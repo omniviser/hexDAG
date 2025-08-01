@@ -1,0 +1,108 @@
+name: ontology_pipeline
+description: Business ontology analysis and validation with path finding - Refactored with Input Mappings
+
+input_schema:
+  user_query: str
+
+nodes:
+  # 1. Load ontology context and nodes
+  - type: function
+    id: ontology_context_loader
+    params:
+      fn: load_ontology_context
+    depends_on: []
+
+  # 2. OntologyParserAgent using LLM node with explicit mapping
+  - type: llm
+    id: ontology_parser_agent
+    params:
+      prompt_template: |
+        You are an Ontology Parser Agent. Your objective is to extract business concepts (ontology nodes, metrics, filters) from the user's query and transform the query to clearly signify the relationships among these concepts.
+
+        User Query: {{user_query}}
+        Available Database Nodes: {{database_nodes}}
+
+        Process the task in steps:
+        1. Identify the key business concepts from the query
+        2. Map them to available ontology nodes in the database
+        3. Refine the user's query for clarity
+        4. Determine confidence level
+
+        Respond with JSON in this exact format:
+        {
+          "refined_user_question": "refined and more explicit user question",
+          "target_nodes": ["node1", "node2"],
+          "explanation": "reasoning for selecting target nodes and confidence level",
+          "confidence": "high|low|failed"
+        }
+
+        Example:
+        User Query: "What is the Average OTIF per product category for the 2024 year?"
+        Expected Response:
+        {
+          "refined_user_question": "What is the Average OTIF per product category for the 2024 year?",
+          "target_nodes": ["OTIF", "Product"],
+          "explanation": "Primary concepts are OTIF metric and Product ontology node. Query is clear and both nodes exist in database.",
+          "confidence": "high"
+        }
+      input_mapping:
+        user_query: "ontology_context_loader.user_query"
+        database_nodes: "ontology_context_loader.database_nodes"
+      output_schema:
+        refined_user_question: str
+        target_nodes: list
+        explanation: str
+        confidence: str
+    depends_on: [ontology_context_loader]
+
+  # 3. MetadataResolverTool using function node with explicit mapping
+  - type: function
+    id: metadata_resolver
+    params:
+      fn: metadata_resolver
+      input_mapping:
+        parsed_data: "ontology_parser_agent"
+        ontology_context: "ontology_context_loader"
+    depends_on: [ontology_parser_agent]
+
+  # 4. Path Analysis LLM node with explicit mapping
+  - type: llm
+    id: path_analyzer
+    params:
+      prompt_template: |
+        Analyze the path finding result for the ontology query.
+
+        User Query: "{{refined_user_question}}"
+        Target Nodes: {{target_nodes}}
+        Path Found: {{path_found}}
+        Shortest Path: {{shortest_path}}
+        Total Hops: {{total_hops}}
+
+        If a path was found, analyze its quality and provide insights.
+        If no path was found, suggest alternative approaches or indicate if the query cannot be answered.
+
+        Respond with JSON:
+        {
+          "analysis": "detailed analysis of the path or lack thereof",
+          "path_quality": "excellent|good|acceptable|poor",
+          "recommendations": ["suggestion1", "suggestion2"],
+          "can_answer_query": true/false,
+          "final_result": {
+            "shortest_path": "copy from input or null",
+            "total_hops": "number",
+            "path_explanation": "human readable explanation"
+          }
+        }
+      input_mapping:
+        refined_user_question: "ontology_parser_agent.refined_user_question"
+        target_nodes: "ontology_parser_agent.target_nodes"
+        path_found: "metadata_resolver.path_found"
+        shortest_path: "metadata_resolver.shortest_path"
+        total_hops: "metadata_resolver.total_hops"
+      output_schema:
+        analysis: str
+        path_quality: str
+        recommendations: list
+        can_answer_query: bool
+        final_result: dict
+    depends_on: [metadata_resolver, ontology_parser_agent]

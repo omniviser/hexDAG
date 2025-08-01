@@ -1,0 +1,77 @@
+"""LLM node factory for creating LLM-based pipeline nodes."""
+
+from typing import Any, Type
+
+from pydantic import BaseModel
+
+from ...domain.dag import NodeSpec
+from ..prompt import PromptInput
+from .base_llm_node import BaseLLMNode
+
+
+class LLMNode(BaseLLMNode):
+    """Simple factory for creating LLM-based nodes with rich template support.
+
+    Inherits all common LLM functionality from BaseLLMNode. Provides clean interface for creating
+    simple LLM nodes.
+    """
+
+    def __call__(
+        self,
+        name: str,
+        template: PromptInput,
+        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        deps: list[str] | None = None,
+        input_mapping: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> NodeSpec:
+        """Create a NodeSpec for an LLM-based node with rich template support.
+
+        Args
+        ----
+            name: Node name
+            template: Template for LLM prompt
+            output_schema: Output schema for validation
+            deps: List of dependency node names
+            input_mapping: Optional field mapping dict {target_field: source_path}
+            **kwargs: Additional parameters
+        """
+        # String templates don't support rich features (structured output)
+        if isinstance(template, str) and output_schema is not None:
+            raise ValueError(
+                "output_schema not supported for string templates - "
+                "use PromptTemplate, ChatPromptTemplate, or other template objects "
+                "for structured output"
+            )
+
+        # Rich features enabled for non-string templates with output schema
+        rich_features = not isinstance(template, str) and output_schema is not None
+
+        # Use BaseLLMNode pipeline
+        return self.build_llm_node_spec(
+            name=name,
+            template=template,
+            output_schema=output_schema,
+            deps=deps,
+            input_mapping=input_mapping,
+            rich_features=rich_features,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_template(
+        cls,
+        name: str,
+        template: PromptInput,
+        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        deps: list[str] | None = None,
+        **kwargs: Any,
+    ) -> NodeSpec:
+        """Create a NodeSpec with rich template features and auto-inferred input schema."""
+        return cls()(
+            name=name,
+            template=template,
+            output_schema=output_schema,
+            deps=deps,
+            **kwargs,
+        )
