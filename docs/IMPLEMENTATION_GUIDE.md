@@ -1,6 +1,6 @@
-# 🚀 hexAI Framework Implementation Guide
+# 🚀 hexDAG Implementation Guide
 
-> **A comprehensive guide for implementing features using the hexAI framework - a modular, deterministic AI workflow orchestration system**
+> **Build production-ready AI agent workflows using the hexDAG framework**
 
 ## 📖 Table of Contents
 
@@ -19,15 +19,15 @@
 
 ## 🏗️ Framework Overview
 
-### hexAI Architecture
+### hexDAG Architecture
 
-The hexAI framework follows hexagonal architecture principles with a focus on modular, deterministic AI workflow orchestration. It provides a clean separation between business logic, external dependencies, and execution concerns.
+hexDAG implements a clean hexagonal architecture specifically designed for AI agent orchestration and data science workflows. It provides separation between business logic, external dependencies, and execution concerns through well-defined layers.
 
 ```mermaid
 graph TD
     %% Application Layer
     A[Application Layer] --> A1[Orchestrator]
-    A --> A2[PipelineBuilder]
+    A --> A2[AgentBuilder]
     A --> A3[Context]
     A --> A4[Event Manager]
 
@@ -62,23 +62,23 @@ graph TD
 
 ### 1. Hexagonal Architecture
 
-The hexAI framework implements hexagonal architecture (also known as ports and adapters) to create a clean separation between the core business logic and external dependencies.
+hexDAG's hexagonal architecture creates clean boundaries between AI agent logic and external services, enabling true portability and testability.
 
-**Core Domain** (`hexai.app.domain`):
-The domain layer contains the pure business logic and core entities. It's completely independent of external dependencies and focuses on the core concepts of workflow orchestration, DAG management, and execution models.
+**Core Domain** (`hexai.core.domain`):
+The domain layer contains pure business logic for agent orchestration, DAG management, and workflow execution. It remains independent of any external AI services or infrastructure concerns.
 
-**Application Layer** (`hexai.app.application`):
-The application layer orchestrates domain objects and manages workflow execution. It handles cross-cutting concerns like event management, resource coordination, and execution flow.
+**Application Layer** (`hexai.core.application`):
+This layer orchestrates agent workflows and manages execution flow. It handles event streaming, context management, and coordination between agents while maintaining separation from infrastructure.
 
-**Ports** (`hexai.app.ports`):
-Ports define abstract interfaces that external services must implement. They provide clear contracts that ensure loose coupling between the framework and external dependencies.
+**Ports** (`hexai.core.ports`):
+Ports define abstract interfaces for external services like LLMs, vector databases, and tool providers. They establish contracts that ensure loose coupling between the framework and external dependencies.
 
 **Essential Port Example:**
 ```python
 from typing import Any, Protocol
 
 class LLM(Protocol):
-    """Language model interface."""
+    """Language model interface for AI agents."""
 
     async def aresponse(self, messages: list[dict[str, Any]]) -> str | None:
         """Generate response from messages."""
@@ -90,12 +90,12 @@ class LLM(Protocol):
 ```
 
 **Adapters** (`hexai.adapters`):
-Adapters implement port interfaces and handle the actual integration with external services. They translate between the framework's expectations and the external service's API.
+Adapters implement port interfaces to connect with actual AI services. They handle API translation, error handling, and service-specific concerns.
 
 **Essential Adapter Example:**
 ```python
-class LLMFactoryAdapter(LLM):
-    """Adapter for LLM factory models."""
+class OpenAIAdapter(LLM):
+    """Adapter for OpenAI models."""
 
     def __init__(self, model: Any) -> None:
         self.model = model

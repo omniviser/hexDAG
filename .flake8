@@ -9,7 +9,7 @@ application-import-names = hexai
 extend-ignore = S106
 per-file-ignores =
     tests/*:S101,D100,D101,D102,D103,D104
-    scripts/*:T201
+    scripts/*:T201,D401
 
 # Error and Warning Codes
 # B008: Do not perform function calls in argument defaults.
