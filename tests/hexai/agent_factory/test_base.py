@@ -400,51 +400,40 @@ class TestPipelineDefinition:
 class TestPipelineCatalog:
     """Tests for PipelineCatalog."""
 
-    @patch("pipelines.base.os.listdir")
-    @patch("pipelines.base.os.path.isdir")
-    @patch("pipelines.base.os.path.exists")
-    def test_catalog_discovery(self, mock_exists, mock_isdir, mock_listdir):
-        """Test pipeline discovery."""
-        # Mock file system
-        mock_listdir.return_value = ["mock_pipeline", "__pycache__", ".git", "valid_pipeline"]
-        mock_isdir.side_effect = lambda x: "pycache" not in x and ".git" not in x
-        mock_exists.side_effect = lambda x: "pipeline.yaml" in x
+    def test_pipeline_registration(self):
+        """Test manual pipeline registration."""
 
-        # Mock module import and YAML loading
-        with patch("pipelines.base.importlib.import_module") as mock_import:
-            # Create a mock pipeline class that doesn't try to load YAML
-            class TestDiscoveryPipeline(PipelineDefinition):
-                @property
-                def name(self) -> str:
-                    """Pipeline name."""
-                    return "test_discovery"
+        # Create a test pipeline class
+        class TestRegistrationPipeline(PipelineDefinition):
+            @property
+            def name(self) -> str:
+                """Pipeline name."""
+                return "test_registration"
 
-                @property
-                def description(self) -> str:
-                    """Pipeline description."""
-                    return "Test pipeline"
+            @property
+            def description(self) -> str:
+                """Pipeline description."""
+                return "Test registration pipeline"
 
-                def __init__(self):
-                    self.builder = Mock()
-                    self._yaml_path = "test"
-                    self._config = {"test": "config"}
-                    self._register_functions()
+            def __init__(self, yaml_path: str | None = None):
+                super().__init__(yaml_path)
+                self.builder = Mock()
+                self._config = {"test": "config"}
 
-                def _register_functions(self):
-                    pass
+            def _register_functions(self):
+                pass
 
-                def _find_yaml(self):
-                    # Override to prevent file loading
-                    pass
+        catalog = PipelineCatalog()
 
-            mock_module = Mock()
-            mock_module.TestDiscoveryPipeline = TestDiscoveryPipeline
-            mock_import.return_value = mock_module
+        # Initially empty
+        assert len(catalog._pipelines) == 0
 
-            catalog = PipelineCatalog()
+        # Register the pipeline
+        catalog.register_pipeline(TestRegistrationPipeline)
 
-            # Should discover TestDiscoveryPipeline
-            assert "test_discovery" in catalog._pipelines
+        # Should now contain the registered pipeline
+        assert "test_registration" in catalog._pipelines
+        assert len(catalog._pipelines) == 1
 
     def test_list_pipelines(self):
         """Test listing pipelines."""

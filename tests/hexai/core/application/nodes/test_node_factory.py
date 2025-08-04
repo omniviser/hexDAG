@@ -9,8 +9,9 @@ Tests cover:
 """
 
 import pytest
-from fastapi_app.src.hexai.app.application.nodes.node_factory import NodeFactory
-from fastapi_app.src.hexai.app.domain.dag import NodeSpec
+
+from hexai.core.application.nodes.node_factory import NodeFactory
+from hexai.core.domain.dag import NodeSpec
 
 
 class TestNodeFactory:
@@ -215,7 +216,7 @@ class TestBuiltinNodes:
         """Setup for builtin node tests."""
         NodeFactory.clear_registry()
         # Manually register builtin nodes since import only happens once
-        from fastapi_app.src.hexai.app.application.nodes.builtin_nodes import (
+        from hexai.core.application.nodes.builtin_nodes import (
             agent_node_factory,
             function_node_factory,
             llm_node_factory,

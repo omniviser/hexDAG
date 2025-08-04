@@ -1,7 +1,8 @@
 """Tests for DAG primitives: NodeSpec and DirectedGraph."""
 
 import pytest
-from fastapi_app.src.hexai.app.domain.dag import (
+
+from hexai.core.domain.dag import (
     CycleDetectedError,
     DirectedGraph,
     DuplicateNodeError,
