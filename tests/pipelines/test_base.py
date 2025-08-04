@@ -6,7 +6,7 @@ from hexai import DirectedGraph
 from pydantic import BaseModel
 import pytest
 
-from pipelines.base import PipelineCatalog, PipelineDefinition
+from hexai.pipelines.base import PipelineCatalog, PipelineDefinition
 
 
 class InputModel(BaseModel):

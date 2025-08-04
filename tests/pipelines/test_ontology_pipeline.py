@@ -1,6 +1,6 @@
 """Tests for Ontology pipeline functionality."""
 
-from pipelines.ontology.pipeline import OntologyPipeline
+from hexai.pipelines.ontology.pipeline import OntologyPipeline
 
 
 class MockEventManager:

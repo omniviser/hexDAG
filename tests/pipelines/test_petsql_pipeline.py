@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pipelines.petsql.functions import (
+from hexai.pipelines.petsql.functions import (
     FilterSchemaInput,
     SelectExamplesInput,
     SqlConverterInput,
@@ -15,7 +15,7 @@ from pipelines.petsql.functions import (
     select_examples,
     sql_validator,
 )
-from pipelines.petsql.pipeline import PetSQLPipeline
+from hexai.pipelines.petsql.pipeline import PetSQLPipeline
 
 
 class MockEventManager:

@@ -30,6 +30,19 @@ from hexai.app.domain import DirectedGraph, NodeSpec
 # Port interfaces
 from hexai.app.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
 
+# Pipeline system exports
+from hexai.pipelines import (
+    PipelineDefinition,
+    PipelineCatalog,
+    get_catalog,
+    Ontology,
+    OntologyNode,
+    OntologyRelation,
+    QueryIntent,
+    SQLQuery,
+    RelationshipType,
+)
+
 __all__ = [
     # Core Framework - DAG Building and Execution
     "Orchestrator",
@@ -60,4 +73,15 @@ __all__ = [
     "MockEmbeddingSelectorPort",
     # Enhanced Adapters
     "EnhancedDatabaseAdapter",
+    # Pipeline System
+    "PipelineDefinition",
+    "PipelineCatalog",
+    "get_catalog",
+    # Pipeline Models
+    "Ontology",
+    "OntologyNode", 
+    "OntologyRelation",
+    "QueryIntent",
+    "SQLQuery",
+    "RelationshipType",
 ]

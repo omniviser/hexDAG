@@ -3,7 +3,7 @@
 from hexai.adapters.mock import MockOntologyPort
 import pytest
 
-from pipelines.ontology.functions import (
+from hexai.pipelines.ontology.functions import (
     OntologyPipelineInput,
     load_ontology_context,
     load_ontology_data,

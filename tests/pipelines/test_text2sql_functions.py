@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from hexai.adapters.mock import MockDatabaseAdapter
 import pytest
 
-from pipelines.text2sql.functions import Text2SQLToolRouter
+from hexai.pipelines.text2sql.functions import Text2SQLToolRouter
 
 
 class TestText2SQLToolRouterDetailed:

@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Any
 
-from pipelines.shared_functions import get_input_data
+from hexai.pipelines.shared_functions import get_input_data
 
 
 async def setup_timer(input_data: dict[str, Any], **ports: Any) -> dict[str, Any]:

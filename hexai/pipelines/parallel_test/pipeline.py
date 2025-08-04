@@ -1,6 +1,6 @@
 """Parallel execution test pipeline for verifying DAG parallelization."""
 
-from pipelines.base import PipelineDefinition
+from hexai.pipelines.base import PipelineDefinition
 
 from .functions import result_aggregator, setup_timer, slow_task_a, slow_task_b, timing_analyzer
 

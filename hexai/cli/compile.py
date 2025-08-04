@@ -14,8 +14,8 @@ from typing import Any
 from hexai.validation.type_checker import check_pipeline_type_safety
 import yaml
 
-from pipelines.base import PipelineCatalog
-from pipelines.compiler import CompiledPipelineData, compile_pipeline
+from hexai.pipelines.base import PipelineCatalog
+from hexai.pipelines.compiler import CompiledPipelineData, compile_pipeline
 
 logger = logging.getLogger(__name__)
 

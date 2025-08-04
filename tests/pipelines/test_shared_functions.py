@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from pipelines.shared_functions import (
+from hexai.pipelines.shared_functions import (
     DatabaseSchemaInput,
     DatabaseSchemaOutput,
     UserQueryInput,

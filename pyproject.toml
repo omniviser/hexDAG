@@ -19,8 +19,7 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 packages = [
-    {include = "hexai"},
-    {include = "pipelines"}
+    {include = "hexai"}
 ]
 
 [tool.poetry.dependencies]
@@ -64,7 +63,7 @@ mkdocs-material = "^9.5.0"
 mkdocs-mermaid2-plugin = "^1.1.0"
 
 [tool.poetry.scripts]
-hexdag = "pipelines.cli:main"
+hexdag = "hexai.cli:main"
 
 [build-system]
 requires = ["poetry-core"]
@@ -76,10 +75,10 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
-addopts = "--cov=hexai --cov=pipelines --cov-report=html --cov-report=term-missing"
+addopts = "--cov=hexai --cov-report=html --cov-report=term-missing"
 
 [tool.coverage.run]
-source = ["hexai", "pipelines"]
+source = ["hexai"]
 omit = [
     "*/tests/*",
     "*/test_*",

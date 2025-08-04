@@ -15,9 +15,8 @@ from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM, MockOntologyPort
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.app.domain.dag_visualizer import render_dag_to_image
 
-from pipelines.base import PipelineCatalog
-from pipelines.cli.compile import compile_single
-
+from hexai.pipelines.base import PipelineCatalog
+from hexai.cli.compile import compile_single
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -76,7 +75,7 @@ class PipelineSchema:
         try:
             from pathlib import Path
 
-            from pipelines.compiler import compile_pipeline
+            from hexai.pipelines.compiler import compile_pipeline
 
             # Try to compile the pipeline to get schemas
             yaml_path = Path(self.pipeline._yaml_path)
@@ -602,7 +601,7 @@ class PipelineCLI:
 
             if validate_only:
                 logger.info(f"🔍 Validating pipeline types: {pipeline_name}")
-                from pipelines.cli.compile import validate_pipeline_types
+                from hexai.cli.compile import validate_pipeline_types
 
                 is_type_safe = validate_pipeline_types(yaml_path)
                 if is_type_safe:
@@ -632,7 +631,7 @@ class PipelineCLI:
                     pipeline_name = pipeline_info["name"]
                     pipeline = self.catalog.get_pipeline(pipeline_name)
                     if pipeline and pipeline._yaml_path:
-                        from pipelines.cli.compile import compile_single
+                        
 
                         compile_single(pipeline._yaml_path)
                         success_count += 1  # Only increment if compilation succeeds

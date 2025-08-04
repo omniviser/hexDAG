@@ -4,14 +4,14 @@ import time
 
 import pytest
 
-from pipelines.parallel_test.functions import (
+from hexai.pipelines.parallel_test.functions import (
     result_aggregator,
     setup_timer,
     slow_task_a,
     slow_task_b,
     timing_analyzer,
 )
-from pipelines.parallel_test.pipeline import ParallelTestPipeline
+from hexai.pipelines.parallel_test.pipeline import ParallelTestPipeline
 
 
 class MockEventManager:

@@ -3,6 +3,6 @@
 
 if __name__ == "__main__":
     # Import only when run as main to avoid circular import warnings
-    from pipelines.cli.simple_pipeline_cli import main
+    from hexai.cli.simple_pipeline_cli import main
 
     main()

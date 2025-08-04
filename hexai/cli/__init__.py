@@ -4,7 +4,7 @@
 # Avoid module-level imports to prevent warnings when using python -m
 def main() -> None:
     """Entry point for CLI."""
-    from .simple_pipeline_cli import main as cli_main
+    from hexai.cli.simple_pipeline_cli import main as cli_main
 
     return cli_main()
 

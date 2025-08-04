@@ -698,7 +698,7 @@ class DAGVisualizer:
 
             # Try to import the compiler
             try:
-                from pipelines.compiler import compile_pipeline
+                from hexai.pipelines.compiler import compile_pipeline
             except ImportError:
                 # Compiler not available, return empty schemas
                 logger.debug("Pipeline compiler not available, skipping schema enhancement")

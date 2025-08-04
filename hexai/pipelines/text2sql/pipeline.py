@@ -5,7 +5,7 @@ This pipeline converts natural language questions into SQL queries using LLM age
 
 from pydantic import BaseModel, Field
 
-from pipelines.base import PipelineDefinition
+from hexai.pipelines.base import PipelineDefinition
 
 
 class Text2SQLPipelineInput(BaseModel):

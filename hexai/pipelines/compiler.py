@@ -16,7 +16,7 @@ from hexai.validation.type_checker import validate_pipeline_compilation
 from pydantic import BaseModel, Field
 import yaml
 
-from pipelines.base import PipelineCatalog
+from hexai.pipelines.base import PipelineCatalog
 
 
 class CompiledPipelineData(BaseModel):

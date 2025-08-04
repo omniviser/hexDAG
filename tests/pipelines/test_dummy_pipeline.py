@@ -3,8 +3,8 @@
 from pydantic import ValidationError
 import pytest
 
-from pipelines.dummy import DummyPipeline
-from pipelines.dummy.functions import (
+from hexai.pipelines.dummy import DummyPipeline
+from hexai.pipelines.dummy.functions import (
     DummyPipelineInput,
     FeaturesOutput,
     ScoreOutput,

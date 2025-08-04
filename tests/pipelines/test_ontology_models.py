@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pipelines.models import Ontology, OntologyNode, OntologyRelation, RelationshipType
+from hexai.pipelines.models import Ontology, OntologyNode, OntologyRelation, RelationshipType
 import pytest
 
 
