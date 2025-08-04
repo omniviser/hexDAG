@@ -51,6 +51,7 @@ repos:
     rev: 7.1.1
     hooks:
       - id: flake8
+        exclude: ^examples/
         additional_dependencies:
           - flake8-docstrings
           - flake8-import-order
