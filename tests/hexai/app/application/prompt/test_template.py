@@ -10,7 +10,6 @@ Tests cover:
 """
 
 import pytest
-
 from fastapi_app.src.hexai.app.application.prompt.template import (
     FewShotPromptTemplate,
     MissingVariableError,

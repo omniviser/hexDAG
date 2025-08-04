@@ -113,8 +113,8 @@ class TestRelationshipService:
         """Test handling malformed relationship data."""
         malformed = [
             {"from": "incomplete"},  # Missing 'to'
-            "malformed_string",      # No arrow
-            {"to": "also_incomplete"}, # Missing 'from'
+            "malformed_string",  # No arrow
+            {"to": "also_incomplete"},  # Missing 'from'
         ]
 
         graph = self.service.build_relationship_graph(malformed)

@@ -9,7 +9,6 @@ Tests cover:
 """
 
 import pytest
-
 from fastapi_app.src.hexai.app.application.nodes.node_factory import NodeFactory
 from fastapi_app.src.hexai.app.domain.dag import NodeSpec
 

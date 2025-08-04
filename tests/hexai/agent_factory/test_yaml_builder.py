@@ -3,8 +3,8 @@
 import pytest
 import yaml
 
-from hexai.core.domain.dag import NodeSpec
 from hexai.agent_factory.yaml_builder import YamlPipelineBuilder, YamlPipelineBuilderError
+from hexai.core.domain.dag import NodeSpec
 
 
 class TestPipelineBuilder:

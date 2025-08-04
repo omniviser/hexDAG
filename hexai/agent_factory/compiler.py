@@ -5,18 +5,18 @@ compilation-specific optimizations like pre-computed execution waves and
 dependency chain inference.
 """
 
-from datetime import datetime
 import hashlib
 import inspect
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, get_type_hints
 
-from hexai.validation.type_checker import validate_pipeline_compilation
-from pydantic import BaseModel, Field
 import yaml
+from pydantic import BaseModel, Field
 
-from hexai.pipelines.base import PipelineCatalog
+from hexai.agent_factory.base import PipelineCatalog
+from hexai.validation.type_checker import validate_pipeline_compilation
 
 
 class CompiledPipelineData(BaseModel):

@@ -2,10 +2,11 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
+from pydantic import BaseModel
+
 from hexai.core.application.nodes.function_node import FunctionNode
 from hexai.core.domain.dag import NodeSpec
-from pydantic import BaseModel
-import pytest
 
 
 class _UserInput(BaseModel):

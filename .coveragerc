@@ -1,6 +1,6 @@
 [run]
 source = hexai, pipelines
-omit = 
+omit =
     */tests/*
     */test_*
     */conftest.py

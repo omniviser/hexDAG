@@ -14,10 +14,11 @@ Run: python examples/16_validation_errors.py
 import asyncio
 from typing import Any
 
+from pydantic import BaseModel, Field, ValidationError
+
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.validation import coerce_validator, passthrough_validator, strict_validator
-from pydantic import BaseModel, Field, ValidationError
 
 
 class StrictUserModel(BaseModel):

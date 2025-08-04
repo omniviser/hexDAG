@@ -1,14 +1,15 @@
 """Unified pipeline management system with base class and catalog functionality."""
 
-from abc import ABC, abstractmethod
 import os
 import traceback
+from abc import ABC, abstractmethod
 from typing import Any, Type
 
-from hexai import Orchestrator
-from hexai.pipelines.yaml_builder import YamlPipelineBuilder
-from hexai.core.domain.dag import DirectedGraph
 import yaml
+
+from hexai import Orchestrator
+from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
+from hexai.core.domain.dag import DirectedGraph
 
 
 class PipelineDefinition(ABC):
@@ -16,7 +17,7 @@ class PipelineDefinition(ABC):
 
     def __init__(self, yaml_path: str | None = None) -> None:
         """Initialize the pipeline definition.
-        
+
         Args:
             yaml_path: Optional path to YAML configuration file
         """

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import json
 import logging
 import time
+from collections import defaultdict
 from typing import Any, Callable
 
 from .base import PipelineEvent, SyncObserver

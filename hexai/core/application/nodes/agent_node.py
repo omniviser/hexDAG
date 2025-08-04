@@ -1,8 +1,8 @@
 """ReActAgentNode - Multi-step reasoning agent."""
 
 import ast
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Any, Callable, Type
 
 from pydantic import BaseModel

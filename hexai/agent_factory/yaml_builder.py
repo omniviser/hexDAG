@@ -6,17 +6,19 @@ Simple pipeline builder that focuses on basic YAML processing with simple data m
 import logging
 from typing import Any
 
+import yaml
+
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.nodes import NodeFactory
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.domain.dag import DirectedGraph
-import yaml
 
 logger = logging.getLogger(__name__)
 
 
 class YamlPipelineBuilderError(Exception):
     """Custom exception for YAML pipeline building errors."""
+
     pass
 
 

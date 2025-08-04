@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 import graphviz
+
 from hexai.core.domain.dag import DirectedGraph
 
 logger = logging.getLogger(__name__)
@@ -698,7 +699,7 @@ class DAGVisualizer:
 
             # Try to import the compiler
             try:
-                from hexai.pipelines.compiler import compile_pipeline
+                from hexai.agent_factory.compiler import compile_pipeline
             except ImportError:
                 # Compiler not available, return empty schemas
                 logger.debug("Pipeline compiler not available, skipping schema enhancement")

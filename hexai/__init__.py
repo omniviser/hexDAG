@@ -14,6 +14,20 @@ from hexai.adapters.mock import (
     MockOntologyPort,
 )
 
+# Agent Factory system exports
+from hexai.agent_factory import (
+    Ontology,
+    OntologyNode,
+    OntologyRelation,
+    PipelineCatalog,
+    PipelineDefinition,
+    QueryIntent,
+    RelationshipType,
+    SQLQuery,
+    get_catalog,
+)
+from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
+
 # Core framework exports
 from hexai.core.application.nodes import (
     ConditionalNode,
@@ -23,25 +37,11 @@ from hexai.core.application.nodes import (
     ReActAgentNode,
 )
 from hexai.core.application.orchestrator import Orchestrator
-from hexai.pipelines.yaml_builder import YamlPipelineBuilder
 from hexai.core.application.prompt import FewShotPromptTemplate, PromptTemplate
 from hexai.core.domain import DirectedGraph, NodeSpec
 
 # Port interfaces
 from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
-
-# Pipeline system exports
-from hexai.pipelines import (
-    PipelineDefinition,
-    PipelineCatalog,
-    get_catalog,
-    Ontology,
-    OntologyNode,
-    OntologyRelation,
-    QueryIntent,
-    SQLQuery,
-    RelationshipType,
-)
 
 __all__ = [
     # Core Framework - DAG Building and Execution
@@ -73,13 +73,13 @@ __all__ = [
     "MockEmbeddingSelectorPort",
     # Enhanced Adapters
     "EnhancedDatabaseAdapter",
-    # Pipeline System
+    # Agent Factory System
     "PipelineDefinition",
     "PipelineCatalog",
     "get_catalog",
-    # Pipeline Models
+    # Agent Factory Models
     "Ontology",
-    "OntologyNode", 
+    "OntologyNode",
     "OntologyRelation",
     "QueryIntent",
     "SQLQuery",

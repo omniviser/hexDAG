@@ -3,6 +3,9 @@
 from typing import Any
 from unittest.mock import AsyncMock
 
+import pytest
+from pydantic import BaseModel
+
 from hexai.core.application.events.events import (
     NodeCompletedEvent,
     NodeFailedEvent,
@@ -10,8 +13,6 @@ from hexai.core.application.events.events import (
 )
 from hexai.core.application.nodes.base_node_factory import BaseNodeFactory
 from hexai.core.domain.dag import NodeSpec
-from pydantic import BaseModel
-import pytest
 
 
 class MockNodeFactory(BaseNodeFactory):

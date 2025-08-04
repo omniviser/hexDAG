@@ -1,8 +1,9 @@
 """Tests for LoopNode and ConditionalNode implementations."""
 
+import pytest
+
 from hexai.core.application.nodes import ConditionalNode, LoopNode
 from hexai.core.domain.dag import NodeSpec
-import pytest
 
 
 class MockEventManager:

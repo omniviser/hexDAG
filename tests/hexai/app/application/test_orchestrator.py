@@ -3,12 +3,13 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from pydantic import BaseModel
+
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.validation import strict_validator
-from pydantic import BaseModel
-import pytest
 
 
 # Test data models

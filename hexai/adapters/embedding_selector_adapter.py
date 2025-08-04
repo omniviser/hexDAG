@@ -2,8 +2,9 @@
 
 from typing import Any
 
-from hexai.core.ports.embedding_selector import EmbeddingSelectorPort
 from text2sql.selectors import CosineSelector, CosineSimilarityQuestionMaskSelector, RandomSelector
+
+from hexai.core.ports.embedding_selector import EmbeddingSelectorPort
 
 
 class EmbeddingSelectorAdapter(EmbeddingSelectorPort):

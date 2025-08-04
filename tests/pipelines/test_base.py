@@ -2,11 +2,11 @@
 
 from unittest.mock import Mock, patch
 
-from hexai import DirectedGraph
-from pydantic import BaseModel
 import pytest
+from pydantic import BaseModel
 
-from hexai.pipelines.base import PipelineCatalog, PipelineDefinition
+from hexai import DirectedGraph
+from hexai.agent_factory.base import PipelineCatalog, PipelineDefinition
 
 
 class InputModel(BaseModel):

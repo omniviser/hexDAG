@@ -12,10 +12,10 @@ Usage:
 """
 
 import os
-from pathlib import Path
 import subprocess  # nosec B404 - trusted example runner only
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 # Example categories for organized learning

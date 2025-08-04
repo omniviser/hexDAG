@@ -2,11 +2,12 @@
 
 from unittest.mock import AsyncMock, Mock
 
+import pytest
+from pydantic import BaseModel
+
 from hexai.adapters.mock.mock_llm import MockLLM
 from hexai.core.application.nodes.llm_node import LLMNode
 from hexai.core.application.prompt import ChatPromptTemplate, PromptTemplate
-from pydantic import BaseModel
-import pytest
 
 
 class OutputSchema(BaseModel):

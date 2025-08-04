@@ -5,18 +5,18 @@ import asyncio
 import json
 import logging
 import os
-from pathlib import Path
 import shlex
 import subprocess  # nosec B404 - subprocess usage is controlled and validated
 import sys
+from pathlib import Path
 from typing import Any
 
 from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM, MockOntologyPort
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
+from hexai.agent_factory.base import PipelineCatalog
+from hexai.cli.compile import compile_single
 from hexai.core.domain.dag_visualizer import render_dag_to_image
 
-from hexai.pipelines.base import PipelineCatalog
-from hexai.cli.compile import compile_single
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ class PipelineSchema:
         try:
             from pathlib import Path
 
-            from hexai.pipelines.compiler import compile_pipeline
+            from hexai.agent_factory.compiler import compile_pipeline
 
             # Try to compile the pipeline to get schemas
             yaml_path = Path(self.pipeline._yaml_path)
@@ -631,7 +631,6 @@ class PipelineCLI:
                     pipeline_name = pipeline_info["name"]
                     pipeline = self.catalog.get_pipeline(pipeline_name)
                     if pipeline and pipeline._yaml_path:
-                        
 
                         compile_single(pipeline._yaml_path)
                         success_count += 1  # Only increment if compilation succeeds

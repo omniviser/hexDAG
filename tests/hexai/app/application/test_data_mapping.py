@@ -1,5 +1,7 @@
 """Tests for the data mapping system."""
 
+from pydantic import BaseModel
+
 from hexai.core.application.data_mapping import (
     DEFAULT_FIELD_MAPPINGS,
     DataAggregator,
@@ -9,7 +11,6 @@ from hexai.core.application.data_mapping import (
     create_prefixed_mapping,
     create_rename_mapping,
 )
-from pydantic import BaseModel
 
 
 class TestUserData(BaseModel):

@@ -1,9 +1,10 @@
 """Unit tests for core validation functionality."""
 
+from pydantic import BaseModel
+
 from hexai.validation.core import BaseValidator
 from hexai.validation.strategies import ValidationStrategy
 from hexai.validation.types import ValidationContext
-from pydantic import BaseModel
 
 
 class TestModel(BaseModel):

@@ -11,11 +11,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from hexai.validation.type_checker import check_pipeline_type_safety
 import yaml
 
-from hexai.pipelines.base import PipelineCatalog
-from hexai.pipelines.compiler import CompiledPipelineData, compile_pipeline
+from hexai.agent_factory.base import PipelineCatalog
+from hexai.agent_factory.compiler import CompiledPipelineData, compile_pipeline
+from hexai.validation.type_checker import check_pipeline_type_safety
 
 logger = logging.getLogger(__name__)
 
