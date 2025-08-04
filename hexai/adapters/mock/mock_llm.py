@@ -1,6 +1,6 @@
 """Mock LLM implementation for testing purposes."""
 
-from hexai.app.ports.llm import LLM, MessageList
+from hexai.core.ports.llm import LLM, MessageList
 
 
 class MockLLM(LLM):

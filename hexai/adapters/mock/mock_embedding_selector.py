@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from hexai.app.ports.embedding_selector import EmbeddingSelectorPort
+from hexai.core.ports.embedding_selector import EmbeddingSelectorPort
 
 
 class MockEmbeddingSelectorPort(EmbeddingSelectorPort):

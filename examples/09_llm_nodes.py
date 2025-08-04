@@ -13,9 +13,9 @@ import asyncio
 from typing import Any
 
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.app.application.nodes.llm_node import LLMNode
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph
+from hexai.core.application.nodes.llm_node import LLMNode
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph
 
 
 async def main():
@@ -49,8 +49,8 @@ async def main():
     print("\n🤖 Test 1: Basic LLM Node")
     print("-" * 30)
 
-    # Create basic LLM node using from_str
-    basic_llm_node = LLMNode.from_str(
+    # Create basic LLM node using from_template
+    basic_llm_node = LLMNode.from_template(
         "text_analyzer", "Analyze the sentiment of this text: {{input}}"
     )
 
@@ -70,7 +70,7 @@ async def main():
     print("-" * 30)
 
     # Create LLM node with structured output
-    structured_llm_node = LLMNode.from_str(
+    structured_llm_node = LLMNode.from_template(
         "topic_analyzer", "Extract the main topics from this text: {{input}}"
     )
 
@@ -91,7 +91,7 @@ async def main():
     print("-" * 30)
 
     # Create LLM node that uses context from previous nodes
-    context_llm_node = LLMNode.from_str(
+    context_llm_node = LLMNode.from_template(
         "recommendation_engine",
         "Based on the analysis '{{analysis}}', provide recommendations for: {{input}}",
     )
@@ -115,7 +115,7 @@ async def main():
     print("-" * 30)
 
     # Create LLM node with complex prompt template
-    complex_llm_node = LLMNode.from_str(
+    complex_llm_node = LLMNode.from_template(
         "quality_assessor",
         """
         You are a content quality assessor. Analyze the following text:

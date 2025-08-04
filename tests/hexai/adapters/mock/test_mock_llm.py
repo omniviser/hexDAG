@@ -2,7 +2,7 @@
 
 import pytest
 
-from fastapi_app.src.hexai.adapters.mock.mock_llm import MockLLM
+from hexai.adapters.mock.mock_llm import MockLLM
 
 
 class TestMockLLM:

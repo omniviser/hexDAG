@@ -4,38 +4,47 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
+# Test change to trigger pre-commit hooks
+
 # Adapter exports for testing and development
-from hexai.adapters import InMemoryMemory, LLMFactoryAdapter
-from hexai.adapters.enhanced_database import EnhancedDatabaseAdapter
-from hexai.adapters.mock import (
-    MockDatabaseAdapter,
-    MockEmbeddingSelectorPort,
-    MockLLM,
-    MockOntologyPort,
+from hexai.adapters import InMemoryMemory
+from hexai.adapters.mock import MockDatabaseAdapter, MockEmbeddingSelectorPort, MockLLM
+
+# Agent Factory system exports
+from hexai.agent_factory import (
+    Ontology,
+    OntologyNode,
+    OntologyRelation,
+    PipelineCatalog,
+    PipelineDefinition,
+    QueryIntent,
+    RelationshipType,
+    SQLQuery,
+    get_catalog,
 )
+from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
 
 # Core framework exports
-from hexai.app.application.nodes import (
+from hexai.core.application.nodes import (
     ConditionalNode,
     FunctionNode,
     LLMNode,
     LoopNode,
     ReActAgentNode,
 )
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.application.pipeline_builder import PipelineBuilder
-from hexai.app.application.prompt import FewShotPromptTemplate, PromptTemplate
-from hexai.app.domain import DirectedGraph, NodeSpec
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.prompt import FewShotPromptTemplate, PromptTemplate
+from hexai.core.domain import DirectedGraph, NodeSpec
 
 # Port interfaces
-from hexai.app.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
+from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
 
 __all__ = [
     # Core Framework - DAG Building and Execution
     "Orchestrator",
     "DirectedGraph",
     "NodeSpec",
-    "PipelineBuilder",
+    "YamlPipelineBuilder",
     # Node Factories
     "FunctionNode",
     "LLMNode",
@@ -53,11 +62,18 @@ __all__ = [
     "OntologyPort",
     # Testing and Development Adapters
     "InMemoryMemory",
-    "LLMFactoryAdapter",
     "MockLLM",
     "MockDatabaseAdapter",
-    "MockOntologyPort",
     "MockEmbeddingSelectorPort",
-    # Enhanced Adapters
-    "EnhancedDatabaseAdapter",
+    # Agent Factory System
+    "PipelineDefinition",
+    "PipelineCatalog",
+    "get_catalog",
+    # Agent Factory Models
+    "Ontology",
+    "OntologyNode",
+    "OntologyRelation",
+    "QueryIntent",
+    "SQLQuery",
+    "RelationshipType",
 ]

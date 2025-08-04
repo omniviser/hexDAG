@@ -12,8 +12,8 @@ This example demonstrates pipeline catalog management in hexAI:
 import asyncio
 from typing import Any, Dict
 
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
 async def simple_processor(input_data: str, **kwargs) -> dict:

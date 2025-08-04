@@ -14,9 +14,9 @@ Run: python examples/11_dag_visualization.py
 import asyncio
 from typing import Any
 
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph, NodeSpec
-from hexai.app.domain.dag_visualizer import DAGVisualizer
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.domain.dag_visualizer import DAGVisualizer
 from hexai.validation import coerce_validator
 
 

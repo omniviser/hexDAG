@@ -3,7 +3,7 @@
 import asyncio
 from typing import Any
 
-from hexai.app.ports.memory import LongTermMemory
+from hexai.core.ports.memory import LongTermMemory
 
 
 class InMemoryMemory(LongTermMemory):

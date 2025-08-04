@@ -12,8 +12,8 @@ This example demonstrates advanced patterns in hexAI:
 import asyncio
 from typing import Any
 
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
 async def data_router(input_data: dict, **kwargs) -> dict:

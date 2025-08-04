@@ -8,7 +8,7 @@ all nodes and connections.
 from dataclasses import dataclass
 from enum import Enum
 
-from hexai.app.domain.dag import DirectedGraph
+from hexai.core.domain.dag import DirectedGraph
 from hexai.validation import ValidationStrategy, can_convert_schema
 
 

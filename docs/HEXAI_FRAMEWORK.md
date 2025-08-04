@@ -1,31 +1,34 @@
-# 🔗 hexAI Framework
+# 🔗 hexDAG Framework
 
-> **A modular, deterministic AI workflow orchestration framework built on hexagonal architecture principles with DAG-based execution.**
+> **Enterprise-grade AI agent orchestration framework built on hexagonal architecture with DAG-based execution**
 
-## 🎯 Framework vs Enterprise Separation
+## 🎯 Framework Overview
 
-**Important**: hexAI is the core orchestration framework providing the fundamental building blocks for DAG-based workflows. For enterprise features like distributed execution, persistence, monitoring, and pre-built business pipelines, see the [Pipelines](../pipelines) layer built on top of hexAI.
+hexDAG is the core orchestration framework that enables building sophisticated AI agent workflows through declarative configuration. It provides the fundamental building blocks for:
 
-- **hexAI Core**: Lightweight orchestration, node system, validation framework, event hooks
-- **Pipelines Layer**: Pipeline catalog, compilation, distributed execution, memory/persistence
+- **AI Agent Orchestration**: Multi-agent coordination with built-in memory and tool support
+- **Data Science Workflows**: Seamless integration of AI agents with traditional data processing
+- **Real-Time Streaming**: Live updates of agent actions and memory operations to frontends
+- **Low-Code Development**: YAML-based declarative configuration for rapid development
 
 ## 🎯 Vision & Design Philosophy
 
-hexAI transforms complex AI workflows into **deterministic, testable, and maintainable** systems by combining:
+hexDAG transforms complex AI workflows into **deterministic, testable, and maintainable** systems by implementing the six pillars:
 
-- **🏗️ Hexagonal Architecture**: Clean separation between business logic and external dependencies
-- **📊 DAG Orchestration**: Directed Acyclic Graph execution with automatic parallelization
-- **🔌 Port-Adapter Pattern**: Pluggable external services (LLMs, databases, tools)
-- **📝 Declarative Configuration**: YAML-driven pipeline definitions
-- **🔄 Event-Driven Monitoring**: Real-time execution visibility and metrics
+1. **🔄 Async-First Architecture**: Non-blocking execution for maximum performance
+2. **📊 Event-Driven Observability**: Real-time monitoring of agent actions
+3. **✅ Pydantic Validation Everywhere**: Type safety at every layer
+4. **🏗️ Hexagonal Architecture**: Clean separation of business logic and infrastructure
+5. **📝 Composable Declarative Files**: Build complex workflows from simple components
+6. **🔀 DAG-Based Orchestration**: Intelligent dependency management and parallelization
 
-### Core Architectural Principles
+### Core Architectural Benefits
 
-1. **Deterministic Execution**: Same input always produces same execution order
-2. **Dependency Injection**: External services provided through well-defined ports
-3. **Separation of Concerns**: Business logic isolated from infrastructure
-4. **Composability**: Reusable components that combine into complex workflows
-5. **Observability**: Built-in tracing, metrics, and event streaming
+- **Deterministic Execution**: Same input always produces same execution order
+- **Dependency Injection**: External services provided through well-defined ports
+- **Separation of Concerns**: Business logic isolated from infrastructure
+- **Composability**: Reusable components that combine into complex workflows
+- **Observability**: Built-in tracing, metrics, and event streaming
 
 ---
 
@@ -39,7 +42,7 @@ hexAI transforms complex AI workflows into **deterministic, testable, and mainta
 │              (YAML Definitions & Schemas)                  │
 ├─────────────────────────────────────────────────────────────┤
 │                   🚀 Application Layer                     │
-│         (Use Cases: Orchestrator, PipelineBuilder)         │
+│         (Use Cases: Orchestrator, AgentBuilder)            │
 ├─────────────────────────────────────────────────────────────┤
 │                    🧠 Domain Layer                         │
 │            (Core Business Logic: DAG, NodeSpec)            │
@@ -59,11 +62,12 @@ hexAI transforms complex AI workflows into **deterministic, testable, and mainta
 
 ```
 hexai/
-├── app/
+├── core/
 │   ├── domain/          # Core business logic (DAG, NodeSpec)
-│   ├── application/     # Use cases (Orchestrator, PipelineBuilder)
+│   ├── application/     # Use cases (Orchestrator, AgentBuilder)
 │   └── ports/           # Interface definitions (LLM, Database)
-└── adapters/            # External service implementations
+├── adapters/            # External service implementations
+└── agent_factory/       # YAML-based agent workflow builders
 ```
 
 ---
@@ -71,31 +75,31 @@ hexai/
 ## 🎯 Layer 1: Configuration Layer
 
 ### Purpose & Responsibility
-The **declarative definition layer** where business workflows are described in human-readable YAML format. This layer translates business requirements into machine-readable pipeline specifications.
+The **declarative definition layer** where AI agent workflows are described in human-readable YAML format. This layer enables low-code development by translating business requirements into executable agent specifications.
 
 ### Key Components
-- **Pipeline YAML Files**: Declarative workflow definitions
-- **Node Configurations**: Individual processing step specifications
+- **Agent Workflow Files**: Declarative agent workflow definitions
+- **Node Configurations**: Individual agent and processing step specifications
 - **Dependency Declarations**: Execution order and data flow definitions
-- **Parameter Schemas**: Input/output type definitions
+- **Parameter Schemas**: Input/output type definitions with Pydantic models
 
 ### Architectural Role
-- **Business-IT Bridge**: Allows non-technical stakeholders to understand and modify workflows
+- **Business-IT Bridge**: Allows non-technical stakeholders to create AI workflows
 - **Configuration Management**: Centralizes workflow definitions outside of code
-- **Version Control**: Enables tracking and rollback of business process changes
+- **Version Control**: Enables tracking and rollback of agent workflow changes
 - **Environment Adaptation**: Different configurations for different deployment environments
 
 ### Design Principles
 - **Declarative over Imperative**: Describe "what" not "how"
 - **Self-Documenting**: YAML serves as both configuration and documentation
 - **Technology Agnostic**: No implementation details, only business logic
-- **Composable**: Nodes can be mixed and matched across different pipelines
+- **Composable**: Agents can be mixed and matched across different workflows
 
 ### Example Configuration Structure
 ```yaml
-# Standard pipeline configuration format
-name: business_workflow_pipeline
-description: Multi-stage business process automation
+# Standard agent workflow configuration format
+name: research_analysis_workflow
+description: Multi-agent research and analysis system
 
 nodes:
   - type: function

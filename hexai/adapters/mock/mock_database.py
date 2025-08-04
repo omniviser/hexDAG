@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from hexai.app.ports.database import DatabasePort
+from hexai.core.ports.database import DatabasePort
 
 
 class MockDatabaseAdapter(DatabasePort):

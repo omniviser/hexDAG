@@ -2,8 +2,9 @@
 
 import asyncio
 
-from hexai.adapters.in_memory_memory import InMemoryMemory
 import pytest
+
+from hexai.adapters.in_memory_memory import InMemoryMemory
 
 
 class TestInMemoryMemory:

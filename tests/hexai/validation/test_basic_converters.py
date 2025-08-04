@@ -1,8 +1,9 @@
 """Unit tests for basic type converters."""
 
+import pytest
+
 from hexai.validation.basic_converters import BooleanConverter, StringToNumericConverter
 from hexai.validation.converters import ConversionError
-import pytest
 
 
 class TestStringToNumericConverter:
