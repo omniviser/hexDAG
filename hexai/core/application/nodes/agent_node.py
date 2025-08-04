@@ -244,10 +244,7 @@ class ReActAgentNode(BaseNodeFactory):
         # Handle both dict and Pydantic model inputs
         if isinstance(input_data, BaseModel):
             # Pydantic model - convert to dict
-            from typing import cast
-
-            model_input = cast(BaseModel, input_data)
-            raw_input = model_input.model_dump()
+            raw_input = input_data.model_dump()
         elif isinstance(input_data, dict):
             # Already a dict
             raw_input = input_data
@@ -363,9 +360,6 @@ class ReActAgentNode(BaseNodeFactory):
   - Function: INVOKE_TOOL: change_phase(phase='new_phase')
   - JSON: INVOKE_TOOL: {"tool": "change_phase", "params": {"phase": "new_phase"}}"""
 
-        else:
-            return "- Unknown format - please check tool calling configuration"
-
     async def _get_llm_response(
         self, prompt: PromptInput, llm_input: dict[str, Any], ports: dict[str, Any], node_name: str
     ) -> str:
@@ -378,7 +372,7 @@ class ReActAgentNode(BaseNodeFactory):
         llm_node_spec = self.llm_node.from_template(node_name, template=prompt)
 
         # Execute LLM with the prepared input
-        return await llm_node_spec.fn(llm_input, **ports)
+        return await llm_node_spec.fn(llm_input, **ports)  # type: ignore[no-any-return]
 
     async def _execute_single_step(
         self,

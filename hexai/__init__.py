@@ -4,15 +4,11 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
+# Test change to trigger pre-commit hooks
+
 # Adapter exports for testing and development
-from hexai.adapters import InMemoryMemory, LLMFactoryAdapter
-from hexai.adapters.enhanced_database import EnhancedDatabaseAdapter
-from hexai.adapters.mock import (
-    MockDatabaseAdapter,
-    MockEmbeddingSelectorPort,
-    MockLLM,
-    MockOntologyPort,
-)
+from hexai.adapters import InMemoryMemory
+from hexai.adapters.mock import MockDatabaseAdapter, MockEmbeddingSelectorPort, MockLLM
 
 # Agent Factory system exports
 from hexai.agent_factory import (
@@ -66,13 +62,9 @@ __all__ = [
     "OntologyPort",
     # Testing and Development Adapters
     "InMemoryMemory",
-    "LLMFactoryAdapter",
     "MockLLM",
     "MockDatabaseAdapter",
-    "MockOntologyPort",
     "MockEmbeddingSelectorPort",
-    # Enhanced Adapters
-    "EnhancedDatabaseAdapter",
     # Agent Factory System
     "PipelineDefinition",
     "PipelineCatalog",

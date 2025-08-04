@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM, MockOntologyPort
+from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.cli.compile import compile_single
@@ -79,20 +79,17 @@ class PipelineSchema:
 
             # Try to compile the pipeline to get schemas
             yaml_path = Path(self.pipeline._yaml_path)
-            self._compiled_data = compile_pipeline(yaml_path)
+            self._compiled_data = compile_pipeline(yaml_path)  # type: ignore[assignment]
         except Exception:
             # Compilation failed or not available
             self._compiled_data = None
 
     def get_input_schema(self) -> dict[str, Any]:
         """Get normalized input schema for any pipeline."""
-        if self._compiled_data and self._compiled_data.input_schema:
-            return self._compiled_data.input_schema
-        # Fallback to existing methods if compilation failed or no input schema
         try:
             primitives = self.pipeline.get_input_primitives()
             if primitives:
-                return primitives
+                return primitives  # type: ignore[no-any-return]
             input_type = self.pipeline.get_input_type()
             return self._normalize_type(input_type)
         except Exception:
@@ -100,10 +97,10 @@ class PipelineSchema:
 
     def get_output_schema(self) -> dict[str, Any]:
         """Get normalized output schema for any pipeline."""
-        if self._compiled_data and self._compiled_data.output_schemas:
+        if self._compiled_data:
             # Find the output schema of the last node(s) in the pipeline
             # For simplicity, assume the last node in execution_waves is the primary output
-            if self._compiled_data.execution_waves:
+            if self._compiled_data.execution_waves:  # type: ignore[unreachable]
                 last_wave_nodes = self._compiled_data.execution_waves[-1]
                 if last_wave_nodes:
                     # Assuming single output node for now, or combine if multiple
@@ -201,7 +198,7 @@ class BasicPipelineSchema:
             # Try input primitives first
             primitives = self.pipeline.get_input_primitives()
             if primitives:
-                return primitives
+                return primitives  # type: ignore[no-any-return]
 
             # Fallback to raw input type
             input_type = self.pipeline.get_input_type()
@@ -517,12 +514,9 @@ class PipelineCLI:
             )
 
             # Show schema info
-            if schema is not None:
-                logger.info(f"📥 Input Schema: {schema.get_input_schema()}")
-                logger.info(f"📤 Output Schema: {schema.get_output_schema()}")
-            else:
-                logger.info("📥 Input Schema: Not available")
-                logger.info("📤 Output Schema: Not available")
+
+            logger.info(f"📥 Input Schema: {schema.get_input_schema()}")
+            logger.info(f"📤 Output Schema: {schema.get_output_schema()}")
 
             # Show terminal visualization
             visualizer.show_terminal_view()
@@ -564,7 +558,6 @@ class PipelineCLI:
             mock_ports = {
                 "llm": MockLLM([json.dumps(json_response)]),
                 "database": MockDatabaseAdapter(),
-                "ontology": MockOntologyPort(),
                 "tool_router": FunctionBasedToolRouter(),
                 "memory": InMemoryMemory(),
             }

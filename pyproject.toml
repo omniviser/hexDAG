@@ -61,6 +61,7 @@ watchdog = "^6.0.0"
 mkdocs = "^1.5.0"
 mkdocs-material = "^9.5.0"
 mkdocs-mermaid2-plugin = "^1.1.0"
+types-pyyaml = "^6.0.12"
 
 [tool.poetry.scripts]
 hexdag = "hexai.cli:main"

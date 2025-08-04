@@ -45,12 +45,29 @@ class FunctionNode(BaseNodeFactory):
 
         # Create Pydantic models for validation
         # For basic types like dict, list, str, etc., use them directly
-        if isinstance(input_schema, type) and input_schema in (dict, list, str, int, float, bool):
+
+        # Handle input schema - check if it's a basic Python type
+        if isinstance(input_schema, type) and input_schema.__name__ in {
+            "dict",
+            "list",
+            "str",
+            "int",
+            "float",
+            "bool",
+        }:
             input_model: Type[BaseModel] | type | None = input_schema
         else:
             input_model = self.create_pydantic_model(f"{name}Input", input_schema)
 
-        if isinstance(output_schema, type) and output_schema in (dict, list, str, int, float, bool):
+        # Handle output schema - check if it's a basic Python type
+        if isinstance(output_schema, type) and output_schema.__name__ in {
+            "dict",
+            "list",
+            "str",
+            "int",
+            "float",
+            "bool",
+        }:
             output_model: Type[BaseModel] | type | None = output_schema
         else:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)

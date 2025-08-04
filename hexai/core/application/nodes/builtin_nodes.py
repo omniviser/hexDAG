@@ -110,7 +110,7 @@ def agent_node_factory(
     )
 
     # Convert continuation_prompt_template to dict format if provided
-    continuation_prompts = None
+    continuation_prompts: dict[str, str | PromptTemplate] | None = None
     if continuation_prompt_template:
         if isinstance(continuation_prompt_template, dict):
             # Convert dict[str, str] to dict[str, PromptTemplate]
@@ -121,7 +121,11 @@ def agent_node_factory(
                 else:
                     continuation_prompts[key] = value
         else:
-            continuation_prompts = {"continue": continuation_prompt_template}
+            # Handle string or PromptTemplate
+            if isinstance(continuation_prompt_template, str):
+                continuation_prompts = {"continue": PromptTemplate(continuation_prompt_template)}
+            else:
+                continuation_prompts = {"continue": continuation_prompt_template}
 
     result = _agent_node(
         name=node_id,

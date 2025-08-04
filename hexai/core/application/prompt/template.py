@@ -113,7 +113,7 @@ class PromptTemplate:
                 value = value[part]
             else:
                 # Handle object attribute access
-                value = getattr(value, part)
+                value = getattr(value, part)  # type: ignore[unreachable]
         return value
 
     def render(self, **kwargs: Any) -> str:

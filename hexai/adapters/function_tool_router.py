@@ -133,8 +133,8 @@ class FunctionBasedToolRouter(ToolRouter):
         type_hints = get_type_hints(func)
 
         # Extract parameters with type information
-        parameters = []
-        for param_name, param in sig.parameters.items():
+        parameters: list[ToolParameter] = []
+        for param_name, inspect_param in sig.parameters.items():
             param_type = type_hints.get(param_name, str)
 
             # Convert type to string for ToolParameter
@@ -147,8 +147,12 @@ class FunctionBasedToolRouter(ToolRouter):
                 name=param_name,
                 description=f"Parameter {param_name} of type {type_str}",
                 param_type=type_str,
-                required=param.default == inspect.Parameter.empty,
-                default=param.default if param.default != inspect.Parameter.empty else None,
+                required=inspect_param.default == inspect.Parameter.empty,
+                default=(
+                    inspect_param.default
+                    if inspect_param.default != inspect.Parameter.empty
+                    else None
+                ),
             )
             parameters.append(tool_param)
 

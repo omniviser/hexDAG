@@ -35,7 +35,7 @@ class JsonUtils:
             for match in matches:
                 cleaned = match.strip()
                 if JsonUtils._is_valid_json(cleaned):
-                    return cleaned
+                    return cleaned  # type: ignore[no-any-return]
 
         # Try to find JSON objects using simple bracket matching
         candidates = JsonUtils._find_json_objects(response)
@@ -119,14 +119,14 @@ class ToolUtils:
         if params_match:
             json_str = params_match.group(1)
             try:
-                return json.loads(json_str)
+                return json.loads(json_str)  # type: ignore[no-any-return]
             except json.JSONDecodeError:
                 # Try simple cleanup and parse again
                 cleaned = json_str.strip()
                 # Remove trailing commas
                 cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
                 try:
-                    return json.loads(cleaned)
+                    return json.loads(cleaned)  # type: ignore[no-any-return]
                 except json.JSONDecodeError:
                     pass
 

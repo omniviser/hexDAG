@@ -229,7 +229,7 @@ class DAGVisualizer:
                 edge_attrs = edge_attributes.get(edge_key, {}) if edge_attributes else {}
                 dot.edge(dep, node_name, **edge_attrs)
 
-        return dot.source
+        return dot.source  # type: ignore[no-any-return]
 
     def _extract_compiled_schemas(
         self, node_configs: list[dict[str, Any]]
@@ -1050,4 +1050,4 @@ def render_dag_to_image(
     dot = graphviz.Source(dot_content)
     rendered_path = dot.render(output_path, format=format, cleanup=True)
 
-    return rendered_path
+    return rendered_path  # type: ignore[no-any-return]

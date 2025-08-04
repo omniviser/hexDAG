@@ -92,7 +92,6 @@ class MetricsObserver(SyncObserver):
             handler(event)
 
     def _handle_pipeline_started(self, event: PipelineEvent) -> None:
-        event = event  # type: ignore
         if isinstance(event, PipelineStartedEvent):
             self.total_nodes = event.total_nodes
             self.pipeline_start_time = time.time()

@@ -199,7 +199,7 @@ class PipelineCompiler:
     def _infer_node_type(self, node_spec: Any, yaml_node: dict[str, Any]) -> str:
         """Infer node type from YAML (PipelineBuilder should have this info)."""
         # Get type from YAML since PipelineBuilder parsed it
-        return yaml_node.get("type", "unknown")
+        return yaml_node.get("type", "unknown")  # type: ignore[no-any-return]
 
     def _extract_node_params(
         self, node_spec: Any, yaml_node: dict[str, Any], builder: Any
@@ -233,7 +233,7 @@ class PipelineCompiler:
             elif node_type in ["llm", "agent"] and "output_schema" not in params:
                 params["output_schema"] = {"result": "str"}
 
-        return params
+        return params  # type: ignore[no-any-return]
 
     def _infer_function_schemas(
         self, func: Any
@@ -322,7 +322,7 @@ class PipelineCompiler:
         # Fallback: infer from first nodes
         first_nodes = [config for config in node_configs if not config.get("depends_on")]
         if first_nodes and "input_schema" in first_nodes[0].get("params", {}):
-            return first_nodes[0]["params"]["input_schema"]
+            return first_nodes[0]["params"]["input_schema"]  # type: ignore[no-any-return]
 
         return None
 

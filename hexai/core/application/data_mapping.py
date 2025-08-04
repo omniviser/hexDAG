@@ -238,7 +238,7 @@ class DataAggregator:
         elif len(dependencies) == 1:
             # Single dependency - return directly
             dep_name = dependencies[0]
-            return node_results.get(dep_name, {})
+            return node_results.get(dep_name, {})  # type: ignore[no-any-return]
         else:
             # Multiple dependencies - preserve namespaces
             aggregated = {}

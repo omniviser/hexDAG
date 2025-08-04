@@ -30,7 +30,7 @@ class DictToPydanticConverter(TypeConverter):
             )
 
         try:
-            return target_type.model_validate(value)  # type: ignore[attr-defined]
+            return target_type.model_validate(value)  # type: ignore[attr-defined,no-any-return]
         except ValidationError as e:
             error_details = []
             for error in e.errors():
@@ -114,7 +114,7 @@ class JsonStringToPydanticConverter(TypeConverter):
 
         # Then convert dict to Pydantic model
         try:
-            return target_type.model_validate(data)  # type: ignore[attr-defined]
+            return target_type.model_validate(data)  # type: ignore[attr-defined,no-any-return]
         except ValidationError as e:
             error_details = []
             for error in e.errors():
@@ -211,7 +211,8 @@ class NestedPydanticConverter(TypeConverter):
         try:
             # Convert source model to dict, then to target model
             intermediate_dict = value.model_dump()
-            return target_type.model_validate(intermediate_dict)  # type: ignore[attr-defined]
+            result = target_type.model_validate(intermediate_dict)  # type: ignore[attr-defined]
+            return result  # type: ignore[no-any-return]
         except ValidationError as e:
             error_details = []
             for error in e.errors():
