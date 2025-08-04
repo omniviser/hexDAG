@@ -13,7 +13,7 @@ from typing import Any
 
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.core.application.nodes.agent_node import AgentConfig, ReActAgentNode
+from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
 from hexai.validation import coerce_validator
@@ -110,11 +110,11 @@ async def main() -> None:
         ]
     )
 
-    # Create agent (no ToolDefinition needed!)
     medical_agent = agent_factory(
         name="medical_agent",
         main_prompt="You are a medical AI assistant. Analyze the patient case: {{input}}. Use available tools to research, assess risk, and generate treatment plans.",
         config=AgentConfig(max_steps=3),
+        output_schema=AgentState,  # Use AgentState as the output schema
     )
 
     # Create and run pipeline
@@ -131,9 +131,13 @@ async def main() -> None:
     )
 
     agent_result = result["medical_agent"]
-    print(f"   📊 Tools used: {len(agent_result.tools_used)}")
-    print(f"   🛠️  Tool calls: {agent_result.tools_used}")
-    print(f"   📝 Response: {agent_result.result[:100]}...")
+    print(f"   📊 Agent result type: {type(agent_result)}")
+    if hasattr(agent_result, "tools_used"):
+        print(f"   📊 Tools used: {len(agent_result.tools_used)}")
+        print(f"   🛠️  Tool calls: {agent_result.tools_used}")
+        print(f"   📝 Response: {agent_result.response[:100]}...")
+    else:
+        print(f"   📝 Response: {str(agent_result)[:100]}...")
     print()
 
     # Show real tool execution results
@@ -179,7 +183,7 @@ async def main() -> None:
     agent_result = result["medical_agent"]
     print(f"   📊 Tools used: {len(agent_result.tools_used)}")
     print(f"   🛠️  Tool calls: {agent_result.tools_used}")
-    print(f"   📝 Response: {agent_result.result[:100]}...")
+    print(f"   📝 Response: {agent_result.response[:100]}...")
     print()
 
     # Test 3: Decorator Pattern
@@ -232,12 +236,13 @@ async def main() -> None:
     demo_router = FunctionBasedToolRouter()
     print(f"📦 Demo router tools: {demo_router.get_available_tools()}")
 
-    # Test demo tools
-    search_result = await demo_router.call_tool("search", {"query": "AI healthcare"})
-    calc_result = await demo_router.call_tool("calculate", {"expression": "100 + 50"})
-
-    print(f"   🔍 Search result: {search_result}")
-    print(f"   🧮 Calculation: {calc_result}")
+    # Test demo tools (only basic tools are available)
+    try:
+        search_result = await demo_router.call_tool("search", {"query": "AI healthcare"})
+        print(f"   🔍 Search result: {search_result}")
+    except ValueError as e:
+        print(f"   ⚠️  Expected: {e}")
+        print("   📝 Demo router only has basic agent tools")
     print()
 
     # Test 5: Integration with Existing Architecture
@@ -274,6 +279,7 @@ async def main() -> None:
         name="integration_agent",
         main_prompt="You are a medical AI. Use tools to research: {{input}}",
         config=AgentConfig(max_steps=2),
+        output_schema=AgentState,  # Use AgentState as the output schema
     )
 
     # Test with real tools
@@ -296,7 +302,7 @@ async def main() -> None:
     agent_result = result["integration_agent"]
     print(f"   📊 Tools used: {len(agent_result.tools_used)}")
     print(f"   🛠️  Tool calls: {agent_result.tools_used}")
-    print(f"   📝 Response: {agent_result.result[:100]}...")
+    print(f"   📝 Response: {agent_result.response[:100]}...")
     print()
 
     # Show tool execution history

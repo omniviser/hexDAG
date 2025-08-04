@@ -94,10 +94,13 @@ class BaseLLMNode(BaseNodeFactory):
                 if rich_features and output_model:
                     enhanced_template = self.enhance_template_with_schema(template, output_model)
 
+                # Convert Pydantic model to dict if needed
+                input_dict = validated_input
+                if hasattr(validated_input, "model_dump"):
+                    input_dict = validated_input.model_dump()
+
                 # Generate messages and extract template variables
-                messages, template_vars = self._generate_messages(
-                    enhanced_template, validated_input
-                )
+                messages, template_vars = self._generate_messages(enhanced_template, input_dict)
 
                 # Emit prompt generated event
                 if event_manager:
