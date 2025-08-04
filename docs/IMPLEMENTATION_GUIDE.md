@@ -196,7 +196,7 @@ The DirectedGraph is the core data structure that represents a workflow. It mana
 
 **Essential Graph Operations:**
 ```python
-from hexai.app.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 # Create and populate graph
 graph = DirectedGraph()
@@ -227,7 +227,7 @@ NodeSpec represents a single processing step in a workflow. It's an immutable sp
 
 **Essential NodeSpec Example:**
 ```python
-from hexai.app.domain.dag import NodeSpec
+from hexai.core.domain.dag import NodeSpec
 
 # Create node specification
 node_spec = NodeSpec(
@@ -532,7 +532,7 @@ The framework provides a comprehensive event system for monitoring and debugging
 
 **Available Event Types:**
 ```python
-from hexai.app.application.events.base import EventType
+from hexai.core.application.events.base import EventType
 
 # Pipeline events
 EventType.PIPELINE_STARTED
@@ -566,7 +566,7 @@ The event system uses the observer pattern to provide flexible monitoring capabi
 
 **Essential Observer Setup:**
 ```python
-from hexai.app.application.events.observers import (
+from hexai.core.application.events.observers import (
     LoggingObserver,
     MetricsObserver,
     FileObserver
@@ -597,8 +597,8 @@ The event system provides comprehensive monitoring capabilities for production e
 
 **Essential Monitoring Setup:**
 ```python
-from hexai.app.application.events import PipelineEventManager
-from hexai.app.application.events.observers import LoggingObserver, MetricsObserver
+from hexai.core.application.events import PipelineEventManager
+from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 import logging
 
 # Production monitoring

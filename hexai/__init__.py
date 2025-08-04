@@ -15,20 +15,20 @@ from hexai.adapters.mock import (
 )
 
 # Core framework exports
-from hexai.app.application.nodes import (
+from hexai.core.application.nodes import (
     ConditionalNode,
     FunctionNode,
     LLMNode,
     LoopNode,
     ReActAgentNode,
 )
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.application.pipeline_builder import PipelineBuilder
-from hexai.app.application.prompt import FewShotPromptTemplate, PromptTemplate
-from hexai.app.domain import DirectedGraph, NodeSpec
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.pipelines.yaml_builder import YamlPipelineBuilder
+from hexai.core.application.prompt import FewShotPromptTemplate, PromptTemplate
+from hexai.core.domain import DirectedGraph, NodeSpec
 
 # Port interfaces
-from hexai.app.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
+from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
 
 # Pipeline system exports
 from hexai.pipelines import (
@@ -48,7 +48,7 @@ __all__ = [
     "Orchestrator",
     "DirectedGraph",
     "NodeSpec",
-    "PipelineBuilder",
+    "YamlPipelineBuilder",
     # Node Factories
     "FunctionNode",
     "LLMNode",

@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any
 
-from hexai.app.ports.llm import LLM, MessageList
+from hexai.core.ports.llm import LLM, MessageList
 
 logger = logging.getLogger(__name__)
 

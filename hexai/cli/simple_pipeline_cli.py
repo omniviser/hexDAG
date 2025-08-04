@@ -13,7 +13,7 @@ from typing import Any
 
 from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM, MockOntologyPort
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
-from hexai.app.domain.dag_visualizer import render_dag_to_image
+from hexai.core.domain.dag_visualizer import render_dag_to_image
 
 from hexai.pipelines.base import PipelineCatalog
 from hexai.cli.compile import compile_single

@@ -12,9 +12,9 @@ This example demonstrates function nodes in hexAI:
 import asyncio
 import json
 
-from hexai.app.application.nodes.function_node import FunctionNode
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph
+from hexai.core.application.nodes.function_node import FunctionNode
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph
 
 
 # Define the functions that will be wrapped by FunctionNode

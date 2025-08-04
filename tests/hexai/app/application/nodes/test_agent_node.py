@@ -2,8 +2,8 @@
 
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.app.application.nodes.agent_node import AgentConfig, ReActAgentNode
-from hexai.app.application.nodes.tool_utils import ToolCallFormat
+from hexai.core.application.nodes.agent_node import AgentConfig, ReActAgentNode
+from hexai.core.application.nodes.tool_utils import ToolCallFormat
 from pydantic import BaseModel
 import pytest
 

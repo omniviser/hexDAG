@@ -1,7 +1,7 @@
 """Tests for LLMFactoryAdapter."""
 
 from hexai.adapters.llm_factory_adapter import LLMFactoryAdapter
-from hexai.app.ports.llm import MessageList
+from hexai.core.ports.llm import MessageList
 import pytest
 
 

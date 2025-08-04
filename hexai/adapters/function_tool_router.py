@@ -4,8 +4,8 @@ import asyncio
 import inspect
 from typing import Any, Callable, get_type_hints
 
-from hexai.app.application.nodes.tool_utils import ToolDefinition, ToolParameter
-from hexai.app.ports.tool_router import ToolRouter
+from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
+from hexai.core.ports.tool_router import ToolRouter
 
 
 class FunctionBasedToolRouter(ToolRouter):

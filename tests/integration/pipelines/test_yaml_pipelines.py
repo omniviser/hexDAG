@@ -9,8 +9,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-from hexai.app.application.routes.registry_route import RegistryRoute
-from hexai.app.mocks import pipeline_functions
+from hexai.core.application.routes.registry_route import RegistryRoute
+from hexai.core.mocks import pipeline_functions
 import pytest
 import yaml
 

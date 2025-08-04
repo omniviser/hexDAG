@@ -3,8 +3,8 @@
 from unittest.mock import AsyncMock, Mock
 
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.app.application.nodes.llm_node import LLMNode
-from hexai.app.application.prompt import ChatPromptTemplate, PromptTemplate
+from hexai.core.application.nodes.llm_node import LLMNode
+from hexai.core.application.prompt import ChatPromptTemplate, PromptTemplate
 from pydantic import BaseModel
 import pytest
 

@@ -97,10 +97,10 @@ This file contains pre-built DAG objects to eliminate runtime parsing.
 from typing import Any
 
 # Only necessary imports for compiled execution - PYDANTIC-FIRST
-from hexai.app.application.events.manager import PipelineEventManager
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph
-from hexai.app.application.nodes import NodeFactory
+from hexai.core.application.events.manager import PipelineEventManager
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph
+from hexai.core.application.nodes import NodeFactory
 
 # PRE-COMPUTED DATA
 EXECUTION_WAVES: list[list[str]] = {data.execution_waves!r}

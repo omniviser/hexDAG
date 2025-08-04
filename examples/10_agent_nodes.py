@@ -13,9 +13,9 @@ from typing import Any
 
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.app.application.nodes.agent_node import AgentConfig, ReActAgentNode
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph
+from hexai.core.application.nodes.agent_node import AgentConfig, ReActAgentNode
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph
 from hexai.validation import coerce_validator
 
 

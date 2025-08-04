@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from hexai.app.application.events import (
+from hexai.core.application.events import (
     LLMPromptGeneratedEvent,
     LLMResponseReceivedEvent,
     NodeCompletedEvent,

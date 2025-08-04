@@ -3,9 +3,9 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from hexai.app.application.events.manager import PipelineEventManager
-from hexai.app.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
-from hexai.app.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.application.events.manager import PipelineEventManager
+from hexai.core.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.validation import strict_validator
 from pydantic import BaseModel
 import pytest
@@ -609,7 +609,7 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_graph_level_schema_validation(self, orchestrator, event_manager):
         """Test that graph validates schema compatibility at construction time."""
-        from hexai.app.domain.dag import SchemaCompatibilityError
+        from hexai.core.domain.dag import SchemaCompatibilityError
 
         class OutputSchemaA(BaseModel):
             data: str
@@ -749,7 +749,7 @@ class TestOrchestrator:
         )
 
         # Consumer with explicit data mapping using new API
-        from hexai.app.application.nodes.function_node import FunctionNode
+        from hexai.core.application.nodes.function_node import FunctionNode
 
         consumer_node = FunctionNode()(
             name="consumer",
@@ -797,7 +797,7 @@ class TestOrchestrator:
         )
 
         # Consumer without explicit mapping - uses structured aggregation
-        from hexai.app.application.nodes.function_node import FunctionNode
+        from hexai.core.application.nodes.function_node import FunctionNode
 
         consumer_node = FunctionNode()(
             name="consumer",
@@ -854,7 +854,7 @@ class TestOrchestrator:
         )
 
         # Consumer with custom field mapping using new API
-        from hexai.app.application.nodes.function_node import FunctionNode
+        from hexai.core.application.nodes.function_node import FunctionNode
 
         consumer_node = FunctionNode()(
             name="consumer",
@@ -954,7 +954,7 @@ class TestOrchestrator:
         )
 
         # Node with explicit mapping using new API
-        from hexai.app.application.nodes.function_node import FunctionNode
+        from hexai.core.application.nodes.function_node import FunctionNode
 
         mapped_node = FunctionNode()(
             name="mapped",
@@ -990,7 +990,7 @@ class TestOrchestrator:
 
     async def test_input_mapping_convenience_methods(self):
         """Test convenience methods for creating input mappings."""
-        from hexai.app.application.nodes.function_node import FunctionNode
+        from hexai.core.application.nodes.function_node import FunctionNode
 
         # Test passthrough mapping
         passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
@@ -1009,7 +1009,7 @@ class TestOrchestrator:
 
     async def test_with_input_mapping_enhancement(self):
         """Test enhancing existing nodes with input mapping."""
-        from hexai.app.application.nodes.function_node import FunctionNode
+        from hexai.core.application.nodes.function_node import FunctionNode
 
         # Create basic node
         factory = FunctionNode()
@@ -1054,7 +1054,7 @@ class TestOrchestrator:
         )
 
         # LLM node with input mapping
-        from hexai.app.application.nodes.llm_node import LLMNode
+        from hexai.core.application.nodes.llm_node import LLMNode
 
         # Mock LLM for testing
         async def mock_llm_response(input_data: dict, **ports) -> str:

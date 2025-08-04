@@ -1,6 +1,6 @@
 """Simple compile-time type safety checker for pipelines."""
 
-from hexai.app.domain.dag import DirectedGraph
+from hexai.core.domain.dag import DirectedGraph
 from hexai.validation import can_convert_schema
 
 

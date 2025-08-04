@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from hexai.app.ports.ontology import OntologyPort
+from hexai.core.ports.ontology import OntologyPort
 
 
 class MockOntologyPort(OntologyPort):

@@ -464,7 +464,7 @@ print(f"Results: {results}")
 import asyncio
 from pipelines.text2sql.pipeline_compiled import build_compiled_dag, Text2SQLInput
 from hexai import Orchestrator, Context
-from hexai.app.application.events.observers import LoggingObserver, MetricsObserver
+from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 
 class ProductionPipelineRunner:
     """Optimized pipeline runner for production."""
@@ -971,8 +971,8 @@ results = await pipeline.execute(input_data, ports=production_ports)
 
 **Event Observers:**
 ```python
-from hexai.app.application.events import PipelineEventManager
-from hexai.app.application.events.observers import LoggingObserver, MetricsObserver
+from hexai.core.application.events import PipelineEventManager
+from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 
 # Production monitoring
 event_manager = PipelineEventManager()

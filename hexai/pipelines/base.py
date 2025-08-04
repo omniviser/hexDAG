@@ -1,27 +1,31 @@
 """Unified pipeline management system with base class and catalog functionality."""
 
 from abc import ABC, abstractmethod
-import importlib
-import inspect
 import os
 import traceback
 from typing import Any, Type
 
-from hexai import Orchestrator, PipelineBuilder
-from hexai.app.domain.dag import DirectedGraph
+from hexai import Orchestrator
+from hexai.pipelines.yaml_builder import YamlPipelineBuilder
+from hexai.core.domain.dag import DirectedGraph
 import yaml
 
 
 class PipelineDefinition(ABC):
     """Base class for pipeline definitions."""
 
-    def __init__(self) -> None:
-        """Initialize the pipeline definition."""
-        self.builder = PipelineBuilder()
-        self._yaml_path: str | None = None
+    def __init__(self, yaml_path: str | None = None) -> None:
+        """Initialize the pipeline definition.
+        
+        Args:
+            yaml_path: Optional path to YAML configuration file
+        """
+        self.builder = YamlPipelineBuilder()
+        self._yaml_path = yaml_path
         self._config: dict[str, Any] | None = None
         self._register_functions()
-        self._find_yaml()
+        if yaml_path:
+            self._load_yaml(yaml_path)
 
     @property
     @abstractmethod
@@ -43,19 +47,11 @@ class PipelineDefinition(ABC):
         """
         pass
 
-    def _find_yaml(self) -> None:
-        """Find the pipeline YAML in the same directory."""
-        class_file = inspect.getfile(self.__class__)
-        class_dir = os.path.dirname(os.path.abspath(class_file))
-
-        # Try pipeline.yaml first, then {name}.yaml
-        for filename in ["pipeline.yaml", f"{self.name}.yaml"]:
-            yaml_path = os.path.join(class_dir, filename)
-            if os.path.exists(yaml_path):
-                self._yaml_path = yaml_path
-                with open(yaml_path) as f:
-                    self._config = yaml.safe_load(f.read())
-                break
+    def _load_yaml(self, yaml_path: str) -> None:
+        """Load YAML configuration from the specified path."""
+        self._yaml_path = yaml_path
+        with open(yaml_path) as f:
+            self._config = yaml.safe_load(f.read())
 
     async def execute(
         self,
@@ -405,39 +401,11 @@ class PipelineCatalog:
     def __init__(self) -> None:
         """Initialize the pipeline catalog."""
         self._pipelines: dict[str, Type[PipelineDefinition]] = {}
-        self._discover_pipelines()
 
-    def _discover_pipelines(self) -> None:
-        """Discover all available pipeline modules."""
-        pipelines_dir = os.path.dirname(__file__)
-
-        for item in os.listdir(pipelines_dir):
-            item_path = os.path.join(pipelines_dir, item)
-
-            # Skip non-directories and special directories
-            if not os.path.isdir(item_path) or item.startswith(("_", ".")):
-                continue
-
-            # Check for pipeline.yaml
-            if not os.path.exists(os.path.join(item_path, "pipeline.yaml")):
-                continue
-
-            try:
-                # Import the module and find PipelineDefinition subclasses
-                module = importlib.import_module(f"pipelines.{item}")
-
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if (
-                        isinstance(attr, type)
-                        and issubclass(attr, PipelineDefinition)
-                        and attr != PipelineDefinition
-                    ):
-                        instance = attr()
-                        self._pipelines[instance.name] = attr
-
-            except ImportError:
-                pass
+    def register_pipeline(self, pipeline_class: Type[PipelineDefinition]) -> None:
+        """Manually register a pipeline class."""
+        instance = pipeline_class()
+        self._pipelines[instance.name] = pipeline_class
 
     def list_pipelines(self) -> list[dict[str, str]]:
         """List all available pipelines."""

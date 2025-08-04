@@ -2,7 +2,7 @@
 
 import pytest
 
-from hexai.app.domain.services.relationship_service import RelationshipService
+from hexai.core.domain.services.relationship_service import RelationshipService
 
 
 class TestRelationshipService:

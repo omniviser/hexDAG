@@ -40,7 +40,7 @@ poetry install
 
 ```python
 from hexai import DirectedGraph, Orchestrator
-from hexai.app.application.nodes import LLMNode, FunctionNode
+from hexai.core.application.nodes import LLMNode, FunctionNode
 
 # Create nodes
 llm_node = LLMNode()

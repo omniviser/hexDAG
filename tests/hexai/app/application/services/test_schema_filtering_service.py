@@ -2,8 +2,8 @@
 
 import pytest
 
-from hexai.app.application.services.schema_filtering_service import SchemaFilteringService
-from hexai.app.domain.services.relationship_service import RelationshipService
+from hexai.core.application.services.schema_filtering_service import SchemaFilteringService
+from hexai.core.domain.services.relationship_service import RelationshipService
 
 
 class TestSchemaFilteringService:

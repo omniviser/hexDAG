@@ -1,6 +1,6 @@
 """Tests for the data mapping system."""
 
-from hexai.app.application.data_mapping import (
+from hexai.core.application.data_mapping import (
     DEFAULT_FIELD_MAPPINGS,
     DataAggregator,
     DataMapper,

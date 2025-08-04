@@ -7,7 +7,7 @@ without Context dependency.
 import asyncio
 from unittest.mock import MagicMock
 
-from hexai.app.application.events import (
+from hexai.core.application.events import (
     NodeCompletedEvent,
     NodeFailedEvent,
     NodeStartedEvent,
@@ -15,8 +15,8 @@ from hexai.app.application.events import (
     PipelineStartedEvent,
     ValidationWarningEvent,
 )
-from hexai.app.application.events.base import SyncObserver
-from hexai.app.application.events.observers import LoggingObserver, MetricsObserver
+from hexai.core.application.events.base import SyncObserver
+from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 import pytest
 
 

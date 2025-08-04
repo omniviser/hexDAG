@@ -2,8 +2,8 @@
 
 from unittest.mock import AsyncMock
 
-from hexai.app.application.nodes.function_node import FunctionNode
-from hexai.app.domain.dag import NodeSpec
+from hexai.core.application.nodes.function_node import FunctionNode
+from hexai.core.domain.dag import NodeSpec
 from pydantic import BaseModel
 import pytest
 

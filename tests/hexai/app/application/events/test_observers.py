@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from hexai.app.application.events import LoggingObserver, MetricsObserver, PipelineStartedEvent
+from hexai.core.application.events import LoggingObserver, MetricsObserver, PipelineStartedEvent
 
 
 class MockEventManager:

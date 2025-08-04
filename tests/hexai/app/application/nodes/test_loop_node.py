@@ -1,7 +1,7 @@
 """Tests for LoopNode and ConditionalNode implementations."""
 
-from hexai.app.application.nodes import ConditionalNode, LoopNode
-from hexai.app.domain.dag import NodeSpec
+from hexai.core.application.nodes import ConditionalNode, LoopNode
+from hexai.core.domain.dag import NodeSpec
 import pytest
 
 

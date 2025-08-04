@@ -2,9 +2,9 @@
 
 from typing import Any
 
-from hexai.app.application.services.schema_filtering_service import SchemaFilteringService
-from hexai.app.domain.services.relationship_service import RelationshipService
-from hexai.app.ports.database import DatabasePort
+from hexai.core.application.services.schema_filtering_service import SchemaFilteringService
+from hexai.core.domain.services.relationship_service import RelationshipService
+from hexai.core.ports.database import DatabasePort
 
 
 class EnhancedDatabaseAdapter(DatabasePort):

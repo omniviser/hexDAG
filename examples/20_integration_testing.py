@@ -8,8 +8,8 @@ import asyncio
 import time
 from typing import Any, Dict, List
 
-from hexai.app.application.orchestrator import Orchestrator
-from hexai.app.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.validation import coerce_validator
 
 
