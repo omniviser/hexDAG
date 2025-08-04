@@ -1,11 +1,11 @@
 [flake8]
 # General Options
-exclude = .git,__pycache__,docs/source/conf.py,old,build,dist,*.toml,*.yaml,*.yml,*.sh,*.md,*.html,*.css,*.js
+exclude = .git,__pycache__,docs/source/conf.py,old,build,dist,examples,*.toml,*.yaml,*.yml,*.sh,*.md,*.html,*.css,*.js
 max-complexity = 10
 max-line-length = 100
 max-annotations-complexity = 4
 import-order-style = google
-application-import-names = hexai, pipelines
+application-import-names = hexai
 extend-ignore = S106
 per-file-ignores =
     tests/*:S101,D100,D101,D102,D103,D104
