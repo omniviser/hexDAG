@@ -7,7 +7,7 @@ from typing import Any, Type
 
 import yaml
 
-from hexai import Orchestrator
+from hexai.core.application.orchestrator import Orchestrator
 from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
 from hexai.core.domain.dag import DirectedGraph
 

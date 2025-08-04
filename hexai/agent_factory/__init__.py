@@ -13,13 +13,15 @@ from .models import (  # New ontology models aligned with database schema; Query
     RelationshipType,
     SQLQuery,
 )
+from .yaml_builder import YamlPipelineBuilder
 
 __all__ = [
-    # Pipeline System
+    # Agent Factory System
     "PipelineDefinition",
     "PipelineCatalog",
     "get_catalog",
-    # New Ontology Models
+    "YamlPipelineBuilder",
+    # Agent Factory Models
     "Ontology",
     "OntologyNode",
     "OntologyRelation",
