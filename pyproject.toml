@@ -5,12 +5,12 @@ description = "Lightweight DAG orchestration framework with enterprise pipeline 
 authors = ["hexDAG Team <developers@hexdag.dev>"]
 readme = "README.md"
 license = "MIT"
-homepage = "https://github.com/yourusername/hexdag"
-repository = "https://github.com/yourusername/hexdag"
-documentation = "https://hexdag.readthedocs.io"
+homepage = "https://dev.azure.com/omniviser/_git/hexDAG"
+repository = "https://dev.azure.com/omniviser/_git/hexDAG"
+documentation = "https://dev.azure.com/omniviser/hexDAG"
 keywords = ["dag", "orchestration", "pipeline", "workflow", "async", "hexagonal-architecture"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
