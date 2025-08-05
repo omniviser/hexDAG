@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.validation import strict_validator
+from hexai.core.validation import strict_validator
 
 
 # Test data models
@@ -44,12 +44,12 @@ async def async_combine(inputs: dict, **ports) -> int:
 
 
 def failing_function(x: int, **ports) -> int:
-    """Function that always raises an exception."""
+    """Raise an exception."""
     raise ValueError("Intentional test failure")
 
 
 async def async_with_memory(x: int, **ports) -> int:
-    """Function that uses event manager memory."""
+    """Use event manager memory."""
     event_manager = ports.get("event_manager")
     if event_manager:
         event_manager.set_memory("processed_value", x)
@@ -57,17 +57,17 @@ async def async_with_memory(x: int, **ports) -> int:
 
 
 async def processor_function(input_data: str, **ports) -> ProcessorOutput:
-    """Function that processes text input."""
+    """Process text input."""
     return ProcessorOutput(text=f"processed_{input_data}", metadata={"lang": "en"})
 
 
 async def validator_function(input_data: str, **ports) -> ValidatorOutput:
-    """Function that validates input."""
+    """Validate input."""
     return ValidatorOutput(status="valid", score=0.95)
 
 
 async def mapper_consumer(input_data: dict, **ports) -> str:
-    """Function that consumes mapped data."""
+    """Consume mapped data."""
     content = input_data.get("content", "")
     language = input_data.get("language", "unknown")
     validation_status = input_data.get("validation_status", "unknown")
@@ -75,7 +75,7 @@ async def mapper_consumer(input_data: dict, **ports) -> str:
 
 
 async def structured_consumer(input_data: dict, **ports) -> str:
-    """Function that consumes structured aggregated data."""
+    """Consume structured aggregated data."""
     processor_data = input_data.get("processor", {})
     validator_data = input_data.get("validator", {})
 
@@ -260,7 +260,7 @@ class TestOrchestrator:
         """Test input preparation for nodes with multiple dependencies."""
 
         async def analyzer(inputs: dict, **ports) -> str:
-            """Function that expects dict input from multiple dependencies."""
+            """Expect dict input from multiple dependencies."""
             values = list(inputs.values())
             return f"sum={sum(values)}"
 
@@ -318,10 +318,10 @@ class TestOrchestrator:
 
     @pytest.mark.asyncio
     async def test_ports_flag_injection(self, orchestrator, event_manager):
-        """Integration test: dummy node reads ports['flag'] == 42."""
+        """Test dummy node reads ports['flag'] == 42."""
 
         def dummy_node_with_flag_check(input_data, flag=None, **ports):
-            """Dummy node that checks for flag port."""
+            """Check for flag port."""
             # Verify the flag is what we expect
             assert flag == 42
             return {"result": "success", "flag_value": flag, "input": input_data}
@@ -440,7 +440,6 @@ class TestOrchestrator:
     async def test_input_validation_with_pydantic_model(self, orchestrator, event_manager):
         """Test input validation using Pydantic models."""
 
-        # Define input schema
         class ProcessingInput(BaseModel):
             text: str
             priority: int = 1
@@ -515,11 +514,11 @@ class TestOrchestrator:
             threshold: float = 0.5
 
         async def producer_node(input_data: str, **ports) -> dict:
-            """Produces data in expected format."""
+            """Produce data in expected format."""
             return {"result": input_data.upper(), "score": 0.8}
 
         async def consumer_node(input_data: NodeBInput, **ports) -> dict:
-            """Consumes validated data (receives Pydantic model)."""
+            """Consume validated data (receives Pydantic model)."""
             passed = input_data.score >= input_data.threshold
             return {"analysis": input_data.result, "passed_threshold": passed}
 
@@ -568,7 +567,7 @@ class TestOrchestrator:
     async def test_node_to_node_validation_strict(self, event_manager):
         """Test validation of data flowing between nodes using strict Pydantic models."""
         # Use strict validation for this test
-        from hexai.validation import strict_validator
+        from hexai.core.validation import strict_validator
 
         strict_orchestrator = Orchestrator(validator=strict_validator())
 
@@ -582,11 +581,11 @@ class TestOrchestrator:
             threshold: float = 0.5
 
         async def producer_node(input_data: str, **ports) -> dict:
-            """Produces data in expected format."""
+            """Produce data in expected format."""
             return {"result": input_data.upper(), "score": 0.8}
 
         async def consumer_node(input_data: NodeBInput, **ports) -> dict:
-            """Consumes validated data (receives Pydantic model)."""
+            """Consume validated data (receives Pydantic model)."""
             passed = input_data.score >= input_data.threshold
             return {"analysis": input_data.result, "passed_threshold": passed}
 

@@ -12,7 +12,7 @@ from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.validation import coerce_validator, passthrough_validator, strict_validator
+from hexai.core.validation import coerce_validator, passthrough_validator, strict_validator
 
 
 async def process_strict(input_data: str) -> dict:

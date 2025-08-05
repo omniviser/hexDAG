@@ -26,7 +26,7 @@ from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.events.observers import LoggingObserver
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.validation import coerce_validator
+from hexai.core.validation import coerce_validator
 
 
 class CustomMetricsObserver(Observer):

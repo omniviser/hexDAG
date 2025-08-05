@@ -11,7 +11,7 @@ Key Components:
 - BaseValidator: Base implementation with common validation logic
 
 Example Usage:
-    from hexai.validation import ValidationStrategy, BaseValidator, ValidationContext
+    from hexai.core.validation import ValidationStrategy, BaseValidator, ValidationContext
 
     # Create a validator with coerce strategy
     validator = BaseValidator(ValidationStrategy.COERCE)
@@ -144,7 +144,7 @@ def register_custom_converter(converter: TypeConverter) -> None:
 
     Example
     -------
-        from hexai.validation import register_custom_converter, TypeConverter
+        from hexai.core.validation import register_custom_converter, TypeConverter
 
         class MyCustomConverter(TypeConverter):
             def can_convert(self, source_type: type, target_type: type) -> bool:

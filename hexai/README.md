@@ -656,7 +656,7 @@ graph.add(NodeSpec("c", func_c).after("a", "b"))
 Flexible validation strategies:
 
 ```python
-from hexai.validation import strict_validator, coerce_validator
+from hexai.core.validation import strict_validator, coerce_validator
 
 # Strict: fail on type mismatch
 orchestrator = Orchestrator(validator=strict_validator())
@@ -719,7 +719,7 @@ class MyCustomNode(BaseNodeFactory):
 Add domain-specific validation:
 
 ```python
-from hexai.validation import TypeConverter, register_converter
+from hexai.core.validation import TypeConverter, register_converter
 
 class DateConverter(TypeConverter):
     def can_convert(self, source_type, target_type):

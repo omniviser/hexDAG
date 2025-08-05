@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from hexai.core.domain.dag import DirectedGraph
-from hexai.validation import IValidator, ValidationContext, coerce_validator
+from hexai.core.validation import IValidator, ValidationContext, coerce_validator
 
 from ..domain.dag import NodeSpec
 from .events import (

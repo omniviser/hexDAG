@@ -1,6 +1,6 @@
 """Unit tests for validation types (ValidationResult and ValidationContext)."""
 
-from hexai.validation.types import ValidationContext, ValidationResult
+from hexai.core.validation.types import ValidationContext, ValidationResult
 
 
 class TestValidationContext:
