@@ -18,7 +18,8 @@ class PipelineDefinition(ABC):
     def __init__(self, yaml_path: str | None = None) -> None:
         """Initialize the pipeline definition.
 
-        Args:
+        Args
+        ----
             yaml_path: Optional path to YAML configuration file
         """
         self.builder = YamlPipelineBuilder()
