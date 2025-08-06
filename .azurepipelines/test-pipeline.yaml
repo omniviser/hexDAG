@@ -11,14 +11,6 @@ pr:
   branches:
     include:
       - main
-
-resources:
-  repositories:
-    - repository: templates
-      type: git
-      name: ADO-pipelines
-      ref: refs/heads/ci/self-hosted
-
 pool:
   vmImage: 'ubuntu-latest'
 
