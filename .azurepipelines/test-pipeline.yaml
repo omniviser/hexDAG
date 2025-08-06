@@ -88,10 +88,7 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
           export PATH=\$PATH:\$HOME/.local/bin
-        displayName: "Install Poetry and graphviz"
-
-      - bash: sudo apt-get install graphviz -f
-        displayName: Install graphviz
+        displayName: "Install Poetry"
 
       - script: |
           poetry install
