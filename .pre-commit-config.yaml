@@ -83,6 +83,7 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
+
       - id: check-examples
         name: Check examples functionality
         entry: poetry run python scripts/check_examples.py
@@ -90,6 +91,7 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
+
       - id: pytest
         name: Run pytest
         entry: poetry run pytest tests/hexai/agent_factory/ -x --tb=short
@@ -97,3 +99,26 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
+
+      - id: branch-name-check
+        name: Branch Name Check
+        entry: |
+            bash -c '
+            # Retrieve the branch name from Git
+            BRANCH_NAME=$(git symbolic-ref --short HEAD)
+
+            # Define your naming convention regex pattern
+            PATTERN="^(ci|dependabot\/pip|docs|experiment|feat|fix|refactor|test)\/[A-Za-z0-9._-]+$"
+
+            # Check if the branch name matches the pattern
+            if [[ $BRANCH_NAME =~ $PATTERN ]]; then
+                echo "Branch name \"$BRANCH_NAME\" is valid."
+                exit 0
+            else
+                echo "Branch name \"$BRANCH_NAME\" is invalid. It must match the pattern \"$PATTERN\"."
+                exit 1
+            fi
+            '
+        language: system
+        pass_filenames: false
+        always_run: true
