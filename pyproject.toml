@@ -49,6 +49,7 @@ flake8-print = "5.0.0"
 pep8-naming = "0.14.1"
 mypy = "1.17.1"
 bandit = "1.7.10"
+ruff = "0.12.7"
 
 # Development Tools
 pre-commit = "3.8.0"
