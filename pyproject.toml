@@ -23,7 +23,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "3.12.8"
+python = "3.12.*"
 pydantic = "2.11.7"
 click = "8.2.1"
 rich = "13.9.4"
