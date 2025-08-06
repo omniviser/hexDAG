@@ -86,7 +86,7 @@ jobs:
           echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
           export PATH=\$PATH:\$HOME/.local/bin
 
-          apt update && apt install graphviz
+          apt-get update && apt-get install graphviz
         displayName: "Install Poetry and graphviz"
 
       - script: |
