@@ -112,6 +112,10 @@ jobs:
         displayName: "Run Mypy ./hexai"
 
       - script: |
+          poetry run ruff check ./hexai
+        displayName: "Run Ruff ./hexai"
+
+      - script: |
           tests_folder=./tests
           source_code=./hexai
           echo "Running tests with coverage..."
