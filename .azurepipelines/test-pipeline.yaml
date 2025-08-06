@@ -81,13 +81,17 @@ jobs:
           versionSpec: "3.12"
         displayName: "Use Python 3.12"
 
+      - bash: sudo apt-get install graphviz -f
+        displayName: Install graphviz
+
       - script: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
           export PATH=\$PATH:\$HOME/.local/bin
-
-          sudo apt-get install -qq -y graphviz
         displayName: "Install Poetry and graphviz"
+
+      - bash: sudo apt-get install graphviz -f
+        displayName: Install graphviz
 
       - script: |
           poetry install
