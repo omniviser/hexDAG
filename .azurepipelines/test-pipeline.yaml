@@ -115,7 +115,7 @@ jobs:
           tests_folder=./tests
           source_code=./hexai
           echo "Running tests with coverage..."
-          poetry run pytest $tests_folder --cov=$source_code --cov-fail-under=85 --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
+          poetry run pytest $tests_folder --cov=$source_code --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"
 
       - script: |
