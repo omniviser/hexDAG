@@ -6,7 +6,7 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 
 1. **Fork and clone the repository**
    ```bash
-   git clone https://github.com/yourusername/hexdag.git
+   git clone https://dev.azure.com/omniviser/_git/hexDAG
    cd hexdag
    ```
 
@@ -64,7 +64,7 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 poetry run pytest
 
 # Run with coverage
-poetry run pytest --cov=hexai --cov=pipelines
+poetry run pytest --cov=hexai
 
 # Run specific test files
 poetry run pytest tests/unit/hexai/

@@ -35,7 +35,7 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 
 ```bash
 # Clone and install
-git clone https://github.com/yourusername/hexdag.git
+git clone https://dev.azure.com/omniviser/_git/hexDAG
 cd hexdag
 poetry install
 ```
@@ -80,27 +80,6 @@ graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
 
 orchestrator = Orchestrator()
 result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
-```
-
-### Real-Time Frontend Streaming
-
-```javascript
-// Connect to real-time agent updates
-const ws = new WebSocket('ws://localhost:8000/stream');
-
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-
-    // See agent thinking in real-time
-    if (data.type === 'agent_thinking') {
-        console.log(`Agent ${data.agent_id}: ${data.thought}`);
-    }
-
-    // Watch memory operations
-    if (data.type === 'memory_ingestion') {
-        updateMemoryVisualization(data);
-    }
-};
 ```
 
 ## 📚 Documentation
@@ -172,9 +151,8 @@ poetry run pre-commit run --all-files
 
 ## 🤝 Community
 
-- **Discord**: [Join our community](https://discord.gg/hexdag)
 - **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/hexdag/issues)
+
 
 ## 📄 License
 

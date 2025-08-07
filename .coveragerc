@@ -1,16 +1,21 @@
 [run]
-source = hexai, pipelines
+source = hexai
 omit =
     */tests/*
     */test_*
     */conftest.py
     */__pycache__/*
     */examples/*
+    */.venv/*
+    */venv/*
+    */site-packages/*
+    */__init__.py
 
 [report]
 exclude_lines =
     pragma: no cover
     def __repr__
+    def __str__
     if self.debug:
     if settings.DEBUG
     raise AssertionError
@@ -19,3 +24,16 @@ exclude_lines =
     if __name__ == .__main__.:
     class .*\bProtocol\):
     @(abc\.)?abstractmethod
+    @abstractmethod
+    # TYPE_CHECKING imports
+    if TYPE_CHECKING:
+    # Defensive assertions
+    assert False
+    # Development/debug code
+    if DEBUG:
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

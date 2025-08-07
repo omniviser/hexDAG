@@ -1,13 +1,13 @@
-# 🗺️ Development Roadmap: hexAI Framework & Enterprise Pipelines
+# 🗺️ Development Roadmap: hexAI Framework & Agent Factory
 
-> **Strategic development plan separating the core hexAI framework from enterprise pipeline applications**
+> **Strategic development plan separating the core hexAI framework from agent factory applications**
 
 ## 🎯 Vision & Architecture Separation
 
 ### Core Philosophy
 - **hexAI**: Lightweight, focused DAG orchestration framework
-- **Pipelines**: Enterprise wrapper with scalability, persistence, and business features
-- **Clear Boundaries**: Framework provides hooks, enterprise layer adds capabilities
+- **Agent Factory**: YAML-based agent workflow builder with multi-agent coordination patterns
+- **Clear Boundaries**: Framework provides hooks, agent factory adds business workflow capabilities
 
 ```mermaid
 graph TD
@@ -18,17 +18,17 @@ graph TD
         D[Event Hooks]
     end
 
-    subgraph "Enterprise Pipelines Layer"
-        E[Pipeline Catalog]
-        F[Compilation & Optimization]
-        G[Distributed Execution]
-        H[Persistence & Memory]
+    subgraph "Agent Factory Layer"
+        E[YAML Pipeline Builder]
+        F[Multi-Agent Coordination]
+        G[Business Workflow Patterns]
+        H[Agent Catalog System]
     end
 
-    subgraph "Business Applications"
-        I[Text2SQL Pipeline]
-        J[Research Pipeline]
-        K[ETL Pipeline]
+    subgraph "Agent Applications"
+        I[Text2SQL Agents]
+        J[Research Agents]
+        K[Analysis Workflows]
     end
 
     A --> E
@@ -44,10 +44,10 @@ graph TD
 
 ## 🏗️ Track 1: hexAI Core Framework Development
 
-### **Immediate: Simplification Sprint (1-2 weeks)**
-**Objective**: Reduce complexity and improve developer experience
+### **Immediate: Core Framework Polish**
+**Objective**: Stabilize and optimize existing functionality
 
-#### **Quick Fixes**
+#### **Architecture Improvements**
 - [ ] **Extract Retry Logic from LLMNode**
   - Move 400+ lines of retry logic to validation framework
   - Use validation strategies instead of node-specific logic
@@ -55,9 +55,8 @@ graph TD
 
 - [ ] **Fix Agent Built-in Tools Architecture**
   - Move `tool_end` and `change_phase` from adapter layer to core domain
-  - Implement CoreAgentTools or AgentToolRouter to maintain hexagonal architecture
+  - Implement CoreAgentTools to maintain hexagonal architecture
   - Remove direct FunctionBasedToolRouter dependency from agent_node.py
-  - Ensure agent's essential behavior isn't defined in adapters
 
 - [ ] **Create Event Emission Decorators**
   ```python
@@ -71,31 +70,41 @@ graph TD
   - Use builder pattern or config objects
   - Provide sensible defaults
 
+#### **Performance & DX Improvements**
 - [ ] **Extract JSON Parsing Strategies**
   - Remove regex duplication
   - Create pluggable parser interface
   - Move to `hexai.parsing` module
+  - Check the security of it
+  - Create YAML Parsing Strategy
 
-- [ ] **Remove Verbose Documentation from Code**
-  - Move detailed examples to separate docs
-  - Keep docstrings concise
-  - Focus on what, not how
+- [ ] **Static Pipeline Linter (`hexai-lint`)**
+  - CLI tool for validating pipelines before execution
+  - Detect cycles, unused outputs, unknown parameters
+  - Emit rule IDs (E100, W200, I300) for different error types
 
-### **Phase 1: Core Framework Enhancement (Weeks 3-4)**
+- [ ] **Repository CI/CD Pipeline Setup**
+  - Azure pipelines workflow for automated testing
+  - Multi-Python version testing (3.10, 3.11, 3.12+)
+  - Code coverage reporting with codecov integration
+  - Automated security scanning (bandit, safety)
+  - Pre-commit hooks for code quality (ruff, uv, flake8, mypy, pyright and other)
+  - Automated PyPI package publishing on release tags
+  - Documentation building and deployment
+  - Example validation in CI (run all examples as tests)
 
-#### **Port Registry System**
-- [ ] **Dynamic Port Discovery**
-  ```python
-  @register_port("vector_store")
-  class VectorStorePort:
-      """Custom port for vector operations"""
-  ```
-  - Remove hardcoded port names
-  - Enable runtime port registration
-  - Type-safe port contracts
+- [ ] **AI Development Assistant Configuration**
+  - Create `.cursorrules` file with hexAI coding standards and patterns
+  - Add `CURSOR_GUIDE.md` with Cursor-specific development workflows
+  - Create `CLAUDE_PROMPTS.md` with standardized Claude prompts for hexAI development
+  - Add AI assistant context files for consistent code generation
+  - Document AI-assisted development best practices for the project
 
-#### **Advanced Node Types**
-- [ ] **Majority Vote Node**
+
+### **Phase 1: Advanced Core Features**
+
+#### **Enhanced Node Types**
+- [ ] **Majority Vote Macro**
   - Multi-input consensus mechanism
   - Configurable voting strategies (unanimous, majority, weighted)
   - Confidence scoring and result aggregation
@@ -110,24 +119,18 @@ graph TD
   - Data-driven routing with schema validation
   - Dynamic path selection based on runtime data
 
-#### **Simplified Node Types**
-- [ ] **Streamlined Base Node**
-  - Extract common patterns to mixins
-  - Reduce boilerplate by 70%
-  - Clear node lifecycle hooks
+#### **Port Registry System**
+- [ ] **Dynamic Port Discovery**
+  ```python
+  @register_port("vector_store")
+  class VectorStorePort:
+      """Custom port for vector operations"""
+  ```
+  - Remove hardcoded port names
+  - Enable runtime port registration
+  - Type-safe port contracts
 
-- [ ] **Pure Function Nodes**
-  - No validation overhead option
-  - Direct function execution
-  - Minimal wrapper for performance
-
-- [ ] **Static Pipeline Linter (`hexai-lint`)**
-  - CLI tool for validating pipelines before execution
-  - Detect cycles, unused outputs, unknown parameters
-  - Emit rule IDs (E100, W200, I300) for different error types
-  - CI/CD integration for automated pipeline validation
-
-#### **Validation Framework Completion**
+#### **Validation Framework Enhancement**
 - [ ] **Performance Mode**
   - Validation result caching
   - Compile-time validation optimization
@@ -138,19 +141,7 @@ graph TD
   - Chainable validators
   - Domain-specific validation rules
 
-#### **Advanced Execution & Performance**
-
-- [ ] **Deterministic Replay & Checkpointing**
-  - Append-only checkpoint logs (`checkpoints/{session}.jsonl`)
-  - CLI replay command: `hexai replay --session {id} --from {node}`
-  - Input/output hash verification for consistency
-
-- [ ] **Reusable Sub-Graphs ("Macros")**
-  - YAML macros for reducing node sequence duplication
-  - `use_macro:` directive for inline expansion
-  - Node-id prefixing for macro instance isolation
-
-### **Phase 2: Framework Stability (Weeks 5-6)**
+### **Phase 2: Framework Stability**
 
 #### **API Stabilization**
 - [ ] **Version 1.0 API Freeze**
@@ -175,85 +166,61 @@ graph TD
   - IDE autocomplete support
   - Runtime type checking options
 
-- [ ] **LoopNode Event System Enhancement**
-  - Add proper event emission for loop iterations
-  - Emit `LoopIterationStartedEvent` and `LoopIterationCompletedEvent`
-  - Integrate with agent nodes using internal loop patterns
-  - Standardize loop control event metadata
-  - Support event tracing for debugging multi-step processes
-
-- [ ] **JSON and Tool Parsing with Internal Feedback Loop**
-  - Implement self-correcting tool parsing with retry mechanisms
-  - Add validation feedback for malformed tool calls
-  - Create internal correction loop for JSON parsing errors
-  - Support adaptive parsing strategies based on LLM output patterns
-  - Add parsing confidence scoring and fallback mechanisms
-
 - [ ] **Universal Input Mapping Across All Nodes**
   - Standardize input mapping implementation across all node types
   - Create shared mapping utilities and patterns
   - Unify field transformation logic in BaseNodeFactory
-  - Add consistent mapping validation and error handling
-  - Support complex nested transformations and data restructuring
 
-#### **Library Publication & Distribution**
+#### **Library Publication**
 - [ ] **PyPI Package Publication**
   - Publish hexAI as standalone library: `pip install hexai`
   - Semantic versioning and release automation
   - Comprehensive package metadata and documentation
   - Minimal dependencies (only Pydantic)
 
-- [ ] **Integration with Main Branch**
-  - Merge hexAI framework into main repository
-  - Establish clear module boundaries
-  - Maintain backward compatibility
-  - Update CI/CD for library builds
+- [ ] **Optional Dependencies Refactor**
+  - CLI tools as optional dependency group [cli]
+  - Visualization as optional dependency group [viz]
+  - Development tools as [dev] group
+  - Graceful import handling for missing dependencies
+
+### **Phase 3: Advanced Infrastructure**
+
+#### **Extensibility & Plugins**
+- [ ] **Plugin System Architecture**
+  - Custom node type plugins
+  - Port adapter plugins
+  - Validation strategy plugins
+  - Event observer plugins
 
 ---
 
-## 🏢 Track 2: Enterprise Pipelines Layer
+## 🏢 Track 2: Agent Factory Enhancement
 
-### **Phase 1: Pipeline Management (Weeks 1-4)**
+### **Phase 1: Enterprise Features **
 
-#### **Pipeline Catalog Enhancement**
+#### **Advanced Pipeline Management**
 - [ ] **Version Control Integration**
   - Git-based pipeline versioning
   - Rollback capabilities
   - A/B testing support
 
-- [ ] **Pluggable Execution Backends** ⚠️ **CONCEPTUAL ISSUE: Duplicate with Track 1**
-  - Additional execution backends: `ThreadPool`, `RayTask`, `Databricks`
-  - YAML configuration: `execution_backend: thread|async|ray`
-  - Performance benchmarking across execution modes
+#### **Advanced Features**
+- [ ] **Deterministic Replay & Checkpointing**
+  - Append-only checkpoint logs (`checkpoints/{session}.jsonl`)
+  - CLI replay command: `hexai replay --session {id} --from {node}`
+  - Input/output hash verification for consistency
 
-- [ ] **Pipeline Compilation v2** *(Game-Changing Speed Optimization)*
-  - Pre-computed execution plans
-  - Secret pre-fetching (500ms → 1ms access)
-  - Function pre-resolution and wave pre-computation
-  - 10-100x performance improvement
-  - Zero-overhead validation
-  - Add pipeline pre-run and post-run hooks
+- [ ] **Reusable Sub-Graphs ("Macros")**
+  - YAML macros for reducing node sequence duplication
+  - `use_macro:` directive for inline expansion
+  - Node-id prefixing for macro instance isolation
 
-#### **Distributed Execution**
-- [ ] **Remote Orchestrator Service**
-  - REST API for pipeline execution
-  - Queue-based job management
-  - Horizontal scaling support
-  - Additional execution backends: `ThreadPool`, `RayTask`, `Databricks` and RemoteOrchestrator.
-  - YAML configuration: `execution_backend: thread|async|ray`
-  - Performance benchmarking across execution modes
+### **Phase 2: Memory & Persistence**
 
-- [ ] **Resource Management**
-  - CPU/Memory limits per pipeline
-  - Priority-based scheduling
-  - Cost tracking integration
-
-### **Phase 2: Memory & Persistence (Weeks 5-8)**
-
-#### **Hybrid Memory Architecture** *(Advanced Memory Management)* ⚠️ **CONCEPTUAL ISSUE: Unclear boundary with core context**
+#### **Memory Architecture**
 - [ ] **Memory Ports**
   ```python
-  # Enterprise feature, not in core hexAI
   class MemoryPort:
       async def store(self, key: str, value: Any, ttl: int = None)
       async def retrieve(self, key: str) -> Any
@@ -270,75 +237,115 @@ graph TD
   - S3 for large objects
   - Local cache for performance
 
-- [ ] **Use Cases & Examples**:
-  - **Conversation Memory**: Store chat history across pipeline runs
-  - **Research Memory**: Cache web search results and analysis
-  - **ETL Memory**: Store intermediate data processing results
-  - **Agent Memory**: Maintain agent state and knowledge
-
 #### **Event Persistence**
 - [ ] **Event Store Implementation**
   - Audit trail capabilities
   - Pipeline replay functionality
   - Analytics integration
 
-### **Phase 3: Enterprise Features (Weeks 9-12)**
+### **Phase 3: Distributed Execution**
 
-#### **Performance & Multi-Agent Coordination**
-- [ ] **Hierarchical Agent Management**
-  - Supervisor-subordinate relationships
-  - Task delegation and result aggregation
-  - Dynamic role assignment
+#### **Distributed Infrastructure**
+- [ ] **Remote Orchestrator Service**
+  - REST API for pipeline execution
+  - Queue-based job management
+  - Horizontal scaling support
 
-- [ ] **Advanced Event System**
-  - Custom event types and handlers
-  - Event filtering and routing
-  - Performance metrics collection
+- [ ] **Resource Management**
+  - CPU/Memory limits per pipeline
+  - Priority-based scheduling
+  - Cost tracking integration
 
-#### **Monitoring & Observability**
-- [ ] **OpenTelemetry Integration**
-  - Distributed tracing
-  - Metrics collection
-  - Log aggregation
-
-- [ ] **Pipeline Analytics**
-  - Execution time tracking
-  - Resource usage analytics
-  - Success/failure rates
-
-#### **Security & Compliance**
-- [ ] **Access Control**
-  - Pipeline-level permissions
-  - Audit logging
-  - Compliance reporting
-
-#### **MCP (Model Context Protocol) Integration**
-- [ ] **MCP Server Framework**
+#### **MCP Integration**
+- [ ] **MCP (Model Context Protocol) Server Framework**
   - MCP protocol implementation for external tool integration
   - Dynamic MCP server discovery and registration
   - Native MCP support in ReActAgentNode
 
-#### **Automatic API and MCP Endpoint Generation**
-- [ ] **Dynamic Pipeline Endpoints**
-  - Auto-generation of REST endpoints for each pipeline
-  - Real-time pipeline registration and deregistration
-  - Dynamic OpenAPI schema generation
+---
 
-- [ ] **Pluggable Execution Backends** ⚠️ **CONCEPTUAL ISSUE: Duplicate with Track 1**
-  - Additional execution backends: `ThreadPool`, `RayTask`, `Databricks`
-  - YAML configuration: `execution_backend: thread|async|ray`
-  - Performance benchmarking across execution modes
+## 🧪 Track 2.5: Testing & Quality Infrastructure
 
-- [ ] **Pipeline-as-a-Service Infrastructure**
-  - Multi-tenant pipeline execution
-  - Pipeline marketplace and catalog API
-  - Usage analytics and billing integration
+### **Phase 1: Comprehensive Testing Framework**
+
+#### **Unit Testing Enhancement**
+- [ ] **Test Coverage Goals**
+  - Achieve 90%+ code coverage for core modules
+  - 100% coverage for critical paths (validation, orchestration)
+  - Coverage reporting integration with CI/CD
+
+- [ ] **Integration Testing Suite**
+  - End-to-end pipeline tests
+  - Multi-node workflow tests
+  - Error propagation tests
+  - Performance regression tests
+
+- [ ] **Property-Based Testing**
+  - Hypothesis integration for validation framework
+  - Fuzzing for parser components
+  - Generative testing for DAG structures
+
+#### **Testing Tools & Infrastructure**
+- [ ] **Test Fixtures Library**
+  - Reusable mock components
+  - Test data generators
+  - Pipeline test harness
+  - Agent behavior simulators
+
+- [ ] **Debugging & Profiling Tools**
+  - Step-through DAG debugger
+  - Node execution profiler
+  - Memory usage analyzer
+  - Event trace visualizer
+
+### **Phase 2: Documentation & DevEx**
+
+#### **Documentation Generation**
+- [ ] **API Documentation System**
+  - Auto-generated API docs from docstrings
+  - Interactive examples in docs
+  - Architecture diagrams generation
+  - Deployment guides
+
+- [ ] **Developer Portal**
+  - Getting started tutorials
+  - Best practices guide
+  - Common patterns cookbook
+  - Troubleshooting guide
+
+### **Phase 3: Security & Reliability**
+
+#### **Security Framework**
+- [ ] **Agent Sandboxing**
+  - Secure execution environment for agents
+  - Resource limits enforcement
+  - Network access controls
+  - Secrets management
+
+- [ ] **Input Sanitization**
+  - LLM prompt injection prevention
+  - YAML bomb protection
+  - Path traversal prevention
+  - Command injection safeguards
+
+#### **Error Handling & Recovery**
+- [ ] **Structured Error System**
+  - Error categorization and codes
+  - Recovery strategies per error type
+  - Error context preservation
+  - User-friendly error messages
+
+- [ ] **Circuit Breaker Pattern**
+  - Service failure detection
+  - Automatic recovery mechanisms
+  - Fallback strategies
+  - Health monitoring
 
 ---
 
-## 🚀 Track 3: Business Applications
+## 🚀 Track 3: Agent Applications
 
-### **Phase 1: Core Pipelines (Ongoing)**
+### **Phase 1: Core Agent Workflows**
 
 #### **Text-to-SQL Pipeline**
 - [ ] **Multi-Strategy Execution**
@@ -360,18 +367,7 @@ graph TD
   - Citation management
   - Knowledge synthesis
 
-#### **ETL Pipeline** ⚠️ **CONCEPTUAL ISSUE: Depends heavily on Track 2 enterprise features**
-- [ ] **Spark Integration**
-  - Large-scale data processing
-  - Stream processing support
-  - Data quality validation
-
-- [ ] **Data Artifact Support**
-  - Artifact objects (URI, media_type, size) for large ETL outputs
-  - Bypass JSON serialization for files >512KB
-  - Parquet, CSV, and binary file format support
-
-#### **Chat Integration Pipeline**
+#### **Chat Integration Pipeline macro**
 - [ ] **Conversational Interface**
   - Context-aware dialogue management
   - Multi-turn conversation support
@@ -379,27 +375,22 @@ graph TD
 
 ### **Phase 2: Advanced Applications**
 
-#### **MCP (Model Context Protocol) Integration**
-- [ ] **MCP Client Implementation**
-  - Tool discovery
-  - Dynamic capability registration
-  - Multi-server coordination
-
-#### **AutoRAG Pipeline (Document Intelligence)**
+#### **AutoRAG Pipeline**
 - [ ] **Document Intelligence**
   - Automatic indexing
   - Query optimization
   - Knowledge graph construction
 
-- [ ] **Document Processing Chain**
-  - Multi-format document ingestion
-  - Content extraction and structuring
-  - Entity extraction and linking
+#### **ETL Pipeline**
+- [ ] **Data Artifact Support**
+  - Artifact objects (URI, media_type, size) for large ETL outputs
+  - Bypass JSON serialization for files >512KB
+  - Parquet, CSV, and binary file format support
 
 ### **Phase 3: Adapter Ecosystem**
 
 #### **LLM Adapters**
-- [ ] **OpenAI Adapter Enhancement**
+- [ ] **Enhanced OpenAI Adapter**
   - Streaming response support
   - Function calling integration
   - Rate limiting and quota management
@@ -412,106 +403,53 @@ graph TD
   - Ollama and NIM integration
   - Model switching capabilities
 
-#### **Database & Infrastructure Adapters**
-- [ ] **Enhanced PostgreSQL Adapter**
-  - Connection pooling, transaction management
-  - Schema introspection improvements
-  - Similarity search capabilities
-
-- [ ] **Big Data & ETL Adapters** ⚠️ **CONCEPTUAL ISSUE: ETL adapters require Track 2 infrastructure**
-  - Apache Spark integration
-  - Message Queue Adapters (RabbitMQ, Kafka)
-  - Data Quality Adapter (Great Expectations integration)
-
 ---
 
-## 📋 Implementation Priorities
-
-### **Immediate (This Sprint)**
-1. Simplification sprint for hexAI core
-2. Clear separation of framework vs enterprise
-3. Documentation updates
-4. Prepare for library publication
-
-### **Short Term (1-2 months)**
-1. hexAI 1.0 stabilization and PyPI release
-2. Merge with main branch
-3. Basic enterprise features
-4. Core pipeline templates
-
-### **Medium Term (3-6 months)**
-1. Full distributed execution
-2. Memory layer implementation
-3. Advanced pipeline applications
-4. MCP ecosystem integration
-
-### **Long Term (6-12 months)**
-1. Enterprise-grade monitoring
-2. Advanced ETL and data processing
-3. Pipeline marketplace
-
----
-
-## 🚫 What hexAI Will NOT Include
-
-To maintain focus and simplicity, hexAI core will NOT include:
-
-- ❌ Specific database implementations
-- ❌ Authentication/authorization
-- ❌ Distributed execution (use enterprise layer)
-- ❌ Persistence mechanisms
-- ❌ Monitoring/metrics collection
-- ❌ Web UI components
-- ❌ Specific cloud integrations
-
-These belong in the enterprise pipelines layer or user applications.
-
----
 
 ## 📚 Success Metrics
 
 ### hexAI Core
-- Framework size < 10,000 LOC
-- Zero external dependencies (except Pydantic)
+- Framework size < 10,000 LOC ✅ (Currently ~8,000 LOC)
+- Zero external dependencies (except Pydantic) ✅
 - 100% type coverage
 - < 100ms overhead per node
 - Successful PyPI publication with >1000 downloads
 
-### Enterprise Layer
+### Agent Factory
 - Support 1000+ concurrent pipelines
 - < 1s pipeline startup time
 - 99.9% uptime
 - Horizontal scaling to 100+ nodes
 
 ### Developer Experience
-- 5 minute quick start
-- Clear framework vs enterprise boundary
-- Extensive examples
+- 5 minute quick start ✅
+- Clear framework vs enterprise boundary ✅
+- Extensive examples ✅ (20 comprehensive examples)
 - Active community
 
 ---
 
 ## 🎯 Library Development Milestones
 
-### Milestone 1: Core Library (Week 6)
-- [ ] Complete simplification sprint
+### Milestone 1: Core Stabilization
+- [ ] Complete architecture fixes
 - [ ] Finalize public API
-- [ ] Comprehensive documentation
-- [ ] Package structure optimization
+- [ ] Performance optimizations
+- [ ] Enhanced validation framework
 
-### Milestone 2: PyPI Release (Week 8)
-- [ ] Setup.py and pyproject.toml configuration
+### Milestone 2: PyPI Release
+- [ ] Package structure optimization
 - [ ] Automated testing and CI/CD
 - [ ] Version tagging and release automation
 - [ ] Published on PyPI with semantic versioning
 
-### Milestone 3: Main Branch Integration (Week 10)
-- [ ] Merge hexAI into main repository
-- [ ] Update all import paths
-- [ ] Maintain backward compatibility
-- [ ] Update enterprise pipelines to use published library
+### Milestone 3: Enterprise Features
+- [ ] Agent factory distributed execution
+- [ ] Memory layer implementation
+- [ ] Advanced pipeline applications
+- [ ] MCP integration
 
-### Milestone 4: Community Adoption (Month 3)
+### Milestone 4: Community Adoption
 - [ ] Developer documentation site
 - [ ] Example repositories and tutorials
 - [ ] Community feedback integration
