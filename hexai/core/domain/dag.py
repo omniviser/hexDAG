@@ -9,7 +9,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Callable
 
-from hexai.validation import can_convert_schema
+from hexai.core.validation import can_convert_schema
 
 
 class Color(Enum):

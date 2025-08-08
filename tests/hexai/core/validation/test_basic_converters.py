@@ -2,15 +2,15 @@
 
 import pytest
 
-from hexai.validation.basic_converters import BooleanConverter, StringToNumericConverter
-from hexai.validation.converters import ConversionError
+from hexai.core.validation.basic_converters import BooleanConverter, StringToNumericConverter
+from hexai.core.validation.converters import ConversionError
 
 
 class TestStringToNumericConverter:
     """Test cases for StringToNumericConverter."""
 
     def setup_method(self):
-        """Setup converter for each test."""
+        """Set up converter for each test."""
         self.converter = StringToNumericConverter()
 
     def test_can_convert_str_to_int(self):
@@ -68,7 +68,7 @@ class TestBooleanConverter:
     """Test cases for BooleanConverter."""
 
     def setup_method(self):
-        """Setup converter for each test."""
+        """Set up converter for each test."""
         self.converter = BooleanConverter()
 
     def test_can_convert(self):

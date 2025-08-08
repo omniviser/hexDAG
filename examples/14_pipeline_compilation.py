@@ -14,7 +14,7 @@ from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.validation import coerce_validator
+from hexai.core.validation import coerce_validator
 
 
 async def data_loader(input_data: str, **kwargs) -> dict:

@@ -34,6 +34,8 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 
 ```bash
 # Clone and install
+
+
 git clone https://omniviser@dev.azure.com/omniviser/hexDAG/_git/hexDAG
 cd hexDAG
 poetry install
@@ -79,7 +81,6 @@ graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
 
 orchestrator = Orchestrator()
 result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
-```
 
 ## 📚 Documentation
 
@@ -150,9 +151,8 @@ poetry run pre-commit run --all-files
 
 ## 🤝 Community
 
-- **Discord**: [Join our community](https://discord.gg/hexdag)
 - **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/hexdag/issues)
+
 
 ## 📄 License
 

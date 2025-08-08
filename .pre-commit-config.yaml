@@ -83,7 +83,6 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
-
       - id: check-examples
         name: Check examples functionality
         entry: poetry run python scripts/check_examples.py
@@ -91,7 +90,6 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
-
       - id: pytest
         name: Run pytest
         entry: poetry run pytest tests/hexai/agent_factory/ -x --tb=short
@@ -99,6 +97,7 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
+
 
       - id: branch-name-check
         name: Branch Name Check

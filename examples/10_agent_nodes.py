@@ -16,7 +16,7 @@ from hexai.adapters.mock.mock_llm import MockLLM
 from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
-from hexai.validation import coerce_validator
+from hexai.core.validation import coerce_validator
 
 
 # Define real tool functions with proper type hints

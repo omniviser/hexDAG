@@ -21,39 +21,52 @@
 
 ### hexDAG Architecture
 
-hexDAG implements a clean hexagonal architecture specifically designed for AI agent orchestration and data science workflows. It provides separation between business logic, external dependencies, and execution concerns through well-defined layers.
+hexDAG is the core orchestration framework that enables building sophisticated AI agent workflows through declarative configuration. It transforms complex AI workflows into **deterministic, testable, and maintainable** systems by implementing the six pillars:
 
-```mermaid
-graph TD
-    %% Application Layer
-    A[Application Layer] --> A1[Orchestrator]
-    A --> A2[AgentBuilder]
-    A --> A3[Context]
-    A --> A4[Event Manager]
+1. **🔄 Async-First Architecture**: Non-blocking execution for maximum performance
+2. **📊 Event-Driven Observability**: Real-time monitoring of agent actions
+3. **✅ Pydantic Validation Everywhere**: Type safety at every layer
+4. **🏗️ Hexagonal Architecture**: Clean separation of business logic and infrastructure
+5. **📝 Composable Declarative Files**: Build complex workflows from simple components
+6. **🔀 DAG-Based Orchestration**: Intelligent dependency management and parallelization
 
-    %% Domain Layer
-    B[Domain Layer] --> B1[DirectedGraph]
-    B --> B2[NodeSpec]
+### Layered Architecture
 
-
-
-
-    %% Relationships
-    A1 --> B1
-    A2 --> B2
-    A3 --> B1
-    F --> A2
-
-    %% Execution Flow
-    A1 --> E[Execution Engine]
-    B1 --> E
-    B2 --> E
-    A3 --> E
-
-    %% Event System
-    A4 --> F[Event System]
-    F --> G[Observers]
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                    🎯 Configuration Layer                   │
+│              (YAML Definitions & Schemas)                  │
+├─────────────────────────────────────────────────────────────┤
+│                   🚀 Application Layer                     │
+│         (Use Cases: Orchestrator, AgentBuilder)            │
+├─────────────────────────────────────────────────────────────┤
+│                    🧠 Domain Layer                         │
+│            (Core Business Logic: DAG, NodeSpec)            │
+├─────────────────────────────────────────────────────────────┤
+│                   🔌 Interface Layer                       │
+│               (Ports: Abstract Protocols)                  │
+├─────────────────────────────────────────────────────────────┤
+│                 🔧 Infrastructure Layer                    │
+│            (Adapters: Concrete Implementations)            │
+├─────────────────────────────────────────────────────────────┤
+│                   🌐 External Services                     │
+│              (LLMs, Databases, APIs, Tools)                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Module Architecture
+
+```
+hexai/
+├── core/
+│   ├── domain/          # Core business logic (DAG, NodeSpec)
+│   ├── application/     # Use cases (Orchestrator, AgentBuilder)
+│   └── ports/           # Interface definitions (LLM, Database)
+├── adapters/            # External service implementations
+└── agent_factory/       # YAML-based agent workflow builders
+```
+
+hexDAG implements hexagonal architecture specifically designed for AI agent orchestration and data science workflows. It provides separation between business logic, external dependencies, and execution concerns through well-defined layers.
 
 
 
@@ -857,8 +870,180 @@ async def resilient_function(input_data: Any, context: Context, **ports: Any) ->
 - **Error Recovery**: Automatically retry failed operations when appropriate
 - **User Communication**: Clearly communicate what happened and what users can expect
 
+
+
 ---
 
+## 🎭 Multi-Agent Orchestration Patterns
+
+### Sequential Agent Chain Pattern
+
+**Use Case**: Linear workflows where each agent builds on previous agent's work
+
+**Architecture**: Progressive Information Enhancement
+```
+Research Agent → Analysis Agent → Decision Agent → Implementation Agent
+```
+
+**YAML Configuration Example**:
+```yaml
+name: sequential_multiagent_workflow
+description: Sequential chain of specialized agents
+
+nodes:
+  - type: agent
+    id: research_agent
+    params:
+      initial_prompt_template: |
+        You are a Research Agent. Your goal: {{goal}}
+        Research thoroughly and provide structured findings.
+      max_steps: 4
+      available_tools: ["web_search", "database_lookup"]
+    depends_on: []
+
+  - type: agent
+    id: analysis_agent
+    params:
+      initial_prompt_template: |
+        Analyze research findings: {{research_agent.research_findings}}
+        Generate insights and recommendations.
+      max_steps: 3
+    depends_on: [research_agent]
+
+  - type: agent
+    id: decision_agent
+    params:
+      initial_prompt_template: |
+        Based on analysis: {{analysis_agent.insights}}
+        Make final recommendations and implementation plan.
+      max_steps: 2
+    depends_on: [analysis_agent]
+```
+
+### Parallel Coordination Pattern
+
+**Use Case**: Complex problems requiring multiple specialist perspectives
+
+**Architecture**: Specialist Analysis with Coordinator Synthesis
+```
+Technical Specialist ──┐
+                       ├── Coordination Agent → Final Decision
+Business Specialist ───┘
+```
+
+**YAML Configuration Example**:
+```yaml
+name: parallel_multiagent_workflow
+description: Parallel specialist agents with coordinator synthesis
+
+nodes:
+  # Parallel Specialist Agents (Wave 1)
+  - type: agent
+    id: technical_specialist
+    params:
+      initial_prompt_template: |
+        You are a Technical Specialist Agent.
+        Analyze from technical perspective: {{task_description}}
+      max_steps: 5
+      available_tools: ["tech_database", "architecture_analyzer"]
+    depends_on: []
+
+  - type: agent
+    id: business_specialist
+    params:
+      initial_prompt_template: |
+        You are a Business Specialist Agent.
+        Analyze from business perspective: {{task_description}}
+      max_steps: 5
+      available_tools: ["market_research", "financial_calculator"]
+    depends_on: []
+
+  # Coordination Agent (Wave 2)
+  - type: agent
+    id: coordination_agent
+    params:
+      initial_prompt_template: |
+        Synthesize findings from specialists:
+        Technical: {{technical_specialist.technical_assessment}}
+        Business: {{business_specialist.business_assessment}}
+        Create unified strategy balancing both perspectives.
+      max_steps: 6
+    depends_on: [technical_specialist, business_specialist]
+```
+
+### Hierarchical Loop-Based Pattern
+
+**Use Case**: Iterative refinement and complex multi-round negotiations
+
+**Architecture**: Supervisor-Managed Iterative Improvement
+```
+Supervisor Agent ──→ Loop Controller ──→ Worker Agents ──→ Validator ──→ Loop Decision
+```
+
+**YAML Configuration Example**:
+```yaml
+name: hierarchical_multiagent_workflow
+description: Hierarchical agents with loops for iterative improvement
+
+nodes:
+  - type: agent
+    id: supervisor_agent
+    params:
+      initial_prompt_template: |
+        You are the Supervisor Agent managing specialist agents.
+        Define tasks and quality criteria for: {{primary_goal}}
+      max_steps: 3
+    depends_on: []
+
+  - type: loop
+    id: agent_iteration_loop
+    params:
+      max_iterations: 3
+      success_condition: |
+        lambda data: (
+          data.get('validation_result', {}).get('quality_score', 0) >= 8 and
+          data.get('validation_result', {}).get('meets_criteria', False)
+        )
+    depends_on: [supervisor_agent]
+
+  - type: agent
+    id: worker_agent
+    params:
+      initial_prompt_template: |
+        You are a Worker Agent in iteration {{agent_iteration}}.
+        Task: {{supervisor_agent.task_assignments}}
+        Previous feedback: {{validation_feedback}}
+        Improve based on feedback.
+      max_steps: 4
+    depends_on: [agent_iteration_loop]
+
+  - type: agent
+    id: validator_agent
+    params:
+      initial_prompt_template: |
+        Evaluate work quality: {{worker_agent.analysis_report}}
+        Score 1-10 and provide improvement feedback.
+      max_steps: 2
+    depends_on: [worker_agent]
+```
+
+### YAML Pipeline Development
+
+The agent factory enables **declarative agent workflow development** through YAML configuration:
+
+**Key Features:**
+- **Auto-Discovery**: Automatic detection of pipeline implementations
+- **Schema Introspection**: Dynamic type discovery for UI generation
+- **Compilation**: Pre-optimized execution for production
+- **Multi-Agent Coordination**: Built-in patterns for agent collaboration
+
+**Development Workflow:**
+1. Define agents and dependencies in YAML
+2. Implement business logic functions
+3. Register functions with pipeline builder
+4. Compile for production deployment
+
+For detailed YAML pipeline implementation, see the [Agent Factory Implementation Guide](../hexai/agent_factory/PIPELINES_IMPLEMENTATION_GUIDE.md).
 
 ---
 

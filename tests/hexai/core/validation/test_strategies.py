@@ -1,6 +1,6 @@
 """Unit tests for ValidationStrategy enum."""
 
-from hexai.validation.strategies import ValidationStrategy
+from hexai.core.validation.strategies import ValidationStrategy
 
 
 class TestValidationStrategy:

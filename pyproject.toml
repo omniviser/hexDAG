@@ -2,7 +2,7 @@
 name = "hexdag"
 version = "0.1.0"
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
-authors = ["hexDAG Team <developers@hexdag.dev>"]
+authors = ["hexDAG Team"]
 readme = "README.md"
 license = "MIT"
 homepage = "https://dev.azure.com/omniviser/_git/hexDAG"
@@ -16,19 +16,20 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: DAI Agents",
 ]
 packages = [
     {include = "hexai"}
 ]
 
 [tool.poetry.dependencies]
-python = "3.12.*"
-pydantic = "2.11.7"
-click = "8.2.1"
-rich = "13.9.4"
-graphviz = "0.20.3"
-pyyaml = "6.0.2"
+python = "^3.12"
+pydantic = "^2.0"
+typing-extensions = "^4.10.0"
+click = "^8.1.0"
+rich = "^13.7.0"
+graphviz = "^0.20.0"
+pyyaml = "^6.0"
 
 [tool.poetry.group.dev.dependencies]
 # Testing
@@ -56,6 +57,7 @@ commitizen = "4.8.3"
 watchdog = "6.0.0"
 
 # Documentation
+
 mkdocs = "1.6.1"
 mkdocs-material = "9.6.16"
 mkdocs-mermaid2-plugin = "1.2.1"

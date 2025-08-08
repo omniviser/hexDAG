@@ -2,9 +2,9 @@
 
 from pydantic import BaseModel
 
-from hexai.validation.core import BaseValidator
-from hexai.validation.strategies import ValidationStrategy
-from hexai.validation.types import ValidationContext
+from hexai.core.validation.core import BaseValidator
+from hexai.core.validation.strategies import ValidationStrategy
+from hexai.core.validation.types import ValidationContext
 
 
 class TestModel(BaseModel):

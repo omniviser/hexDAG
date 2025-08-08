@@ -5,8 +5,8 @@ import json
 import pytest
 from pydantic import BaseModel, Field
 
-from hexai.validation.converters import ConversionError
-from hexai.validation.pydantic_converters import (
+from hexai.core.validation.converters import ConversionError
+from hexai.core.validation.pydantic_converters import (
     DictToPydanticConverter,
     JsonStringToPydanticConverter,
     NestedPydanticConverter,
