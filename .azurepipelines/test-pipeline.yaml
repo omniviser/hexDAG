@@ -135,3 +135,22 @@ jobs:
       - script: |
           poetry run python scripts/check_examples.py
         displayName: "Check examples functionality"
+
+
+      - task: SonarCloudPrepare@3
+        inputs:
+          SonarCloud: SonarServiceConnection
+          organization: "omniviser"
+          scannerMode: "CLI"
+          configMode: "manual"
+          cliProjectKey: omniviser_hexDAG
+          cliProjectName: hexDAG
+          cliSources: ./hexai
+
+      - task: SonarCloudAnalyze@3
+        inputs:
+          jdkversion: "JAVA_HOME_17_X64"
+
+      - task: SonarCloudPublish@3
+        inputs:
+          pollingTimeoutSec: "300"
