@@ -1,8 +1,7 @@
 # 🤖 hexDAG - AI Agent Orchestration Framework
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12.*-blue.svg)](https://www.python.org/downloads/)
 [![Poetry](https://img.shields.io/badge/dependency%20manager-poetry-blue.svg)](https://python-poetry.org/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -35,8 +34,10 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 
 ```bash
 # Clone and install
-git clone https://dev.azure.com/omniviser/_git/hexDAG
-cd hexdag
+
+
+git clone https://omniviser@dev.azure.com/omniviser/hexDAG/_git/hexDAG
+cd hexDAG
 poetry install
 ```
 
@@ -80,7 +81,6 @@ graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
 
 orchestrator = Orchestrator()
 result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
-```
 
 ## 📚 Documentation
 

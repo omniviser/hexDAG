@@ -40,27 +40,28 @@ pytest-mock = "^3.14.0"
 
 # Code Quality
 black = "24.10.0"
-isort = "^5.13.0"
-flake8 = "^7.1.0"
-flake8-docstrings = "^1.7.0"
-flake8-import-order = "^0.18.0"
-flake8-bugbear = "^24.4.0"
-flake8-comprehensions = "^3.16.0"
-flake8-print = "^5.0.0"
-pep8-naming = "^0.14.0"
-mypy = "^1.11.0"
-bandit = "^1.7.0"
+isort = "5.13.2"
+flake8 = "7.1.1"
+flake8-docstrings = "1.7.0"
+flake8-import-order = "0.18.2"
+flake8-bugbear = "24.12.12"
+flake8-comprehensions = "3.16.0"
+flake8-print = "5.0.0"
+pep8-naming = "0.14.1"
+mypy = "1.17.1"
+bandit = "1.7.10"
 
 # Development Tools
-pre-commit = "^3.7.0"
-commitizen = "^4.4.0"
-watchdog = "^6.0.0"
+pre-commit = "3.8.0"
+commitizen = "4.8.3"
+watchdog = "6.0.0"
 
 # Documentation
-mkdocs = "^1.5.0"
-mkdocs-material = "^9.5.0"
-mkdocs-mermaid2-plugin = "^1.1.0"
-types-pyyaml = "^6.0.12"
+
+mkdocs = "1.6.1"
+mkdocs-material = "9.6.16"
+mkdocs-mermaid2-plugin = "1.2.1"
+types-pyyaml = "6.0.12"
 
 [tool.poetry.scripts]
 hexdag = "hexai.cli:main"
@@ -142,6 +143,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
+disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

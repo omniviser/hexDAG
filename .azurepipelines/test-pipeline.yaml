@@ -1,0 +1,137 @@
+variables:
+  CI_USERNAME: "CI Pipeline"
+  CI_EMAIL: developers@omniviser.ai
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
+  - job: DevelopmentStandards
+    steps:
+      - checkout: self
+        persistCredentials: true
+        clean: true
+
+      - script: |
+          # Define your naming convention regex pattern
+          PATTERN="(^(chore|ci|docs|experiment|feat|fix|refactor|test)\/[A-Za-z0-9_-]+$)|main|^snyk|^dependabot"
+
+          if [[ $(Build.Reason) == "PullRequest" ]]; then
+            BRANCH="$(echo $(System.PullRequest.SourceBranch) | sed 's/refs\/heads\///')"
+          else
+            BRANCH="$(echo $(Build.SourceBranch) | sed 's/refs\/heads\///')"
+          fi
+
+          # Check if the branch name matches the pattern
+          if [[ $BRANCH =~ $PATTERN ]]; then
+              echo "Branch name '$BRANCH' is valid."
+          else
+              echo "Branch name [${BRANCH}] does not follow convention: [chore/* | ci/* | dependabot/* | docs/* | experiment/* | feat/* | fix/* | refactor/* | test/* | main | snyk | dependabot]."
+              exit 1
+          fi
+        displayName: "Check the branch name"
+
+
+      - script: |
+          if [ "$BUILD_REASON" == "PullRequest" ] && [ "$TARGETBRANCH" == "refs/heads/main" ]; then
+              echo "PullRequest reason for build"
+              echo "Main target branch"
+
+              pr_data=$(az repos pr show --id $PULLREQUESTID --organization $ORGANIZATION_URI)
+              title=$(echo "$pr_data" | jq -r '.title')
+              echo "PR Title: $title"
+              echo "Keep in mind that 'Bump' and 'chore' are for AZURE BOTS ONLY, don't use them!"
+
+              pattern="^(ci|docs|experiment|feat|fix|refactor|test|chore|Bump)"
+
+              if [[ "$title" =~ $pattern ]]; then
+                  echo "PR title is valid"
+              else
+                  echo "ERROR: PR TITLE IS INVALID"
+                  echo "Please ensure your PR title starts with one of the following prefixes:"
+                  echo "ci, Bump, docs, experiment, feat, fix, refactor, test, chore"
+                  exit 1
+              fi
+          fi
+        displayName: "Validate PR title"
+        env:
+          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+          ORGANIZATION_URI: https://dev.azure.com/omniviser
+          PULLREQUESTID: $(System.PullRequest.PullRequestId)
+          TARGETBRANCH: $(System.PullRequest.TargetBranch)
+          BUILD_REASON: $(Build.Reason)
+
+  - job: CodeQuality
+    steps:
+      - checkout: self
+        persistCredentials: true
+        clean: true
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+        displayName: "Use Python 3.12"
+
+      - bash: sudo apt-get install graphviz -f
+        displayName: Install graphviz
+
+      - script: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
+          export PATH=\$PATH:\$HOME/.local/bin
+        displayName: "Install Poetry"
+
+      - script: |
+          poetry install
+        displayName: "Install dependencies with Poetry"
+
+      - script: |
+          poetry run black --check ./hexai
+        displayName: "Check Black"
+
+      - script: |
+          poetry run flake8 ./hexai
+        displayName: "Run Flake8"
+        continueOnError: true
+
+      - script: |
+          poetry run isort ./hexai --check-only
+        displayName: "Run Isort"
+
+      - script: |
+          poetry run mypy ./hexai
+        displayName: "Run Mypy"
+
+      - script: |
+          echo "Running tests with coverage..."
+          poetry run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
+        displayName: "Run unit tests"
+
+      - script: |
+          echo "Running Bandit for SAST..."
+          poetry run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
+          BANDIT_EXIT_CODE=$?
+          echo "Bandit exit code: $BANDIT_EXIT_CODE"
+          if [ $BANDIT_EXIT_CODE -ne 0 ]; then
+              echo "Bandit found issues or encountered an error. See bandit-report.json for details."
+              cat bandit-report.json
+              exit 1
+          fi
+        displayName: "Run Bandit"
+
+      - script: |
+          poetry run python scripts/check_test_structure.py
+        displayName: "Check test structure consistency"
+
+      - script: |
+          poetry run python scripts/check_examples.py
+        displayName: "Check examples functionality"
