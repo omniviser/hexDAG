@@ -1,14 +1,19 @@
-[tool.poetry]
+[project]
 name = "hexdag"
 version = "0.1.0"
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
-authors = ["hexDAG Team"]
+authors = [{ name = "hexDAG Team" }]
+requires-python = "~=3.12.0"
 readme = "README.md"
 license = "MIT"
-homepage = "https://dev.azure.com/omniviser/_git/hexDAG"
-repository = "https://dev.azure.com/omniviser/_git/hexDAG"
-documentation = "https://dev.azure.com/omniviser/hexDAG"
-keywords = ["dag", "orchestration", "pipeline", "workflow", "async", "hexagonal-architecture"]
+keywords = [
+    "dag",
+    "orchestration",
+    "pipeline",
+    "workflow",
+    "async",
+    "hexagonal-architecture",
+]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -16,59 +21,59 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: DAI Agents",
 ]
-packages = [
-    {include = "hexai"}
+dependencies = [
+    "pydantic~=2.0",
+    "typing-extensions>=4.10.0,<5",
+    "click>=8.1.0,<9",
+    "rich>=13.7.0,<14",
+    "graphviz>=0.20.0,<0.21",
+    "pyyaml~=6.0",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-pydantic = "^2.0"
-typing-extensions = "^4.10.0"
-click = "^8.1.0"
-rich = "^13.7.0"
-graphviz = "^0.20.0"
-pyyaml = "^6.0"
+[project.urls]
+Homepage = "https://dev.azure.com/omniviser/_git/hexDAG"
+Repository = "https://dev.azure.com/omniviser/_git/hexDAG"
+Documentation = "https://dev.azure.com/omniviser/hexDAG"
 
-[tool.poetry.group.dev.dependencies]
-# Testing
-pytest = "^8.0.0"
-pytest-asyncio = "^0.21.0"
-pytest-cov = "^5.0.0"
-pytest-mock = "^3.14.0"
-
-# Code Quality
-black = "24.10.0"
-isort = "5.13.2"
-flake8 = "7.1.1"
-flake8-docstrings = "1.7.0"
-flake8-import-order = "0.18.2"
-flake8-bugbear = "24.12.12"
-flake8-comprehensions = "3.16.0"
-flake8-print = "5.0.0"
-pep8-naming = "0.14.1"
-mypy = "1.17.1"
-bandit = "1.7.10"
-
-# Development Tools
-pre-commit = "3.8.0"
-commitizen = "4.8.3"
-watchdog = "6.0.0"
-
-# Documentation
-
-mkdocs = "1.6.1"
-mkdocs-material = "9.6.16"
-mkdocs-mermaid2-plugin = "1.2.1"
-types-pyyaml = "6.0.12"
-
-[tool.poetry.scripts]
+[project.scripts]
 hexdag = "hexai.cli:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0,<9",
+    "pytest-asyncio>=0.21.0,<0.22",
+    "pytest-cov>=5.0.0,<6",
+    "pytest-mock>=3.14.0,<4",
+    "black==24.10.0",
+    "isort==5.13.2",
+    "flake8==7.1.1",
+    "flake8-docstrings==1.7.0",
+    "flake8-import-order==0.18.2",
+    "flake8-bugbear==24.12.12",
+    "flake8-comprehensions==3.16.0",
+    "flake8-print==5.0.0",
+    "pep8-naming==0.14.1",
+    "mypy==1.17.1",
+    "bandit==1.7.10",
+    "pre-commit==3.8.0",
+    "commitizen==4.8.3",
+    "watchdog==6.0.0",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.6.16",
+    "mkdocs-mermaid2-plugin==1.2.1",
+    "types-pyyaml==6.0.12",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["hexai"]
+
+[tool.hatch.build.targets.wheel]
+include = ["hexai"]
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -12,14 +12,14 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 
 2. **Install dependencies**
    ```bash
-   poetry install
-   poetry run pre-commit install
+   uv sync
    ```
+   Note: in uv this is optional `run` installs dependencies as well.
 
 3. **Verify setup**
    ```bash
-   poetry run pytest
-   poetry run pre-commit run --all-files
+   uv run pytest
+   uv run pre-commit run --all-files
    ```
 
 ## Development Workflow
@@ -36,8 +36,8 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 
 3. **Run tests and quality checks**
    ```bash
-   poetry run pytest
-   poetry run pre-commit run --all-files
+   uv run pytest
+   uv run pre-commit run --all-files
    ```
 
 4. **Commit and push**
@@ -61,13 +61,13 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 
 ```bash
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run with coverage
-poetry run pytest --cov=hexai
+uv run pytest --cov=hexai
 
 # Run specific test files
-poetry run pytest tests/unit/hexai/
+uv run pytest tests/unit/hexai/
 ```
 
 ## Documentation

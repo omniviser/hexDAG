@@ -67,8 +67,8 @@ logs/
 .env.*
 !.env.example
 
-# Poetry
-poetry.lock
+# uv
+uv.lock
 
 # Development
 .pre-commit-config.yaml.bak
