@@ -1,0 +1,13 @@
+pr: none  # Disable pull request triggers
+trigger: none  # Disable continuous integration triggers
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
+  - job: dependabot
+    timeoutInMinutes: 0
+    steps:
+      - task: dependabot@2
+        inputs:
+          azureDevOpsAccessToken: $(PAT)
