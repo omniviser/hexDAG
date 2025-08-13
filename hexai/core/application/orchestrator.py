@@ -422,7 +422,7 @@ class Orchestrator:
                 if dep_name in node_results:
                     value = node_results[dep_name]
                     # If the node expects dict input and we have Pydantic models, convert them
-                    if node_spec.in_type == dict and hasattr(value, "model_dump"):
+                    if node_spec.in_type is dict and hasattr(value, "model_dump"):
                         aggregated_data[dep_name] = value.model_dump()
                     else:
                         aggregated_data[dep_name] = value

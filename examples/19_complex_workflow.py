@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator, strict_validator
+from hexai.core.validation import coerce_validator
 
 
 class CustomerData(BaseModel):
@@ -204,7 +204,7 @@ async def analyze_customer_behavior(input_data: Any, **kwargs) -> dict:
     customer_data = input_data.get("load_customer_data", {})
     order_history = input_data.get("load_order_history", {})
 
-    customer = customer_data.get("customer_data")
+    customer_data.get("customer_data")
     orders = order_history.get("order_history", [])
 
     # Calculate insights
@@ -301,7 +301,7 @@ async def assess_business_risk(input_data: Any, **kwargs) -> dict:
 
     insights = customer_analysis.get("customer_insights", {})
     product = product_data.get("product_data")
-    recs = recommendations.get("recommendations", [])
+    recommendations.get("recommendations", [])
 
     risks = []
     risk_score = 0.0
@@ -386,7 +386,7 @@ async def compile_final_report(input_data: Any, **kwargs) -> dict:
 
     insights = customer_analysis.get("customer_insights", {})
     recs = recommendations.get("recommendations", [])
-    risks = risk_assessment.get("risks", [])
+    risk_assessment.get("risks", [])
     suggestions = optimizations.get("suggestions", [])
 
     return {
@@ -553,7 +553,7 @@ async def demonstrate_error_handling():
     # Test normal execution
     print("\n   🟢 Normal execution:")
     try:
-        results = await orchestrator.run(graph, {"should_fail": False})
+        await orchestrator.run(graph, {"should_fail": False})
         print("   ✅ Normal execution succeeded")
     except Exception as e:
         print(f"   ❌ Unexpected failure: {e}")
@@ -561,7 +561,7 @@ async def demonstrate_error_handling():
     # Test failure scenario
     print("\n   🔴 Failure scenario:")
     try:
-        results = await orchestrator.run(graph, {"should_fail": True})
+        await orchestrator.run(graph, {"should_fail": True})
         print("   ⚠️  Unexpected success")
     except Exception as e:
         print(f"   ✅ Correctly caught error: {type(e).__name__}")
@@ -618,9 +618,9 @@ async def demonstrate_performance_optimization():
     end_time = time.time()
 
     total_time = end_time - start_time
-    print(f"\n⏱️  Performance Results:")
+    print("\n⏱️  Performance Results:")
     print(f"   • Total execution time: {total_time:.3f}s")
-    print(f"   • Sequential time (estimated): 0.7s")
+    print("   • Sequential time (estimated): 0.7s")
     print(f"   • Parallel time (actual): {total_time:.3f}s")
     print(f"   • Speedup: {0.7/total_time:.2f}x")
 
@@ -640,7 +640,7 @@ async def main():
     print("   • Real-world data processing patterns")
     print("   • Enterprise-level pipeline design")
 
-    results = await demonstrate_complex_workflow()
+    await demonstrate_complex_workflow()
     await demonstrate_error_handling()
     await demonstrate_performance_optimization()
 

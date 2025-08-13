@@ -422,7 +422,7 @@ async def main():
     # Test 5: Complex Multi-Level Aggregation
     await demonstrate_complex_aggregation()
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Fan-Out Fan-In - Distribute and collect data")
     print("   ✅ Data Aggregation - Combine results from multiple nodes")
     print("   ✅ Priority Ordering - Aggregate by priority levels")
@@ -430,7 +430,7 @@ async def main():
     print("   ✅ Statistical Analysis - Analyze aggregated data")
     print("   ✅ Multi-Level Aggregation - Complex aggregation patterns")
 
-    print(f"\n🔗 This completes the data aggregation demonstration!")
+    print("\n🔗 This completes the data aggregation demonstration!")
 
 
 if __name__ == "__main__":

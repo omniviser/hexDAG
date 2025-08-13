@@ -106,6 +106,10 @@ jobs:
         displayName: "Run Mypy"
 
       - script: |
+          uv run ruff check ./hexai
+        displayName: "Run Ruff ./hexai"
+
+      - script: |
           echo "Running tests with coverage..."
           uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"

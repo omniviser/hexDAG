@@ -174,21 +174,21 @@ class BaseValidator(IValidator):
 
             # Fallback to basic conversions for backward compatibility
             try:
-                if expected_type == str:
+                if expected_type is str:
                     converted = str(data)
-                elif expected_type == int:
+                elif expected_type is int:
                     converted = int(data)
-                elif expected_type == float:
+                elif expected_type is float:
                     converted = float(data)
-                elif expected_type == bool:
+                elif expected_type is bool:
                     converted = bool(data)
-                elif expected_type == list:
+                elif expected_type is list:
                     converted = (
                         list(data)
                         if hasattr(data, "__iter__") and not isinstance(data, str)
                         else [data]
                     )
-                elif expected_type == dict:
+                elif expected_type is dict:
                     if hasattr(data, "model_dump"):
                         converted = data.model_dump()
                     elif hasattr(data, "__dict__"):

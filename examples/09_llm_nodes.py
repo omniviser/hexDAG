@@ -10,7 +10,6 @@ This example demonstrates LLM nodes in hexAI:
 """
 
 import asyncio
-from typing import Any
 
 from hexai.adapters.mock.mock_llm import MockLLM
 from hexai.core.application.nodes.llm_node import LLMNode
@@ -43,7 +42,7 @@ async def main():
     )
 
     # Create LLMNode factory
-    llm_node = LLMNode()
+    LLMNode()
 
     # Test 1: Basic LLM Node
     print("\n🤖 Test 1: Basic LLM Node")
@@ -62,7 +61,7 @@ async def main():
     orchestrator = Orchestrator(ports={"llm": mock_llm})
     result = await orchestrator.run(graph, {"input": "I love this new product!"})
 
-    print(f"   ✅ Basic LLM node executed successfully")
+    print("   ✅ Basic LLM node executed successfully")
     print(f"   📊 Analysis: {result['text_analyzer']}")
 
     # Test 2: LLM Node with Structured Output
@@ -83,7 +82,7 @@ async def main():
         graph, {"input": "This article discusses AI, machine learning, and data science."}
     )
 
-    print(f"   ✅ Structured LLM node executed successfully")
+    print("   ✅ Structured LLM node executed successfully")
     print(f"   📊 Response: {result['topic_analyzer']}")
 
     # Test 3: LLM Node with Context
@@ -107,7 +106,7 @@ async def main():
     }
 
     result = await orchestrator.run(graph, context_data)
-    print(f"   ✅ Context-aware LLM node executed successfully")
+    print("   ✅ Context-aware LLM node executed successfully")
     print(f"   📊 Recommendation: {result['recommendation_engine']}")
 
     # Test 4: LLM Node with Complex Prompt
@@ -140,17 +139,17 @@ async def main():
         graph, {"input": "This is a well-written article about artificial intelligence."}
     )
 
-    print(f"   ✅ Complex prompt LLM node executed successfully")
+    print("   ✅ Complex prompt LLM node executed successfully")
     print(f"   📊 Assessment: {result['quality_assessor']}")
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ LLMNode - Create nodes that use language models")
     print("   ✅ Prompt Templates - Use {{variables}} in prompts")
     print("   ✅ Structured Output - Define output schemas for LLMs")
     print("   ✅ Context Usage - Pass data between LLM nodes")
     print("   ✅ LLM Composition - Chain multiple LLM nodes together")
 
-    print(f"\n🔗 Next: Run example 10 to learn about agent nodes!")
+    print("\n🔗 Next: Run example 10 to learn about agent nodes!")
 
 
 if __name__ == "__main__":

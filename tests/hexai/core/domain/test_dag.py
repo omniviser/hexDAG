@@ -51,8 +51,8 @@ class TestNodeSpec:
     def test_with_types(self):
         """Test setting input/output types."""
         node = NodeSpec("test", dummy_fn, in_type=str, out_type=dict)
-        assert node.in_type == str
-        assert node.out_type == dict
+        assert node.in_type is str
+        assert node.out_type is dict
 
     def test_repr(self):
         """Test string representation."""
@@ -101,11 +101,11 @@ class TestNodeSpec:
         # Alternative chaining using a separate node for list/tuple types
         node2 = NodeSpec("test2", dummy_fn, in_type=list, out_type=tuple).after("dep3")
 
-        assert node.in_type == str
-        assert node.out_type == dict
+        assert node.in_type is str
+        assert node.out_type is dict
         assert node.deps == frozenset({"dep1", "dep2"})
-        assert node2.in_type == list
-        assert node2.out_type == tuple
+        assert node2.in_type is list
+        assert node2.out_type is tuple
 
     def test_empty_node_name(self):
         """Test NodeSpec with empty name."""
@@ -122,8 +122,8 @@ class TestNodeSpec:
         )
 
         assert node.deps == frozenset({"dep1", "dep2", "dep3"})
-        assert node.in_type == list
-        assert node.out_type == tuple
+        assert node.in_type is list
+        assert node.out_type is tuple
 
     def test_node_with_none_types(self):
         """Test NodeSpec with explicit None types."""

@@ -298,7 +298,7 @@ class TestFunctionNode:
 
         # This should work but not be practical in real use
         with pytest.raises(Exception):
-            node = factory("no_params", no_params)
+            factory("no_params", no_params)
             # This would fail because wrapped_fn expects input_data
             # But we test that the node creation works
 

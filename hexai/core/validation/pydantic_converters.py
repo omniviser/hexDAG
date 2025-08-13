@@ -17,7 +17,7 @@ class DictToPydanticConverter(TypeConverter):
 
     def can_convert(self, source_type: type, target_type: type) -> bool:
         """Check if we can convert dict to Pydantic model."""
-        return source_type == dict and self._is_pydantic_model(target_type)
+        return source_type is dict and self._is_pydantic_model(target_type)
 
     def convert(self, value: Any, target_type: type) -> BaseModel:
         """Convert dictionary to Pydantic model."""
@@ -54,7 +54,7 @@ class PydanticToDictConverter(TypeConverter):
 
     def can_convert(self, source_type: type, target_type: type) -> bool:
         """Check if we can convert Pydantic model to dict."""
-        return target_type == dict and self._is_pydantic_model(source_type)
+        return target_type is dict and self._is_pydantic_model(source_type)
 
     def convert(self, value: Any, target_type: type) -> dict[str, Any]:
         """Convert Pydantic model to dictionary."""
@@ -63,7 +63,7 @@ class PydanticToDictConverter(TypeConverter):
                 "Value must be a Pydantic model instance", type(value), target_type, value
             )
 
-        if target_type != dict:
+        if target_type is not dict:
             raise ConversionError("Target type must be dict", type(value), target_type, value)
 
         try:
@@ -86,7 +86,7 @@ class JsonStringToPydanticConverter(TypeConverter):
 
     def can_convert(self, source_type: type, target_type: type) -> bool:
         """Check if we can convert JSON string to Pydantic model."""
-        return source_type == str and self._is_pydantic_model(target_type)
+        return source_type is str and self._is_pydantic_model(target_type)
 
     def convert(self, value: Any, target_type: type) -> BaseModel:
         """Convert JSON string to Pydantic model."""
@@ -138,7 +138,7 @@ class PydanticToJsonConverter(TypeConverter):
 
     def can_convert(self, source_type: type, target_type: type) -> bool:
         """Check if we can convert Pydantic model to JSON string."""
-        return target_type == str and self._is_pydantic_model(source_type)
+        return target_type is str and self._is_pydantic_model(source_type)
 
     def convert(self, value: Any, target_type: type) -> str:
         """Convert Pydantic model to JSON string."""
@@ -147,7 +147,7 @@ class PydanticToJsonConverter(TypeConverter):
                 "Value must be a Pydantic model instance", type(value), target_type, value
             )
 
-        if target_type != str:
+        if target_type is not str:
             raise ConversionError("Target type must be str", type(value), target_type, value)
 
         try:

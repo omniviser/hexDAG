@@ -14,7 +14,7 @@ class StringToNumericConverter(TypeConverter):
 
     def can_convert(self, source_type: type, target_type: type) -> bool:
         """Check if we can convert string to numeric type."""
-        return source_type == str and target_type in (int, float)
+        return source_type is str and target_type in (int, float)
 
     def convert(self, value: Any, target_type: type) -> int | float:
         """Convert string to int or float."""
@@ -28,7 +28,7 @@ class StringToNumericConverter(TypeConverter):
             )
 
         try:
-            if target_type == int:
+            if target_type is int:
                 # Handle float strings that should become int
                 if "." in value:
                     float_val = float(value)
@@ -42,7 +42,7 @@ class StringToNumericConverter(TypeConverter):
                             value,
                         )
                 return int(value)
-            elif target_type == float:
+            elif target_type is float:
                 return float(value)
             else:
                 raise ConversionError(
@@ -63,11 +63,11 @@ class BooleanConverter(TypeConverter):
 
     def can_convert(self, source_type: type, target_type: type) -> bool:
         """Check if we can convert to boolean."""
-        return target_type == bool and source_type in (str, int, float)
+        return target_type is bool and source_type in (str, int, float)
 
     def convert(self, value: Any, target_type: type) -> bool:
         """Convert value to boolean."""
-        if target_type != bool:
+        if target_type is not bool:
             raise ConversionError("Target type must be bool", type(value), target_type, value)
 
         # Handle string conversion
