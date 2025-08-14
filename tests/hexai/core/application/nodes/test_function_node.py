@@ -30,7 +30,11 @@ class TestFunctionNode:
     @pytest.fixture
     def mock_ports(self):
         """Create mock ports."""
-        return {"event_manager": AsyncMock(), "database": AsyncMock(), "cache": AsyncMock()}
+        return {
+            "event_manager": AsyncMock(),
+            "database": AsyncMock(),
+            "cache": AsyncMock(),
+        }
 
     def test_create_node_basic(self, factory):
         """Test creating a basic function node."""
@@ -53,7 +57,10 @@ class TestFunctionNode:
             return {"greeting": f"Hello, {user_data['name']}!"}
 
         node = factory(
-            "process_user", process_user, input_schema=_UserInput, output_schema=_UserOutput
+            "process_user",
+            process_user,
+            input_schema=_UserInput,
+            output_schema=_UserOutput,
         )
 
         assert node.name == "process_user"
@@ -139,7 +146,11 @@ class TestFunctionNode:
         node = factory("params_func", func_with_params)
 
         # Add an unknown port that should be filtered out
-        all_ports = {**mock_ports, "unknown_port": AsyncMock(), "extra_port": AsyncMock()}
+        all_ports = {
+            **mock_ports,
+            "unknown_port": AsyncMock(),
+            "extra_port": AsyncMock(),
+        }
         result = await node.fn("test", **all_ports)
 
         assert result["data"] == "test"
@@ -220,7 +231,10 @@ class TestFunctionNode:
             return {"greeting": f"Welcome, {user['name']}!", "user_age": user["age"]}
 
         node = factory(
-            "process_user", process_user_data, input_schema=_UserInput, output_schema=_UserOutput
+            "process_user",
+            process_user_data,
+            input_schema=_UserInput,
+            output_schema=_UserOutput,
         )
 
         result = await node.fn({"name": "Bob", "age": 35})
@@ -234,7 +248,7 @@ class TestFunctionNode:
         """Test that function metadata is preserved."""
 
         def documented_function(x: int) -> int:
-            """This is a well-documented function."""
+            """Return the input incremented by one."""
             return x + 1
 
         node = factory("documented", documented_function)
@@ -244,7 +258,7 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_port_combinations(self, factory):
-        """Test various combinations of port handling."""
+        # """Test various combinations of port handling."""
 
         # Function that uses specific ports
         def func_with_event_manager(data: str, event_manager=None) -> str:
@@ -266,7 +280,7 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_complex_port_scenarios(self, factory):
-        """Test complex port handling scenarios."""
+        # """Test complex port handling scenarios."""
 
         # Function with multiple specific ports
         def multi_port_func(data: str, event_manager=None, database=None, cache=None) -> dict:
@@ -281,7 +295,10 @@ class TestFunctionNode:
 
         # Test with subset of ports
         result = await node.fn(
-            "test", event_manager=AsyncMock(), cache=AsyncMock(), unknown_service=AsyncMock()
+            "test",
+            event_manager=AsyncMock(),
+            cache=AsyncMock(),
+            unknown_service=AsyncMock(),
         )  # Should be filtered out
 
         assert result["event_manager"] is True
@@ -290,15 +307,15 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_edge_cases(self, factory):
-        """Test edge cases and unusual scenarios."""
+        # """Test edge cases and unusual scenarios."""
 
         # Function with no parameters at all
         def no_params() -> str:
             return "no_params_result"
 
         # This should work but not be practical in real use
-        with pytest.raises(Exception):
-            node = factory("no_params", no_params)
+        with pytest.raises(ValueError, match="at least one parameter"):
+            factory("no_params", no_params)
             # This would fail because wrapped_fn expects input_data
             # But we test that the node creation works
 
@@ -307,7 +324,7 @@ class TestFunctionNode:
             return {"kwargs_count": len(kwargs)}
 
         # This would also be unusual but test node creation
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="First parameter cannot be \\*\\*kwargs"):
             factory("only_kwargs", only_kwargs)
             # Expected - functions need input_data parameter
 
@@ -400,7 +417,6 @@ class TestFunctionNode:
 
     def test_convenience_methods(self, factory):
         """Test convenience methods for creating input mappings."""
-
         # Test passthrough mapping
         passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
         expected_passthrough = {"text": "text", "status": "status", "score": "score"}
@@ -413,11 +429,14 @@ class TestFunctionNode:
 
         # Test prefixed mapping
         prefixed = FunctionNode.create_prefixed_mapping(["text", "score"], "processor", "proc_")
-        expected_prefixed = {"proc_text": "processor.text", "proc_score": "processor.score"}
+        expected_prefixed = {
+            "proc_text": "processor.text",
+            "proc_score": "processor.score",
+        }
         assert prefixed == expected_prefixed
 
     def test_with_input_mapping_enhancement(self, factory):
-        """Test enhancing existing nodes with input mapping."""
+        # """Test enhancing existing nodes with input mapping."""
 
         # Create basic node
         def basic_func(data: str) -> str:
@@ -444,7 +463,7 @@ class TestFunctionNode:
         assert enhanced_node.out_type == basic_node.out_type
 
     def test_with_input_mapping_overwrite(self, factory):
-        """Test that with_input_mapping overwrites existing mapping."""
+        # """Test that with_input_mapping overwrites existing mapping."""
 
         # Create node with existing mapping
         def func(data: str) -> str:
@@ -468,7 +487,10 @@ class TestFunctionNode:
             return f"{content}_processed"
 
         node = factory(
-            "port_processor", port_func, deps=["source"], input_mapping={"content": "source.text"}
+            "port_processor",
+            port_func,
+            deps=["source"],
+            input_mapping={"content": "source.text"},
         )
 
         # Verify both input mapping and port handling work together
@@ -479,7 +501,11 @@ class TestFunctionNode:
         """Test complex input mapping scenario with multiple dependencies."""
 
         def complex_processor(
-            user_name: str, user_age: int, validation_status: str, score: float, metadata: dict
+            user_name: str,
+            user_age: int,
+            validation_status: str,
+            score: float,
+            metadata: dict,
         ) -> dict:
             return {
                 "result": f"{user_name} ({user_age}) - {validation_status}",

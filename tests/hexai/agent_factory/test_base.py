@@ -208,7 +208,10 @@ class TestPipelineDefinition:
             "first_node2": [],  # No dependencies = first node
             "second_node": ["first_node1"],  # Has dependencies = not first node
         }
-        mock_graph.waves.return_value = [["first_node1", "first_node2"], ["second_node"]]
+        mock_graph.waves.return_value = [
+            ["first_node1", "first_node2"],
+            ["second_node"],
+        ]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -251,7 +254,10 @@ class TestPipelineDefinition:
             "last_node2": mock_node_spec2,
         }
         # Only first_node appears in dependencies, so last_node1 and last_node2 are last nodes
-        mock_graph.dependencies = {"last_node1": ["first_node"], "last_node2": ["first_node"]}
+        mock_graph.dependencies = {
+            "last_node1": ["first_node"],
+            "last_node2": ["first_node"],
+        }
         mock_graph.waves.return_value = [["first_node"], ["last_node1", "last_node2"]]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
@@ -278,7 +284,10 @@ class TestPipelineDefinition:
         mock_node_spec2.fn.__name__ = "generate_output"
 
         mock_graph = Mock()
-        mock_graph.nodes = {"input_processor": mock_node_spec1, "output_generator": mock_node_spec2}
+        mock_graph.nodes = {
+            "input_processor": mock_node_spec1,
+            "output_generator": mock_node_spec2,
+        }
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -317,7 +326,13 @@ class TestPipelineDefinition:
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_node_types()
 
-            expected = {"test_node": {"name": "test_node", "input_type": str, "output_type": dict}}
+            expected = {
+                "test_node": {
+                    "name": "test_node",
+                    "input_type": str,
+                    "output_type": dict,
+                }
+            }
             assert result == expected
 
     def test_get_input_type_exception_handling(self):
@@ -325,7 +340,9 @@ class TestPipelineDefinition:
         pipeline = MockPipeline()
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(
-            pipeline.builder, "build_from_yaml_file", side_effect=Exception("Test error")
+            pipeline.builder,
+            "build_from_yaml_file",
+            side_effect=Exception("Test error"),
         ):
             result = pipeline.get_input_type()
             assert result is None
@@ -335,7 +352,9 @@ class TestPipelineDefinition:
         pipeline = MockPipeline()
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(
-            pipeline.builder, "build_from_yaml_file", side_effect=Exception("Test error")
+            pipeline.builder,
+            "build_from_yaml_file",
+            side_effect=Exception("Test error"),
         ):
             result = pipeline.get_output_type()
             assert result is None
@@ -345,7 +364,9 @@ class TestPipelineDefinition:
         pipeline = MockPipeline()
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(
-            pipeline.builder, "build_from_yaml_file", side_effect=Exception("Test error")
+            pipeline.builder,
+            "build_from_yaml_file",
+            side_effect=Exception("Test error"),
         ):
             result = pipeline.get_node_types()
             assert result == {}
@@ -357,7 +378,10 @@ class TestPipelineDefinition:
         # Mock graph where all nodes have dependencies
         mock_graph = Mock()
         mock_graph.nodes = {"node1": Mock(), "node2": Mock()}
-        mock_graph.dependencies = {"node1": ["node2"], "node2": ["node1"]}  # Circular dependency
+        mock_graph.dependencies = {
+            "node1": ["node2"],
+            "node2": ["node1"],
+        }  # Circular dependency
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -401,7 +425,7 @@ class TestPipelineCatalog:
     """Tests for PipelineCatalog."""
 
     def test_pipeline_registration(self):
-        """Test manual pipeline registration."""
+        # """Test manual pipeline registration."""
 
         # Create a test pipeline class
         class TestRegistrationPipeline(PipelineDefinition):

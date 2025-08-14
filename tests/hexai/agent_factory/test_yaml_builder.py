@@ -22,7 +22,7 @@ class TestPipelineBuilder:
         self.builder.register_function("sample_function", self.sample_function)
 
     def test_simple_function_registration(self):
-        """Test basic function registration and retrieval."""
+        # """Test basic function registration and retrieval."""
 
         # Register a function
         def sample_function(input_data, **ports):
@@ -35,7 +35,7 @@ class TestPipelineBuilder:
         assert self.builder.registered_functions["sample_function"] == sample_function
 
     def test_build_simple_graph(self):
-        """Test building a simple graph with one node."""
+        # """Test building a simple graph with one node."""
 
         # Register required function
         def sample_function(input_data, **ports):
@@ -67,7 +67,7 @@ nodes:
         assert metadata["description"] is None
 
     def test_build_with_dependencies(self):
-        """Test building pipeline with dependencies."""
+        # """Test building pipeline with dependencies."""
 
         # Register required function
         def sample_function(input_data, **ports):
@@ -104,7 +104,7 @@ nodes:
         assert graph.nodes["node3"].deps == {"node1", "node2"}
 
     def test_build_with_input_mapping(self):
-        """Test building pipeline with input mapping."""
+        # """Test building pipeline with input mapping."""
 
         # Register required function
         def sample_function(input_data, **ports):
@@ -161,7 +161,7 @@ nodes:
 """
 
         # This will fail due to missing function, but we can catch and check metadata
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError, match="not a callable object"):
             self.builder.build_from_yaml_string(yaml_content)
             # Expected due to missing function registration
 
@@ -223,7 +223,7 @@ nodes:
       fn: test_function
 """
 
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError, match="not a callable object"):
             self.builder.build_from_yaml_string(yaml_content_valid)
             # Expected due to missing function, but metadata extraction should work
 
@@ -249,7 +249,8 @@ nodes:
 """
 
         with pytest.raises(
-            YamlPipelineBuilderError, match="input_mapping for node 'node1' must be a dictionary"
+            YamlPipelineBuilderError,
+            match="input_mapping for node 'node1' must be a dictionary",
         ):
             self.builder.build_from_yaml_string(yaml_content)
 
