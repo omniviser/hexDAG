@@ -1,6 +1,9 @@
 variables:
-  CI_USERNAME: "CI Pipeline"
-  CI_EMAIL: developers@omniviser.ai
+- group: pypi-secrets
+- name: CI_USERNAME
+  value: "CI Pipeline"
+- name: CI_EMAIL
+  value: developers@omniviser.ai
 
 trigger:
   branches:
@@ -133,3 +136,37 @@ jobs:
       - script: |
           uv run scripts/check_examples.py
         displayName: "Check examples functionality"
+
+  - job: BuildAndPublish
+    displayName: "Build package & publish to TestPyPI"
+    dependsOn: CodeQuality
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: self
+        clean: true
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+
+      - script: |
+          pip install --upgrade pip
+          pip install build twine
+          python -m build
+          twine check dist/*
+        displayName: "Build sdist & wheel"
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: "$(System.DefaultWorkingDirectory)/dist"
+          artifact: "dist"
+          publishLocation: "pipeline"
+        displayName: "Save dist/ as artifact"
+
+      - script: |
+          TWINE_USERNAME="__token__" \
+          TWINE_PASSWORD="$(TEST_PYPI_TOKEN)" \
+          twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+        displayName: "Upload to TestPyPI"
+        condition: succeeded()
