@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "pydantic~=2.0",
+    "pydantic~=2.0", # xxxxxx
     "typing-extensions>=4.10.0,<5",
     "click>=8.1.0,<9",
     "rich>=13.7.0,<14",
