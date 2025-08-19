@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
 authors = [{ name = "hexDAG Team" }]
 requires-python = "~=3.12.0"
