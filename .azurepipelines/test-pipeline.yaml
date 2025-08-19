@@ -92,7 +92,8 @@ jobs:
           # Install Python packages needed for typing and runtime graphviz usage
           # types-graphviz: stubs for mypy
           # graphviz: Python wrapper for Graphviz
-          uv pip install --system types-graphviz graphviz
+          python -m pip install -U pip
+          uv pip install types-graphviz graphviz
         displayName: "Install Python deps for typing/graphviz"
 
       - script: |
