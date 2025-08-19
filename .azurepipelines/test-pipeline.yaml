@@ -140,8 +140,6 @@ jobs:
   - job: BuildAndPublish
     displayName: "Build package & publish to TestPyPI"
     dependsOn: CodeQuality
-    pool:
-      vmImage: 'ubuntu-latest'
     steps:
       - checkout: self
         clean: true
@@ -169,4 +167,36 @@ jobs:
           TWINE_PASSWORD="$(TEST_PYPI_TOKEN)" \
           twine upload --repository-url https://test.pypi.org/legacy/ dist/*
         displayName: "Upload to TestPyPI"
+
+      - script: |
+          python - <<'PY'
+          import tomllib
+          with open('pyproject.toml','rb') as f:
+              proj = tomllib.load(f)['project']
+          # set ADO variables
+          print(f"##vso[task.setvariable variable=PKG_NAME]{proj['name']}")
+          print(f"##vso[task.setvariable variable=PKG_VERSION]{proj['version']}")
+          PY
+        displayName: "Read package name/version from pyproject.toml"
+
+      - script: |
+          set -e
+          python -m venv .venv_test
+          source .venv_test/bin/activate
+          python -m pip install --upgrade pip
+          # install from TestPyPI (deps from prod PyPI)
+          python -m pip install \
+            --index-url https://test.pypi.org/simple \
+            --extra-index-url https://pypi.org/simple \
+            $(PKG_NAME)==$(PKG_VERSION)
+          # smoke test - verify installed dist/version
+          python - <<'PY'
+          import os, importlib.metadata as md
+          name = os.environ["PKG_NAME"]
+          print("Installed OK:", name, md.version(name))
+          PY
+        displayName: "Install from TestPyPI + smoke test"
+        env:
+          PKG_NAME: $(PKG_NAME)
+          PKG_VERSION: $(PKG_VERSION)
         condition: succeeded()
