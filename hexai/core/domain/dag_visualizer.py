@@ -18,7 +18,7 @@ from hexai.core.domain.dag import DirectedGraph
 from hexai.utils.features import FeatureManager
 from hexai.utils.imports import optional_import
 
-graphviz = optional_import("graphviz", feature="viz")
+graphviz: Any = optional_import("graphviz", feature="viz")
 
 logger = logging.getLogger(__name__)
 
