@@ -39,7 +39,6 @@ class YamlPipelineBuilder:
 
     def build_from_yaml_file(self, yaml_file_path: str) -> tuple[DirectedGraph, dict[str, Any]]:
         """Build DirectedGraph from YAML file."""
-
         try:
             with open(yaml_file_path, encoding="utf-8") as file:
                 yaml_content = file.read()

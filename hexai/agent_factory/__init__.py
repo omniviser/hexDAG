@@ -1,10 +1,10 @@
-"""
-Agent Factory subpackage (lazy, conditional imports).
+"""Agent Factory subpackage (lazy, conditional imports).
 
 This package contains optional pipeline utilities and domain models.
 Attributes are imported on first access to avoid importing optional dependencies eagerly.
 
-Examples:
+Examples
+--------
     from hexai.agent_factory import YamlPipelineBuilder
     from hexai.agent_factory import PipelineCatalog, PipelineDefinition, get_catalog
     from hexai.agent_factory import (

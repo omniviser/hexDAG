@@ -5,11 +5,7 @@ traditional code with YAML pipeline configuration.
 """
 
 # Core framework exports
-from hexai.core.application.nodes import (
-    ConditionalNode,
-    FunctionNode,
-    LoopNode,
-)
+from hexai.core.application.nodes import ConditionalNode, FunctionNode, LoopNode
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain import DirectedGraph, NodeSpec
 

@@ -72,7 +72,6 @@ class DAGVisualizer:
         -------
             DOT format string for the graph
         """
-
         FeatureManager.require_feature("viz")
         global graphviz
         if graphviz is None:
@@ -82,7 +81,8 @@ class DAGVisualizer:
                 graphviz = _gv
             except ModuleNotFoundError as e:
                 raise ModuleNotFoundError(
-                    "Feature 'viz' requires the 'graphviz' package. Install with `pip install hexdag[viz]`."
+                    "Feature 'viz' requires the 'graphviz' package."
+                    " Install with `pip install hexdag[viz]`."
                 ) from e
 
         dot = graphviz.Digraph(comment=title)

@@ -1,9 +1,7 @@
-(
-    """Enhanced mock implementations for testing purposes."""
-    """
+"""Enhanced mock implementations for testing purposes.
+
 Mock adapters for testing (lazy, conditional imports).
 """
-)
 
 from __future__ import annotations
 
