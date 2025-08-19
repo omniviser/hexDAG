@@ -12,11 +12,16 @@ import subprocess  # nosec B404
 import tempfile
 import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hexai.core.domain.dag import DirectedGraph
 from hexai.utils.features import FeatureManager
 from hexai.utils.imports import optional_import
+
+if TYPE_CHECKING:
+    import graphviz as _graphviz
+else:
+    _graphviz = None
 
 graphviz: Any = optional_import("graphviz", feature="viz")
 
