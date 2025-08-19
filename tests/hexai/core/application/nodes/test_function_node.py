@@ -258,13 +258,12 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_port_combinations(self, factory):
-        # """Test various combinations of port handling."""
-
-        # Function that uses specific ports
-        def func_with_event_manager(data: str, event_manager=None) -> str:
-            return f"{data}_with_em" if event_manager else f"{data}_no_em"
-
-        node = factory("em_func", func_with_event_manager)
+        node = factory(
+            "em_func",
+            lambda data, event_manager=None: (
+                f"{data}_with_em" if event_manager else f"{data}_no_em"
+            ),
+        )
 
         # Test with event_manager
         result1 = await node.fn("test", event_manager=AsyncMock())
@@ -280,18 +279,16 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_complex_port_scenarios(self, factory):
-        # """Test complex port handling scenarios."""
-
-        # Function with multiple specific ports
-        def multi_port_func(data: str, event_manager=None, database=None, cache=None) -> dict:
-            return {
+        """Test complex port handling scenarios."""
+        node = factory(
+            "multi_port",
+            lambda data, event_manager=None, database=None, cache=None: {
                 "data": data,
                 "event_manager": event_manager is not None,
                 "database": database is not None,
                 "cache": cache is not None,
-            }
-
-        node = factory("multi_port", multi_port_func)
+            },
+        )
 
         # Test with subset of ports
         result = await node.fn(
@@ -307,15 +304,10 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_edge_cases(self, factory):
-        # """Test edge cases and unusual scenarios."""
-
-        # Function with no parameters at all
-        def no_params() -> str:
-            return "no_params_result"
-
+        """Test edge cases and unusual scenarios."""
         # This should work but not be practical in real use
         with pytest.raises(ValueError, match="at least one parameter"):
-            factory("no_params", no_params)
+            factory("no_params", lambda: "no_params_result")
             # This would fail because wrapped_fn expects input_data
             # But we test that the node creation works
 
@@ -436,15 +428,10 @@ class TestFunctionNode:
         assert prefixed == expected_prefixed
 
     def test_with_input_mapping_enhancement(self, factory):
-        # """Test enhancing existing nodes with input mapping."""
-
-        # Create basic node
-        def basic_func(data: str) -> str:
-            return data.upper()
-
+        """Test enhancing existing nodes with input mapping."""
         basic_node = factory(
             "basic",
-            basic_func,
+            lambda data: data.upper(),
             input_schema=str,
             output_schema=str,
         )
@@ -463,13 +450,11 @@ class TestFunctionNode:
         assert enhanced_node.out_type == basic_node.out_type
 
     def test_with_input_mapping_overwrite(self, factory):
-        # """Test that with_input_mapping overwrites existing mapping."""
-
-        # Create node with existing mapping
-        def func(data: str) -> str:
-            return data.upper()
-
-        original_node = factory("test", func, input_mapping={"data": "old.source"})
+        """Test that with_input_mapping overwrites existing mapping."""
+        # Create node with existing mapping using lambda
+        original_node = factory(
+            "test", lambda data: data.upper(), input_mapping={"data": "old.source"}
+        )
 
         # Overwrite with new mapping
         updated_node = factory.with_input_mapping(
