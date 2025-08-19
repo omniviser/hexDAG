@@ -25,10 +25,27 @@ classifiers = [
 dependencies = [
     "pydantic~=2.0",
     "typing-extensions>=4.10.0,<5",
+]
+[project.optional-dependencies]
+cli = [
     "click>=8.1.0,<9",
-    "rich>=13.7.0,<14",
     "pyyaml~=6.0",
+    "rich>=13.7.0,<14",
+]
+viz = [
     "graphviz>=0.20",
+]
+adapters-openai = [
+    "openai>=1.0.0",
+]
+adapters-anthropic = [
+    "anthropic>=0.3.0",
+]
+all = [
+    "hexdag[cli]",
+    "hexdag[viz]",
+    "hexdag[adapters-openai]",
+    "hexdag[adapters-anthropic]",
 ]
 
 [project.urls]

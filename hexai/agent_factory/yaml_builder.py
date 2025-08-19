@@ -6,8 +6,6 @@ Simple pipeline builder that focuses on basic YAML processing with simple data m
 import logging
 from typing import Any
 
-import yaml
-
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.nodes import NodeFactory
 from hexai.core.application.prompt.template import ChatPromptTemplate
@@ -41,6 +39,7 @@ class YamlPipelineBuilder:
 
     def build_from_yaml_file(self, yaml_file_path: str) -> tuple[DirectedGraph, dict[str, Any]]:
         """Build DirectedGraph from YAML file."""
+
         try:
             with open(yaml_file_path, encoding="utf-8") as file:
                 yaml_content = file.read()
@@ -61,6 +60,9 @@ class YamlPipelineBuilder:
         -------
             tuple: (DirectedGraph, pipeline_metadata)
         """
+        from hexai.utils.imports import optional_import
+
+        yaml = optional_import("yaml", "cli")
         try:
             config = yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
@@ -259,7 +261,7 @@ class YamlPipelineBuilder:
                 node_name, _field_name = source_path.split(".", 1)
                 if node_name not in node_names:
                     warnings.append(
-                        f"Node '{node_id}' {mapping_type} references " f"unknown node '{node_name}'"
+                        f"Node '{node_id}' {mapping_type} references unknown node '{node_name}'"
                     )
                 elif node_name not in dependencies:
                     warnings.append(
@@ -270,8 +272,7 @@ class YamlPipelineBuilder:
                 # Direct node reference
                 if source_path not in node_names:
                     warnings.append(
-                        f"Node '{node_id}' {mapping_type} references "
-                        f"unknown node '{source_path}'"
+                        f"Node '{node_id}' {mapping_type} references unknown node '{source_path}'"
                     )
 
         return warnings

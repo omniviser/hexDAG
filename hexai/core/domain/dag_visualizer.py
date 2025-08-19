@@ -14,9 +14,11 @@ import threading
 import time
 from typing import Any
 
-import graphviz
-
 from hexai.core.domain.dag import DirectedGraph
+from hexai.utils.features import FeatureManager
+from hexai.utils.imports import optional_import
+
+graphviz = optional_import("graphviz", feature="viz")
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,19 @@ class DAGVisualizer:
         -------
             DOT format string for the graph
         """
+
+        FeatureManager.require_feature("viz")
+        global graphviz
+        if graphviz is None:
+            try:
+                import graphviz as _gv
+
+                graphviz = _gv
+            except ModuleNotFoundError as e:
+                raise ModuleNotFoundError(
+                    "Feature 'viz' requires the 'graphviz' package. Install with `pip install hexdag[viz]`."
+                ) from e
+
         dot = graphviz.Digraph(comment=title)
         dot.attr(rankdir="TB", style="filled", bgcolor="white")
         dot.attr("node", shape="box", style="filled,rounded", fontname="Arial")
@@ -842,10 +857,14 @@ class DAGVisualizer:
             else:
                 attr_pairs.append(f"{key}={value}")
 
-        return f'[{", ".join(attr_pairs)}]'
+        return f"[{', '.join(attr_pairs)}]"
 
     def render_to_file(
-        self, output_path: str, format: str = "png", title: str = "Pipeline DAG", **kwargs: Any
+        self,
+        output_path: str,
+        format: str = "png",
+        title: str = "Pipeline DAG",
+        **kwargs: Any,
     ) -> str:
         """Render DAG to file using Graphviz.
 

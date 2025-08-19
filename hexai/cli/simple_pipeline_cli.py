@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
+from hexai.adapters.mock import InMemoryMemory, MockDatabaseAdapter, MockLLM
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.cli.compile import compile_single
 from hexai.core.domain.dag_visualizer import render_dag_to_image
@@ -624,7 +624,6 @@ class PipelineCLI:
                     pipeline_name = pipeline_info["name"]
                     pipeline = self.catalog.get_pipeline(pipeline_name)
                     if pipeline and pipeline._yaml_path:
-
                         compile_single(pipeline._yaml_path)
                         success_count += 1  # Only increment if compilation succeeds
                     else:
