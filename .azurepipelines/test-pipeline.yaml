@@ -89,6 +89,10 @@ jobs:
         displayName: "Install UV"
 
       - script: |
+          uv venv
+        displayName: "Create UV venv"
+
+      - script: |
           # Install Python packages needed for typing and runtime graphviz usage
           # types-graphviz: stubs for mypy
           # graphviz: Python wrapper for Graphviz
