@@ -19,7 +19,7 @@ from hexai.utils.features import FeatureManager
 from hexai.utils.imports import optional_import
 
 if TYPE_CHECKING:
-    import graphviz as _graphviz
+    import graphviz as _graphviz  # type: ignore
 else:
     _graphviz = None
 
