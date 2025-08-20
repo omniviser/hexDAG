@@ -1,7 +1,7 @@
 import os
 
-# Kod napisany przez tabulator, nie wiem czy jest wystarczający, ale po przeczytaniu dokumentacji wydaje się być poprawny.
-# Proszę o sprawdzenie i ewentualne uwagi.
+# Code written by tab, not sure if it's sufficient, but after reading the documentation it seems correct.
+# Please review and provide any comments.
 
 
 class Secret:
