@@ -110,6 +110,11 @@ jobs:
         displayName: "Run Ruff ./hexai"
 
       - script: |
+          python -m pip install -U pip
+          python -m pip install -e
+        displayName: "Install package (editable)"
+
+      - script: |
           echo "Running tests with coverage..."
           uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"
