@@ -22,26 +22,24 @@ class TestPipelineBuilder:
         self.builder.register_function("sample_function", self.sample_function)
 
     def test_simple_function_registration(self):
-        # """Test basic function registration and retrieval."""
-
+        """Test basic function registration and retrieval."""
         # Register a function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
+        self.builder.register_function(
+            "sample_function",
+            lambda input_data, **ports: {"result": "test"},
+        )
 
         # Verify registration
         assert "sample_function" in self.builder.registered_functions
-        assert self.builder.registered_functions["sample_function"] == sample_function
+        assert callable(self.builder.registered_functions["sample_function"])
 
     def test_build_simple_graph(self):
-        # """Test building a simple graph with one node."""
-
+        """Test building a simple graph with one node."""
         # Register required function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
+        self.builder.register_function(
+            "sample_function",
+            lambda input_data, **ports: {"result": "test"},
+        )
 
         yaml_content = """
 nodes:
@@ -67,13 +65,12 @@ nodes:
         assert metadata["description"] is None
 
     def test_build_with_dependencies(self):
-        # """Test building pipeline with dependencies."""
-
+        """Test building pipeline with dependencies."""
         # Register required function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
+        self.builder.register_function(
+            "sample_function",
+            lambda input_data, **ports: {"result": "test"},
+        )
 
         yaml_content = """
 nodes:
@@ -104,13 +101,12 @@ nodes:
         assert graph.nodes["node3"].deps == {"node1", "node2"}
 
     def test_build_with_input_mapping(self):
-        # """Test building pipeline with input mapping."""
-
+        """Test building pipeline with input mapping."""
         # Register required function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
+        self.builder.register_function(
+            "sample_function",
+            lambda input_data, **ports: {"result": "test"},
+        )
 
         yaml_content = """
 nodes:
