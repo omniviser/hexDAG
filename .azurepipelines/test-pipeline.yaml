@@ -88,6 +88,12 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
         displayName: "Install UV"
 
+      - script: uv venv
+        displayName: "Create UV virtual environment"
+
+      - script: uv pip install -e ".[viz]"
+        displayName: "Install package (editable + viz deps)"
+
       - script: |
           uv run black --check ./hexai
         displayName: "Check Black"
@@ -108,11 +114,6 @@ jobs:
       - script: |
           uv run ruff check ./hexai
         displayName: "Run Ruff ./hexai"
-
-      - script: |
-          python -m pip install -U pip
-          python -m pip install -e
-        displayName: "Install package (editable)"
 
       - script: |
           echo "Running tests with coverage..."

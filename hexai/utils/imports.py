@@ -1,7 +1,4 @@
-"""Optional import.
-
-Import an optional dependency
-"""
+"""Optional import. Import an optional dependency."""
 
 from __future__ import annotations
 
@@ -19,9 +16,7 @@ PKG_TO_FEATURE = {
 
 
 def optional_import(pkg: str, feature: str | None = None) -> Any:
-    """
-    Import an optional dependency at runtime with a clear install hint.
-    """
+    """Import an optional dependency at runtime with a clear install hint."""
     try:
         return importlib.import_module(pkg)
     except ImportError as e:
