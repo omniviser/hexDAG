@@ -1,6 +1,6 @@
 """Import compatibility layer for optional features with helpful error messages.
 
-This module provides a safe way to use optional dependencies in hexdag. It allows lazy imports
+This module provides a safe way to use optional dependencies in hexDAG. It allows lazy imports
 and raises user-friendly errors if a required feature or package is missing, including system
 dependencies like Graphviz's `dot`.
 """
