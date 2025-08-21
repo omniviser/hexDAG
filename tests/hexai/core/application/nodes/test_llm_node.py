@@ -35,7 +35,7 @@ class TestLLMNode:
         assert node_spec.name == "simple_llm"
         assert node_spec.fn.__name__ == "llm_wrapper"
         assert node_spec.in_type is not None
-        assert node_spec.out_type == str  # No rich features for string template
+        assert node_spec.out_type is str  # No rich features for string template
 
     def test_string_template_with_output_schema_rejected(self, llm_node):
         """Test that string templates with output schema are rejected."""
