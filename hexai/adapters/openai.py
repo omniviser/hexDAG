@@ -5,7 +5,56 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator, Awaitable
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict
+
+# --- simple price map ($ per 1K tokens); adjust models as needed ---
+_MODEL_PRICES = {
+    # examples
+    "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+    "gpt-4o": {"input": 0.005, "output": 0.015},
+}
+
+
+def _estimate_cost_usd(model: Optional[str], usage: Any) -> Optional[float]:
+    """Return estimated USD cost based on usage.{prompt_tokens, completion_tokens}."""
+    try:
+        if not model or not usage:
+            return None
+        prices = _MODEL_PRICES.get(model)
+        if not prices:
+            return None
+        prompt = getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None)
+        if prompt is None and isinstance(usage, dict):
+            prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
+        completion = getattr(usage, "completion_tokens", None) or getattr(
+            usage, "output_tokens", None
+        )
+        if completion is None and isinstance(usage, dict):
+            completion = usage.get("completion_tokens") or usage.get("output_tokens")
+        prompt = float(prompt or 0)
+        completion = float(completion or 0)
+        return (prompt / 1000.0) * prices["input"] + (completion / 1000.0) * prices["output"]
+    except Exception:
+        return None
+
+
+class ToolCall(TypedDict):
+    """Represents a single function/tool call returned by the model."""
+
+    id: str
+    name: str
+    arguments: str
+
+
+class GenerateResult(TypedDict, total=False):
+    """Normalized return type for non-streaming generate() results."""
+
+    content: Optional[str]
+    usage: Any
+    cost_usd: NotRequired[float]
+    tool_calls: NotRequired[list[ToolCall]]
+    raw: Any
+
 
 try:
     from hexai.helpers.secrets import get_secret as _get_secret
@@ -197,6 +246,21 @@ class OpenAIAdapter:
             if delta is not None and getattr(delta, "content", None):
                 yield {"type": "content", "data": delta.content}
 
+            # tool calls (OpenAI: delta.tool_calls[].function.{name, arguments})
+            tcs = getattr(delta, "tool_calls", None) if delta is not None else None
+            if tcs:
+                for tc in tcs:
+                    fn = getattr(tc, "function", None)
+                    if fn and getattr(fn, "name", None) is not None:
+                        yield {
+                            "type": "tool_call",
+                            "data": {
+                                "id": getattr(tc, "id", ""),
+                                "name": fn.name,
+                                "arguments": getattr(fn, "arguments", "") or "",
+                            },
+                        }
+
             finish = getattr(choice, "finish_reason", None)
             if finish:
                 yield {"type": "finish", "data": finish}
@@ -207,7 +271,7 @@ class OpenAIAdapter:
         messages: list[dict[str, Any]],
         model: Optional[str] = None,
         **params: Any,
-    ) -> dict[str, Any]:
+    ) -> GenerateResult:
         """Non-streaming chat completion call.
 
         Parameters
@@ -252,7 +316,41 @@ class OpenAIAdapter:
             content = getattr(msg, "content", None) if msg else None
 
         usage = getattr(resp, "usage", None)
-        return {"content": content, "usage": usage, "raw": resp}
+
+        # collect tool calls (if any)
+        tool_calls: list[ToolCall] = []
+        try:
+            tool_calls_raw = resp.choices[0].message.tool_calls  # OpenAI SDK shape
+        except Exception:
+            tool_calls_raw = None
+
+        if tool_calls_raw:
+            for tc in tool_calls_raw:
+                fn = getattr(tc, "function", None)
+                if fn and getattr(fn, "name", None) is not None:
+                    tool_calls.append(
+                        {
+                            "id": getattr(tc, "id", "") or "",
+                            "name": fn.name,
+                            "arguments": getattr(fn, "arguments", "") or "",
+                        }
+                    )
+
+        # build normalized result
+        out: GenerateResult = {
+            "content": content,
+            "usage": usage,
+            "raw": resp,
+        }
+        if tool_calls:
+            out["tool_calls"] = tool_calls
+
+        # cost estimation (if price known for model)
+        cost = _estimate_cost_usd(model or self.model, usage)
+        if cost is not None:
+            out["cost_usd"] = cost
+
+        return out
 
     async def _with_retries(
         self,
