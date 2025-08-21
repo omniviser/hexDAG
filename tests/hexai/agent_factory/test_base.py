@@ -425,7 +425,8 @@ class TestPipelineCatalog:
     """Tests for PipelineCatalog."""
 
     def test_pipeline_registration(self):
-        # """Test manual pipeline registration."""
+        """Test manual pipeline registration."""
+        (lambda: None)()
 
         # Create a test pipeline class
         class TestRegistrationPipeline(PipelineDefinition):
