@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import AsyncIterator
 from typing import Any, Callable, Literal, Optional
 
 try:
@@ -144,3 +145,58 @@ class OpenAIAdapter:
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, **self._client_kwargs)
         # no code after this point that could be flagged as unreachable
         return None
+
+    async def astream(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: Optional[str] = None,
+        **params: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream chat completions as an async iterator (MVP for OpenAI/Azure).
+
+        Parameters
+        ----------
+        messages : list of dict
+            Chat messages in OpenAI format, e.g. [{"role": "user", "content": "..."}].
+        model : str, optional
+            Model override for this call; falls back to self.model if not provided.
+        **params : Any
+            Extra parameters forwarded to the provider SDK.
+
+        Yields
+        ------
+        dict
+            Normalized stream deltas, e.g. {"type": "content", "data": "<chunk>"} or
+            {"type": "finish", "data": "<finish_reason>"}.
+        """
+        # simple per-stream rate limit (1 token cost per request for MVP)
+        bucket = TokenBucket(rate_per_s=5, capacity=10)
+        await bucket.acquire(1)
+
+        # ensure SDK client is ready (Bandit-safe: no assert)
+        await self._ensure_client()
+        if self._client is None:
+            raise RuntimeError("SDK client not initialized")
+
+        # OpenAI async stream
+        stream = await self._client.chat.completions.create(
+            model=model or self.model,
+            messages=list(messages),
+            stream=True,
+            **params,
+        )
+
+        async for chunk in stream:
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            choice = choices[0]
+
+            delta = getattr(choice, "delta", None)
+            if delta is not None and getattr(delta, "content", None):
+                yield {"type": "content", "data": delta.content}
+
+            finish = getattr(choice, "finish_reason", None)
+            if finish:
+                yield {"type": "finish", "data": finish}
