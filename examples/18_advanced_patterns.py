@@ -283,14 +283,14 @@ async def main():
     # Test 4: Meta-Programming
     await demonstrate_meta_programming()
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Pipeline Composition - Combine multiple pipelines")
     print("   ✅ Dynamic Routing - Route data based on content")
     print("   ✅ Conditional Execution - Execute based on conditions")
     print("   ✅ Recursive Pipelines - Self-referential processing")
     print("   ✅ Meta-Programming - Dynamic operation selection")
 
-    print(f"\n🔗 Next: Run example 19 to learn about complex workflows!")
+    print("\n🔗 Next: Run example 19 to learn about complex workflows!")
 
 
 if __name__ == "__main__":

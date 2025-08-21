@@ -174,47 +174,47 @@ async def main():
     # Test data
     test_user = {"user_id": "user123", "name": "John Doe", "email": "john@example.com"}
 
-    print(f"\n🚀 Executing pipeline with test data:")
+    print("\n🚀 Executing pipeline with test data:")
     print(f"   User: {test_user['name']} (ID: {test_user['user_id']})")
 
     # Execute pipeline
     results = await orchestrator.run(graph, test_user)
 
     # Show results
-    print(f"\n📋 Pipeline Results:")
+    print("\n📋 Pipeline Results:")
     print(f"   Process Result: {results['process_user']['status']}")
     print(f"   Report Status: {results['generate_report']['status']}")
 
     # Show adapter activity
-    print(f"\n🔌 Adapter Activity:")
+    print("\n🔌 Adapter Activity:")
     print(f"   Database saves: {len(mock_db.storage)}")
     print(f"   Emails sent: {len(mock_email.sent_emails)}")
     print(f"   Log entries: {len(mock_logger.logs)}")
 
     # Show detailed adapter results
-    print(f"\n📊 Detailed Adapter Results:")
+    print("\n📊 Detailed Adapter Results:")
 
-    print(f"   Database Storage:")
+    print("   Database Storage:")
     for key, value in mock_db.storage.items():
         print(f"     {key}: {value}")
 
-    print(f"   Sent Emails:")
+    print("   Sent Emails:")
     for email in mock_email.sent_emails:
         print(f"     To: {email['to']}")
         print(f"     Subject: {email['subject']}")
 
-    print(f"   Log Entries:")
+    print("   Log Entries:")
     for log in mock_logger.logs:
         print(f"     [{log['level']}] {log['message']}")
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Ports - Define interfaces for external dependencies")
     print("   ✅ Adapters - Implement interfaces for different technologies")
     print("   ✅ Dependency Injection - Pass adapters through orchestrator")
     print("   ✅ Mock Adapters - Test business logic without real dependencies")
     print("   ✅ Hexagonal Architecture - Separate business logic from infrastructure")
 
-    print(f"\n🔗 Next: Run example 07 to learn about error handling!")
+    print("\n🔗 Next: Run example 07 to learn about error handling!")
 
 
 if __name__ == "__main__":

@@ -24,11 +24,8 @@ classifiers = [
 ]
 dependencies = [
     "pydantic~=2.0",
-    "typing-extensions>=4.10.0,<5",
-    "click>=8.1.0,<9",
-    "rich>=13.7.0,<14",
+    "graphviz>=0.20.0,<0.21",
     "pyyaml~=6.0",
-    "graphviz>=0.20",
 ]
 
 [project.urls]
@@ -41,12 +38,14 @@ hexdag = "hexai.cli:main"
 
 [dependency-groups]
 dev = [
+    "deptry>=0.23.1",
     "pytest>=8.0.0,<9",
     "pytest-asyncio>=0.21.0,<0.22",
     "pytest-cov>=5.0.0,<6",
     "pytest-mock>=3.14.0,<4",
     "black==24.10.0",
     "isort==5.13.2",
+    "ruff>=0.12.8",
     "flake8==7.1.1",
     "flake8-docstrings==1.7.0",
     "flake8-import-order==0.18.2",

@@ -183,7 +183,7 @@ async def main():
     )
 
     # Test 1: Retry Mechanism
-    print(f"\n🔄 Test 1: Retry Mechanism")
+    print("\n🔄 Test 1: Retry Mechanism")
     print("-" * 30)
 
     retry_graph = DirectedGraph()
@@ -195,7 +195,7 @@ async def main():
     print(f"   Attempts: {retry_result['retry_processor'].get('attempts', 0)}")
 
     # Test 2: Graceful Degradation
-    print(f"\n🔄 Test 2: Graceful Degradation")
+    print("\n🔄 Test 2: Graceful Degradation")
     print("-" * 30)
 
     degradation_graph = DirectedGraph()
@@ -207,7 +207,7 @@ async def main():
     print(f"   Source: {degradation_result['degradation_processor'].get('source', 'unknown')}")
 
     # Test 3: Circuit Breaker
-    print(f"\n🔄 Test 3: Circuit Breaker")
+    print("\n🔄 Test 3: Circuit Breaker")
     print("-" * 30)
 
     circuit_graph = DirectedGraph()
@@ -220,7 +220,7 @@ async def main():
         print(f"   Call {i+1}: {circuit_result['circuit_processor']['status']}")
 
     # Test 4: Error Aggregation
-    print(f"\n🔄 Test 4: Error Aggregation")
+    print("\n🔄 Test 4: Error Aggregation")
     print("-" * 30)
 
     # Create a complex graph with multiple nodes that can fail
@@ -246,20 +246,20 @@ async def main():
     print(f"   Overall status: {aggregation_result['aggregator']['overall_status']}")
 
     # Show detailed error analysis
-    print(f"\n📊 Error Analysis:")
-    print(f"   • Retry Mechanism: Handles transient failures")
-    print(f"   • Graceful Degradation: Provides fallback options")
-    print(f"   • Circuit Breaker: Prevents cascade failures")
-    print(f"   • Error Aggregation: Manages partial failures")
+    print("\n📊 Error Analysis:")
+    print("   • Retry Mechanism: Handles transient failures")
+    print("   • Graceful Degradation: Provides fallback options")
+    print("   • Circuit Breaker: Prevents cascade failures")
+    print("   • Error Aggregation: Manages partial failures")
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Retry Patterns - Handle transient failures")
     print("   ✅ Graceful Degradation - Provide fallback options")
     print("   ✅ Circuit Breaker - Prevent cascade failures")
     print("   ✅ Error Aggregation - Handle partial failures")
     print("   ✅ Resilience Patterns - Build robust systems")
 
-    print(f"\n🔗 Next: Run example 08 to learn about function nodes!")
+    print("\n🔗 Next: Run example 08 to learn about function nodes!")
 
 
 if __name__ == "__main__":

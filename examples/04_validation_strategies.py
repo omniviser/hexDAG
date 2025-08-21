@@ -154,19 +154,19 @@ async def main():
                 print(f"   {strategy.upper()}: {result['value']} ({result['input_type']})")
 
     # Demonstrate strategy comparison
-    print(f"\n🔬 Strategy Comparison Analysis:")
+    print("\n🔬 Strategy Comparison Analysis:")
     print("   • STRICT: Best for type safety, fails on any mismatch")
     print("   • COERCE: Best for flexibility, converts when possible")
     print("   • PASSTHROUGH: Best for performance, no validation overhead")
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Validation Strategies - Choose based on your needs")
     print("   ✅ Type Safety - STRICT ensures exact type matching")
     print("   ✅ Flexibility - COERCE handles type conversions")
     print("   ✅ Performance - PASSTHROUGH skips validation")
     print("   ✅ Error Handling - Different strategies fail differently")
 
-    print(f"\n🔗 Next: Run example 05 to learn about the event system!")
+    print("\n🔗 Next: Run example 05 to learn about the event system!")
 
 
 if __name__ == "__main__":

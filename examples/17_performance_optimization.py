@@ -124,11 +124,11 @@ async def demonstrate_parallel_execution():
     start_time = time.time()
 
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "parallel test data")
+    await orchestrator.run(graph, "parallel test data")
 
     execution_time = time.time() - start_time
     print(f"   ⚡ Parallel execution time: {execution_time:.2f}s")
-    print(f"   📊 Expected sequential time: ~1.5s")
+    print("   📊 Expected sequential time: ~1.5s")
     print(f"   🚀 Speedup: {1.5/execution_time:.1f}x")
 
 
@@ -238,7 +238,7 @@ async def demonstrate_performance_monitoring():
 
     execution_time = time.time() - start_time
     print(f"   ⏱️  Total execution time: {execution_time:.2f}s")
-    print(f"   📈 Processing time breakdown:")
+    print("   📈 Processing time breakdown:")
 
     for node_name, node_result in result.items():
         if isinstance(node_result, dict) and "processing_time" in node_result:
@@ -270,14 +270,14 @@ async def main():
     # Test 4: Performance Monitoring
     await demonstrate_performance_monitoring()
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Parallel Execution - Execute nodes concurrently")
     print("   ✅ Caching Strategies - Cache expensive operations")
     print("   ✅ Resource Management - Manage CPU and memory usage")
     print("   ✅ Performance Monitoring - Track execution metrics")
     print("   ✅ Optimization Techniques - Improve pipeline performance")
 
-    print(f"\n🔗 Next: Run example 18 to learn about advanced patterns!")
+    print("\n🔗 Next: Run example 18 to learn about advanced patterns!")
 
 
 if __name__ == "__main__":

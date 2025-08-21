@@ -325,7 +325,7 @@ class DirectedGraph:
                 continue
 
             # Skip nodes with multiple dependencies - orchestrator handles aggregation
-            if len(node_spec.deps) > 1 and node_spec.in_type == dict:
+            if len(node_spec.deps) > 1 and node_spec.in_type is dict:
                 continue
 
             # Check each dependency connection

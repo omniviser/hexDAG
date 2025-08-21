@@ -346,8 +346,8 @@ async def main():
     print("   • Pipeline catalog management")
     print("   • Complex dependency handling")
 
-    yaml_content = await demonstrate_yaml_parsing()
-    graph = await demonstrate_pipeline_execution()
+    await demonstrate_yaml_parsing()
+    await demonstrate_pipeline_execution()
     await demonstrate_pipeline_compilation()
     await demonstrate_pipeline_catalog()
 

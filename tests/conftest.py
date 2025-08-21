@@ -10,4 +10,4 @@ import pytest
 @pytest.fixture(scope="session")
 def headers() -> dict[str, str]:
     """Fixture that creates a mock JWT token for testing."""
-    return {"Authorization": f"Bearer TEST_FASTAPI_KEY"}
+    return {"Authorization": "Bearer TEST_FASTAPI_KEY"}
