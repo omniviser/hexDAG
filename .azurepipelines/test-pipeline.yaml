@@ -165,9 +165,10 @@ jobs:
         displayName: "Save dist/ as artifact"
 
       - script: |
+          set -e
           TWINE_USERNAME="__token__" \
           TWINE_PASSWORD="$(TEST_PYPI_TOKEN)" \
-          uv twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+          uvx twine upload --repository-url https://test.pypi.org/legacy/ dist/*
         displayName: "Upload to TestPyPI"
 
       - script: |
