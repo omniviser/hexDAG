@@ -153,7 +153,7 @@ jobs:
         displayName: "Install uv"
 
       - script: |
-          uvx build
+          uvx --from build pyproject-build
           uv run twine check dist/*
         displayName: "Build sdist & wheel"
 
@@ -167,7 +167,7 @@ jobs:
       - script: |
           TWINE_USERNAME="__token__" \
           TWINE_PASSWORD="$(TEST_PYPI_TOKEN)" \
-          uv run twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+          uv twine upload --repository-url https://test.pypi.org/legacy/ dist/*
         displayName: "Upload to TestPyPI"
 
       - script: |
