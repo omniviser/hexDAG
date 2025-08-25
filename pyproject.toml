@@ -157,6 +157,10 @@ disable_error_code = ["import-untyped"]
 module = "tests.*"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = ["openai", "openai.*"]
+ignore_missing_imports = true
+
 [tool.bandit]
 exclude_dirs = ["tests", "examples"]
 skips = ["B101", "B601"]
