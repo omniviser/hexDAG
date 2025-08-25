@@ -164,7 +164,9 @@ nodes:
       fn: test_function
 """
 
-        with pytest.raises(Exception, match="Invalid field_mapping_mode"):
+        with pytest.raises(
+            YamlPipelineBuilderError, match="Invalid field_mapping_mode"
+        ):
             self.builder.build_from_yaml_string(yaml_content)
 
     def test_custom_field_mappings_validation(self):
@@ -177,9 +179,12 @@ nodes:
   - id: test_node
     type: function
     params:
-      fn: sample_function
+      fn: test_function
 """
-        with pytest.raises(YamlPipelineBuilderError):
+        with pytest.raises(
+            YamlPipelineBuilderError,
+            match="custom_field_mappings required when field_mapping_mode='custom'",
+        ):
             self.builder.build_from_yaml_string(yaml_content)
 
         # Test custom mode with mappings
@@ -193,11 +198,11 @@ nodes:
   - id: test_node
     type: function
     params:
-      fn: sample_function
+      fn: test_function
 """
-
-        self.builder.build_from_yaml_string(yaml_content_valid)
-        # Expected due to missing function, but metadata extraction should work
+        with pytest.raises(TypeError, match="'test_function' is not a callable object"):
+            self.builder.build_from_yaml_string(yaml_content_valid)
+            # Expected due to missing function, but metadata extraction should work
 
         # Test metadata extraction
         import yaml
