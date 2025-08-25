@@ -7,7 +7,40 @@ import os
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict
 
-# --- simple price map ($ per 1K tokens); adjust models as needed ---
+
+class ProviderCompatCfg(TypedDict):
+    """Configuration schema for OpenAI-compatible providers."""
+
+    BASE_URL_ENV: str
+    API_KEY_ENV: str
+    HEADER_KIND: Literal["authorization", "x-api-key"]
+    DEFAULT_BASE_URL: Optional[str]
+
+
+# Names for provider “compat” envs (OpenAI-API compatible gateways)
+# e.g. LiteLLM, OpenRouter, custom proxy, or Ollama OpenAI compat server
+_PROVIDER_COMPAT: dict[Literal["anthropic", "gemini", "ollama"], ProviderCompatCfg] = {
+    "anthropic": {
+        "BASE_URL_ENV": "ANTHROPIC_COMPAT_BASE_URL",
+        "API_KEY_ENV": "ANTHROPIC_COMPAT_API_KEY",
+        "HEADER_KIND": "authorization",
+        "DEFAULT_BASE_URL": None,
+    },
+    "gemini": {
+        "BASE_URL_ENV": "GEMINI_COMPAT_BASE_URL",
+        "API_KEY_ENV": "GEMINI_COMPAT_API_KEY",
+        "HEADER_KIND": "authorization",
+        "DEFAULT_BASE_URL": None,
+    },
+    "ollama": {
+        "BASE_URL_ENV": "OLLAMA_COMPAT_BASE_URL",
+        "API_KEY_ENV": "OLLAMA_COMPAT_API_KEY",
+        "HEADER_KIND": "authorization",
+        "DEFAULT_BASE_URL": "http://localhost:11434/v1",
+    },
+}
+
+# --- simple price map ($ per 1K tokens); TODO: adjust models as needed ---
 _MODEL_PRICES = {
     # examples
     "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
@@ -88,7 +121,7 @@ class TokenBucket:
         self.rate = rate_per_s
         self.capacity = capacity
         self.tokens = float(capacity)
-        self.updated = asyncio.get_event_loop().time()
+        self.updated = asyncio.get_running_loop().time()
         self._lock = asyncio.Lock()
 
     async def acquire(self, cost: int = 1) -> None:
@@ -105,7 +138,7 @@ class TokenBucket:
             If the waiting coroutine is cancelled before tokens are available.
         """
         async with self._lock:
-            now = asyncio.get_event_loop().time()
+            now = asyncio.get_running_loop().time()
             # Refill tokens based on elapsed time
             self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)
             self.updated = now
@@ -113,7 +146,7 @@ class TokenBucket:
             while self.tokens < cost:
                 needed = cost - self.tokens
                 await asyncio.sleep(max(0.0, needed / self.rate))
-                now = asyncio.get_event_loop().time()
+                now = asyncio.get_running_loop().time()
                 self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)
                 self.updated = now
 
@@ -121,7 +154,16 @@ class TokenBucket:
 
 
 class OpenAIAdapter:
-    """OpenAI-compatible adapter (skeleton)."""
+    """OpenAI-compatible adapter with streaming, rate limiting and retries.
+
+    OpenAI-compatible providers:
+    - OpenAI via OPENAI_API_KEY (+ optional OPENAI_BASE_URL)
+    - Azure via AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT
+    - Anthropic via ANTHROPIC_COMPAT_BASE_URL (+ ANTHROPIC_COMPAT_API_KEY if required)
+    - Gemini via GEMINI_COMPAT_BASE_URL (+ GEMINI_COMPAT_API_KEY if required)
+    - Ollama via OLLAMA_COMPAT_BASE_URL (default http://localhost:11434/v1)
+      (+ OLLAMA_COMPAT_API_KEY optional)
+    """
 
     def __init__(
         self,
@@ -173,7 +215,7 @@ class OpenAIAdapter:
             return None
 
         # only these providers supported in MVP
-        if self.provider not in ("openai", "azure"):
+        if self.provider not in ("openai", "azure", "anthropic", "gemini", "ollama"):
             raise NotImplementedError(f"Provider '{self.provider}' not implemented yet.")
 
         # lazy import so unit tests don't need the SDK installed
@@ -182,16 +224,35 @@ class OpenAIAdapter:
         except Exception as e:  # pragma: no cover
             raise RuntimeError("OpenAI SDK not installed. Add `openai` to dependencies.") from e
 
-        api_key = self._require_secret(
-            "AZURE_OPENAI_API_KEY" if self.provider == "azure" else "OPENAI_API_KEY"
-        )
-        base_url = (
-            os.getenv("AZURE_OPENAI_ENDPOINT")
-            if self.provider == "azure"
-            else os.getenv("OPENAI_BASE_URL")
-        )
+        default_headers: dict[str, str] = {}
+        api_key: Optional[str] = None
+        base_url: Optional[str] = None
 
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, **self._client_kwargs)
+        if self.provider == "openai":
+            api_key = self._require_secret("OPENAI_API_KEY")
+            base_url = os.getenv("OPENAI_BASE_URL")  # optional
+            # standard Bearer header is set by the SDK when api_key is passed
+
+        elif self.provider == "azure":
+            api_key = self._require_secret("AZURE_OPENAI_API_KEY")
+            base_url = os.getenv("AZURE_OPENAI_ENDPOINT")  # required in Azure setups
+            # Azure-compatible gateways often accept Bearer too; SDK will set it
+
+        else:
+            cfg = _PROVIDER_COMPAT[self.provider]
+            base_url = os.getenv(cfg["BASE_URL_ENV"]) or cfg["DEFAULT_BASE_URL"]
+            api_key_opt = os.getenv(cfg["API_KEY_ENV"])
+            api_key = api_key_opt or os.getenv("OPENAI_API_KEY")
+
+            if cfg["HEADER_KIND"] == "x-api-key" and api_key:
+                default_headers["x-api-key"] = api_key
+
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            default_headers=default_headers or None,
+            **self._client_kwargs,
+        )
         return None
 
     async def astream(
