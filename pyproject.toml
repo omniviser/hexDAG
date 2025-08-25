@@ -81,6 +81,9 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
 addopts = "--cov=hexai --cov-report=html --cov-report=term-missing"
+markers = [
+  "integration: tests that hit real external APIs (skipped when no key present)"
+]
 
 [tool.coverage.run]
 source = ["hexai"]
