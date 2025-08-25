@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict
 
-# Placeholder for AsyncOpenAI so that monkeypatching in tests works without openai installed
-AsyncOpenAI: Any | None = None
-
 # Exposed for tests: can be monkeypatched to a fake client
-AsyncOpenAI = None  # will be populated on first use if not monkeypatched
+AsyncOpenAI: Any | None = None
 
 
 class ProviderCompatCfg(TypedDict):
@@ -77,6 +75,55 @@ def _estimate_cost_usd(model: Optional[str], usage: Any) -> Optional[float]:
         return None
 
 
+def _try_parse_structured(
+    content: Optional[str], schema: Optional[Callable[..., Any] | type[Any]]
+) -> Optional[Any]:
+    """
+    If `schema` is provided and `content` looks like JSON, try to parse and validate it.
+
+    Tries:
+    - Pydantic v2 via TypeAdapter (if available)
+    - Fallback: call schema(data) first; if that fails with TypeError and data is a dict,
+      try schema(**data).
+    """
+    if not content or schema is None:
+        return None
+
+    # Best-effort JSON parse
+    try:
+        data = json.loads(content)
+    except Exception:
+        return None
+
+    # Pydantic v2 path (optional)
+    parsed: Any | None = None
+    try:
+        from pydantic import TypeAdapter  # optional dependency
+
+        adapter: Any = TypeAdapter(schema)
+        parsed = adapter.validate_python(data)
+    except Exception:
+        parsed = None
+
+    if parsed is not None:
+        return parsed
+
+    # Generic callable/class fallback
+    try:
+        if callable(schema):
+            # Prefer single-arg call (works for functions expecting dict)
+            try:
+                return schema(data)
+            except TypeError:
+                # If the callable expects kwargs (e.g., dataclass/pydantic-like)
+                if isinstance(data, dict):
+                    return schema(**data)
+    except Exception:
+        return None
+
+    return None
+
+
 class ToolCall(TypedDict):
     """Represents a single function/tool call returned by the model."""
 
@@ -92,6 +139,7 @@ class GenerateResult(TypedDict, total=False):
     usage: Any
     cost_usd: NotRequired[float]
     tool_calls: NotRequired[list[ToolCall]]
+    structured: NotRequired[Any]
     raw: Any
 
 
@@ -274,7 +322,7 @@ class OpenAIAdapter:
         model: Optional[str] = None,
         **params: Any,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Stream chat completions as an async iterator (MVP for OpenAI/Azure).
+        """Stream chat completions as an async iterator (MVP for OpenAI/Azure/compat).
 
         Parameters
         ----------
@@ -343,6 +391,7 @@ class OpenAIAdapter:
         *,
         messages: list[dict[str, Any]],
         model: Optional[str] = None,
+        schema: Optional[Callable[..., Any] | type[Any]] = None,
         **params: Any,
     ) -> GenerateResult:
         """Non-streaming chat completion call.
@@ -422,6 +471,10 @@ class OpenAIAdapter:
         cost = _estimate_cost_usd(model or self.model, usage)
         if cost is not None:
             out["cost_usd"] = cost
+
+        parsed = _try_parse_structured(content, schema)
+        if parsed is not None:
+            out["structured"] = parsed
 
         return out
 
