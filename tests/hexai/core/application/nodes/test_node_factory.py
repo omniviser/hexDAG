@@ -34,7 +34,9 @@ class TestNodeFactory:
 
             return NodeSpec(name, test_fn)
 
-        NodeFactory.register_node_type("test_type", create_test_node, "Test node description")
+        NodeFactory.register_node_type(
+            "test_type", create_test_node, "Test node description"
+        )
 
         # Check that the function was registered
         assert NodeFactory.node_type_exists("test_type")
@@ -52,7 +54,9 @@ class TestNodeFactory:
         NodeFactory.register_node_type("duplicate", first_factory)
 
         # Attempting to register the same type again should raise an error
-        with pytest.raises(ValueError, match="Node type 'duplicate' is already registered"):
+        with pytest.raises(
+            ValueError, match="Node type 'duplicate' is already registered"
+        ):
             NodeFactory.register_node_type("duplicate", second_factory)
 
     def test_create_node_success(self):
@@ -108,7 +112,9 @@ class TestNodeFactory:
 
         NodeFactory.register_node_type("failing", failing_factory)
 
-        with pytest.raises(TypeError, match="Failed to create node 'test_id' of type 'failing'"):
+        with pytest.raises(
+            TypeError, match="Failed to create node 'test_id' of type 'failing'"
+        ):
             # Missing required_param should cause factory to fail
             NodeFactory.create_node("failing", "test_id")
 
@@ -190,7 +196,9 @@ class TestNodeFactory:
 
     def test_unregister_nonexistent_type_raises_error(self):
         """Test that unregistering nonexistent type raises error."""
-        with pytest.raises(ValueError, match="Node type 'nonexistent' is not registered"):
+        with pytest.raises(
+            ValueError, match="Node type 'nonexistent' is not registered"
+        ):
             NodeFactory.unregister_node_type("nonexistent")
 
     def test_register_custom_node(self):
@@ -213,7 +221,7 @@ class TestBuiltinNodes:
     """Test cases for builtin node types."""
 
     def setup_method(self):
-        """Setup for builtin node tests."""
+        """Set up builtin node tests."""
         NodeFactory.clear_registry()
         # Manually register builtin nodes since import only happens once
         from hexai.core.application.nodes.builtin_nodes import (
@@ -275,14 +283,18 @@ class TestBuiltinNodes:
 
     def test_llm_node_creation(self):
         """Create an LLM node through the factory."""
-        node = NodeFactory.create_node("llm", "analyzer", prompt_template="Analyze: {{input}}")
+        node = NodeFactory.create_node(
+            "llm", "analyzer", prompt_template="Analyze: {{input}}"
+        )
 
         assert isinstance(node, NodeSpec)
         assert node.name == "analyzer"
 
     def test_llm_node_creation_with_string_template(self):
         """Create an LLM node with string template."""
-        node = NodeFactory.create_node("llm", "processor", prompt_template="Process: {{data}}")
+        node = NodeFactory.create_node(
+            "llm", "processor", prompt_template="Process: {{data}}"
+        )
 
         assert isinstance(node, NodeSpec)
         assert node.name == "processor"

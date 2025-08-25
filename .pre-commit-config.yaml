@@ -34,19 +34,6 @@ repos:
     hooks:
       - id: validate-pyproject
 
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
-        language_version: python3.12
-        args: [--line-length=100]
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        args: [--profile=black, --line-length=100]
-
   - repo: https://github.com/pycqa/flake8
     rev: 7.1.1
     hooks:
@@ -108,12 +95,28 @@ repos:
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
+
+      - id: black
+        name: Run black
+        entry: uv run black hexai
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: isort
+        name: Run isort
+        entry: uv run isort
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: deptry
         name: deptry
         entry: uv run deptry .
         language: system
         always_run: true
         pass_filenames: false
+
       - id: branch-name-check
         name: Branch Name Check
         entry: |
