@@ -95,9 +95,7 @@ class TestPipelineDefinition:
         pipeline._yaml_path = "test.yaml"
 
         # Mock builder to raise an error
-        pipeline.builder.build_from_yaml_file = Mock(
-            side_effect=Exception("Test error")
-        )
+        pipeline.builder.build_from_yaml_file = Mock(side_effect=Exception("Test error"))
 
         result = await pipeline.execute()
 
@@ -142,9 +140,7 @@ class TestPipelineDefinition:
         pipeline._yaml_path = "test.yaml"
 
         # Mock graph building failure
-        pipeline.builder.build_from_yaml_file = Mock(
-            side_effect=Exception("Invalid config")
-        )
+        pipeline.builder.build_from_yaml_file = Mock(side_effect=Exception("Invalid config"))
 
         result = pipeline.validate()
 
@@ -187,9 +183,7 @@ class TestPipelineDefinition:
         mock_graph.waves.return_value = [["first_node"]]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_input_type()
             assert result == InputModel
 
@@ -220,9 +214,7 @@ class TestPipelineDefinition:
         ]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_input_type()
             expected = {"first_node1": InputModel, "first_node2": str}
             assert result == expected
@@ -241,9 +233,7 @@ class TestPipelineDefinition:
         mock_graph.waves.return_value = [["last_node"]]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_output_type()
             assert result == OutputModel
 
@@ -271,9 +261,7 @@ class TestPipelineDefinition:
         mock_graph.waves.return_value = [["first_node"], ["last_node1", "last_node2"]]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_output_type()
             expected = {"last_node1": OutputModel, "last_node2": dict}
             assert result == expected
@@ -302,9 +290,7 @@ class TestPipelineDefinition:
         }
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_node_types()
 
             expected = {
@@ -337,9 +323,7 @@ class TestPipelineDefinition:
         mock_graph.nodes = {"test_node": mock_node_spec}
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_node_types()
 
             expected = {
@@ -400,9 +384,7 @@ class TestPipelineDefinition:
         }  # Circular dependency
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_input_type()
             assert result is None
 
@@ -419,9 +401,7 @@ class TestPipelineDefinition:
         }
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
-        with patch.object(
-            pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})
-        ):
+        with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_output_type()
             assert result is None
 

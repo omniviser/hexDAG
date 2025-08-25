@@ -336,7 +336,6 @@ class PipelineDefinition(ABC):
             return {}
 
         try:
-
             with open(self._yaml_path, encoding="utf-8") as f:
                 content = f.read()
 

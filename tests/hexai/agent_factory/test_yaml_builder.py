@@ -164,9 +164,7 @@ nodes:
       fn: test_function
 """
 
-        with pytest.raises(
-            YamlPipelineBuilderError, match="Invalid field_mapping_mode"
-        ):
+        with pytest.raises(YamlPipelineBuilderError, match="Invalid field_mapping_mode"):
             self.builder.build_from_yaml_string(yaml_content)
 
     def test_custom_field_mappings_validation(self):

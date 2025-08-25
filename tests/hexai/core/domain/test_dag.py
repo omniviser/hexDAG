@@ -61,9 +61,7 @@ class TestNodeSpec:
         assert "NodeSpec('test'" in repr_str
 
         # Test with dependencies and types
-        node_with_deps = NodeSpec("test", dummy_fn, in_type=str, out_type=dict).after(
-            "dep1"
-        )
+        node_with_deps = NodeSpec("test", dummy_fn, in_type=str, out_type=dict).after("dep1")
         repr_with_deps = repr(node_with_deps)
         assert "NodeSpec('test'" in repr_with_deps
         assert "str -> dict" in repr_with_deps
@@ -99,11 +97,7 @@ class TestNodeSpec:
 
     def test_complex_chaining(self):
         """Test complex method chaining."""
-        node = (
-            NodeSpec("test", dummy_fn, in_type=str, out_type=dict)
-            .after("dep1")
-            .after("dep2")
-        )
+        node = NodeSpec("test", dummy_fn, in_type=str, out_type=dict).after("dep1").after("dep2")
         # Alternative chaining using a separate node for list/tuple types
         node2 = NodeSpec("test2", dummy_fn, in_type=list, out_type=tuple).after("dep3")
 
@@ -245,12 +239,8 @@ class TestDirectedGraph:
         assert "D" in graph.nodes
 
         # Verify dependency structure for parallel pattern
-        assert len(graph.get_dependencies("B")) == 1 and "A" in graph.get_dependencies(
-            "B"
-        )
-        assert len(graph.get_dependencies("C")) == 1 and "A" in graph.get_dependencies(
-            "C"
-        )
+        assert len(graph.get_dependencies("B")) == 1 and "A" in graph.get_dependencies("B")
+        assert len(graph.get_dependencies("C")) == 1 and "A" in graph.get_dependencies("C")
         assert len(graph.get_dependencies("D")) == 2 and {"B", "C"}.issubset(
             graph.get_dependencies("D")
         )
@@ -619,9 +609,7 @@ class TestDirectedGraph:
         node = NodeSpec("self_ref", dummy_fn).after("self_ref")
         graph.add(node)
 
-        with pytest.raises(
-            CycleDetectedError, match="Cycle detected.*self_ref.*self_ref"
-        ):
+        with pytest.raises(CycleDetectedError, match="Cycle detected.*self_ref.*self_ref"):
             graph.validate()
 
     def test_cycle_detection_indirect_cycle(self):
@@ -684,9 +672,7 @@ class TestDirectedGraph:
             # Additional verification that validation succeeded
             assert len(graph.nodes) == 7
         except Exception as e:
-            pytest.fail(
-                f"Valid DAG should not raise cycle detection error, but got: {e}"
-            )
+            pytest.fail(f"Valid DAG should not raise cycle detection error, but got: {e}")
 
     # Enhanced Error Handling Tests
 
@@ -727,9 +713,7 @@ class TestDirectedGraph:
             # If we get here, validation passed successfully
             assert True
         except Exception as e:
-            pytest.fail(
-                f"Empty graph validation should not raise an exception, but got: {e}"
-            )
+            pytest.fail(f"Empty graph validation should not raise an exception, but got: {e}")
 
     def test_dependencies_edge_cases(self):
         """Test edge cases in dependency management."""

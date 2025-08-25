@@ -133,9 +133,7 @@ class TestFunctionNode:
         assert result["has_database"] is True
 
     @pytest.mark.asyncio
-    async def test_function_with_specific_params_gets_matching_ports(
-        self, factory, mock_ports
-    ):
+    async def test_function_with_specific_params_gets_matching_ports(self, factory, mock_ports):
         """Test that functions with specific parameters get only matching ports."""
 
         def func_with_params(data: str, event_manager=None, unknown_port=None) -> dict:
@@ -219,9 +217,7 @@ class TestFunctionNode:
         def create_invalid_output(data: dict) -> dict:
             return {"user_age": 25}  # Missing required 'greeting'
 
-        node = factory(
-            "invalid_output", create_invalid_output, output_schema=_UserOutput
-        )
+        node = factory("invalid_output", create_invalid_output, output_schema=_UserOutput)
 
         # Should return raw result when validation fails (no exception raised)
         result = await node.fn({"input": "test"})
@@ -280,9 +276,7 @@ class TestFunctionNode:
         assert result2 == "test_no_em"
 
         # Test with extra ports (should be filtered out)
-        result3 = await node.fn(
-            "test", event_manager=AsyncMock(), extra_port=AsyncMock()
-        )
+        result3 = await node.fn("test", event_manager=AsyncMock(), extra_port=AsyncMock())
         assert result3 == "test_with_em"
 
     @pytest.mark.asyncio
@@ -373,9 +367,7 @@ class TestFunctionNode:
         """Test input mapping combined with input/output schemas."""
 
         def process_user(user_data: _UserInput) -> _UserOutput:
-            return _UserOutput(
-                greeting=f"Hello, {user_data.name}!", user_age=user_data.age
-            )
+            return _UserOutput(greeting=f"Hello, {user_data.name}!", user_age=user_data.age)
 
         node = factory(
             "user_processor",
@@ -420,23 +412,17 @@ class TestFunctionNode:
     def test_convenience_methods(self, factory):
         """Test convenience methods for creating input mappings."""
         # Test passthrough mapping
-        passthrough = FunctionNode.create_passthrough_mapping(
-            ["text", "status", "score"]
-        )
+        passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
         expected_passthrough = {"text": "text", "status": "status", "score": "score"}
         assert passthrough == expected_passthrough
 
         # Test rename mapping
-        rename = FunctionNode.create_rename_mapping(
-            {"content": "text", "validation": "status"}
-        )
+        rename = FunctionNode.create_rename_mapping({"content": "text", "validation": "status"})
         expected_rename = {"content": "text", "validation": "status"}
         assert rename == expected_rename
 
         # Test prefixed mapping
-        prefixed = FunctionNode.create_prefixed_mapping(
-            ["text", "score"], "processor", "proc_"
-        )
+        prefixed = FunctionNode.create_prefixed_mapping(["text", "score"], "processor", "proc_")
         expected_prefixed = {
             "proc_text": "processor.text",
             "proc_score": "processor.score",

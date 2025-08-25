@@ -167,9 +167,7 @@ class TestDAGVisualizer:
         graph.add_many(node1, node2)
 
         visualizer = DAGVisualizer(graph)
-        dot_string = visualizer.to_dot(
-            show_intermediate_input=True, show_intermediate_output=True
-        )
+        dot_string = visualizer.to_dot(show_intermediate_input=True, show_intermediate_output=True)
 
         # Should show intermediate node schemas
         assert "node1" in dot_string
@@ -368,9 +366,7 @@ class TestDAGVisualizer:
         object.__setattr__(graph, "_pipeline_name", "nonexistent_pipeline")
 
         # Should handle missing pipeline gracefully
-        schemas, input_schema = visualizer._load_compiled_schemas(
-            "nonexistent_pipeline"
-        )
+        schemas, input_schema = visualizer._load_compiled_schemas("nonexistent_pipeline")
         assert schemas == {}
         assert input_schema is None
 
@@ -620,9 +616,7 @@ class TestDAGVisualizerEdgeCases:
     def test_node_with_none_schemas(self):
         """Test visualization of node with None schemas."""
         graph = DirectedGraph()
-        node = NodeSpec(
-            "test_node", create_test_function(), in_type=None, out_type=None
-        )
+        node = NodeSpec("test_node", create_test_function(), in_type=None, out_type=None)
         graph.add(node)
 
         visualizer = DAGVisualizer(graph)
@@ -641,9 +635,7 @@ class TestDAGVisualizerEdgeCases:
             if i == 0:
                 node = NodeSpec(f"node{i}", create_test_function())
             else:
-                node = NodeSpec(f"node{i}", create_test_function()).after(
-                    f"node{i - 1}"
-                )
+                node = NodeSpec(f"node{i}", create_test_function()).after(f"node{i - 1}")
             nodes.append(node)
 
         graph.add_many(*nodes)

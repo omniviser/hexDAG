@@ -129,7 +129,7 @@ async def demonstrate_parallel_execution():
     execution_time = time.time() - start_time
     print(f"   ⚡ Parallel execution time: {execution_time:.2f}s")
     print("   📊 Expected sequential time: ~1.5s")
-    print(f"   🚀 Speedup: {1.5/execution_time:.1f}x")
+    print(f"   🚀 Speedup: {1.5 / execution_time:.1f}x")
 
 
 async def demonstrate_caching_strategy():

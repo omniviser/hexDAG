@@ -120,7 +120,6 @@ extend-exclude = '''
   | \.venv
   | build
   | dist
-  | tests
 )/
 '''
 
@@ -140,7 +139,6 @@ skip = [
     ".mypy_cache",
     ".tox",
     ".eggs",
-    "tests"
 ]
 
 [tool.mypy]

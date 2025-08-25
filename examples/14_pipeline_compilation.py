@@ -107,7 +107,7 @@ async def demonstrate_basic_compilation():
         waves = graph.waves()
         print(f"   📊 Execution waves: {len(waves)}")
         for i, wave in enumerate(waves):
-            print(f"      Wave {i+1}: {wave}")
+            print(f"      Wave {i + 1}: {wave}")
 
         # Execute compiled pipeline
         orchestrator = Orchestrator(validator=coerce_validator())

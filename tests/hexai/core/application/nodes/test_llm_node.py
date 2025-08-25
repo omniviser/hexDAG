@@ -1,6 +1,5 @@
 """Test cases for LLMNode class."""
 
-
 import pytest
 from pydantic import BaseModel
 
