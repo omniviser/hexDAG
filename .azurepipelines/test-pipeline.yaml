@@ -149,10 +149,12 @@ jobs:
           versionSpec: "3.12"
 
       - script: |
-          pip install --upgrade pip
-          pip install build twine
-          python -m build
-          twine check dist/*
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+
+      - script: |
+          uvx build
+          uv run twine check dist/*
         displayName: "Build sdist & wheel"
 
       - task: PublishPipelineArtifact@1
@@ -165,37 +167,32 @@ jobs:
       - script: |
           TWINE_USERNAME="__token__" \
           TWINE_PASSWORD="$(TEST_PYPI_TOKEN)" \
-          twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+          uv run twine upload --repository-url https://test.pypi.org/legacy/ dist/*
         displayName: "Upload to TestPyPI"
 
       - script: |
-          python - <<'PY'
-          import tomllib
-          with open('pyproject.toml','rb') as f:
-              proj = tomllib.load(f)['project']
-          # set ADO variables
-          print(f"##vso[task.setvariable variable=PKG_NAME]{proj['name']}")
-          print(f"##vso[task.setvariable variable=PKG_VERSION]{proj['version']}")
-          PY
-        displayName: "Read package name/version from pyproject.toml"
+          set -e
+          INFO="$(uv version)"
+          PKG_NAME="$(echo "$INFO" | awk '{print $1}')"
+          PKG_VERSION="$(echo "$INFO" | awk '{print $2}')"
+
+          echo "Detected: $PKG_NAME $PKG_VERSION"
+          echo "##vso[task.setvariable variable=PKG_NAME]$PKG_NAME"
+          echo "##vso[task.setvariable variable=PKG_VERSION]$PKG_VERSION"
+        displayName: "Read package name/version (uv)"
 
       - script: |
           set -e
-          python -m venv .venv_test
+          uv venv .venv_test
           source .venv_test/bin/activate
-          python -m pip install --upgrade pip
-          # install from TestPyPI (deps from prod PyPI)
-          python -m pip install \
+          uv pip install \
             --index-url https://test.pypi.org/simple \
             --extra-index-url https://pypi.org/simple \
             $(PKG_NAME)==$(PKG_VERSION)
-          # smoke test - verify installed dist/version
-          python - <<'PY'
-          import os, importlib.metadata as md
-          name = os.environ["PKG_NAME"]
-          print("Installed OK:", name, md.version(name))
-          PY
-        displayName: "Install from TestPyPI + smoke test"
+
+          # smoke test: check installed version
+          uv pip show $(PKG_NAME) | grep Version:
+        displayName: "Install from TestPyPI + smoke test (uv)"
         env:
           PKG_NAME: $(PKG_NAME)
           PKG_VERSION: $(PKG_VERSION)
