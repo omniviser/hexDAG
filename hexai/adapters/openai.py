@@ -7,6 +7,12 @@ import os
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict
 
+# Placeholder for AsyncOpenAI so that monkeypatching in tests works without openai installed
+AsyncOpenAI: Any | None = None
+
+# Exposed for tests: can be monkeypatched to a fake client
+AsyncOpenAI = None  # will be populated on first use if not monkeypatched
+
 
 class ProviderCompatCfg(TypedDict):
     """Configuration schema for OpenAI-compatible providers."""
@@ -219,10 +225,16 @@ class OpenAIAdapter:
             raise NotImplementedError(f"Provider '{self.provider}' not implemented yet.")
 
         # lazy import so unit tests don't need the SDK installed
-        try:
-            from openai import AsyncOpenAI
-        except Exception as e:  # pragma: no cover
-            raise RuntimeError("OpenAI SDK not installed. Add `openai` to dependencies.") from e
+        # lazy import with test-friendly override
+        global AsyncOpenAI
+        if AsyncOpenAI is None:
+            try:
+                from openai import AsyncOpenAI as _RealAsyncOpenAI
+
+                AsyncOpenAI = _RealAsyncOpenAI
+            except Exception as e:  # pragma: no cover
+                # If tests monkeypatch AsyncOpenAI earlier, they won't hit this branch.
+                raise RuntimeError("OpenAI SDK not installed. Add `openai` to dependencies.") from e
 
         default_headers: dict[str, str] = {}
         api_key: Optional[str] = None
