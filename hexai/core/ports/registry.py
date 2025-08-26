@@ -3,14 +3,46 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Dict, Literal, Type, TypeVar
+from typing import Any, Callable, ClassVar, Dict, Literal, Type
 
-PortKind = Literal["llm", "database", "memory", "embedding_selector", "ontology", "tool_router"]
+# Allowed kinds of ports
+PortKind = Literal[
+    "llm", "database", "memory", "embedding_selector", "ontology", "tool_router"
+]  # ruff: formatter-ignore
+
+# Health states for a port
+HealthStatus = Literal["unknown", "healthy", "unhealthy"]
 
 
 @dataclass
 class PortInfo:
-    """Metadata describing a port."""
+    """Metadata describing a port in the registry.
+
+    Attributes
+    ----------
+    name : str
+        Unique name of the port.
+    port_cls : type[Any]
+        The class implementing the port.
+    kind : PortKind
+        Type of the port (llm, database, memory, embedding_selector, ontology, tool_router).
+    sync : bool
+        Whether the port operates synchronously (default True).
+    streaming : bool
+        Whether the port supports streaming responses (default False).
+    transactional : bool
+        Whether the port supports transactions (default False).
+    idempotent : bool
+        Whether repeated calls produce the same result (default True).
+    cost_hint : str | None
+        Optional hint about cost of using the port.
+    latency_hint : str | None
+        Optional hint about expected latency.
+    health : HealthStatus
+        Current health status of the port (default "unknown").
+    version : str | None
+        Optional version of the port implementation.
+    """
 
     name: str
     port_cls: Type[Any]
@@ -85,10 +117,7 @@ class PortRegistry:
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
 
-T = TypeVar("T", bound=Type[Any])
-
-
-def register_port(name: str, **meta: Any) -> Callable[[T], T]:
+def register_port[T: type[Any]](name: str, **meta: Any) -> Callable[[T], T]:
     """Decorator to register a custom port in the PortRegistry.
 
     Automatically registers the decorated class as a port under a unique name

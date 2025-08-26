@@ -1,4 +1,4 @@
-"""Tests for Registry port."""
+"""Tests for Registry ports."""
 
 import pytest
 
