@@ -1,3 +1,5 @@
+"""Tests for Registry port."""
+
 import pytest
 
 from hexai.core.ports.llm import LLM, MessageList
