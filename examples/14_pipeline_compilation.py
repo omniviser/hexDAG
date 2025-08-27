@@ -264,14 +264,14 @@ async def main():
     # Test 4: Compilation Error Handling
     await demonstrate_compilation_errors()
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Pipeline Compilation - Convert DAGs to executable pipelines")
     print("   ✅ Compilation Validation - Validate pipeline structure and types")
     print("   ✅ Compilation Optimization - Optimize pipeline performance")
     print("   ✅ Error Handling - Handle compilation errors gracefully")
     print("   ✅ Type Safety - Ensure type compatibility during compilation")
 
-    print(f"\n🔗 Next: Run example 15 to learn about pipeline catalog!")
+    print("\n🔗 Next: Run example 15 to learn about pipeline catalog!")
 
 
 if __name__ == "__main__":

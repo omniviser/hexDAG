@@ -14,7 +14,7 @@ Run: python examples/16_validation_errors.py
 import asyncio
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
@@ -150,7 +150,7 @@ async def demonstrate_schema_compatibility_errors():
 
     print("\n   Testing incompatible schema connection...")
     try:
-        result = await orchestrator.run(
+        await orchestrator.run(
             graph, {"name": "Test", "age": 25, "email": "test@example.com", "score": 0.5}
         )
         print("   ✅ Unexpectedly succeeded")

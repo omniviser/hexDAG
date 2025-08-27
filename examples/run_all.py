@@ -131,7 +131,7 @@ def run_category(category: str, quiet: bool = False) -> dict[str, Any]:
         results[example] = success
 
         if not success:
-            print(f"⚠️  Skipping remaining examples in category due to failure")
+            print("⚠️  Skipping remaining examples in category due to failure")
             break
 
     end_time = time.time()
@@ -177,7 +177,7 @@ def run_all_examples(quiet: bool = False) -> dict[str, Any]:
     successful = sum(1 for success in results.values() if success)
     total = len(results)
 
-    print(f"\n📊 Overall Summary:")
+    print("\n📊 Overall Summary:")
     print(f"   • Successful: {successful}/{total}")
     print(f"   • Total time: {total_time:.2f}s")
     print(f"   • Average time per example: {total_time/max(1, total):.2f}s")

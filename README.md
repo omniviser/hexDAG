@@ -1,7 +1,7 @@
 # 🤖 hexDAG - AI Agent Orchestration Framework
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12.*-blue.svg)](https://www.python.org/downloads/)
-[![Poetry](https://img.shields.io/badge/dependency%20manager-poetry-blue.svg)](https://python-poetry.org/)
+[![uv: Python package manager](https://img.shields.io/badge/uv-fastest--python--installer-blueviolet?logo=python&logoColor=white)](https://github.com/astral-sh/uv)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -38,8 +38,8 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 
 git clone https://omniviser@dev.azure.com/omniviser/hexDAG/_git/hexDAG
 cd hexDAG
-poetry install
-```
+uv sync # optional, uv checks packages in each run
+````
 
 ### Your First Agent Workflow
 
@@ -104,27 +104,26 @@ Explore 20+ examples covering everything from basic to advanced patterns:
 
 ```bash
 # Run all examples
-poetry run python examples/run_all.py
+uv run examples/run_all.py
 
 # Try specific examples
-poetry run python examples/01_basic_dag.py           # DAG fundamentals
-poetry run python examples/10_agent_nodes.py         # AI agents with tools
-poetry run python examples/13_yaml_pipelines.py      # Declarative workflows
-poetry run python examples/19_complex_workflow.py     # Enterprise patterns
+uv run examples/01_basic_dag.py           # DAG fundamentals
+uv run examples/10_agent_nodes.py         # AI agents with tools
+uv run examples/13_yaml_pipelines.py      # Declarative workflows
+uv run examples/19_complex_workflow.py     # Enterprise patterns
 ```
 
 ## 🛠️ Development
 
 ```bash
 # Setup development environment
-poetry install
-poetry run pre-commit install
+uv run pre-commit install
 
 # Run tests
-poetry run pytest
+uv run pytest
 
 # Code quality checks
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 ## 🌟 Key Features

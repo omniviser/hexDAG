@@ -255,14 +255,14 @@ async def main():
     # Test 4: Pipeline Execution
     await demonstrate_pipeline_execution()
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ Pipeline Catalog - Manage and organize pipelines")
     print("   ✅ Pipeline Registration - Register pipelines with metadata")
     print("   ✅ Pipeline Discovery - Find and list available pipelines")
     print("   ✅ Catalog Management - Add, remove, and manage pipelines")
     print("   ✅ Pipeline Execution - Execute pipelines from catalog")
 
-    print(f"\n🔗 Next: Run example 16 to learn about validation errors!")
+    print("\n🔗 Next: Run example 16 to learn about validation errors!")
 
 
 if __name__ == "__main__":

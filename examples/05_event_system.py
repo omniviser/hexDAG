@@ -260,14 +260,14 @@ async def demonstrate_event_monitoring():
     print("\n📊 Detailed Metrics Report:")
     metrics_summary = metrics.get_summary()
 
-    print(f"\n   Execution Summary:")
+    print("\n   Execution Summary:")
     exec_summary = metrics_summary["execution_summary"]
     print(f"   • Total nodes: {exec_summary['total_nodes']}")
     print(f"   • Successful: {exec_summary['successful_nodes']}")
     print(f"   • Failed: {exec_summary['failed_nodes']}")
     print(f"   • Success rate: {exec_summary['success_rate']:.2%}")
 
-    print(f"\n   Performance Analysis:")
+    print("\n   Performance Analysis:")
     perf = metrics_summary["performance"]
     print(f"   • Total execution time: {perf['total_time']}s")
     print(f"   • Average node time: {perf['average_node_time']}s")
@@ -276,18 +276,18 @@ async def demonstrate_event_monitoring():
     if perf["slowest_node"]:
         print(f"   • Slowest node: {perf['slowest_node'][0]} ({perf['slowest_node'][1]:.3f}s)")
 
-    print(f"\n   Node Timings:")
+    print("\n   Node Timings:")
     for node_name, timing in metrics_summary["detailed_timings"].items():
         print(f"   • {node_name}: {timing:.3f}s")
 
     # Error summary
     error_summary = error_logger.get_error_summary()
-    print(f"\n   Error Summary:")
+    print("\n   Error Summary:")
     print(f"   • Errors: {error_summary['total_errors']}")
     print(f"   • Warnings: {error_summary['total_warnings']}")
 
     # Final results
-    print(f"\n📋 Final Results:")
+    print("\n📋 Final Results:")
     print(f"   • Aggregated data keys: {list(results['aggregator']['aggregated_data'].keys())}")
     print(f"   • Pipeline success: {results['aggregator']['aggregation_complete']}")
 

@@ -263,7 +263,7 @@ async def test_error_handling():
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                result = await email.send_email(
+                await email.send_email(
                     to_address="test@example.com",
                     subject="Processing Update",
                     body=f"Attempt {attempt + 1}: {input_data}",

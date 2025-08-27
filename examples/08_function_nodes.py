@@ -152,7 +152,7 @@ async def main():
     orchestrator = Orchestrator()
     result = await orchestrator.run(graph, "Hello World Function Node!")
 
-    print(f"   ✅ Function node executed successfully")
+    print("   ✅ Function node executed successfully")
     print(f"   📊 Original text: {result['text_processor']['original']}")
     print(f"   📊 Word count: {result['text_processor']['word_count']}")
     print(f"   📊 Uppercase: {result['text_processor']['uppercase']}")
@@ -172,7 +172,7 @@ async def main():
     valid_data = {"text_stats": {"characters": 10, "words": 2}, "processing_complete": True}
 
     result = await orchestrator.run(graph, valid_data)
-    print(f"   ✅ Validation node executed successfully")
+    print("   ✅ Validation node executed successfully")
     print(f"   📊 Validation status: {result['data_validator']['status']}")
 
     # Test 3: Function Node with Dependencies
@@ -193,7 +193,7 @@ async def main():
 
     # Execute
     result = await orchestrator.run(graph, "Dependency test data")
-    print(f"   ✅ Dependency chain executed successfully")
+    print("   ✅ Dependency chain executed successfully")
     print(f"   📊 Characters: {result['number_calculator']['text_stats']['characters']}")
     print(f"   📊 Words: {result['number_calculator']['text_stats']['words']}")
 
@@ -214,7 +214,7 @@ async def main():
     orchestrator_with_ports = Orchestrator(ports={"formatter": "json"})
     result = await orchestrator_with_ports.run(graph, test_data)
 
-    print(f"   ✅ Port-based function executed successfully")
+    print("   ✅ Port-based function executed successfully")
     print(f"   📊 Format: {result['data_formatter']['format']}")
     print(f"   📊 Size: {result['data_formatter']['size']} bytes")
 
@@ -246,18 +246,18 @@ async def main():
 
     # Execute composition
     result = await orchestrator.run(graph, "Composition test data")
-    print(f"   ✅ Function composition executed successfully")
+    print("   ✅ Function composition executed successfully")
     print(f"   📊 Validation status: {result['data_validator']['status']}")
     print(f"   📊 Format: {result['data_formatter']['format']}")
 
-    print(f"\n🎯 Key Concepts Learned:")
+    print("\n🎯 Key Concepts Learned:")
     print("   ✅ FunctionNode - Create nodes from Python functions")
     print("   ✅ Input/Output Schemas - Validate data with Pydantic")
     print("   ✅ Dependencies - Chain function nodes together")
     print("   ✅ Ports - Access external services in functions")
     print("   ✅ Composition - Build complex pipelines from simple functions")
 
-    print(f"\n🔗 Next: Run example 09 to learn about LLM nodes!")
+    print("\n🔗 Next: Run example 09 to learn about LLM nodes!")
 
 
 if __name__ == "__main__":

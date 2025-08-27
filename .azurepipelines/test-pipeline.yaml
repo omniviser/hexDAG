@@ -85,40 +85,38 @@ jobs:
         displayName: Install graphviz
 
       - script: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "export PATH=\$PATH:\$HOME/.local/bin" >> $HOME/.bashrc
-          export PATH=\$PATH:\$HOME/.local/bin
-        displayName: "Install Poetry"
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install UV"
 
       - script: |
-          poetry install
-        displayName: "Install dependencies with Poetry"
-
-      - script: |
-          poetry run black --check ./hexai
+          uv run black --check ./hexai
         displayName: "Check Black"
 
       - script: |
-          poetry run flake8 ./hexai
+          uv run flake8 ./hexai
         displayName: "Run Flake8"
         continueOnError: true
 
       - script: |
-          poetry run isort ./hexai --check-only
+          uv run isort ./hexai --check-only
         displayName: "Run Isort"
 
       - script: |
-          poetry run mypy ./hexai
+          uv run mypy ./hexai
         displayName: "Run Mypy"
 
       - script: |
+          uv run ruff check ./hexai
+        displayName: "Run Ruff ./hexai"
+
+      - script: |
           echo "Running tests with coverage..."
-          poetry run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
+          uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"
 
       - script: |
           echo "Running Bandit for SAST..."
-          poetry run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
+          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
           BANDIT_EXIT_CODE=$?
           echo "Bandit exit code: $BANDIT_EXIT_CODE"
           if [ $BANDIT_EXIT_CODE -ne 0 ]; then
@@ -129,13 +127,16 @@ jobs:
         displayName: "Run Bandit"
 
       - script: |
-          poetry run python scripts/check_test_structure.py
+          uv run scripts/check_test_structure.py
         displayName: "Check test structure consistency"
 
       - script: |
-          poetry run python scripts/check_examples.py
+          uv run scripts/check_examples.py
         displayName: "Check examples functionality"
 
+      - script: |
+          uv run deptry .
+        displayName: "Run deptry"
 
       - task: SonarCloudPrepare@3
         inputs:

@@ -33,9 +33,9 @@ def run_examples() -> tuple[bool, str]:
         return False, "run_all.py script not found in examples directory"
 
     try:
-        # Run the examples using poetry to ensure correct environment
+        # Run the examples using uv to ensure correct environment
         result = subprocess.run(  # nosec B603 B607 # Safe: controlled command, fixed args
-            ["poetry", "run", "python", "run_all.py", "--all", "--quiet"],
+            ["uv", "run", "run_all.py", "--all", "--quiet"],
             cwd=examples_dir,
             capture_output=True,
             text=True,
@@ -101,7 +101,7 @@ def main() -> int:
         print()
         print("💡 To fix this:")
         print("   1. Check the failing examples manually:")
-        print("      cd examples && poetry run python run_all.py --all")
+        print("      cd examples && uv run run_all.py --all")
         print("   2. Fix any broken examples before committing")
         print("   3. Ensure all dependencies are properly installed")
         print()

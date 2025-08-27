@@ -6,6 +6,8 @@ visualization and debugging purposes.
 
 import logging
 import os
+import platform
+import shutil
 import subprocess  # nosec B404
 import tempfile
 import threading
@@ -931,7 +933,24 @@ class DAGVisualizer:
 
             # Open the image with the default viewer
             # nosec B607, B603 - open is a trusted system command for viewing files
-            subprocess.run(["open", temp_image_path], check=False)  # nosec B607, B603
+            system_platform = platform.system()
+            if system_platform == "Darwin":
+                viewer_cmd = "open"
+            elif system_platform == "Linux":
+                viewer_cmd = "xdg-open"
+            else:
+                viewer_cmd = None
+
+            if viewer_cmd and shutil.which(viewer_cmd):
+                subprocess.run([viewer_cmd, temp_image_path], check=False)  # nosec B607, B603
+            else:
+                help_msg = (
+                    f"No default image viewer found for platform '{system_platform}'.\n"
+                    f"For macOS, please ensure the 'open' command is available.\n"
+                    f"For Linux, please ensure the 'xdg-open' command is installed.\n"
+                    f"You can manually open the file located at: {temp_image_path}"
+                )
+                logger.error(help_msg)
 
             def cleanup_files() -> None:
                 time.sleep(2)  # Wait for viewer to open
@@ -945,10 +964,6 @@ class DAGVisualizer:
 
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to show graph: {e.stderr}") from e
-        except FileNotFoundError:
-            raise ImportError(
-                "Graphviz 'dot' command not found. Please install Graphviz."
-            ) from None
         except Exception as e:
             raise RuntimeError(f"Failed to show graph: {e}") from e
 

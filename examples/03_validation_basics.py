@@ -175,7 +175,7 @@ async def demonstrate_validation_errors():
     for i, invalid_input in enumerate(invalid_inputs, 1):
         print(f"\n   Test 3.{i}: {invalid_input}")
         try:
-            results = await orchestrator.run(graph, invalid_input)
+            await orchestrator.run(graph, invalid_input)
             print("   ⚠️  Unexpectedly succeeded")
         except Exception as e:
             print(f"   ✅ Correctly caught error: {type(e).__name__}")

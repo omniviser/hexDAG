@@ -168,12 +168,12 @@ async def demonstrate_dag_visualization():
     # Create complex pipeline
     graph = create_complex_pipeline()
 
-    print(f"\n📋 Pipeline Overview:")
+    print("\n📋 Pipeline Overview:")
     print(f"   • Total nodes: {len(graph.nodes)}")
     print(f"   • Node names: {list(graph.nodes.keys())}")
 
     # Analyze execution waves
-    print(f"\n🌊 Execution Wave Analysis:")
+    print("\n🌊 Execution Wave Analysis:")
     waves = graph.waves()
     for i, wave in enumerate(waves, 1):
         if len(wave) == 1:
@@ -186,7 +186,7 @@ async def demonstrate_dag_visualization():
     )
 
     # Show dependencies
-    print(f"\n🔗 Dependency Analysis:")
+    print("\n🔗 Dependency Analysis:")
     for node_name, node_spec in graph.nodes.items():
         if node_spec.deps:
             deps_str = ", ".join(node_spec.deps)
@@ -197,15 +197,15 @@ async def demonstrate_dag_visualization():
     # Create visualizer
     visualizer = DAGVisualizer(graph)
 
-    print(f"\n🎨 Generating DAG visualization...")
+    print("\n🎨 Generating DAG visualization...")
 
     # Generate DOT format visualization
-    dot_string = visualizer.to_dot(title="ML Pipeline DAG")
-    print(f"\n📊 DAG Structure (DOT format):")
+    visualizer.to_dot(title="ML Pipeline DAG")
+    print("\n📊 DAG Structure (DOT format):")
     print("   (DOT content generated - can be rendered with Graphviz)")
 
     # Show a simplified text representation
-    print(f"\n📝 Simplified Pipeline Structure:")
+    print("\n📝 Simplified Pipeline Structure:")
     print("   data_ingestion")
     print("   └── data_validation")
     print("       └── feature_extraction")
@@ -214,7 +214,7 @@ async def demonstrate_dag_visualization():
     print("               └── audit_logging")
 
     # Validate graph structure
-    print(f"\n🔍 Graph Validation:")
+    print("\n🔍 Graph Validation:")
     try:
         graph.validate()
         print("   ✅ Graph structure is valid")
@@ -235,7 +235,7 @@ async def demonstrate_execution_analysis():
     graph = create_complex_pipeline()
     orchestrator = Orchestrator(validator=coerce_validator())
 
-    print(f"\n🚀 Executing pipeline for performance analysis...")
+    print("\n🚀 Executing pipeline for performance analysis...")
 
     import time
 
@@ -247,7 +247,7 @@ async def demonstrate_execution_analysis():
     print(f"   ⏱️  Total execution time: {total_time:.3f} seconds")
 
     # Analyze results
-    print(f"\n📊 Execution Results Analysis:")
+    print("\n📊 Execution Results Analysis:")
 
     # Check final results
     final_result = results.get("result_formatting", {}).get("final_result", {})
@@ -261,8 +261,8 @@ async def demonstrate_execution_analysis():
     print(f"   📋 Audit status: {audit_info.get('pipeline_execution')}")
 
     # Show data flow
-    print(f"\n🔄 Data Flow Trace:")
-    print(f"   1. Input: 'sample machine learning input data'")
+    print("\n🔄 Data Flow Trace:")
+    print("   1. Input: 'sample machine learning input data'")
     print(f"   2. Validation: {results['data_validation']['is_valid']}")
     print(f"   3. Features: {list(results['feature_extraction']['features'].keys())}")
     print(f"   4. Prediction: {results['model_prediction']['prediction_class']}")
@@ -270,13 +270,13 @@ async def demonstrate_execution_analysis():
     print(f"   6. Audited: {results['audit_logging']['processing_summary']}")
 
     # Performance insights
-    print(f"\n💡 Performance Insights:")
-    print(f"   • Wave 1 (data_ingestion): Handles initial I/O")
-    print(f"   • Wave 2 (data_validation): Quick validation check")
-    print(f"   • Wave 3 (feature_extraction): Feature computation")
-    print(f"   • Wave 4 (model_prediction): Most compute-intensive")
-    print(f"   • Wave 5 (result_formatting): Parallel with logging")
-    print(f"   • Wave 6 (audit_logging): Final cleanup")
+    print("\n💡 Performance Insights:")
+    print("   • Wave 1 (data_ingestion): Handles initial I/O")
+    print("   • Wave 2 (data_validation): Quick validation check")
+    print("   • Wave 3 (feature_extraction): Feature computation")
+    print("   • Wave 4 (model_prediction): Most compute-intensive")
+    print("   • Wave 5 (result_formatting): Parallel with logging")
+    print("   • Wave 6 (audit_logging): Final cleanup")
 
     return results
 
@@ -294,8 +294,8 @@ async def main():
     print("   • Performance bottleneck identification")
     print("   • Execution flow debugging")
 
-    graph = await demonstrate_dag_visualization()
-    results = await demonstrate_execution_analysis()
+    await demonstrate_dag_visualization()
+    await demonstrate_execution_analysis()
 
     print("\n🎯 Key Concepts Learned:")
     print("   ✅ DAG Visualization - Understand complex pipeline structure")
