@@ -11,7 +11,7 @@ import importlib.util
 import shutil
 from typing import Iterable
 
-from .imports import PKG_TO_FEATURE
+from .optional_deps import FEATURES
 
 
 class FeatureMissingError(ImportError):
@@ -36,8 +36,10 @@ class FeatureManager:
     """
 
     _FEATURES: dict[str, list[str]] = {
-        feature: [pkg for pkg, f in PKG_TO_FEATURE.items() if f == feature]
-        for feature in set(PKG_TO_FEATURE.values())
+        feature: [
+            "yyaml" if pkg == "pyyaml" else pkg for pkg, f in FEATURES.items() if f == feature
+        ]
+        for feature in set(FEATURES.values())
     }
 
     @staticmethod
