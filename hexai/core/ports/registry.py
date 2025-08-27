@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Dict, Literal, Type
+from typing import Any, Callable, ClassVar, Literal, Type
 
 # Allowed kinds of ports
 PortKind = Literal[
@@ -53,14 +53,14 @@ class PortInfo:
     idempotent: bool = True
     cost_hint: str | None = None
     latency_hint: str | None = None
-    health: str = "unknown"
+    health: HealthStatus = "unknown"
     version: str | None = None
 
 
 class PortRegistry:
     """In-memory registry of port classes with discoverability and simple instantiation."""
 
-    _registry: ClassVar[Dict[str, PortInfo]] = {}
+    _registry: ClassVar[dict[str, PortInfo]] = {}
 
     @classmethod
     def register(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
@@ -87,7 +87,7 @@ class PortRegistry:
             ) from e
 
     @classmethod
-    def meta(cls, name: str) -> Dict[str, Any]:
+    def meta(cls, name: str) -> dict[str, Any]:
         """Retrieve a port metadata under a unique name."""
         info = cls._registry.get(name)
         if info is None:
@@ -98,21 +98,34 @@ class PortRegistry:
         return dict(info.__dict__)
 
     @classmethod
-    def find(cls, **filters: Any) -> Dict[str, PortInfo]:
+    def find(cls, **filters: Any) -> dict[str, PortInfo]:
         """Find ports matching given metadata filters.
+
+        Parameters
+        ----------
+        **filters : Any
+            Arbitrary metadata attributes of :class:`PortInfo` to filter on.
+            Each keyword argument corresponds to a field in ``PortInfo``
+            (e.g., ``kind``, ``streaming``, ``sync``). Only ports where
+            all provided attributes match the given values will be returned.
+
+        Returns
+        -------
+        Dict[str, PortInfo]
+            A mapping of port names to their corresponding metadata objects.
 
         Example
         -------
             PortRegistry.find(kind="llm", streaming=True)
         """
-        results: Dict[str, PortInfo] = {}
+        results: dict[str, PortInfo] = {}
         for name, meta in cls._registry.items():
             if all(getattr(meta, key, None) == value for key, value in filters.items()):
                 results[name] = meta
         return results
 
     @classmethod
-    def all(cls) -> Dict[str, Type[Any]]:
+    def all(cls) -> dict[str, Type[Any]]:
         """Return all registered ports."""
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
