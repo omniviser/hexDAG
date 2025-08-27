@@ -94,7 +94,7 @@ class PortRegistry:
             raise KeyError(
                 f"Port {name} not registered. Available ports are {list(cls._registry.keys())}"
             )
-        # kopia dict, by nie wystawiać mutowalnego wnętrza
+        # copy dict to not expose mutable interior
         return dict(info.__dict__)
 
     @classmethod
