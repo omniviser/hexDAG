@@ -11,6 +11,15 @@ import importlib.util
 import shutil
 from typing import Iterable
 
+PKG_TO_FEATURE: dict[str, str] = {
+    "yaml": "cli",
+    "click": "cli",
+    "rich": "cli",
+    "graphviz": "viz",
+    "openai": "adapters-openai",
+    "anthropic": "adapters-anthropic",
+}
+
 
 class FeatureMissingError(ImportError):
     """Exception raised when a user tries to use a feature without installing required extras.
@@ -34,10 +43,8 @@ class FeatureManager:
     """
 
     _FEATURES: dict[str, list[str]] = {
-        "cli": ["click", "yaml"],  # 'rich' is part of core dependencies
-        "viz": ["graphviz"],  # Visualization feature
-        "adapters-openai": ["openai"],  # OpenAI adapter
-        "adapters-anthropic": ["anthropic"],  # Anthropic adapter
+        feature: [pkg for pkg, f in PKG_TO_FEATURE.items() if f == feature]
+        for feature in set(PKG_TO_FEATURE.values())
     }
 
     @staticmethod

@@ -12,18 +12,14 @@ import subprocess  # nosec B404
 import tempfile
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from hexai.core.domain.dag import DirectedGraph
 from hexai.utils.features import FeatureManager
 from hexai.utils.imports import optional_import
 
-if TYPE_CHECKING:
-    import graphviz as _graphviz  # type: ignore
-else:
-    _graphviz = None
-
-graphviz: Any = optional_import("graphviz", feature="viz")
+FeatureManager.require_feature("viz")
+graphviz = optional_import("graphviz", feature="viz")
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +73,6 @@ class DAGVisualizer:
         -------
             DOT format string for the graph
         """
-        FeatureManager.require_feature("viz")
-        global graphviz
-        if graphviz is None:
-            try:
-                import graphviz as _gv
-
-                graphviz = _gv
-            except ModuleNotFoundError as e:
-                raise ModuleNotFoundError(
-                    "Feature 'viz' requires the 'graphviz' package."
-                    " Install with `pip install hexdag[viz]`."
-                ) from e
 
         dot = graphviz.Digraph(comment=title)
         dot.attr(rankdir="TB", style="filled", bgcolor="white")

@@ -10,6 +10,9 @@ from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.nodes import NodeFactory
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.domain.dag import DirectedGraph
+from hexai.utils.imports import optional_import
+
+yaml = optional_import("yaml", "cli")
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +62,6 @@ class YamlPipelineBuilder:
         -------
             tuple: (DirectedGraph, pipeline_metadata)
         """
-        from hexai.utils.imports import optional_import
-
-        yaml = optional_import("yaml", "cli")
         try:
             config = yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:

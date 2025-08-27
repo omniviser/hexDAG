@@ -174,3 +174,7 @@ tag_format = "v$version"
 version_files = [
     "pyproject.toml:version"
 ]
+[tool.deptry.per_rule_ignores]
+# Ignore DEP002 for `graphviz`: this package is an optional dependency,
+# only required when using the "viz" feature. Deptry cannot detect this.
+DEP002 = ["graphviz"]
