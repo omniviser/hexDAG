@@ -4,7 +4,6 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    # To jest widoczne TYLKO dla mypy/pyright
     from .base import PipelineCatalog, PipelineDefinition, get_catalog  # noqa: F401
     from .models import (  # noqa: F401
         Ontology,

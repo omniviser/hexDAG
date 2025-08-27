@@ -11,14 +11,7 @@ import importlib.util
 import shutil
 from typing import Iterable
 
-PKG_TO_FEATURE: dict[str, str] = {
-    "yaml": "cli",
-    "click": "cli",
-    "rich": "cli",
-    "graphviz": "viz",
-    "openai": "adapters-openai",
-    "anthropic": "adapters-anthropic",
-}
+from .imports import PKG_TO_FEATURE
 
 
 class FeatureMissingError(ImportError):

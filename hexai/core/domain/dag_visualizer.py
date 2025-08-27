@@ -74,6 +74,7 @@ class DAGVisualizer:
             DOT format string for the graph
         """
 
+        FeatureManager.require_feature("viz")
         dot = graphviz.Digraph(comment=title)
         dot.attr(rankdir="TB", style="filled", bgcolor="white")
         dot.attr("node", shape="box", style="filled,rounded", fontname="Arial")

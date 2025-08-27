@@ -11,7 +11,7 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    # Imports only for type checkers
+    # Imports only for type checker
     from .in_memory_memory import InMemoryMemory  # noqa: F401
 
 _LAZY_MAP: dict[str, tuple[str, str]] = {
