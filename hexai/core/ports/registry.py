@@ -130,7 +130,7 @@ class PortRegistry:
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
 
-def register_port[T: type[Any]](name: str, **meta: Any) -> Callable[[T], T]:
+def register_port[T: type](name: str, **meta: Any) -> Callable[[T], T]:
     """Decorator to register a custom port in the PortRegistry.
 
     Automatically registers the decorated class as a port under a unique name
