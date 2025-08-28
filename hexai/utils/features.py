@@ -36,9 +36,7 @@ class FeatureManager:
     """
 
     _FEATURES: dict[str, list[str]] = {
-        feature: [
-            "yyaml" if pkg == "pyyaml" else pkg for pkg, f in FEATURES.items() if f == feature
-        ]
+        feature: [pkg for pkg, f in FEATURES.items() if f == feature]
         for feature in set(FEATURES.values())
     }
 
