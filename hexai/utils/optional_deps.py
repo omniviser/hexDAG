@@ -14,23 +14,42 @@ def find_pyproject(start: Path | None = None) -> Path:
     raise FileNotFoundError(f"pyproject.toml not found starting from {p}")
 
 
-def get_feature_map(pyproject_path: str | Path | None = None) -> dict[str, str]:
+def load_pyproject(pyproject_path: str | Path | None = None) -> dict:
     path = Path(pyproject_path) if pyproject_path else find_pyproject()
     with path.open("rb") as f:
         pyproject_data = tomllib.load(f)
 
-    extras = pyproject_data.get("project", {}).get("optional-dependencies", {})
+    return pyproject_data.get("project", {}).get("optional-dependencies", {})
+
+
+def dep_clear(dep: str) -> str:
+    raw = dep.strip()
+    base = raw.split("[", 1)[0]
+    return re.split(r"[<>=!~\s]", base, 1)[0]
+
+
+def get_pkg_feature(pyproject_path: str | Path | None = None) -> dict[str, str]:
+    """Mapping of clean package names to the feature that declares them.
+
+    Example
+    -------
+    {"pyyaml": "cli", "graphviz": "viz"}."""
+    extras = load_pyproject(pyproject_path)
     feature_map: dict[str, str] = {}
     for feature_name, deps in extras.items():
         for dep in deps:
-            raw = dep.strip()
-            base = raw.split("[", 1)[0]
-            pkg_name = re.split(r"[<>=!~\s]", base, 1)[0]
-            if pkg_name == "pyyaml":
-                pkg_name = "yyaml"
+            pkg_name = dep_clear(dep)
             feature_map[pkg_name] = feature_name
     return feature_map
 
 
-FEATURES = get_feature_map()
-print(FEATURES)
+def get_feature_to_pkg(pyproject_path: str | Path | None = None) -> dict[str, list[str]]:
+    """Mapping feature -> list of clean package names.
+
+    Example
+    -------
+    {"cli": ["pyyaml"], "viz": ["graphviz"], "adapters-openai": []}."""
+
+    extras = load_pyproject(pyproject_path)
+
+    return {feature_name: [dep_clear(d) for d in deps] for feature_name, deps in extras.items()}

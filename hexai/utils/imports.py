@@ -5,19 +5,30 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from .optional_deps import FEATURES
+from .optional_deps import get_pkg_feature
+
+PYPI_TO_MODULE: dict[str, str] = {
+    "pyyaml": "yaml",
+    "pydantic-core": "pydantic_core",
+}
+
+
+def _import_name(pypi_pkg: str) -> str:
+    """
+    If user calls pyyaml there is no error in name.
+    """
+    return PYPI_TO_MODULE.get(pypi_pkg, pypi_pkg)
 
 
 def optional_import(pkg: str, feature: str | None = None) -> Any:
     """Import an optional dependency at runtime with a clear install hint."""
-    feature = None
+    FEATURES = get_pkg_feature()
+    suggested_feature = feature or FEATURES.get(pkg)
 
-    for feat, deps in FEATURES.items():
-        if any(pkg in dep for dep in deps):
-            feature = feat
-            break
     try:
-        return importlib.import_module(pkg)
+        return importlib.import_module(_import_name(pkg))
     except ImportError as e:
-        hint = f" Install with: pip install hexdag[{feature}]" if feature else ""
+        hint = (
+            f" Install with: pip install hexdag[{suggested_feature}]" if suggested_feature else ""
+        )
         raise RuntimeError(f"Missing optional dependency '{pkg}'.{hint}") from e

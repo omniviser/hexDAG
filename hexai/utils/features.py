@@ -11,7 +11,7 @@ import importlib.util
 import shutil
 from typing import Iterable
 
-from .optional_deps import FEATURES
+from .optional_deps import get_feature_to_pkg
 
 
 class FeatureMissingError(ImportError):
@@ -35,10 +35,7 @@ class FeatureManager:
     It can also raise informative errors suggesting how to install missing packages.
     """
 
-    _FEATURES: dict[str, list[str]] = {
-        feature: [pkg for pkg, f in FEATURES.items() if f == feature]
-        for feature in set(FEATURES.values())
-    }
+    _FEATURES = get_feature_to_pkg()
 
     @staticmethod
     def _has_package(pkg: str) -> bool:
@@ -72,7 +69,7 @@ class FeatureManager:
         bool
             True if all required packages (and system deps) are available, False otherwise.
         """
-        pkgs = cls._FEATURES.get(name, [])
+        pkgs = cls._FEATURES.get(name, [])  # type: ignore
         if not pkgs:
             return False
 
@@ -100,7 +97,7 @@ class FeatureManager:
         if cls.has_feature(name):
             return
 
-        pkgs = cls._FEATURES.get(name, [])
+        pkgs = cls._FEATURES.get(name, [])  # type: ignore
         missing = [p for p in pkgs if not cls._has_package(p)]
         msg = [f"Feature '{name}' is not available."]
 
