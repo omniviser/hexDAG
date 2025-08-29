@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, ClassVar, Literal, Type
 
@@ -9,9 +10,6 @@ from typing import Any, Callable, ClassVar, Literal, Type
 PortKind = Literal[
     "llm", "database", "memory", "embedding_selector", "ontology", "tool_router"
 ]  # ruff: formatter-ignore
-
-# Health states for a port
-HealthStatus = Literal["unknown", "healthy", "unhealthy"]
 
 
 @dataclass
@@ -38,8 +36,8 @@ class PortInfo:
         Optional hint about cost of using the port.
     latency_hint : str | None
         Optional hint about expected latency.
-    health : HealthStatus
-        Current health status of the port (default "unknown").
+    health : str | None
+        Optional hint about health status of the port.
     version : str | None
         Optional version of the port implementation.
     """
@@ -53,7 +51,7 @@ class PortInfo:
     idempotent: bool = True
     cost_hint: str | None = None
     latency_hint: str | None = None
-    health: HealthStatus = "unknown"
+    health: str | None = None
     version: str | None = None
 
 
@@ -64,9 +62,32 @@ class PortRegistry:
 
     @classmethod
     def register(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
-        """Register a port implementation under a unique name."""
+        """Register a port implementation under a unique name.
+
+        Parameters
+        ----------
+        name : str
+            Unique identifier for the port.
+        port_cls : type[Any]
+            Implementation class for the port.
+        """
+        existing = cls._registry[name]
+        if existing:
+            same_cls = existing.port_cls is port_cls
+            same_meta = all(getattr(existing, atr) == i for atr, i in meta.items())
+            if same_cls or same_meta:
+                return
+            raise ValueError(
+                f"Port '{name}' already registered with a different definition. "
+                f"Use PortRegistry.override(...) if you want to replace it."
+            )
+        cls._registry[name] = PortInfo(name=name, port_cls=port_cls, **meta)
+
+    @classmethod
+    def override(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
+        """Force override of an existing definition"""
         if name in cls._registry:
-            raise ValueError(f"Port {name} already registered")
+            logging.warning(f"Port '{name}' is being overridden in the registry.")
         cls._registry[name] = PortInfo(name=name, port_cls=port_cls, **meta)
 
     @classmethod
@@ -130,7 +151,9 @@ class PortRegistry:
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
 
-def register_port[T: type](name: str, **meta: Any) -> Callable[[T], T]:
+def register_port[T: type](
+    name: str, override: bool = False, **meta: Any
+) -> Callable[[T], T]:
     """Decorator to register a custom port in the PortRegistry.
 
     Automatically registers the decorated class as a port under a unique name
@@ -138,7 +161,10 @@ def register_port[T: type](name: str, **meta: Any) -> Callable[[T], T]:
     """
 
     def decorator(cls: T) -> T:
-        PortRegistry.register(name=name, port_cls=cls, **meta)
+        if override:
+            PortRegistry.override(name=name, port_cls=cls, **meta)
+        else:
+            PortRegistry.register(name=name, port_cls=cls, **meta)
         return cls
 
     return decorator
