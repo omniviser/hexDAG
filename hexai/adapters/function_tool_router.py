@@ -115,13 +115,9 @@ class FunctionBasedToolRouter(ToolRouter):
         """
         tool_name = name or func.__name__
         self.tools[tool_name] = func
-        self.tool_definitions[tool_name] = self._generate_tool_definition(
-            func, tool_name
-        )
+        self.tool_definitions[tool_name] = self._generate_tool_definition(func, tool_name)
 
-    def _generate_tool_definition(
-        self, func: Callable, tool_name: str
-    ) -> ToolDefinition:
+    def _generate_tool_definition(self, func: Callable, tool_name: str) -> ToolDefinition:
         """Auto-generate ToolDefinition from function signature and docstring.
 
         This creates ToolDefinitions that integrate with the existing ToolDescriptionManager.
@@ -184,14 +180,10 @@ class FunctionBasedToolRouter(ToolRouter):
                     elif param.param_type == "int":
                         example_params.append(f"{param.name}=10")
                     else:
-                        example_params.append(
-                            f"{param.name}='{param.param_type}_value'"
-                        )
+                        example_params.append(f"{param.name}='{param.param_type}_value'")
 
             example = (
-                f"{tool_name}({', '.join(example_params)})"
-                if example_params
-                else f"{tool_name}()"
+                f"{tool_name}({', '.join(example_params)})" if example_params else f"{tool_name}()"
             )
         else:
             example = f"{tool_name}()"
@@ -207,9 +199,7 @@ class FunctionBasedToolRouter(ToolRouter):
     async def aroute(self, tool_name: str, input_data: Any) -> Any:
         """Route a tool call to the registered function (legacy interface)."""
         if tool_name not in self.tools:
-            raise ValueError(
-                f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}"
-            )
+            raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
 
         try:
             tool_func = self.tools[tool_name]
@@ -221,8 +211,7 @@ class FunctionBasedToolRouter(ToolRouter):
 
                 # Check if function accepts **kwargs
                 has_var_keyword = any(
-                    p.kind == inspect.Parameter.VAR_KEYWORD
-                    for p in sig.parameters.values()
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
                 )
 
                 if has_var_keyword:
@@ -264,9 +253,7 @@ class FunctionBasedToolRouter(ToolRouter):
     async def call_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
         """Call a tool with parameters (main interface used by agents)."""
         if tool_name not in self.tools:
-            raise ValueError(
-                f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}"
-            )
+            raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
 
         return await self.aroute(tool_name, params)
 

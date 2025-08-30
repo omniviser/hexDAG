@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, ClassVar, Literal, Type
 
 # Allowed kinds of ports
-PortKind = Literal[
-    "llm", "database", "memory", "embedding_selector", "ontology", "tool_router"
-]  # ruff: formatter-ignore
+# ruff: formatter-ignore
+PortKind = Literal["llm", "database", "memory", "embedding_selector", "ontology", "tool_router"]
 
 
 @dataclass
@@ -151,9 +150,8 @@ class PortRegistry:
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
 
-def register_port[T: type](
-    name: str, override: bool = False, **meta: Any
-) -> Callable[[T], T]:
+# ruff: formatter-ignore
+def register_port[T: type](name: str, override: bool = False, **meta: Any) -> Callable[[T], T]:
     """Decorator to register a custom port in the PortRegistry.
 
     Automatically registers the decorated class as a port under a unique name

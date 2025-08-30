@@ -29,7 +29,7 @@ def __getattr__(name: str) -> Any:
         if hasattr(value, "register_port"):
             value.register_port()
 
-        globals()[name] = value
+        globals()[name] = value  # Cache the imported module in the globals for future access
         return value
 
     raise AttributeError(f"module {__name__} has no attribute {name}")
