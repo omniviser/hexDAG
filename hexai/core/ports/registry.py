@@ -70,8 +70,8 @@ class PortRegistry:
         port_cls : type[Any]
             Implementation class for the port.
         """
-        existing = cls._registry[name]
-        if existing:
+        if name in cls._registry:
+            existing = cls._registry[name]
             same_cls = existing.port_cls is port_cls
             same_meta = all(getattr(existing, atr) == i for atr, i in meta.items())
             if same_cls or same_meta:
@@ -81,6 +81,7 @@ class PortRegistry:
                 f"Use PortRegistry.override(...) if you want to replace it."
             )
         cls._registry[name] = PortInfo(name=name, port_cls=port_cls, **meta)
+        logging.info(f"Port '{name}' registered.")
 
     @classmethod
     def override(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
@@ -159,6 +160,8 @@ def register_port[T: type](name: str, override: bool = False, **meta: Any) -> Ca
     """
 
     def decorator(cls: T) -> T:
+        if name in PortRegistry._registry and not override:
+            raise ValueError(f"Port '{name}' already exists. Use override=True to replace it.")
         if override:
             PortRegistry.override(name=name, port_cls=cls, **meta)
         else:

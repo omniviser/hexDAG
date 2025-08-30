@@ -6,10 +6,18 @@ from hexai.core.ports.llm import LLM, MessageList
 from hexai.core.ports.registry import PortRegistry, register_port
 
 
-@register_port(name="test_llm", kind="llm")
-class TestLLMAdapter(LLM):
-    async def aresponse(self, messages: MessageList) -> str | None:
-        return "test response"
+@pytest.fixture(scope="module", autouse=True)
+def register_ports():
+    @register_port(name="test_llm", kind="llm")
+    class TestLLMAdapter(LLM):
+        async def aresponse(self, messages: MessageList) -> str | None:
+            return "test response"
+
+    yield
+
+
+def test_check_if_port_registered():
+    assert "test_llm" in PortRegistry._registry, "Port 'test_llm' not registered!"
 
 
 @pytest.mark.asyncio
