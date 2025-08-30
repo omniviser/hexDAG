@@ -1,25 +1,35 @@
-"""Adapter implementations for external services.
-
-When `import hexai.adapters` is called, all adapter modules
-in this package will be imported automatically,
-triggering their @register_port decorators.
-"""
+from __future__ import annotations
 
 import importlib
-import pkgutil
-import sys
-from types import ModuleType
+from typing import TYPE_CHECKING, Any
 
-from .function_tool_router import FunctionBasedToolRouter
-from .in_memory_memory import InMemoryMemory
+if TYPE_CHECKING:
+    # Imports only for type checker
+    from .in_memory_memory import InMemoryMemory  # noqa: F401
 
-for module_info in pkgutil.iter_modules(__path__, __name__ + "."):
-    if module_info.name not in [
-        "hexai.adapters.in_memory_memory",
+_LAZY_MAP: dict[str, tuple[str, str]] = {
+    "InMemoryMemory": ("hexai.adapters.in_memory_memory", "InMemoryMemory"),
+    "FunctionBasedToolRouter": (
         "hexai.adapters.function_tool_router",
-    ]:
-        module: ModuleType = importlib.import_module(module_info.name)
-        for attr in getattr(module, "__all__", []):
-            setattr(sys.modules[__name__], attr, getattr(module, attr))
+        "FunctionBasedToolRouter",
+    ),
+}
 
-__all__ = ["InMemoryMemory", "FunctionBasedToolRouter"]
+__all__ = list(_LAZY_MAP.keys())
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy import for adapters. When an adapter is accessed, it is dynamically imported and registered."""
+    if name in _LAZY_MAP:
+        module_name, attr = _LAZY_MAP[name]
+        module = importlib.import_module(module_name)
+        value = getattr(module, attr)
+
+        # Register the port dynamically if necessary
+        if hasattr(value, "register_port"):
+            value.register_port()
+
+        globals()[name] = value
+        return value
+
+    raise AttributeError(f"module {__name__} has no attribute {name}")
