@@ -1,0 +1,17 @@
+# Required
+version: 2
+
+# Set the version of Python and other tools you might need
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.12"
+
+# Sphinx configuration
+sphinx:
+  configuration: docs/source/conf.py
+
+# Python dependencies
+python:
+  install:
+    - requirements: requirements.txt
