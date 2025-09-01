@@ -5,6 +5,8 @@ from typing import Any
 
 from hexai.core.ports.memory import LongTermMemory
 
+__all__ = ["InMemoryMemory"]
+
 
 class InMemoryMemory(LongTermMemory):
     """In-memory implementation of LongTermMemory for testing.
