@@ -17,24 +17,24 @@ class Secret:
     def __str__(self) -> str:  # Added return type annotation
         return "<SECRET>"
 
+    @staticmethod
+    def retrieve_secret_from_env(name: str) -> "Secret":
+        """
+        Fetch a secret from environment variable, or raise error if not found.
+        Wraps the value in the Secret class to avoid accidental logging.
 
-def get_secret(name: str):  # type: ignore[no-untyped-def]
-    """
-    Fetch a secret from environment variable, or raise error if not found.
-    Wraps the value in the Secret class to avoid accidental logging.
+        Args:
+            name (str): The environment variable name.
+        Returns:
+            Secret: The wrapped secret value.
 
-    Args:
-        name (str): The environment variable name.
-    Returns:
-        Secret: The wrapped secret value.
-
-    Raises:
-        ValueError: If the secret is not found.
-    """
-    try:
-        value = os.getenv(name)
-    except Exception as e:
-        raise ValueError(f"Error fetching secret '{name}': {e}")
-    if value is None:
-        raise ValueError(f"Secret '{name}' not found in environment variables.")
-    return Secret(value)
+        Raises:
+            ValueError: If the secret is not found.
+        """
+        try:
+            value = os.getenv(name)
+            if value is None:
+                raise ValueError(f"Secret '{name}' not found in environment variables.")
+            return Secret(value)
+        except Exception as e:
+            raise ValueError(f"Error fetching secret '{name}': {e}")
