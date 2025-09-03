@@ -6,7 +6,8 @@ a consistent API across the entire hexDAG ecosystem.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, Optional, TypeVar
 
 from hexai.core.registry.types import ComponentType
 

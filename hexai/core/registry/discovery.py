@@ -15,7 +15,7 @@ hookspec = pluggy.HookspecMarker("hexdag")
 
 
 def create_plugin(namespace: str) -> type:
-    """Helper to create a simple plugin class.
+    """Create a simple plugin class.
 
     This is a convenience function for plugin authors who just want
     to register components without implementing the full plugin interface.
