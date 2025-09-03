@@ -105,7 +105,7 @@ repos:
 
       - id: pytest
         name: Run pytest
-        entry: uv run pytest tests/hexai/agent_factory/ -x --tb=short
+        entry: uv run pytest tests/hexai/ -x --tb=short
         language: system
         types: [python]
         stages: [pre-commit]
