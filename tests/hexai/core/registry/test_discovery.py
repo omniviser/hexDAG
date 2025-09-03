@@ -1,211 +1,219 @@
-"""Tests for discovery.py - plugin and component discovery."""
+"""Tests for the discovery module."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from hexai.core.registry.discovery import discover_entry_points, discover_plugins
+from hexai.core.registry.discovery import (
+    create_plugin,
+    discover_entry_points,
+    discover_plugins,
+    hookimpl,
+    hookspec,
+)
 
 
-class TestDiscoverEntryPoints:
-    """Test the discover_entry_points function."""
+class TestPluggyMarkers:
+    """Test that pluggy markers are properly exported."""
 
-    @patch("hexai.core.registry.discovery.entry_points")
-    def test_discover_entry_points_basic(self, mock_entry_points):
-        """Test basic entry point discovery."""
-        # Mock entry points
-        mock_ep1 = Mock()
-        mock_ep1.name = "plugin1"
-        mock_ep1.load.return_value = Mock()
+    def test_hookimpl_marker(self):
+        """Test hookimpl marker is available."""
+        assert hookimpl is not None
+        assert hookimpl.project_name == "hexdag"
 
-        mock_ep2 = Mock()
-        mock_ep2.name = "plugin2"
-        mock_ep2.load.return_value = Mock()
+    def test_hookspec_marker(self):
+        """Test hookspec marker is available."""
+        assert hookspec is not None
+        assert hookspec.project_name == "hexdag"
 
-        mock_entry_points.return_value = [mock_ep1, mock_ep2]
+    def test_markers_can_decorate(self):
+        """Test that markers can be used as decorators."""
 
-        plugins = discover_entry_points("hexai.plugins")
+        # Create a class with hook specs
+        class TestSpec:
+            @hookspec
+            def test_method(self):
+                pass
 
-        assert len(plugins) == 2
-        assert "plugin1" in plugins
-        assert "plugin2" in plugins
+        # Create implementation
+        class TestImpl:
+            @hookimpl
+            def test_method(self):
+                pass
 
-        mock_entry_points.assert_called_once_with(group="hexai.plugins")
+        # Check markers were applied
+        assert hasattr(TestSpec.test_method, "hexdag_spec")
+        assert hasattr(TestImpl.test_method, "hexdag_impl")
 
-    @patch("hexai.core.registry.discovery.entry_points")
-    def test_discover_entry_points_with_error(self, mock_entry_points):
-        """Test entry point discovery with loading errors."""
-        mock_ep1 = Mock()
-        mock_ep1.name = "good_plugin"
-        mock_ep1.load.return_value = Mock()
 
-        mock_ep2 = Mock()
-        mock_ep2.name = "bad_plugin"
-        mock_ep2.load.side_effect = ImportError("Failed to load")
+class TestCreatePlugin:
+    """Test the create_plugin helper function."""
 
-        mock_entry_points.return_value = [mock_ep1, mock_ep2]
+    def test_create_simple_plugin(self):
+        """Test creating a simple plugin class."""
+        PluginClass = create_plugin("test_plugin")
 
+        # Check class properties
+        assert PluginClass.__name__ == "Test_PluginPlugin"
+
+        # Create instance
+        plugin = PluginClass()
+        assert plugin.namespace == "test_plugin"
+
+        # Check it has the hook
+        assert hasattr(plugin, "hexdag_initialize")
+
+    def test_plugin_hook_implementation(self):
+        """Test that created plugin has proper hook."""
+        PluginClass = create_plugin("my_plugin")
+        plugin = PluginClass()
+
+        # Check hook exists
+        assert hasattr(plugin, "hexdag_initialize")
+
+        # Should run without error
         with patch("hexai.core.registry.discovery.logger") as mock_logger:
-            plugins = discover_entry_points("hexai.plugins")
+            plugin.hexdag_initialize()
+            mock_logger.debug.assert_called_with("Plugin 'my_plugin' initialized")
 
-            assert len(plugins) == 1
-            assert "good_plugin" in plugins
-            assert "bad_plugin" not in plugins
+    def test_different_namespaces(self):
+        """Test creating plugins with different namespaces."""
+        Plugin1 = create_plugin("plugin_one")
+        Plugin2 = create_plugin("plugin_two")
 
-            # Should log the warning about failed loading
-            mock_logger.warning.assert_called()
+        p1 = Plugin1()
+        p2 = Plugin2()
 
-    @patch("hexai.core.registry.discovery.entry_points")
-    def test_discover_entry_points_empty(self, mock_entry_points):
-        """Test discovery with no entry points."""
-        mock_entry_points.return_value = []
+        assert p1.namespace == "plugin_one"
+        assert p2.namespace == "plugin_two"
+        assert Plugin1.__name__ == "Plugin_OnePlugin"
+        assert Plugin2.__name__ == "Plugin_TwoPlugin"
 
-        plugins = discover_entry_points("hexai.plugins")
+    def test_plugin_usage_example(self):
+        """Test the documented usage pattern."""
+        # Simulate plugin __init__.py
+        Plugin = create_plugin("example_plugin")
 
-        assert len(plugins) == 0
+        def register():
+            """Entry point function."""
+            # Would normally import modules here
+            return Plugin()
 
-    @patch("hexai.core.registry.discovery.entry_points")
-    def test_discover_entry_points_duplicate_names(self, mock_entry_points):
-        """Test handling of duplicate entry point names."""
-        mock_ep1 = Mock()
-        mock_ep1.name = "plugin"
-        mock_ep1.load.return_value = Mock(version=1)
-
-        mock_ep2 = Mock()
-        mock_ep2.name = "plugin"  # Duplicate name
-        mock_ep2.load.return_value = Mock(version=2)
-
-        mock_entry_points.return_value = [mock_ep1, mock_ep2]
-
-        plugins = discover_entry_points("hexai.plugins")
-
-        # Should keep the last one (overwrites silently)
-        assert len(plugins) == 1
-        assert "plugin" in plugins
-        # The second one should overwrite
-        assert plugins["plugin"].version == 2
+        # Test the register function
+        plugin_instance = register()
+        assert isinstance(plugin_instance, Plugin)
+        assert plugin_instance.namespace == "example_plugin"
 
 
-class TestDiscoverPlugins:
-    """Test the discover_plugins function."""
+class TestLegacyFunctions:
+    """Test backward compatibility functions."""
 
-    @patch("hexai.core.registry.discovery.discover_entry_points")
-    def test_discover_plugins_success(self, mock_discover):
-        """Test successful plugin discovery and loading."""
-        # Mock plugin register functions
-        register1 = Mock()
-        register2 = Mock()
-        register3 = Mock()
+    @patch("hexai.core.registry.discovery.logger")
+    def test_discover_entry_points_deprecated(self, mock_logger):
+        """Test that discover_entry_points logs deprecation warning."""
+        result = discover_entry_points("test.group")
 
-        mock_discover.return_value = {
-            "plugin1": register1,
-            "plugin2": register2,
-            "plugin3": register3,
-        }
+        # Should return empty dict
+        assert result == {}
 
-        with patch("hexai.core.registry.discovery.logger") as mock_logger:
-            loaded_count = discover_plugins()
+        # Should log warning
+        mock_logger.warning.assert_called_once()
+        warning_msg = mock_logger.warning.call_args[0][0]
+        assert "deprecated" in warning_msg
+        assert "test.group" in warning_msg
 
-            assert loaded_count == 3
+    @patch("hexai.core.registry.discovery.logger")
+    def test_discover_plugins_deprecated(self, mock_logger):
+        """Test that discover_plugins logs deprecation warning."""
+        result = discover_plugins()
 
-            # All register functions should be called
-            register1.assert_called_once()
-            register2.assert_called_once()
-            register3.assert_called_once()
+        # Should return 0
+        assert result == 0
 
-            # Should log info for each plugin
-            assert mock_logger.info.call_count >= 3
-
-    @patch("hexai.core.registry.discovery.discover_entry_points")
-    def test_discover_plugins_with_failures(self, mock_discover):
-        """Test plugin discovery with some failures."""
-        register1 = Mock()
-        register2 = Mock()
-        register2.side_effect = RuntimeError("Plugin failed")
-        register3 = Mock()
-
-        mock_discover.return_value = {
-            "plugin1": register1,
-            "plugin2": register2,
-            "plugin3": register3,
-        }
-
-        with patch("hexai.core.registry.discovery.logger") as mock_logger:
-            loaded_count = discover_plugins()
-
-            # Only 2 should load successfully
-            assert loaded_count == 2
-
-            register1.assert_called_once()
-            register2.assert_called_once()  # Called but failed
-            register3.assert_called_once()
-
-            # Should log error for failed plugin
-            mock_logger.error.assert_called()
-
-    @patch("hexai.core.registry.discovery.discover_entry_points")
-    def test_discover_plugins_empty(self, mock_discover):
-        """Test plugin discovery with no plugins."""
-        mock_discover.return_value = {}
-
-        loaded_count = discover_plugins()
-
-        assert loaded_count == 0
-
-    @patch("hexai.core.registry.discovery.discover_entry_points")
-    def test_discover_plugins_all_fail(self, mock_discover):
-        """Test when all plugins fail to load."""
-        register1 = Mock(side_effect=Exception("Failed"))
-        register2 = Mock(side_effect=Exception("Failed"))
-
-        mock_discover.return_value = {
-            "plugin1": register1,
-            "plugin2": register2,
-        }
-
-        with patch("hexai.core.registry.discovery.logger") as mock_logger:
-            loaded_count = discover_plugins()
-
-            assert loaded_count == 0
-
-            # Should log errors for each
-            assert mock_logger.error.call_count == 2
+        # Should log warning
+        mock_logger.warning.assert_called_once()
+        warning_msg = mock_logger.warning.call_args[0][0]
+        assert "deprecated" in warning_msg
+        assert "automatically" in warning_msg
 
 
-class TestIntegration:
-    """Integration tests for discovery system."""
+class TestPluginIntegration:
+    """Test plugin integration patterns."""
 
-    def test_full_discovery_flow(self):
-        """Test complete discovery and registration flow."""
-        # This test would require actual plugin entry points
-        # which is harder to mock in unit tests
-        pass
+    def test_plugin_with_hooks(self):
+        """Test creating a plugin that implements hooks."""
+        # Create plugin class
+        PluginClass = create_plugin("advanced_plugin")
 
-    def test_protected_namespace_discovery(self):
-        """Test that discovery respects protected namespaces."""
-        # Protected namespaces are handled by the registry, not discovery
-        # This is tested in test_registry.py
-        pass
+        # Extend it with custom hooks
+        class AdvancedPlugin(PluginClass):
+            def __init__(self):
+                super().__init__()
+                self.components_registered = False
+
+            @hookimpl
+            def hexdag_initialize(self):
+                """Override to do actual initialization."""
+                super().hexdag_initialize()
+                # Simulate importing modules
+                self.components_registered = True
+
+            @hookimpl
+            def hexdag_configure(self, config):
+                """Additional hook implementation."""
+                self.config = config
+
+        # Test the plugin
+        plugin = AdvancedPlugin()
+        assert plugin.namespace == "advanced_plugin"
+
+        # Test initialization
+        plugin.hexdag_initialize()
+        assert plugin.components_registered
+
+        # Test configuration
+        test_config = {"key": "value"}
+        plugin.hexdag_configure(test_config)
+        assert plugin.config == test_config
+
+    def test_multiple_plugins_pattern(self):
+        """Test pattern for multiple plugins."""
+        plugins = {}
+
+        # Create multiple plugins
+        for name in ["plugin_a", "plugin_b", "plugin_c"]:
+            PluginClass = create_plugin(name)
+            plugins[name] = PluginClass()
+
+        # Verify each has unique namespace
+        assert plugins["plugin_a"].namespace == "plugin_a"
+        assert plugins["plugin_b"].namespace == "plugin_b"
+        assert plugins["plugin_c"].namespace == "plugin_c"
+
+        # Each should have the hook
+        for plugin in plugins.values():
+            assert hasattr(plugin, "hexdag_initialize")
 
 
-class TestDiscoveryHelpers:
-    """Test helper functions and utilities."""
+class TestDocumentation:
+    """Test that documented examples work."""
 
-    def test_entry_point_group_names(self):
-        """Test standard entry point group names."""
-        # These are conventions
-        expected_groups = [
-            "hexai.plugins",
-            "hexai.nodes",
-            "hexai.tools",
-            "hexai.agents",
-        ]
+    def test_entry_point_example(self):
+        """Test the documented entry point pattern."""
+        # This is what would be in a plugin's __init__.py
+        from hexai.core.registry.discovery import create_plugin
 
-        # In real implementation, these might be constants
-        for group in expected_groups:
-            # Just verify the format
-            assert group.startswith("hexai.")
+        Plugin = create_plugin("documented_plugin")
 
-    def test_filesystem_discovery(self):
-        """Test filesystem-based component discovery."""
-        # This is a placeholder test for future filesystem discovery implementation
-        # Currently, discovery.py only supports entry points, not filesystem discovery
-        pass
+        def register():
+            """Entry point for plugin registration."""
+            # from . import nodes  # Would import decorated modules
+            return Plugin()
+
+        # Test that this pattern works
+        plugin = register()
+        assert plugin.namespace == "documented_plugin"
+
+        # Plugin should be ready to use with pluggy
+        assert hasattr(plugin, "hexdag_initialize")
+
+        # Can call the hook
+        plugin.hexdag_initialize()  # Should not raise

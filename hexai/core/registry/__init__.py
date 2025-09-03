@@ -1,28 +1,38 @@
-"""Registry system for dynamic component discovery and management."""
+"""HexDAG component registry with unified decorator-based registration.
 
-from hexai.core.registry.decorators import (
-    adapter,
-    component,
-    get_component_metadata,
-    memory,
-    node,
-    observer,
-    policy,
-    tool,
-)
-from hexai.core.registry.discovery import discover_entry_points
-from hexai.core.registry.metadata import ComponentMetadata
+The registry provides a simple, consistent API for registering both core
+and plugin components using decorators.
+
+Examples
+--------
+>>> # Core component
+>>> from hexai.core.registry import node
+>>>
+>>> @node()
+>>> class PassthroughNode:
+...     def execute(self, data):
+...         return data
+>>>
+>>> # Plugin component
+>>> @node(namespace='my_plugin')
+>>> class AnalyzerNode:
+...     def execute(self, data):
+...         return analyze(data)
+>>>
+>>> # Access components
+>>> from hexai.core.registry import registry
+>>> node = registry.get('passthrough_node')
+"""
+
+from hexai.core.registry.decorators import adapter, component, memory, node, observer, policy, tool
 from hexai.core.registry.registry import ComponentRegistry, registry
 from hexai.core.registry.types import ComponentType
 
 __all__ = [
-    # Singleton registry (primary interface)
-    "registry",
+    # Main registry
     "ComponentRegistry",
-    # Component metadata
-    "ComponentMetadata",
-    "ComponentType",
-    # Decorators for components (auto-register)
+    "registry",
+    # Decorators
     "component",
     "node",
     "tool",
@@ -30,7 +40,6 @@ __all__ = [
     "policy",
     "memory",
     "observer",
-    "get_component_metadata",
-    # Plugin support
-    "discover_entry_points",
+    # Types
+    "ComponentType",
 ]

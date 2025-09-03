@@ -1,475 +1,455 @@
-"""Tests for decorators.py - component registration decorators."""
-
-from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+"""Tests for the decorators module."""
 
 import pytest
 
+from hexai.core.registry import ComponentRegistry, ComponentType
 from hexai.core.registry.decorators import (
-    _pending_components,
+    _infer_component_type,
+    _snake_case,
     adapter,
     component,
+    get_component_metadata,
+    memory,
     node,
     observer,
-    register_pending_components,
+    policy,
     tool,
 )
-from hexai.core.registry.types import ComponentType
 
 
-class TestComponentDecorators:
-    """Test the component registration decorators."""
+class TestSnakeCase:
+    """Test snake_case conversion."""
+
+    def test_simple_camel_case(self):
+        """Test simple CamelCase conversion."""
+        assert _snake_case("CamelCase") == "camel_case"
+        assert _snake_case("SimpleTest") == "simple_test"
+
+    def test_consecutive_capitals(self):
+        """Test handling of consecutive capital letters."""
+        assert _snake_case("HTTPServer") == "http_server"
+        assert _snake_case("XMLParser") == "xml_parser"
+        assert _snake_case("HTMLToXML") == "html_to_xml"
+
+    def test_already_snake_case(self):
+        """Test that snake_case remains unchanged."""
+        assert _snake_case("already_snake") == "already_snake"
+        assert _snake_case("test_name") == "test_name"
+
+    def test_single_word(self):
+        """Test single word conversion."""
+        assert _snake_case("Word") == "word"
+        assert _snake_case("TEST") == "test"
+
+    def test_numbers(self):
+        """Test handling of numbers in names."""
+        assert _snake_case("Test2Node") == "test2_node"
+        assert _snake_case("V2Parser") == "v2_parser"
+
+    def test_edge_cases(self):
+        """Test edge cases."""
+        assert _snake_case("") == ""
+        assert _snake_case("A") == "a"
+        assert _snake_case("_Leading") == "leading"
+        assert _snake_case("__DoubleLeading") == "double_leading"
+
+
+class TestInferComponentType:
+    """Test component type inference."""
+
+    def test_node_inference(self):
+        """Test inference for node types."""
+
+        class SomeNode:
+            pass
+
+        class DataProcessorNode:
+            pass
+
+        class NodeProcessor:
+            pass
+
+        assert _infer_component_type(SomeNode) == ComponentType.NODE
+        assert _infer_component_type(DataProcessorNode) == ComponentType.NODE
+        assert _infer_component_type(NodeProcessor) == ComponentType.NODE
+
+    def test_adapter_inference(self):
+        """Test inference for adapter types."""
+
+        class DatabaseAdapter:
+            pass
+
+        class AdapterBase:
+            pass
+
+        class PostgresAdapter:
+            pass
+
+        assert _infer_component_type(DatabaseAdapter) == ComponentType.ADAPTER
+        assert _infer_component_type(AdapterBase) == ComponentType.ADAPTER
+        assert _infer_component_type(PostgresAdapter) == ComponentType.ADAPTER
+
+    def test_tool_inference(self):
+        """Test inference for tool types."""
+
+        class WebScraperTool:
+            pass
+
+        class ToolBase:
+            pass
+
+        class DataFetchTool:
+            pass
+
+        assert _infer_component_type(WebScraperTool) == ComponentType.TOOL
+        assert _infer_component_type(ToolBase) == ComponentType.TOOL
+        assert _infer_component_type(DataFetchTool) == ComponentType.TOOL
+
+    def test_policy_inference(self):
+        """Test inference for policy types."""
+
+        class RetryPolicy:
+            pass
+
+        class PolicyBase:
+            pass
+
+        class CachingPolicy:
+            pass
+
+        assert _infer_component_type(RetryPolicy) == ComponentType.POLICY
+        assert _infer_component_type(PolicyBase) == ComponentType.POLICY
+        assert _infer_component_type(CachingPolicy) == ComponentType.POLICY
+
+    def test_memory_inference(self):
+        """Test inference for memory types."""
+
+        class ConversationMemory:
+            pass
+
+        class MemoryStore:
+            pass
+
+        class LongTermMemory:
+            pass
+
+        assert _infer_component_type(ConversationMemory) == ComponentType.MEMORY
+        assert _infer_component_type(MemoryStore) == ComponentType.MEMORY
+        assert _infer_component_type(LongTermMemory) == ComponentType.MEMORY
+
+    def test_observer_inference(self):
+        """Test inference for observer types."""
+
+        class MetricsObserver:
+            pass
+
+        class ObserverBase:
+            pass
+
+        class LoggingObserver:
+            pass
+
+        assert _infer_component_type(MetricsObserver) == ComponentType.OBSERVER
+        assert _infer_component_type(ObserverBase) == ComponentType.OBSERVER
+        assert _infer_component_type(LoggingObserver) == ComponentType.OBSERVER
+
+    def test_inheritance_inference(self):
+        """Test type inference through inheritance."""
+
+        class BaseNode:
+            pass
+
+        class DerivedProcessor(BaseNode):
+            pass
+
+        # Should infer from base class name
+        assert _infer_component_type(DerivedProcessor) == ComponentType.NODE
+
+    def test_no_inference(self):
+        """Test when type cannot be inferred."""
+
+        class RandomClass:
+            pass
+
+        class SomeProcessor:
+            pass
+
+        assert _infer_component_type(RandomClass) is None
+        assert _infer_component_type(SomeProcessor) is None
+
+
+class TestComponentDecorator:
+    """Test the main component decorator."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
         """Clear pending components before each test."""
-        _pending_components.clear()
+        ComponentRegistry._pending_components.clear()
+        yield
+        ComponentRegistry._pending_components.clear()
 
-    def test_node_decorator_basic(self):
-        """Test basic node decorator usage."""
+    def test_basic_decoration(self):
+        """Test basic component decoration."""
 
-        @node(namespace="test")
-        class TestNode:
-            """A test node."""
-
-            pass
-
-        assert len(_pending_components) == 1
-        component, metadata, namespace = _pending_components[0]
-
-        assert metadata.component_type == ComponentType.NODE
-        assert component is TestNode
-        assert namespace == "test"
-
-    def test_node_decorator_with_options(self):
-        """Test node decorator with all options."""
-
-        @node(
-            namespace="test",
-            name="custom_node",
-            description="Custom description",
-            tags={"tag1", "tag2"},
-            dependencies={"dep1", "dep2"},
-            replaceable=False,
-        )
-        class MyNode:
-            pass
-
-        _, metadata, _ = _pending_components[0]
-
-        assert metadata.name == "custom_node"
-        assert metadata.description == "Custom description"
-        assert metadata.tags == {"tag1", "tag2"}
-        assert metadata.dependencies == {"dep1", "dep2"}
-        assert metadata.replaceable is False
-
-    def test_tool_decorator(self):
-        """Test tool decorator."""
-
-        @tool(namespace="test", description="A test tool")
-        def my_tool(data: Any) -> Any:
-            return data
-
-        component, metadata, _ = _pending_components[0]
-
-        assert metadata.name == "my_tool"
-        assert metadata.component_type == ComponentType.TOOL
-        assert metadata.description == "A test tool"
-        assert component is my_tool
-
-    def test_adapter_decorator(self):
-        """Test adapter decorator."""
-
-        @adapter(namespace="test")
-        class TestAdapter:
-            """An adapter component."""
+        @component(namespace="test", component_type=ComponentType.NODE)
+        class TestComponent:
+            """Test component."""
 
             pass
 
-        _, metadata, _ = _pending_components[0]
+        # Check class attributes
+        assert hasattr(TestComponent, "_hexdag_component")
+        assert TestComponent._hexdag_component is True
+        assert TestComponent._hexdag_namespace == "test"
+        assert TestComponent._hexdag_name == "test_component"
 
-        assert metadata.component_type == ComponentType.ADAPTER
+        # Check pending registration
+        assert len(ComponentRegistry._pending_components) == 1
+        cls, metadata = ComponentRegistry._pending_components[0]
+        assert cls is TestComponent
+        assert metadata["name"] == "test_component"
+        assert metadata["namespace"] == "test"
+        assert metadata["component_type"] == ComponentType.NODE
 
-    def test_observer_decorator(self):
-        """Test observer decorator."""
+    def test_custom_name(self):
+        """Test custom component name."""
 
-        @observer(namespace="test")
-        class ObserverComponent:
+        @component(name="custom_name", namespace="test", component_type=ComponentType.NODE)
+        class SomeClass:
             pass
 
-        _, metadata, namespace = _pending_components[0]
+        assert SomeClass._hexdag_name == "custom_name"
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["name"] == "custom_name"
 
-        assert metadata.component_type == ComponentType.OBSERVER
-        assert namespace == "test"
+    def test_docstring_as_description(self):
+        """Test using docstring as description."""
 
-    def test_component_decorator_generic(self):
-        """Test generic component decorator."""
+        @component(namespace="test", component_type=ComponentType.NODE)
+        class DocumentedComponent:
+            """This is the component description."""
 
-        @component(component_type=ComponentType.MEMORY, namespace="test")
-        class ServiceComponent:
             pass
 
-        _, metadata, _ = _pending_components[0]
-
-        assert metadata.component_type == ComponentType.MEMORY
-        assert metadata.name == "service_component"
-
-    def test_decorator_preserves_class(self):
-        """Test that decorators preserve the original class."""
-
-        @node(namespace="test")
-        class OriginalClass:
-            """Original docstring."""
-
-            value = 42
-
-            def method(self):
-                return "test"
-
-        assert OriginalClass.__doc__ == "Original docstring."
-        assert OriginalClass.value == 42
-        instance = OriginalClass()
-        assert instance.method() == "test"
-
-    def test_decorator_preserves_function(self):
-        """Test that decorators preserve the original function."""
-
-        @tool(namespace="test")
-        def original_function(x: int) -> int:
-            """Original function docstring."""
-            return x * 2
-
-        assert original_function.__doc__ == "Original function docstring."
-        assert original_function(5) == 10
-
-    def test_namespace_required(self):
-        """Test that namespace is required."""
-        with pytest.raises(TypeError):
-
-            @node()  # Missing namespace
-            class InvalidNode:
-                pass
-
-    def test_multiple_components(self):
-        """Test registering multiple components."""
-
-        @node(namespace="test")
-        class Node1:
-            pass
-
-        @tool(namespace="test")
-        def tool1():
-            pass
-
-        @adapter(namespace="other")
-        class Adapter1:
-            pass
-
-        assert len(_pending_components) == 3
-
-        # Check types
-        types = [m.component_type for _, m, _ in _pending_components]
-        assert ComponentType.NODE in types
-        assert ComponentType.TOOL in types
-        assert ComponentType.ADAPTER in types
-
-    def test_register_pending_components(self):
-        """Test registering pending components."""
-
-        # Create some pending components
-        @node(namespace="test")
-        class TestNode:
-            pass
-
-        @tool(namespace="test")
-        def test_tool():
-            pass
-
-        # Mock registry
-        mock_registry = Mock()
-
-        register_pending_components(mock_registry)
-
-        # Should have registered both components
-        assert mock_registry.register.call_count == 2
-
-        # Check first registration (node)
-        call_args = mock_registry.register.call_args_list[0]
-        assert call_args[1]["name"] == "test_node"
-        assert call_args[1]["component"] is TestNode
-        assert call_args[1]["component_type"] == ComponentType.NODE
-        assert call_args[1]["namespace"] == "test"
-
-        # Should clear pending after registration
-        assert len(_pending_components) == 0
-
-    def test_register_pending_with_errors(self):
-        """Test register_pending handles errors gracefully."""
-
-        @node(namespace="test")
-        class TestNode:
-            pass
-
-        mock_registry = Mock()
-        mock_registry.register.side_effect = ValueError("Registration failed")
-
-        with patch("logging.getLogger") as mock_get_logger:
-            mock_logger = Mock()
-            mock_get_logger.return_value = mock_logger
-            register_pending_components(mock_registry)
-
-            # Should log warning but not raise
-            mock_logger.warning.assert_called()
-
-        # Should still clear pending
-        assert len(_pending_components) == 0
-
-    def test_decorator_with_inheritance(self):
-        """Test decorators work with inheritance."""
-
-        @node(namespace="test")
-        class BaseNode:
-            def execute(self):
-                return "base"
-
-        # Subclass should not be registered automatically
-        class DerivedNode(BaseNode):
-            def execute(self):
-                return "derived"
-
-        assert len(_pending_components) == 1
-        component, _, _ = _pending_components[0]
-        assert component is BaseNode
-
-    def test_decorator_on_methods_fails(self):
-        """Test that decorators on methods fail appropriately."""
-
-        class TestClass:
-            @node(namespace="test")  # This won't work as expected
-            def method(self):
-                pass
-
-        # The decorator will register the unbound method
-        # This is allowed but probably not what user wants
-        assert len(_pending_components) == 1
-        component, _, _ = _pending_components[0]
-        # It registers the method function, not the class
-        assert callable(component)
-
-    def test_decorator_stacking(self):
-        """Test that decorators can't be stacked."""
-
-        # This would register twice - not recommended but allowed
-        @node(namespace="test1")
-        @node(namespace="test2")
-        class DoubleNode:
-            pass
-
-        # Both decorations should be in pending
-        assert len(_pending_components) == 2
-        namespaces = [ns for _, _, ns in _pending_components]
-        assert "test1" in namespaces
-        assert "test2" in namespaces
-
-    def test_name_inference(self):
-        """Test that names are correctly inferred."""
-
-        @node(namespace="test")
-        class CamelCaseClass:
-            pass
-
-        @tool(namespace="test")
-        def snake_case_function():
-            pass
-
-        @observer(namespace="test")
-        class _PrivateClass:
-            pass
-
-        names = [m.name for _, m, _ in _pending_components]
-        assert "camel_case_class" in names
-        assert "snake_case_function" in names
-        assert "__private_class" in names  # Double underscore preserved
-
-    def test_replaceable_default(self):
-        """Test default replaceable value."""
-
-        @node(namespace="test")
-        class DefaultNode:
-            pass
-
-        _, metadata, _ = _pending_components[0]
-        assert metadata.replaceable is False  # Default is False
-
-    def test_replaceable_explicit(self):
-        """Test explicit replaceable values."""
-
-        @node(namespace="test", replaceable=False)
-        class NonReplaceableNode:
-            pass
-
-        @tool(namespace="test", replaceable=True)
-        def replaceable_tool():
-            pass
-
-        metadatas = [m for _, m, _ in _pending_components]
-        assert metadatas[0].replaceable is False
-        assert metadatas[1].replaceable is True
-
-
-class TestDecoratorIntegration:
-    """Test decorator integration with registry."""
-
-    @pytest.fixture
-    def mock_registry(self):
-        """Create a mock registry."""
-        mock = MagicMock()
-        mock._protected_namespaces = {"core", "hexai", "system", "internal"}
-        return mock
-
-    def test_protected_namespace_registration(self, mock_registry):
-        """Test that protected namespaces work with decorators."""
-        _pending_components.clear()
-
-        # This should be allowed to pend
-        @node(namespace="core")
-        class CoreNode:
-            pass
-
-        assert len(_pending_components) == 1
-
-        # Mock the register to check namespace
-        def check_namespace(name, component, component_type, namespace, **kwargs):
-            if namespace in mock_registry._protected_namespaces:
-                raise ValueError(f"Namespace '{namespace}' is protected")
-
-        mock_registry.register.side_effect = check_namespace
-
-        # This will log a warning but not raise
-        with patch("logging.getLogger") as mock_get_logger:
-            mock_logger = Mock()
-            mock_get_logger.return_value = mock_logger
-
-            register_pending_components(mock_registry)
-
-            # Should have logged warning about protected namespace
-            mock_logger.warning.assert_called_once()
-            assert "protected" in str(mock_logger.warning.call_args)
-
-    def test_custom_metadata_fields(self):
-        """Test that only standard metadata fields are accepted."""
-        # The decorator only accepts standard fields defined in ComponentMetadata
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["description"] == "This is the component description."
+
+    def test_explicit_description(self):
+        """Test explicit description overrides docstring."""
 
         @component(
-            component_type=ComponentType.POLICY,
-            namespace="test",
-            description="A policy component",
+            namespace="test", component_type=ComponentType.NODE, description="Explicit description"
         )
-        class CustomService:
+        class ComponentWithBoth:
+            """Docstring description."""
+
             pass
 
-        _, metadata, _ = _pending_components[0]
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["description"] == "Explicit description"
 
-        # Standard fields
-        assert metadata.name == "custom_service"
-        assert metadata.component_type == ComponentType.POLICY
-        assert metadata.description == "A policy component"
+    def test_tags_and_dependencies(self):
+        """Test tags and dependencies parameters."""
+
+        @component(
+            namespace="test",
+            component_type=ComponentType.NODE,
+            tags={"tag1", "tag2"},
+            dependencies={"dep1", "dep2"},
+        )
+        class TaggedComponent:
+            pass
+
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["tags"] == {"tag1", "tag2"}
+        assert metadata["dependencies"] == {"dep1", "dep2"}
+
+    def test_all_parameters(self):
+        """Test all decorator parameters."""
+
+        @component(
+            name="full_component",
+            namespace="test_ns",
+            component_type=ComponentType.TOOL,
+            description="Full description",
+            tags={"tag1", "tag2"},
+            author="test_author",
+            dependencies={"dep1"},
+            replaceable=True,
+            version="2.0.0",
+        )
+        class FullyConfigured:
+            pass
+
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["name"] == "full_component"
+        assert metadata["namespace"] == "test_ns"
+        assert metadata["component_type"] == ComponentType.TOOL
+        assert metadata["description"] == "Full description"
+        assert metadata["tags"] == {"tag1", "tag2"}
+        assert metadata["author"] == "test_author"
+        assert metadata["dependencies"] == {"dep1"}
+        assert metadata["replaceable"] is True
+        assert metadata["version"] == "2.0.0"
+
+    def test_type_inference(self):
+        """Test automatic type inference."""
+
+        @component(namespace="test")
+        class SomeNode:
+            pass
+
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.NODE
+
+    def test_type_inference_failure(self):
+        """Test error when type cannot be inferred."""
+        with pytest.raises(ValueError, match="Cannot infer component type"):
+
+            @component(namespace="test")
+            class RandomClass:
+                pass
+
+    def test_default_namespace(self):
+        """Test default namespace is 'core'."""
+
+        @component(component_type=ComponentType.NODE)
+        class CoreComponent:
+            pass
+
+        assert CoreComponent._hexdag_namespace == "core"
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["namespace"] == "core"
 
 
-class TestDecoratorEdgeCases:
-    """Test edge cases and error conditions."""
+class TestTypeSpecificDecorators:
+    """Test type-specific decorator shortcuts."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        """Clear pending components."""
-        _pending_components.clear()
+        """Clear pending components before each test."""
+        ComponentRegistry._pending_components.clear()
+        yield
+        ComponentRegistry._pending_components.clear()
 
-    def test_empty_namespace(self):
-        """Test that empty namespace is allowed but not recommended."""
+    def test_node_decorator(self):
+        """Test @node decorator."""
 
-        # Empty namespace is technically allowed
-        @node(namespace="")
-        class EmptyNamespaceNode:
+        @node(namespace="test")
+        class TestNode:
+            """Node description."""
+
             pass
 
-        assert len(_pending_components) == 1
-        _, metadata, namespace = _pending_components[0]
-        assert namespace == ""
-        assert metadata.name == "empty_namespace_node"
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.NODE
+        assert metadata["name"] == "test_node"
+        assert metadata["namespace"] == "test"
 
-    def test_none_namespace(self):
-        """Test that None namespace is treated as None."""
+    def test_tool_decorator(self):
+        """Test @tool decorator."""
 
-        # None namespace is allowed (though not recommended)
-        @node(namespace=None)  # type: ignore
-        class NoneNamespaceNode:
+        @tool(namespace="test", author="tool_author")
+        class DataFetcher:
             pass
 
-        assert len(_pending_components) == 1
-        _, metadata, namespace = _pending_components[0]
-        assert namespace is None
-        assert metadata.name == "none_namespace_node"
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.TOOL
+        assert metadata["name"] == "data_fetcher"
+        assert metadata["author"] == "tool_author"
 
-    def test_lambda_function(self):
-        """Test decorator on lambda (should work but not recommended)."""
-        # This is syntactically invalid in Python
-        # lambda_tool = tool(namespace='test')(lambda x: x * 2)
+    def test_adapter_decorator(self):
+        """Test @adapter decorator."""
 
-        # But we can test programmatically
-        def lambda_func(x):
-            return x * 2
-
-        tool(namespace="test")(lambda_func)
-
-        assert len(_pending_components) == 1
-        component, metadata, _ = _pending_components[0]
-        assert metadata.name == "lambda_func"
-
-    def test_partial_function(self):
-        """Test decorator on partial function."""
-        from functools import partial
-
-        def base_func(x, y):
-            return x + y
-
-        partial_func = partial(base_func, 10)
-
-        @tool(namespace="test", name="partial_tool")
-        def wrapped_partial(x):
-            return partial_func(x)
-
-        assert len(_pending_components) == 1
-        _, metadata, _ = _pending_components[0]
-        assert metadata.name == "partial_tool"
-
-    def test_very_long_name(self):
-        """Test component with very long name."""
-        long_name = "A" * 1000
-
-        @node(namespace="test", name=long_name)
-        class LongNamedClass:
+        @adapter(namespace="test", version="1.5.0")
+        class PostgresAdapter:
             pass
 
-        _, metadata, _ = _pending_components[0]
-        assert metadata.name == long_name
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.ADAPTER
+        assert metadata["name"] == "postgres_adapter"
+        assert metadata["version"] == "1.5.0"
 
-    def test_special_characters_in_name(self):
-        """Test special characters in component name."""
+    def test_policy_decorator(self):
+        """Test @policy decorator."""
 
-        @node(namespace="test", name="test-node-123_v2.0")
-        class SpecialNode:
+        @policy(namespace="test", replaceable=True)
+        class RetryPolicy:
             pass
 
-        _, metadata, _ = _pending_components[0]
-        assert metadata.name == "test-node-123_v2.0"
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.POLICY
+        assert metadata["name"] == "retry_policy"
+        assert metadata["replaceable"] is True
 
-    def test_unicode_in_metadata(self):
-        """Test unicode in metadata fields."""
+    def test_memory_decorator(self):
+        """Test @memory decorator."""
 
-        @tool(namespace="test", description="🚀 Unicode tool", tags={"émoji", "中文", "العربية"})
-        def unicode_tool():
+        @memory(namespace="test", tags={"persistent"})
+        class ConversationMemory:
             pass
 
-        _, metadata, _ = _pending_components[0]
-        assert "🚀" in metadata.description
-        assert "émoji" in metadata.tags
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.MEMORY
+        assert metadata["name"] == "conversation_memory"
+        assert "persistent" in metadata["tags"]
+
+    def test_observer_decorator(self):
+        """Test @observer decorator."""
+
+        @observer(namespace="test", dependencies={"logger"})
+        class MetricsObserver:
+            pass
+
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["component_type"] == ComponentType.OBSERVER
+        assert metadata["name"] == "metrics_observer"
+        assert "logger" in metadata["dependencies"]
+
+    def test_decorator_default_namespace(self):
+        """Test that type decorators default to 'core' namespace."""
+
+        @node()
+        class CoreNode:
+            pass
+
+        _, metadata = ComponentRegistry._pending_components[0]
+        assert metadata["namespace"] == "core"
+
+
+class TestGetComponentMetadata:
+    """Test the get_component_metadata function."""
+
+    def test_get_metadata_from_decorated(self):
+        """Test getting metadata from decorated component."""
+
+        @node(namespace="test")
+        class DecoratedNode:
+            pass
+
+        metadata = get_component_metadata(DecoratedNode)
+        assert metadata is not None
+        assert metadata["name"] == "decorated_node"
+        assert metadata["namespace"] == "test"
+
+    def test_get_metadata_from_undecorated(self):
+        """Test getting metadata from undecorated class."""
+
+        class PlainClass:
+            pass
+
+        metadata = get_component_metadata(PlainClass)
+        assert metadata is None
+
+    def test_get_metadata_from_instance(self):
+        """Test getting metadata from instance of decorated class."""
+
+        @tool(namespace="test")
+        class SomeTool:
+            pass
+
+        instance = SomeTool()
+        metadata = get_component_metadata(instance)
+        assert metadata is not None
+        assert metadata["name"] == "some_tool"
+        assert metadata["namespace"] == "test"
