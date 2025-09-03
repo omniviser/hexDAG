@@ -7,15 +7,21 @@ supporting plugins while maintaining control over component registration.
 from __future__ import annotations
 
 import logging
+import threading
 from collections import defaultdict
-from threading import RLock
 from typing import Any, Callable
 
+from hexai.core.registry.decorators import get_component_metadata
 from hexai.core.registry.discovery import discover_entry_points
 from hexai.core.registry.metadata import ComponentMetadata
 from hexai.core.registry.types import ComponentType
 
 logger = logging.getLogger(__name__)
+
+# Module-level lock for thread-safe singleton initialization
+# This avoids the race condition where class-level _lock could be accessed
+# before the class is fully initialized in multi-threaded environments
+_singleton_lock = threading.RLock()
 
 
 class ComponentRegistry:
@@ -66,36 +72,53 @@ class ComponentRegistry:
     """
 
     _instance: ComponentRegistry | None = None
-    _lock = RLock()
 
     def __new__(cls) -> ComponentRegistry:
-        """Ensure only one instance exists (singleton pattern)."""
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
+        """Ensure only one instance exists (singleton pattern).
+
+        Uses a module-level lock instead of class-level to avoid race conditions
+        where the class variable _lock could be accessed before initialization.
+        This is a more robust pattern for thread-safe singletons.
+        """
+        # Fast path: if instance exists, return it (no lock needed)
+        if cls._instance is not None:
+            return cls._instance
+
+        # Slow path: acquire lock and create instance if needed
+        with _singleton_lock:
+            # Double-check after acquiring lock
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self) -> None:
-        """Initialize the registry (only runs once due to singleton)."""
-        if not hasattr(self, "_initialized"):
+        """Initialize the registry (only runs once due to singleton).
+
+        Thread-safe initialization using the module-level lock.
+        """
+        # Use module lock for thread-safe initialization check
+        with _singleton_lock:
+            if hasattr(self, "_initialized"):
+                return
+
+            # Create instance-level lock for normal operations
+            self._lock = threading.RLock()
+
             # Component storage: {component_type: {namespace: {name: (metadata, component)}}}
             self._components: dict[str, dict[str, dict[str, tuple[ComponentMetadata, Any]]]] = (
                 defaultdict(lambda: defaultdict(dict))
             )
 
-            # Protected system namespaces (cannot be used by external code)
-            self._protected_namespaces: frozenset[str] = frozenset(
-                {
-                    "core",  # Core hexDAG components
-                    "system",  # System-level components
-                    "internal",  # Internal implementation details
-                    "hexai",  # First-party hexai extensions
-                }
-            )
+            # Protected system namespaces with allowed packages (like Django apps)
+            self._protected_namespaces: dict[str, set[str]] = {
+                "core": {"hexai.core"},  # Core hexDAG components
+                "system": {"hexai.core", "hexai.system"},  # System-level components
+                "internal": {"hexai.core", "hexai.internal"},  # Internal implementation details
+                "hexai": {"hexai"},  # First-party hexai extensions
+            }
 
-            # Registered namespaces (including protected ones)
-            self._namespaces: set[str] = set(self._protected_namespaces)
+            # Registered namespaces
+            self._namespaces: set[str] = set(self._protected_namespaces.keys())
 
             # Registration hooks for plugins
             self._pre_register_hooks: list[Callable] = []
@@ -115,15 +138,15 @@ class ComponentRegistry:
             self._available_plugins: dict[str, Any] = {}  # namespace -> entry_point
             self._loaded_plugins: set[str] = set()  # Track which plugins are loaded
 
+            # Mark as initialized BEFORE loading components to prevent recursion
             self._initialized = True
 
-            # Load core framework components (these are always available)
-            self._load_core_components()
+        # Load components outside the singleton lock to avoid deadlocks
+        # These operations use the instance-level _lock internally
+        self._load_core_components()
+        self._register_pending_components()
 
-            # Register any pending decorated components
-            self._register_pending_components()
-
-            logger.info("Component registry initialized")
+        logger.info("Component registry initialized")
 
     def register(
         self,
@@ -175,19 +198,13 @@ class ComponentRegistry:
         ...                  namespace='my_plugin')
         """
         with self._lock:
-            # Validate namespace
+            # Validate namespace protection (similar to Django's app registry)
             if namespace in self._protected_namespaces:
-                # Check if this is being called from hexai internal code
-                import inspect
-
-                frame = inspect.currentframe()
-                caller_module = (
-                    frame.f_back.f_globals.get("__name__", "") if frame and frame.f_back else ""
-                )
-
-                if not caller_module.startswith("hexai.core."):
+                allowed_packages = self._protected_namespaces[namespace]
+                if not self._is_caller_allowed(allowed_packages):
                     raise ValueError(
                         f"Namespace '{namespace}' is protected and reserved for system use. "
+                        f"Allowed packages: {', '.join(allowed_packages)}. "
                         f"Please use your own namespace (e.g., your plugin name)."
                     )
 
@@ -257,8 +274,6 @@ class ComponentRegistry:
             # Create metadata if needed (or use decorated metadata)
             if metadata is None:
                 # Check if component has decorated metadata
-                from hexai.core.registry.decorators import get_component_metadata
-
                 decorated_metadata = get_component_metadata(component)
 
                 if decorated_metadata:
@@ -266,7 +281,6 @@ class ComponentRegistry:
                     metadata = ComponentMetadata(
                         name=name,
                         component_type=component_type,
-                        version=decorated_metadata.version,
                         description=decorated_metadata.description,
                         tags=decorated_metadata.tags,
                         author=decorated_metadata.author,
@@ -834,6 +848,51 @@ class ComponentRegistry:
 
             self._plugins_loaded = True
             return loaded
+
+    def _is_caller_allowed(self, allowed_packages: set[str]) -> bool:
+        """Check if the calling code is from an allowed package.
+
+        Similar to Django's app loading and FastAPI's dependency injection,
+        this uses frame inspection to verify the caller's module.
+
+        Parameters
+        ----------
+        allowed_packages : set[str]
+            Set of package prefixes that are allowed to use the namespace.
+
+        Returns
+        -------
+        bool
+            True if caller is from an allowed package, False otherwise.
+        """
+        import sys
+
+        # Get the call stack, skipping internal frames
+        frame = sys._getframe(2)  # Skip this method and the calling method
+
+        while frame is not None:
+            module_name = frame.f_globals.get("__name__", "")
+
+            # Skip test modules (similar to Django's test runner)
+            if "test" in module_name or "pytest" in module_name:
+                next_frame = frame.f_back
+                if next_frame is None:
+                    break
+                frame = next_frame
+                continue
+
+            # Check if module is from an allowed package
+            for allowed in allowed_packages:
+                if module_name.startswith(allowed):
+                    return True
+
+            # Move up the stack to check parent callers
+            next_frame = frame.f_back
+            if next_frame is None:
+                break
+            frame = next_frame
+
+        return False
 
     def _clear_for_testing(self, namespace: str | None = None) -> None:
         """[TESTING ONLY] Clear components from registry.

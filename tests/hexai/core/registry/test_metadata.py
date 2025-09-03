@@ -15,7 +15,6 @@ class TestComponentMetadata:
 
         assert metadata.name == "test_component"
         assert metadata.component_type == ComponentType.NODE
-        assert metadata.version is None  # Default
         assert metadata.description is None
         assert metadata.tags == frozenset()
         assert metadata.dependencies == frozenset()
@@ -26,7 +25,6 @@ class TestComponentMetadata:
         metadata = ComponentMetadata(
             name="full_component",
             component_type=ComponentType.TOOL,
-            version="2.1.0",
             description="A fully configured component",
             tags={"tag1", "tag2", "tag3"},
             dependencies={"dep1", "dep2"},
@@ -35,7 +33,6 @@ class TestComponentMetadata:
 
         assert metadata.name == "full_component"
         assert metadata.component_type == ComponentType.TOOL
-        assert metadata.version == "2.1.0"
         assert metadata.description == "A fully configured component"
         assert metadata.tags == {"tag1", "tag2", "tag3"}
         assert metadata.dependencies == {"dep1", "dep2"}
@@ -58,17 +55,11 @@ class TestComponentMetadata:
 
     def test_metadata_equality(self):
         """Test metadata equality comparison."""
-        metadata1 = ComponentMetadata(
-            name="component", component_type=ComponentType.NODE, version="1.0.0"
-        )
+        metadata1 = ComponentMetadata(name="component", component_type=ComponentType.NODE)
 
-        metadata2 = ComponentMetadata(
-            name="component", component_type=ComponentType.NODE, version="1.0.0"
-        )
+        metadata2 = ComponentMetadata(name="component", component_type=ComponentType.NODE)
 
-        metadata3 = ComponentMetadata(
-            name="different", component_type=ComponentType.NODE, version="1.0.0"
-        )
+        metadata3 = ComponentMetadata(name="different", component_type=ComponentType.NODE)
 
         # Same content should be equal
         assert metadata1 == metadata2
@@ -91,9 +82,7 @@ class TestComponentMetadata:
 
     def test_metadata_string_representation(self):
         """Test string representation of metadata."""
-        metadata = ComponentMetadata(
-            name="test_component", component_type=ComponentType.NODE, version="1.2.3"
-        )
+        metadata = ComponentMetadata(name="test_component", component_type=ComponentType.NODE)
 
         str_repr = str(metadata)
 
@@ -112,23 +101,17 @@ class TestComponentMetadata:
         metadata = ComponentMetadata(name="test", component_type="node")
         assert metadata.component_type == "node"
 
-    def test_version_format(self):
-        """Test version string handling."""
-        # Standard semver
-        metadata1 = ComponentMetadata(
-            name="test", component_type=ComponentType.NODE, version="1.2.3"
-        )
-        assert metadata1.version == "1.2.3"
+    def test_author_field(self):
+        """Test author field handling."""
+        # Default author
+        metadata1 = ComponentMetadata(name="test", component_type=ComponentType.NODE)
+        assert metadata1.author == "hexdag"
 
-        # Non-standard but allowed
+        # Custom author
         metadata2 = ComponentMetadata(
-            name="test", component_type=ComponentType.NODE, version="v2.0"
+            name="test", component_type=ComponentType.NODE, author="custom-author"
         )
-        assert metadata2.version == "v2.0"
-
-        # Empty version uses default
-        metadata3 = ComponentMetadata(name="test", component_type=ComponentType.NODE, version="")
-        assert metadata3.version == "" or metadata3.version == "1.0.0"  # Depends on implementation
+        assert metadata2.author == "custom-author"
 
     def test_tags_type_conversion(self):
         """Test that tags are converted to set."""
@@ -183,29 +166,21 @@ class TestComponentMetadata:
             name="original", component_type=ComponentType.NODE, tags={"tag1"}, dependencies={"dep1"}
         )
 
-        # If copy method exists
-        if hasattr(original, "copy"):
-            copy = original.copy()
+        # Using Pydantic's model_copy
+        copy = original.model_copy()
 
-            # Should be equal but not same object
-            assert copy == original
-            assert copy is not original
-
-            # Modifying copy shouldn't affect original
-            # frozenset is immutable, so we can't add to it
-            # This test is not applicable for frozenset
-            pass
+        # Should be equal but not same object
+        assert copy == original
+        assert copy is not original
 
     def test_metadata_update(self):
         """Test updating metadata fields."""
-        metadata = ComponentMetadata(
-            name="test", component_type=ComponentType.NODE, version="1.0.0"
-        )
+        metadata = ComponentMetadata(name="test", component_type=ComponentType.NODE)
 
         # If metadata is immutable, this should fail
         # If mutable, it should work
         try:
-            metadata.version = "2.0.0"
+            metadata.name = "new_name"
             assert False, "Should not be able to modify frozen model"
         except (AttributeError, TypeError, Exception):
             # Immutable implementation - this is expected
@@ -227,7 +202,6 @@ class TestComponentMetadata:
         metadata = ComponentMetadata(
             name="test",
             component_type=ComponentType.TOOL,
-            version="1.5.0",
             description="Test tool",
             tags={"tag1", "tag2"},
             dependencies={"dep1"},
@@ -240,7 +214,6 @@ class TestComponentMetadata:
 
             assert data["name"] == "test"
             assert data["component_type"] == ComponentType.TOOL.value
-            assert data["version"] == "1.5.0"
             assert data["description"] == "Test tool"
             assert set(data["tags"]) == {"tag1", "tag2"}
             assert set(data["dependencies"]) == {"dep1"}
@@ -251,24 +224,21 @@ class TestComponentMetadata:
         data = {
             "name": "test",
             "component_type": ComponentType.NODE,
-            "version": "2.0.0",
             "description": "Test agent",
             "tags": ["tag1"],
             "dependencies": ["dep1"],
             "replaceable": True,
         }
 
-        # If from_dict method exists
-        if hasattr(ComponentMetadata, "from_dict"):
-            metadata = ComponentMetadata.from_dict(data)
+        # Using Pydantic's model_validate or direct constructor
+        metadata = ComponentMetadata(**data)
 
-            assert metadata.name == "test"
-            assert metadata.component_type == ComponentType.NODE
-            assert metadata.version == "2.0.0"
-            assert metadata.description == "Test agent"
-            assert metadata.tags == {"tag1"}
-            assert metadata.dependencies == {"dep1"}
-            assert metadata.replaceable is True
+        assert metadata.name == "test"
+        assert metadata.component_type == ComponentType.NODE
+        assert metadata.description == "Test agent"
+        assert metadata.tags == {"tag1"}
+        assert metadata.dependencies == {"dep1"}
+        assert metadata.replaceable is True
 
 
 class TestMetadataEdgeCases:

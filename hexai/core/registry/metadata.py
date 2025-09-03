@@ -20,8 +20,6 @@ class ComponentMetadata(BaseModel):
         Unique identifier for the component within the registry.
     component_type : ComponentTypeEnum
         Type or category of the component (node, adapter, tool, etc.).
-    version : str | None
-        Version string of the component implementation.
     description : str | None
         Human-readable description of the component's purpose.
     tags : frozenset[str]
@@ -42,7 +40,6 @@ class ComponentMetadata(BaseModel):
 
     name: str
     component_type: ComponentType | str
-    version: str | None = None
     description: str | None = None
     tags: frozenset[str] = Field(default_factory=frozenset)
     author: str = Field(default="hexdag")

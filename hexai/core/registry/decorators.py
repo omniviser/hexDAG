@@ -23,7 +23,6 @@ def component(
     name: str | None = None,
     *,
     component_type: ComponentType | str | None = None,
-    version: str | None = None,
     description: str | None = None,
     tags: set[str] | frozenset[str] | None = None,
     author: str = "hexdag",
@@ -42,7 +41,6 @@ def component(
         Component name. If None, uses class name in snake_case.
     component_type : ComponentTypeEnum | None
         Component type. If None, inferred from class name or base class.
-    version : str | None
         Component version.
     description : str | None
         Component description. If None, uses class docstring.
@@ -113,7 +111,6 @@ def component(
         metadata = ComponentMetadata(
             name=component_name,
             component_type=inferred_type,
-            version=version,
             description=component_description,
             tags=frozenset(tags) if tags else frozenset(),
             author=author,

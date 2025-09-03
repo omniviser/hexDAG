@@ -15,8 +15,6 @@ from hexai.core.registry.metadata import ComponentMetadata
 from hexai.core.registry.registry import ComponentRegistry, registry
 from hexai.core.registry.types import ComponentType
 
-# Note: autodiscover and scaffold modules can be added when implemented
-
 __all__ = [
     # Singleton registry (primary interface)
     "registry",

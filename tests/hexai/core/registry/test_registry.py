@@ -263,7 +263,6 @@ class TestFiltering:
                 name="llm_node",
                 component_type=ComponentType.NODE,
                 tags={"llm", "ai"},
-                version="2.0.0",
             ),
         )
         reg.register(
@@ -275,7 +274,6 @@ class TestFiltering:
                 name="ml_tool",
                 component_type=ComponentType.TOOL,
                 tags={"ml", "ai"},
-                version="1.5.0",
             ),
         )
 
@@ -288,11 +286,10 @@ class TestFiltering:
         assert "test:llm_node" in results
         assert "test:ml_tool" in results
 
-    def test_find_by_version(self, registry):
-        """Test finding by version prefix."""
-        results = registry.find(version__startswith="2.")
-        assert len(results) == 1
-        assert "test:llm_node" in results
+    def test_find_by_author(self, registry):
+        """Test finding by author."""
+        results = registry.find(author="hexdag")
+        assert len(results) >= 2  # Should find our test components
 
 
 class TestHooks:

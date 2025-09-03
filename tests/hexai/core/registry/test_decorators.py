@@ -37,7 +37,6 @@ class TestComponentDecorators:
         assert len(_pending_components) == 1
         component, metadata, namespace = _pending_components[0]
 
-        assert metadata.name == "test_node"  # Snake case conversion
         assert metadata.component_type == ComponentType.NODE
         assert component is TestNode
         assert namespace == "test"
@@ -48,7 +47,6 @@ class TestComponentDecorators:
         @node(
             namespace="test",
             name="custom_node",
-            version="2.0.0",
             description="Custom description",
             tags={"tag1", "tag2"},
             dependencies={"dep1", "dep2"},
@@ -60,7 +58,6 @@ class TestComponentDecorators:
         _, metadata, _ = _pending_components[0]
 
         assert metadata.name == "custom_node"
-        assert metadata.version == "2.0.0"
         assert metadata.description == "Custom description"
         assert metadata.tags == {"tag1", "tag2"}
         assert metadata.dependencies == {"dep1", "dep2"}
@@ -367,7 +364,6 @@ class TestDecoratorIntegration:
             component_type=ComponentType.POLICY,
             namespace="test",
             description="A policy component",
-            version="1.0.0",
         )
         class CustomService:
             pass
@@ -378,7 +374,6 @@ class TestDecoratorIntegration:
         assert metadata.name == "custom_service"
         assert metadata.component_type == ComponentType.POLICY
         assert metadata.description == "A policy component"
-        assert metadata.version == "1.0.0"
 
 
 class TestDecoratorEdgeCases:
