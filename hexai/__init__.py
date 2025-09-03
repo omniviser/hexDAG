@@ -4,8 +4,6 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
-# Test change to trigger pre-commit hooks
-
 # Adapter exports for testing and development
 from hexai.adapters import InMemoryMemory
 from hexai.adapters.mock import MockDatabaseAdapter, MockEmbeddingSelectorPort, MockLLM
@@ -39,7 +37,17 @@ from hexai.core.domain import DirectedGraph, NodeSpec
 # Port interfaces xd
 from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
 
+# Initialize the component registry early so it's available for all imports
+# This ensures core components are loaded and plugins are discovered
+from hexai.core.registry import ComponentType, registry
+
+# Test change to trigger pre-commit hooks
+
+
 __all__ = [
+    # Registry System
+    "registry",
+    "ComponentType",
     # Core Framework - DAG Building and Execution
     "Orchestrator",
     "DirectedGraph",
