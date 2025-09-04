@@ -10,11 +10,12 @@ import logging
 from typing import Any
 
 from hexai.core.registry import node
+from hexai.core.registry.types import NodeSubtype
 
 logger = logging.getLogger(__name__)
 
 
-@node(namespace="core", replaceable=False)
+@node(subtype=NodeSubtype.PASSTHROUGH)
 class PassThroughNode:
     """Passes data through without modification.
 
@@ -26,7 +27,7 @@ class PassThroughNode:
         return data
 
 
-@node(namespace="core", replaceable=False)
+@node(subtype=NodeSubtype.FUNCTION)
 class LoggingNode:
     """Logs data passing through the node.
 

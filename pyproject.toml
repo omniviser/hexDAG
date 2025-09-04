@@ -26,7 +26,6 @@ dependencies = [
     "pydantic~=2.0",
     "graphviz>=0.20.0,<0.21",
     "pyyaml~=6.0",
-    "pluggy>=1.6.0",
 ]
 
 [project.urls]
@@ -64,6 +63,7 @@ dev = [
     "mkdocs-mermaid2-plugin==1.2.1",
     "types-pyyaml==6.0.12",
 ]
+
 
 [tool.hatch.build.targets.sdist]
 include = ["hexai"]

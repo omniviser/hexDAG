@@ -1,4 +1,4 @@
-"""Simplified component registry using pluggy and decorators.
+"""Simplified component registry for hexDAG.
 
 This module provides a centralized registry for all hexDAG components,
 supporting plugins while maintaining control over component registration.
@@ -6,110 +6,61 @@ supporting plugins while maintaining control over component registration.
 
 from __future__ import annotations
 
+import inspect
 import logging
+import threading
 import warnings
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any
 
-import pluggy
-
-from hexai.core.registry.metadata import ComponentMetadata
-from hexai.core.registry.types import ComponentType
+from hexai.core.registry.metadata import ComponentMetadata, InstanceFactory
+from hexai.core.registry.plugin_loader import PluginLoader
+from hexai.core.registry.types import ComponentType, Namespace, NodeSubtype
 
 logger = logging.getLogger(__name__)
 
-# Plugin system markers
-hookspec = pluggy.HookspecMarker("hexdag")
-hookimpl = pluggy.HookimplMarker("hexdag")
-
-
-class PluginSpec:
-    """Plugin hook specifications for hexDAG."""
-
-    @hookspec  # type: ignore[misc]
-    def hexdag_initialize(self) -> None:
-        """Initialize plugin by importing modules with decorated components."""
-        pass
-
-    @hookspec  # type: ignore[misc]
-    def hexdag_configure(self, config: dict) -> None:
-        """Configure plugin with settings."""
-        pass
+# Constants
+NAMESPACE_SEPARATOR = ":"
+ERROR_COMPONENT_NONE = "Component cannot be None"
+ERROR_CORE_PROTECTED = (
+    "Cannot register '{name}' in protected 'core' namespace. "
+    "Use a different namespace for plugin components."
+)
+ERROR_ALREADY_REGISTERED = "Component '{name}' already registered. Use replace=True to override."
+ERROR_NOT_FOUND = "Component '{name}' not found"
 
 
 class ComponentRegistry:
-    """Simplified registry with decorator-based registration for all components.
+    """Simplified registry with decorator-based registration.
 
-    This registry uses a unified decorator approach for both core and plugin
-    components, with automatic protection for core components.
-
-    Examples
-    --------
-    >>> from hexai.core.registry import registry
-    >>>
-    >>> # Get a core component
-    >>> node = registry.get('passthrough')
-    >>>
-    >>> # Get a plugin component
-    >>> analyzer = registry.get('sentiment_analyzer', namespace='nlp_plugin')
-    >>>
-    >>> # List all components
-    >>> components = registry.list_components()
+    Combines storage, validation, and permission checking in one place
+    for simplicity and clarity.
     """
 
-    _instance: Optional[ComponentRegistry] = None
-    _pending_components: List[Tuple[Type, Dict[str, Any]]] = []
-
-    def __new__(cls) -> ComponentRegistry:
-        """Ensure only one instance exists (singleton pattern)."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self) -> None:
-        """Initialize the registry with pluggy support."""
-        if hasattr(self, "_initialized"):
-            return
+        """Initialize the registry."""
+        # Simple storage: namespace -> name -> metadata
+        self._components: dict[Namespace | str, dict[str, ComponentMetadata]] = {}
 
-        # Component storage: namespace -> name -> metadata
-        self._components: Dict[str, Dict[str, ComponentMetadata]] = {}
+        # Track protected components (core components that shouldn't be overridden)
+        self._protected_components: set[str] = set()
 
-        # Track protected core components
-        self._protected_components: Set[str] = set()
+        # Plugin loader (kept separate as it's a distinct concern)
+        self._plugin_loader = PluginLoader(self)
 
-        # Component instances cache (lazy instantiation)
-        self._instances: Dict[str, Any] = {}
+        # Thread lock for all operations
+        self._lock = threading.RLock()
 
-        # Plugin manager
-        self.pm = pluggy.PluginManager("hexdag")
-        self.pm.add_hookspecs(PluginSpec)
-
-        # Load core components first
-        self._load_core_components()
-
-        # Process pending core components
-        self._process_pending_components()
-
-        # Discover and load plugins
-        self._load_plugins()
-
-        # Process any pending plugin components
-        self._process_pending_components()
-
-        self._initialized = True
-        logger.info("Component registry initialized")
-
-    @classmethod
-    def add_pending(cls, component_cls: Type, metadata: Dict[str, Any]) -> None:
-        """Add a component to the pending registration queue."""
-        cls._pending_components.append((component_cls, metadata))
+        # Ready state
+        self._ready = False
 
     def register(
         self,
         name: str,
         component: Any,
         component_type: ComponentType | str,
-        namespace: str = "user",
+        namespace: str | Namespace = Namespace.USER,
         replace: bool = False,
+        privileged: bool = False,
         **kwargs: Any,
     ) -> None:
         """Register a component in the registry.
@@ -119,92 +70,64 @@ class ComponentRegistry:
         name : str
             Component name.
         component : Any
-            Component instance or class.
+            Component (class, function, or instance).
         component_type : ComponentType | str
             Type of component.
-        namespace : str
+        namespace : str | Namespace
             Component namespace (default: 'user').
         replace : bool
             Allow replacement of existing component.
+        privileged : bool
+            Whether the registration has elevated privileges (for core components).
         **kwargs : Any
-            Additional metadata.
-
-        Raises
-        ------
-        ValueError
-            If component exists and replace=False.
+            Additional metadata (subtype, description, etc.).
         """
-        full_name = f"{namespace}:{name}"
+        with self._lock:
+            # Validate inputs
+            self._validate_registration(
+                name, component, component_type, namespace, privileged, replace
+            )
 
-        # Check for existing component
-        existing = self._find_component(name)
+            # Convert types to enums
+            ns_result = self._to_namespace(namespace)
+            if ns_result is not None:
+                namespace = ns_result
+            if isinstance(component_type, str):
+                component_type = ComponentType(component_type)
 
-        if existing:
-            if existing.is_core and namespace != "core":
-                # Plugin trying to override core component
-                warnings.warn(
-                    f"⚠️  Component '{name}' shadows CORE component!\n"
-                    f"    Core version remains at 'core:{name}'\n"
-                    f"    Plugin version will be at '{full_name}'\n"
-                    f"    Use registry.get('{name}', namespace='{namespace}') for plugin version",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                logger.warning(
-                    f"Plugin component '{full_name}' shadows core component 'core:{name}'"
-                )
-            elif existing.namespace == namespace:
-                if not existing.replaceable and not replace:
-                    raise ValueError(
-                        f"Component '{full_name}' already registered and not replaceable"
-                    )
-                logger.info(f"Replacing component '{full_name}'")
-            elif existing.namespace != namespace:
-                logger.debug(
-                    f"Component '{name}' exists in '{existing.namespace}', "
-                    f"registering in '{namespace}'"
-                )
+            # Check for existing component
+            qualified_name = f"{namespace}{NAMESPACE_SEPARATOR}{name}"
+            existing = self._find_component(name)
 
-        # Create namespace if needed
-        if namespace not in self._components:
-            self._components[namespace] = {}
+            if existing:
+                self._handle_existing_component(existing, name, namespace, qualified_name, replace)
 
-        # Create metadata
-        metadata = ComponentMetadata(
-            name=name,
-            component_type=component_type,
-            namespace=namespace,
-            is_core=(namespace == "core"),
-            replaceable=kwargs.pop("replaceable", False),
-            version=kwargs.pop("version", "1.0.0"),
-            author=kwargs.pop("author", namespace),
-            description=kwargs.pop("description", ""),
-            tags=frozenset(kwargs.pop("tags", set())),
-            dependencies=frozenset(kwargs.pop("dependencies", set())),
-        )
+            # Create metadata
+            metadata = ComponentMetadata(
+                name=name,
+                component_type=component_type,
+                component=component,
+                namespace=namespace,
+                subtype=kwargs.get("subtype"),
+                description=kwargs.get("description", ""),
+            )
 
-        # Store component
-        self._components[namespace][name] = metadata
+            # Store component
+            if namespace not in self._components:
+                self._components[namespace] = {}
+            self._components[namespace][name] = metadata
 
-        # Store instance if provided
-        instance_key = f"{namespace}:{name}"
-        if not isinstance(component, type):
-            self._instances[instance_key] = component
-        else:
-            # Store class for lazy instantiation
-            metadata.component_class = component
+            # Mark core components as protected
+            if namespace == Namespace.CORE:
+                self._protected_components.add(name)
 
-        # Track core components
-        if namespace == "core":
-            self._protected_components.add(name)
-
-        logger.debug(f"Registered {component_type} '{full_name}'")
+            logger.debug(f"Registered {component_type} '{qualified_name}'")
 
     def get(
         self,
         name: str,
-        component_type: ComponentType | str | None = None,
-        namespace: str | None = None,
+        namespace: str | Namespace | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Get a component by name.
 
@@ -212,10 +135,10 @@ class ComponentRegistry:
         ----------
         name : str
             Component name. Can include namespace as 'namespace:name'.
-        component_type : ComponentType | str | None
-            Component type for validation (optional).
         namespace : str | None
             Namespace to search in. If None, searches core first.
+        **kwargs : Any
+            Arguments to pass to component instantiation.
 
         Returns
         -------
@@ -228,35 +151,44 @@ class ComponentRegistry:
             If component not found.
         """
         # Parse namespace from name if provided
-        if ":" in name and namespace is None:
-            namespace, name = name.split(":", 1)
+        if NAMESPACE_SEPARATOR in name and namespace is None:
+            namespace, name = name.split(NAMESPACE_SEPARATOR, 1)
+
+        # Convert to namespace enum
+        namespace = self._to_namespace(namespace) if namespace else None
 
         # Direct lookup if namespace specified
         if namespace:
-            if namespace in self._components and name in self._components[namespace]:
-                return self._get_instance(namespace, name)
-            raise KeyError(f"Component '{namespace}:{name}' not found")
+            metadata = self._components.get(namespace, {}).get(name)
+            if metadata:
+                # Resolve lazy component if needed
+                component = (
+                    metadata.resolve_lazy_component() if metadata.is_lazy else metadata.component
+                )
+                return InstanceFactory.create_instance(component, **kwargs)
+            raise KeyError(f"{ERROR_NOT_FOUND.format(name=f'{namespace}:{name}')}")
 
-        # Search order: core -> other namespaces
-        # Core always wins for unqualified names
-        if "core" in self._components and name in self._components["core"]:
-            return self._get_instance("core", name)
-
-        # Search other namespaces
-        for ns in self._components:
-            if ns != "core" and name in self._components[ns]:
-                if name in self._protected_components:
+        # Search namespaces, prioritizing core
+        for ns in [Namespace.CORE] + [ns for ns in self._components if ns != Namespace.CORE]:
+            metadata = self._components.get(ns, {}).get(name)
+            if metadata:
+                if ns != Namespace.CORE and name in self._protected_components:
                     logger.debug(
                         f"Using '{ns}:{name}' (shadows core component). "
                         f"Use registry.get('{name}', namespace='core') for core version"
                     )
-                return self._get_instance(ns, name)
+                # Resolve lazy component if needed
+                component = (
+                    metadata.resolve_lazy_component() if metadata.is_lazy else metadata.component
+                )
+                return InstanceFactory.create_instance(component, **kwargs)
 
-        available = self._list_available_components()
-        raise KeyError(f"Component '{name}' not found. Available components: {available}")
+        # Component not found
+        available = [f"{ns}:{n}" for ns, comps in self._components.items() for n in comps]
+        raise KeyError(f"{ERROR_NOT_FOUND.format(name=name)}. Available: {available}")
 
     def get_metadata(
-        self, name: str, component_type: ComponentType | str | None = None, namespace: str = "core"
+        self, name: str, namespace: str | Namespace = Namespace.CORE
     ) -> ComponentMetadata:
         """Get metadata for a component.
 
@@ -264,32 +196,34 @@ class ComponentRegistry:
         ----------
         name : str
             Component name.
-        component_type : ComponentType | str | None
-            Component type (optional).
-        namespace : str
+        namespace : str | Namespace
             Namespace (default: 'core').
 
         Returns
         -------
         ComponentMetadata
             Component metadata.
+
+        Raises
+        ------
+        KeyError
+            If component not found.
         """
-        # Parse namespace from name
-        if ":" in name:
-            namespace, name = name.split(":", 1)
-
-        if namespace in self._components and name in self._components[namespace]:
-            return self._components[namespace][name]
-
+        ns_result = self._to_namespace(namespace)
+        if ns_result is not None:
+            namespace = ns_result
+        metadata = self._components.get(namespace, {}).get(name)
+        if metadata:
+            return metadata
         raise KeyError(f"Component '{namespace}:{name}' not found")
 
     def list_components(
         self,
         component_type: ComponentType | str | None = None,
         namespace: str | None = None,
-        include_metadata: bool = False,
-    ) -> Union[list[str], list[tuple[str, ComponentMetadata]]]:
-        """List registered components.
+        subtype: NodeSubtype | str | None = None,
+    ) -> list[tuple[str, ComponentMetadata]]:
+        """List registered components with their metadata.
 
         Parameters
         ----------
@@ -297,141 +231,143 @@ class ComponentRegistry:
             Filter by type.
         namespace : str | None
             Filter by namespace.
-        include_metadata : bool
-            Include metadata in results.
+        subtype : NodeSubtype | str | None
+            Filter by subtype (for nodes).
 
         Returns
         -------
-        list[str] | list[tuple[str, ComponentMetadata]]
-            Component names or (name, metadata) tuples.
+        list[tuple[str, ComponentMetadata]]
+            List of (qualified_name, metadata) tuples.
         """
-        results: List[Any] = []
+        with self._lock:
+            results = []
+            namespace_enum = self._to_namespace(namespace) if namespace else None
 
-        namespaces = [namespace] if namespace else self._components.keys()
-
-        for ns in namespaces:
-            if ns not in self._components:
-                continue
-
-            for name, metadata in self._components[ns].items():
-                # Filter by type if specified
-                if component_type and metadata.component_type != component_type:
+            for ns, components in self._components.items():
+                # Filter by namespace if specified
+                if namespace_enum and ns != namespace_enum:
                     continue
 
-                if include_metadata:
-                    results.append((f"{ns}:{name}", metadata))
-                else:
-                    results.append(f"{ns}:{name}")
+                for name, metadata in components.items():
+                    # Filter by type if specified
+                    if component_type and metadata.component_type != component_type:
+                        continue
 
-        return results
+                    # Filter by subtype if specified
+                    if subtype and metadata.subtype != subtype:
+                        continue
+
+                    results.append((f"{ns}{NAMESPACE_SEPARATOR}{name}", metadata))
+
+            return results
 
     def list_namespaces(self) -> list[str]:
-        """List all registered namespaces.
+        """List all registered namespaces."""
+        with self._lock:
+            return sorted(str(ns) for ns in self._components.keys())
 
-        Returns
-        -------
-        list[str]
-            Namespace names.
+    def load_plugins(self) -> int:
+        """Load plugins via Python entry points."""
+        return self._plugin_loader.load_plugins()
+
+    def set_ready(self, ready: bool = True) -> None:
+        """Set registry ready state."""
+        with self._lock:
+            self._ready = ready
+
+    def is_ready(self) -> bool:
+        """Check if registry is ready."""
+        return self._ready
+
+    # Private helper methods
+
+    def _validate_registration(
+        self,
+        name: str,
+        component: Any,
+        component_type: ComponentType | str,
+        namespace: str | Namespace,
+        privileged: bool,
+        replace: bool,
+    ) -> None:
+        """Validate a registration request."""
+        # Validate name
+        if not name or not isinstance(name, str):
+            raise ValueError("Component name must be a non-empty string")
+
+        # Validate component
+        if component is None:
+            raise TypeError(ERROR_COMPONENT_NONE)
+
+        # Basic validation - components should be callable or classes
+        if not (inspect.isclass(component) or callable(component)):
+            raise TypeError(f"Components must be classes or callable, got {type(component)}")
+
+        # Check namespace permissions
+        namespace_enum = self._to_namespace(namespace)
+        if namespace_enum == Namespace.CORE and not privileged:
+            # Allow replacement of existing core components with privilege
+            if not (name in self._protected_components and replace):
+                raise PermissionError(ERROR_CORE_PROTECTED.format(name=name))
+
+    def _handle_existing_component(
+        self,
+        existing: ComponentMetadata,
+        name: str,
+        namespace: Namespace | str,
+        full_name: str,
+        replace: bool,
+    ) -> None:
+        """Handle registration when component already exists."""
+        if existing.is_core and namespace != Namespace.CORE:
+            # Plugin trying to shadow core component
+            warnings.warn(
+                f"⚠️  Component '{name}' shadows HEXDAG CORE component!\n"
+                f"    Core version remains at 'core:{name}'\n"
+                f"    Plugin version will be at '{full_name}'\n"
+                f"    This may cause unexpected behavior!",
+                UserWarning,
+                stacklevel=3,
+            )
+        elif existing.namespace == namespace:
+            if not replace:
+                raise ValueError(ERROR_ALREADY_REGISTERED.format(name=full_name))
+            logger.info(f"Replaced component '{full_name}'")
+        else:
+            logger.debug(
+                f"Component '{name}' exists in '{existing.namespace}', registering in '{namespace}'"
+            )
+
+    def _to_namespace(self, namespace: str | Namespace | None) -> Namespace | str | None:
+        """Convert to Namespace enum for known system namespaces.
+
+        Known system namespaces: 'core', 'user', 'plugin'
+        These get special handling. All others are treated as custom plugin namespaces.
         """
-        return sorted(self._components.keys())
+        if namespace is None:
+            return None
+        if isinstance(namespace, Namespace):
+            return namespace
 
-    def _get_instance(self, namespace: str, name: str) -> Any:
-        """Get or create component instance (lazy instantiation)."""
-        instance_key = f"{namespace}:{name}"
+        # Check for known system namespaces (case-insensitive for convenience)
+        if isinstance(namespace, str):
+            lower = namespace.lower()
+            if lower == "core":
+                return Namespace.CORE
+            elif lower == "user":
+                return Namespace.USER
+            elif lower == "plugin":
+                return Namespace.PLUGIN
 
-        # Return cached instance if available
-        if instance_key in self._instances:
-            return self._instances[instance_key]
+        # Keep as string for custom plugin namespaces
+        return namespace
 
-        # Create instance from class
-        metadata = self._components[namespace][name]
-        if hasattr(metadata, "component_class") and metadata.component_class is not None:
-            instance = metadata.component_class()
-            self._instances[instance_key] = instance
-            return instance
-
-        raise RuntimeError(f"No instance or class for component '{instance_key}'")
-
-    def _find_component(self, name: str) -> Optional[ComponentMetadata]:
+    def _find_component(self, name: str) -> ComponentMetadata | None:
         """Find component in any namespace."""
-        for namespace_components in self._components.values():
-            if name in namespace_components:
-                return namespace_components[name]
+        for components in self._components.values():
+            if name in components:
+                return components[name]
         return None
-
-    def _list_available_components(self) -> list[str]:
-        """List all available component names."""
-        components = []
-        for namespace, namespace_components in self._components.items():
-            for name in namespace_components:
-                components.append(f"{namespace}:{name}")
-        return components
-
-    def _load_core_components(self) -> None:
-        """Load core hexDAG components."""
-        try:
-            # Import core modules to trigger decorators
-            import hexai.core.nodes  # noqa: F401
-
-            logger.debug("Core nodes module loaded")
-        except ImportError as e:
-            logger.debug(f"Core nodes module not found: {e}")
-
-        # Add imports for other core modules as they're created
-        # import hexai.core.adapters
-        # import hexai.core.tools
-        # etc.
-
-    def _load_plugins(self) -> None:
-        """Discover and load plugins via pluggy."""
-        # Load from setuptools entry points
-        self.pm.load_setuptools_entrypoints("hexdag.plugins")
-
-        # Call plugin initialization hooks
-        self.pm.hook.hexdag_initialize()
-
-        plugin_count = len(self.pm.get_plugins())
-        if plugin_count > 0:
-            logger.info(f"Loaded {plugin_count} plugins")
-
-    def _process_pending_components(self) -> None:
-        """Process all pending component registrations from decorators."""
-        processed = 0
-
-        while self._pending_components:
-            component_cls, metadata = self._pending_components.pop(0)
-
-            try:
-                self.register(
-                    name=metadata["name"],
-                    component=component_cls,
-                    component_type=metadata["component_type"],
-                    namespace=metadata.get("namespace", "core"),
-                    **{
-                        k: v
-                        for k, v in metadata.items()
-                        if k not in ["name", "component_type", "namespace"]
-                    },
-                )
-                processed += 1
-            except Exception as e:
-                logger.error(f"Failed to register component {metadata.get('name', 'unknown')}: {e}")
-
-        if processed > 0:
-            logger.debug(f"Processed {processed} pending components")
-
-    def _clear_for_testing(self) -> None:
-        """Clear registry for testing. Only works in test mode."""
-        import os
-
-        if not os.environ.get("PYTEST_CURRENT_TEST"):
-            raise RuntimeError("clear_for_testing() only available in tests")
-
-        self._components.clear()
-        self._protected_components.clear()
-        self._instances.clear()
-        self._pending_components.clear()
-        logger.warning("Registry cleared for testing")
 
 
 # Global registry instance

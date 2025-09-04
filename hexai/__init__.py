@@ -39,9 +39,14 @@ from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, To
 
 # Initialize the component registry early so it's available for all imports
 # This ensures core components are loaded and plugins are discovered
-from hexai.core.registry import ComponentType, registry
+from hexai.core.registry import registry
+from hexai.core.registry.types import ComponentType  # For internal framework use
 
-# Test change to trigger pre-commit hooks
+# Load core components - using setattr to avoid mypy issues
+setattr(registry, "_core_loading", True)  # Allow core namespace registration
+import hexai.core.nodes  # noqa: F401, E402 - triggers decorator registration
+
+setattr(registry, "_core_loading", False)  # Block core namespace registration
 
 
 __all__ = [

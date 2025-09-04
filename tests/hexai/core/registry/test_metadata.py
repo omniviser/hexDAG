@@ -1,9 +1,9 @@
-"""Tests for the metadata module."""
+"""Tests for the simplified metadata module."""
 
 import pytest
 
-from hexai.core.registry.metadata import ComponentMetadata
-from hexai.core.registry.types import ComponentType
+from hexai.core.registry.metadata import ComponentMetadata, InstanceFactory
+from hexai.core.registry.types import ComponentType, NodeSubtype
 
 
 class TestComponentMetadata:
@@ -11,226 +11,152 @@ class TestComponentMetadata:
 
     def test_basic_creation(self):
         """Test basic metadata creation."""
+
+        class TestComponent:
+            pass
+
         meta = ComponentMetadata(
-            name="test_component", component_type=ComponentType.NODE, namespace="test"
+            name="test_component",
+            component_type=ComponentType.NODE,
+            component=TestComponent,
+            namespace="test",
         )
 
         assert meta.name == "test_component"
         assert meta.component_type == ComponentType.NODE
+        assert meta.component is TestComponent
         assert meta.namespace == "test"
-
-        # Check defaults
         assert meta.description == ""
-        assert meta.version == "1.0.0"
-        assert meta.author == "hexdag"
-        assert meta.is_core is False
-        assert meta.replaceable is False
-        assert meta.tags == frozenset()
-        assert meta.dependencies == frozenset()
+        assert meta.subtype is None
 
-    def test_all_fields(self):
-        """Test metadata with all fields specified."""
-        meta = ComponentMetadata(
-            name="full_component",
-            component_type=ComponentType.TOOL,
-            namespace="custom",
-            description="A complete component",
-            version="2.5.1",
-            author="test_author",
-            is_core=True,
-            replaceable=True,
-            tags=frozenset({"tag1", "tag2", "tag3"}),
-            dependencies=frozenset({"dep1", "dep2"}),
-        )
+    def test_with_description(self):
+        """Test metadata with description."""
 
-        assert meta.name == "full_component"
-        assert meta.component_type == ComponentType.TOOL
-        assert meta.namespace == "custom"
-        assert meta.description == "A complete component"
-        assert meta.version == "2.5.1"
-        assert meta.author == "test_author"
-        assert meta.is_core is True
-        assert meta.replaceable is True
-        assert meta.tags == frozenset({"tag1", "tag2", "tag3"})
-        assert meta.dependencies == frozenset({"dep1", "dep2"})
-
-    def test_string_component_type(self):
-        """Test that string component type is converted to enum."""
-        meta = ComponentMetadata(
-            name="test",
-            component_type="node",
-            namespace="test",  # String instead of enum
-        )
-
-        # Should be converted to enum
-        assert meta.component_type == ComponentType.NODE
-        assert isinstance(meta.component_type, ComponentType)
-
-    def test_tags_conversion_to_frozenset(self):
-        """Test that tags are converted to frozenset."""
-        # Pass regular set
-        meta = ComponentMetadata(
-            name="test",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            tags={"tag1", "tag2"},  # Regular set
-        )
-
-        assert isinstance(meta.tags, frozenset)
-        assert meta.tags == frozenset({"tag1", "tag2"})
-
-        # Pass list
-        meta2 = ComponentMetadata(
-            name="test2",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            tags=["tag3", "tag4"],  # List
-        )
-
-        assert isinstance(meta2.tags, frozenset)
-        assert meta2.tags == frozenset({"tag3", "tag4"})
-
-    def test_dependencies_conversion_to_frozenset(self):
-        """Test that dependencies are converted to frozenset."""
-        # Pass regular set
-        meta = ComponentMetadata(
-            name="test",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            dependencies={"dep1", "dep2"},  # Regular set
-        )
-
-        assert isinstance(meta.dependencies, frozenset)
-        assert meta.dependencies == frozenset({"dep1", "dep2"})
-
-        # Pass list
-        meta2 = ComponentMetadata(
-            name="test2",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            dependencies=["dep3", "dep4"],  # List
-        )
-
-        assert isinstance(meta2.dependencies, frozenset)
-        assert meta2.dependencies == frozenset({"dep3", "dep4"})
-
-    def test_runtime_fields(self):
-        """Test runtime fields that are not part of __init__."""
-        meta = ComponentMetadata(name="test", component_type=ComponentType.NODE, namespace="test")
-
-        # Runtime fields should be None initially
-        assert meta.component_class is None
-        assert meta.config_schema is None
-
-        # Can be set after creation
-        class TestClass:
+        def test_function():
             pass
 
-        meta.component_class = TestClass
-        meta.config_schema = {"type": "object"}
-
-        assert meta.component_class is TestClass
-        assert meta.config_schema == {"type": "object"}
-
-    def test_immutable_collections(self):
-        """Test that collections are immutable (frozenset)."""
         meta = ComponentMetadata(
-            name="test",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            tags={"tag1"},
-            dependencies={"dep1"},
+            name="test_function",
+            component_type=ComponentType.TOOL,
+            component=test_function,
+            namespace="plugins",
+            description="A test function",
         )
 
-        # Should not be able to modify frozensets
-        with pytest.raises(AttributeError):
-            meta.tags.add("tag2")
+        assert meta.name == "test_function"
+        assert meta.component_type == ComponentType.TOOL
+        assert meta.component is test_function
+        assert meta.namespace == "plugins"
+        assert meta.description == "A test function"
 
-        with pytest.raises(AttributeError):
-            meta.dependencies.add("dep2")
+    def test_with_subtype(self):
+        """Test metadata with node subtype."""
 
-    def test_equality(self):
-        """Test metadata equality."""
-        meta1 = ComponentMetadata(
-            name="test",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            description="Test component",
-        )
+        class TestNode:
+            pass
 
-        meta2 = ComponentMetadata(
-            name="test",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            description="Test component",
-        )
-
-        meta3 = ComponentMetadata(
-            name="different",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            description="Test component",
-        )
-
-        assert meta1 == meta2
-        assert meta1 != meta3
-
-    def test_core_components(self):
-        """Test metadata for core components."""
         meta = ComponentMetadata(
-            name="passthrough",
+            name="test_node",
             component_type=ComponentType.NODE,
+            component=TestNode,
+            namespace="test",
+            subtype=NodeSubtype.FUNCTION,
+        )
+
+        assert meta.name == "test_node"
+        assert meta.component_type == ComponentType.NODE
+        assert meta.subtype == NodeSubtype.FUNCTION
+
+    def test_is_core_property(self):
+        """Test is_core property."""
+
+        class TestComponent:
+            pass
+
+        # Core component
+        core_meta = ComponentMetadata(
+            name="core_component",
+            component_type=ComponentType.NODE,
+            component=TestComponent,
             namespace="core",
-            is_core=True,
-            replaceable=False,
-            description="Core passthrough node",
         )
+        assert core_meta.is_core is True
 
-        assert meta.is_core is True
-        assert meta.replaceable is False
-        assert meta.namespace == "core"
-
-    def test_plugin_components(self):
-        """Test metadata for plugin components."""
-        meta = ComponentMetadata(
-            name="custom_analyzer",
+        # Non-core component
+        user_meta = ComponentMetadata(
+            name="user_component",
             component_type=ComponentType.NODE,
-            namespace="nlp_plugin",
-            is_core=False,
-            replaceable=True,
-            author="plugin_author",
-            version="0.1.0",
-            tags={"nlp", "analysis"},
-            dependencies={"core:tokenizer", "core:embedder"},
+            component=TestComponent,
+            namespace="user",
         )
+        assert user_meta.is_core is False
 
-        assert meta.is_core is False
-        assert meta.replaceable is True
-        assert meta.namespace == "nlp_plugin"
-        assert meta.author == "plugin_author"
-        assert "nlp" in meta.tags
-        assert "core:tokenizer" in meta.dependencies
 
-    def test_invalid_component_type_string(self):
-        """Test that invalid component type string raises error."""
+class TestInstanceFactory:
+    """Test the InstanceFactory utility."""
+
+    def test_create_class_instance(self):
+        """Test creating instance from a class."""
+
+        class TestClass:
+            def __init__(self, value=42):
+                self.value = value
+
+        # Default arguments
+        instance = InstanceFactory.create_instance(TestClass)
+        assert isinstance(instance, TestClass)
+        assert instance.value == 42
+
+        # Custom arguments
+        instance = InstanceFactory.create_instance(TestClass, value=100)
+        assert instance.value == 100
+
+    def test_create_function_instance(self):
+        """Test that functions are returned as-is, not called."""
+
+        def test_function(value=10):
+            return f"test-{value}"
+
+        # Functions should be returned as-is, not called
+        func = InstanceFactory.create_instance(test_function)
+        assert func is test_function
+        assert callable(func)
+
+        # kwargs should be ignored for functions
+        func = InstanceFactory.create_instance(test_function, value=20)
+        assert func is test_function
+
+        # Can call the function normally after getting it
+        assert func() == "test-10"
+        assert func(value=20) == "test-20"
+
+    def test_create_instance_with_args(self):
+        """Test creating instance with keyword args only (no positional)."""
+
+        class TestClass:
+            def __init__(self, a=1, b=2, c=3):
+                self.a = a
+                self.b = b
+                self.c = c
+
+        # InstanceFactory only supports kwargs, not positional args
+        instance = InstanceFactory.create_instance(TestClass, a=10, b=20, c=30)
+        assert instance.a == 10
+        assert instance.b == 20
+        assert instance.c == 30
+
+    def test_create_singleton_instance(self):
+        """Test that non-class objects are returned as-is."""
+        obj = object()
+        instance = InstanceFactory.create_instance(obj)
+        assert instance is obj
+
+    def test_create_instance_error_handling(self):
+        """Test error handling in instance creation."""
+
+        class BadClass:
+            def __init__(self):
+                raise ValueError("Cannot create instance")
+
         with pytest.raises(ValueError):
-            ComponentMetadata(
-                name="test",
-                component_type="invalid_type",
-                namespace="test",  # Invalid string
-            )
-
-    def test_empty_collections(self):
-        """Test that empty collections work correctly."""
-        meta = ComponentMetadata(
-            name="test",
-            component_type=ComponentType.NODE,
-            namespace="test",
-            tags=set(),  # Empty set
-            dependencies=[],  # Empty list
-        )
-
-        assert meta.tags == frozenset()
-        assert meta.dependencies == frozenset()
-        assert len(meta.tags) == 0
-        assert len(meta.dependencies) == 0
+            InstanceFactory.create_instance(BadClass)

@@ -1,17 +1,34 @@
 """HexDAG component registry with unified decorator-based registration.
 
 The registry provides a simple, consistent API for registering both core
-and plugin components using decorators.
+and plugin components using decorators. All decorators accept strings for
+component types and namespaces, making them easy to use.
+
+System Namespaces
+-----------------
+- 'core': Protected namespace for hexDAG core components
+- 'user': Default namespace for user-defined components
+- 'plugin': Standard namespace for plugin components
+- Any other string: Custom plugin namespace
+
+Component Types
+---------------
+- 'node': Processing nodes in the DAG
+- 'tool': External tools/functions
+- 'adapter': Data adapters
+- 'policy': Execution policies
+- 'memory': Memory/storage components
+- 'observer': Event observers
 
 Examples
 --------
->>> # Core component
+>>> # User component (default)
 >>> from hexai.core.registry import node
 >>>
->>> @node()
->>> class PassthroughNode:
+>>> @node(namespace='user')
+>>> class MyProcessor:
 ...     def execute(self, data):
-...         return data
+...         return process(data)
 >>>
 >>> # Plugin component
 >>> @node(namespace='my_plugin')
@@ -21,18 +38,30 @@ Examples
 >>>
 >>> # Access components
 >>> from hexai.core.registry import registry
->>> node = registry.get('passthrough_node')
+>>> processor = registry.get('my_processor', namespace='user')
 """
 
-from hexai.core.registry.decorators import adapter, component, memory, node, observer, policy, tool
-from hexai.core.registry.registry import ComponentRegistry, registry
-from hexai.core.registry.types import ComponentType
+from hexai.core.registry.decorators import (
+    adapter,
+    agent_node,
+    component,
+    function_node,
+    llm_node,
+    memory,
+    node,
+    observer,
+    policy,
+    tool,
+)
+from hexai.core.registry.registry import registry
+
+# Note: ComponentType and NodeSubtype enums are internal.
+# External users should use strings: 'node', 'tool', etc.
 
 __all__ = [
     # Main registry
-    "ComponentRegistry",
     "registry",
-    # Decorators
+    # Decorators (all accept strings)
     "component",
     "node",
     "tool",
@@ -40,6 +69,8 @@ __all__ = [
     "policy",
     "memory",
     "observer",
-    # Types
-    "ComponentType",
+    # Node subtype decorators
+    "function_node",
+    "llm_node",
+    "agent_node",
 ]

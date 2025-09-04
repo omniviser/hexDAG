@@ -12,7 +12,8 @@ Users don't need to import core components - they're automatically available:
     node = registry.get('passthrough', namespace='core')  # Works!
 """
 
-from hexai.core.registry import ComponentType, registry
+from hexai.core.registry import registry
+from hexai.core.registry.types import ComponentType  # For internal framework use
 
 # At this point, core components are already loaded and registered
 # via the registry initialization process.
