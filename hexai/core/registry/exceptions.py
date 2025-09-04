@@ -62,15 +62,3 @@ class InvalidComponentError(RegistryError):
         super().__init__(msg)
         self.name = name
         self.reason = reason
-
-
-class LazyLoadError(RegistryError):
-    """Raised when lazy loading of a component fails."""
-
-    def __init__(self, name: str, import_path: str, original_error: Exception):
-        """Initialize with lazy loading details."""
-        msg = f"Failed to lazy load '{name}' from '{import_path}': {original_error}"
-        super().__init__(msg)
-        self.name = name
-        self.import_path = import_path
-        self.original_error = original_error

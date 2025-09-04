@@ -23,14 +23,12 @@ class TestComponentRegistry:
         # Clear registry before each test
         registry._components.clear()
         registry._protected_components.clear()
-        registry._ready = False
 
         yield
 
         # Clean up after test
         registry._components.clear()
         registry._protected_components.clear()
-        registry._ready = False
 
     def test_register_and_get(self):
         """Test basic register and get functionality."""
@@ -138,14 +136,6 @@ class TestComponentRegistry:
             "my_node", MyNode, ComponentType.NODE, namespace=Namespace.CORE, privileged=True
         )
         assert "my_node" in registry._protected_components
-
-    def test_ready_state(self):
-        """Test registry ready state management."""
-        assert registry.is_ready() is False
-        registry.set_ready(True)
-        assert registry.is_ready() is True
-        registry.set_ready(False)
-        assert registry.is_ready() is False
 
 
 class TestDecorators:

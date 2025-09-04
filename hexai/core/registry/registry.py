@@ -50,9 +50,6 @@ class ComponentRegistry:
         # Thread lock for all operations
         self._lock = threading.RLock()
 
-        # Ready state
-        self._ready = False
-
     def register(
         self,
         name: str,
@@ -93,7 +90,11 @@ class ComponentRegistry:
 
             # Step 3: Check if component already exists (in ANY namespace)
             qualified_name = f"{namespace_enum}{NAMESPACE_SEPARATOR}{name}"
-            existing = self._find_component(name)
+            existing = None
+            for components in self._components.values():
+                if name in components:
+                    existing = components[name]
+                    break
 
             if existing:
                 # Handle conflicts: shadowing, replacement, or error
@@ -199,7 +200,10 @@ class ComponentRegistry:
         namespace_str, component_name = qualified_name.split(NAMESPACE_SEPARATOR, 1)
         namespace = self._to_namespace(namespace_str)
 
-        return self._get_and_instantiate(component_name, namespace, namespace_str, **kwargs)
+        metadata = self._get_from_namespace(component_name, namespace)
+        if not metadata:
+            raise ComponentNotFoundError(component_name, namespace_str)
+        return InstanceFactory.create_instance(metadata.component, **kwargs)
 
     def _get_from_specific_namespace(self, name: str, namespace: str, **kwargs: Any) -> Any:
         """Get component from a specific namespace only.
@@ -226,7 +230,10 @@ class ComponentRegistry:
             If component not found in the specified namespace
         """
         namespace_enum = self._to_namespace(namespace)
-        return self._get_and_instantiate(name, namespace_enum, namespace, **kwargs)
+        metadata = self._get_from_namespace(name, namespace_enum)
+        if not metadata:
+            raise ComponentNotFoundError(name, namespace)
+        return InstanceFactory.create_instance(metadata.component, **kwargs)
 
     def _get_with_fallback_search(self, name: str, **kwargs: Any) -> Any:
         """Search for component across all namespaces with intelligent fallback.
@@ -257,7 +264,7 @@ class ComponentRegistry:
         # First, try core namespace (backward compatibility)
         metadata = self._get_from_namespace(name, Namespace.CORE)
         if metadata:
-            return self._instantiate_component(metadata, **kwargs)
+            return InstanceFactory.create_instance(metadata.component, **kwargs)
 
         # Then try other namespaces
         for ns in self._components:
@@ -270,7 +277,7 @@ class ComponentRegistry:
                             f"Using '{ns}:{name}' which shadows a core component name. "
                             f"Use get('{name}', namespace='core') for the core version."
                         )
-                    return self._instantiate_component(metadata, **kwargs)
+                    return InstanceFactory.create_instance(metadata.component, **kwargs)
 
         # Not found anywhere - provide helpful error
         available = self._list_all_components()
@@ -357,15 +364,6 @@ class ComponentRegistry:
     def load_plugins(self) -> int:
         """Load plugins via Python entry points."""
         return self._plugin_loader.load_plugins()
-
-    def set_ready(self, ready: bool = True) -> None:
-        """Set registry ready state."""
-        with self._lock:
-            self._ready = ready
-
-    def is_ready(self) -> bool:
-        """Check if registry is ready."""
-        return self._ready
 
     # Private helper methods
 
@@ -493,13 +491,6 @@ class ComponentRegistry:
         # Keep as string for custom plugin namespaces
         return namespace
 
-    def _find_component(self, name: str) -> ComponentMetadata | None:
-        """Find component in any namespace."""
-        for components in self._components.values():
-            if name in components:
-                return components[name]
-        return None
-
     def _get_from_namespace(
         self, name: str, namespace: Namespace | str
     ) -> ComponentMetadata | None:
@@ -518,65 +509,6 @@ class ComponentRegistry:
             Component metadata if found, None otherwise
         """
         return self._components.get(namespace, {}).get(name)
-
-    def _get_and_instantiate(
-        self,
-        name: str,
-        namespace: Namespace | str,
-        original_namespace: str | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Get component from namespace and instantiate it.
-
-        Consolidates the common pattern of getting metadata and instantiating.
-
-        Parameters
-        ----------
-        name : str
-            Component name
-        namespace : Namespace | str
-            Namespace to search in (enum or string)
-        original_namespace : str | None
-            Original namespace string for error messages (if different from namespace)
-        **kwargs : Any
-            Arguments for component instantiation
-
-        Returns
-        -------
-        Any
-            The instantiated component
-
-        Raises
-        ------
-        ComponentNotFoundError
-            If component not found in the specified namespace
-        """
-        metadata = self._get_from_namespace(name, namespace)
-        if not metadata:
-            # Use original_namespace for error if provided, else convert namespace to string
-            error_namespace = original_namespace if original_namespace else str(namespace)
-            raise ComponentNotFoundError(name, error_namespace)
-
-        return self._instantiate_component(metadata, **kwargs)
-
-    def _instantiate_component(self, metadata: ComponentMetadata, **kwargs: Any) -> Any:
-        """Resolve and instantiate a component from its metadata.
-
-        Parameters
-        ----------
-        metadata : ComponentMetadata
-            Component metadata
-        **kwargs : Any
-            Arguments to pass to component instantiation
-
-        Returns
-        -------
-        Any
-            The instantiated component
-        """
-        # Resolve lazy component if needed
-        component = metadata.resolve_lazy_component() if metadata.is_lazy else metadata.component
-        return InstanceFactory.create_instance(component, **kwargs)
 
     def _list_all_components(self) -> list[str]:
         """List all available component names with namespaces.

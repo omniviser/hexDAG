@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import importlib
 import inspect
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from hexai.core.registry.types import ComponentType, NodeSubtype
@@ -24,11 +23,6 @@ class ComponentMetadata:
     namespace: str = "core"
     subtype: NodeSubtype | str | None = None
     description: str = ""
-    # Lazy loading support
-    is_lazy: bool = False
-    import_path: str | None = None
-    attribute_name: str | None = None
-    _resolved_component: Any = field(default=None, init=False, repr=False)
 
     @property
     def is_core(self) -> bool:
@@ -39,44 +33,6 @@ class ComponentMetadata:
     def qualified_name(self) -> str:
         """Get fully qualified name."""
         return f"{self.namespace}:{self.name}"
-
-    def resolve_lazy_component(self) -> Any:
-        """Resolve and cache a lazy component.
-
-        Returns
-        -------
-        Any
-            The actual component (class or function)
-
-        Raises
-        ------
-        ImportError
-            If the module cannot be imported
-        AttributeError
-            If the component doesn't exist in the module
-        """
-        if not self.is_lazy:
-            return self.component
-
-        # Return cached if already resolved
-        if self._resolved_component is not None:
-            return self._resolved_component
-
-        if not self.import_path or not self.attribute_name:
-            raise ValueError(
-                f"Lazy component {self.qualified_name} missing import_path or attribute_name"
-            )
-
-        # Import the module
-        module = importlib.import_module(self.import_path)
-
-        # Get the component from the module
-        component = getattr(module, self.attribute_name)
-
-        # Cache for future use
-        self._resolved_component = component
-
-        return component
 
 
 class InstanceFactory:

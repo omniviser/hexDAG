@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Constants
+# Note: This is the Python entry point group name for plugin discovery.
+# It's not related to registry namespaces - plugins can register their
+# components in any namespace (e.g., "my_plugin", "custom_namespace", etc.)
 PLUGIN_ENTRY_GROUP = "hexdag.plugins"
 
 
