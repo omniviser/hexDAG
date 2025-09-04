@@ -1,6 +1,5 @@
 """Tests for plugin loader functionality."""
 
-import sys
 from unittest.mock import MagicMock, patch
 
 from hexai.core.registry.plugin_loader import PluginLoader
@@ -97,4 +96,3 @@ class TestPluginLoader:
 
         assert result is False
         mock_ep.load.assert_not_called()
-
