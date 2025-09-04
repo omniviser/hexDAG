@@ -85,7 +85,7 @@ class PortRegistry:
 
     @classmethod
     def override(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
-        """Force override of an existing definition"""
+        """Force override of an existing definition."""
         if name in cls._registry:
             logging.warning(f"Port '{name}' is being overridden in the registry.")
         cls._registry[name] = PortInfo(name=name, port_cls=port_cls, **meta)
@@ -151,15 +151,22 @@ class PortRegistry:
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
 
-# ruff: formatter-ignore
+# flake8: noqa
 def register_port[T: type](name: str, override: bool = False, **meta: Any) -> Callable[[T], T]:
-    """Decorator to register a custom port in the PortRegistry.
+    """Decorator to register or override a port class in the PortRegistry.
 
-    Automatically registers the decorated class as a port under a unique name
-    with optional metadata (kind, streaming, sync, etc.).
+    Args
+    ----
+        name (str): The name of the port to register.
+        override (bool, optional): Whether to override an existing port. Defaults to False.
+        **meta (Any): Additional metadata for the port.
+    Returns
+    -------
+        Callable[[T], T]: A decorator for the port class.
     """
 
     def decorator(cls: T) -> T:
+        """Register or override a port class in the PortRegistry."""
         if name in PortRegistry._registry and not override:
             raise ValueError(f"Port '{name}' already exists. Use override=True to replace it.")
         if override:

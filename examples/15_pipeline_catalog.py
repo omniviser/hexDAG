@@ -166,12 +166,12 @@ async def demonstrate_catalog_management():
 
     # Register pipelines
     for i in range(3):
-        name = f"pipeline_{i+1}"
+        name = f"pipeline_{i + 1}"
         graph = DirectedGraph()
-        processor = NodeSpec(f"processor_{i+1}", simple_processor)
+        processor = NodeSpec(f"processor_{i + 1}", simple_processor)
         graph.add(processor)
 
-        metadata = {"description": f"Pipeline {i+1}", "version": "1.0.0", "created": "2024-01-01"}
+        metadata = {"description": f"Pipeline {i + 1}", "version": "1.0.0", "created": "2024-01-01"}
 
         catalog.register_pipeline(name, graph, metadata)
 

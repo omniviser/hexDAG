@@ -177,7 +177,7 @@ class ConditionalNode(BaseNodeFactory):
                 "condition_value": condition_value,
                 "action": action,
                 "routing_decision": (
-                    f"{'continue' if condition_value else 'proceed'} based on " f"{condition_key}"
+                    f"{'continue' if condition_value else 'proceed'} based on {condition_key}"
                 ),
             }
 

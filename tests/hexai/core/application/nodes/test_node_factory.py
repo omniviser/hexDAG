@@ -213,7 +213,7 @@ class TestBuiltinNodes:
     """Test cases for builtin node types."""
 
     def setup_method(self):
-        """Setup for builtin node tests."""
+        """Set up builtin node tests."""
         NodeFactory.clear_registry()
         # Manually register builtin nodes since import only happens once
         from hexai.core.application.nodes.builtin_nodes import (

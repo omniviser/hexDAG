@@ -624,7 +624,6 @@ class PipelineCLI:
                     pipeline_name = pipeline_info["name"]
                     pipeline = self.catalog.get_pipeline(pipeline_name)
                     if pipeline and pipeline._yaml_path:
-
                         compile_single(pipeline._yaml_path)
                         success_count += 1  # Only increment if compilation succeeds
                     else:
