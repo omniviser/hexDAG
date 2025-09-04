@@ -3,10 +3,7 @@
 import pytest
 import yaml
 
-from hexai.agent_factory.yaml_builder import (
-    YamlPipelineBuilder,
-    YamlPipelineBuilderError,
-)
+from hexai.agent_factory.yaml_builder import YamlPipelineBuilder, YamlPipelineBuilderError
 from hexai.core.domain.dag import NodeSpec
 
 

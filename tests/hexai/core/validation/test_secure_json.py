@@ -7,6 +7,7 @@ import json
 import pytest
 
 from hexai.core.validation import JsonStringToPydanticConverter
+from hexai.core.validation.converters import ConversionError
 from hexai.core.validation.secure_json import (
     DEFAULT_MAX_DEPTH,
     extract_json_from_text,
@@ -101,7 +102,7 @@ def test_converter_uses_secure_loader_and_handles_invalid_json():
         a: int
 
     conv = JsonStringToPydanticConverter()
-    with pytest.raises(Exception):
+    with pytest.raises(ConversionError):
         conv.convert('{"a": not_a_number}', M)  # invalid JSON
 
 
