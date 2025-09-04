@@ -92,6 +92,84 @@ class TestComponentMetadata:
         assert user_meta.is_core is False
 
 
+class TestLazyLoading:
+    """Test lazy loading functionality."""
+
+    def test_lazy_component_metadata(self):
+        """Test creating lazy component metadata."""
+        meta = ComponentMetadata(
+            name="lazy_component",
+            component_type=ComponentType.NODE,
+            component=None,  # Lazy - no component yet
+            namespace="test",
+            is_lazy=True,
+            import_path="test.module",
+            attribute_name="MyComponent",
+        )
+
+        assert meta.is_lazy is True
+        assert meta.component is None
+        assert meta.import_path == "test.module"
+        assert meta.attribute_name == "MyComponent"
+
+    def test_resolve_lazy_component_import_error(self):
+        """Test lazy component resolution with import error."""
+        meta = ComponentMetadata(
+            name="bad_lazy",
+            component_type=ComponentType.NODE,
+            component=None,
+            namespace="test",
+            is_lazy=True,
+            import_path="nonexistent.module",
+            attribute_name="Component",
+        )
+
+        with pytest.raises(ImportError):
+            meta.resolve_lazy_component()
+
+    def test_resolve_lazy_component_attribute_error(self):
+        """Test lazy component resolution with missing attribute."""
+        import sys
+        from types import ModuleType
+
+        mock_module = ModuleType("test_module_no_attr")
+        sys.modules["test_module_no_attr"] = mock_module
+
+        try:
+            meta = ComponentMetadata(
+                name="lazy_no_attr",
+                component_type=ComponentType.NODE,
+                component=None,
+                namespace="test",
+                is_lazy=True,
+                import_path="test_module_no_attr",
+                attribute_name="NonExistentComponent",
+            )
+
+            with pytest.raises(AttributeError):
+                meta.resolve_lazy_component()
+        finally:
+            del sys.modules["test_module_no_attr"]
+
+    def test_non_lazy_component(self):
+        """Test that non-lazy components don't have lazy attributes."""
+
+        class TestComponent:
+            pass
+
+        meta = ComponentMetadata(
+            name="regular",
+            component_type=ComponentType.NODE,
+            component=TestComponent,
+            namespace="test",
+        )
+
+        assert meta.is_lazy is False
+        assert meta.import_path is None
+        assert meta.attribute_name is None
+        assert meta.component is TestComponent
+
+
 class TestInstanceFactory:
     """Test the InstanceFactory utility."""
 
