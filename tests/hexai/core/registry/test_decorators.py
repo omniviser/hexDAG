@@ -16,6 +16,7 @@ from hexai.core.registry.decorators import (
     policy,
     tool,
 )
+from hexai.core.registry.exceptions import ComponentAlreadyRegisteredError
 from hexai.core.registry.types import ComponentType  # Internal for tests
 from hexai.core.registry.types import Namespace, NodeSubtype
 
@@ -291,7 +292,7 @@ class TestDecoratorIntegration:
             pass
 
         # This should raise an error since replace=False by default
-        with pytest.raises(ValueError):
+        with pytest.raises(ComponentAlreadyRegisteredError):
 
             @node(namespace="test", name="original_node")
             class ReplacementNode:

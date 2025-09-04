@@ -5,6 +5,11 @@ import warnings
 import pytest
 
 from hexai.core.registry import adapter, component, node, registry, tool
+from hexai.core.registry.exceptions import (
+    ComponentAlreadyRegisteredError,
+    InvalidComponentError,
+    NamespacePermissionError,
+)
 from hexai.core.registry.types import ComponentType  # Internal for tests
 from hexai.core.registry.types import Namespace
 
@@ -110,7 +115,7 @@ class TestComponentRegistry:
         registry.register("comp", Original, ComponentType.NODE, namespace="test")
 
         # Should fail without replace=True
-        with pytest.raises(ValueError):
+        with pytest.raises(ComponentAlreadyRegisteredError):
             registry.register("comp", Replacement, ComponentType.NODE, namespace="test")
 
         # Should work with replace=True
@@ -125,7 +130,7 @@ class TestComponentRegistry:
             pass
 
         # Should fail without privilege
-        with pytest.raises(PermissionError):
+        with pytest.raises(NamespacePermissionError):
             registry.register("my_node", MyNode, ComponentType.NODE, namespace=Namespace.CORE)
 
         # Should work with privilege
@@ -214,6 +219,84 @@ class TestDecorators:
         assert "core_node" in registry._protected_components
         metadata = registry.get_metadata("core_node", namespace=Namespace.CORE)
         assert metadata.namespace == Namespace.CORE
+
+    def test_valid_names(self):
+        """Test that valid namespace and component names are accepted."""
+
+        class TestComponent:
+            pass
+
+        # Valid alphanumeric namespace and component names
+        registry.register("test123", TestComponent, "node", namespace="plugin123")
+        instance = registry.get("test123", namespace="plugin123")
+        assert isinstance(instance, TestComponent)
+
+        # Underscores are allowed in both namespace and component names
+        registry.register("test_component", TestComponent, "node", namespace="my_plugin")
+        instance = registry.get("test_component", namespace="my_plugin")
+        assert isinstance(instance, TestComponent)
+
+        # Mixed case is allowed
+        registry.register("MyComponent", TestComponent, "node", namespace="MyPlugin")
+        instance = registry.get("MyComponent", namespace="MyPlugin")
+        assert isinstance(instance, TestComponent)
+
+    def test_invalid_namespace_names(self):
+        """Test that invalid namespace names are rejected."""
+
+        class TestComponent:
+            pass
+
+        # Namespace with hyphen should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("comp", TestComponent, "node", namespace="my-plugin")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Namespace with space should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("comp", TestComponent, "node", namespace="my plugin")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Namespace with dot should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("comp", TestComponent, "node", namespace="my.plugin")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Namespace with special characters should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("comp", TestComponent, "node", namespace="my@plugin")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+    def test_invalid_component_names(self):
+        """Test that invalid component names are rejected."""
+
+        class TestComponent:
+            pass
+
+        # Component name with hyphen should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("my-component", TestComponent, "node", namespace="test")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Component name with space should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("my component", TestComponent, "node", namespace="test")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Component name with dot should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("my.component", TestComponent, "node", namespace="test")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Component name with special character should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("my@component", TestComponent, "node", namespace="test")
+        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+
+        # Empty component name should fail
+        with pytest.raises(InvalidComponentError) as exc_info:
+            registry.register("", TestComponent, "node", namespace="test")
+        assert "must be a non-empty string" in str(exc_info.value)
 
 
 class TestPluginShadowing:

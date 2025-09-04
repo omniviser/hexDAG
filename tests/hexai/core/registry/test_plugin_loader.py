@@ -15,7 +15,7 @@ class TestPluginLoader:
         loader = PluginLoader(mock_registry)
         assert loader._loaded_plugins == set()
 
-    @patch("hexai.core.registry.plugin_loader.metadata.entry_points")
+    @patch("importlib.metadata.entry_points")
     def test_discover_plugins_python_310_plus(self, mock_entry_points):
         """Test plugin discovery on Python 3.10+."""
         # Mock entry points with select method (Python 3.10+)
@@ -30,10 +30,10 @@ class TestPluginLoader:
 
         # Mock the entry point loading
         with patch.object(loader, "_load_entry_point", return_value=True) as mock_load:
-            loader.discover_and_load_plugins()
+            loader.load_plugins()
             mock_load.assert_called_once_with(mock_ep)
 
-    @patch("hexai.core.registry.plugin_loader.metadata.entry_points")
+    @patch("importlib.metadata.entry_points")
     def test_discover_plugins_python_39(self, mock_entry_points):
         """Test plugin discovery on Python 3.9."""
         # Mock entry points as callable returning dict (Python 3.9)
@@ -41,19 +41,17 @@ class TestPluginLoader:
         mock_ep.name = "test_plugin"
         mock_ep.value = "test_module:setup"
 
-        # Remove select attribute to simulate Python 3.9
-        mock_eps = MagicMock()
-        del mock_eps.select
-        mock_entry_points.return_value = mock_eps
-
-        # Make it callable and return dict
-        mock_entry_points.return_value = {"hexdag.plugins": [mock_ep]}
+        # For Python 3.9, entry_points() returns a callable that returns a dict
+        mock_eps_callable = MagicMock(return_value={"hexdag.plugins": [mock_ep]})
+        # Make sure it doesn't have a select attribute
+        del mock_eps_callable.select
+        mock_entry_points.return_value = mock_eps_callable
 
         mock_registry = MagicMock()
         loader = PluginLoader(mock_registry)
 
         with patch.object(loader, "_load_entry_point", return_value=True) as mock_load:
-            loader.discover_and_load_plugins()
+            loader.load_plugins()
             mock_load.assert_called_once_with(mock_ep)
 
     def test_load_entry_point_success(self):
@@ -100,27 +98,3 @@ class TestPluginLoader:
         assert result is False
         mock_ep.load.assert_not_called()
 
-    def test_load_module_success(self):
-        """Test direct module loading."""
-        mock_registry = MagicMock()
-        loader = PluginLoader(mock_registry)
-
-        # Create a mock module with setup function
-        mock_module = MagicMock()
-        mock_module.setup = MagicMock()
-
-        with patch.object(sys.modules, "__getitem__", return_value=mock_module):
-            loader.load_module("test.module")
-            mock_module.setup.assert_called_once_with(mock_registry)
-
-    def test_load_module_no_setup(self):
-        """Test loading module without setup function."""
-        mock_registry = MagicMock()
-        loader = PluginLoader(mock_registry)
-
-        # Create a mock module without setup function
-        mock_module = MagicMock(spec=[])
-
-        with patch("importlib.import_module", return_value=mock_module):
-            # Should not raise, just warn
-            loader.load_module("test.module")
