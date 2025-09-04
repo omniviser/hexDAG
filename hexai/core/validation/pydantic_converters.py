@@ -2,14 +2,17 @@
 
 This module provides converters for working with Pydantic models, including conversion from/to
 dictionaries, JSON strings, and handling nested model conversion.
+
+JSON string parsing is centralized via ``secure_json.loads`` to ensure consistent safety
+and robustness characteristics across the codebase.
 """
 
-import json
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from .converters import ConversionError, TypeConverter
+from .secure_json import loads as secure_json_loads
 
 
 class DictToPydanticConverter(TypeConverter):
@@ -98,11 +101,10 @@ class JsonStringToPydanticConverter(TypeConverter):
                 f"Target type {target_type} is not a Pydantic model", str, target_type, value
             )
 
-        # First parse JSON string to dict
-        try:
-            data = json.loads(value)
-        except json.JSONDecodeError as e:
-            raise ConversionError(f"Invalid JSON string: {str(e)}", str, target_type, value) from e
+        # First parse JSON string to dict using secure JSON loader
+        data = secure_json_loads(value)
+        if data is None:
+            raise ConversionError("Invalid JSON string", str, target_type, value)
 
         if not isinstance(data, dict):
             raise ConversionError(
