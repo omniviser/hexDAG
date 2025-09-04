@@ -199,7 +199,7 @@ class TestPromptTemplate:
         }
 
         result = template.render(project=project_data)
-        expected = "Project: AI Platform\n" "Team Lead: Alice\n" "Status: In Progress"
+        expected = "Project: AI Platform\nTeam Lead: Alice\nStatus: In Progress"
         assert result == expected
 
 
@@ -312,7 +312,7 @@ class TestFewShotPromptTemplate:
             {
                 "input": "Search for Python tutorials",
                 "output": (
-                    "INVOKE_TOOL: search_tool " '{"query": "Python tutorials", "max_results": 5}'
+                    'INVOKE_TOOL: search_tool {"query": "Python tutorials", "max_results": 5}'
                 ),
             },
             {

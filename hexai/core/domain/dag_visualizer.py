@@ -842,7 +842,7 @@ class DAGVisualizer:
             else:
                 attr_pairs.append(f"{key}={value}")
 
-        return f'[{", ".join(attr_pairs)}]'
+        return f"[{', '.join(attr_pairs)}]"
 
     def render_to_file(
         self, output_path: str, format: str = "png", title: str = "Pipeline DAG", **kwargs: Any

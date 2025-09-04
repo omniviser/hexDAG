@@ -156,7 +156,6 @@ class BaseValidator(IValidator):
 
         # Try type conversion for coerce strategy
         if self.strategy == ValidationStrategy.COERCE:
-
             registry = get_registry()
             source_type = type(data)
 

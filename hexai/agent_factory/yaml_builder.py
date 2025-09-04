@@ -259,7 +259,7 @@ class YamlPipelineBuilder:
                 node_name, _field_name = source_path.split(".", 1)
                 if node_name not in node_names:
                     warnings.append(
-                        f"Node '{node_id}' {mapping_type} references " f"unknown node '{node_name}'"
+                        f"Node '{node_id}' {mapping_type} references unknown node '{node_name}'"
                     )
                 elif node_name not in dependencies:
                     warnings.append(
@@ -270,8 +270,7 @@ class YamlPipelineBuilder:
                 # Direct node reference
                 if source_path not in node_names:
                     warnings.append(
-                        f"Node '{node_id}' {mapping_type} references "
-                        f"unknown node '{source_path}'"
+                        f"Node '{node_id}' {mapping_type} references unknown node '{source_path}'"
                     )
 
         return warnings

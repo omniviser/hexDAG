@@ -217,7 +217,7 @@ async def main():
     # Run multiple times to trigger circuit breaker
     for i in range(5):
         circuit_result = await orchestrator.run(circuit_graph, f"test data {i}")
-        print(f"   Call {i+1}: {circuit_result['circuit_processor']['status']}")
+        print(f"   Call {i + 1}: {circuit_result['circuit_processor']['status']}")
 
     # Test 4: Error Aggregation
     print("\n🔄 Test 4: Error Aggregation")

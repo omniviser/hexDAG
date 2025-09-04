@@ -12,12 +12,12 @@ from hexai.core.domain.dag import (
 
 
 def dummy_fn():
-    """Dummy function for testing."""
+    """Return a predefined string result for testing purposes."""
     return "result"
 
 
 def another_fn():
-    """Another dummy function for testing."""
+    """Return another predefined string result for testing purposes."""
     return "another_result"
 
 
@@ -72,7 +72,7 @@ class TestNodeSpec:
         node = NodeSpec("test", dummy_fn, deps={"dep1"})
 
         # Should not be able to modify existing node
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError, match="has no attribute 'add'"):
             node.deps.add("dep2")  # type: ignore
 
         # Creating new node should not modify original
@@ -86,7 +86,7 @@ class TestNodeSpec:
         node = NodeSpec("test", dummy_fn, params=params)
 
         # Should not be able to modify params directly
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError, match="does not support item assignment"):
             node.params["new_key"] = "new_value"  # type: ignore
 
     def test_types_none_handling(self):

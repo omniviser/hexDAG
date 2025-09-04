@@ -82,7 +82,6 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit tool called event."""
         if event_manager:
-
             await event_manager.emit(
                 ToolCalledEvent(
                     node_name=node_name,
@@ -103,7 +102,6 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit tool completed event."""
         if event_manager:
-
             await event_manager.emit(
                 ToolCompletedEvent(
                     node_name=node_name,

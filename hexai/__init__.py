@@ -42,11 +42,11 @@ from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, To
 from hexai.core.registry import registry
 from hexai.core.registry.types import ComponentType  # For internal framework use
 
-# Load core components - using setattr to avoid mypy issues
-setattr(registry, "_core_loading", True)  # Allow core namespace registration
+# Load core components - using attribute assignment for dynamic loading flag
+registry._core_loading = True  # type: ignore  # Allow core namespace registration
 import hexai.core.nodes  # noqa: F401, E402 - triggers decorator registration
 
-setattr(registry, "_core_loading", False)  # Block core namespace registration
+registry._core_loading = False  # type: ignore  # Block core namespace registration
 
 
 __all__ = [

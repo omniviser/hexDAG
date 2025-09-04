@@ -86,7 +86,7 @@ def node(
     subtype: NodeSubtype | str | None = None,
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for node components."""
+    """Decorate node components."""
     return component("node", name, namespace=namespace, subtype=subtype, **kwargs)
 
 
@@ -95,7 +95,7 @@ def tool(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for tool components."""
+    """Decorate tool components."""
     return component("tool", name, namespace=namespace, **kwargs)
 
 
@@ -104,7 +104,7 @@ def adapter(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for adapter components."""
+    """Decorate adapter components."""
     return component("adapter", name, namespace=namespace, **kwargs)
 
 
@@ -113,7 +113,7 @@ def policy(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for policy components."""
+    """Decorate policy components."""
     return component("policy", name, namespace=namespace, **kwargs)
 
 
@@ -122,7 +122,7 @@ def memory(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for memory components."""
+    """Decorate memory components."""
     return component("memory", name, namespace=namespace, **kwargs)
 
 
@@ -131,7 +131,7 @@ def observer(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for observer components."""
+    """Decorate observer components."""
     return component("observer", name, namespace=namespace, **kwargs)
 
 
@@ -141,7 +141,7 @@ def function_node(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for function nodes."""
+    """Decorate function nodes."""
     return component("node", name, namespace=namespace, subtype="function", **kwargs)
 
 
@@ -150,7 +150,7 @@ def llm_node(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for LLM nodes."""
+    """Decorate LLM nodes."""
     return component("node", name, namespace=namespace, subtype="llm", **kwargs)
 
 
@@ -159,7 +159,7 @@ def agent_node(
     namespace: str | Namespace = "user",
     **kwargs: Any,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for agent nodes."""
+    """Decorate agent nodes."""
     return component("node", name, namespace=namespace, subtype="agent", **kwargs)
 
 

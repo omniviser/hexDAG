@@ -100,7 +100,7 @@ class TestComponentDecorator:
 
         @component(ComponentType.NODE, namespace="test")
         class DocumentedComponent:
-            """This is a well-documented component.
+            """Well-documented component.
 
             It has multiple lines.
             """
@@ -108,7 +108,7 @@ class TestComponentDecorator:
             pass
 
         metadata = registry.get_metadata("documented_component", namespace="test")
-        assert "well-documented component" in metadata.description
+        assert "Well-documented component" in metadata.description
 
     def test_explicit_description(self):
         """Test explicit description parameter."""
@@ -407,7 +407,7 @@ class TestFunctionBehavior:
         assert func1 is func2 is func3 is singleton_tool
 
     def test_exception_not_raised_on_get(self):
-        """Test that function exceptions aren't raised during get()."""
+        """Ensure function exceptions aren't raised during get()."""
 
         @tool(namespace="test")
         def failing_tool():
@@ -427,7 +427,7 @@ class TestFunctionBehavior:
 
         @tool(namespace="test")
         def generator_tool():
-            """A generator tool."""
+            """Yield values from generator."""
             yield 1
             yield 2
             yield 3

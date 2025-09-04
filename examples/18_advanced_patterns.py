@@ -164,7 +164,7 @@ async def demonstrate_pipeline_composition():
     orchestrator = Orchestrator()
 
     for i, test_case in enumerate(test_cases):
-        print(f"   🧪 Test case {i+1}: {test_case['content']}")
+        print(f"   🧪 Test case {i + 1}: {test_case['content']}")
         result = await orchestrator.run(graph, test_case)
         print(f"   📋 Result: {result['composition_aggregator']['composed_results']}")
 
@@ -226,7 +226,7 @@ async def demonstrate_conditional_execution():
     ]
 
     for i, test_case in enumerate(test_cases):
-        print(f"   🔀 Condition {i+1}: {test_case['condition']}")
+        print(f"   🔀 Condition {i + 1}: {test_case['condition']}")
         result = await orchestrator.run(graph, test_case)
         processed = result.get("conditional_processor", {}).get("processed_content", "")
         print(f"   📋 Result: {processed}")
