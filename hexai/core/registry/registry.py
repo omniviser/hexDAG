@@ -279,8 +279,8 @@ class ComponentRegistry:
                         )
                     return InstanceFactory.create_instance(metadata.component, **kwargs)
 
-        # Not found anywhere - provide helpful error
-        available = self._list_all_components()
+        # Not found anywhere - provide helpful error with available components
+        available = [f"{ns}:{name}" for ns, comps in self._components.items() for name in comps]
         raise ComponentNotFoundError(name, None, available)
 
     def get_metadata(self, name: str, namespace: str = Namespace.CORE.value) -> ComponentMetadata:
@@ -509,16 +509,6 @@ class ComponentRegistry:
             Component metadata if found, None otherwise
         """
         return self._components.get(namespace, {}).get(name)
-
-    def _list_all_components(self) -> list[str]:
-        """List all available component names with namespaces.
-
-        Returns
-        -------
-        list[str]
-            List of 'namespace:component' strings
-        """
-        return [f"{ns}:{name}" for ns, comps in self._components.items() for name in comps]
 
 
 # Global registry instance

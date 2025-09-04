@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from hexai.core.registry.types import ComponentType, NodeSubtype
@@ -23,6 +23,8 @@ class ComponentMetadata:
     namespace: str = "core"
     subtype: NodeSubtype | str | None = None
     description: str = ""
+    # Extensible metadata for future features
+    metadata_extensions: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_core(self) -> bool:
