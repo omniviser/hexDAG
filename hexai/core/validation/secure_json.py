@@ -89,17 +89,29 @@ def loads_from_llm_output(
     *,
     max_size_bytes: int = DEFAULT_MAX_SIZE_BYTES,
     max_depth: int = DEFAULT_MAX_DEPTH,
+    expected_type: type | tuple[type, ...] | str | None = None,
 ) -> Any | None:
     """Extract and parse JSON from an LLM-style text/markdown response.
 
     This helper first extracts likely JSON content from code fences or balanced
     brackets, then parses it with :func:`loads` including safety limits and
-    cleanup retry.
+    cleanup retry. Optionally validates the parsed value's type.
     """
     extracted = extract_json_from_text(text)
     if extracted is None:
         return None
-    return loads(extracted, max_size_bytes=max_size_bytes, max_depth=max_depth)
+    parsed = loads(extracted, max_size_bytes=max_size_bytes, max_depth=max_depth)
+    if parsed is None:
+        return None
+    target_type = _normalize_expected_type(expected_type)
+    if target_type is not None:
+        if isinstance(target_type, tuple):
+            if not isinstance(parsed, target_type):
+                return None
+        else:
+            if not isinstance(parsed, target_type):
+                return None
+    return parsed
 
 
 def extract_json_from_text(text: str) -> str | None:
@@ -189,7 +201,7 @@ def _extract_by_bracket_matching(text: str) -> str | None:
                     continue
                 if not stack:
                     # Complete JSON region
-                    return text[start : i + 1]
+                    return text[start: i + 1]  # fmt: skip
 
     return None
 
@@ -396,3 +408,24 @@ __all__ = [
     "loads_from_llm_output",
     "extract_json_from_text",
 ]
+
+
+def _normalize_expected_type(
+    expected: type | tuple[type, ...] | str | None,
+) -> type | tuple[type, ...] | None:
+    """Map a human-friendly expected_type to Python types.
+
+    Supports strings: "object" -> dict, "array" -> list.
+    Returns a type/tuple or None if no expectation is provided.
+    """
+    if expected is None:
+        return None
+    if isinstance(expected, str):
+        name = expected.strip().lower()
+        if name == "object":
+            return dict
+        if name == "array":
+            return list
+        # Unknown string forms are ignored for simplicity
+        return None
+    return expected
