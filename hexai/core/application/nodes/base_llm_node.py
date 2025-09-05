@@ -1,13 +1,11 @@
 """BaseLLMNode - Foundation class for all LLM-based nodes."""
 
 import json
-import time
 from typing import Any, Callable, Type
 
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
-from ..events import LLMEvent
 from ..prompt import PromptInput, TemplateType
 from ..prompt.template import PromptTemplate
 from .base_node_factory import BaseNodeFactory
@@ -77,16 +75,11 @@ class BaseLLMNode(BaseNodeFactory):
         async def llm_wrapper(validated_input: dict[str, Any], **ports: Any) -> Any:
             """Execute LLM call with proper event emission."""
             llm = ports.get("llm")
-            event_manager = ports.get("event_manager")
 
             if not llm:
                 raise ValueError("LLM port is required")
 
-            # Start timing
-            start_time = time.time()
-
-            # Emit node started event
-            await self.emit_node_started(name, 0, [], event_manager)
+            # Event emission is now handled by the orchestrator
 
             try:
                 # Enhance template with schema if needed
@@ -102,19 +95,7 @@ class BaseLLMNode(BaseNodeFactory):
                 # Generate messages and extract template variables
                 messages, template_vars = self._generate_messages(enhanced_template, input_dict)
 
-                # Emit prompt generated event
-                if event_manager:
-                    await event_manager.emit(
-                        LLMEvent(
-                            event_class="llm",
-                            action="prompt",
-                            node_name=name,
-                            tool_name="llm",
-                            input_data=messages,
-                            messages=messages,
-                            template_vars=template_vars,
-                        )
-                    )
+                # Event emission removed - now handled at orchestrator level
 
                 # Call LLM
                 if rich_features and output_model:
@@ -126,29 +107,12 @@ class BaseLLMNode(BaseNodeFactory):
                     response = await llm.aresponse(messages)
                     result = response
 
-                # Emit response received event
-                if event_manager:
-                    await event_manager.emit(
-                        LLMEvent(
-                            event_class="llm",
-                            action="response",
-                            node_name=name,
-                            tool_name="llm",
-                            output_data=str(result),
-                        )
-                    )
-
-                # Calculate execution time
-                execution_time = time.time() - start_time
-
-                # Emit node completed event
-                await self.emit_node_completed(name, result, execution_time, 0, event_manager)
+                # Event emission removed - now handled at orchestrator level
 
                 return result
 
             except Exception as e:
-                execution_time = time.time() - start_time
-                await self.emit_node_failed(name, e, 0, event_manager)
+                # Event emission is now handled by the orchestrator
                 raise e
 
         return llm_wrapper

@@ -12,7 +12,17 @@ from hexai.core.domain.dag import DirectedGraph
 from hexai.core.validation import IValidator, ValidationContext, coerce_validator
 
 from ..domain.dag import NodeSpec
-from .events import ExecutionEvent, ExecutionLevel, ExecutionPhase
+from .events import (
+    EventBus,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
+    ObserverManager,
+    PipelineCompleted,
+    PipelineStarted,
+    WaveCompleted,
+    WaveStarted,
+)
 
 
 class OrchestratorError(Exception):
@@ -115,34 +125,32 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        event_manager = all_ports.get("event_manager")
+        # Get observers and control bus from ports
+        observers: ObserverManager = all_ports.get("observers", ObserverManager())
+        control: EventBus = all_ports.get("control_bus", EventBus())
 
-        # Emit pipeline started event using elegant null-safe syntax
-        if event_manager:
-            await event_manager.emit(
-                ExecutionEvent(
-                    level=ExecutionLevel.DAG,
-                    phase=ExecutionPhase.STARTED,
-                    name=getattr(graph, "name", "unnamed"),
-                    total_waves=len(waves),
-                    total_nodes=len(graph.nodes),
-                )
-            )
+        # Emit pipeline started event
+        pipeline_name = getattr(graph, "name", "unnamed")
+        event = PipelineStarted(
+            name=pipeline_name,
+            total_waves=len(waves),
+            total_nodes=len(graph.nodes),
+        )
+        await observers.notify(event)
+        if not await control.check(event):
+            raise OrchestratorError("Pipeline start vetoed by control handler")
 
         for wave_idx, wave in enumerate(waves, 1):
             wave_start_time = time.time()
 
             # Emit wave started event
-            if event_manager:
-                await event_manager.emit(
-                    ExecutionEvent(
-                        level=ExecutionLevel.WAVE,
-                        phase=ExecutionPhase.STARTED,
-                        name=f"wave_{wave_idx}",
-                        wave_index=wave_idx,
-                        nodes=wave,
-                    )
-                )
+            wave_event = WaveStarted(
+                wave_index=wave_idx,
+                nodes=list(wave),  # wave is already a list of node names
+            )
+            await observers.notify(wave_event)
+            if not await control.check(wave_event):
+                raise OrchestratorError(f"Wave {wave_idx} vetoed by control handler")
 
             wave_results = await self._execute_wave(
                 wave,
@@ -157,29 +165,19 @@ class Orchestrator:
             node_results.update(wave_results)
 
             # Emit wave completed event
-            if event_manager:
-                await event_manager.emit(
-                    ExecutionEvent(
-                        level=ExecutionLevel.WAVE,
-                        phase=ExecutionPhase.COMPLETED,
-                        name=f"wave_{wave_idx}",
-                        wave_index=wave_idx,
-                        nodes=wave,
-                        execution_time_ms=(time.time() - wave_start_time) * 1000,
-                    )
-                )
+            wave_completed = WaveCompleted(
+                wave_index=wave_idx,
+                duration_ms=(time.time() - wave_start_time) * 1000,
+            )
+            await observers.notify(wave_completed)
 
         # Emit pipeline completed event
-        if event_manager:
-            await event_manager.emit(
-                ExecutionEvent(
-                    level=ExecutionLevel.DAG,
-                    phase=ExecutionPhase.COMPLETED,
-                    name=getattr(graph, "name", "unnamed"),
-                    execution_time_ms=(time.time() - pipeline_start_time) * 1000,
-                    node_results=node_results,
-                )
-            )
+        pipeline_completed = PipelineCompleted(
+            name=pipeline_name,
+            duration_ms=(time.time() - pipeline_start_time) * 1000,
+            node_results=node_results,
+        )
+        await observers.notify(pipeline_completed)
 
         return node_results
 
@@ -238,7 +236,9 @@ class Orchestrator:
     ) -> Any:
         """Execute a single node."""
         node_start_time = time.time()
-        event_manager = ports.get("event_manager")
+        # Get observers and control bus from ports
+        observers: ObserverManager = ports.get("observers", ObserverManager())
+        control: EventBus = ports.get("control_bus", EventBus())
 
         try:
             node_spec = graph.nodes[node_name]
@@ -252,16 +252,14 @@ class Orchestrator:
                 validated_input = node_input
 
             # Emit node started event
-            if event_manager:
-                await event_manager.emit(
-                    ExecutionEvent(
-                        level=ExecutionLevel.NODE,
-                        phase=ExecutionPhase.STARTED,
-                        name=node_name,
-                        wave_index=wave_index,
-                        dependencies=list(node_spec.deps),
-                    )
-                )
+            start_event = NodeStarted(
+                name=node_name,
+                wave_index=wave_index,
+                dependencies=list(node_spec.deps),
+            )
+            await observers.notify(start_event)
+            if not await control.check(start_event):
+                raise OrchestratorError(f"Node '{node_name}' start vetoed by control handler")
 
             # Execute node function
             raw_output = (
@@ -279,33 +277,24 @@ class Orchestrator:
                 validated_output = raw_output
 
             # Emit node completed event
-            if event_manager:
-                await event_manager.emit(
-                    ExecutionEvent(
-                        level=ExecutionLevel.NODE,
-                        phase=ExecutionPhase.COMPLETED,
-                        name=node_name,
-                        wave_index=wave_index,
-                        result=validated_output,
-                        execution_time_ms=(time.time() - node_start_time) * 1000,
-                    )
-                )
+            complete_event = NodeCompleted(
+                name=node_name,
+                wave_index=wave_index,
+                result=validated_output,
+                duration_ms=(time.time() - node_start_time) * 1000,
+            )
+            await observers.notify(complete_event)
 
             return validated_output
 
         except Exception as e:
             # Emit node failed event
-            if event_manager:
-                await event_manager.emit(
-                    ExecutionEvent(
-                        level=ExecutionLevel.NODE,
-                        phase=ExecutionPhase.FAILED,
-                        name=node_name,
-                        wave_index=wave_index,
-                        error=e,
-                    )
-                )
-
+            fail_event = NodeFailed(
+                name=node_name,
+                wave_index=wave_index,
+                error=e,
+            )
+            await observers.notify(fail_event)
             raise NodeExecutionError(node_name, e) from e
 
     def _validate_input(self, input_data: Any, expected_type: type, node_name: str) -> Any:

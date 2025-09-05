@@ -1,247 +1,189 @@
-"""Tests for pipeline event manager functionality.
-
-This module tests the event system that manages pipeline execution lifecycle events
-without Context dependency.
-"""
+"""Tests for the ObserverManager - the clean event manager implementation."""
 
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from hexai.core.application.events import (
-    ExecutionEvent,
-    ExecutionLevel,
-    ExecutionPhase,
-    MetaEvent,
-    PipelineEventManager,
-)
-from hexai.core.application.events.base import SyncObserver
-from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
+from hexai.core.application.events import NodeStarted, ObserverManager, PipelineStarted
 
 
-class MockObserver(SyncObserver):
-    """Mock observer for testing event manager functionality."""
-
-    def __init__(self) -> None:
-        self.received_events: list = []
-        self.call_count = 0
-
-    def handle_sync(self, event) -> None:
-        """Handle events synchronously."""
-        self.received_events.append(event)
-        self.call_count += 1
-
-
-class TestPipelineEventManager:
-    """Test cases for PipelineEventManager without Context dependency."""
-
-    def setup_method(self) -> None:
-        """Set up test fixtures."""
-        self.event_manager = PipelineEventManager()
-        self.mock_observer = MockObserver()
-        self.logging_observer = LoggingObserver()
-        self.metrics_observer = MetricsObserver()
+class TestObserverManager:
+    """Test the ObserverManager for fire-and-forget observability."""
 
     @pytest.mark.asyncio
-    async def test_subscribe_and_emit_event(self) -> None:
-        """Test subscribing to events and emitting them."""
-        # Subscribe mock observer
-        self.event_manager.subscribe(self.mock_observer)
+    async def test_attach_and_notify(self):
+        """Test attaching observers and notifying them of events."""
+        manager = ObserverManager()
 
-        # Create and emit an event
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.STARTED,
-            name="test_node",
-            wave_index=1,
-            dependencies=["dep1"],
-        )
+        # Create mock observer
+        mock_observer = MagicMock()
+        mock_observer.handle = AsyncMock()
 
-        await self.event_manager.emit(event)
+        # Attach observer
+        manager.attach(mock_observer)
+        assert len(manager) == 1
 
-        # Verify the observer received the event
-        assert len(self.mock_observer.received_events) == 1
-        assert self.mock_observer.received_events[0] == event
-        assert self.mock_observer.call_count == 1
+        # Emit event
+        event = NodeStarted(name="test_node", wave_index=1)
+        await manager.notify(event)
+
+        # Verify observer was called
+        mock_observer.handle.assert_called_once_with(event)
 
     @pytest.mark.asyncio
-    async def test_multiple_observers(self) -> None:
-        """Test that multiple observers can receive the same event."""
-        mock_observer_2 = MockObserver()
+    async def test_multiple_observers_receive_events(self):
+        """Test that multiple observers all receive the same event."""
+        manager = ObserverManager()
 
-        # Subscribe both observers
-        self.event_manager.subscribe(self.mock_observer)
-        self.event_manager.subscribe(mock_observer_2)
+        # Create multiple observers
+        observers = []
+        for _ in range(3):
+            obs = MagicMock()
+            obs.handle = AsyncMock()
+            observers.append(obs)
+            manager.attach(obs)
 
-        # Create and emit an event
-        event = ExecutionEvent(
-            level=ExecutionLevel.DAG,
-            phase=ExecutionPhase.STARTED,
-            name="test_pipeline",
-            total_waves=2,
-            total_nodes=5,
-        )
+        assert len(manager) == 3
 
-        await self.event_manager.emit(event)
+        # Emit event
+        event = PipelineStarted(name="test_pipeline", total_nodes=5, total_waves=2)
+        await manager.notify(event)
 
-        # Both observers should have received the event
-        assert len(self.mock_observer.received_events) == 1
-        assert len(mock_observer_2.received_events) == 1
-        assert self.mock_observer.received_events[0] == event
-        assert mock_observer_2.received_events[0] == event
+        # All observers should be called
+        for obs in observers:
+            obs.handle.assert_called_once_with(event)
 
     @pytest.mark.asyncio
-    async def test_emit_multiple_events(self) -> None:
-        """Test emitting multiple events to the same observer."""
-        self.event_manager.subscribe(self.mock_observer)
+    async def test_observer_error_isolation(self):
+        """Test that errors in one observer don't affect others."""
+        manager = ObserverManager()
 
-        # Create and emit multiple events
-        events = [
-            ExecutionEvent(
-                level=ExecutionLevel.NODE,
-                phase=ExecutionPhase.STARTED,
-                name="node1",
-                wave_index=1,
-            ),
-            ExecutionEvent(
-                level=ExecutionLevel.NODE,
-                phase=ExecutionPhase.STARTED,
-                name="node2",
-                wave_index=1,
-            ),
-            ExecutionEvent(
-                level=ExecutionLevel.NODE,
-                phase=ExecutionPhase.COMPLETED,
-                name="node1",
-                wave_index=1,
-                result={"test": "result"},
-                execution_time_ms=1500,
-            ),
-        ]
+        # Create failing observer
+        failing_observer = MagicMock()
+        failing_observer.handle = AsyncMock(side_effect=RuntimeError("Observer failed"))
 
-        for event in events:
-            await self.event_manager.emit(event)
+        # Create working observer
+        working_observer = MagicMock()
+        working_observer.handle = AsyncMock()
 
-        # Verify all events were received
-        assert len(self.mock_observer.received_events) == 3
-        assert self.mock_observer.call_count == 3
-        assert self.mock_observer.received_events == events
+        # Attach both
+        manager.attach(failing_observer)
+        manager.attach(working_observer)
+
+        # Emit event - should not raise
+        event = NodeStarted(name="test", wave_index=1)
+        await manager.notify(event)
+
+        # Working observer should still be called
+        working_observer.handle.assert_called_once_with(event)
 
     @pytest.mark.asyncio
-    async def test_real_observers_integration(self) -> None:
-        """Test integration with real observer implementations."""
-        # Mock the logger methods to avoid actual logging during tests
-        self.logging_observer.logger.log = MagicMock()
-        self.logging_observer.logger.error = MagicMock()
+    async def test_async_function_as_observer(self):
+        """Test that async functions can be used as observers."""
+        manager = ObserverManager()
 
-        # Subscribe real observers
-        self.event_manager.subscribe(self.logging_observer)
-        self.event_manager.subscribe(self.metrics_observer)
+        # Track calls
+        calls = []
 
-        # Emit a pipeline started event
-        pipeline_event = ExecutionEvent(
-            level=ExecutionLevel.DAG,
-            phase=ExecutionPhase.STARTED,
-            name="integration_test",
-            total_waves=2,
-            total_nodes=4,
-        )
-        await self.event_manager.emit(pipeline_event)
+        async def async_observer(event):
+            calls.append(event)
 
-        # Emit a node failed event
-        node_event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.FAILED,
-            name="failing_node",
-            wave_index=1,
-            error=RuntimeError("Test error"),
-        )
-        await self.event_manager.emit(node_event)
+        manager.attach(async_observer)
 
-        # Verify logging observer received calls
-        assert self.logging_observer.logger.log.called
-        assert self.logging_observer.logger.error.called
+        # Emit event
+        event = NodeStarted(name="test", wave_index=1)
+        await manager.notify(event)
 
-        # Verify metrics observer updated its state
-        assert self.metrics_observer.total_nodes == 4
-        assert self.metrics_observer.error_count == 1
+        # Should be called
+        assert len(calls) == 1
+        assert calls[0] == event
 
     @pytest.mark.asyncio
-    async def test_observer_error_handling(self) -> None:
-        """Test that observer errors don't crash the event manager."""
+    async def test_sync_function_as_observer(self):
+        """Test that sync functions can be used as observers."""
+        manager = ObserverManager()
 
-        class FailingObserver(SyncObserver):
-            def handle_sync(self, event) -> None:
-                raise RuntimeError("Observer failed")
+        # Track calls
+        calls = []
 
-        failing_observer = FailingObserver()
-        self.event_manager.subscribe(failing_observer)
-        self.event_manager.subscribe(self.mock_observer)
+        def sync_observer(event):
+            calls.append(event)
 
-        # Emit an event - failing observer should not prevent others from working
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.COMPLETED,
-            name="test_node",
-            wave_index=1,
-            result={"output": "test"},
-            execution_time_ms=500,
-        )
+        manager.attach(sync_observer)
 
-        # This should not raise an exception
-        await self.event_manager.emit(event)
+        # Emit event
+        event = NodeStarted(name="test", wave_index=1)
+        await manager.notify(event)
 
-        # The working observer should still receive the event
-        assert len(self.mock_observer.received_events) == 1
-        assert self.mock_observer.received_events[0] == event
+        # Give time for executor
+        await asyncio.sleep(0.1)
+
+        # Should be called
+        assert len(calls) == 1
+        assert calls[0] == event
+
+    def test_detach_observer(self):
+        """Test removing observers."""
+        manager = ObserverManager()
+
+        obs1 = MagicMock()
+        obs2 = MagicMock()
+
+        manager.attach(obs1)
+        manager.attach(obs2)
+        assert len(manager) == 2
+
+        # Detach one
+        manager.detach(obs1)
+        assert len(manager) == 1
+
+        # Detach non-existent (should not error)
+        manager.detach(obs1)
+        assert len(manager) == 1
+
+    def test_clear_all_observers(self):
+        """Test clearing all observers."""
+        manager = ObserverManager()
+
+        # Add multiple observers
+        for _ in range(5):
+            manager.attach(MagicMock())
+
+        assert len(manager) == 5
+
+        # Clear all
+        manager.clear()
+        assert len(manager) == 0
 
     @pytest.mark.asyncio
-    async def test_concurrent_event_emission(self) -> None:
-        """Test concurrent event emission."""
-        self.event_manager.subscribe(self.mock_observer)
+    async def test_empty_manager_does_nothing(self):
+        """Test that notifying with no observers doesn't error."""
+        manager = ObserverManager()
+
+        # Should not raise
+        await manager.notify(NodeStarted(name="test", wave_index=1))
+
+    @pytest.mark.asyncio
+    async def test_concurrent_notifications(self):
+        """Test that concurrent notifications work correctly."""
+        manager = ObserverManager()
+
+        # Track all calls
+        calls = []
+
+        async def tracking_observer(event):
+            calls.append(event)
+            await asyncio.sleep(0.01)  # Simulate some work
+
+        manager.attach(tracking_observer)
 
         # Create multiple events
-        events = [
-            ExecutionEvent(
-                level=ExecutionLevel.NODE,
-                phase=ExecutionPhase.STARTED,
-                name=f"node_{i}",
-                wave_index=1,
-            )
-            for i in range(10)
-        ]
+        events = [NodeStarted(name=f"node_{i}", wave_index=1) for i in range(5)]
 
-        # Emit events concurrently
-        await asyncio.gather(*[self.event_manager.emit(event) for event in events])
+        # Notify concurrently
+        await asyncio.gather(*[manager.notify(event) for event in events])
 
-        # All events should be received
-        assert len(self.mock_observer.received_events) == 10
-
-    def test_unsubscribe_observer(self) -> None:
-        """Test unsubscribing observers."""
-        # Subscribe observer
-        self.event_manager.subscribe(self.mock_observer)
-        assert len(self.event_manager._global_observers_compat) == 1
-
-        # Unsubscribe observer
-        self.event_manager.unsubscribe(self.mock_observer)
-        assert len(self.event_manager._global_observers_compat) == 0
-
-    @pytest.mark.asyncio
-    async def test_emit_after_unsubscribe(self) -> None:
-        """Test that unsubscribed observers don't receive events."""
-        # Subscribe and then unsubscribe
-        self.event_manager.subscribe(self.mock_observer)
-        self.event_manager.unsubscribe(self.mock_observer)
-
-        # Emit an event
-        event = MetaEvent(
-            category="validation",
-            pipeline_name="test_pipeline",
-            warnings=["test warning"],
-        )
-        await self.event_manager.emit(event)
-
-        # Observer should not have received the event
-        assert len(self.mock_observer.received_events) == 0
+        # All events should be tracked
+        assert len(calls) == 5
+        assert {e.name for e in calls} == {f"node_{i}" for i in range(5)}

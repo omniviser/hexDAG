@@ -7,11 +7,7 @@ from unittest.mock import Mock, patch
 from pydantic import BaseModel
 
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.domain.dag_visualizer import (
-    DAGVisualizer,
-    export_dag_to_dot,
-    render_dag_to_image,
-)
+from hexai.core.domain.dag_visualizer import DAGVisualizer, export_dag_to_dot, render_dag_to_image
 
 
 class TestInput(BaseModel):

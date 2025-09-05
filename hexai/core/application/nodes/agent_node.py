@@ -391,15 +391,7 @@ class ReActAgentNode(BaseNodeFactory):
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"
 
-        # Emit step started event
-        if event_manager:
-            await self.emit_node_started(
-                node_step_name,
-                wave_index=current_step,
-                dependencies=[],
-                event_manager=event_manager,
-                metadata={"phase": state.current_phase},
-            )
+        # Event emission is now handled by the orchestrator
 
         # Get current prompt based on phase
         current_prompt = self._get_current_prompt(
@@ -430,16 +422,7 @@ class ReActAgentNode(BaseNodeFactory):
         state.response = response
         state.step = current_step
 
-        # Emit step completed event
-        if event_manager:
-            await self.emit_node_completed(
-                node_step_name,
-                result=response,
-                execution_time=0.0,
-                wave_index=current_step,
-                event_manager=event_manager,
-                metadata={"phase": state.current_phase},
-            )
+        # Event emission is now handled by the orchestrator
 
         return state
 
@@ -464,15 +447,7 @@ class ReActAgentNode(BaseNodeFactory):
         tool_calls = self.tool_parser.parse_tool_calls(response, format=config.tool_call_style)
 
         for tool_call in tool_calls:
-            # Emit tool called event
-            if event_manager:
-                await self.emit_tool_called(
-                    node_name=f"agent_step_{state.step}",
-                    tool_name=tool_call.name,
-                    tool_params=tool_call.params,
-                    event_manager=event_manager,
-                    metadata={"phase": state.current_phase},
-                )
+            # Event emission is now handled by the orchestrator
 
             try:
                 # Execute tool
@@ -482,16 +457,7 @@ class ReActAgentNode(BaseNodeFactory):
                 state.tool_results.append(f"{tool_call.name}: {result}")
                 state.tools_used.append(tool_call.name)
 
-                # Emit tool completed event
-                if event_manager:
-                    await self.emit_tool_completed(
-                        node_name=f"agent_step_{state.step}",
-                        tool_name=tool_call.name,
-                        result=result,
-                        execution_time=0.0,
-                        event_manager=event_manager,
-                        metadata={"phase": state.current_phase},
-                    )
+                # Event emission is now handled by the orchestrator
 
                 # Handle special tools
                 if tool_call.name in ["change_phase", "phase"] and isinstance(result, dict):

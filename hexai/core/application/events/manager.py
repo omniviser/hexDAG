@@ -1,172 +1,92 @@
-"""Event manager for pipeline events - simplified version."""
-
-from __future__ import annotations
+"""Simple observer manager for logging and metrics - read only."""
 
 import asyncio
 import logging
-from collections import defaultdict
-from typing import Any
-
-from .base import BasePriorityEventDispatcher, EventType, Observer, PipelineEvent
+from typing import Any, Callable, Protocol
 
 logger = logging.getLogger(__name__)
 
 
-class PipelineEventManager(BasePriorityEventDispatcher):
-    """Central event manager for pipeline events using observer pattern.
+class Observer(Protocol):
+    """Protocol for observers - just need to handle events."""
 
-    This manager is designed for observability - logging, metrics, telemetry,
-    and other monitoring tasks that don't affect pipeline execution.
+    async def handle(self, event: Any) -> None:
+        """Handle an event (async)."""
+        ...
 
-    For control-flow handlers that can modify execution (policies, circuit
-    breakers), use EventBus instead.
+
+class ObserverManager:
+    """Manages observers for logging, metrics, telemetry.
+
+    Key principles:
+    - Observers are READ-ONLY - they cannot affect execution
+    - Failures in observers don't crash the pipeline
+    - Fire-and-forget pattern
     """
 
     def __init__(self) -> None:
-        """Initialize event manager."""
-        super().__init__()
+        self._observers: list[Observer | Callable] = []
 
-        # Legacy observers for backward compatibility
-        self._observers: dict[EventType, list[Observer]] = defaultdict(list)
-        self._global_observers_compat: list[Observer] = []
+    def attach(self, observer: Observer | Callable) -> None:
+        """Attach an observer."""
+        self._observers.append(observer)
 
-    def subscribe(
-        self, observer: Observer, event_type: EventType | None = None, priority: int = 0
-    ) -> None:
-        """Subscribe observer to events.
+    def detach(self, observer: Observer | Callable) -> None:
+        """Detach an observer."""
+        if observer in self._observers:
+            self._observers.remove(observer)
 
-        Parameters
-        ----------
-        observer : Observer
-            Observer instance
-        event_type : EventType, optional
-            Optional event type to filter (None for all events)
-        priority : int, optional
-            Optional priority (lower = higher priority, default 0)
+    async def notify(self, event: Any) -> None:
+        """Notify all observers of an event.
+
+        Errors are logged but don't affect execution.
         """
-        # Store in legacy lists for backward compatibility
-        if event_type is None:
-            self._global_observers_compat.append(observer)
-        else:
-            self._observers[event_type].append(observer)
+        if not self._observers:
+            return
 
-        # Add to base priority system
-        self._add_handler(observer, event_type, priority, observer.__class__.__name__)
-
-        logger.debug(
-            f"Registered observer {observer.__class__.__name__} "
-            f"for {event_type.value if event_type else 'all events'} "
-            f"with priority {priority}"
-        )
-
-    def unsubscribe(self, observer: Observer, event_type: EventType | None = None) -> None:
-        """Unsubscribe observer from events."""
-        # Remove from legacy lists
-        if event_type is None and observer in self._global_observers_compat:
-            self._global_observers_compat.remove(observer)
-        elif event_type and observer in self._observers[event_type]:
-            self._observers[event_type].remove(observer)
-
-        # Remove from priority system
-        self._remove_handler(observer.__class__.__name__)
-
-    async def emit(self, event: PipelineEvent) -> None:
-        """Emit event to all relevant observers with error isolation."""
-        await self._ensure_lock()
-
-        # Get applicable handlers sorted by priority
-        applicable_handlers = self._get_applicable_handlers(event)
-
-        # Filter for observers that can handle this event
-        applicable_observers = []
-        for prioritized in applicable_handlers:
-            observer = prioritized.handler
-            if isinstance(observer, Observer):
-                if observer.can_handle(event):
-                    applicable_observers.append(observer)
-
-        if applicable_observers:
-            logger.debug(
-                f"Emitting event: {event.event_type.value} to {len(applicable_observers)} observers"
-            )
-
-            # Use gather with return_exceptions for error isolation
-            results = await asyncio.gather(
-                *[obs.handle(event) for obs in applicable_observers], return_exceptions=True
-            )
-
-            # Log any observer errors
-            for obs, result in zip(applicable_observers, results):
-                if isinstance(result, Exception):
-                    logger.error(
-                        f"Observer {obs.__class__.__name__} failed handling "
-                        f"{event.event_type.value}: {result}"
-                    )
-
-    async def get_observer_count(self, event_type: EventType | None = None) -> int:
-        """Get total number of observers."""
-        await self._ensure_lock()
-        if self._lock is None:  # Type guard for mypy
-            raise RuntimeError("Lock not initialized")
-
-        async with self._lock:
-            if event_type is None:
-                return len([h for h in self._global_handlers if isinstance(h.handler, Observer)])
-            return len(
-                [h for h in self._handlers.get(event_type, []) if isinstance(h.handler, Observer)]
-            )
-
-    async def clear_observers(self, event_type: EventType | None = None) -> None:
-        """Clear observers."""
-        await self._ensure_lock()
-        if self._lock is None:  # Type guard for mypy
-            raise RuntimeError("Lock not initialized")
-
-        async with self._lock:
-            if event_type is None:
-                self._global_observers_compat.clear()
-                self._observers.clear()
-                self.clear_handlers()
+        # Fire all observers concurrently
+        tasks = []
+        for observer in self._observers:
+            if hasattr(observer, "handle"):
+                # Observer protocol
+                tasks.append(self._safe_handle(observer, event))
+            elif asyncio.iscoroutinefunction(observer):
+                # Async function
+                tasks.append(self._safe_call(observer, event))
             else:
-                self._observers[event_type].clear()
-                # Remove from priority handlers
-                self._handlers[event_type] = [
-                    h
-                    for h in self._handlers.get(event_type, [])
-                    if not isinstance(h.handler, Observer)
-                ]
+                # Sync function - run in executor
+                tasks.append(self._safe_call_sync(observer, event))
 
-    async def get_stats(self) -> dict[str, Any]:
-        """Get event manager statistics.
+        # Wait for all, but don't fail on exceptions
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-        Returns
-        -------
-        dict[str, Any]
-            Dictionary with stats about observers.
-        """
-        await self._ensure_lock()
-        if self._lock is None:  # Type guard for mypy
-            raise RuntimeError("Lock not initialized")
+    async def _safe_handle(self, observer: Observer, event: Any) -> None:
+        """Safely call observer.handle()."""
+        try:
+            await observer.handle(event)
+        except Exception as e:
+            logger.error(f"Observer {observer.__class__.__name__} failed: {e}")
 
-        async with self._lock:
-            total_observers = len(
-                [
-                    h
-                    for h in self._global_handlers + sum(self._handlers.values(), [])
-                    if isinstance(h.handler, Observer)
-                ]
-            )
-            return {
-                "total_observers": total_observers,
-                "event_types_monitored": len(self._observers),
-                "global_observers": len(self._global_observers_compat),
-            }
+    async def _safe_call(self, func: Callable, event: Any) -> None:
+        """Safely call an async function."""
+        try:
+            await func(event)
+        except Exception as e:
+            logger.error(f"Observer function {func.__name__} failed: {e}")
 
-    # Backward compatibility method (synchronous wrapper)
-    def get_observer_count_sync(self, event_type: EventType | None = None) -> int:
-        """Return synchronous observer count for backward compatibility."""
-        if event_type is None:
-            return len(self._global_observers_compat) + sum(
-                len(obs_list) for obs_list in self._observers.values()
-            )
-        return len(self._global_observers_compat) + len(self._observers[event_type])
+    async def _safe_call_sync(self, func: Callable, event: Any) -> None:
+        """Safely call a sync function in executor."""
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, func, event)
+        except Exception as e:
+            logger.error(f"Observer function {func.__name__} failed: {e}")
+
+    def clear(self) -> None:
+        """Remove all observers."""
+        self._observers.clear()
+
+    def __len__(self) -> int:
+        """Return number of attached observers."""
+        return len(self._observers)

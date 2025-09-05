@@ -1,297 +1,199 @@
-"""Tests for consolidated event classes."""
+"""Tests for event data classes."""
 
 from datetime import datetime
 
 from hexai.core.application.events import (
-    ExecutionEvent,
-    ExecutionLevel,
-    ExecutionPhase,
-    HookEvent,
-    LLMEvent,
-    MetaEvent,
+    LLMPromptSent,
+    LLMResponseReceived,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
+    PipelineCompleted,
+    PipelineStarted,
+    ToolCalled,
+    ToolCompleted,
+    WaveCompleted,
+    WaveStarted,
 )
 
 
-class MockEventManager:
-    """Mock event manager for testing."""
+class TestNodeEvents:
+    """Test node-level event data classes."""
 
-    def __init__(self, session_id: str | None = None):
-        self.session_id = session_id or "test-session-123"
-        self.events = []
+    def test_node_started_creation(self):
+        """Test NodeStarted event creation."""
+        event = NodeStarted(name="test_node", wave_index=1, dependencies=["dep1", "dep2"])
 
-    async def emit(self, event):
-        """Mock emit that just stores events."""
-        self.events.append(event)
-
-
-class TestConsolidatedEvents:
-    """Test cases for consolidated event data classes."""
-
-    def test_execution_event_dag_started(self):
-        """Test ExecutionEvent creation for DAG started."""
-        event = ExecutionEvent(
-            level=ExecutionLevel.DAG,
-            phase=ExecutionPhase.STARTED,
-            name="test_pipeline",
-            total_waves=3,
-            total_nodes=10,
-        )
-
-        assert event.level == ExecutionLevel.DAG
-        assert event.phase == ExecutionPhase.STARTED
-        assert event.name == "test_pipeline"
-        assert event.total_waves == 3
-        assert event.total_nodes == 10
-        assert isinstance(event.timestamp, datetime)
-
-    def test_execution_event_dag_completed(self):
-        """Test ExecutionEvent creation for DAG completed."""
-        node_results = {"node1": {"output": "test"}, "node2": {"output": "test2"}}
-        event = ExecutionEvent(
-            level=ExecutionLevel.DAG,
-            phase=ExecutionPhase.COMPLETED,
-            name="test_pipeline",
-            execution_time_ms=1500,
-            node_results=node_results,
-        )
-
-        assert event.level == ExecutionLevel.DAG
-        assert event.phase == ExecutionPhase.COMPLETED
-        assert event.name == "test_pipeline"
-        assert event.execution_time_ms == 1500
-        assert event.node_results == node_results
-        assert isinstance(event.timestamp, datetime)
-
-    def test_execution_event_node_started(self):
-        """Test ExecutionEvent creation for node started."""
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.STARTED,
-            name="test_node",
-            wave_index=1,
-            dependencies=["dep1", "dep2"],
-        )
-
-        assert event.level == ExecutionLevel.NODE
-        assert event.phase == ExecutionPhase.STARTED
         assert event.name == "test_node"
         assert event.wave_index == 1
         assert event.dependencies == ["dep1", "dep2"]
         assert isinstance(event.timestamp, datetime)
 
-    def test_execution_event_node_completed(self):
-        """Test ExecutionEvent creation for node completed."""
-        result = {"output": "test_result"}
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.COMPLETED,
-            name="test_node",
-            wave_index=1,
-            result=result,
-            execution_time_ms=500,
-        )
+    def test_node_started_defaults(self):
+        """Test NodeStarted with default values."""
+        event = NodeStarted(name="test", wave_index=0)
 
-        assert event.level == ExecutionLevel.NODE
-        assert event.phase == ExecutionPhase.COMPLETED
+        assert event.name == "test"
+        assert event.wave_index == 0
+        assert event.dependencies == []
+        assert isinstance(event.timestamp, datetime)
+
+    def test_node_completed_creation(self):
+        """Test NodeCompleted event creation."""
+        result = {"output": "test_output", "score": 0.95}
+        event = NodeCompleted(name="test_node", wave_index=1, result=result, duration_ms=1500.5)
+
         assert event.name == "test_node"
+        assert event.wave_index == 1
         assert event.result == result
-        assert event.execution_time_ms == 500
-        assert event.wave_index == 1
+        assert event.duration_ms == 1500.5
         assert isinstance(event.timestamp, datetime)
 
-    def test_execution_event_node_failed(self):
-        """Test ExecutionEvent creation for node failed."""
-        error = ValueError("Test error message")
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.FAILED,
-            name="test_node",
-            wave_index=1,
-            error=error,
-        )
+    def test_node_failed_creation(self):
+        """Test NodeFailed event creation."""
+        error = RuntimeError("Test error message")
+        event = NodeFailed(name="failing_node", wave_index=2, error=error)
 
-        assert event.level == ExecutionLevel.NODE
-        assert event.phase == ExecutionPhase.FAILED
-        assert event.name == "test_node"
-        assert event.error == error
-        assert event.wave_index == 1
+        assert event.name == "failing_node"
+        assert event.wave_index == 2
+        assert event.error is error
         assert isinstance(event.timestamp, datetime)
 
-    def test_execution_event_wave(self):
-        """Test ExecutionEvent creation for wave events."""
-        event = ExecutionEvent(
-            level=ExecutionLevel.WAVE,
-            phase=ExecutionPhase.STARTED,
-            name="wave_1",
-            wave_index=1,
-            nodes=["node1", "node2", "node3"],
-        )
 
-        assert event.level == ExecutionLevel.WAVE
-        assert event.phase == ExecutionPhase.STARTED
-        assert event.name == "wave_1"
+class TestWaveEvents:
+    """Test wave-level event data classes."""
+
+    def test_wave_started_creation(self):
+        """Test WaveStarted event creation."""
+        nodes = ["node1", "node2", "node3"]
+        event = WaveStarted(wave_index=1, nodes=nodes)
+
         assert event.wave_index == 1
-        assert event.nodes == ["node1", "node2", "node3"]
+        assert event.nodes == nodes
+        assert isinstance(event.timestamp, datetime)
 
-    def test_llm_event_prompt(self):
-        """Test LLMEvent creation for prompts."""
-        messages = [{"role": "user", "content": "Hello"}]
-        event = LLMEvent(
-            event_class="llm",
-            action="prompt",
-            node_name="test_node",
-            tool_name="gpt-4",
-            input_data=messages,
-            messages=messages,
-            template_vars={"user": "test"},
+    def test_wave_completed_creation(self):
+        """Test WaveCompleted event creation."""
+        event = WaveCompleted(wave_index=2, duration_ms=3000.0)
+
+        assert event.wave_index == 2
+        assert event.duration_ms == 3000.0
+        assert isinstance(event.timestamp, datetime)
+
+
+class TestPipelineEvents:
+    """Test pipeline-level event data classes."""
+
+    def test_pipeline_started_creation(self):
+        """Test PipelineStarted event creation."""
+        event = PipelineStarted(name="test_pipeline", total_waves=3, total_nodes=10)
+
+        assert event.name == "test_pipeline"
+        assert event.total_waves == 3
+        assert event.total_nodes == 10
+        assert isinstance(event.timestamp, datetime)
+
+    def test_pipeline_completed_creation(self):
+        """Test PipelineCompleted event creation."""
+        node_results = {"node1": {"output": 1}, "node2": {"output": 2}}
+        event = PipelineCompleted(
+            name="test_pipeline", duration_ms=5000.0, node_results=node_results
         )
 
-        assert event.event_class == "llm"
-        assert event.action == "prompt"
-        assert event.node_name == "test_node"
-        assert event.tool_name == "gpt-4"
+        assert event.name == "test_pipeline"
+        assert event.duration_ms == 5000.0
+        assert event.node_results == node_results
+        assert isinstance(event.timestamp, datetime)
+
+    def test_pipeline_completed_defaults(self):
+        """Test PipelineCompleted with default values."""
+        event = PipelineCompleted(name="test", duration_ms=1000.0)
+
+        assert event.name == "test"
+        assert event.duration_ms == 1000.0
+        assert event.node_results == {}
+        assert isinstance(event.timestamp, datetime)
+
+
+class TestLLMEvents:
+    """Test LLM-related event data classes."""
+
+    def test_llm_prompt_sent_creation(self):
+        """Test LLMPromptSent event creation."""
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hello"},
+        ]
+        event = LLMPromptSent(node_name="llm_node", messages=messages)
+
+        assert event.node_name == "llm_node"
         assert event.messages == messages
-        assert event.template_vars == {"user": "test"}
         assert isinstance(event.timestamp, datetime)
 
-    def test_llm_event_response(self):
-        """Test LLMEvent creation for responses."""
-        event = LLMEvent(
-            event_class="llm",
-            action="response",
-            node_name="test_node",
-            tool_name="gpt-4",
-            output_data="Generated response",
+    def test_llm_response_received_creation(self):
+        """Test LLMResponseReceived event creation."""
+        event = LLMResponseReceived(
+            node_name="llm_node", response="This is the LLM response", duration_ms=2500.0
         )
 
-        assert event.event_class == "llm"
-        assert event.action == "response"
-        assert event.node_name == "test_node"
-        assert event.output_data == "Generated response"
+        assert event.node_name == "llm_node"
+        assert event.response == "This is the LLM response"
+        assert event.duration_ms == 2500.0
         assert isinstance(event.timestamp, datetime)
 
-    def test_llm_event_tool_called(self):
-        """Test LLMEvent for tool calls."""
-        tool_params = {"query": "test search"}
-        event = LLMEvent(
-            event_class="tool",
-            action="called",
-            node_name="test_node",
-            tool_name="search_tool",
-            input_data=tool_params,
-        )
 
-        assert event.event_class == "tool"
-        assert event.action == "called"
-        assert event.node_name == "test_node"
-        assert event.tool_name == "search_tool"
-        assert event.input_data == tool_params
+class TestToolEvents:
+    """Test tool-related event data classes."""
 
-    def test_llm_event_tool_completed(self):
-        """Test LLMEvent for tool completion."""
-        event = LLMEvent(
-            event_class="tool",
-            action="completed",
-            node_name="test_node",
-            tool_name="search_tool",
-            output_data=["result1", "result2"],
-            execution_time_ms=250,
-        )
+    def test_tool_called_creation(self):
+        """Test ToolCalled event creation."""
+        params = {"param1": "value1", "param2": 42}
+        event = ToolCalled(node_name="tool_node", tool_name="calculator", params=params)
 
-        assert event.event_class == "tool"
-        assert event.action == "completed"
-        assert event.tool_name == "search_tool"
-        assert event.output_data == ["result1", "result2"]
-        assert event.execution_time_ms == 250
-
-    def test_hook_event(self):
-        """Test HookEvent creation."""
-        event = HookEvent(
-            hook_type="pre_node",
-            hook_name="validation_hook",
-            target_name="test_node",
-            metadata={"input": "test"},
-        )
-
-        assert event.hook_type == "pre_node"
-        assert event.hook_name == "validation_hook"
-        assert event.target_name == "test_node"
-        assert event.metadata == {"input": "test"}
+        assert event.node_name == "tool_node"
+        assert event.tool_name == "calculator"
+        assert event.params == params
         assert isinstance(event.timestamp, datetime)
 
-    def test_hook_event_mid_node(self):
-        """Test HookEvent for mid-node LLM retries."""
-        event = HookEvent(
-            hook_type="mid_node",
-            hook_name="retry_hook",
-            target_name="agent_node",
-            metadata={"retry_count": 2, "reason": "Invalid response format"},
+    def test_tool_completed_creation(self):
+        """Test ToolCompleted event creation."""
+        result = {"calculation": 84}
+        event = ToolCompleted(
+            node_name="tool_node", tool_name="calculator", result=result, duration_ms=100.5
         )
 
-        assert event.hook_type == "mid_node"
-        assert event.target_name == "agent_node"
-        assert event.metadata["retry_count"] == 2
-
-    def test_meta_event(self):
-        """Test MetaEvent creation."""
-        event = MetaEvent(
-            category="validation",
-            pipeline_name="test_pipeline",
-            warnings=["Warning 1", "Warning 2"],
-        )
-
-        assert event.category == "validation"
-        assert event.pipeline_name == "test_pipeline"
-        assert event.warnings == ["Warning 1", "Warning 2"]
+        assert event.node_name == "tool_node"
+        assert event.tool_name == "calculator"
+        assert event.result == result
+        assert event.duration_ms == 100.5
         assert isinstance(event.timestamp, datetime)
 
-    def test_meta_event_build(self):
-        """Test MetaEvent for build events."""
-        event = MetaEvent(
-            category="build",
-            pipeline_name="test_pipeline",
-            message="Building pipeline nodes",
-            details={
-                "nodes_added": 10,
-                "waves_created": 3,
-            },
-        )
 
-        assert event.category == "build"
-        assert event.pipeline_name == "test_pipeline"
-        assert event.message == "Building pipeline nodes"
-        assert event.details["nodes_added"] == 10
+class TestEventComparison:
+    """Test event comparison and equality."""
 
-    def test_event_extra_fields(self):
-        """Test that events include expected extra fields in their representation."""
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.STARTED,
-            name="test_node",
-            wave_index=1,
-            dependencies=["dep1"],
-        )
+    def test_events_are_dataclasses(self):
+        """Test that events behave like dataclasses."""
+        import time
 
-        extra_fields = event._extra_fields()
-        assert extra_fields["level"] == "node"  # String value of the enum
-        assert extra_fields["phase"] == "started"  # String value of the enum
-        assert extra_fields["name"] == "test_node"
-        assert extra_fields["wave_index"] == 1
-        # dependencies is not included in _extra_fields()
+        event1 = NodeStarted(name="test", wave_index=1)
+        time.sleep(0.001)  # Ensure different timestamp
+        event2 = NodeStarted(name="test", wave_index=1)
+        event3 = NodeStarted(name="other", wave_index=1)
 
-    def test_execution_event_optional_fields(self):
-        """Test ExecutionEvent with optional fields."""
-        metadata = {"custom": "data"}
-        event = ExecutionEvent(
-            level=ExecutionLevel.NODE,
-            phase=ExecutionPhase.COMPLETED,
-            name="test_node",
-            wave_index=1,
-            result={"output": "test"},
-            execution_time_ms=100,
-            metadata=metadata,
-        )
+        # Same data with different timestamps should not be equal
+        assert event1 != event2
 
-        assert event.metadata == metadata
-        assert event.execution_time_ms == 100
-        assert event.result == {"output": "test"}
+        # Different data definitely not equal
+        assert event1 != event3
+
+    def test_event_fields_accessible(self):
+        """Test that all event fields are accessible."""
+        event = NodeCompleted(name="test", wave_index=1, result={"test": True}, duration_ms=500)
+
+        # All fields should be accessible
+        assert hasattr(event, "name")
+        assert hasattr(event, "wave_index")
+        assert hasattr(event, "result")
+        assert hasattr(event, "duration_ms")
+        assert hasattr(event, "timestamp")

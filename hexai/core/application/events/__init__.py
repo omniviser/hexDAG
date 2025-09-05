@@ -1,37 +1,61 @@
-"""Pipeline event system with consolidated events."""
+"""Clean event system with clear separation of concerns.
 
-from .base import EventType, Observer, PipelineEvent, SyncObserver
-from .bus import EventBus, HandlerPriority
-from .events import ExecutionEvent, ExecutionLevel, ExecutionPhase, HookEvent, LLMEvent, MetaEvent
-from .manager import PipelineEventManager
+This module provides a simple event system for pipeline execution:
+- Events: Simple data classes representing what happened
+- ObserverManager (ObserverManager): Fire-and-forget observability (logging, metrics)
+- EventBus: Execution control that can veto operations
+"""
+
+from .bus import ControlHandler, EventBus
+from .events import (
+    Event,
+    LLMPromptSent,
+    LLMResponseReceived,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
+    PipelineCompleted,
+    PipelineStarted,
+    ToolCalled,
+    ToolCompleted,
+    WaveCompleted,
+    WaveStarted,
+)
+from .manager import Observer, ObserverManager
+from .null_manager import get_event_manager
 from .observers import (
     FileObserver,
     LoggingObserver,
     MetricsObserver,
-    NodeObserver,
+    NodeStateObserver,
     WebSocketObserver,
 )
 
 __all__ = [
-    # Base classes
-    "EventType",
+    # Core system
+    "Event",
+    "ObserverManager",  # Alias for backward compatibility
     "Observer",
-    "PipelineEvent",
-    "SyncObserver",
-    "HandlerPriority",
     "EventBus",
-    "PipelineEventManager",
-    # Consolidated events
-    "ExecutionEvent",
-    "ExecutionLevel",
-    "ExecutionPhase",
-    "LLMEvent",
-    "HookEvent",
-    "MetaEvent",
+    "ControlBus",  # Alias for backward compatibility
+    "ControlHandler",
+    "get_event_manager",
+    # Event types
+    "NodeStarted",
+    "NodeCompleted",
+    "NodeFailed",
+    "WaveStarted",
+    "WaveCompleted",
+    "PipelineStarted",
+    "PipelineCompleted",
+    "LLMPromptSent",
+    "LLMResponseReceived",
+    "ToolCalled",
+    "ToolCompleted",
     # Observers
     "LoggingObserver",
     "MetricsObserver",
-    "NodeObserver",
-    "WebSocketObserver",
     "FileObserver",
+    "NodeStateObserver",
+    "WebSocketObserver",
 ]
