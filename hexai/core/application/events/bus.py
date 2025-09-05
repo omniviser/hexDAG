@@ -1,110 +1,149 @@
-"""Control bus for execution control - can veto/modify execution."""
+"""Control Port: Manages execution control policies.
 
+This will become a hexagonal architecture PORT that allows policies to control
+the execution flow of the pipeline.
+"""
+
+import asyncio
 import logging
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Callable, Protocol, Union
+
+from .context import ExecutionContext
+from .control import ControlResponse
+from .events import Event
 
 logger = logging.getLogger(__name__)
 
-# Handler returns True to allow, False to veto
-Handler = Callable[[Any], Awaitable[bool]]
-
 
 class ControlHandler(Protocol):
-    """Protocol for control handlers that can veto execution."""
+    """Protocol for control handlers that can affect execution."""
 
-    async def check(self, event: Any) -> bool:
-        """Check if event should be allowed.
-
-        Returns
-        -------
-            True to allow execution, False to veto.
-        """
+    async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:
+        """Handle an event and return control response."""
         ...
+
+
+# Types that can be control handlers
+ControlHandlerFunc = Callable[[Any, ExecutionContext], ControlResponse]
+AsyncControlHandlerFunc = Callable[[Any, ExecutionContext], Any]  # Returns awaitable
+ControlHandlerLike = Union[ControlHandler, ControlHandlerFunc, AsyncControlHandlerFunc]
+
+
+def _make_handler(func: Union[ControlHandlerFunc, AsyncControlHandlerFunc]) -> ControlHandler:
+    """Convert a control handler function into a ControlHandler protocol.
+
+    Args
+    ----
+        func: A function that takes (event, context) and returns ControlResponse
+
+    Returns
+    -------
+        An object implementing the ControlHandler protocol
+    """
+
+    class FunctionHandler:
+        def __init__(self, fn: Union[ControlHandlerFunc, AsyncControlHandlerFunc]):
+            self._func = fn
+            self.__name__ = getattr(fn, "__name__", "anonymous_handler")
+
+        async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:
+            if asyncio.iscoroutinefunction(self._func):
+                result = await self._func(event, context)
+            else:
+                result = self._func(event, context)
+            # Ensure we return a ControlResponse
+            if not isinstance(result, ControlResponse):
+                raise TypeError(
+                    f"Handler {self.__name__} must return ControlResponse, got {type(result)}"
+                )
+            return result
+
+    return FunctionHandler(func)
 
 
 class EventBus:
     """Manages control handlers that can affect execution.
 
     Key principles:
-    - Handlers can VETO execution by returning False
-    - Used for policies, circuit breakers, rate limiting
-    - Handlers are executed in priority order
-    - All handlers must approve for execution to continue
+    - Handlers can control execution flow (retry, skip, fallback, fail)
+    - First non-PROCEED response wins (veto pattern)
+    - Handler failures are isolated and logged
     """
 
     def __init__(self) -> None:
-        # Simple list of handlers - all handlers see all events
-        self._handlers: list[Handler | ControlHandler] = []
+        self._handlers: list[ControlHandler] = []
 
-    def register(self, handler: Handler | ControlHandler) -> None:
+    def register(self, handler: ControlHandlerLike) -> None:
         """Register a control handler.
 
         Args
         ----
-            handler: Function or ControlHandler that returns True to allow, False to veto
+            handler: Either a ControlHandler protocol implementation or
+                    a function (sync/async) that takes (event, context) -> ControlResponse
         """
-        self._handlers.append(handler)
+        if hasattr(handler, "handle"):
+            # Already implements protocol
+            self._handlers.append(handler)
+        elif callable(handler):
+            # Wrap function to implement the protocol
+            self._handlers.append(_make_handler(handler))
+        else:
+            raise TypeError(
+                f"Handler must be callable / implement ControlHandler protocol, got {type(handler)}"
+            )
 
-    def unregister(self, handler: Handler | ControlHandler) -> None:
-        """Remove a handler."""
-        if handler in self._handlers:
-            self._handlers.remove(handler)
+    def _validate_response(self, response: Any, handler: ControlHandler) -> ControlResponse:
+        """Validate and normalize handler response."""
+        handler_name = getattr(handler, "__name__", handler.__class__.__name__)
 
-    async def check(self, event: Any) -> bool:
-        """Check if event is allowed by all control handlers.
+        if response is None:
+            logger.warning(f"Handler {handler_name} returned None, assuming PROCEED")
+            return ControlResponse()
+
+        if not isinstance(response, ControlResponse):
+            logger.warning(
+                f"Handler {handler_name} returned {type(response).__name__}, "
+                f"not ControlResponse. Assuming PROCEED"
+            )
+            return ControlResponse()
+
+        return response
+
+    async def check(self, event: Event, context: ExecutionContext) -> ControlResponse:
+        """Check event against all control handlers.
 
         Returns
         -------
-            True if all handlers approve (or no handlers), False if any vetoes
+            ControlResponse with signal and optional data.
         """
-        # No handlers means allow all
+        # No handlers means proceed
         if not self._handlers:
-            return True
+            return ControlResponse()
 
         for handler in self._handlers:
             try:
-                # Check if it's a ControlHandler class
-                if hasattr(handler, "check"):
-                    result = await handler.check(event)
-                else:
-                    # It's a function
-                    result = await handler(event)
+                response = await handler.handle(event, context)
 
-                if not result:
+                # Validate and normalize response
+                response = self._validate_response(response, handler)
+
+                # First non-PROCEED response wins
+                if response.should_interrupt():
                     handler_name = getattr(handler, "__name__", handler.__class__.__name__)
-                    logger.info(f"Handler vetoed {event.__class__.__name__}: {handler_name}")
-                    return False
+                    logger.info(
+                        f"Handler {handler_name} returned {response.signal.value} "
+                        f"for {event.__class__.__name__}"
+                    )
+                    return response
+
             except Exception as e:
                 handler_name = getattr(handler, "__name__", handler.__class__.__name__)
                 logger.error(f"Control handler {handler_name} failed: {e}")
-                # On error, we veto for safety
-                return False
+                # Continue to next handler on error
+                continue
 
-        return True
+        return ControlResponse()
 
     def clear(self) -> None:
         """Clear all handlers."""
         self._handlers.clear()
-
-    def has_handlers(self) -> bool:
-        """Check if there are any handlers registered."""
-        return bool(self._handlers)
-
-
-# Example handlers
-async def circuit_breaker(event: Any) -> bool:
-    """Circuit breaker that can stop execution on too many failures."""
-    # This would check failure rates and return False if circuit is open
-    return True
-
-
-async def rate_limiter(event: Any) -> bool:
-    """Rate limiter for API calls."""
-    # This would check rate limits and return False if exceeded
-    return True
-
-
-async def policy_checker(event: Any) -> bool:
-    """Check if event violates any policies."""
-    # This would check business rules and return False if violated
-    return True

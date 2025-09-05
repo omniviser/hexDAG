@@ -5,131 +5,111 @@ from datetime import datetime
 from typing import Any
 
 
+@dataclass
+class Event:
+    """Base class for all events - provides timestamp."""
+
+    timestamp: datetime = field(default_factory=datetime.now, init=False)
+
+
 # Node events
 @dataclass
-class NodeStarted:
+class NodeStarted(Event):
     """A node has started execution."""
 
     name: str
     wave_index: int
     dependencies: list[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class NodeCompleted:
+class NodeCompleted(Event):
     """A node has completed successfully."""
 
     name: str
     wave_index: int
     result: Any
     duration_ms: float
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class NodeFailed:
+class NodeFailed(Event):
     """A node has failed."""
 
     name: str
     wave_index: int
     error: Exception
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 # Wave events
 @dataclass
-class WaveStarted:
+class WaveStarted(Event):
     """A wave of parallel nodes has started."""
 
     wave_index: int
     nodes: list[str]
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class WaveCompleted:
+class WaveCompleted(Event):
     """A wave has completed."""
 
     wave_index: int
     duration_ms: float
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 # Pipeline events
 @dataclass
-class PipelineStarted:
+class PipelineStarted(Event):
     """Pipeline execution has started."""
 
     name: str
     total_waves: int
     total_nodes: int
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class PipelineCompleted:
+class PipelineCompleted(Event):
     """Pipeline has completed successfully."""
 
     name: str
     duration_ms: float
     node_results: dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 # LLM events
 @dataclass
-class LLMPromptSent:
+class LLMPromptSent(Event):
     """LLM prompt has been sent."""
 
     node_name: str
     messages: list[dict[str, str]]
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class LLMResponseReceived:
+class LLMResponseReceived(Event):
     """LLM response has been received."""
 
     node_name: str
     response: str
     duration_ms: float
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 # Tool events
 @dataclass
-class ToolCalled:
+class ToolCalled(Event):
     """A tool has been invoked."""
 
     node_name: str
     tool_name: str
     params: dict[str, Any]
-    timestamp: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class ToolCompleted:
+class ToolCompleted(Event):
     """A tool has completed."""
 
     node_name: str
     tool_name: str
     result: Any
     duration_ms: float
-    timestamp: datetime = field(default_factory=datetime.now)
-
-
-# Type union for any event
-Event = (
-    NodeStarted
-    | NodeCompleted
-    | NodeFailed
-    | WaveStarted
-    | WaveCompleted
-    | PipelineStarted
-    | PipelineCompleted
-    | LLMPromptSent
-    | LLMResponseReceived
-    | ToolCalled
-    | ToolCompleted
-)

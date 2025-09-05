@@ -12,16 +12,16 @@ class TestObserverManager:
     """Test the ObserverManager for fire-and-forget observability."""
 
     @pytest.mark.asyncio
-    async def test_attach_and_notify(self):
-        """Test attaching observers and notifying them of events."""
+    async def test_register_and_notify(self):
+        """Test registering observers and notifying them of events."""
         manager = ObserverManager()
 
         # Create mock observer
         mock_observer = MagicMock()
         mock_observer.handle = AsyncMock()
 
-        # Attach observer
-        manager.attach(mock_observer)
+        # Register observer
+        manager.register(mock_observer)
         assert len(manager) == 1
 
         # Emit event
@@ -42,7 +42,7 @@ class TestObserverManager:
             obs = MagicMock()
             obs.handle = AsyncMock()
             observers.append(obs)
-            manager.attach(obs)
+            manager.register(obs)
 
         assert len(manager) == 3
 
@@ -67,9 +67,9 @@ class TestObserverManager:
         working_observer = MagicMock()
         working_observer.handle = AsyncMock()
 
-        # Attach both
-        manager.attach(failing_observer)
-        manager.attach(working_observer)
+        # Register both
+        manager.register(failing_observer)
+        manager.register(working_observer)
 
         # Emit event - should not raise
         event = NodeStarted(name="test", wave_index=1)
@@ -89,7 +89,7 @@ class TestObserverManager:
         async def async_observer(event):
             calls.append(event)
 
-        manager.attach(async_observer)
+        manager.register(async_observer)
 
         # Emit event
         event = NodeStarted(name="test", wave_index=1)
@@ -110,7 +110,7 @@ class TestObserverManager:
         def sync_observer(event):
             calls.append(event)
 
-        manager.attach(sync_observer)
+        manager.register(sync_observer)
 
         # Emit event
         event = NodeStarted(name="test", wave_index=1)
@@ -123,23 +123,23 @@ class TestObserverManager:
         assert len(calls) == 1
         assert calls[0] == event
 
-    def test_detach_observer(self):
+    def test_unregister_observer(self):
         """Test removing observers."""
         manager = ObserverManager()
 
         obs1 = MagicMock()
         obs2 = MagicMock()
 
-        manager.attach(obs1)
-        manager.attach(obs2)
+        manager.register(obs1)
+        manager.register(obs2)
         assert len(manager) == 2
 
-        # Detach one
-        manager.detach(obs1)
+        # Unregister one
+        manager.unregister(obs1)
         assert len(manager) == 1
 
-        # Detach non-existent (should not error)
-        manager.detach(obs1)
+        # Unregister non-existent (should not error)
+        manager.unregister(obs1)
         assert len(manager) == 1
 
     def test_clear_all_observers(self):
@@ -148,7 +148,7 @@ class TestObserverManager:
 
         # Add multiple observers
         for _ in range(5):
-            manager.attach(MagicMock())
+            manager.register(MagicMock())
 
         assert len(manager) == 5
 
@@ -176,7 +176,7 @@ class TestObserverManager:
             calls.append(event)
             await asyncio.sleep(0.01)  # Simulate some work
 
-        manager.attach(tracking_observer)
+        manager.register(tracking_observer)
 
         # Create multiple events
         events = [NodeStarted(name=f"node_{i}", wave_index=1) for i in range(5)]

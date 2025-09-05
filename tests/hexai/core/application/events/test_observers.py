@@ -320,9 +320,9 @@ class TestObserverIntegration:
         metrics_obs = MetricsObserver()
         state_obs = NodeStateObserver()
 
-        manager.attach(logging_obs)
-        manager.attach(metrics_obs)
-        manager.attach(state_obs)
+        manager.register(logging_obs)
+        manager.register(metrics_obs)
+        manager.register(state_obs)
 
         # Run a mini pipeline
         await manager.notify(PipelineStarted(name="test", total_nodes=1, total_waves=1))

@@ -2,11 +2,13 @@
 
 This module provides a simple event system for pipeline execution:
 - Events: Simple data classes representing what happened
-- ObserverManager (ObserverManager): Fire-and-forget observability (logging, metrics)
+- ObserverManager: Fire-and-forget observability (logging, metrics)
 - EventBus: Execution control that can veto operations
 """
 
 from .bus import ControlHandler, EventBus
+from .context import ExecutionContext
+from .control import ControlResponse, ControlSignal
 from .events import (
     Event,
     LLMPromptSent,
@@ -22,7 +24,6 @@ from .events import (
     WaveStarted,
 )
 from .manager import Observer, ObserverManager
-from .null_manager import get_event_manager
 from .observers import (
     FileObserver,
     LoggingObserver,
@@ -34,12 +35,13 @@ from .observers import (
 __all__ = [
     # Core system
     "Event",
-    "ObserverManager",  # Alias for backward compatibility
+    "ObserverManager",
     "Observer",
     "EventBus",
-    "ControlBus",  # Alias for backward compatibility
     "ControlHandler",
-    "get_event_manager",
+    "ControlResponse",
+    "ControlSignal",
+    "ExecutionContext",
     # Event types
     "NodeStarted",
     "NodeCompleted",
