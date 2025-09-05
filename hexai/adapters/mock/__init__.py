@@ -8,7 +8,8 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
+# fmt: off
+if TYPE_CHECKING:  # noqa: I300
     # These imports are only for static analysis / IDEs, not runtime
     from hexai.adapters.mock.mock_database import MockDatabaseAdapter  # noqa: F401
     from hexai.adapters.mock.mock_embedding_selector import MockEmbeddingSelectorPort  # noqa: F401

@@ -1,3 +1,9 @@
+"""Pipeline modules for hexAI framework.
+
+This package contains pre-built pipeline applications that demonstrate the capabilities of the hexAI
+framework for specific use cases.
+"""
+
 from __future__ import annotations
 
 import importlib

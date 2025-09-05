@@ -14,16 +14,14 @@ PYPI_TO_MODULE: dict[str, str] = {
 
 
 def _import_name(pypi_pkg: str) -> str:
-    """
-    If user calls pyyaml there is no error in name.
-    """
+    """If user calls pyyaml there is no error in name."""
     return PYPI_TO_MODULE.get(pypi_pkg, pypi_pkg)
 
 
 def optional_import(pkg: str, feature: str | None = None) -> Any:
     """Import an optional dependency at runtime with a clear install hint."""
-    FEATURES = get_pkg_feature()
-    suggested_feature = feature or FEATURES.get(pkg)
+    features = get_pkg_feature()
+    suggested_feature = feature or features.get(pkg)
 
     try:
         return importlib.import_module(_import_name(pkg))
