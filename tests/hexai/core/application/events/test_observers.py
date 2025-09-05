@@ -2,7 +2,13 @@
 
 from unittest.mock import MagicMock
 
-from hexai.core.application.events import LoggingObserver, MetricsObserver, PipelineStartedEvent
+from hexai.core.application.events import (
+    ExecutionEvent,
+    ExecutionLevel,
+    ExecutionPhase,
+    LoggingObserver,
+    MetricsObserver,
+)
 
 
 class MockEventManager:
@@ -31,7 +37,13 @@ class TestObserverIntegration:
         metrics_observer.handle_sync = MagicMock()
 
         # Create an event
-        event = PipelineStartedEvent(pipeline_name="integration_test", total_waves=1, total_nodes=2)
+        event = ExecutionEvent(
+            level=ExecutionLevel.DAG,
+            phase=ExecutionPhase.STARTED,
+            name="integration_test",
+            total_waves=1,
+            total_nodes=2,
+        )
 
         # Both observers should be able to handle the event
         logging_observer.handle_sync(event)

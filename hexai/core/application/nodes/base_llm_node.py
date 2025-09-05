@@ -7,7 +7,7 @@ from typing import Any, Callable, Type
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
-from ..events.events import LLMPromptGeneratedEvent, LLMResponseReceivedEvent
+from ..events import LLMEvent
 from ..prompt import PromptInput, TemplateType
 from ..prompt.template import PromptTemplate
 from .base_node_factory import BaseNodeFactory
@@ -105,8 +105,12 @@ class BaseLLMNode(BaseNodeFactory):
                 # Emit prompt generated event
                 if event_manager:
                     await event_manager.emit(
-                        LLMPromptGeneratedEvent(
+                        LLMEvent(
+                            event_class="llm",
+                            action="prompt",
                             node_name=name,
+                            tool_name="llm",
+                            input_data=messages,
                             messages=messages,
                             template_vars=template_vars,
                         )
@@ -125,9 +129,12 @@ class BaseLLMNode(BaseNodeFactory):
                 # Emit response received event
                 if event_manager:
                     await event_manager.emit(
-                        LLMResponseReceivedEvent(
+                        LLMEvent(
+                            event_class="llm",
+                            action="response",
                             node_name=name,
-                            response=str(result),
+                            tool_name="llm",
+                            output_data=str(result),
                         )
                     )
 

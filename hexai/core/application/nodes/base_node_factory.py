@@ -6,13 +6,7 @@ from typing import Any, Type
 from pydantic import BaseModel, create_model
 
 from ...domain.dag import NodeSpec
-from ..events.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    ToolCalledEvent,
-    ToolCompletedEvent,
-)
+from ..events import ExecutionEvent, ExecutionLevel, ExecutionPhase, LLMEvent
 
 
 class BaseNodeFactory(ABC):
@@ -29,14 +23,15 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit node started event."""
         if event_manager and dependencies is not None:
-            await event_manager.emit(
-                NodeStartedEvent(
-                    node_name=node_name,
-                    wave_index=wave_index,
-                    dependencies=dependencies,
-                    metadata=metadata or {},
-                )
+            event = ExecutionEvent(
+                level=ExecutionLevel.NODE,
+                phase=ExecutionPhase.STARTED,
+                name=node_name,
+                wave_index=wave_index,
+                dependencies=dependencies,
+                metadata=metadata or {},
             )
+            await event_manager.emit(event)
 
     async def emit_node_completed(
         self,
@@ -49,15 +44,16 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit node completed event."""
         if event_manager:
-            await event_manager.emit(
-                NodeCompletedEvent(
-                    node_name=node_name,
-                    result=result,
-                    execution_time=execution_time,
-                    wave_index=wave_index,
-                    metadata=metadata or {},
-                )
+            event = ExecutionEvent(
+                level=ExecutionLevel.NODE,
+                phase=ExecutionPhase.COMPLETED,
+                name=node_name,
+                wave_index=wave_index,
+                result=result,
+                execution_time_ms=execution_time * 1000,  # Convert to milliseconds
+                metadata=metadata or {},
             )
+            await event_manager.emit(event)
 
     async def emit_node_failed(
         self, node_name: str, error: Exception, wave_index: int, event_manager: Any = None
@@ -65,10 +61,12 @@ class BaseNodeFactory(ABC):
         """Emit node failed event."""
         if event_manager:
             await event_manager.emit(
-                NodeFailedEvent(
-                    node_name=node_name,
-                    error=error,
+                ExecutionEvent(
+                    level=ExecutionLevel.NODE,
+                    phase=ExecutionPhase.FAILED,
+                    name=node_name,
                     wave_index=wave_index,
+                    error=error,
                 )
             )
 
@@ -82,14 +80,15 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit tool called event."""
         if event_manager:
-            await event_manager.emit(
-                ToolCalledEvent(
-                    node_name=node_name,
-                    tool_name=tool_name,
-                    tool_params=tool_params,
-                    metadata=metadata or {},
-                )
+            event = LLMEvent(
+                event_class="tool",
+                action="called",
+                node_name=node_name,
+                tool_name=tool_name,
+                input_data=tool_params,
+                metadata=metadata or {},
             )
+            await event_manager.emit(event)
 
     async def emit_tool_completed(
         self,
@@ -102,15 +101,16 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit tool completed event."""
         if event_manager:
-            await event_manager.emit(
-                ToolCompletedEvent(
-                    node_name=node_name,
-                    tool_name=tool_name,
-                    result=result,
-                    execution_time=execution_time,
-                    metadata=metadata or {},
-                )
+            event = LLMEvent(
+                event_class="tool",
+                action="completed",
+                node_name=node_name,
+                tool_name=tool_name,
+                output_data=result,
+                execution_time_ms=execution_time * 1000 if execution_time else None,
+                metadata=metadata or {},
             )
+            await event_manager.emit(event)
 
     def create_pydantic_model(
         self, name: str, schema: dict[str, Any] | Type[BaseModel] | Type[Any] | None

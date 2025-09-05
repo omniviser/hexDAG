@@ -12,15 +12,7 @@ from hexai.core.domain.dag import DirectedGraph
 from hexai.core.validation import IValidator, ValidationContext, coerce_validator
 
 from ..domain.dag import NodeSpec
-from .events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineCompletedEvent,
-    PipelineStartedEvent,
-    WaveCompletedEvent,
-    WaveStartedEvent,
-)
+from .events import ExecutionEvent, ExecutionLevel, ExecutionPhase
 
 
 class OrchestratorError(Exception):
@@ -128,8 +120,10 @@ class Orchestrator:
         # Emit pipeline started event using elegant null-safe syntax
         if event_manager:
             await event_manager.emit(
-                PipelineStartedEvent(
-                    pipeline_name=getattr(graph, "name", "unnamed"),
+                ExecutionEvent(
+                    level=ExecutionLevel.DAG,
+                    phase=ExecutionPhase.STARTED,
+                    name=getattr(graph, "name", "unnamed"),
                     total_waves=len(waves),
                     total_nodes=len(graph.nodes),
                 )
@@ -140,7 +134,15 @@ class Orchestrator:
 
             # Emit wave started event
             if event_manager:
-                await event_manager.emit(WaveStartedEvent(wave_index=wave_idx, nodes=wave))
+                await event_manager.emit(
+                    ExecutionEvent(
+                        level=ExecutionLevel.WAVE,
+                        phase=ExecutionPhase.STARTED,
+                        name=f"wave_{wave_idx}",
+                        wave_index=wave_idx,
+                        nodes=wave,
+                    )
+                )
 
             wave_results = await self._execute_wave(
                 wave,
@@ -157,19 +159,24 @@ class Orchestrator:
             # Emit wave completed event
             if event_manager:
                 await event_manager.emit(
-                    WaveCompletedEvent(
+                    ExecutionEvent(
+                        level=ExecutionLevel.WAVE,
+                        phase=ExecutionPhase.COMPLETED,
+                        name=f"wave_{wave_idx}",
                         wave_index=wave_idx,
                         nodes=wave,
-                        execution_time=time.time() - wave_start_time,
+                        execution_time_ms=(time.time() - wave_start_time) * 1000,
                     )
                 )
 
         # Emit pipeline completed event
         if event_manager:
             await event_manager.emit(
-                PipelineCompletedEvent(
-                    pipeline_name=getattr(graph, "name", "unnamed"),
-                    total_execution_time=time.time() - pipeline_start_time,
+                ExecutionEvent(
+                    level=ExecutionLevel.DAG,
+                    phase=ExecutionPhase.COMPLETED,
+                    name=getattr(graph, "name", "unnamed"),
+                    execution_time_ms=(time.time() - pipeline_start_time) * 1000,
                     node_results=node_results,
                 )
             )
@@ -247,8 +254,10 @@ class Orchestrator:
             # Emit node started event
             if event_manager:
                 await event_manager.emit(
-                    NodeStartedEvent(
-                        node_name=node_name,
+                    ExecutionEvent(
+                        level=ExecutionLevel.NODE,
+                        phase=ExecutionPhase.STARTED,
+                        name=node_name,
                         wave_index=wave_index,
                         dependencies=list(node_spec.deps),
                     )
@@ -272,11 +281,13 @@ class Orchestrator:
             # Emit node completed event
             if event_manager:
                 await event_manager.emit(
-                    NodeCompletedEvent(
-                        node_name=node_name,
-                        result=validated_output,
-                        execution_time=time.time() - node_start_time,
+                    ExecutionEvent(
+                        level=ExecutionLevel.NODE,
+                        phase=ExecutionPhase.COMPLETED,
+                        name=node_name,
                         wave_index=wave_index,
+                        result=validated_output,
+                        execution_time_ms=(time.time() - node_start_time) * 1000,
                     )
                 )
 
@@ -286,7 +297,13 @@ class Orchestrator:
             # Emit node failed event
             if event_manager:
                 await event_manager.emit(
-                    NodeFailedEvent(node_name=node_name, error=e, wave_index=wave_index)
+                    ExecutionEvent(
+                        level=ExecutionLevel.NODE,
+                        phase=ExecutionPhase.FAILED,
+                        name=node_name,
+                        wave_index=wave_index,
+                        error=e,
+                    )
                 )
 
             raise NodeExecutionError(node_name, e) from e

@@ -1,22 +1,8 @@
-"""Pipeline event system with improvements."""
+"""Pipeline event system with consolidated events."""
 
 from .base import EventType, Observer, PipelineEvent, SyncObserver
 from .bus import EventBus, HandlerPriority
-from .events import (  # Node events; Wave events; Pipeline events; LLM events; Tool events
-    LLMPromptGeneratedEvent,
-    LLMResponseReceivedEvent,
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineBuildEvent,
-    PipelineCompletedEvent,
-    PipelineStartedEvent,
-    ToolCalledEvent,
-    ToolCompletedEvent,
-    ValidationWarningEvent,
-    WaveCompletedEvent,
-    WaveStartedEvent,
-)
+from .events import ExecutionEvent, ExecutionLevel, ExecutionPhase, HookEvent, LLMEvent, MetaEvent
 from .manager import PipelineEventManager
 from .observers import (
     FileObserver,
@@ -27,6 +13,7 @@ from .observers import (
 )
 
 __all__ = [
+    # Base classes
     "EventType",
     "Observer",
     "PipelineEvent",
@@ -34,19 +21,14 @@ __all__ = [
     "HandlerPriority",
     "EventBus",
     "PipelineEventManager",
-    "NodeStartedEvent",
-    "NodeCompletedEvent",
-    "NodeFailedEvent",
-    "WaveStartedEvent",
-    "WaveCompletedEvent",
-    "PipelineStartedEvent",
-    "PipelineCompletedEvent",
-    "PipelineBuildEvent",
-    "ValidationWarningEvent",
-    "LLMPromptGeneratedEvent",
-    "LLMResponseReceivedEvent",
-    "ToolCalledEvent",
-    "ToolCompletedEvent",
+    # Consolidated events
+    "ExecutionEvent",
+    "ExecutionLevel",
+    "ExecutionPhase",
+    "LLMEvent",
+    "HookEvent",
+    "MetaEvent",
+    # Observers
     "LoggingObserver",
     "MetricsObserver",
     "NodeObserver",

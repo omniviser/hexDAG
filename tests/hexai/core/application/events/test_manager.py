@@ -10,12 +10,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from hexai.core.application.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
+    ExecutionEvent,
+    ExecutionLevel,
+    ExecutionPhase,
+    MetaEvent,
     PipelineEventManager,
-    PipelineStartedEvent,
-    ValidationWarningEvent,
 )
 from hexai.core.application.events.base import SyncObserver
 from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
@@ -51,8 +50,10 @@ class TestPipelineEventManager:
         self.event_manager.subscribe(self.mock_observer)
 
         # Create and emit an event
-        event = NodeStartedEvent(
-            node_name="test_node",
+        event = ExecutionEvent(
+            level=ExecutionLevel.NODE,
+            phase=ExecutionPhase.STARTED,
+            name="test_node",
             wave_index=1,
             dependencies=["dep1"],
         )
@@ -74,8 +75,10 @@ class TestPipelineEventManager:
         self.event_manager.subscribe(mock_observer_2)
 
         # Create and emit an event
-        event = PipelineStartedEvent(
-            pipeline_name="test_pipeline",
+        event = ExecutionEvent(
+            level=ExecutionLevel.DAG,
+            phase=ExecutionPhase.STARTED,
+            name="test_pipeline",
             total_waves=2,
             total_nodes=5,
         )
@@ -95,13 +98,25 @@ class TestPipelineEventManager:
 
         # Create and emit multiple events
         events = [
-            NodeStartedEvent(node_name="node1", wave_index=1),
-            NodeStartedEvent(node_name="node2", wave_index=1),
-            NodeCompletedEvent(
-                node_name="node1",
+            ExecutionEvent(
+                level=ExecutionLevel.NODE,
+                phase=ExecutionPhase.STARTED,
+                name="node1",
+                wave_index=1,
+            ),
+            ExecutionEvent(
+                level=ExecutionLevel.NODE,
+                phase=ExecutionPhase.STARTED,
+                name="node2",
+                wave_index=1,
+            ),
+            ExecutionEvent(
+                level=ExecutionLevel.NODE,
+                phase=ExecutionPhase.COMPLETED,
+                name="node1",
                 wave_index=1,
                 result={"test": "result"},
-                execution_time=1.5,
+                execution_time_ms=1500,
             ),
         ]
 
@@ -125,16 +140,20 @@ class TestPipelineEventManager:
         self.event_manager.subscribe(self.metrics_observer)
 
         # Emit a pipeline started event
-        pipeline_event = PipelineStartedEvent(
-            pipeline_name="integration_test",
+        pipeline_event = ExecutionEvent(
+            level=ExecutionLevel.DAG,
+            phase=ExecutionPhase.STARTED,
+            name="integration_test",
             total_waves=2,
             total_nodes=4,
         )
         await self.event_manager.emit(pipeline_event)
 
         # Emit a node failed event
-        node_event = NodeFailedEvent(
-            node_name="failing_node",
+        node_event = ExecutionEvent(
+            level=ExecutionLevel.NODE,
+            phase=ExecutionPhase.FAILED,
+            name="failing_node",
             wave_index=1,
             error=RuntimeError("Test error"),
         )
@@ -161,11 +180,13 @@ class TestPipelineEventManager:
         self.event_manager.subscribe(self.mock_observer)
 
         # Emit an event - failing observer should not prevent others from working
-        event = NodeCompletedEvent(
-            node_name="test_node",
+        event = ExecutionEvent(
+            level=ExecutionLevel.NODE,
+            phase=ExecutionPhase.COMPLETED,
+            name="test_node",
             wave_index=1,
             result={"output": "test"},
-            execution_time=0.5,
+            execution_time_ms=500,
         )
 
         # This should not raise an exception
@@ -181,7 +202,15 @@ class TestPipelineEventManager:
         self.event_manager.subscribe(self.mock_observer)
 
         # Create multiple events
-        events = [NodeStartedEvent(node_name=f"node_{i}", wave_index=1) for i in range(10)]
+        events = [
+            ExecutionEvent(
+                level=ExecutionLevel.NODE,
+                phase=ExecutionPhase.STARTED,
+                name=f"node_{i}",
+                wave_index=1,
+            )
+            for i in range(10)
+        ]
 
         # Emit events concurrently
         await asyncio.gather(*[self.event_manager.emit(event) for event in events])
@@ -207,7 +236,8 @@ class TestPipelineEventManager:
         self.event_manager.unsubscribe(self.mock_observer)
 
         # Emit an event
-        event = ValidationWarningEvent(
+        event = MetaEvent(
+            category="validation",
             pipeline_name="test_pipeline",
             warnings=["test warning"],
         )

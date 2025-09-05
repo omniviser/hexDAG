@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-📊 Example 05: Event System and Monitoring.
+📊 Example 05: Event System and Monitoring (Using Consolidated Events).
 
-This example teaches:
-- Event observers and monitoring
-- Custom event handlers
-- Pipeline metrics collection
-- Real-time execution tracking
+This example demonstrates the NEW consolidated event system:
+- ExecutionEvent for all DAG/Wave/Node lifecycle events
+- Event levels (DAG, WAVE, NODE) and phases (STARTED, COMPLETED, FAILED)
+- Custom event observers with the new event structure
+- Real-time execution tracking and metrics collection
+
+NOTE: This example has been updated to use the new consolidated events.
+      The old event classes (NodeStartedEvent, etc.) are deprecated.
 
 Run: python examples/05_event_system.py
 """
@@ -16,12 +19,7 @@ import time
 from typing import Any
 
 from hexai.core.application.events.base import Observer, PipelineEvent
-from hexai.core.application.events.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineStartedEvent,
-)
+from hexai.core.application.events.events import ExecutionEvent, ExecutionLevel, ExecutionPhase
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.events.observers import LoggingObserver
 from hexai.core.application.orchestrator import Orchestrator
@@ -50,29 +48,34 @@ class CustomMetricsObserver(Observer):
 
     async def handle(self, event: PipelineEvent) -> None:
         """Handle pipeline events."""
-        if isinstance(event, NodeStartedEvent):
-            self.metrics["nodes_started"] += 1
-            self.node_start_times[event.node_name] = time.time()
-            self.metrics["events_received"].append(f"STARTED: {event.node_name}")
-            print(f"   📊 Metrics: {event.node_name} started")
+        if isinstance(event, ExecutionEvent):
+            if event.level == ExecutionLevel.NODE:
+                if event.phase == ExecutionPhase.STARTED:
+                    self.metrics["nodes_started"] += 1
+                    self.node_start_times[event.name] = time.time()
+                    self.metrics["events_received"].append(f"STARTED: {event.name}")
+                    print(f"   📊 Metrics: {event.name} started")
 
-        elif isinstance(event, NodeCompletedEvent):
-            self.metrics["nodes_completed"] += 1
+                elif event.phase == ExecutionPhase.COMPLETED:
+                    self.metrics["nodes_completed"] += 1
 
-            # Calculate execution time
-            if event.node_name in self.node_start_times:
-                start_time = self.node_start_times[event.node_name]
-                execution_time = time.time() - start_time
-                self.metrics["node_timings"][event.node_name] = execution_time
-                self.metrics["total_execution_time"] += execution_time
+                    # Calculate execution time
+                    if event.name in self.node_start_times:
+                        start_time = self.node_start_times[event.name]
+                        execution_time = time.time() - start_time
+                        self.metrics["node_timings"][event.name] = execution_time
+                        self.metrics["total_execution_time"] += execution_time
 
-            self.metrics["events_received"].append(f"COMPLETED: {event.node_name}")
-            print(f"   📊 Metrics: {event.node_name} completed in {event.execution_time:.3f}s")
+                    self.metrics["events_received"].append(f"COMPLETED: {event.name}")
+                    execution_time_s = (
+                        event.execution_time_ms / 1000 if event.execution_time_ms else 0
+                    )
+                    print(f"   📊 Metrics: {event.name} completed in {execution_time_s:.3f}s")
 
-        elif isinstance(event, NodeFailedEvent):
-            self.metrics["nodes_failed"] += 1
-            self.metrics["events_received"].append(f"FAILED: {event.node_name}")
-            print(f"   📊 Metrics: {event.node_name} failed")
+                elif event.phase == ExecutionPhase.FAILED:
+                    self.metrics["nodes_failed"] += 1
+                    self.metrics["events_received"].append(f"FAILED: {event.name}")
+                    print(f"   📊 Metrics: {event.name} failed")
 
     def get_summary(self) -> dict:
         """Get metrics summary."""
@@ -120,25 +123,27 @@ class ProgressTracker(Observer):
 
     async def handle(self, event: PipelineEvent) -> None:
         """Handle pipeline events."""
-        if isinstance(event, PipelineStartedEvent):
-            self.start_time = time.time()
-            print(f"   🚀 Progress: Pipeline started with {self.total_nodes} nodes")
+        if isinstance(event, ExecutionEvent):
+            if event.level == ExecutionLevel.DAG and event.phase == ExecutionPhase.STARTED:
+                self.start_time = time.time()
+                print(f"   🚀 Progress: Pipeline started with {self.total_nodes} nodes")
 
-        elif isinstance(event, NodeCompletedEvent):
-            self.completed_nodes += 1
-            progress_percent = (self.completed_nodes / self.total_nodes) * 100
+            elif event.level == ExecutionLevel.NODE and event.phase == ExecutionPhase.COMPLETED:
+                self.completed_nodes += 1
+                progress_percent = (self.completed_nodes / self.total_nodes) * 100
 
-            elapsed = time.time() - (self.start_time or time.time())
-            estimated_total = (
-                elapsed * (self.total_nodes / self.completed_nodes)
-                if self.completed_nodes > 0
-                else 0
-            )
-            remaining = max(0, estimated_total - elapsed)
+                elapsed = time.time() - (self.start_time or time.time())
+                estimated_total = (
+                    elapsed * (self.total_nodes / self.completed_nodes)
+                    if self.completed_nodes > 0
+                    else 0
+                )
+                remaining = max(0, estimated_total - elapsed)
 
-            print(
-                f"   🔄 Progress: {progress_percent:.1f}% ({self.completed_nodes}/{self.total_nodes}) - ETA: {remaining:.1f}s"
-            )
+                print(
+                    f"   🔄 Progress: {progress_percent:.1f}% "
+                    f"({self.completed_nodes}/{self.total_nodes}) - ETA: {remaining:.1f}s"
+                )
 
 
 class ErrorLogger(Observer):
@@ -155,14 +160,15 @@ class ErrorLogger(Observer):
 
     async def handle(self, event: PipelineEvent) -> None:
         """Handle pipeline events."""
-        if isinstance(event, NodeFailedEvent):
-            error_info = {
-                "node": event.node_name,
-                "timestamp": time.time(),
-                "error": str(event.error),
-            }
-            self.errors.append(error_info)
-            print(f"   ❌ Error: {event.node_name} failed - {error_info['error']}")
+        if isinstance(event, ExecutionEvent):
+            if event.level == ExecutionLevel.NODE and event.phase == ExecutionPhase.FAILED:
+                error_info = {
+                    "node": event.name,
+                    "timestamp": time.time(),
+                    "error": str(event.error) if event.error else "Unknown error",
+                }
+                self.errors.append(error_info)
+                print(f"   ❌ Error: {event.name} failed - {error_info['error']}")
 
     def get_error_summary(self) -> dict:
         """Get error summary."""
@@ -213,10 +219,10 @@ async def aggregator_task(input_data: Any, **kwargs) -> dict:
 
 
 async def demonstrate_event_monitoring():
-    """Demonstrate comprehensive event monitoring."""
+    """Demonstrate comprehensive event monitoring with consolidated events."""
 
-    print("\n📊 Event System Demo: Multi-Observer Monitoring")
-    print("=" * 55)
+    print("\n📊 Event System Demo: Consolidated Events & Multi-Observer Monitoring")
+    print("=" * 70)
 
     # Create DAG
     graph = DirectedGraph()
@@ -254,6 +260,10 @@ async def demonstrate_event_monitoring():
     print("   • ErrorLogger - Error and warning capture")
     print("   • LoggingObserver - Built-in logging")
     print("   • PipelineEventManager - Event management")
+    print("\n📦 Using NEW Consolidated Events:")
+    print("   • ExecutionEvent with levels: DAG, WAVE, NODE")
+    print("   • Event phases: STARTED, COMPLETED, FAILED")
+    print("   • All times in milliseconds (execution_time_ms)")
 
     # Execute pipeline
     print("\n🚀 Executing pipeline with real-time monitoring...")
@@ -307,26 +317,26 @@ async def demonstrate_event_monitoring():
 
 
 async def main():
-    """Demonstrate event system capabilities."""
+    """Demonstrate the NEW consolidated event system."""
 
-    print("📊 Example 05: Event System and Monitoring")
-    print("=" * 50)
+    print("📊 Example 05: Consolidated Event System and Monitoring")
+    print("=" * 55)
 
     print("\n🎯 This example demonstrates:")
-    print("   • Custom event observers")
-    print("   • Real-time metrics collection")
-    print("   • Progress tracking")
-    print("   • Error logging and monitoring")
-    print("   • Performance analysis")
+    print("   • NEW Consolidated Events (ExecutionEvent)")
+    print("   • Event Levels: DAG, WAVE, NODE")
+    print("   • Event Phases: STARTED, COMPLETED, FAILED")
+    print("   • Custom observers with new event structure")
+    print("   • Real-time metrics and performance analysis")
 
     results, metrics = await demonstrate_event_monitoring()
 
     print("\n🎯 Key Concepts Learned:")
-    print("   ✅ Event Observers - Monitor pipeline execution")
-    print("   ✅ Metrics Collection - Track performance and timing")
-    print("   ✅ Progress Tracking - Real-time execution progress")
-    print("   ✅ Error Handling - Capture and log failures")
-    print("   ✅ Performance Analysis - Identify bottlenecks")
+    print("   ✅ Consolidated Events - Using new ExecutionEvent for all lifecycle events")
+    print("   ✅ Event Levels - DAG, WAVE, NODE hierarchy")
+    print("   ✅ Event Phases - STARTED, COMPLETED, FAILED states")
+    print("   ✅ Observers Pattern - Monitor execution with custom observers")
+    print("   ✅ Performance Analysis - Identify bottlenecks with metrics")
 
     print("\n🔗 Next: Run example 06 to learn about ports and adapters!")
 

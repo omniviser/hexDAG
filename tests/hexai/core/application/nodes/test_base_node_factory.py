@@ -6,11 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import BaseModel
 
-from hexai.core.application.events.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-)
+from hexai.core.application.events import ExecutionEvent, ExecutionLevel, ExecutionPhase
 from hexai.core.application.nodes.base_node_factory import BaseNodeFactory
 from hexai.core.domain.dag import NodeSpec
 
@@ -95,8 +91,10 @@ class TestBaseNodeFactory:
 
         mock_event_manager.emit.assert_called_once()
         event = mock_event_manager.emit.call_args[0][0]
-        assert isinstance(event, NodeStartedEvent)
-        assert event.node_name == "test_node"
+        assert isinstance(event, ExecutionEvent)
+        assert event.level == ExecutionLevel.NODE
+        assert event.phase == ExecutionPhase.STARTED
+        assert event.name == "test_node"
         assert event.dependencies == ["dep1", "dep2"]
         assert event.metadata == {"test": "metadata"}
 
@@ -109,10 +107,12 @@ class TestBaseNodeFactory:
 
         mock_event_manager.emit.assert_called_once()
         event = mock_event_manager.emit.call_args[0][0]
-        assert isinstance(event, NodeCompletedEvent)
-        assert event.node_name == "test_node"
+        assert isinstance(event, ExecutionEvent)
+        assert event.level == ExecutionLevel.NODE
+        assert event.phase == ExecutionPhase.COMPLETED
+        assert event.name == "test_node"
         assert event.result == "result"
-        assert event.execution_time == 1.5
+        assert event.execution_time_ms == 1500  # 1.5 seconds -> 1500 ms
         assert event.metadata == {"test": "metadata"}
 
     @pytest.mark.asyncio
@@ -123,8 +123,10 @@ class TestBaseNodeFactory:
 
         mock_event_manager.emit.assert_called_once()
         event = mock_event_manager.emit.call_args[0][0]
-        assert isinstance(event, NodeFailedEvent)
-        assert event.node_name == "test_node"
+        assert isinstance(event, ExecutionEvent)
+        assert event.level == ExecutionLevel.NODE
+        assert event.phase == ExecutionPhase.FAILED
+        assert event.name == "test_node"
         assert event.error == error
 
     def test_create_node_with_mapping(self, factory):
