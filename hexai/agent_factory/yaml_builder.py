@@ -60,7 +60,6 @@ class YamlPipelineBuilder:
         -------
             tuple: (DirectedGraph, pipeline_metadata)
         """
-
         yaml = optional_import("yaml", "cli")
         try:
             config = yaml.safe_load(yaml_content)

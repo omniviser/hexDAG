@@ -265,9 +265,7 @@ class PromptTemplate:
 
     def __repr__(self) -> str:
         """Return detailed representation for debugging."""
-        return (
-            f"PromptTemplate(template='{self.template[:50]}...', " f"input_vars={self.input_vars})"
-        )
+        return f"PromptTemplate(template='{self.template[:50]}...', input_vars={self.input_vars})"
 
     def __add__(self, other: str) -> "PromptTemplate":
         """Add text to template using + operator.

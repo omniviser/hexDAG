@@ -622,7 +622,7 @@ async def demonstrate_performance_optimization():
     print(f"   • Total execution time: {total_time:.3f}s")
     print("   • Sequential time (estimated): 0.7s")
     print(f"   • Parallel time (actual): {total_time:.3f}s")
-    print(f"   • Speedup: {0.7/total_time:.2f}x")
+    print(f"   • Speedup: {0.7 / total_time:.2f}x")
 
     return results
 

@@ -73,8 +73,6 @@ class DAGVisualizer:
         -------
             DOT format string for the graph
         """
-
-        FeatureManager.require_feature("viz")
         dot = graphviz.Digraph(comment=title)
         dot.attr(rankdir="TB", style="filled", bgcolor="white")
         dot.attr("node", shape="box", style="filled,rounded", fontname="Arial")
@@ -850,11 +848,7 @@ class DAGVisualizer:
         return f"[{', '.join(attr_pairs)}]"
 
     def render_to_file(
-        self,
-        output_path: str,
-        format: str = "png",
-        title: str = "Pipeline DAG",
-        **kwargs: Any,
+        self, output_path: str, format: str = "png", title: str = "Pipeline DAG", **kwargs: Any
     ) -> str:
         """Render DAG to file using Graphviz.
 

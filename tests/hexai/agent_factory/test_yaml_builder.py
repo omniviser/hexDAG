@@ -3,7 +3,10 @@
 import pytest
 import yaml
 
-from hexai.agent_factory.yaml_builder import YamlPipelineBuilder, YamlPipelineBuilderError
+from hexai.agent_factory.yaml_builder import (
+    YamlPipelineBuilder,
+    YamlPipelineBuilderError,
+)
 from hexai.core.domain.dag import NodeSpec
 
 
@@ -23,26 +26,14 @@ class TestPipelineBuilder:
 
     def test_simple_function_registration(self):
         """Test basic function registration and retrieval."""
-
-        # Register a function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
-
         # Verify registration
         assert "sample_function" in self.builder.registered_functions
-        assert self.builder.registered_functions["sample_function"] == sample_function
+        assert self.builder.registered_functions["sample_function"](None) == {
+            "result": "test_output"
+        }
 
     def test_build_simple_graph(self):
         """Test building a simple graph with one node."""
-
-        # Register required function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
-
         yaml_content = """
 nodes:
   - id: processor
@@ -68,13 +59,6 @@ nodes:
 
     def test_build_with_dependencies(self):
         """Test building pipeline with dependencies."""
-
-        # Register required function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
-
         yaml_content = """
 nodes:
   - id: node1
@@ -105,13 +89,6 @@ nodes:
 
     def test_build_with_input_mapping(self):
         """Test building pipeline with input mapping."""
-
-        # Register required function
-        def sample_function(input_data, **ports):
-            return {"result": "test"}
-
-        self.builder.register_function("sample_function", sample_function)
-
         yaml_content = """
 nodes:
   - id: node1
@@ -161,11 +138,8 @@ nodes:
 """
 
         # This will fail due to missing function, but we can catch and check metadata
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError):
             self.builder.build_from_yaml_string(yaml_content)
-            # Expected due to missing function registration
-
-        # Test metadata extraction separately
 
         config = yaml.safe_load(yaml_content)
         metadata = self.builder._extract_pipeline_metadata(config)
@@ -205,8 +179,10 @@ nodes:
     params:
       fn: test_function
 """
-
-        with pytest.raises(YamlPipelineBuilderError, match="custom_field_mappings required"):
+        with pytest.raises(
+            YamlPipelineBuilderError,
+            match="custom_field_mappings required when field_mapping_mode='custom'",
+        ):
             self.builder.build_from_yaml_string(yaml_content)
 
         # Test custom mode with mappings
@@ -222,8 +198,7 @@ nodes:
     params:
       fn: test_function
 """
-
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError, match="'test_function' is not a callable object"):
             self.builder.build_from_yaml_string(yaml_content_valid)
             # Expected due to missing function, but metadata extraction should work
 
@@ -249,7 +224,8 @@ nodes:
 """
 
         with pytest.raises(
-            YamlPipelineBuilderError, match="input_mapping for node 'node1' must be a dictionary"
+            YamlPipelineBuilderError,
+            match="input_mapping for node 'node1' must be a dictionary",
         ):
             self.builder.build_from_yaml_string(yaml_content)
 

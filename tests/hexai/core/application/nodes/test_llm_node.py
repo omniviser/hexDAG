@@ -1,6 +1,5 @@
 """Test cases for LLMNode class."""
 
-
 import pytest
 from pydantic import BaseModel
 
@@ -104,7 +103,9 @@ class TestLLMNode:
     def test_input_mapping_support(self, llm_node):
         """Test LLM node with input mapping."""
         node_spec = llm_node(
-            "mapped_llm", "Process: {{content}}", input_mapping={"content": "source.text"}
+            "mapped_llm",
+            "Process: {{content}}",
+            input_mapping={"content": "source.text"},
         )
 
         assert "input_mapping" in node_spec.params

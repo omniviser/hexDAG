@@ -99,9 +99,9 @@ jobs:
         displayName: "Check Black"
 
       - script: |
-          uv run flake8 ./hexai
+          uv run pre-commit install
+          uv run pre-commit run flake8 --all-files
         displayName: "Run Flake8"
-        continueOnError: true
 
       - script: |
           uv run isort ./hexai --check-only

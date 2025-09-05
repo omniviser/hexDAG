@@ -144,7 +144,7 @@ def run_category(category: str, quiet: bool = False) -> dict[str, Any]:
     print(f"\n📊 {category.upper()} Category Summary:")
     print(f"   • Successful: {successful}/{total}")
     print(f"   • Total time: {total_time:.2f}s")
-    print(f"   • Average time per example: {total_time/max(1, total):.2f}s")
+    print(f"   • Average time per example: {total_time / max(1, total):.2f}s")
 
     return {
         "success": successful == total,
@@ -180,7 +180,7 @@ def run_all_examples(quiet: bool = False) -> dict[str, Any]:
     print("\n📊 Overall Summary:")
     print(f"   • Successful: {successful}/{total}")
     print(f"   • Total time: {total_time:.2f}s")
-    print(f"   • Average time per example: {total_time/max(1, total):.2f}s")
+    print(f"   • Average time per example: {total_time / max(1, total):.2f}s")
 
     return {
         "success": successful == total,
