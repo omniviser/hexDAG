@@ -44,6 +44,10 @@ class CustomMetricsObserver(Observer):
         }
         self.node_start_times = {}
 
+    def can_handle(self, event: PipelineEvent) -> bool:
+        """Check if this observer can handle the event - we handle all events."""
+        return True
+
     async def handle(self, event: PipelineEvent) -> None:
         """Handle pipeline events."""
         if isinstance(event, NodeStartedEvent):
@@ -110,6 +114,10 @@ class ProgressTracker(Observer):
         self.completed_nodes = 0
         self.start_time = None
 
+    def can_handle(self, event: PipelineEvent) -> bool:
+        """Check if this observer can handle the event - we handle all events."""
+        return True
+
     async def handle(self, event: PipelineEvent) -> None:
         """Handle pipeline events."""
         if isinstance(event, PipelineStartedEvent):
@@ -140,6 +148,10 @@ class ErrorLogger(Observer):
         """Initialize error logging."""
         self.errors = []
         self.warnings = []
+
+    def can_handle(self, event: PipelineEvent) -> bool:
+        """Check if this observer can handle the event - we handle all events."""
+        return True
 
     async def handle(self, event: PipelineEvent) -> None:
         """Handle pipeline events."""

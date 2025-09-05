@@ -1,6 +1,7 @@
-"""Pipeline event system."""
+"""Pipeline event system with improvements."""
 
 from .base import EventType, Observer, PipelineEvent, SyncObserver
+from .bus import EventBus, HandlerPriority
 from .events import (  # Node events; Wave events; Pipeline events; LLM events; Tool events
     LLMPromptGeneratedEvent,
     LLMResponseReceivedEvent,
@@ -30,6 +31,8 @@ __all__ = [
     "Observer",
     "PipelineEvent",
     "SyncObserver",
+    "HandlerPriority",
+    "EventBus",
     "PipelineEventManager",
     "NodeStartedEvent",
     "NodeCompletedEvent",

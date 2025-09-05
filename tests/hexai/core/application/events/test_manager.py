@@ -193,11 +193,11 @@ class TestPipelineEventManager:
         """Test unsubscribing observers."""
         # Subscribe observer
         self.event_manager.subscribe(self.mock_observer)
-        assert len(self.event_manager._global_observers) == 1
+        assert len(self.event_manager._global_observers_compat) == 1
 
         # Unsubscribe observer
         self.event_manager.unsubscribe(self.mock_observer)
-        assert len(self.event_manager._global_observers) == 0
+        assert len(self.event_manager._global_observers_compat) == 0
 
     @pytest.mark.asyncio
     async def test_emit_after_unsubscribe(self) -> None:

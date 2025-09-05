@@ -157,7 +157,12 @@ class WebSocketObserver(SyncObserver):
 
     def handle_sync(self, event: PipelineEvent) -> None:
         """Stream event to WebSocket clients."""
-        event_data = event.to_dict()
+        event_data = {
+            "event_type": event.event_type.value,
+            "timestamp": event.timestamp.isoformat(),
+            "session_id": event.session_id,
+            "metadata": event.metadata or {},
+        }
 
         # Add progress info for node events
         if isinstance(event, NodeCompletedEvent):
@@ -175,7 +180,14 @@ class FileObserver(SyncObserver):
 
     def handle_sync(self, event: PipelineEvent) -> None:
         """Write event to file as JSON."""
-        event_data = json.dumps(event.to_dict())
+        event_data = json.dumps(
+            {
+                "event_type": event.event_type.value,
+                "timestamp": event.timestamp.isoformat(),
+                "session_id": event.session_id,
+                "metadata": event.metadata or {},
+            }
+        )
         self.file_handle.write(event_data + "\n")
         self.file_handle.flush()
 
