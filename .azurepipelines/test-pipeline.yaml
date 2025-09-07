@@ -128,14 +128,8 @@ jobs:
     displayName: "Matrix: OS × Python × profiles"
     strategy:
       matrix:
-        ubuntu-py310:  { vmImage: "ubuntu-latest",  python: "3.10" }
-        ubuntu-py311:  { vmImage: "ubuntu-latest",  python: "3.11" }
         ubuntu-py312:  { vmImage: "ubuntu-latest",  python: "3.12" }
-        macos-py310:   { vmImage: "macos-latest",   python: "3.10" }
-        macos-py311:   { vmImage: "macos-latest",   python: "3.11" }
         macos-py312:   { vmImage: "macos-latest",   python: "3.12" }
-        windows-py310: { vmImage: "windows-latest", python: "3.10" }
-        windows-py311: { vmImage: "windows-latest", python: "3.11" }
         windows-py312: { vmImage: "windows-latest", python: "3.12" }
     pool:
       vmImage: $(vmImage)
