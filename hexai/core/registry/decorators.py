@@ -1,173 +1,155 @@
-"""Simplified decorators for component registration."""
+"""Simplified component decorators with minimal side effects.
+
+These decorators ONLY add metadata to classes. They do NOT register
+components. Registration happens during bootstrap via the manifest.
+"""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Callable, TypeVar
 
-from hexai.core.registry.types import ComponentType, Namespace, NodeSubtype
+from hexai.core.registry.models import ComponentType, DecoratorMetadata, NodeSubtype
 
 T = TypeVar("T")
+
+
+def _snake_case(name: str) -> str:
+    """Convert CamelCase to snake_case."""
+    # Insert underscore before uppercase letters that follow lowercase letters
+    s1 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", name)
+    # Insert underscore before uppercase letters followed by lowercase (except at start)
+    s2 = re.sub("([A-Z]+)([A-Z][a-z])", r"\1_\2", s1)
+    return s2.lower()
 
 
 def component(
     component_type: ComponentType | str,
     name: str | None = None,
     *,
-    namespace: str | Namespace = "user",
+    namespace: str = "user",
     subtype: NodeSubtype | str | None = None,
     description: str | None = None,
 ) -> Callable[[type[T]], type[T]]:
-    """Universal decorator for component registration.
+    """Add metadata to components without registering them.
+
+    This decorator ONLY attaches metadata. It does NOT register the component.
+    Registration happens during bootstrap when modules are loaded from the manifest.
 
     Parameters
     ----------
-    component_type : ComponentType | str
+    component_type: ComponentType | str
         Component type (required). Can be enum or string like "node", "tool", etc.
-    name : str | None
+    name: str | None
         Component name. If None, uses class name in snake_case.
-    namespace : str | Namespace
+    namespace: str
         Component namespace. Defaults to 'user'.
-        Use 'core' for system components (requires privilege),
-        or custom string for plugins.
-    subtype : NodeSubtype | str | None
-        Subtype for nodes (e.g., 'function', 'llm', 'agent').
-    description : str | None
+    subtype: NodeSubtype | str | None
+        Optional subtype (mainly for nodes).
+    description: str | None
         Component description. If None, uses class docstring.
+
+    Returns
+    -------
+    Callable[[type[T]], type[T]]
+        Decorator function that adds metadata to the class.
 
     Examples
     --------
-    >>> @component("node")  # String works
-    ... class PassthroughNode:
+    >>> @component('node', name='passthrough')
+    >>> class PassthroughNode:
     ...     '''Passes data through unchanged.'''
     ...     pass
-
-    >>> @component(ComponentType.NODE)  # Enum also works
-    ... class DataNode:
-    ...     pass
+    >>>
+    >>> # After decoration, the class has metadata:
+    >>> assert hasattr(PassthroughNode, '__hexdag_metadata__')
+    >>> assert PassthroughNode.__hexdag_metadata__.type == 'node'
     """
 
     def decorator(cls: type[T]) -> type[T]:
-        from hexai.core.registry import registry
-
         # Infer name from class name if not provided
         component_name = name or _snake_case(cls.__name__)
 
         # Use class docstring as description if not provided
         component_description = description or (cls.__doc__ or "").strip()
 
-        # Only check for core namespace privilege (let registry handle conversion)
-        privileged = namespace == "core" or namespace == Namespace.CORE
+        # Validate component type if it's a string
+        if isinstance(component_type, str):
+            try:
+                validated_type: ComponentType | str = ComponentType(component_type)
+            except ValueError:
+                # Invalid type - fail fast
+                raise ValueError(
+                    f"Invalid component type '{component_type}'. "
+                    f"Must be one of: {', '.join(ComponentType)}"
+                ) from None
+        else:
+            validated_type = component_type  # type: ignore[unreachable]
 
-        # Register component (registry will handle string->enum conversion)
-        registry.register(
+        metadata = DecoratorMetadata(
+            type=validated_type,
             name=component_name,
-            component=cls,
-            component_type=component_type,
-            namespace=namespace,
-            privileged=privileged,
+            declared_namespace=namespace,
             subtype=subtype,
             description=component_description,
         )
+
+        # Attach metadata to the class
+        cls.__hexdag_metadata__ = metadata  # type: ignore[attr-defined]
 
         return cls
 
     return decorator
 
 
-# Simple wrapper decorators for common component types
-# Much cleaner than the factory pattern
-
-
-def node(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
+def make_component_decorator(
+    component_type: ComponentType | str,
     subtype: NodeSubtype | str | None = None,
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate node components."""
-    return component("node", name, namespace=namespace, subtype=subtype, **kwargs)
+) -> Callable[..., Callable[[type[T]], type[T]]]:
+    """Create specialized component decorators.
+
+    Parameters
+    ----------
+    component_type : ComponentType | str
+        The type of component this decorator creates.
+    subtype : NodeSubtype | str | None
+        Optional subtype to set automatically.
+
+    Returns
+    -------
+    Callable
+        A decorator function with the type/subtype pre-configured.
+    """
+
+    def wrapper(
+        name: str | None = None,
+        *,
+        namespace: str = "user",
+        description: str | None = None,
+        **kwargs: Any,
+    ) -> Callable[[type[T]], type[T]]:
+        # If subtype is provided via factory, it takes precedence
+        actual_subtype = subtype or kwargs.get("subtype")
+        return component(
+            component_type,
+            name,
+            namespace=namespace,
+            subtype=actual_subtype,
+            description=description,
+        )
+
+    return wrapper
 
 
-def tool(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate tool components."""
-    return component("tool", name, namespace=namespace, **kwargs)
+# Generate base type decorators using the factory
+node = make_component_decorator(ComponentType.NODE)
+tool = make_component_decorator(ComponentType.TOOL)
+adapter = make_component_decorator(ComponentType.ADAPTER)
+policy = make_component_decorator(ComponentType.POLICY)
+memory = make_component_decorator(ComponentType.MEMORY)
+observer = make_component_decorator(ComponentType.OBSERVER)
 
-
-def adapter(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate adapter components."""
-    return component("adapter", name, namespace=namespace, **kwargs)
-
-
-def policy(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate policy components."""
-    return component("policy", name, namespace=namespace, **kwargs)
-
-
-def memory(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate memory components."""
-    return component("memory", name, namespace=namespace, **kwargs)
-
-
-def observer(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate observer components."""
-    return component("observer", name, namespace=namespace, **kwargs)
-
-
-# Node subtype decorators
-def function_node(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate function nodes."""
-    return component("node", name, namespace=namespace, subtype="function", **kwargs)
-
-
-def llm_node(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate LLM nodes."""
-    return component("node", name, namespace=namespace, subtype="llm", **kwargs)
-
-
-def agent_node(
-    name: str | None = None,
-    namespace: str | Namespace = "user",
-    **kwargs: Any,
-) -> Callable[[type[T]], type[T]]:
-    """Decorate agent nodes."""
-    return component("node", name, namespace=namespace, subtype="agent", **kwargs)
-
-
-def _snake_case(name: str) -> str:
-    """Convert CamelCase to snake_case."""
-    # Insert underscore before uppercase letters
-    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-    # Insert underscore before uppercase letter sequences
-    s2 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1)
-    # Convert to lowercase and remove leading underscore
-    return s2.lower().lstrip("_")
+# Generate node subtype decorators
+function_node = make_component_decorator(ComponentType.NODE, subtype=NodeSubtype.FUNCTION)
+llm_node = make_component_decorator(ComponentType.NODE, subtype=NodeSubtype.LLM)
+agent_node = make_component_decorator(ComponentType.NODE, subtype=NodeSubtype.AGENT)

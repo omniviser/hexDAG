@@ -10,7 +10,7 @@ import logging
 from typing import Any
 
 from hexai.core.registry import node
-from hexai.core.registry.types import NodeSubtype
+from hexai.core.registry.models import NodeSubtype
 
 logger = logging.getLogger(__name__)
 

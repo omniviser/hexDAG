@@ -1,21 +1,29 @@
 """HexDAG Core - Hexagonal Architecture for DAG Orchestration.
 
-Core Framework Components Auto-Registration:
-1. When 'registry' is imported below, it triggers ComponentRegistry.__init__
-2. Registry.__init__ calls _load_core_components()
-3. This imports core modules (hexai.core.nodes, etc.)
-4. Core module decorators (@node, @adapter, etc.) register components
-5. Components become available in 'core' namespace
+The new bootstrap-based architecture:
+1. Decorators only add metadata (no auto-registration)
+2. Components are declared in component_manifest.yaml
+3. Call bootstrap_registry() or init_hexdag() to initialize
+4. Registry is immutable after bootstrap (in production)
 
-Users don't need to import core components - they're automatically available:
-    from hexai.core.registry import registry
-    node = registry.get('passthrough', namespace='core')  # Works!
+Example usage:
+    from hexai.core import init_hexdag, registry
+
+    # Initialize HexDAG
+    init_hexdag(dev_mode=True)
+
+    # Now use the registry
+    node = registry.get('passthrough', namespace='core')
 """
 
+from hexai.core.bootstrap import bootstrap_registry, ensure_bootstrapped, init_hexdag
 from hexai.core.registry import registry
-from hexai.core.registry.types import ComponentType  # For internal framework use
+from hexai.core.registry.models import ComponentType
 
-# At this point, core components are already loaded and registered
-# via the registry initialization process.
-
-__all__ = ["registry", "ComponentType"]
+__all__ = [
+    "registry",
+    "ComponentType",
+    "bootstrap_registry",
+    "ensure_bootstrapped",
+    "init_hexdag",
+]

@@ -2,7 +2,6 @@
 
 import pytest
 
-from hexai.core.registry import registry
 from hexai.core.registry.decorators import (
     _snake_case,
     adapter,
@@ -16,9 +15,8 @@ from hexai.core.registry.decorators import (
     policy,
     tool,
 )
-from hexai.core.registry.exceptions import ComponentAlreadyRegisteredError
-from hexai.core.registry.types import ComponentType  # Internal for tests
-from hexai.core.registry.types import Namespace, NodeSubtype
+from hexai.core.registry.models import ComponentType  # Internal for tests
+from hexai.core.registry.models import NodeSubtype
 
 
 class TestSnakeCase:
@@ -51,26 +49,15 @@ class TestSnakeCase:
 
     def test_leading_underscore(self):
         """Test handling of leading underscores."""
-        assert _snake_case("_Leading") == "leading"
-        assert _snake_case("__DoubleLeading") == "double_leading"
+        assert _snake_case("_Leading") == "_leading"
+        assert _snake_case("__DoubleLeading") == "__double_leading"
 
 
 class TestComponentDecorator:
-    """Test the main component decorator with direct registration."""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Create a fresh registry for each test."""
-        # Clear the registry before each test
-        registry._components.clear()
-        registry._protected_components.clear()
-        yield
-        # Clean up after
-        registry._components.clear()
-        registry._protected_components.clear()
+    """Test the main component decorator."""
 
     def test_basic_decoration(self):
-        """Test basic component decoration and registration."""
+        """Test basic component decoration adds metadata."""
 
         @component(ComponentType.NODE, namespace="test")
         class TestComponent:
@@ -78,11 +65,12 @@ class TestComponentDecorator:
 
             pass
 
-        # Component should be registered immediately
-        metadata = registry.get_metadata("test_component", namespace="test")
+        # Decorator should add metadata to the class
+        assert hasattr(TestComponent, "__hexdag_metadata__")
+        metadata = TestComponent.__hexdag_metadata__
         assert metadata.name == "test_component"
-        assert metadata.component_type == ComponentType.NODE
-        assert metadata.namespace == "test"
+        assert metadata.type == ComponentType.NODE
+        assert metadata.declared_namespace == "test"
         assert metadata.description == "Test component."
 
     def test_custom_name(self):
@@ -92,8 +80,9 @@ class TestComponentDecorator:
         class TestComponent:
             pass
 
-        # Should use custom name
-        metadata = registry.get_metadata("custom", namespace="test")
+        # Should use custom name in metadata
+        assert hasattr(TestComponent, "__hexdag_metadata__")
+        metadata = TestComponent.__hexdag_metadata__
         assert metadata.name == "custom"
 
     def test_description_from_docstring(self):
@@ -108,7 +97,9 @@ class TestComponentDecorator:
 
             pass
 
-        metadata = registry.get_metadata("documented_component", namespace="test")
+        # Check metadata directly on the class
+        assert hasattr(DocumentedComponent, "__hexdag_metadata__")
+        metadata = DocumentedComponent.__hexdag_metadata__
         assert "Well-documented component" in metadata.description
 
     def test_explicit_description(self):
@@ -120,7 +111,9 @@ class TestComponentDecorator:
 
             pass
 
-        metadata = registry.get_metadata("test_component", namespace="test")
+        # Check metadata directly on the class
+        assert hasattr(TestComponent, "__hexdag_metadata__")
+        metadata = TestComponent.__hexdag_metadata__
         assert metadata.description == "Explicit description"
 
     def test_subtype_parameter(self):
@@ -130,33 +123,28 @@ class TestComponentDecorator:
         class FunctionComponent:
             pass
 
-        metadata = registry.get_metadata("function_component", namespace="test")
+        # Check metadata directly on the class
+        assert hasattr(FunctionComponent, "__hexdag_metadata__")
+        metadata = FunctionComponent.__hexdag_metadata__
         assert metadata.subtype == NodeSubtype.FUNCTION
 
     def test_core_namespace_privilege(self):
         """Test that core namespace gets privileged access."""
 
-        @component(ComponentType.NODE, namespace=Namespace.CORE)
+        @component(ComponentType.NODE, namespace="core")
         class CoreComponent:
             pass
 
-        # Core component should be marked as protected
-        assert "core_component" in registry._protected_components
-        metadata = registry.get_metadata("core_component", namespace=Namespace.CORE)
-        assert metadata.namespace == Namespace.CORE
+        # Check metadata directly on the class
+        assert hasattr(CoreComponent, "__hexdag_metadata__")
+        metadata = CoreComponent.__hexdag_metadata__
+        # Note: declared_namespace is what's set by decorator
+        # The actual namespace is determined during bootstrap
+        assert metadata.declared_namespace == "core"
 
 
 class TestTypeSpecificDecorators:
     """Test type-specific decorator shortcuts."""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Create a fresh registry for each test."""
-        registry._components.clear()
-        registry._protected_components.clear()
-        yield
-        registry._components.clear()
-        registry._protected_components.clear()
 
     def test_node_decorator(self):
         """Test @node decorator."""
@@ -165,8 +153,9 @@ class TestTypeSpecificDecorators:
         class TestNode:
             pass
 
-        metadata = registry.get_metadata("test_node", namespace="test")
-        assert metadata.component_type == ComponentType.NODE
+        assert hasattr(TestNode, "__hexdag_metadata__")
+        metadata = TestNode.__hexdag_metadata__
+        assert metadata.type == ComponentType.NODE
 
     def test_tool_decorator(self):
         """Test @tool decorator."""
@@ -175,8 +164,9 @@ class TestTypeSpecificDecorators:
         class TestTool:
             pass
 
-        metadata = registry.get_metadata("test_tool", namespace="test")
-        assert metadata.component_type == ComponentType.TOOL
+        assert hasattr(TestTool, "__hexdag_metadata__")
+        metadata = TestTool.__hexdag_metadata__
+        assert metadata.type == ComponentType.TOOL
 
     def test_adapter_decorator(self):
         """Test @adapter decorator."""
@@ -185,8 +175,9 @@ class TestTypeSpecificDecorators:
         class TestAdapter:
             pass
 
-        metadata = registry.get_metadata("test_adapter", namespace="test")
-        assert metadata.component_type == ComponentType.ADAPTER
+        assert hasattr(TestAdapter, "__hexdag_metadata__")
+        metadata = TestAdapter.__hexdag_metadata__
+        assert metadata.type == ComponentType.ADAPTER
 
     def test_policy_decorator(self):
         """Test @policy decorator."""
@@ -195,8 +186,9 @@ class TestTypeSpecificDecorators:
         class TestPolicy:
             pass
 
-        metadata = registry.get_metadata("test_policy", namespace="test")
-        assert metadata.component_type == ComponentType.POLICY
+        assert hasattr(TestPolicy, "__hexdag_metadata__")
+        metadata = TestPolicy.__hexdag_metadata__
+        assert metadata.type == ComponentType.POLICY
 
     def test_memory_decorator(self):
         """Test @memory decorator."""
@@ -205,8 +197,9 @@ class TestTypeSpecificDecorators:
         class TestMemory:
             pass
 
-        metadata = registry.get_metadata("test_memory", namespace="test")
-        assert metadata.component_type == ComponentType.MEMORY
+        assert hasattr(TestMemory, "__hexdag_metadata__")
+        metadata = TestMemory.__hexdag_metadata__
+        assert metadata.type == ComponentType.MEMORY
 
     def test_observer_decorator(self):
         """Test @observer decorator."""
@@ -215,8 +208,9 @@ class TestTypeSpecificDecorators:
         class TestObserver:
             pass
 
-        metadata = registry.get_metadata("test_observer", namespace="test")
-        assert metadata.component_type == ComponentType.OBSERVER
+        assert hasattr(TestObserver, "__hexdag_metadata__")
+        metadata = TestObserver.__hexdag_metadata__
+        assert metadata.type == ComponentType.OBSERVER
 
     def test_function_node_decorator(self):
         """Test @function_node decorator."""
@@ -225,8 +219,9 @@ class TestTypeSpecificDecorators:
         class TestFunctionNode:
             pass
 
-        metadata = registry.get_metadata("test_function_node", namespace="test")
-        assert metadata.component_type == ComponentType.NODE
+        assert hasattr(TestFunctionNode, "__hexdag_metadata__")
+        metadata = TestFunctionNode.__hexdag_metadata__
+        assert metadata.type == ComponentType.NODE
         assert metadata.subtype == NodeSubtype.FUNCTION
 
     def test_llm_node_decorator(self):
@@ -236,8 +231,9 @@ class TestTypeSpecificDecorators:
         class TestLLMNode:
             pass
 
-        metadata = registry.get_metadata("test_llm_node", namespace="test")
-        assert metadata.component_type == ComponentType.NODE
+        assert hasattr(TestLLMNode, "__hexdag_metadata__")
+        metadata = TestLLMNode.__hexdag_metadata__
+        assert metadata.type == ComponentType.NODE
         assert metadata.subtype == NodeSubtype.LLM
 
     def test_agent_node_decorator(self):
@@ -247,25 +243,17 @@ class TestTypeSpecificDecorators:
         class TestAgentNode:
             pass
 
-        metadata = registry.get_metadata("test_agent_node", namespace="test")
-        assert metadata.component_type == ComponentType.NODE
+        assert hasattr(TestAgentNode, "__hexdag_metadata__")
+        metadata = TestAgentNode.__hexdag_metadata__
+        assert metadata.type == ComponentType.NODE
         assert metadata.subtype == NodeSubtype.AGENT
 
 
-class TestDecoratorIntegration:
-    """Test decorator integration with registry."""
+class TestDecoratorMetadata:
+    """Test that decorators correctly attach metadata."""
 
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Create a fresh registry for each test."""
-        registry._components.clear()
-        registry._protected_components.clear()
-        yield
-        registry._components.clear()
-        registry._protected_components.clear()
-
-    def test_multiple_components_same_namespace(self):
-        """Test registering multiple components in same namespace."""
+    def test_multiple_components_metadata(self):
+        """Test that multiple components get correct metadata."""
 
         @node(namespace="test")
         class Node1:
@@ -279,152 +267,69 @@ class TestDecoratorIntegration:
         class Tool1:
             pass
 
-        # All should be registered
-        assert registry.get("node1", namespace="test") is not None
-        assert registry.get("node2", namespace="test") is not None
-        assert registry.get("tool1", namespace="test") is not None
+        # All should have metadata attached
+        assert hasattr(Node1, "__hexdag_metadata__")
+        assert Node1.__hexdag_metadata__.name == "node1"
+        assert Node1.__hexdag_metadata__.type == ComponentType.NODE
 
-    def test_component_replacement(self):
-        """Test that decorators don't replace by default."""
+        assert hasattr(Node2, "__hexdag_metadata__")
+        assert Node2.__hexdag_metadata__.name == "node2"
+        assert Node2.__hexdag_metadata__.type == ComponentType.NODE
 
-        @node(namespace="test")
-        class OriginalNode:
+        assert hasattr(Tool1, "__hexdag_metadata__")
+        assert Tool1.__hexdag_metadata__.name == "tool1"
+        assert Tool1.__hexdag_metadata__.type == ComponentType.TOOL
+
+    def test_same_name_different_classes(self):
+        """Test that classes can have same component name."""
+
+        @node(name="shared_name", namespace="test")
+        class FirstNode:
             pass
 
-        # This should raise an error since replace=False by default
-        with pytest.raises(ComponentAlreadyRegisteredError):
+        @node(name="shared_name", namespace="other")
+        class SecondNode:
+            pass
 
-            @node(namespace="test", name="original_node")
-            class ReplacementNode:
-                pass
+        # Both should have the metadata with same name but different namespaces
+        assert FirstNode.__hexdag_metadata__.name == "shared_name"
+        assert FirstNode.__hexdag_metadata__.declared_namespace == "test"
 
-    def test_get_component_instance(self):
-        """Test getting component instance from registry."""
-
-        @node(namespace="test")
-        class SimpleNode:
-            def __init__(self, value=42):
-                self.value = value
-
-        # Get instance with default args
-        instance = registry.get("simple_node", namespace="test")
-        assert isinstance(instance, SimpleNode)
-        assert instance.value == 42
-
-        # Get instance with custom args
-        instance = registry.get("simple_node", namespace="test", value=100)
-        assert instance.value == 100
+        assert SecondNode.__hexdag_metadata__.name == "shared_name"
+        assert SecondNode.__hexdag_metadata__.declared_namespace == "other"
 
 
-class TestFunctionBehavior:
-    """Test that functions are NOT called when retrieved from registry."""
+class TestFunctionMetadata:
+    """Test that function decorators work correctly."""
 
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Clean registry before each test."""
-        registry._components.clear()
-        registry._protected_components.clear()
-        yield
-        registry._components.clear()
-        registry._protected_components.clear()
-
-    def test_function_not_called_on_get(self):
-        """Test that registry.get() returns function without calling it."""
-        call_count = 0
+    def test_function_decorator(self):
+        """Test that functions can be decorated."""
 
         @tool(namespace="test")
-        def counting_tool():
-            """Tool that counts how many times it's called."""
-            nonlocal call_count
-            call_count += 1
-            return f"called {call_count} times"
+        def my_tool():
+            """Tool that does something."""
+            return "result"
 
-        # Get the function from registry
-        func = registry.get("counting_tool", namespace="test")
+        # Function should have metadata
+        assert hasattr(my_tool, "__hexdag_metadata__")
+        assert my_tool.__hexdag_metadata__.name == "my_tool"
+        assert my_tool.__hexdag_metadata__.type == ComponentType.TOOL
+        assert my_tool.__hexdag_metadata__.declared_namespace == "test"
 
-        # Function should NOT have been called yet
-        assert call_count == 0, "Function was called during get()!"
-        assert callable(func), "Should return a callable"
-        assert func is counting_tool, "Should return the original function"
-
-        # Now call it manually
-        result = func()
-        assert call_count == 1
-        assert result == "called 1 times"
-
-    def test_function_with_side_effects_not_triggered(self):
-        """Test that functions with side effects aren't triggered on get()."""
-        side_effects = []
+    def test_function_with_parameters(self):
+        """Test that functions with parameters get metadata."""
 
         @tool(namespace="test")
-        def side_effect_tool(value):
-            """Tool with side effects."""
-            side_effects.append(f"executed with {value}")
-            return value * 2
-
-        # Get the function - should NOT trigger side effects
-        func = registry.get("side_effect_tool", namespace="test")
-        assert len(side_effects) == 0, "Side effects triggered during get()!"
-
-        # Now call it manually
-        result = func(5)
-        assert result == 10
-        assert side_effects == ["executed with 5"]
-
-    def test_kwargs_ignored_for_functions(self):
-        """Test that kwargs passed to get() are ignored for functions."""
-        call_args = []
-
-        @tool(namespace="test")
-        def arg_tracking_tool(x=1, y=2):
-            """Tool that tracks its arguments."""
-            call_args.append((x, y))
+        def parameterized_tool(x: int, y: int = 5) -> int:
+            """Tool with parameters."""
             return x + y
 
-        # Get with kwargs - they should be ignored
-        func = registry.get("arg_tracking_tool", namespace="test", x=100, y=200)
+        # Function should have metadata
+        assert hasattr(parameterized_tool, "__hexdag_metadata__")
+        assert parameterized_tool.__hexdag_metadata__.name == "parameterized_tool"
 
-        # Function should not have been called
-        assert len(call_args) == 0
-
-        # When we call it, it uses its own defaults, not the get() kwargs
-        result = func()
-        assert result == 3  # 1 + 2 (defaults)
-        assert call_args == [(1, 2)]
-
-    def test_function_returned_same_instance(self):
-        """Test that same function instance is returned each time."""
-
-        @tool(namespace="test")
-        def singleton_tool():
-            return "data"
-
-        # Get multiple times
-        func1 = registry.get("singleton_tool", namespace="test")
-        func2 = registry.get("singleton_tool", namespace="test")
-        func3 = registry.get("singleton_tool", namespace="test", unused_kwarg="ignored")
-
-        # Should all be the same function object
-        assert func1 is func2 is func3 is singleton_tool
-
-    def test_exception_not_raised_on_get(self):
-        """Ensure function exceptions aren't raised during get()."""
-
-        @tool(namespace="test")
-        def failing_tool():
-            """Tool that always raises an exception."""
-            raise ValueError("This tool always fails!")
-
-        # Getting the function should NOT raise the exception
-        func = registry.get("failing_tool", namespace="test")
-        assert callable(func)
-
-        # But calling it should raise
-        with pytest.raises(ValueError, match="This tool always fails"):
-            func()
-
-    def test_generator_function_not_started(self):
-        """Test that generator functions aren't started on get()."""
+    def test_generator_function(self):
+        """Test that generator functions can be decorated."""
 
         @tool(namespace="test")
         def generator_tool():
@@ -433,34 +338,14 @@ class TestFunctionBehavior:
             yield 2
             yield 3
 
-        # Get the generator function
-        func = registry.get("generator_tool", namespace="test")
-
-        # It should be the function, not a generator instance
-        assert callable(func)
-        assert func is generator_tool
-
-        # Now we can create generator instances
-        gen1 = func()
-        gen2 = func()
-
-        # They should be different generator instances
-        assert gen1 is not gen2
-        assert list(gen1) == [1, 2, 3]
-        assert list(gen2) == [1, 2, 3]
+        # Generator function should have metadata
+        assert hasattr(generator_tool, "__hexdag_metadata__")
+        assert generator_tool.__hexdag_metadata__.name == "generator_tool"
+        assert generator_tool.__hexdag_metadata__.type == ComponentType.TOOL
 
 
 class TestStringUsage:
     """Test string-based decorator usage for user-friendliness."""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Clean registry before each test."""
-        registry._components.clear()
-        registry._protected_components.clear()
-        yield
-        registry._components.clear()
-        registry._protected_components.clear()
 
     def test_string_component_type(self):
         """Test that component types can be strings."""
@@ -477,12 +362,10 @@ class TestStringUsage:
         class StringAdapter:
             pass
 
-        # All should be registered with correct types
-        assert registry.get_metadata("string_node", "user").component_type == ComponentType.NODE
-        assert registry.get_metadata("string_tool", "user").component_type == ComponentType.TOOL
-        assert (
-            registry.get_metadata("string_adapter", "user").component_type == ComponentType.ADAPTER
-        )
+        # All should have correct metadata
+        assert StringNode.__hexdag_metadata__.type == ComponentType.NODE
+        assert StringTool.__hexdag_metadata__.type == ComponentType.TOOL
+        assert StringAdapter.__hexdag_metadata__.type == ComponentType.ADAPTER
 
     def test_string_namespace(self):
         """Test that namespaces can be strings."""
@@ -491,9 +374,9 @@ class TestStringUsage:
         class PluginNode:
             pass
 
-        # Should be registered in plugin namespace
-        metadata = registry.get_metadata("plugin_node", "my_plugin")
-        assert metadata.namespace == "my_plugin"
+        # Should have declared namespace in metadata
+        assert hasattr(PluginNode, "__hexdag_metadata__")
+        assert PluginNode.__hexdag_metadata__.declared_namespace == "my_plugin"
 
     def test_string_subtype(self):
         """Test that subtypes can be strings."""
@@ -506,9 +389,9 @@ class TestStringUsage:
         class LLMNode:
             pass
 
-        # Should have correct subtypes
-        assert registry.get_metadata("func_node", "user").subtype == "function"
-        assert registry.get_metadata("llm_node", "user").subtype == "llm"
+        # Should have correct subtypes in metadata
+        assert FuncNode.__hexdag_metadata__.subtype == "function"
+        assert LLMNode.__hexdag_metadata__.subtype == "llm"
 
     def test_mixed_string_and_enum(self):
         """Test mixing strings and enums works."""
@@ -521,9 +404,9 @@ class TestStringUsage:
         class MixedNode2:
             pass
 
-        # Both should work
-        assert registry.get_metadata("mixed_node1", "user").component_type == ComponentType.NODE
-        assert registry.get_metadata("mixed_node2", "user").component_type == ComponentType.NODE
+        # Both should have correct type in metadata
+        assert MixedNode1.__hexdag_metadata__.type == ComponentType.NODE
+        assert MixedNode2.__hexdag_metadata__.type == ComponentType.NODE
 
     def test_default_string_namespace(self):
         """Test that default namespace is 'user' string."""
@@ -532,8 +415,14 @@ class TestStringUsage:
         class DefaultNode:
             pass
 
-        # Should be in user namespace
-        metadata = registry.get_metadata("default_node", "user")
-        assert metadata.namespace == "user"
-        # Should NOT be protected (user components aren't protected)
-        assert "default_node" not in registry._protected_components
+        # Should have default namespace in metadata
+        assert hasattr(DefaultNode, "__hexdag_metadata__")
+        assert DefaultNode.__hexdag_metadata__.declared_namespace == "user"
+
+    def test_invalid_component_type(self):
+        """Test that invalid component types raise an error."""
+        with pytest.raises(ValueError, match="Invalid component type 'invalid'"):
+
+            @component("invalid", namespace="user")
+            class InvalidComponent:
+                pass

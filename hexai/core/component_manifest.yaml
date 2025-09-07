@@ -1,0 +1,39 @@
+# HexDAG Component Manifest
+#
+# This file declares which modules contain components to be registered.
+# Similar to Django's INSTALLED_APPS, this is the single source of truth
+# for what components are available in the system.
+#
+# Format:
+#   - namespace: The namespace to register components under
+#     module: The Python module path containing decorated components
+#
+# Namespaces:
+#   - core: System components (protected, requires privilege)
+#   - plugin: Third-party plugins
+#   - user: User-defined components
+#   - test: Test components (only in test mode)
+#
+# Configuration like dev_mode should be set via environment variables:
+#   HEXDAG_DEV_MODE=true  # Enable post-bootstrap registration
+
+components:
+  # Core HexDAG components
+  - namespace: core
+    module: hexai.core.nodes
+
+  # Additional core modules can be added here
+  # - namespace: core
+  #   module: hexai.core.tools
+
+  # Plugin components (uncomment to enable)
+  # - namespace: plugin
+  #   module: hexai.plugins.kafka
+  # - namespace: plugin
+  #   module: hexai.plugins.redis
+
+  # User/project components (add your own here)
+  # - namespace: user
+  #   module: myproject.components
+  # - namespace: user
+  #   module: myproject.custom_nodes

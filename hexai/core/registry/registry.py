@@ -1,27 +1,30 @@
-"""Simplified component registry for hexDAG.
-
-This module provides a centralized registry for all hexDAG components,
-supporting plugins while maintaining control over component registration.
-"""
+"""Refactored component registry with improved design patterns."""
 
 from __future__ import annotations
 
 import inspect
 import logging
 import re
-import threading
-import warnings
 from typing import Any
 
+from hexai.core.registry.discovery import register_components as default_register_components
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
     ComponentNotFoundError,
     InvalidComponentError,
     NamespacePermissionError,
+    RegistryAlreadyBootstrappedError,
+    RegistryImmutableError,
 )
-from hexai.core.registry.metadata import ComponentMetadata, InstanceFactory
-from hexai.core.registry.plugin_loader import PluginLoader
-from hexai.core.registry.types import ComponentType, Namespace, NodeSubtype
+from hexai.core.registry.locks import ReadWriteLock
+from hexai.core.registry.manifest import ComponentManifest
+from hexai.core.registry.models import (
+    ComponentInfo,
+    ComponentMetadata,
+    ComponentType,
+    InstanceFactory,
+    NodeSubtype,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,25 +33,178 @@ NAMESPACE_SEPARATOR = ":"
 
 
 class ComponentRegistry:
-    """Simplified registry with decorator-based registration.
+    """Central registry with bootstrap-based initialization.
 
-    Combines storage, validation, and permission checking in one place
-    for simplicity and clarity.
+    The registry follows a strict lifecycle:
+    1. Empty at creation
+    2. Populated via bootstrap(manifest)
+    3. Read-only after bootstrap (in production)
+
+    This is similar to Django's app registry pattern.
     """
 
-    def __init__(self) -> None:
-        """Initialize the registry."""
-        # Simple storage: namespace -> name -> metadata
-        self._components: dict[Namespace | str, dict[str, ComponentMetadata]] = {}
+    # Known system namespaces
+    SYSTEM_NAMESPACES = {"core", "user", "plugin", "test"}
+    PROTECTED_NAMESPACES = {"core"}  # Require privilege to register
 
-        # Track protected components (core components that shouldn't be overridden)
+    # Default search priority (immutable)
+    DEFAULT_SEARCH_PRIORITY = ("core", "user", "plugin")
+
+    def __init__(self, _search_priority: tuple[str, ...] | None = None) -> None:
+        """Initialize an empty registry.
+
+        Args
+        ----
+        _search_priority : tuple[str, ...] | None
+            Internal parameter for testing. Users should not set this.
+        """
+        self._components: dict[str, dict[str, ComponentMetadata]] = {}
         self._protected_components: set[str] = set()
 
-        # Plugin loader (kept separate as it's a distinct concern)
-        self._plugin_loader = PluginLoader(self)
+        # Search priority is an implementation detail
+        self._search_priority = _search_priority or self.DEFAULT_SEARCH_PRIORITY
 
-        # Thread lock for all operations
-        self._lock = threading.RLock()
+        self._lock = ReadWriteLock()
+
+        # Bootstrap state
+        self._ready = False
+        self._manifest: ComponentManifest | None = None
+        self._dev_mode = False  # If True, allows post-bootstrap registration
+        self._bootstrap_context = False  # True during bootstrap process
+
+    def _cleanup_state(self) -> None:
+        """Clean up registry state on bootstrap failure."""
+        self._components.clear()
+        self._protected_components.clear()
+        self._ready = False
+        self._manifest = None
+        self._bootstrap_context = False
+
+    def bootstrap(
+        self,
+        manifest: ComponentManifest | list[dict[str, str]],
+        dev_mode: bool = False,
+    ) -> None:
+        """Bootstrap the registry from a manifest.
+
+        This method:
+        1. Validates the manifest
+        2. Imports modules
+        3. Calls register_components() for each module
+        4. Marks the registry as ready (immutable in production)
+
+        Parameters
+        ----------
+        manifest : ComponentManifest | list[dict[str, str]]
+            The component manifest declaring what to load.
+        dev_mode : bool
+            If True, allows post-bootstrap registration (for development).
+
+        Raises
+        ------
+        RegistryAlreadyBootstrappedError
+            If the registry has already been bootstrapped.
+        ImportError
+            If a module in the manifest cannot be imported.
+        """
+        with self._lock.write():
+            # Prepare for bootstrap
+            manifest = self._prepare_bootstrap(manifest, dev_mode)
+
+            # Load all modules from manifest
+            self._bootstrap_context = True
+            try:
+                total_registered = self._load_manifest_modules(manifest)
+                self._finalize_bootstrap(total_registered, dev_mode)
+            finally:
+                self._bootstrap_context = False
+
+    def _prepare_bootstrap(
+        self, manifest: ComponentManifest | list[dict[str, str]], dev_mode: bool
+    ) -> ComponentManifest:
+        """Prepare registry for bootstrap.
+
+        Returns validated ComponentManifest.
+        """
+        if self._ready:
+            raise RegistryAlreadyBootstrappedError(
+                "Registry has already been bootstrapped. Use reset() if you need to re-bootstrap."
+            )
+
+        # Convert list to ComponentManifest if needed
+        if isinstance(manifest, list):
+            manifest = ComponentManifest(manifest)
+
+        # Validate manifest
+        manifest.validate()
+
+        # Store configuration
+        self._manifest = manifest
+        self._dev_mode = dev_mode
+
+        logger.info(f"Bootstrapping registry with {len(manifest.entries)} entries")
+        return manifest
+
+    def _load_manifest_modules(self, manifest: ComponentManifest) -> int:
+        """Load and register components from all manifest modules.
+
+        Returns total number of components registered.
+        """
+        total_registered = 0
+
+        for entry in manifest.entries:
+            try:
+                count = default_register_components(
+                    registry=self,
+                    namespace=entry.namespace,
+                    module_path=entry.module,
+                )
+                total_registered += count
+                logger.info(
+                    f"Registered {count} components from {entry.module} "
+                    f"into namespace '{entry.namespace}'"
+                )
+            except ImportError as e:
+                logger.error(f"Failed to import module {entry.module}: {e}")
+                self._cleanup_state()
+                raise
+            except (
+                ComponentAlreadyRegisteredError,
+                InvalidComponentError,
+                NamespacePermissionError,
+            ) as e:
+                logger.error(f"Failed to register components from {entry.module}: {e}")
+                self._cleanup_state()
+                raise
+
+        return total_registered
+
+    def _finalize_bootstrap(self, total_registered: int, dev_mode: bool) -> None:
+        """Mark registry as ready and log completion."""
+        self._ready = True
+        logger.info(
+            f"Bootstrap complete: {total_registered} components registered. "
+            f"Registry is {'mutable (dev mode)' if dev_mode else 'read-only'}."
+        )
+
+    @property
+    def ready(self) -> bool:
+        """Check if the registry has been bootstrapped."""
+        return self._ready
+
+    @property
+    def manifest(self) -> ComponentManifest | None:
+        """Get the current manifest."""
+        return self._manifest
+
+    @property
+    def dev_mode(self) -> bool:
+        """Check if registry is in development mode."""
+        return self._dev_mode
+
+    def is_namespace_empty(self, namespace: str) -> bool:
+        """Check if a namespace has no components (for testing)."""
+        return namespace not in self._components or len(self._components[namespace]) == 0
 
     def register(
         self,
@@ -56,459 +212,283 @@ class ComponentRegistry:
         component: Any,
         component_type: str,
         namespace: str = "user",
-        replace: bool = False,
         privileged: bool = False,
         **kwargs: Any,
-    ) -> None:
+    ) -> ComponentInfo:
         """Register a component in the registry.
 
-        Parameters
-        ----------
-        name : str
-            Component name.
-        component : Any
-            Component (class, function, or instance).
-        component_type : str
-            Type of component ('node', 'tool', 'adapter', etc.).
-        namespace : str
-            Component namespace (default: 'user').
-        replace : bool
-            Allow replacement of existing component.
-        privileged : bool
-            Whether the registration has elevated privileges (for core components).
-        **kwargs : Any
-            Additional metadata (subtype, description, etc.).
+        After bootstrap, registration is only allowed in dev mode or
+        during the bootstrap process itself.
+
+        Raises ComponentAlreadyRegisteredError if component exists.
+
+        Returns ComponentInfo with details about the registration.
         """
-        with self._lock:
-            # Step 1: Convert external string API to internal enums
-            namespace_enum = self._to_namespace(namespace)
-            component_type_enum = ComponentType(component_type)
-
-            # Step 2: Validate registration request
-            # This checks: name format, component validity, namespace permissions
-            self._validate_registration(name, component, namespace_enum, privileged, replace)
-
-            # Step 3: Check if component already exists (in ANY namespace)
-            qualified_name = f"{namespace_enum}{NAMESPACE_SEPARATOR}{name}"
-            existing = None
-            for components in self._components.values():
-                if name in components:
-                    existing = components[name]
-                    break
-
-            if existing:
-                # Handle conflicts: shadowing, replacement, or error
-                self._handle_existing_component(
-                    existing, name, namespace_enum, qualified_name, replace
+        with self._lock.write():
+            # Check if we can register
+            if self._ready and not self._dev_mode and not self._bootstrap_context:
+                raise RegistryImmutableError(
+                    f"Cannot register component '{name}' after bootstrap. "
+                    f"Registry is read-only in production mode. "
+                    f"Use dev_mode=True in bootstrap() for development."
                 )
+            namespace_str = self._normalize_namespace(namespace)
+            component_type_enum = self._validate_component_type(component_type)
+            self._validate_component(name, component)
 
-            # Step 4: Create metadata for the component
+            if namespace_str in self.PROTECTED_NAMESPACES and not privileged:
+                raise NamespacePermissionError(name, namespace_str)
+
+            # Check for duplicates - always error
+            if namespace_str in self._components and name in self._components[namespace_str]:
+                raise ComponentAlreadyRegisteredError(name, namespace_str)
+
+            # Create metadata
             metadata = ComponentMetadata(
                 name=name,
                 component_type=component_type_enum,
                 component=component,
-                namespace=namespace_enum,
+                namespace=namespace_str,
                 subtype=kwargs.get("subtype"),
                 description=kwargs.get("description", ""),
             )
 
             # Store component
-            if namespace_enum not in self._components:
-                self._components[namespace_enum] = {}
-            self._components[namespace_enum][name] = metadata
+            if namespace_str not in self._components:
+                self._components[namespace_str] = {}
+            self._components[namespace_str][name] = metadata
 
-            # Step 5: Mark core components as protected
-            # This prevents non-privileged code from registering in core namespace
-            if namespace_enum == Namespace.CORE:
-                self._protected_components.add(name)
+            # Create registration info
+            registration_info = ComponentInfo(
+                name=name,
+                namespace=namespace_str,
+                qualified_name=f"{namespace_str}{NAMESPACE_SEPARATOR}{name}",
+                component_type=component_type_enum,
+                metadata=metadata,
+            )
 
-            logger.debug(f"Registered {component_type_enum} '{qualified_name}'")
+            if namespace_str in self.PROTECTED_NAMESPACES:
+                self._protected_components.add(f"{namespace_str}:{name}")
+                registration_info.is_protected = True
 
-    def get(
-        self,
-        name: str,
-        namespace: str | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Get a component by name and instantiate it.
+            logger.debug(f"Registered {registration_info.qualified_name}")
+            return registration_info
 
-        Three search strategies (in priority order):
-        1. Qualified name (e.g., 'core:my_component') - searches only that namespace
-        2. Explicit namespace parameter - searches only that namespace
-        3. Fallback search - searches all namespaces (core first for compatibility)
+    def get_metadata(self, name: str, namespace: str | None = None) -> ComponentMetadata:
+        """Get component metadata without instantiation.
 
-        Parameters
-        ----------
-        name : str
-            Component name. Can include namespace as 'namespace:name'.
-        namespace : str | None
-            Explicit namespace to search in. Ignored if name is qualified.
-        **kwargs : Any
-            Arguments to pass to component instantiation.
-
-        Returns
-        -------
-        Any
-            The component instance.
-
-        Raises
-        ------
-        ComponentNotFoundError
-            If component not found.
-
-        Examples
-        --------
-        >>> registry.get('my_node')  # Searches all namespaces, core first
-        >>> registry.get('my_node', namespace='plugin')  # Only searches plugin namespace
-        >>> registry.get('plugin:my_node')  # Only searches plugin namespace
+        This is useful when you want to inspect a component
+        before deciding whether/how to instantiate it.
         """
-        with self._lock:
-            # Strategy 1: Qualified name takes precedence (e.g., 'namespace:component')
-            if NAMESPACE_SEPARATOR in name:
-                return self._get_by_qualified_name(name, **kwargs)
+        # No lock needed after bootstrap (immutable)
+        if not self._ready:
+            with self._lock.read():
+                return self._get_metadata_unlocked(name, namespace)
+        return self._get_metadata_unlocked(name, namespace)
 
-            # Strategy 2: Explicit namespace parameter
-            elif namespace is not None:
-                return self._get_from_specific_namespace(name, namespace, **kwargs)
+    def _get_metadata_unlocked(self, name: str, namespace: str | None = None) -> ComponentMetadata:
+        """Get metadata without holding lock (assumes lock already held or not needed)."""
+        # Parse the component name and namespace
+        component_name, resolved_namespace = self._resolve_component_location(name, namespace)
 
-            # Strategy 3: Search all namespaces with fallback
+        # Get metadata
+        if resolved_namespace:
+            metadata = self._get_metadata_internal(component_name, resolved_namespace)
+        else:
+            metadata = self._search_component(component_name)
+
+        if not metadata:
+            raise ComponentNotFoundError(name, namespace, self._get_available_components())
+
+        return metadata
+
+    def _resolve_component_location(
+        self, name: str, namespace: str | None = None
+    ) -> tuple[str, str | None]:
+        """Resolve component name and namespace from various input formats."""
+        if NAMESPACE_SEPARATOR in name:
+            # Qualified name like "core:my_component"
+            namespace_str, component_name = name.split(NAMESPACE_SEPARATOR, 1)
+            return component_name, namespace_str
+        elif namespace:
+            # Explicit namespace provided
+            return name, self._normalize_namespace(namespace)
+        else:
+            # Search needed
+            return name, None
+
+    def get(self, name: str, namespace: str | None = None, **kwargs: Any) -> Any:
+        """Get and instantiate a component.
+
+        This is a convenience wrapper around get_metadata() + instantiation.
+        """
+        metadata = self.get_metadata(name, namespace)
+        return InstanceFactory.create_instance(metadata.component, **kwargs)
+
+    def get_info(self, name: str, namespace: str | None = None) -> ComponentInfo:
+        """Get detailed information about a component."""
+        # No lock needed after bootstrap (immutable)
+        if not self._ready:
+            with self._lock.read():
+                return self._get_info_unlocked(name, namespace)
+        return self._get_info_unlocked(name, namespace)
+
+    def _get_info_unlocked(self, name: str, namespace: str | None = None) -> ComponentInfo:
+        """Get info without holding lock (assumes lock already held or not needed)."""
+        if NAMESPACE_SEPARATOR in name:
+            namespace_str, component_name = name.split(NAMESPACE_SEPARATOR, 1)
+            namespace_str = self._normalize_namespace(namespace_str)
+        else:
+            if namespace:
+                namespace_str = self._normalize_namespace(namespace)
             else:
-                return self._get_with_fallback_search(name, **kwargs)
+                found_namespace = self._find_namespace(name)
+                if found_namespace is None:
+                    raise ComponentNotFoundError(name, None, self._get_available_components())
+                namespace_str = found_namespace
+            component_name = name
 
-    def _get_by_qualified_name(self, qualified_name: str, **kwargs: Any) -> Any:
-        """Get component using a qualified name (e.g., 'namespace:component').
-
-        This is the most explicit way to get a component - no ambiguity.
-
-        Parameters
-        ----------
-        qualified_name : str
-            Name in format 'namespace:component'
-        **kwargs : Any
-            Arguments for component instantiation
-
-        Returns
-        -------
-        Any
-            The instantiated component
-
-        Raises
-        ------
-        ComponentNotFoundError
-            If component not found in the specified namespace
-        """
-        namespace_str, component_name = qualified_name.split(NAMESPACE_SEPARATOR, 1)
-        namespace = self._to_namespace(namespace_str)
-
-        metadata = self._get_from_namespace(component_name, namespace)
-        if not metadata:
-            raise ComponentNotFoundError(component_name, namespace_str)
-        return InstanceFactory.create_instance(metadata.component, **kwargs)
-
-    def _get_from_specific_namespace(self, name: str, namespace: str, **kwargs: Any) -> Any:
-        """Get component from a specific namespace only.
-
-        No fallback, no searching - just looks in the specified namespace.
-
-        Parameters
-        ----------
-        name : str
-            Component name (without namespace prefix)
-        namespace : str
-            The namespace to search in
-        **kwargs : Any
-            Arguments for component instantiation
-
-        Returns
-        -------
-        Any
-            The instantiated component
-
-        Raises
-        ------
-        ComponentNotFoundError
-            If component not found in the specified namespace
-        """
-        namespace_enum = self._to_namespace(namespace)
-        metadata = self._get_from_namespace(name, namespace_enum)
+        metadata = self._get_metadata_internal(component_name, namespace_str)
         if not metadata:
             raise ComponentNotFoundError(name, namespace)
-        return InstanceFactory.create_instance(metadata.component, **kwargs)
 
-    def _get_with_fallback_search(self, name: str, **kwargs: Any) -> Any:
-        """Search for component across all namespaces with intelligent fallback.
-
-        Search order:
-        1. Core namespace (highest priority for backward compatibility)
-        2. All other namespaces in registration order
-
-        This method logs warnings when non-core components shadow core ones.
-
-        Parameters
-        ----------
-        name : str
-            Component name to search for
-        **kwargs : Any
-            Arguments for component instantiation
-
-        Returns
-        -------
-        Any
-            The instantiated component
-
-        Raises
-        ------
-        ComponentNotFoundError
-            If component not found in any namespace
-        """
-        # First, try core namespace (backward compatibility)
-        metadata = self._get_from_namespace(name, Namespace.CORE)
-        if metadata:
-            return InstanceFactory.create_instance(metadata.component, **kwargs)
-
-        # Then try other namespaces
-        for ns in self._components:
-            if ns != Namespace.CORE:
-                metadata = self._get_from_namespace(name, ns)
-                if metadata:
-                    # Warn if this shadows a protected component name
-                    if name in self._protected_components:
-                        logger.debug(
-                            f"Using '{ns}:{name}' which shadows a core component name. "
-                            f"Use get('{name}', namespace='core') for the core version."
-                        )
-                    return InstanceFactory.create_instance(metadata.component, **kwargs)
-
-        # Not found anywhere - provide helpful error with available components
-        available = [f"{ns}:{name}" for ns, comps in self._components.items() for name in comps]
-        raise ComponentNotFoundError(name, None, available)
-
-    def get_metadata(self, name: str, namespace: str = Namespace.CORE.value) -> ComponentMetadata:
-        """Get metadata for a component.
-
-        Parameters
-        ----------
-        name : str
-            Component name.
-        namespace : str
-            Namespace (default: 'core').
-
-        Returns
-        -------
-        ComponentMetadata
-            Component metadata.
-
-        Raises
-        ------
-        KeyError
-            If component not found.
-        """
-        with self._lock:
-            namespace_enum = self._to_namespace(namespace)
-            metadata = self._components.get(namespace_enum, {}).get(name)
-            if metadata:
-                return metadata
-            raise ComponentNotFoundError(name, namespace)
+        return ComponentInfo(
+            name=component_name,
+            namespace=namespace_str,
+            qualified_name=f"{namespace_str}{NAMESPACE_SEPARATOR}{component_name}",
+            component_type=metadata.component_type,
+            metadata=metadata,
+            is_protected=f"{namespace_str}:{component_name}" in self._protected_components,
+        )
 
     def list_components(
         self,
-        component_type: str | None = None,
+        component_type: ComponentType | None = None,
         namespace: str | None = None,
-        subtype: str | None = None,
-    ) -> list[tuple[str, ComponentMetadata]]:
-        """List registered components with their metadata.
+        subtype: NodeSubtype | None = None,
+    ) -> list[ComponentInfo]:
+        """List components with rich information."""
+        # No lock needed after bootstrap (immutable)
+        if not self._ready:
+            with self._lock.read():
+                return self._list_components_unlocked(component_type, namespace, subtype)
+        return self._list_components_unlocked(component_type, namespace, subtype)
 
-        Parameters
-        ----------
-        component_type : str | None
-            Filter by type ('node', 'tool', etc.).
-        namespace : str | None
-            Filter by namespace.
-        subtype : str | None
-            Filter by subtype (for nodes).
+    def _list_components_unlocked(
+        self,
+        component_type: ComponentType | None = None,
+        namespace: str | None = None,
+        subtype: NodeSubtype | None = None,
+    ) -> list[ComponentInfo]:
+        """List components without holding lock (assumes lock already held or not needed)."""
+        results = []
 
-        Returns
-        -------
-        list[tuple[str, ComponentMetadata]]
-            List of (qualified_name, metadata) tuples.
-        """
-        with self._lock:
-            results = []
-            namespace_enum = self._to_namespace(namespace) if namespace else None
-            type_enum = ComponentType(component_type) if component_type else None
-            subtype_enum = NodeSubtype(subtype) if subtype else None
+        # Normalize namespace if provided
+        normalized_namespace = self._normalize_namespace(namespace) if namespace else None
 
-            for ns, components in self._components.items():
-                # Filter by namespace if specified
-                if namespace_enum and ns != namespace_enum:
+        for ns_str, components in self._components.items():
+            if normalized_namespace and ns_str != normalized_namespace:
+                continue
+
+            for name, metadata in components.items():
+                if component_type and metadata.component_type != component_type:
+                    continue
+                if subtype and metadata.subtype != subtype:
                     continue
 
-                for name, metadata in components.items():
-                    # Filter by type if specified
-                    if type_enum and metadata.component_type != type_enum:
-                        continue
+                results.append(
+                    ComponentInfo(
+                        name=name,
+                        namespace=ns_str,
+                        qualified_name=f"{ns_str}{NAMESPACE_SEPARATOR}{name}",
+                        component_type=metadata.component_type,
+                        metadata=metadata,
+                        is_protected=f"{ns_str}:{name}" in self._protected_components,
+                    )
+                )
 
-                    # Filter by subtype if specified
-                    if subtype_enum and metadata.subtype != subtype_enum:
-                        continue
-
-                    results.append((f"{ns}{NAMESPACE_SEPARATOR}{name}", metadata))
-
-            return results
+        return results
 
     def list_namespaces(self) -> list[str]:
         """List all registered namespaces."""
-        with self._lock:
-            return sorted(str(ns) for ns in self._components.keys())
-
-    def load_plugins(self) -> int:
-        """Load plugins via Python entry points."""
-        return self._plugin_loader.load_plugins()
+        # No lock needed after bootstrap (immutable)
+        if not self._ready:
+            with self._lock.read():
+                return sorted(self._components.keys())
+        return sorted(self._components.keys())
 
     # Private helper methods
 
-    def _validate_registration(
-        self,
-        name: str,
-        component: Any,
-        namespace_enum: Namespace | str,
-        privileged: bool,
-        replace: bool,
-    ) -> None:
-        """Validate a registration request."""
-        # Validate name
+    def _normalize_namespace(self, namespace: str | None) -> str:
+        """Normalize namespace to lowercase string."""
+        if namespace is None or namespace == "":
+            return "user"  # Default namespace
+
+        # At this point, namespace must be a non-empty string based on type hints
+        if not re.match(r"^[a-zA-Z0-9_]+$", namespace):
+            raise InvalidComponentError(
+                namespace, f"Namespace must be alphanumeric, got '{namespace}'"
+            )
+
+        return namespace.lower()  # Normalize to lowercase
+
+    def _validate_component_type(self, component_type: str) -> ComponentType:
+        """Validate component type."""
+        try:
+            return ComponentType(component_type)
+        except ValueError:
+            valid = ", ".join(t.value for t in ComponentType)
+            raise InvalidComponentError(
+                component_type, f"Invalid component type. Must be one of: {valid}"
+            )
+
+    def _validate_component(self, name: str, component: Any) -> None:
+        """Validate component name and value."""
         if not name or not isinstance(name, str):
             raise InvalidComponentError(
                 name or "<empty>", "Component name must be a non-empty string"
             )
 
-        # Validate component name - must be alphanumeric (plus underscores for snake_case)
         if not re.match(r"^[a-zA-Z0-9_]+$", name):
-            raise InvalidComponentError(
-                name,
-                f"Component name must only contain letters, numbers, and underscores, got '{name}'",
-            )
+            raise InvalidComponentError(name, f"Component name must be alphanumeric, got '{name}'")
 
-        # Validate component
-        if component is None:
-            raise InvalidComponentError(name, "Component cannot be None")
-
-        # Basic validation - components should be callable or classes
+        # No need to check for None - inspect.isclass and callable handle it
         if not (inspect.isclass(component) or callable(component)):
             raise InvalidComponentError(
-                name, f"Components must be classes or callable, got {type(component)}"
+                name, f"Component must be class or callable, got {type(component)}"
             )
 
-        # Check namespace permissions
-        if namespace_enum == Namespace.CORE and not privileged:
-            # Allow replacement of existing core components with privilege
-            if not (name in self._protected_components and replace):
-                raise NamespacePermissionError(name, Namespace.CORE.value)
-
-    def _handle_existing_component(
-        self,
-        existing: ComponentMetadata,
-        name: str,
-        namespace: Namespace | str,
-        full_name: str,
-        replace: bool,
-    ) -> None:
-        """Handle registration when component already exists.
-
-        Three cases:
-        1. Plugin shadowing core component - WARNING but allowed
-        2. Same namespace collision - ERROR unless replace=True
-        3. Different namespace - OK (multiple components with same name)
-        """
-        if existing.is_core and namespace != Namespace.CORE:
-            # Case 1: Plugin/user component shadows core - this is ALLOWED but warned
-            # The core component remains accessible via 'core:name'
-            warnings.warn(
-                f"⚠️  Component '{name}' shadows HEXDAG CORE component!\n"
-                f"    Core version remains at 'core:{name}'\n"
-                f"    Plugin version will be at '{full_name}'\n"
-                f"    This may cause unexpected behavior!",
-                UserWarning,
-                stacklevel=3,
-            )
-        elif existing.namespace == namespace:
-            # Case 2: Same namespace - this is a real conflict
-            if not replace:
-                raise ComponentAlreadyRegisteredError(name, str(namespace))
-            logger.info(f"Replaced component '{full_name}'")
-        else:
-            # Case 3: Different namespaces - this is fine, components can share names
-            logger.debug(
-                f"Component '{name}' exists in '{existing.namespace}', registering in '{namespace}'"
-            )
-
-    def _to_namespace(self, namespace: str | None) -> Namespace | str:
-        """Convert string to Namespace enum for known system namespaces.
-
-        This is an internal method that converts external string API to internal enums.
-        Validates that namespace names only contain alphanumeric characters.
-
-        Known system namespaces: 'core', 'user', 'plugin', 'test'
-        These get converted to enums. All others remain as strings for custom namespaces.
-
-        Parameters
-        ----------
-        namespace : str | None
-            Namespace string or None
-
-        Returns
-        -------
-        Namespace | str
-            Enum for system namespaces, string for custom ones
-
-        Raises
-        ------
-        ValueError
-            If namespace is None or contains invalid characters
-        """
-        if namespace is None:
-            raise InvalidComponentError("<none>", "Namespace cannot be None")
-
-        # Validate namespace name - must be alphanumeric (plus underscores)
-        if not re.match(r"^[a-zA-Z0-9_]+$", namespace):
-            raise InvalidComponentError(
-                namespace,
-                "Namespace name must only contain letters, numbers, and underscores, "
-                f"got '{namespace}'",
-            )
-
-        # Check for known system namespaces (case-insensitive for convenience)
-        lower = namespace.lower()
-        if lower == "core":
-            return Namespace.CORE
-        elif lower == "user":
-            return Namespace.USER
-        elif lower == "plugin":
-            return Namespace.PLUGIN
-        elif lower == "test":
-            return Namespace.TEST
-
-        # Keep as string for custom plugin namespaces
-        return namespace
-
-    def _get_from_namespace(
-        self, name: str, namespace: Namespace | str
-    ) -> ComponentMetadata | None:
-        """Get component metadata from a specific namespace.
-
-        Parameters
-        ----------
-        name : str
-            Component name
-        namespace : Namespace | str
-            Namespace to search in
-
-        Returns
-        -------
-        ComponentMetadata | None
-            Component metadata if found, None otherwise
-        """
+    def _get_metadata_internal(self, name: str, namespace: str) -> ComponentMetadata | None:
+        """Get metadata for a specific component from namespace."""
         return self._components.get(namespace, {}).get(name)
+
+    def _search_component(self, name: str) -> ComponentMetadata | None:
+        """Search for component with priority order."""
+        namespace = self._find_namespace(name)
+        if namespace:
+            return self._components[namespace][name]
+        return None
+
+    def _find_namespace(self, name: str) -> str | None:
+        """Find the namespace containing a component, respecting search priority."""
+        # First check priority namespaces
+        for ns in self._search_priority:
+            if ns in self._components and name in self._components[ns]:
+                return ns
+
+        # Then check other namespaces
+        for ns, components in self._components.items():
+            if ns not in self._search_priority and name in components:
+                return ns
+        return None
+
+    def _get_available_components(self) -> list[str]:
+        """Get list of all available component names."""
+        available = []
+        for ns, components in self._components.items():
+            for name in components:
+                available.append(f"{ns}:{name}")
+        return available
 
 
 # Global registry instance

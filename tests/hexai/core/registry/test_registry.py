@@ -7,11 +7,11 @@ import pytest
 from hexai.core.registry import adapter, component, node, registry, tool
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
+    ComponentNotFoundError,
     InvalidComponentError,
     NamespacePermissionError,
 )
-from hexai.core.registry.types import ComponentType  # Internal for tests
-from hexai.core.registry.types import Namespace
+from hexai.core.registry.models import ComponentType  # Internal for tests
 
 
 class TestComponentRegistry:
@@ -64,16 +64,16 @@ class TestComponentRegistry:
 
         # Register in different namespaces
         registry.register(
-            "my_node", CoreNode, ComponentType.NODE, namespace=Namespace.CORE, privileged=True
+            "my_node", CoreNode, ComponentType.NODE, namespace="core", privileged=True
         )
-        registry.register("my_node", UserNode, ComponentType.NODE, namespace=Namespace.USER)
+        registry.register("my_node", UserNode, ComponentType.NODE, namespace="user")
 
         # Without namespace, should get core first
         instance = registry.get("my_node")
         assert isinstance(instance, CoreNode)
 
         # With explicit namespace
-        instance = registry.get("my_node", namespace=Namespace.USER)
+        instance = registry.get("my_node", namespace="user")
         assert isinstance(instance, UserNode)
 
     def test_list_components(self):
@@ -112,14 +112,9 @@ class TestComponentRegistry:
 
         registry.register("comp", Original, ComponentType.NODE, namespace="test")
 
-        # Should fail without replace=True
+        # Should always fail on duplicate (no replacement policy)
         with pytest.raises(ComponentAlreadyRegisteredError):
             registry.register("comp", Replacement, ComponentType.NODE, namespace="test")
-
-        # Should work with replace=True
-        registry.register("comp", Replacement, ComponentType.NODE, namespace="test", replace=True)
-        instance = registry.get("comp", namespace="test")
-        assert isinstance(instance, Replacement)
 
     def test_core_protection(self):
         """Test that core namespace is protected."""
@@ -129,31 +124,18 @@ class TestComponentRegistry:
 
         # Should fail without privilege
         with pytest.raises(NamespacePermissionError):
-            registry.register("my_node", MyNode, ComponentType.NODE, namespace=Namespace.CORE)
+            registry.register("my_node", MyNode, ComponentType.NODE, namespace="core")
 
         # Should work with privilege
-        registry.register(
-            "my_node", MyNode, ComponentType.NODE, namespace=Namespace.CORE, privileged=True
-        )
-        assert "my_node" in registry._protected_components
+        registry.register("my_node", MyNode, ComponentType.NODE, namespace="core", privileged=True)
+        assert "core:my_node" in registry._protected_components
 
 
 class TestDecorators:
-    """Test decorator functionality."""
+    """Test decorator functionality - decorators only add metadata, no auto-registration."""
 
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Clean registry before each test."""
-        registry._components.clear()
-        registry._protected_components.clear()
-
-        yield
-
-        registry._components.clear()
-        registry._protected_components.clear()
-
-    def test_component_decorator(self):
-        """Test the general component decorator."""
+    def test_component_decorator_adds_metadata(self):
+        """Test that decorators add metadata to classes."""
 
         @component(ComponentType.NODE, namespace="test")
         class TestNode:
@@ -161,14 +143,16 @@ class TestDecorators:
 
             pass
 
-        # Should be registered immediately
-        metadata = registry.get_metadata("test_node", namespace="test")
+        # Decorator should add metadata to the class
+        assert hasattr(TestNode, "__hexdag_metadata__")
+        metadata = TestNode.__hexdag_metadata__
+        assert metadata.type == ComponentType.NODE
         assert metadata.name == "test_node"
-        assert metadata.component_type == ComponentType.NODE
+        assert metadata.declared_namespace == "test"
         assert metadata.description == "A test node."
 
-    def test_type_specific_decorators(self):
-        """Test type-specific decorators."""
+    def test_type_specific_decorators_add_metadata(self):
+        """Test that type-specific decorators add correct metadata."""
 
         @node(namespace="test")
         class TestNode:
@@ -182,10 +166,10 @@ class TestDecorators:
         class TestAdapter:
             pass
 
-        # All should be registered with correct types
-        assert registry.get_metadata("test_node", "test").component_type == ComponentType.NODE
-        assert registry.get_metadata("test_tool", "test").component_type == ComponentType.TOOL
-        assert registry.get_metadata("test_adapter", "test").component_type == ComponentType.ADAPTER
+        # All should have metadata with correct types
+        assert TestNode.__hexdag_metadata__.type == ComponentType.NODE
+        assert TestTool.__hexdag_metadata__.type == ComponentType.TOOL
+        assert TestAdapter.__hexdag_metadata__.type == ComponentType.ADAPTER
 
     def test_decorator_with_custom_name(self):
         """Test decorator with custom name."""
@@ -194,21 +178,32 @@ class TestDecorators:
         class SomeClass:
             pass
 
-        # Should use custom name
-        metadata = registry.get_metadata("custom_name", namespace="test")
-        assert metadata.name == "custom_name"
+        # Should use custom name in metadata
+        assert SomeClass.__hexdag_metadata__.name == "custom_name"
 
-    def test_core_namespace_decorator(self):
-        """Test decorator with core namespace."""
+    def test_decorator_with_subtype(self):
+        """Test decorator with subtype."""
+        from hexai.core.registry.models import NodeSubtype
 
-        @node(namespace=Namespace.CORE)
-        class CoreNode:
+        @node(namespace="test", subtype=NodeSubtype.LLM)
+        class LLMNode:
             pass
 
-        # Should be registered and protected
-        assert "core_node" in registry._protected_components
-        metadata = registry.get_metadata("core_node", namespace=Namespace.CORE)
-        assert metadata.namespace == Namespace.CORE
+        # Should have subtype in metadata
+        assert LLMNode.__hexdag_metadata__.subtype == NodeSubtype.LLM
+
+
+class TestValidation:
+    """Test validation of names and namespaces."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Clean registry before each test."""
+        registry._components.clear()
+        registry._protected_components.clear()
+        yield
+        registry._components.clear()
+        registry._protected_components.clear()
 
     def test_valid_names(self):
         """Test that valid namespace and component names are accepted."""
@@ -226,9 +221,10 @@ class TestDecorators:
         instance = registry.get("test_component", namespace="my_plugin")
         assert isinstance(instance, TestComponent)
 
-        # Mixed case is allowed
+        # Mixed case namespace is normalized to lowercase
         registry.register("MyComponent", TestComponent, "node", namespace="MyPlugin")
-        instance = registry.get("MyComponent", namespace="MyPlugin")
+        # Namespace is normalized to lowercase internally
+        instance = registry.get("MyComponent", namespace="myplugin")
         assert isinstance(instance, TestComponent)
 
     def test_invalid_namespace_names(self):
@@ -240,22 +236,22 @@ class TestDecorators:
         # Namespace with hyphen should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("comp", TestComponent, "node", namespace="my-plugin")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Namespace with space should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("comp", TestComponent, "node", namespace="my plugin")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Namespace with dot should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("comp", TestComponent, "node", namespace="my.plugin")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Namespace with special characters should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("comp", TestComponent, "node", namespace="my@plugin")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
     def test_invalid_component_names(self):
         """Test that invalid component names are rejected."""
@@ -266,22 +262,22 @@ class TestDecorators:
         # Component name with hyphen should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("my-component", TestComponent, "node", namespace="test")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Component name with space should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("my component", TestComponent, "node", namespace="test")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Component name with dot should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("my.component", TestComponent, "node", namespace="test")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Component name with special character should fail
         with pytest.raises(InvalidComponentError) as exc_info:
             registry.register("my@component", TestComponent, "node", namespace="test")
-        assert "must only contain letters, numbers, and underscores" in str(exc_info.value)
+        assert "must be alphanumeric" in str(exc_info.value)
 
         # Empty component name should fail
         with pytest.raises(InvalidComponentError) as exc_info:
@@ -303,7 +299,7 @@ class TestPluginShadowing:
             pass
 
         registry.register(
-            "processor", CoreNode, ComponentType.NODE, namespace=Namespace.CORE, privileged=True
+            "processor", CoreNode, ComponentType.NODE, namespace="core", privileged=True
         )
 
         yield
@@ -311,18 +307,23 @@ class TestPluginShadowing:
         registry._components.clear()
         registry._protected_components.clear()
 
-    def test_plugin_shadow_warning(self):
-        """Test that plugins shadowing core components generate warning."""
+    def test_plugin_can_have_same_name_in_different_namespace(self):
+        """Test that plugins can have same name in different namespace."""
 
         class PluginNode:
             pass
 
-        # Should generate warning
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            registry.register("processor", PluginNode, ComponentType.NODE, namespace="my_plugin")
-            assert len(w) == 1
-            assert "shadows HEXDAG CORE component" in str(w[0].message)
+        # Should work fine since it's a different namespace
+        registry.register(
+            "processor",
+            PluginNode,
+            ComponentType.NODE,
+            namespace="my_plugin",
+        )
+
+        # Both should be accessible
+        assert registry.get("processor", namespace="core") is not None
+        assert registry.get("processor", namespace="my_plugin") is not None
 
     def test_shadowed_core_remains_accessible(self):
         """Test that shadowed core components remain accessible."""
@@ -337,7 +338,7 @@ class TestPluginShadowing:
             registry.register("processor", PluginNode, ComponentType.NODE, namespace="my_plugin")
 
         # Core version should still be accessible
-        core_instance = registry.get("processor", namespace=Namespace.CORE)
+        core_instance = registry.get("processor", namespace="core")
         assert not hasattr(core_instance, "is_plugin")
 
         # Plugin version accessible with explicit namespace
@@ -347,3 +348,120 @@ class TestPluginShadowing:
         # Default should still get core
         default_instance = registry.get("processor")
         assert not hasattr(default_instance, "is_plugin")
+
+
+class TestImprovedAPI:
+    """Test the improved API features."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        from hexai.core.registry.registry import ComponentRegistry
+
+        self.registry = ComponentRegistry()
+
+    def test_ergonomic_locking_api(self):
+        """Test the new ergonomic locking API."""
+        # Should be able to use with registry._lock.read() and write()
+        with self.registry._lock.read():
+            # Can read
+            assert self.registry._components is not None
+
+        with self.registry._lock.write():
+            # Can write
+            self.registry._components["test"] = {}
+
+    def test_separate_metadata_from_instantiation(self):
+        """Test that get_metadata returns metadata without instantiation."""
+        # Register a component that tracks instantiation
+        instantiation_count = 0
+
+        class TrackedComponent:
+            def __init__(self):
+                nonlocal instantiation_count
+                instantiation_count += 1
+
+        self.registry.register("tracked", TrackedComponent, "node")
+
+        # Getting metadata should NOT instantiate
+        metadata = self.registry.get_metadata("tracked")
+        assert instantiation_count == 0
+        assert metadata.component is TrackedComponent
+        assert metadata.name == "tracked"
+
+        # Using get() should instantiate
+        instance = self.registry.get("tracked")
+        assert instantiation_count == 1
+        assert isinstance(instance, TrackedComponent)
+
+    def test_different_namespaces_allow_same_name(self):
+        """Test that different namespaces can have same component name."""
+        # Register a core component
+        self.registry.register(
+            "important", lambda: "core", "tool", namespace="core", privileged=True
+        )
+
+        # Register same name in plugin namespace (no error)
+        self.registry.register(
+            "important",
+            lambda: "plugin",
+            "tool",
+            namespace="plugin",
+        )
+
+        # Both should be accessible
+        assert self.registry.get("important", namespace="core")() == "core"
+        assert self.registry.get("important", namespace="plugin")() == "plugin"
+
+    def test_find_namespace_respects_priority(self):
+        """Test that _find_namespace respects search priority."""
+        # Register same component in multiple namespaces
+        self.registry.register("shared", lambda: "user", "tool", namespace="user")
+        self.registry.register("shared", lambda: "plugin", "tool", namespace="plugin")
+        self.registry.register("shared", lambda: "custom", "tool", namespace="custom_ns")
+
+        # _find_namespace should return based on priority
+        found_ns = self.registry._find_namespace("shared")
+        assert found_ns == "user"  # user has higher priority than plugin
+
+        # Verify search order
+        result = self.registry.get("shared")
+        assert result() == "user"
+
+    def test_custom_search_priority(self):
+        """Test customizing search priority."""
+        # Create registry with custom priority (using internal parameter for testing)
+        from hexai.core.registry.registry import ComponentRegistry
+
+        registry = ComponentRegistry(_search_priority=("plugin", "user", "core"))
+
+        # Register in different namespaces
+        registry.register("comp", lambda: "user", "tool", namespace="user")
+        registry.register("comp", lambda: "plugin", "tool", namespace="plugin")
+
+        # Should find plugin first due to custom priority
+        result = registry.get("comp")
+        assert result() == "plugin"
+
+    def test_get_metadata_with_qualified_name(self):
+        """Test get_metadata with qualified names."""
+        self.registry.register("tool", lambda: 1, "tool", namespace="ns1")
+        self.registry.register("tool", lambda: 2, "tool", namespace="ns2")
+
+        # Get specific metadata using qualified name
+        metadata1 = self.registry.get_metadata("ns1:tool")
+        metadata2 = self.registry.get_metadata("ns2:tool")
+
+        assert metadata1.component() == 1
+        assert metadata2.component() == 2
+
+    def test_metadata_lookup_error_handling(self):
+        """Test error handling in metadata lookup."""
+        # Non-existent component
+        with pytest.raises(Exception) as exc_info:
+            self.registry.get_metadata("nonexistent")
+
+        assert "nonexistent" in str(exc_info.value)
+
+        # Non-existent namespace
+        with pytest.raises(ComponentNotFoundError):
+            self.registry.get_metadata("nonexistent", namespace="bad_ns")

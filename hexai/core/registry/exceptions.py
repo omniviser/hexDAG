@@ -62,3 +62,21 @@ class InvalidComponentError(RegistryError):
         super().__init__(msg)
         self.name = name
         self.reason = reason
+
+
+class RegistryAlreadyBootstrappedError(RegistryError):
+    """Raised when trying to bootstrap an already bootstrapped registry."""
+
+    pass
+
+
+class RegistryNotBootstrappedError(RegistryError):
+    """Raised when trying to access registry before bootstrap."""
+
+    pass
+
+
+class RegistryImmutableError(RegistryError):
+    """Raised when trying to modify a read-only registry."""
+
+    pass

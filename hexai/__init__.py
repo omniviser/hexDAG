@@ -40,7 +40,7 @@ from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, To
 # Initialize the component registry early so it's available for all imports
 # This ensures core components are loaded and plugins are discovered
 from hexai.core.registry import registry
-from hexai.core.registry.types import ComponentType  # For internal framework use
+from hexai.core.registry.models import ComponentType  # For internal framework use
 
 # Load core components - using attribute assignment for dynamic loading flag
 registry._core_loading = True  # type: ignore  # Allow core namespace registration

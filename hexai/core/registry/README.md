@@ -1,306 +1,303 @@
-# HexDAG Component Registry
+# Component Registry
 
-A simplified, string-based component registry for the HexDAG framework. Clean API, no bloat, easy to use.
+Bootstrap-based component registry with declarative YAML manifests and namespace isolation.
+
+## Overview
+
+The registry follows a **bootstrap-based architecture** similar to Django's app registry:
+1. **Decorators add metadata** - No auto-registration or import side effects
+2. **Manifest declares components** - YAML file lists what modules to load
+3. **Bootstrap initializes** - Explicit initialization populates the registry
+4. **Immutable after bootstrap** - Registry is read-only in production
 
 ## Quick Start
 
-```python
-from hexai.core.registry import node, tool, registry
+### 1. Define Components
 
-# Register a class component (instantiated on get)
-@node(namespace="user")
+```python
+# my_components.py
+from hexai.core.registry.decorators import node, tool
+
+@node(name="data_processor", description="Processes data")
 class DataProcessor:
-    def __init__(self, batch_size=32):
-        self.batch_size = batch_size
-
+    """Component with metadata - NOT auto-registered."""
     def execute(self, data):
-        return process_in_batches(data, self.batch_size)
+        return process(data)
 
-# Register a function component (returned as-is, not called)
-@tool(namespace="user")
-def fetch_data(url: str):
-    return requests.get(url).json()
-
-# Get components from registry
-processor = registry.get("data_processor", namespace="user")  # Returns new instance
-print(processor.batch_size)  # 32
-
-processor = registry.get("data_processor", namespace="user", batch_size=64)  # Custom args
-print(processor.batch_size)  # 64
-
-fetcher = registry.get("fetch_data", namespace="user")  # Returns function itself
-data = fetcher("https://api.example.com")  # Call it with your args
+@tool(name="utility_function")
+def utility_function(x):
+    """Tool with metadata - NOT auto-registered."""
+    return x * 2
 ```
 
-## Key Concepts
+### 2. Create Manifest
 
-### Everything is Strings
-No need to import enums or types. All decorators accept strings:
+```yaml
+# hexdag_manifest.yaml or hexai/core/component_manifest.yaml
+components:
+  - namespace: core
+    module: hexai.core.nodes
+  - namespace: user
+    module: my_components
+
+config:
+  dev_mode: false
+  search_priority:
+    - core
+    - user
+```
+
+### 3. Bootstrap and Use
 
 ```python
-@node(namespace="my_plugin")  # String namespace
-class MyNode:
-    pass
+from hexai.core import init_hexdag, registry
 
-@component("tool", namespace="utilities")  # String component type
-def my_tool():
-    pass
+# Initialize registry from manifest
+init_hexdag()  # or bootstrap_registry(manifest_path="custom.yaml")
+
+# Now use components
+processor = registry.get("data_processor")
+result = processor.execute(data)
 ```
 
-### Class vs Function Components
+## Bootstrap API
 
-**Classes** are instantiated on each `get()`:
-```python
-@node(namespace="user")
-class StatefulProcessor:
-    def __init__(self, config=None):
-        self.state = {}
-        self.config = config or {}
+### Initialization Functions
 
-# Each get() creates a new instance
-proc1 = registry.get("stateful_processor", namespace="user")
-proc2 = registry.get("stateful_processor", namespace="user")
-assert proc1 is not proc2  # Different instances
-```
-
-**Functions** are returned as-is (not called):
-```python
-@tool(namespace="user")
-def transform_data(data, scale=1.0):
-    return [x * scale for x in data]
-
-# get() returns the function itself
-transform = registry.get("transform_data", namespace="user")
-result = transform([1, 2, 3], scale=2.0)  # Call it yourself
-```
-
-## Namespaces
-
-### System Namespaces
-- `"user"` - **Default namespace** for user components
-- `"core"` - Protected namespace for framework components (requires privilege)
-- `"plugin"` - Standard namespace for plugin components
-
-### Custom Namespaces
-Any other string is a custom namespace:
+#### `init_hexdag(dev_mode=False)`
+Simple one-liner initialization with defaults.
 
 ```python
-@node(namespace="analytics")
-class StatsNode:
-    pass
-
-@tool(namespace="cloud_services")
-def upload_to_s3(file):
-    pass
+from hexai.core import init_hexdag
+init_hexdag(dev_mode=True)  # For development
 ```
 
-## Component Types
+#### `bootstrap_registry(manifest_path=None, dev_mode=None)`
+Full control over bootstrap process.
 
-All specified as strings:
-- `"node"` - Processing nodes
-- `"tool"` - Utility functions
-- `"adapter"` - Data adapters
-- `"policy"` - Execution policies
-- `"memory"` - Storage components
-- `"observer"` - Event observers
-
-## Decorators
-
-### Basic Decorators
 ```python
-from hexai.core.registry import node, tool, adapter, policy, memory, observer
-
-@node(namespace="user")  # Default namespace is "user"
-class MyNode:
-    pass
-
-@tool(name="custom_name", namespace="utilities")
-def my_tool():
-    pass
+from hexai.core.bootstrap import bootstrap_registry
+bootstrap_registry(
+    manifest_path="config/production.yaml",
+    dev_mode=False
+)
 ```
 
-### Node Subtypes
-```python
-from hexai.core.registry import function_node, llm_node, agent_node
+#### `registry.bootstrap(manifest, dev_mode=False)`
+Low-level bootstrap on registry instance.
 
-@function_node(namespace="user")
-class DataTransformer:
-    pass
-
-@llm_node(namespace="ai")
-class ChatNode:
-    pass
-```
-
-### Generic Decorator
-```python
-from hexai.core.registry import component
-
-@component("node", namespace="user", subtype="custom")
-class CustomNode:
-    pass
-```
-
-## Registry API
-
-### Getting Components
 ```python
 from hexai.core.registry import registry
+from hexai.core.registry.manifest import ComponentManifest
 
-# Basic get
-node = registry.get("my_node", namespace="user")
-
-# With namespace in name
-node = registry.get("user:my_node")
-
-# With kwargs (for class instantiation)
-node = registry.get("my_node", namespace="user", config={'debug': True})
+manifest = ComponentManifest([
+    {"namespace": "core", "module": "hexai.core.nodes"}
+])
+registry.bootstrap(manifest)
 ```
 
-### Listing Components
+## Registry Operations
+
+### Core Methods
+
+#### `get(name, namespace=None, **kwargs)`
+Get and instantiate a component.
+
 ```python
-# List all
+# With namespace search priority
+tool = registry.get("my_tool")
+
+# With explicit namespace
+tool = registry.get("my_tool", namespace="user")
+
+# With qualified name
+tool = registry.get("user:my_tool")
+
+# With constructor arguments
+tool = registry.get("my_tool", config={"debug": True})
+```
+
+#### `get_metadata(name, namespace=None)`
+Get component metadata without instantiation.
+
+```python
+metadata = registry.get_metadata("my_tool")
+print(f"Type: {metadata.component_type}")
+print(f"Description: {metadata.description}")
+```
+
+#### `list_components(component_type=None, namespace=None)`
+List registered components.
+
+```python
+# All components
 all_components = registry.list_components()
 
 # Filter by type
-nodes = registry.list_components(component_type="node")
+tools = registry.list_components(component_type="tool")
 
 # Filter by namespace
 user_components = registry.list_components(namespace="user")
 ```
 
-### Component Metadata
+### Registry State
+
+#### `ready`
+Check if registry has been bootstrapped.
+
 ```python
-metadata = registry.get_metadata("my_node", namespace="user")
-print(f"Name: {metadata.name}")
-print(f"Type: {metadata.component_type}")
-print(f"Description: {metadata.description}")
+if not registry.ready:
+    init_hexdag()
 ```
 
-## Plugin Development
-
-Create components in custom namespaces:
+#### `manifest`
+Access the current manifest.
 
 ```python
-# my_plugin/nodes.py
-from hexai.core.registry import node, tool
-
-NAMESPACE = "my_plugin"
-
-@node(namespace=NAMESPACE)
-class AnalysisNode:
-    """Performs custom analysis."""
-    def execute(self, data):
-        return analyze(data)
-
-@tool(namespace=NAMESPACE)
-def preprocess(data):
-    """Preprocessing utility."""
-    return clean(data)
+if registry.manifest:
+    print(f"Loaded from: {registry.manifest.entries}")
 ```
 
-## Implementation Details
+#### `reset(namespace=None)`
+Reset registry (mainly for testing).
 
-### Architecture
-- **~260 lines of code** (down from 500+)
-- **5 files** (down from 9)
-- Thread-safe with RLock
-- No external dependencies beyond Python stdlib
-
-### Files
-- `registry.py` - Core registry logic (125 lines)
-- `decorators.py` - Decorator functions (36 lines)
-- `metadata.py` - Component metadata (27 lines)
-- `plugin_loader.py` - Plugin discovery (62 lines)
-- `types.py` - Type definitions (21 lines)
-
-### How It Works
-1. Decorators register components immediately when imported
-2. Registry stores metadata, not instances
-3. `get()` creates instances (classes) or returns as-is (functions)
-4. Namespaces provide isolation
-5. System namespaces get special handling
-
-## Best Practices
-
-1. **Use "user" namespace by default** - It's the default for a reason
-2. **Document your components** - Docstrings become descriptions
-3. **Functions for stateless operations** - Simpler and more efficient
-4. **Classes for stateful components** - When you need state or initialization
-5. **Custom namespaces for plugins** - Avoid conflicts
-6. **Never use "core" namespace** - Unless you're developing HexDAG itself
-
-## Common Pitfalls
-
-### Function Called Unexpectedly
-❌ **Wrong**: Expecting function to be called automatically
 ```python
-@tool(namespace="user")
-def fetch_data(url):
-    return data
+# Reset everything
+registry.reset()
 
-# This returns the function, not the data!
-data = registry.get("fetch_data", namespace="user")
+# Reset specific namespace
+registry.reset(namespace="test")
 ```
 
-✅ **Right**: Call the function yourself
-```python
-fetcher = registry.get("fetch_data", namespace="user")
-data = fetcher("https://api.example.com")
+## Manifest Structure
+
+### YAML Format
+
+```yaml
+# Component declarations
+components:
+  - namespace: core
+    module: hexai.core.nodes
+  - namespace: plugin
+    module: my_plugin.components
+  - namespace: user
+    module: myproject.components
+
+# Optional configuration
+config:
+  dev_mode: false  # Allow post-bootstrap registration
+  search_priority:  # Namespace resolution order
+    - core
+    - user
+    - plugin
+  validation:
+    prevent_shadowing: false
+    require_descriptions: false
 ```
 
-### Class Not Instantiated
-❌ **Wrong**: Using function decorator for a class
+### Loading Manifests
+
 ```python
-@tool(namespace="user")  # tool decorator is for functions!
-class MyTool:
-    pass
+from hexai.core.registry.manifest import load_manifest_from_yaml
+
+# From YAML file
+manifest = load_manifest_from_yaml("my_manifest.yaml")
+
+# From Python list
+from hexai.core.registry.manifest import ComponentManifest
+manifest = ComponentManifest([
+    {"namespace": "core", "module": "hexai.core.nodes"}
+])
 ```
 
-✅ **Right**: Use appropriate decorator
+## Component Discovery
+
+### Default Discovery
+Modules are scanned for decorated components automatically.
+
 ```python
-@node(namespace="user")  # node decorator for classes
+# In your module
+@node(name="my_node")
 class MyNode:
     pass
+
+# Automatically discovered during bootstrap
 ```
 
-### Namespace Conflicts
-❌ **Wrong**: Using "core" namespace
+### Custom Registration Hook
+Modules can define custom registration logic.
+
 ```python
-@node(namespace="core")  # Will fail without privilege
-class MyNode:
-    pass
+# my_module.py
+def register_components(registry, namespace):
+    """Custom registration logic."""
+    # Conditional registration
+    if os.getenv("ENABLE_EXPERIMENTAL"):
+        registry.register(
+            name="experimental",
+            component=ExperimentalNode,
+            namespace=namespace,
+            privileged=(namespace == "core")
+        )
 ```
 
-✅ **Right**: Use "user" or custom namespace
+## Development Mode
+
+### Enable Dev Mode
+
 ```python
-@node(namespace="user")  # Or namespace="my_plugin"
-class MyNode:
-    pass
+# Via init
+init_hexdag(dev_mode=True)
+
+# Via environment
+export HEXDAG_DEV_MODE=true
+
+# Via manifest
+config:
+  dev_mode: true
+```
+
+### Dev Mode Features
+- Post-bootstrap registration allowed
+- Helpful for interactive development
+- Testing with mock components
+
+## Namespaces
+
+- `core` - Protected system components (requires privilege)
+- `user` - Default for user components
+- `plugin` - Third-party plugins
+- `test` - Testing components
+- Custom - Any alphanumeric string
+
+## Thread Safety
+
+All operations are thread-safe:
+- Multiple concurrent reads allowed
+- Writes have exclusive access
+- Bootstrap is single-threaded
+
+## Architecture
+
+```
+manifest.py       - YAML manifest loading
+discovery.py      - Component discovery system
+bootstrap.py      - Bootstrap utilities
+registry.py       - Core registry (immutable after bootstrap)
+decorators.py     - Metadata-only decorators
+models.py         - Data models
+locks.py          - Thread safety
+exceptions.py     - Custom exceptions
 ```
 
 ## Testing
 
-The registry has comprehensive test coverage:
-
 ```bash
-# Run tests
 pytest tests/hexai/core/registry/
-
-# Coverage
-- decorators.py: 100% coverage
-- registry.py: 88% coverage
-- metadata.py: 96% coverage
-- Total: 60+ passing tests
 ```
 
-## Summary
-
-The new registry delivers:
-- ✅ **Simple string-based API** - No enums to import
-- ✅ **Clear semantics** - Classes instantiated, functions returned
-- ✅ **Minimal code** - 260 lines total
-- ✅ **Thread-safe** - RLock protection
-- ✅ **Well-tested** - 60+ tests, high coverage
-- ✅ **Plugin-friendly** - Custom namespaces
-- ✅ **No surprises** - Predictable behavior
+The bootstrap architecture makes testing much cleaner:
+- Each test can have its own manifest
+- Clean reset between tests
+- No import order dependencies
+- Easy to mock components
