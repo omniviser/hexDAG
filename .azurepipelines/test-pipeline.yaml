@@ -6,61 +6,51 @@ trigger:
   branches:
     include:
       - main
+      - feat/*
 
 pr:
   branches:
     include:
       - main
+      - feat/*
+
 pool:
   vmImage: 'ubuntu-latest'
 
 jobs:
   - job: DevelopmentStandards
+    displayName: "Development standards"
     steps:
       - checkout: self
         persistCredentials: true
         clean: true
 
       - script: |
-          # Define your naming convention regex pattern
           PATTERN="(^(chore|ci|docs|experiment|feat|fix|refactor|test)\/[A-Za-z0-9_-]+$)|main|^snyk|^dependabot"
-
           if [[ $(Build.Reason) == "PullRequest" ]]; then
             BRANCH="$(echo $(System.PullRequest.SourceBranch) | sed 's/refs\/heads\///')"
           else
             BRANCH="$(echo $(Build.SourceBranch) | sed 's/refs\/heads\///')"
           fi
-
-          # Check if the branch name matches the pattern
           if [[ $BRANCH =~ $PATTERN ]]; then
-              echo "Branch name '$BRANCH' is valid."
+            echo "Branch name '$BRANCH' is valid."
           else
-              echo "Branch name [${BRANCH}] does not follow convention: [chore/* | ci/* | dependabot/* | docs/* | experiment/* | feat/* | fix/* | refactor/* | test/* | main | snyk | dependabot]."
-              exit 1
+            echo "Branch name [$BRANCH] does not follow convention."
+            exit 1
           fi
         displayName: "Check the branch name"
 
-
       - script: |
           if [ "$BUILD_REASON" == "PullRequest" ] && [ "$TARGETBRANCH" == "refs/heads/main" ]; then
-              echo "PullRequest reason for build"
-              echo "Main target branch"
-
-              pr_data=$(az repos pr show --id $PULLREQUESTID --organization $ORGANIZATION_URI)
-              title=$(echo "$pr_data" | jq -r '.title')
-              echo "PR Title: $title"
-              echo "Keep in mind that 'Bump' and 'chore' are for AZURE BOTS ONLY, don't use them!"
-
-              pattern="^(ci|docs|experiment|feat|fix|refactor|test|chore|Bump)"
-
-              if [[ "$title" =~ $pattern ]]; then
-                  echo "PR title is valid"
-              else
-                  echo "ERROR: PR TITLE IS INVALID"
-                  echo "Please ensure your PR title starts with one of the following prefixes:"
-                  echo "ci, Bump, docs, experiment, feat, fix, refactor, test, chore"
-                  exit 1
-              fi
+            pr_data=$(az repos pr show --id $PULLREQUESTID --organization $ORGANIZATION_URI)
+            title=$(echo "$pr_data" | jq -r '.title')
+            pattern="^(ci|docs|experiment|feat|fix|refactor|test|chore|Bump)"
+            if [[ "$title" =~ $pattern ]]; then
+              echo "PR title is valid"
+            else
+              echo "ERROR: PR TITLE IS INVALID"
+              exit 1
+            fi
           fi
         displayName: "Validate PR title"
         env:
@@ -71,6 +61,9 @@ jobs:
           BUILD_REASON: $(Build.Reason)
 
   - job: CodeQuality
+    displayName: "Code quality (Ubuntu, Py 3.12)"
+    pool:
+      vmImage: 'ubuntu-latest'
     steps:
       - checkout: self
         persistCredentials: true
@@ -81,8 +74,8 @@ jobs:
           versionSpec: "3.12"
         displayName: "Use Python 3.12"
 
-      - bash: sudo apt-get install graphviz -f
-        displayName: Install graphviz
+      - bash: sudo apt-get update && sudo apt-get install -y graphviz
+        displayName: "Install graphviz"
 
       - script: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -94,8 +87,7 @@ jobs:
       - script: uv pip install -e ".[viz]"
         displayName: "Install package (editable + viz deps)"
 
-      - script: |
-          uv run black --check ./hexai
+      - script: uv run black --check ./hexai
         displayName: "Check Black"
 
       - script: |
@@ -103,16 +95,13 @@ jobs:
           uv run pre-commit run flake8 --all-files
         displayName: "Run Flake8"
 
-      - script: |
-          uv run isort ./hexai --check-only
+      - script: uv run isort ./hexai --check-only
         displayName: "Run Isort"
 
-      - script: |
-          uv run mypy ./hexai
+      - script: uv run mypy ./hexai
         displayName: "Run Mypy"
 
-      - script: |
-          uv run ruff check ./hexai
+      - script: uv run ruff check ./hexai
         displayName: "Run Ruff ./hexai"
 
       - script: |
@@ -121,182 +110,239 @@ jobs:
         displayName: "Run unit tests"
 
       - script: |
-          echo "Running Bandit for SAST..."
-          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
-          BANDIT_EXIT_CODE=$?
-          echo "Bandit exit code: $BANDIT_EXIT_CODE"
-          if [ $BANDIT_EXIT_CODE -ne 0 ]; then
-              echo "Bandit found issues or encountered an error. See bandit-report.json for details."
-              cat bandit-report.json
-              exit 1
-          fi
+          echo "Running Bandit..."
+          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json || exit_code=$?
+          test -z "$exit_code" || exit $exit_code
         displayName: "Run Bandit"
 
-      - script: |
-          uv run scripts/check_test_structure.py
-        displayName: "Check test structure consistency"
+      - script: uv run scripts/check_test_structure.py
+        displayName: "Check test structure"
 
-      - script: |
-          uv run scripts/check_examples.py
-        displayName: "Check examples functionality"
+      - script: uv run scripts/check_examples.py
+        displayName: "Check examples"
 
-      - script: |
-          uv run deptry .
+      - script: uv run deptry .
         displayName: "Run deptry"
 
   - job: CIMatrix
+    displayName: "Matrix: OS × Python × profiles"
     strategy:
       matrix:
-        ubuntu-py310: { vmImage: "ubuntu-latest", python: "3.10" }
-        ubuntu-py311: { vmImage: "ubuntu-latest",  python: "3.11" }
-        ubuntu-py312: { vmImage: "ubuntu-latest",  python: "3.12" }
-        macos-py310: { vmImage: "macos-latest",   python: "3.10" }
-        macos-py311: { vmImage: "macos-latest",   python: "3.11" }
-        macos-py312: { vmImage: "macos-latest",   python: "3.12" }
+        ubuntu-py310:  { vmImage: "ubuntu-latest",  python: "3.10" }
+        ubuntu-py311:  { vmImage: "ubuntu-latest",  python: "3.11" }
+        ubuntu-py312:  { vmImage: "ubuntu-latest",  python: "3.12" }
+        macos-py310:   { vmImage: "macos-latest",   python: "3.10" }
+        macos-py311:   { vmImage: "macos-latest",   python: "3.11" }
+        macos-py312:   { vmImage: "macos-latest",   python: "3.12" }
         windows-py310: { vmImage: "windows-latest", python: "3.10" }
         windows-py311: { vmImage: "windows-latest", python: "3.11" }
         windows-py312: { vmImage: "windows-latest", python: "3.12" }
-      pool:
-        vmImage: $(vmImage)
-      variables:
-        PACKAGE_NAME: "hexai"
-        INSTALL_PROFILES: "base cli viz"
-        ARTIFACT_DIR: "artifacts"
-        VENV_DIR: ".venv"
-      steps:
-        - checkout: self
-          fetchDepth: 1
+    pool:
+      vmImage: $(vmImage)
+    variables:
+      PACKAGE_NAME: "hexai"
+      ARTIFACT_DIR: "artifacts"
+      VENV_DIR: ".venv"
+    steps:
+      - checkout: self
+        fetchDepth: 1
 
-        - task: UsePythonVersion@0
-          displayName: "Use Python $(python)"
-          inputs:
-            versionSpec: "$(python)"
-            addToPath: true
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "$(python)"
+          addToPath: true
+        displayName: "Use Python $(python)"
 
-        - bash: |
-            python -m venv $(VENV_DIR)
-            if [ "$(Agent.OS)" = "Windows_NT" ]; then
-              source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
-            else
-              . $(VENV_DIR)/bin/activate
-            fi
-            python -m pip install -U pip wheel setuptools
-          displayName: "Create and prime venv"
+      - bash: |
+          python -m venv $(VENV_DIR)
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python -m pip install -U pip wheel setuptools
+        displayName: "Create and prime venv"
 
-        - bash: |
-            if [ "$(Agent.OS)" = "Linux" ]; then
-              sudo apt-get update
-              sudo apt-get install -y graphviz
-            elif [ "$(Agent.OS)" = "Darwin" ]; then
-              brew update
-              brew install graphviz || true
-            else
-              echo "Skipping OS-level graphviz on Windows"
-            fi
-          displayName: "Install system deps for viz"
-          condition: always()
+      - bash: |
+          if [ "$(Agent.OS)" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y graphviz jq unzip
+          elif [ "$(Agent.OS)" = "Darwin" ]; then
+            brew update
+            brew install graphviz || true
+          else
+            echo "Windows: ensure Graphviz installed if needed"
+          fi
+        displayName: "Install system deps"
+        condition: always()
 
-        - bash: |
-            set -e
-            mkdir -p $(ARTIFACT_DIR)
-            if [ "$(Agent.OS)" = "Windows_NT" ]; then
-              source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
-            else
-              . $(VENV_DIR)/bin/activate
-            fi
-            python --version
-            pip --version
-          displayName: "Verify tools"
+      - bash: |
+          set -e
+          mkdir -p $(ARTIFACT_DIR)
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python --version
+          pip --version
+        displayName: "Verify tools"
 
-        - ${{ each profile in split(variables['INSTALL_PROFILES'], ' ') }}:
-            - bash: |
-                set -e
-                echo "=== Install profile: ${profile} ==="
-                if [ "$(Agent.OS)" = "Windows_NT" ]; then
-                  source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
-                else
-                  . $(VENV_DIR)/bin/activate
-                fi
-                case "${profile}" in
-                  base) pip install -e . ;;
-                  cli)  pip install -e ".[cli]" ;;
-                  viz)  pip install -e ".[viz]" ;;
-                  *) echo "Unknown profile ${profile}"; exit 1 ;;
-                esac
-                python -c "import importlib; import sys; import platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK install for ${profile}', sys.version.split()[0], platform.platform())"
-              displayName: "Install (${profile})"
+      # BASE
+      - bash: |
+          set -e
+          echo "=== Install profile: base ==="
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          pip install -e .
+          python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK base', sys.version.split()[0], platform.platform())"
+        displayName: "Install (base)"
 
-            - bash: |
-                set -e
-                if [ "$(Agent.OS)" = "Windows_NT" ]; then
-                  source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
-                else
-                  . $(VENV_DIR)/bin/activate
-                fi
-                python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_${{ profile }}_import.json
-              displayName: "Measure import time (${profile})"
-              condition: succeededOrFailed()
+      - bash: |
+          set -e
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_import.json
+        displayName: "Measure import time (base)"
+        condition: succeededOrFailed()
 
-            - bash: |
-                set -e
-                if [ "$(Agent.OS)" = "Windows_NT" ]; then
-                  source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
-                else
-                  . $(VENV_DIR)/bin/activate
-                fi
-                python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_${{ profile }}_size.json
-              displayName: "Size benchmark (${profile})"
-              condition: succeededOrFailed()
+      - bash: |
+          set -e
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_size.json
+        displayName: "Size benchmark (base)"
+        condition: succeededOrFailed()
 
-        - task: PublishBuildArtifacts@1
-          inputs:
-            PathtoPublish: "$(ARTIFACT_DIR)"
-            ArtifactName: "benchmarks_$(Agent.OS)_py$(python)"
-            publishLocation: "Container"
-          displayName: "Publish artifacts"
-          condition: always()
+      # CLI
+      - bash: |
+          set -e
+          echo "=== Install profile: cli ==="
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          pip install -e ".[cli]"
+          python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK cli', sys.version.split()[0], platform.platform())"
+        displayName: "Install (cli)"
 
-        - bash: |
-            set -e
-            if [ "$(Build.SourceBranchName)" = "main" ]; then
-              echo "On main, skipping regression check against itself."
-              exit 0
-            fi
+      - bash: |
+          set -e
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_import.json
+        displayName: "Measure import time (cli)"
+        condition: succeededOrFailed()
 
-            echo "Fetching baseline artifacts from last successful run on main..."
-            mkdir -p baseline_artifacts
+      - bash: |
+          set -e
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_size.json
+        displayName: "Size benchmark (cli)"
+        condition: succeededOrFailed()
 
-            SYSTEM_ACCESSTOKEN="$(System.AccessToken)"
-            PIPELINE_ID="$(System.DefinitionId)"
+      # VIZ
+      - bash: |
+          set -e
+          echo "=== Install profile: viz ==="
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          pip install -e ".[viz]"
+          python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK viz', sys.version.split()[0], platform.platform())"
+        displayName: "Install (viz)"
 
-            RUN_JSON=$(curl -sS -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}$(System.CollectionUri)$(System.TeamProject)/_apis/pipelines/${PIPELINE_ID}/runs?api-version=7.1-preview.1&\$top=50")
-            RUN_ID=$(echo "$RUN_JSON" | jq -r '.value[] | select(.state=="completed" and .result=="succeeded" and .resources.repositories.self.refName=="refs/heads/main") | .id' | head -n 1)
+      - bash: |
+          set -e
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_import.json
+        displayName: "Measure import time (viz)"
+        condition: succeededOrFailed()
 
-            if [ -z "$RUN_ID" ]; then
-              echo "No successful baseline run for main found. Skipping."
-              exit 0
-            fi
-            echo "Baseline run id: $RUN_ID"
+      - bash: |
+          set -e
+          if [ "$(Agent.OS)" = "Windows_NT" ]; then
+            source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+          else
+            . $(VENV_DIR)/bin/activate
+          fi
+          python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_size.json
+        displayName: "Size benchmark (viz)"
+        condition: succeededOrFailed()
 
-            ARTIFACTS_JSON=$(curl -sS -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" \
-              "$(System.CollectionUri)$(System.TeamProject)/_apis/pipelines/${PIPELINE_ID}/runs/${RUN_ID}/artifacts?api-version=7.1-preview.1")
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: "$(ARTIFACT_DIR)"
+          ArtifactName: "benchmarks_$(Agent.OS)_py$(python)"
+          publishLocation: "Container"
+        displayName: "Publish artifacts"
+        condition: always()
 
-            echo "$ARTIFACTS_JSON" | jq -r '.value[].name' | while read -r NAME; do
-              echo "Downloading artifact: $NAME"
-              URL=$(echo "$ARTIFACTS_JSON" | jq -r ".value[] | select(.name==\"$NAME\") | .location")
-              curl -sS -L -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" "$URL" -o "baseline_${NAME}.zip" || true
-              unzip -o "baseline_${NAME}.zip" -d baseline_artifacts || true
-            done
+      - bash: |
+          set -e
+          if [ "$(Build.SourceBranchName)" = "main" ]; then
+            echo "On main, skipping regression check."
+            exit 0
+          fi
 
-            ls -la baseline_artifacts || true
+          echo "Fetching baseline artifacts from last successful run on main..."
+          mkdir -p baseline_artifacts
 
-            python -m pip install -U pip
-            python scripts/compare_benchmarks.py \
-              --baseline-dir baseline_artifacts \
-              --current-dir $(ARTIFACT_DIR) \
-              --max-import-increase 20 \
-              --max-size-increase 10
-            displayName: "Regression check vs last successful main"
-            env:
-              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-            condition: and(always(), eq(variables['Agent.OS'], 'Linux'))
+          SYSTEM_ACCESSTOKEN="$(System.AccessToken)"
+          PIPELINE_ID="$(System.DefinitionId)"
+
+          RUN_JSON=$(curl -sS -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" \
+            "$(System.CollectionUri)$(System.TeamProject)/_apis/pipelines/${PIPELINE_ID}/runs?api-version=7.1-preview.1&$top=50")
+          RUN_ID=$(echo "$RUN_JSON" | jq -r '.value[] | select(.state=="completed" and .result=="succeeded" and .resources.repositories.self.refName=="refs/heads/main") | .id' | head -n 1)
+
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful baseline run for main found. Skipping."
+            exit 0
+          fi
+          echo "Baseline run id: $RUN_ID"
+
+          ARTIFACTS_JSON=$(curl -sS -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" \
+            "$(System.CollectionUri)$(System.TeamProject)/_apis/pipelines/${PIPELINE_ID}/runs/${RUN_ID}/artifacts?api-version=7.1-preview.1")
+
+          echo "$ARTIFACTS_JSON" | jq -r '.value[].name' | while read -r NAME; do
+            echo "Downloading artifact: $NAME"
+            URL=$(echo "$ARTIFACTS_JSON" | jq -r ".value[] | select(.name==\"$NAME\") | .location")
+            curl -sS -L -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" "$URL" -o "baseline_${NAME}.zip" || true
+            unzip -o "baseline_${NAME}.zip" -d baseline_artifacts || true
+          done
+
+          ls -la baseline_artifacts || true
+
+          python -m pip install -U pip
+          python scripts/compare_benchmarks.py \
+            --baseline-dir baseline_artifacts \
+            --current-dir $(ARTIFACT_DIR) \
+            --max-import-increase 20 \
+            --max-size-increase 10
+        displayName: "Regression check vs last successful main"
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        condition: and(always(), eq(variables['Agent.OS'], 'Linux'))
