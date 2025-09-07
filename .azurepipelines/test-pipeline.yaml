@@ -143,3 +143,160 @@ jobs:
       - script: |
           uv run deptry .
         displayName: "Run deptry"
+
+  - job: CIMatrix
+    strategy:
+      matrix:
+        ubuntu-py310: { vmImage: "ubuntu-latest", python: "3.10" }
+        ubuntu-py311: { vmImage: "ubuntu-latest",  python: "3.11" }
+        ubuntu-py312: { vmImage: "ubuntu-latest",  python: "3.12" }
+        macos-py310: { vmImage: "macos-latest",   python: "3.10" }
+        macos-py311: { vmImage: "macos-latest",   python: "3.11" }
+        macos-py312: { vmImage: "macos-latest",   python: "3.12" }
+        windows-py310: { vmImage: "windows-latest", python: "3.10" }
+        windows-py311: { vmImage: "windows-latest", python: "3.11" }
+        windows-py312: { vmImage: "windows-latest", python: "3.12" }
+      pool:
+        vmImage: $(vmImage)
+      variables:
+        PACKAGE_NAME: "hexai"
+        INSTALL_PROFILES: "base cli viz"
+        ARTIFACT_DIR: "artifacts"
+        VENV_DIR: ".venv"
+      steps:
+        - checkout: self
+          fetchDepth: 1
+
+        - task: UsePythonVersion@0
+          displayName: "Use Python $(python)"
+          inputs:
+            versionSpec: "$(python)"
+            addToPath: true
+
+        - bash: |
+            python -m venv $(VENV_DIR)
+            if [ "$(Agent.OS)" = "Windows_NT" ]; then
+              source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+            else
+              . $(VENV_DIR)/bin/activate
+            fi
+            python -m pip install -U pip wheel setuptools
+          displayName: "Create and prime venv"
+
+        - bash: |
+            if [ "$(Agent.OS)" = "Linux" ]; then
+              sudo apt-get update
+              sudo apt-get install -y graphviz
+            elif [ "$(Agent.OS)" = "Darwin" ]; then
+              brew update
+              brew install graphviz || true
+            else
+              echo "Skipping OS-level graphviz on Windows"
+            fi
+          displayName: "Install system deps for viz"
+          condition: always()
+
+        - bash: |
+            set -e
+            mkdir -p $(ARTIFACT_DIR)
+            if [ "$(Agent.OS)" = "Windows_NT" ]; then
+              source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+            else
+              . $(VENV_DIR)/bin/activate
+            fi
+            python --version
+            pip --version
+          displayName: "Verify tools"
+
+        - ${{ each profile in split(variables['INSTALL_PROFILES'], ' ') }}:
+            - bash: |
+                set -e
+                echo "=== Install profile: ${profile} ==="
+                if [ "$(Agent.OS)" = "Windows_NT" ]; then
+                  source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+                else
+                  . $(VENV_DIR)/bin/activate
+                fi
+                case "${profile}" in
+                  base) pip install -e . ;;
+                  cli)  pip install -e ".[cli]" ;;
+                  viz)  pip install -e ".[viz]" ;;
+                  *) echo "Unknown profile ${profile}"; exit 1 ;;
+                esac
+                python -c "import importlib; import sys; import platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK install for ${profile}', sys.version.split()[0], platform.platform())"
+              displayName: "Install (${profile})"
+
+            - bash: |
+                set -e
+                if [ "$(Agent.OS)" = "Windows_NT" ]; then
+                  source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+                else
+                  . $(VENV_DIR)/bin/activate
+                fi
+                python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_${{ profile }}_import.json
+              displayName: "Measure import time (${profile})"
+              condition: succeededOrFailed()
+
+            - bash: |
+                set -e
+                if [ "$(Agent.OS)" = "Windows_NT" ]; then
+                  source $(VENV_DIR)/Scripts/activate 2>/dev/null || . $(VENV_DIR)/Scripts/activate
+                else
+                  . $(VENV_DIR)/bin/activate
+                fi
+                python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_${{ profile }}_size.json
+              displayName: "Size benchmark (${profile})"
+              condition: succeededOrFailed()
+
+        - task: PublishBuildArtifacts@1
+          inputs:
+            PathtoPublish: "$(ARTIFACT_DIR)"
+            ArtifactName: "benchmarks_$(Agent.OS)_py$(python)"
+            publishLocation: "Container"
+          displayName: "Publish artifacts"
+          condition: always()
+
+        - bash: |
+            set -e
+            if [ "$(Build.SourceBranchName)" = "main" ]; then
+              echo "On main, skipping regression check against itself."
+              exit 0
+            fi
+
+            echo "Fetching baseline artifacts from last successful run on main..."
+            mkdir -p baseline_artifacts
+
+            SYSTEM_ACCESSTOKEN="$(System.AccessToken)"
+            PIPELINE_ID="$(System.DefinitionId)"
+
+            RUN_JSON=$(curl -sS -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}$(System.CollectionUri)$(System.TeamProject)/_apis/pipelines/${PIPELINE_ID}/runs?api-version=7.1-preview.1&\$top=50")
+            RUN_ID=$(echo "$RUN_JSON" | jq -r '.value[] | select(.state=="completed" and .result=="succeeded" and .resources.repositories.self.refName=="refs/heads/main") | .id' | head -n 1)
+
+            if [ -z "$RUN_ID" ]; then
+              echo "No successful baseline run for main found. Skipping."
+              exit 0
+            fi
+            echo "Baseline run id: $RUN_ID"
+
+            ARTIFACTS_JSON=$(curl -sS -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" \
+              "$(System.CollectionUri)$(System.TeamProject)/_apis/pipelines/${PIPELINE_ID}/runs/${RUN_ID}/artifacts?api-version=7.1-preview.1")
+
+            echo "$ARTIFACTS_JSON" | jq -r '.value[].name' | while read -r NAME; do
+              echo "Downloading artifact: $NAME"
+              URL=$(echo "$ARTIFACTS_JSON" | jq -r ".value[] | select(.name==\"$NAME\") | .location")
+              curl -sS -L -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" "$URL" -o "baseline_${NAME}.zip" || true
+              unzip -o "baseline_${NAME}.zip" -d baseline_artifacts || true
+            done
+
+            ls -la baseline_artifacts || true
+
+            python -m pip install -U pip
+            python scripts/compare_benchmarks.py \
+              --baseline-dir baseline_artifacts \
+              --current-dir $(ARTIFACT_DIR) \
+              --max-import-increase 20 \
+              --max-size-increase 10
+            displayName: "Regression check vs last successful main"
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            condition: and(always(), eq(variables['Agent.OS'], 'Linux'))
