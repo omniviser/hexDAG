@@ -9,9 +9,10 @@ from typing import Any
 import yaml
 
 from hexai.core.application.events.manager import PipelineEventManager
-from hexai.core.application.nodes import NodeFactory
 from hexai.core.application.prompt.template import ChatPromptTemplate
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.registry import registry
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,15 @@ class YamlPipelineBuilder:
                     params["fn"] = actual_func
 
             # Create node using NodeFactory (let nodes handle their own logic)
-            node = NodeFactory.create_node(node_type, node_id, **params)
+            # Ensure registry is bootstrapped
+            ensure_bootstrapped()
+
+            # Get node factory from registry
+            factory_name = f"{node_type}_node"
+            factory = registry.get(factory_name, namespace="core")
+
+            # Create node using factory
+            node = factory(node_id, **params)
 
             # Add dependencies
             if deps:

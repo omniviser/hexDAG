@@ -4,8 +4,12 @@ import pytest
 from pydantic import BaseModel
 
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.core.application.nodes.llm_node import LLMNode
 from hexai.core.application.prompt import ChatPromptTemplate, PromptTemplate
+from hexai.core.bootstrap import ensure_bootstrapped
+from hexai.core.registry import registry
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class OutputSchema(BaseModel):
@@ -20,8 +24,9 @@ class TestLLMNode:
 
     @pytest.fixture
     def llm_node(self):
-        """Fixture for LLMNode."""
-        return LLMNode()
+        """Get LLMNode factory from registry."""
+        ensure_bootstrapped()
+        return registry.get("llm_node", namespace="core")
 
     @pytest.fixture
     def mock_llm(self):

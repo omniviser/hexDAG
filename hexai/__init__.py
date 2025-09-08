@@ -44,7 +44,7 @@ from hexai.core.registry.models import ComponentType  # For internal framework u
 
 # Load core components - using attribute assignment for dynamic loading flag
 registry._core_loading = True  # type: ignore  # Allow core namespace registration
-import hexai.core.nodes  # noqa: F401, E402 - triggers decorator registration
+import hexai.core.application.nodes  # noqa: F401, E402 - triggers decorator registration
 
 registry._core_loading = False  # type: ignore  # Block core namespace registration
 

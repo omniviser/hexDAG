@@ -46,9 +46,11 @@ def discover_components(module: Any) -> list[tuple[str, Any]]:
         if hasattr(obj, "__hexdag_metadata__"):
             # Only register classes and callables defined in this module
             if inspect.isclass(obj) or callable(obj):
-                # Check if it's actually from this module (not imported)
+                # Check if it's from this module or a submodule
                 obj_module = getattr(obj, "__module__", None)
-                if obj_module == module.__name__:
+                if obj_module and (
+                    obj_module == module.__name__ or obj_module.startswith(module.__name__ + ".")
+                ):
                     components.append((name, obj))
 
     return components

@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from ....adapters.function_tool_router import FunctionBasedToolRouter
 from ...domain.dag import NodeSpec
 from ...ports.tool_router import ToolRouter
+from ...registry import node
+from ...registry.models import NodeSubtype
 from ..data_mapping import DataMapper
 from ..prompt import PromptInput
 from ..prompt.template import PromptTemplate
@@ -50,6 +52,7 @@ class AgentConfig:
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
 
 
+@node(name="agent_node", subtype=NodeSubtype.AGENT, namespace="core")
 class ReActAgentNode(BaseNodeFactory):
     """Multi-step reasoning agent.
 

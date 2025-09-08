@@ -5,8 +5,12 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import BaseModel
 
-from hexai.core.application.nodes.function_node import FunctionNode
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import registry
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class _UserInput(BaseModel):
@@ -24,8 +28,9 @@ class TestFunctionNode:
 
     @pytest.fixture
     def factory(self):
-        """Create function node factory."""
-        return FunctionNode()
+        """Get function node factory from registry."""
+        ensure_bootstrapped()
+        return registry.get("function_node", namespace="core")
 
     @pytest.fixture
     def mock_ports(self):
@@ -412,17 +417,17 @@ class TestFunctionNode:
     def test_convenience_methods(self, factory):
         """Test convenience methods for creating input mappings."""
         # Test passthrough mapping
-        passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
+        passthrough = factory.create_passthrough_mapping(["text", "status", "score"])
         expected_passthrough = {"text": "text", "status": "status", "score": "score"}
         assert passthrough == expected_passthrough
 
         # Test rename mapping
-        rename = FunctionNode.create_rename_mapping({"content": "text", "validation": "status"})
+        rename = factory.create_rename_mapping({"content": "text", "validation": "status"})
         expected_rename = {"content": "text", "validation": "status"}
         assert rename == expected_rename
 
         # Test prefixed mapping
-        prefixed = FunctionNode.create_prefixed_mapping(["text", "score"], "processor", "proc_")
+        prefixed = factory.create_prefixed_mapping(["text", "score"], "processor", "proc_")
         expected_prefixed = {
             "proc_text": "processor.text",
             "proc_score": "processor.score",

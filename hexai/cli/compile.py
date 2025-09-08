@@ -100,7 +100,8 @@ from typing import Any
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
-from hexai.core.application.nodes import NodeFactory
+from hexai.core.registry import registry
+from hexai.core.bootstrap import ensure_bootstrapped
 
 # PRE-COMPUTED DATA
 EXECUTION_WAVES: list[list[str]] = {data.execution_waves!r}
@@ -143,8 +144,16 @@ class Compiled{class_name}Pipeline:
 
         # Build nodes from compiled configs
         for node_config in NODE_CONFIGS:
-            node = NodeFactory.create_node(
-                node_config["type"],
+            # Ensure registry is bootstrapped
+            ensure_bootstrapped()
+
+            # Get node factory from registry
+            node_type = node_config["type"]  # noqa: F821
+            factory_name = f"{{node_type}}_node"  # noqa: F821
+            factory = registry.get(factory_name, namespace="core")
+
+            # Create node using factory
+            node = factory(
                 node_config["id"],
                 **node_config.get("params", {{}})
             )

@@ -749,9 +749,13 @@ class TestOrchestrator:
         )
 
         # Consumer with explicit data mapping using new API
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
 
-        consumer_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        consumer_node = function_node(
             name="consumer",
             fn=mapper_consumer,
             input_schema=dict,
@@ -797,9 +801,13 @@ class TestOrchestrator:
         )
 
         # Consumer without explicit mapping - uses structured aggregation
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
 
-        consumer_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        consumer_node = function_node(
             name="consumer",
             fn=structured_consumer,
             input_schema=dict,
@@ -854,9 +862,13 @@ class TestOrchestrator:
         )
 
         # Consumer with custom field mapping using new API
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
 
-        consumer_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        consumer_node = function_node(
             name="consumer",
             fn=custom_consumer,
             input_schema=dict,
@@ -954,9 +966,13 @@ class TestOrchestrator:
         )
 
         # Node with explicit mapping using new API
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
 
-        mapped_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        mapped_node = function_node(
             name="mapped",
             fn=mapper_consumer,
             input_schema=dict,
@@ -973,7 +989,7 @@ class TestOrchestrator:
         async def final_consumer(input_data: str, **ports) -> str:
             return f"final: {input_data}"
 
-        final_node = FunctionNode()(
+        final_node = function_node(
             name="final",
             fn=final_consumer,
             input_schema=str,
@@ -990,29 +1006,37 @@ class TestOrchestrator:
 
     async def test_input_mapping_convenience_methods(self):
         """Test convenience methods for creating input mappings."""
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
+
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
 
         # Test passthrough mapping
-        passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
+        passthrough = function_node.create_passthrough_mapping(["text", "status", "score"])
         expected_passthrough = {"text": "text", "status": "status", "score": "score"}
         assert passthrough == expected_passthrough
 
         # Test rename mapping
-        rename = FunctionNode.create_rename_mapping({"content": "text", "validation": "status"})
+        rename = function_node.create_rename_mapping({"content": "text", "validation": "status"})
         expected_rename = {"content": "text", "validation": "status"}
         assert rename == expected_rename
 
         # Test prefixed mapping
-        prefixed = FunctionNode.create_prefixed_mapping(["text", "score"], "processor", "proc_")
+        prefixed = function_node.create_prefixed_mapping(["text", "score"], "processor", "proc_")
         expected_prefixed = {"proc_text": "processor.text", "proc_score": "processor.score"}
         assert prefixed == expected_prefixed
 
     async def test_with_input_mapping_enhancement(self):
         """Test enhancing existing nodes with input mapping."""
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
+
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
 
         # Create basic node
-        factory = FunctionNode()
+        factory = function_node
         basic_node = factory(
             name="basic",
             fn=mapper_consumer,
@@ -1054,7 +1078,11 @@ class TestOrchestrator:
         )
 
         # LLM node with input mapping
-        from hexai.core.application.nodes.llm_node import LLMNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
+
+        ensure_bootstrapped()
+        llm_node_factory = registry.get("llm_node", namespace="core")
 
         # Mock LLM for testing
         async def mock_llm_response(input_data: dict, **ports) -> str:
@@ -1063,7 +1091,7 @@ class TestOrchestrator:
             status = input_data.get("validation_status", "unknown")
             return f"LLM analyzed: {content} ({language}) - {status}"
 
-        llm_node = LLMNode()(
+        llm_node = llm_node_factory(
             name="llm_analyzer",
             template="Analyze {{content}} in {{language}}. Status: {{validation_status}}",
             deps=["processor", "validator"],

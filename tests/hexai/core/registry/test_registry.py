@@ -23,12 +23,20 @@ class TestComponentRegistry:
         # Clear registry before each test
         registry._components.clear()
         registry._protected_components.clear()
+        registry._ready = False
+        registry._manifest = None
+        registry._dev_mode = False
+        registry._bootstrap_context = False
 
         yield
 
         # Clean up after test
         registry._components.clear()
         registry._protected_components.clear()
+        registry._ready = False
+        registry._manifest = None
+        registry._dev_mode = False
+        registry._bootstrap_context = False
 
     def test_register_and_get(self):
         """Test basic register and get functionality."""

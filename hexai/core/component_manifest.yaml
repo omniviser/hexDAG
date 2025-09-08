@@ -18,9 +18,9 @@
 #   HEXDAG_DEV_MODE=true  # Enable post-bootstrap registration
 
 components:
-  # Core HexDAG components
+  # Core node factories
   - namespace: core
-    module: hexai.core.nodes
+    module: hexai.core.application.nodes
 
   # Additional core modules can be added here
   # - namespace: core
