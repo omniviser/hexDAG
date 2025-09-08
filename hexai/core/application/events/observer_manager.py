@@ -1,4 +1,4 @@
-"""Observability Port: Manages monitoring and telemetry.
+"""Observer Manager: Manages event distribution to observers.
 
 This is a hexagonal architecture PORT that allows external systems
 to observe pipeline execution without affecting it. Observers can:
@@ -15,10 +15,10 @@ implementations (those belong in Tier 2 or external systems).
 import asyncio
 import logging
 import uuid
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Optional, Union
+from typing import Any, Union
 
-from .models import AsyncObserverFunc, Observer, ObserverFunc, ObserverLike
+from .base_manager import BaseEventManager
+from .models import AsyncObserverFunc, Observer, ObserverFunc
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +44,15 @@ def _make_observer(func: Union[ObserverFunc, AsyncObserverFunc]) -> Observer:
             if asyncio.iscoroutinefunction(self._func):
                 await self._func(event)
             else:
-                # Run sync function in executor to avoid blocking
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, self._func, event)
+                # For sync functions, call directly - user is responsible for non-blocking code
+                # This simplifies the implementation and avoids thread pool complexity
+                self._func(event)
 
     return FunctionObserver(func)
 
 
-class ObserverManager:
-    """Observability Port implementation for monitoring.
+class ObserverManager(BaseEventManager[Observer]):
+    """Observer Manager for distributing events to observers.
 
     This is the primary port for observability in the hexagonal architecture.
     It defines how external systems can monitor pipeline execution.
@@ -62,6 +62,7 @@ class ObserverManager:
     - Failures in observers don't crash the pipeline (fault isolation)
     - Fire-and-forget pattern (async, non-blocking)
     - No observer implementations here (Tier 1 = plumbing only)
+    - Async-first design (sync functions are called directly without thread pools)
     """
 
     def __init__(
@@ -76,24 +77,26 @@ class ObserverManager:
             max_concurrent_observers: Maximum number of observers to run concurrently
             observer_timeout: Timeout in seconds for each observer
         """
-        self._observers: dict[str, Observer] = {}
+        super().__init__()
         self._max_concurrent = max_concurrent_observers
         self._timeout = observer_timeout
-        self._executor = ThreadPoolExecutor(max_workers=max_concurrent_observers)
+        self._closed = False
 
-    def register(self, observer: ObserverLike, observer_id: Optional[str] = None) -> str:
+    def register(self, handler: Any, **kwargs: Any) -> Any:
         """Register an observer with optional ID.
 
         Args
         ----
-            observer: Either an Observer protocol implementation or
-                     a function (sync/async) that takes an event
-            observer_id: Optional ID for the observer (generated if not provided)
+            handler: Either an Observer protocol implementation or
+                    a function (sync/async) that takes an event
+            **kwargs: Can include 'observer_id' for the optional ID
 
         Returns
         -------
             str: The ID of the registered observer
         """
+        observer = handler
+        observer_id = kwargs.get("observer_id", None)
         # Generate ID if not provided
         if observer_id is None:
             observer_id = str(uuid.uuid4())
@@ -101,10 +104,10 @@ class ObserverManager:
         # Wrap if needed
         if hasattr(observer, "handle"):
             # Already implements protocol
-            self._observers[observer_id] = observer
+            self._handlers[observer_id] = observer
         elif callable(observer):
             # Wrap function to implement the protocol
-            self._observers[observer_id] = _make_observer(observer)
+            self._handlers[observer_id] = _make_observer(observer)
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(observer)}"
@@ -112,28 +115,12 @@ class ObserverManager:
 
         return observer_id
 
-    def unregister(self, observer_id: str) -> bool:
-        """Unregister an observer by ID.
-
-        Args
-        ----
-            observer_id: The ID of the observer to unregister
-
-        Returns
-        -------
-            bool: True if observer was found and removed, False otherwise
-        """
-        if observer_id in self._observers:
-            del self._observers[observer_id]
-            return True
-        return False
-
     async def notify(self, event: Any) -> None:
         """Notify all observers of an event.
 
         Errors are logged but don't affect execution.
         """
-        if not self._observers:
+        if not self._handlers:
             return
 
         # Create semaphore to limit concurrency
@@ -144,7 +131,7 @@ class ObserverManager:
                 await self._safe_invoke(obs, event)
 
         # Fire all observers with limited concurrency
-        tasks = [limited_invoke(observer) for observer in self._observers.values()]
+        tasks = [limited_invoke(observer) for observer in self._handlers.values()]
 
         # Wait for all with timeout
         if tasks:
@@ -172,15 +159,9 @@ class ObserverManager:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             logger.error(f"Observer {name} failed: {e}")
 
-    def clear(self) -> None:
-        """Remove all observers."""
-        self._observers.clear()
-
-    def __len__(self) -> int:
-        """Return number of attached observers."""
-        return len(self._observers)
-
-    def __del__(self) -> None:
-        """Cleanup executor on deletion."""
-        if hasattr(self, "_executor"):
-            self._executor.shutdown(wait=False)
+    async def close(self) -> None:
+        """Explicitly close the observer manager and cleanup resources."""
+        if not self._closed:
+            self._closed = True
+            self.clear()
+            # Any additional cleanup can be added here

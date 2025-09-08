@@ -3,10 +3,10 @@
 import asyncio
 
 from hexai.core.application.events import (
+    ControlManager,
     ControlResponse,
     ControlSignal,
     Event,
-    EventBus,
     ExecutionContext,
     NodeCompleted,
     NodeFailed,
@@ -68,18 +68,18 @@ async def main():
     """Demonstrate the simplified event system."""
     print("Simplified Event System Demo\n" + "=" * 50)
 
-    # Create EventBus for control and ObserverManager for observability
-    control_bus = EventBus()
-    observers = ObserverManager()
+    # Create ControlManager for control and ObserverManager for observability
+    control_manager = ControlManager()
+    observer_manager = ObserverManager()
 
     # Register control handlers
-    control_bus.register(skip_test_nodes)
-    control_bus.register(fallback_on_error)
+    control_manager.register(skip_test_nodes)
+    control_manager.register(fallback_on_error)
 
-    # Register observers
-    observers.register(log_observer)
+    # Register observer_manager
+    observer_manager.register(log_observer)
     metrics = MetricsObserver()
-    observers.register(metrics)
+    observer_manager.register(metrics)
 
     # Create execution context
     context = ExecutionContext(dag_id="demo_pipeline")
@@ -87,21 +87,21 @@ async def main():
     # Simulate normal node execution
     print("\n1. Normal Node Execution:")
     event1 = NodeStarted(name="process_data", wave_index=1, dependencies=[])
-    await observers.notify(event1)
-    response1 = await control_bus.check(event1, context)
+    await observer_manager.notify(event1)
+    response1 = await control_manager.check(event1, context)
     print(f"   Control decision: {response1.signal.value}")
 
     # Simulate node completion
     event1_complete = NodeCompleted(
         name="process_data", wave_index=1, result={"data": 123}, duration_ms=150.5
     )
-    await observers.notify(event1_complete)
+    await observer_manager.notify(event1_complete)
 
     # Simulate test node (will be skipped by control)
     print("\n2. Test Node (should be skipped):")
     event2 = NodeStarted(name="test_validation", wave_index=1, dependencies=[])
-    await observers.notify(event2)
-    response2 = await control_bus.check(event2, context)
+    await observer_manager.notify(event2)
+    response2 = await control_manager.check(event2, context)
     print(f"   Control decision: {response2.signal.value}")
     if response2.data:
         print(f"   Control data: {response2.data}")
@@ -109,8 +109,8 @@ async def main():
     # Simulate API failure (will get fallback)
     print("\n3. API Node Failure (should get fallback):")
     event3 = NodeFailed(name="api_call", wave_index=1, error=Exception("Connection timeout"))
-    await observers.notify(event3)
-    response3 = await control_bus.check(event3, context)
+    await observer_manager.notify(event3)
+    response3 = await control_manager.check(event3, context)
     print(f"   Control decision: {response3.signal.value}")
     if response3.data:
         print(f"   Fallback data: {response3.data}")
@@ -118,8 +118,8 @@ async def main():
     # Simulate regular failure (no special handling)
     print("\n4. Regular Node Failure:")
     event4 = NodeFailed(name="compute", wave_index=1, error=Exception("Out of memory"))
-    await observers.notify(event4)
-    response4 = await control_bus.check(event4, context)
+    await observer_manager.notify(event4)
+    response4 = await control_manager.check(event4, context)
     print(f"   Control decision: {response4.signal.value}")
 
     # Show metrics

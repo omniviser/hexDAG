@@ -13,8 +13,8 @@ from hexai.core.validation import IValidator, ValidationContext, coerce_validato
 
 from ..domain.dag import NodeSpec
 from .events import (
+    ControlManager,
     ControlSignal,
-    EventBus,
     ExecutionContext,
     NodeCompleted,
     NodeFailed,
@@ -127,9 +127,9 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        # Get observers and control bus from ports
-        observers: ObserverManager = all_ports.get("observers", ObserverManager())
-        control_bus: EventBus = all_ports.get("control_bus", EventBus())
+        # Get observer manager and control manager from ports
+        observer_manager: ObserverManager = all_ports.get("observer_manager", ObserverManager())
+        control_manager: ControlManager = all_ports.get("control_manager", ControlManager())
 
         # Create execution context for this DAG run
         pipeline_name = getattr(graph, "name", "unnamed")
@@ -141,8 +141,8 @@ class Orchestrator:
             total_waves=len(waves),
             total_nodes=len(graph.nodes),
         )
-        await observers.notify(event)
-        control_response = await control_bus.check(event, context)
+        await observer_manager.notify(event)
+        control_response = await control_manager.check(event, context)
         if control_response.signal != ControlSignal.PROCEED:
             raise OrchestratorError(f"Pipeline start blocked: {control_response.signal.value}")
 
@@ -154,8 +154,8 @@ class Orchestrator:
                 wave_index=wave_idx,
                 nodes=list(wave),  # wave is already a list of node names
             )
-            await observers.notify(wave_event)
-            wave_response = await control_bus.check(wave_event, context)
+            await observer_manager.notify(wave_event)
+            wave_response = await control_manager.check(wave_event, context)
             if wave_response.signal != ControlSignal.PROCEED:
                 raise OrchestratorError(f"Wave {wave_idx} blocked: {wave_response.signal.value}")
 
@@ -166,8 +166,8 @@ class Orchestrator:
                 initial_input,
                 all_ports,
                 context=context,
-                observers=observers,
-                control_bus=control_bus,
+                observer_manager=observer_manager,
+                control_manager=control_manager,
                 wave_index=wave_idx,
                 validate=validate,
                 **kwargs,
@@ -179,7 +179,7 @@ class Orchestrator:
                 wave_index=wave_idx,
                 duration_ms=(time.time() - wave_start_time) * 1000,
             )
-            await observers.notify(wave_completed)
+            await observer_manager.notify(wave_completed)
 
         # Fire pipeline completed event (observation only)
         pipeline_completed = PipelineCompleted(
@@ -187,7 +187,7 @@ class Orchestrator:
             duration_ms=(time.time() - pipeline_start_time) * 1000,
             node_results=node_results,
         )
-        await observers.notify(pipeline_completed)
+        await observer_manager.notify(pipeline_completed)
 
         return node_results
 
@@ -199,8 +199,8 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observers: ObserverManager,
-        control_bus: EventBus,
+        observer_manager: ObserverManager,
+        control_manager: ControlManager,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -216,8 +216,8 @@ class Orchestrator:
                     initial_input,
                     ports,
                     context=context,
-                    observers=observers,
-                    control_bus=control_bus,
+                    observer_manager=observer_manager,
+                    control_manager=control_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,
@@ -247,8 +247,8 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observers: ObserverManager,
-        control_bus: EventBus,
+        observer_manager: ObserverManager,
+        control_manager: ControlManager,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -279,8 +279,8 @@ class Orchestrator:
                 wave_index=wave_index,
                 dependencies=list(node_spec.deps),
             )
-            await observers.notify(start_event)
-            start_response = await control_bus.check(start_event, node_context)
+            await observer_manager.notify(start_event)
+            start_response = await control_manager.check(start_event, node_context)
 
             # Handle control signals
             if start_response.signal == ControlSignal.SKIP:
@@ -316,7 +316,7 @@ class Orchestrator:
                 result=validated_output,
                 duration_ms=(time.time() - node_start_time) * 1000,
             )
-            await observers.notify(complete_event)
+            await observer_manager.notify(complete_event)
 
             return validated_output
 
@@ -327,8 +327,8 @@ class Orchestrator:
                 wave_index=wave_index,
                 error=e,
             )
-            await observers.notify(fail_event)
-            fail_response = await control_bus.check(fail_event, node_context)
+            await observer_manager.notify(fail_event)
+            fail_response = await control_manager.check(fail_event, node_context)
 
             # Handle control signals
             if fail_response.signal == ControlSignal.FALLBACK:
@@ -353,8 +353,8 @@ class Orchestrator:
                     initial_input=initial_input,
                     ports=ports,
                     context=context.with_attempt(context.attempt + 1),
-                    observers=observers,
-                    control_bus=control_bus,
+                    observer_manager=observer_manager,
+                    control_manager=control_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,

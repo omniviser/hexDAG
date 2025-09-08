@@ -1,4 +1,4 @@
-"""Tests for the ObserverManager - the clean event manager implementation."""
+"""Tests for the ObserverManager - the clean observer manager implementation."""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from hexai.core.application.events.events import NodeStarted, PipelineStarted
-from hexai.core.application.events.manager import ObserverManager
+from hexai.core.application.events.observer_manager import ObserverManager
 
 
 class TestObserverManager:

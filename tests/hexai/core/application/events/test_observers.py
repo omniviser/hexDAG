@@ -15,7 +15,7 @@ from hexai.core.application.events.events import (
     PipelineCompleted,
     PipelineStarted,
 )
-from hexai.core.application.events.manager import ObserverManager
+from hexai.core.application.events.observer_manager import ObserverManager
 from hexai.core.application.events.observers import (
     FileObserver,
     LoggingObserver,
@@ -310,27 +310,29 @@ class TestWebSocketObserver:
 
 
 class TestObserverIntegration:
-    """Test observers working together with ObserverManager."""
+    """Test observers working together with EventDispatcher."""
 
     @pytest.mark.asyncio
     async def test_multiple_observers_with_manager(self):
-        """Test multiple observers receiving events through manager."""
-        manager = ObserverManager()
+        """Test multiple observers receiving events through event dispatcher."""
+        observer_manager = ObserverManager()
 
         # Add different observers
         logging_obs = LoggingObserver()
         metrics_obs = MetricsObserver()
         state_obs = NodeStateObserver()
 
-        manager.register(logging_obs)
-        manager.register(metrics_obs)
-        manager.register(state_obs)
+        observer_manager.register(logging_obs)
+        observer_manager.register(metrics_obs)
+        observer_manager.register(state_obs)
 
         # Run a mini pipeline
-        await manager.notify(PipelineStarted(name="test", total_nodes=1, total_waves=1))
-        await manager.notify(NodeStarted(name="node1", wave_index=1))
-        await manager.notify(NodeCompleted(name="node1", wave_index=1, result={}, duration_ms=100))
-        await manager.notify(PipelineCompleted(name="test", duration_ms=100))
+        await observer_manager.notify(PipelineStarted(name="test", total_nodes=1, total_waves=1))
+        await observer_manager.notify(NodeStarted(name="node1", wave_index=1))
+        await observer_manager.notify(
+            NodeCompleted(name="node1", wave_index=1, result={}, duration_ms=100)
+        )
+        await observer_manager.notify(PipelineCompleted(name="test", duration_ms=100))
 
         # Check that observers got the data
         assert metrics_obs.completed_nodes == 1

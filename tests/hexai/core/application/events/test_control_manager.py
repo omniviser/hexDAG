@@ -1,9 +1,9 @@
-"""Tests for the EventBus - execution control system."""
+"""Tests for the ControlManager - execution control system."""
 
 import pytest
 
-from hexai.core.application.events.bus import ControlHandler, EventBus
 from hexai.core.application.events.context import ExecutionContext
+from hexai.core.application.events.control_manager import ControlHandler, ControlManager
 from hexai.core.application.events.events import (
     NodeCompleted,
     NodeFailed,
@@ -13,34 +13,38 @@ from hexai.core.application.events.events import (
 from hexai.core.application.events.models import ControlResponse, ControlSignal
 
 
-class TestEventBus:
-    """Test the EventBus for execution control."""
+class TestControlManager:
+    """Test the ControlManager for execution control."""
 
     @pytest.mark.asyncio
     async def test_no_handlers_allows_everything(self):
         """Test that with no handlers, all events are allowed."""
-        bus = EventBus()
+        control_manager = ControlManager()
         ctx = ExecutionContext(dag_id="test-dag")
 
         # All events should be allowed (PROCEED response)
-        response = await bus.check(NodeStarted(name="test", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
-        response = await bus.check(
+        response = await control_manager.check(
             NodeCompleted(name="test", wave_index=1, result={}, duration_ms=100), ctx
         )
         assert response.signal == ControlSignal.PROCEED
 
-        response = await bus.check(NodeFailed(name="test", wave_index=1, error=RuntimeError()), ctx)
+        response = await control_manager.check(
+            NodeFailed(name="test", wave_index=1, error=RuntimeError()), ctx
+        )
         assert response.signal == ControlSignal.PROCEED
 
-        response = await bus.check(PipelineStarted(name="test", total_nodes=5, total_waves=2), ctx)
+        response = await control_manager.check(
+            PipelineStarted(name="test", total_nodes=5, total_waves=2), ctx
+        )
         assert response.signal == ControlSignal.PROCEED
 
     @pytest.mark.asyncio
     async def test_veto_handler_blocks_events(self):
         """Test that handlers can veto specific events."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         # Handler that vetoes nodes with specific names
         async def veto_forbidden_nodes(event, context):
@@ -48,23 +52,23 @@ class TestEventBus:
                 return ControlResponse(signal=ControlSignal.SKIP)
             return ControlResponse()
 
-        bus.register(veto_forbidden_nodes)
+        control_manager.register(veto_forbidden_nodes)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # Normal nodes allowed
-        response = await bus.check(NodeStarted(name="allowed", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="allowed", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
-        response = await bus.check(NodeStarted(name="test", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
         # Forbidden node is vetoed
-        response = await bus.check(NodeStarted(name="forbidden", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="forbidden", wave_index=1), ctx)
         assert response.signal == ControlSignal.SKIP
 
         # Other event types still allowed
-        response = await bus.check(
+        response = await control_manager.check(
             NodeCompleted(name="forbidden", wave_index=1, result={}, duration_ms=100), ctx
         )
         assert response.signal == ControlSignal.PROCEED
@@ -72,7 +76,7 @@ class TestEventBus:
     @pytest.mark.asyncio
     async def test_multiple_handlers_all_must_approve(self):
         """Test that all handlers must approve for event to pass."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         # First handler - allows everything
         async def allow_all(event, context):
@@ -92,22 +96,22 @@ class TestEventBus:
                 return ControlResponse(signal=ControlSignal.SKIP)
             return ControlResponse()
 
-        bus.register(allow_all)
-        bus.register(veto_failures)
-        bus.register(limit_node_names)
+        control_manager.register(allow_all)
+        control_manager.register(veto_failures)
+        control_manager.register(limit_node_names)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # Node with valid name passes all handlers
-        response = await bus.check(NodeStarted(name="test_node", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test_node", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
         # Node with invalid name fails third handler
-        response = await bus.check(NodeStarted(name="bad_node", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="bad_node", wave_index=1), ctx)
         assert response.signal == ControlSignal.SKIP
 
         # Failed node fails second handler
-        response = await bus.check(
+        response = await control_manager.check(
             NodeFailed(name="test_node", wave_index=1, error=RuntimeError()), ctx
         )
         assert response.signal == ControlSignal.SKIP
@@ -115,7 +119,7 @@ class TestEventBus:
     @pytest.mark.asyncio
     async def test_handler_class_implementation(self):
         """Test using a ControlHandler class instead of function."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         class RateLimiter(ControlHandler):
             """Example rate limiter handler."""
@@ -131,28 +135,28 @@ class TestEventBus:
                 return ControlResponse()
 
         limiter = RateLimiter(max_events=3)
-        bus.register(limiter)
+        control_manager.register(limiter)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # First 3 events pass
-        response = await bus.check(NodeStarted(name="node1", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="node1", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
-        response = await bus.check(NodeStarted(name="node2", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="node2", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
-        response = await bus.check(NodeStarted(name="node3", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="node3", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
         # Fourth event is blocked
-        response = await bus.check(NodeStarted(name="node4", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="node4", wave_index=1), ctx)
         assert response.signal == ControlSignal.SKIP
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_pattern(self):
         """Test implementing a circuit breaker with ControlHandler."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         class CircuitBreaker(ControlHandler):
             """Circuit breaker that opens after too many failures."""
@@ -177,74 +181,74 @@ class TestEventBus:
                 return ControlResponse()
 
         breaker = CircuitBreaker(failure_threshold=2)
-        bus.register(breaker)
+        control_manager.register(breaker)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # Normal events pass
-        response = await bus.check(NodeStarted(name="test", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
         # First failure passes
-        response = await bus.check(
+        response = await control_manager.check(
             NodeFailed(name="fail1", wave_index=1, error=RuntimeError()), ctx
         )
         assert response.signal == ControlSignal.PROCEED
 
         # Second failure triggers circuit breaker
-        response = await bus.check(
+        response = await control_manager.check(
             NodeFailed(name="fail2", wave_index=1, error=RuntimeError()), ctx
         )
         assert response.signal == ControlSignal.FAIL
 
         # Now all events are blocked (circuit is open)
-        response = await bus.check(NodeStarted(name="test", wave_index=2), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=2), ctx)
         assert response.signal == ControlSignal.FAIL
 
     @pytest.mark.asyncio
     async def test_handler_error_does_not_crash(self):
         """Test that errors in handlers are handled gracefully."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         # Handler that crashes
         async def broken_handler(event, context):
             raise RuntimeError("Handler error")
 
-        bus.register(broken_handler)
+        control_manager.register(broken_handler)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # Error is caught and logged, execution proceeds
-        response = await bus.check(NodeStarted(name="test", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
     @pytest.mark.asyncio
     async def test_clear_handlers(self):
         """Test clearing handlers from the bus."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         # Handler that vetoes everything
         async def veto_all(event, context):
             return ControlResponse(signal=ControlSignal.SKIP)
 
-        bus.register(veto_all)
+        control_manager.register(veto_all)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # Events are vetoed
-        response = await bus.check(NodeStarted(name="test", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.SKIP
 
         # Clear the handlers
-        bus.clear()
+        control_manager.clear()
 
         # Events are now allowed
-        response = await bus.check(NodeStarted(name="test", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
     def test_clear_all_handlers(self):
         """Test clearing all handlers."""
-        bus = EventBus()
+        control_manager = ControlManager()
 
         # Add multiple handlers
         async def handler1(event, context):
@@ -253,19 +257,19 @@ class TestEventBus:
         async def handler2(event, context):
             return ControlResponse()
 
-        bus.register(handler1)
-        bus.register(handler2)
+        control_manager.register(handler1)
+        control_manager.register(handler2)
 
-        assert len(bus._handlers) == 2
+        assert len(control_manager) == 2
 
         # Clear all
-        bus.clear()
-        assert len(bus._handlers) == 0
+        control_manager.clear()
+        assert len(control_manager) == 0
 
     @pytest.mark.asyncio
     async def test_policy_enforcement_example(self):
-        """Test using EventBus for policy enforcement."""
-        bus = EventBus()
+        """Test using ControlManager for policy enforcement."""
+        control_manager = ControlManager()
 
         # Business policy: no processing on weekends
         async def weekday_only_policy(event, context):
@@ -281,19 +285,21 @@ class TestEventBus:
                 return ControlResponse(signal=ControlSignal.SKIP)  # Block sensitive operations
             return ControlResponse()
 
-        bus.register(weekday_only_policy)
-        bus.register(security_policy)
+        control_manager.register(weekday_only_policy)
+        control_manager.register(security_policy)
 
         ctx = ExecutionContext(dag_id="test-dag")
 
         # Normal operations allowed
-        response = await bus.check(NodeStarted(name="normal_task", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="normal_task", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
         # Weekend operations blocked
-        response = await bus.check(NodeStarted(name="weekend_job", wave_index=1), ctx)
+        response = await control_manager.check(NodeStarted(name="weekend_job", wave_index=1), ctx)
         assert response.signal == ControlSignal.SKIP
 
         # Sensitive operations blocked
-        response = await bus.check(NodeStarted(name="sensitive_data_export", wave_index=1), ctx)
+        response = await control_manager.check(
+            NodeStarted(name="sensitive_data_export", wave_index=1), ctx
+        )
         assert response.signal == ControlSignal.SKIP

@@ -1,7 +1,7 @@
-"""Control Port: Manages execution control policies.
+"""Control Manager: Manages execution control policies.
 
-This will become a hexagonal architecture PORT that allows policies to control
-the execution flow of the pipeline.
+This is a hexagonal architecture PORT that allows policies to control
+the execution flow of the pipeline through control handlers.
 """
 
 import asyncio
@@ -9,6 +9,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Protocol, Union
 
+from .base_manager import BaseEventManager
 from .context import ExecutionContext
 from .events import Event
 from .models import ControlResponse, ControlSignal, HandlerMetadata
@@ -53,7 +54,7 @@ ControlHandlerLike = Union[ControlHandler, ControlHandlerFunc, AsyncControlHandl
 
 
 def _make_handler(
-    func: Union[ControlHandlerFunc, AsyncControlHandlerFunc],
+    func: ControlHandlerFunc | AsyncControlHandlerFunc,
     metadata: HandlerMetadata | None = None,
 ) -> ControlHandler:
     """Convert a control handler function into a ControlHandler protocol.
@@ -95,35 +96,34 @@ def _make_handler(
     return FunctionHandler(func, metadata)
 
 
-class EventBus:
-    """Manages control handlers that can affect execution.
+class ControlManager(BaseEventManager[tuple[ControlHandler, HandlerMetadata]]):
+    """Manages control policy handlers that can affect execution.
 
     Key principles:
     - Handlers can control execution flow (retry, skip, fallback, fail)
     - First non-PROCEED response wins (veto pattern)
     - Handler failures are isolated and logged
+    - Priority-based handler execution
     """
 
     def __init__(self) -> None:
-        self._handlers: list[tuple[ControlHandler, HandlerMetadata]] = []
+        """Initialize the control manager."""
+        super().__init__()
+        # Override _handlers to maintain sorted list
+        self._handler_list: list[tuple[ControlHandler, HandlerMetadata]] = []
 
-    def register(
-        self,
-        handler: ControlHandlerLike,
-        priority: int = 100,
-        name: str = "",
-        description: str = "",
-    ) -> None:
+    def register(self, handler: Any, **kwargs: Any) -> Any:
         """Register a control handler with optional priority.
 
         Args
         ----
             handler: Either a ControlHandler protocol implementation or
                     a function (sync/async) that takes (event, context) -> ControlResponse
-            priority: Handler priority (lower = higher priority, default 100)
-            name: Optional handler name for logging
-            description: Optional handler description
+            **kwargs: Can include 'priority', 'name', 'description'
         """
+        priority = kwargs.get("priority", 100)
+        name = kwargs.get("name", "")
+        description = kwargs.get("description", "")
         metadata = HandlerMetadata(priority=priority, name=name, description=description)
 
         if isinstance(handler, ControlHandlerBase):
@@ -133,21 +133,35 @@ class EventBus:
             if not handler.metadata.description:
                 handler.metadata.description = description
             handler.metadata.priority = priority
-            self._handlers.append((handler, handler.metadata))
+            self._handler_list.append((handler, handler.metadata))
         elif hasattr(handler, "handle"):
             # Already implements protocol
-            self._handlers.append((handler, metadata))
+            self._handler_list.append((handler, metadata))
         elif callable(handler):
             # Wrap function to implement the protocol
             wrapped = _make_handler(handler, metadata)
-            self._handlers.append((wrapped, metadata))
+            self._handler_list.append((wrapped, metadata))
         else:
             raise TypeError(
                 f"Handler must be callable / implement ControlHandler protocol, got {type(handler)}"
             )
 
         # Sort handlers by priority
-        self._handlers.sort(key=lambda h: h[1].priority)
+        self._handler_list.sort(key=lambda h: h[1].priority)
+
+    def unregister(self, handler_id: str) -> bool:
+        """Remove a handler by name.
+
+        Note: Since control handlers don't have IDs like observers,
+        we remove by name matching.
+        """
+        initial_length = len(self._handler_list)
+        self._handler_list = [
+            (h, m)
+            for h, m in self._handler_list
+            if m.name != handler_id and getattr(h, "__name__", "") != handler_id
+        ]
+        return len(self._handler_list) < initial_length
 
     def _validate_response(self, response: Any, handler: ControlHandler) -> ControlResponse:
         """Validate and normalize handler response."""
@@ -174,10 +188,10 @@ class EventBus:
             ControlResponse with signal and optional data.
         """
         # No handlers means proceed
-        if not self._handlers:
+        if not self._handler_list:
             return ControlResponse()
 
-        for handler, metadata in self._handlers:
+        for handler, metadata in self._handler_list:
             try:
                 response = await handler.handle(event, context)
 
@@ -215,4 +229,9 @@ class EventBus:
 
     def clear(self) -> None:
         """Clear all handlers."""
-        self._handlers.clear()
+        self._handler_list.clear()
+        super().clear()
+
+    def __len__(self) -> int:
+        """Return number of registered handlers."""
+        return len(self._handler_list)

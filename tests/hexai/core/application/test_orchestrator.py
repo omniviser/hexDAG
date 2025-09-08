@@ -106,7 +106,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("add_one", async_add_one))
         graph.add(NodeSpec("multiply_two", sync_multiply_two).after("add_one"))
 
-        results = await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+        results = await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
 
         assert "add_one" in results
         assert "multiply_two" in results
@@ -127,7 +127,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("branch_b", sync_multiply_two))
         graph.add(NodeSpec("combine", async_combine).after("branch_a", "branch_b"))
 
-        results = await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+        results = await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
 
         assert "branch_a" in results
         assert "branch_b" in results
@@ -152,7 +152,7 @@ class TestOrchestrator:
         ]
         graph.add_many(*nodes)
 
-        results = await orchestrator.run(graph, 3, additional_ports={"observers": observers})
+        results = await orchestrator.run(graph, 3, additional_ports={"observer_manager": observers})
 
         # Verify execution flow:
         # start: 3 + 1 = 4
@@ -172,7 +172,7 @@ class TestOrchestrator:
         graph = DirectedGraph()
         graph.add(NodeSpec("memory_node", async_with_memory))
 
-        results = await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+        results = await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
 
         assert results["memory_node"] == 15  # 5 + 10
         # Observers are for observability, not memory storage
@@ -185,7 +185,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("bad_node", failing_function).after("good_node"))
 
         with pytest.raises(NodeExecutionError) as exc_info:
-            await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+            await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
 
         assert exc_info.value.node_name == "bad_node"
         assert "Intentional test failure" in str(exc_info.value)
@@ -200,7 +200,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("b", sync_multiply_two).after("a"))
 
         with pytest.raises(OrchestratorError) as exc_info:
-            await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+            await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
 
         assert "Invalid DAG" in str(exc_info.value)
 
@@ -208,7 +208,7 @@ class TestOrchestrator:
     async def test_empty_dag(self, orchestrator, observers):
         """Test execution of empty DAG."""
         graph = DirectedGraph()
-        results = await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+        results = await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
         assert results == {}
 
     @pytest.mark.asyncio
@@ -217,7 +217,9 @@ class TestOrchestrator:
         graph = DirectedGraph()
         graph.add(NodeSpec("only_node", async_add_one))
 
-        results = await orchestrator.run(graph, 10, additional_ports={"observers": observers})
+        results = await orchestrator.run(
+            graph, 10, additional_ports={"observer_manager": observers}
+        )
 
         assert len(results) == 1
         assert results["only_node"] == 11
@@ -233,7 +235,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("kwarg_node", node_with_kwargs))
 
         results = await orchestrator.run(
-            graph, 5, additional_ports={"observers": observers}, multiplier=3
+            graph, 5, additional_ports={"observer_manager": observers}, multiplier=3
         )
 
         assert results["kwarg_node"] == 15  # 5 * 3
@@ -252,7 +254,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("b", sync_multiply_two))
         graph.add(NodeSpec("analyze", analyzer).after("a", "b"))
 
-        results = await orchestrator.run(graph, 5, additional_ports={"observers": observers})
+        results = await orchestrator.run(graph, 5, additional_ports={"observer_manager": observers})
 
         assert results["a"] == 6  # 5 + 1
         assert results["b"] == 10  # 5 * 2
@@ -288,7 +290,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("c", await track_execution("c")).after("a"))
         graph.add(NodeSpec("d", await track_execution("d", expect_dict=True)).after("b", "c"))
 
-        await orchestrator.run(graph, 1, additional_ports={"observers": observers})
+        await orchestrator.run(graph, 1, additional_ports={"observer_manager": observers})
 
         # Check execution order
         assert execution_order[0] == "a"  # Wave 1 first
@@ -385,7 +387,7 @@ class TestOrchestrator:
 
         # Execute without ports (should default to {})
         results = await orchestrator.run(
-            graph, "test_input", additional_ports={"observers": observers}
+            graph, "test_input", additional_ports={"observer_manager": observers}
         )
 
         # Verify the node handled missing memory port gracefully
@@ -445,7 +447,7 @@ class TestOrchestrator:
         # Test with valid input
         valid_input = {"text": "hello world", "priority": 2}
         results = await orchestrator.run(
-            graph, valid_input, additional_ports={"observers": observers}
+            graph, valid_input, additional_ports={"observer_manager": observers}
         )
 
         assert "strict_processor" in results
@@ -472,7 +474,9 @@ class TestOrchestrator:
         invalid_input = {"number_field": 42}  # Missing required_field
 
         with pytest.raises(NodeExecutionError) as exc_info:
-            await orchestrator.run(graph, invalid_input, additional_ports={"observers": observers})
+            await orchestrator.run(
+                graph, invalid_input, additional_ports={"observer_manager": observers}
+            )
 
         # Check that error mentions input validation
         error_str = str(exc_info.value)
@@ -507,7 +511,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("consumer", consumer_node, in_type=NodeBInput).after("producer"))
 
         results = await orchestrator.run(
-            graph, "test data", additional_ports={"observers": observers}
+            graph, "test data", additional_ports={"observer_manager": observers}
         )
 
         # Check that data flowed correctly through validation
@@ -535,7 +539,7 @@ class TestOrchestrator:
         # Pass dict when expecting string
         with pytest.raises(NodeExecutionError) as exc_info:
             await strict_orchestrator.run(
-                graph, {"not": "a string"}, additional_ports={"observers": observers}
+                graph, {"not": "a string"}, additional_ports={"observer_manager": observers}
             )
 
         error_str = str(exc_info.value)
@@ -574,7 +578,7 @@ class TestOrchestrator:
         graph.add(NodeSpec("consumer", consumer_node, in_type=NodeBInput).after("producer"))
 
         results = await strict_orchestrator.run(
-            graph, "test data", additional_ports={"observers": observers}
+            graph, "test data", additional_ports={"observer_manager": observers}
         )
 
         # Check that data flowed correctly through validation - expect Pydantic models
@@ -639,7 +643,9 @@ class TestOrchestrator:
         graph.validate()  # Should not raise
 
         # Should execute successfully
-        results = await orchestrator.run(graph, "hello", additional_ports={"observers": observers})
+        results = await orchestrator.run(
+            graph, "hello", additional_ports={"observer_manager": observers}
+        )
         assert results["consumer"]["result"] == "hello:42"
 
     @pytest.mark.asyncio
@@ -650,7 +656,7 @@ class TestOrchestrator:
 
         # Should work with validation disabled
         results = await orchestrator.run(
-            graph, 5, additional_ports={"observers": observers}, validate=False
+            graph, 5, additional_ports={"observer_manager": observers}, validate=False
         )
         assert results["test_node"] == 6
 
@@ -669,7 +675,7 @@ class TestOrchestrator:
 
         # Execute with additional ports
         results = await orchestrator.run(
-            graph, "test_input", additional_ports={"observers": observers}
+            graph, "test_input", additional_ports={"observer_manager": observers}
         )
 
         # Should have access to both shared and additional ports
@@ -682,11 +688,11 @@ class TestOrchestrator:
     async def test_observers_as_port(self, orchestrator):
         """Test that event manager is passed as a port to nodes."""
 
-        async def node_with_observers(input_data, observers=None, **ports):
+        async def node_with_observers(input_data, observer_manager=None, **ports):
             """Node that uses event manager from ports."""
-            if observers:
-                await observers.emit(MagicMock())  # Mock event
-            return {"used_observers": observers is not None}
+            if observer_manager:
+                await observer_manager.emit(MagicMock())  # Mock event
+            return {"used_observers": observer_manager is not None}
 
         graph = DirectedGraph()
         graph.add(NodeSpec("test_node", node_with_observers))
@@ -694,7 +700,7 @@ class TestOrchestrator:
         # Test with event manager
         observers = AsyncMock()
         results = await orchestrator.run(
-            graph, "test_input", additional_ports={"observers": observers}
+            graph, "test_input", additional_ports={"observer_manager": observers}
         )
 
         assert results["test_node"]["used_observers"] is True

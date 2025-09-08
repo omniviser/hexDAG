@@ -97,7 +97,7 @@ This file contains pre-built DAG objects to eliminate runtime parsing.
 from typing import Any
 
 # Only necessary imports for compiled execution - PYDANTIC-FIRST
-from hexai.core.application.events.manager import ObserverManager
+from hexai.core.application.events.observer_manager import ObserverManager
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
 from hexai.core.application.nodes import NodeFactory
@@ -172,7 +172,7 @@ class Compiled{class_name}Pipeline:
         Args
         ----
             input_data: Input data (preferably Pydantic model)
-            event_manager: Event manager for tracing and memory
+            event_manager: Observer manager for tracing and memory
             ports: Injected dependencies (adapters)
 
         Returns
@@ -259,7 +259,7 @@ async def execute_{data.name.lower()}(
     Args
     ----
         input_data: Input data (preferably Pydantic model)
-        event_manager: Event manager for tracing and memory
+        event_manager: Observer manager for tracing and memory
         ports: Injected dependencies (adapters)
 
     Returns

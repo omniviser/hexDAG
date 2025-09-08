@@ -9,17 +9,17 @@ from typing import Any, Optional
 from .models import ControlResponse, ControlSignal
 
 
-class NullEventBus:
-    """Null implementation of EventBus for control plane.
+class NullControlManager:
+    """Null implementation of ControlManager for control plane.
 
     Always returns PROCEED, allowing execution to continue.
     """
 
-    async def check(self, event: Any, context: Any) -> ControlResponse:
+    async def check(self, event: Any, context: Any) -> ControlResponse:  # noqa: ARG002
         """Return PROCEED to allow execution."""
         return ControlResponse(signal=ControlSignal.PROCEED)
 
-    def register(self, handler: Any, **kwargs: Any) -> None:
+    def register(self, handler: Any, **kwargs: Any) -> None:  # noqa: ARG002
         """No-op registration."""
         pass
 
@@ -34,15 +34,15 @@ class NullObserverManager:
     Silently ignores all notifications.
     """
 
-    async def notify(self, event: Any) -> None:
+    async def notify(self, event: Any) -> None:  # noqa: ARG002
         """Silently ignore notification."""
         pass
 
-    def register(self, observer: Any, observer_id: Optional[str] = None) -> str:
+    def register(self, observer: Any, observer_id: Optional[str] = None) -> str:  # noqa: ARG002
         """No-op registration, returns dummy ID."""
         return "null-observer-id"
 
-    def unregister(self, observer_id: str) -> bool:
+    def unregister(self, observer_id: str) -> bool:  # noqa: ARG002
         """No-op unregistration, always returns False."""
         return False
 
@@ -56,26 +56,26 @@ class NullObserverManager:
 
 
 # Singleton instances for use in tests and as defaults
-NULL_EVENT_BUS = NullEventBus()
+NULL_CONTROL_MANAGER = NullControlManager()
 NULL_OBSERVER_MANAGER = NullObserverManager()
 
 
-def get_event_bus(ports: dict[str, Any]) -> Any:
-    """Get event bus from ports, returning null bus if not found.
+def get_control_manager(ports: dict[str, Any]) -> Any:
+    """Get control manager from ports, returning null manager if not found.
 
-    This eliminates the need for 'if event_bus:' checks everywhere.
+    This eliminates the need for 'if control_manager:' checks everywhere.
 
     Parameters
     ----------
     ports : dict[str, Any]
-        Dictionary of ports that may contain event_bus
+        Dictionary of ports that may contain control_manager
 
     Returns
     -------
     Any
-        Event bus or null bus that always allows execution
+        Control manager or null manager that always allows execution
     """
-    return ports.get("event_bus", NULL_EVENT_BUS)
+    return ports.get("control_manager", NULL_CONTROL_MANAGER)
 
 
 def get_observer_manager(ports: dict[str, Any]) -> Any:
