@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Literal, Type
+from typing import Any, Callable, ClassVar, Literal, Type, TypeVar
 
 # Allowed kinds of ports
 # ruff: formatter-ignore
@@ -151,8 +151,11 @@ class PortRegistry:
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 
 
+T = TypeVar("T", bound=type[Any])
+
+
 # flake8: noqa
-def register_port[T: type](name: str, override: bool = False, **meta: Any) -> Callable[[T], T]:
+def register_port(name: str, override: bool = False, **meta: Any) -> Callable[[T], T]:
     """Decorator to register or override a port class in the PortRegistry.
 
     Args
