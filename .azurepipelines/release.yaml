@@ -1,3 +1,13 @@
+trigger:
+    branches:
+      include:
+        - main
+
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
   - job: BuildAndPublish
     displayName: "Build package & publish to TestPyPI"
     dependsOn: CodeQuality
