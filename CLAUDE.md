@@ -84,7 +84,6 @@ hexai/
 │   └── validation/      # Type validation and schema conversion
 ├── adapters/            # External service implementations
 │   ├── mock/           # Mock implementations for testing
-│   └── in_memory_memory.py  # In-memory memory adapter
 ├── agent_factory/       # YAML pipeline building and compilation
 └── cli/                # Command-line interface
 ```
