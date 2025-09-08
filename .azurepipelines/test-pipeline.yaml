@@ -182,16 +182,13 @@ jobs:
         condition: ne(variables['Agent.OS'], 'Windows_NT')
 
       - task: PowerShell@2
-        displayName: "Install system deps (Windows via winget)"
+        displayName: "Install system deps (Windows via Chocolatey)"
         condition: eq(variables['Agent.OS'], 'Windows_NT')
         inputs:
           targetType: inline
           script: |
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-              winget install -e --id Graphviz.Graphviz --silent
-            } else {
-              Write-Host "winget not available; skipping Graphviz install on Windows"
-            }
+            choco --version
+            choco install graphviz -y --no-progress
 
       - script: |
           set -e
