@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from hexai.core.application.events import NodeStarted, ObserverManager, PipelineStarted
+from hexai.core.application.events.events import NodeStarted, PipelineStarted
+from hexai.core.application.events.manager import ObserverManager
 
 
 class TestObserverManager:
@@ -130,16 +131,19 @@ class TestObserverManager:
         obs1 = MagicMock()
         obs2 = MagicMock()
 
-        manager.register(obs1)
-        manager.register(obs2)
+        # Register returns IDs now
+        id1 = manager.register(obs1)
+        _ = manager.register(obs2)
         assert len(manager) == 2
 
-        # Unregister one
-        manager.unregister(obs1)
+        # Unregister one by ID
+        result = manager.unregister(id1)
+        assert result is True
         assert len(manager) == 1
 
-        # Unregister non-existent (should not error)
-        manager.unregister(obs1)
+        # Unregister non-existent ID (should return False)
+        result = manager.unregister(id1)
+        assert result is False
         assert len(manager) == 1
 
     def test_clear_all_observers(self):

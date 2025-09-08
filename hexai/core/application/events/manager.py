@@ -14,23 +14,13 @@ implementations (those belong in Tier 2 or external systems).
 
 import asyncio
 import logging
-from typing import Any, Callable, Protocol, Union
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Optional, Union
+
+from .models import AsyncObserverFunc, Observer, ObserverFunc, ObserverLike
 
 logger = logging.getLogger(__name__)
-
-
-class Observer(Protocol):
-    """Protocol for observers."""
-
-    async def handle(self, event: Any) -> None:
-        """Handle an event."""
-        ...
-
-
-# Types that can be observers
-ObserverFunc = Callable[[Any], None]
-AsyncObserverFunc = Callable[[Any], Any]  # Returns awaitable
-ObserverLike = Union[Observer, ObserverFunc, AsyncObserverFunc]
 
 
 def _make_observer(func: Union[ObserverFunc, AsyncObserverFunc]) -> Observer:
@@ -74,41 +64,69 @@ class ObserverManager:
     - No observer implementations here (Tier 1 = plumbing only)
     """
 
-    def __init__(self) -> None:
-        self._observers: list[Observer] = []
+    def __init__(
+        self,
+        max_concurrent_observers: int = 10,
+        observer_timeout: float = 5.0,
+    ) -> None:
+        """Initialize the observer manager.
 
-    def register(self, observer: ObserverLike) -> None:
-        """Register an observer.
+        Args
+        ----
+            max_concurrent_observers: Maximum number of observers to run concurrently
+            observer_timeout: Timeout in seconds for each observer
+        """
+        self._observers: dict[str, Observer] = {}
+        self._max_concurrent = max_concurrent_observers
+        self._timeout = observer_timeout
+        self._executor = ThreadPoolExecutor(max_workers=max_concurrent_observers)
+
+    def register(self, observer: ObserverLike, observer_id: Optional[str] = None) -> str:
+        """Register an observer with optional ID.
 
         Args
         ----
             observer: Either an Observer protocol implementation or
                      a function (sync/async) that takes an event
+            observer_id: Optional ID for the observer (generated if not provided)
+
+        Returns
+        -------
+            str: The ID of the registered observer
         """
+        # Generate ID if not provided
+        if observer_id is None:
+            observer_id = str(uuid.uuid4())
+
+        # Wrap if needed
         if hasattr(observer, "handle"):
             # Already implements protocol
-            self._observers.append(observer)
+            self._observers[observer_id] = observer
         elif callable(observer):
             # Wrap function to implement the protocol
-            self._observers.append(_make_observer(observer))
+            self._observers[observer_id] = _make_observer(observer)
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(observer)}"
             )
 
-    def unregister(self, observer: Observer) -> None:
-        """Unregister an observer.
+        return observer_id
 
-        Warning: This only works for observers that were registered as objects
-        implementing the Observer protocol. Functions that were auto-wrapped
-        cannot be unregistered this way since a new wrapper is created each time.
+    def unregister(self, observer_id: str) -> bool:
+        """Unregister an observer by ID.
 
-        If you need to unregister functions, consider using a class that
-        implements the Observer protocol instead.
+        Args
+        ----
+            observer_id: The ID of the observer to unregister
+
+        Returns
+        -------
+            bool: True if observer was found and removed, False otherwise
         """
-        # Only works for observers registered as-is (not wrapped functions)
-        if observer in self._observers:
-            self._observers.remove(observer)
+        if observer_id in self._observers:
+            del self._observers[observer_id]
+            return True
+        return False
 
     async def notify(self, event: Any) -> None:
         """Notify all observers of an event.
@@ -118,17 +136,37 @@ class ObserverManager:
         if not self._observers:
             return
 
-        # Fire all observers concurrently
-        tasks = [self._safe_invoke(observer, event) for observer in self._observers]
+        # Create semaphore to limit concurrency
+        semaphore = asyncio.Semaphore(self._max_concurrent)
 
-        # Wait for all, but don't fail on exceptions
+        async def limited_invoke(obs: Observer) -> None:
+            async with semaphore:
+                await self._safe_invoke(obs, event)
+
+        # Fire all observers with limited concurrency
+        tasks = [limited_invoke(observer) for observer in self._observers.values()]
+
+        # Wait for all with timeout
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=self._timeout * 2,  # Total timeout for all observers
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"Observer notification timed out after {self._timeout * 2}s")
 
     async def _safe_invoke(self, observer: Observer, event: Any) -> None:
-        """Safely invoke an observer."""
+        """Safely invoke an observer with timeout."""
         try:
-            await observer.handle(event)
+            # Apply timeout to individual observer
+            await asyncio.wait_for(
+                observer.handle(event),
+                timeout=self._timeout,
+            )
+        except asyncio.TimeoutError:
+            name = getattr(observer, "__name__", observer.__class__.__name__)
+            logger.warning(f"Observer {name} timed out after {self._timeout}s")
         except Exception as e:
             # Get appropriate name for logging
             name = getattr(observer, "__name__", observer.__class__.__name__)
@@ -141,3 +179,8 @@ class ObserverManager:
     def __len__(self) -> int:
         """Return number of attached observers."""
         return len(self._observers)
+
+    def __del__(self) -> None:
+        """Cleanup executor on deletion."""
+        if hasattr(self, "_executor"):
+            self._executor.shutdown(wait=False)

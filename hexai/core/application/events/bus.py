@@ -6,13 +6,36 @@ the execution flow of the pipeline.
 
 import asyncio
 import logging
+from abc import ABC, abstractmethod
 from typing import Any, Callable, Protocol, Union
 
 from .context import ExecutionContext
-from .control import ControlResponse
 from .events import Event
+from .models import ControlResponse, ControlSignal, HandlerMetadata
 
 logger = logging.getLogger(__name__)
+
+
+class ControlHandlerBase(ABC):
+    """Base class for control handlers with metadata support."""
+
+    def __init__(self, metadata: HandlerMetadata | None = None):
+        self.metadata = metadata or HandlerMetadata()
+
+    @abstractmethod
+    async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:
+        """Handle an event and return control response."""
+        ...
+
+    @property
+    def priority(self) -> int:
+        """Get handler priority."""
+        return self.metadata.priority
+
+    @property
+    def name(self) -> str:
+        """Get handler name."""
+        return self.metadata.name or self.__class__.__name__
 
 
 class ControlHandler(Protocol):
@@ -29,22 +52,33 @@ AsyncControlHandlerFunc = Callable[[Any, ExecutionContext], Any]  # Returns awai
 ControlHandlerLike = Union[ControlHandler, ControlHandlerFunc, AsyncControlHandlerFunc]
 
 
-def _make_handler(func: Union[ControlHandlerFunc, AsyncControlHandlerFunc]) -> ControlHandler:
+def _make_handler(
+    func: Union[ControlHandlerFunc, AsyncControlHandlerFunc],
+    metadata: HandlerMetadata | None = None,
+) -> ControlHandler:
     """Convert a control handler function into a ControlHandler protocol.
 
     Args
     ----
         func: A function that takes (event, context) and returns ControlResponse
+        metadata: Optional handler metadata with priority and description
 
     Returns
     -------
         An object implementing the ControlHandler protocol
     """
 
-    class FunctionHandler:
-        def __init__(self, fn: Union[ControlHandlerFunc, AsyncControlHandlerFunc]):
+    class FunctionHandler(ControlHandlerBase):
+        def __init__(
+            self,
+            fn: Union[ControlHandlerFunc, AsyncControlHandlerFunc],
+            metadata: HandlerMetadata | None = None,
+        ):
+            super().__init__(metadata)
             self._func = fn
             self.__name__ = getattr(fn, "__name__", "anonymous_handler")
+            if not self.metadata.name:
+                self.metadata.name = self.__name__
 
         async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:
             if asyncio.iscoroutinefunction(self._func):
@@ -58,7 +92,7 @@ def _make_handler(func: Union[ControlHandlerFunc, AsyncControlHandlerFunc]) -> C
                 )
             return result
 
-    return FunctionHandler(func)
+    return FunctionHandler(func, metadata)
 
 
 class EventBus:
@@ -71,26 +105,49 @@ class EventBus:
     """
 
     def __init__(self) -> None:
-        self._handlers: list[ControlHandler] = []
+        self._handlers: list[tuple[ControlHandler, HandlerMetadata]] = []
 
-    def register(self, handler: ControlHandlerLike) -> None:
-        """Register a control handler.
+    def register(
+        self,
+        handler: ControlHandlerLike,
+        priority: int = 100,
+        name: str = "",
+        description: str = "",
+    ) -> None:
+        """Register a control handler with optional priority.
 
         Args
         ----
             handler: Either a ControlHandler protocol implementation or
                     a function (sync/async) that takes (event, context) -> ControlResponse
+            priority: Handler priority (lower = higher priority, default 100)
+            name: Optional handler name for logging
+            description: Optional handler description
         """
-        if hasattr(handler, "handle"):
+        metadata = HandlerMetadata(priority=priority, name=name, description=description)
+
+        if isinstance(handler, ControlHandlerBase):
+            # Update metadata if not already set
+            if not handler.metadata.name:
+                handler.metadata.name = name
+            if not handler.metadata.description:
+                handler.metadata.description = description
+            handler.metadata.priority = priority
+            self._handlers.append((handler, handler.metadata))
+        elif hasattr(handler, "handle"):
             # Already implements protocol
-            self._handlers.append(handler)
+            self._handlers.append((handler, metadata))
         elif callable(handler):
             # Wrap function to implement the protocol
-            self._handlers.append(_make_handler(handler))
+            wrapped = _make_handler(handler, metadata)
+            self._handlers.append((wrapped, metadata))
         else:
             raise TypeError(
                 f"Handler must be callable / implement ControlHandler protocol, got {type(handler)}"
             )
+
+        # Sort handlers by priority
+        self._handlers.sort(key=lambda h: h[1].priority)
 
     def _validate_response(self, response: Any, handler: ControlHandler) -> ControlResponse:
         """Validate and normalize handler response."""
@@ -120,7 +177,7 @@ class EventBus:
         if not self._handlers:
             return ControlResponse()
 
-        for handler in self._handlers:
+        for handler, metadata in self._handlers:
             try:
                 response = await handler.handle(event, context)
 
@@ -129,17 +186,29 @@ class EventBus:
 
                 # First non-PROCEED response wins
                 if response.should_interrupt():
-                    handler_name = getattr(handler, "__name__", handler.__class__.__name__)
+                    handler_name = metadata.name or getattr(
+                        handler, "__name__", handler.__class__.__name__
+                    )
                     logger.info(
-                        f"Handler {handler_name} returned {response.signal.value} "
-                        f"for {event.__class__.__name__}"
+                        f"Handler {handler_name} (priority {metadata.priority}) "
+                        f"returned {response.signal.value} for {event.__class__.__name__}"
                     )
                     return response
 
             except Exception as e:
-                handler_name = getattr(handler, "__name__", handler.__class__.__name__)
-                logger.error(f"Control handler {handler_name} failed: {e}")
-                # Continue to next handler on error
+                handler_name = metadata.name or getattr(
+                    handler, "__name__", handler.__class__.__name__
+                )
+                logger.error(
+                    f"Control handler {handler_name} (priority {metadata.priority}) failed: {e}"
+                )
+                # For critical handlers, return ERROR signal
+                if metadata.priority < 50:  # Consider high-priority handlers as critical
+                    return ControlResponse(
+                        signal=ControlSignal.ERROR,
+                        data=f"Critical handler {handler_name} failed: {e}",
+                    )
+                # Continue to next handler for non-critical errors
                 continue
 
         return ControlResponse()

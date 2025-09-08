@@ -8,17 +8,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hexai.core.application.events import (
-    FileObserver,
-    LoggingObserver,
-    MetricsObserver,
+from hexai.core.application.events.events import (
     NodeCompleted,
     NodeFailed,
     NodeStarted,
-    NodeStateObserver,
-    ObserverManager,
     PipelineCompleted,
     PipelineStarted,
+)
+from hexai.core.application.events.manager import ObserverManager
+from hexai.core.application.events.observers import (
+    FileObserver,
+    LoggingObserver,
+    MetricsObserver,
+    NodeStateObserver,
     WebSocketObserver,
 )
 

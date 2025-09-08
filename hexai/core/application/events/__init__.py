@@ -6,9 +6,8 @@ This module provides a simple event system for pipeline execution:
 - EventBus: Execution control that can veto operations
 """
 
-from .bus import ControlHandler, EventBus
+from .bus import ControlHandler, ControlHandlerBase, EventBus
 from .context import ExecutionContext
-from .control import ControlResponse, ControlSignal
 from .events import (
     Event,
     LLMPromptSent,
@@ -23,7 +22,9 @@ from .events import (
     WaveCompleted,
     WaveStarted,
 )
-from .manager import Observer, ObserverManager
+from .manager import ObserverManager
+from .models import ControlResponse, ControlSignal, HandlerMetadata, Observer
+from .null_manager import NULL_EVENT_BUS, NULL_OBSERVER_MANAGER
 from .observers import (
     FileObserver,
     LoggingObserver,
@@ -39,9 +40,14 @@ __all__ = [
     "Observer",
     "EventBus",
     "ControlHandler",
+    "ControlHandlerBase",
+    "HandlerMetadata",
     "ControlResponse",
     "ControlSignal",
     "ExecutionContext",
+    # Null implementations for testing
+    "NULL_EVENT_BUS",
+    "NULL_OBSERVER_MANAGER",
     # Event types
     "NodeStarted",
     "NodeCompleted",
