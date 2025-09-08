@@ -187,12 +187,11 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            script: |
-              if (Get-Command winget -ErrorAction SilentlyContinue) {
-                winget install -e --id Graphviz.Graphviz --silent
-              } else {
-                Write-Host "winget not available; skipping Graphviz install on Windows"
-              }
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+              winget install -e --id Graphviz.Graphviz --silent
+            } else {
+              Write-Host "winget not available; skipping Graphviz install on Windows"
+            }
 
       - script: |
           set -e
