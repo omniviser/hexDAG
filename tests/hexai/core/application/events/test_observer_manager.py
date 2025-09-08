@@ -190,3 +190,95 @@ class TestObserverManager:
         # All events should be tracked
         assert len(calls) == 5
         assert {e.name for e in calls} == {f"node_{i}" for i in range(5)}
+
+    @pytest.mark.asyncio
+    async def test_observer_receives_only_registered_events(self):
+        """Test that observers only receive events they registered for."""
+        manager = ObserverManager()
+
+        # Create mock observers
+        node_observer = AsyncMock()
+        pipeline_observer = AsyncMock()
+        all_observer = AsyncMock()
+
+        # Register with different filters
+        from hexai.core.application.events import (
+            NodeCompleted,
+            NodeFailed,
+            PipelineCompleted,
+            PipelineStarted,
+            ToolCalled,
+        )
+
+        manager.register(node_observer, event_types=[NodeStarted, NodeCompleted, NodeFailed])
+        manager.register(pipeline_observer, event_types=[PipelineStarted, PipelineCompleted])
+        manager.register(all_observer)  # No filter = all events
+
+        # Send various events
+        await manager.notify(NodeStarted(name="test", wave_index=1))
+        await manager.notify(PipelineStarted(name="pipeline", total_waves=2, total_nodes=5))
+        await manager.notify(ToolCalled(node_name="test", tool_name="api", params={}))
+
+        # Check calls
+        assert node_observer.handle.call_count == 1  # Only NodeStarted
+        assert pipeline_observer.handle.call_count == 1  # Only PipelineStarted
+        assert all_observer.handle.call_count == 3  # All three events
+
+    @pytest.mark.asyncio
+    async def test_observer_no_filter_receives_all(self):
+        """Test that observer without filter receives all events."""
+        manager = ObserverManager()
+
+        observer = AsyncMock()
+        manager.register(observer)  # No event_types specified
+
+        # Send various events
+        from hexai.core.application.events import PipelineCompleted, ToolCalled
+
+        await manager.notify(NodeStarted(name="test", wave_index=1))
+        await manager.notify(ToolCalled(node_name="test", tool_name="api", params={}))
+        await manager.notify(PipelineCompleted(name="pipeline", duration_ms=1000))
+
+        assert observer.handle.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_observer_empty_filter_list(self):
+        """Test that empty event_types list means no events."""
+        manager = ObserverManager()
+
+        observer = AsyncMock()
+        manager.register(observer, event_types=[])  # Empty list
+
+        # Send events
+        await manager.notify(NodeStarted(name="test", wave_index=1))
+        await manager.notify(PipelineStarted(name="pipeline", total_waves=1, total_nodes=1))
+
+        # Should not be called
+        assert observer.handle.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_filtering_improves_performance(self):
+        """Test that filtering reduces unnecessary invocations."""
+        manager = ObserverManager()
+
+        from hexai.core.application.events import ToolCalled
+
+        # Create 10 observers, each interested in only one event type
+        node_observers = [AsyncMock() for _ in range(10)]
+        tool_observers = [AsyncMock() for _ in range(10)]
+
+        for obs in node_observers:
+            manager.register(obs, event_types=[NodeStarted])
+
+        for obs in tool_observers:
+            manager.register(obs, event_types=[ToolCalled])
+
+        # Send a NodeStarted event
+        await manager.notify(NodeStarted(name="test", wave_index=1))
+
+        # Only node observers should be called
+        for obs in node_observers:
+            assert obs.handle.call_count == 1
+
+        for obs in tool_observers:
+            assert obs.handle.call_count == 0

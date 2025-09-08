@@ -248,25 +248,127 @@ class TestControlManager:
         response = await control_manager.check(NodeStarted(name="test", wave_index=1), ctx)
         assert response.signal == ControlSignal.PROCEED
 
-    def test_clear_all_handlers(self):
-        """Test clearing all handlers."""
-        control_manager = ControlManager()
+    @pytest.mark.asyncio
+    async def test_handler_only_checks_registered_events(self):
+        """Test that handlers only process events they registered for."""
+        manager = ControlManager()
+        context = ExecutionContext(dag_id="test")
 
-        # Add multiple handlers
-        async def handler1(event, context):
+        from hexai.core.application.events import (
+            NodeCompleted,
+            PipelineStarted,
+            ToolCalled,
+            ToolCompleted,
+        )
+
+        # Create handlers with different filters
+        async def node_handler(event, ctx):
+            return ControlResponse(signal=ControlSignal.RETRY)
+
+        async def tool_handler(event, ctx):
+            return ControlResponse(signal=ControlSignal.SKIP)
+
+        manager.register(node_handler, name="node_policy", event_types=[NodeStarted, NodeCompleted])
+        manager.register(tool_handler, name="tool_policy", event_types=[ToolCalled, ToolCompleted])
+
+        # Check NodeStarted - should trigger retry
+        response = await manager.check(NodeStarted(name="test", wave_index=1), context)
+        assert response.signal == ControlSignal.RETRY
+
+        # Check ToolCalled - should trigger skip
+        response = await manager.check(
+            ToolCalled(node_name="test", tool_name="api", params={}), context
+        )
+        assert response.signal == ControlSignal.SKIP
+
+        # Check PipelineStarted - no handlers registered, should proceed
+        response = await manager.check(
+            PipelineStarted(name="pipeline", total_waves=1, total_nodes=1), context
+        )
+        assert response.signal == ControlSignal.PROCEED
+
+    @pytest.mark.asyncio
+    async def test_handler_no_filter_checks_all(self):
+        """Test that handler without filter checks all events."""
+        manager = ControlManager()
+        context = ExecutionContext(dag_id="test")
+
+        from hexai.core.application.events import PipelineCompleted, ToolCalled
+
+        call_count = 0
+
+        async def universal_handler(event, ctx):
+            nonlocal call_count
+            call_count += 1
             return ControlResponse()
 
-        async def handler2(event, context):
-            return ControlResponse()
+        manager.register(universal_handler, name="universal")  # No event_types
 
-        control_manager.register(handler1)
-        control_manager.register(handler2)
+        # Check various events
+        await manager.check(NodeStarted(name="test", wave_index=1), context)
+        await manager.check(ToolCalled(node_name="test", tool_name="api", params={}), context)
+        await manager.check(PipelineCompleted(name="pipeline", duration_ms=1000), context)
 
-        assert len(control_manager) == 2
+        assert call_count == 3
 
-        # Clear all
-        control_manager.clear()
-        assert len(control_manager) == 0
+    @pytest.mark.asyncio
+    async def test_filtering_with_priority(self):
+        """Test that filtering works correctly with priority ordering."""
+        manager = ControlManager()
+        context = ExecutionContext(dag_id="test")
+
+        from hexai.core.application.events import ToolCalled
+
+        # High priority handler for nodes only
+        async def high_priority_node_handler(event, ctx):
+            return ControlResponse(signal=ControlSignal.SKIP)
+
+        # Low priority universal handler
+        async def low_priority_handler(event, ctx):
+            return ControlResponse(signal=ControlSignal.RETRY)
+
+        manager.register(
+            high_priority_node_handler,
+            priority=10,
+            event_types=[NodeStarted],  # High priority
+        )
+        manager.register(
+            low_priority_handler,
+            priority=100,  # Low priority
+            # No filter - handles all
+        )
+
+        # NodeStarted should be skipped by high priority handler
+        response = await manager.check(NodeStarted(name="test", wave_index=1), context)
+        assert response.signal == ControlSignal.SKIP
+
+        # ToolCalled should be retried by low priority handler (high priority doesn't match)
+        response = await manager.check(
+            ToolCalled(node_name="test", tool_name="api", params={}), context
+        )
+        assert response.signal == ControlSignal.RETRY
+
+    @pytest.mark.asyncio
+    async def test_empty_filter_list_never_called(self):
+        """Test that handler with empty event list is never called."""
+        manager = ControlManager()
+        context = ExecutionContext(dag_id="test")
+
+        from hexai.core.application.events import PipelineCompleted
+
+        async def never_handler(event, ctx):
+            return ControlResponse(signal=ControlSignal.FAIL)
+
+        manager.register(never_handler, event_types=[])  # Empty list
+
+        # Check various events - should all proceed
+        response = await manager.check(NodeStarted(name="test", wave_index=1), context)
+        assert response.signal == ControlSignal.PROCEED
+
+        response = await manager.check(
+            PipelineCompleted(name="pipeline", duration_ms=1000), context
+        )
+        assert response.signal == ControlSignal.PROCEED
 
     @pytest.mark.asyncio
     async def test_policy_enforcement_example(self):
