@@ -168,7 +168,7 @@ jobs:
           addToPath: true
         displayName: "Use Python $(python)"
 
-      - bash: |
+      - script: |
           if [ "$(Agent.OS)" = "Linux" ]; then
             sudo apt-get update
             sudo apt-get install -y graphviz
@@ -185,6 +185,7 @@ jobs:
         displayName: "Install UV"
 
       - script: |
+          export PATH="$UV_BIN_DIR:$PATH"
           uv venv
         displayName: "Create UV virtual environment"
 
@@ -205,7 +206,7 @@ jobs:
         displayName: "Measure import time (base)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
 
-      - bash: |
+      - script: |
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_size.json
         displayName: "Size benchmark (base)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
@@ -250,4 +251,4 @@ jobs:
           ArtifactName: "benchmarks_$(Agent.OS)_py$(python)"
           publishLocation: "Container"
         displayName: "Publish artifacts"
-        condition: always()
+        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
