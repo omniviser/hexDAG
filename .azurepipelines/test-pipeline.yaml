@@ -179,11 +179,40 @@ jobs:
             echo "Ensure Graphviz installed if needed"
           fi
         displayName: "Install system deps"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+      - task: PowerShell@2
+        displayName: "Install system deps (Windows via winget)"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+            try {
+              winget --version
+            } catch {
+              Write-Host "winget not available on this runner; skipping Graphviz install"
+              exit 0
+            }
+            winget install --id Graphviz.Graphviz -e --silent || Write-Host "Graphviz may already be installed"
 
       - script: |
           set -e
           curl -LsSf https://astral.sh/uv/install.sh | sh
-        displayName: "Install UV"
+        displayName: "Install UV (Unix)"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+      - task: PowerShell@2
+        displayName: "Install UV (Windows)"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+              powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
+              if (elseif (Test-Path "$env:USERPROFILE\.local\bin\uv.exe") {
+                Write-Host "##vso[task.setvariable variable=UV_BIN_DIR]$env:USERPROFILE\.local\bin"
+              } else {
+                Write-Host "##vso[task.setvariable variable=UV_BIN_DIR]$env:USERPROFILE\.cargo\bin"
+              }
 
       - script: |
           set -e
@@ -205,6 +234,7 @@ jobs:
           echo "Using UV from: $FOUND"
           echo "##vso[task.setvariable variable=UV_BIN_DIR]$FOUND"
         displayName: "Locate UV and set PATH var"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
 
       - script: |
           set -e
@@ -212,6 +242,18 @@ jobs:
           which uv || true
           uv venv
         displayName: "Create UV virtual environment"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+      - task: PowerShell@2
+        displayName: "Create UV virtual environment (Windows)"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+              $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+              uv venv
+              uv --version
+              uv run python --version
 
       - script: |
           set -e
@@ -226,20 +268,49 @@ jobs:
           uv pip install -e .
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK base', sys.version.split()[0], platform.platform())"
         displayName: "Install (base)"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+      - task: PowerShell@2
+        displayName: "Install (base, Windows)"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv pip install -e .
+            uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_import.json
         displayName: "Measure import time (base)"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+
+      - task: PowerShell@2
+        displayName: "Measure import time (base, Windows)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_import.json"
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_size.json
         displayName: "Size benchmark (base)"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+
+      - task: PowerShell@2
+        displayName: "Size benchmark (base, Windows)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_size.json"
 
       # CLI
       - script: |
@@ -249,20 +320,49 @@ jobs:
           uv pip install -e ".[cli]"
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK cli', sys.version.split()[0], platform.platform())"
         displayName: "Install (cli)"
+        condition: ne(variables['Agent.OS'], 'Windows_NT'
+
+      - task: PowerShell@2
+        displayName: "Install (cli, Windows)"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+              $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+              uv pip install -e ".[cli]"
+              uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_import.json
         displayName: "Measure import time (cli)"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main')
+
+      - task: PowerShell@2
+        displayName: "Measure import time (cli, Windows)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_import.json"
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_size.json
         displayName: "Size benchmark (cli)"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+
+      - task: PowerShell@2
+        displayName: "Size benchmark (cli, Windows)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_size.json"
 
       # VIZ
       - script: |
@@ -272,20 +372,49 @@ jobs:
           uv pip install -e ".[viz]"
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK viz', sys.version.split()[0], platform.platform())"
         displayName: "Install (viz)"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+      - task: PowerShell@2
+        displayName: "Install (viz, Windows)"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv pip install -e ".[viz]"
+            uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_import.json
         displayName: "Measure import time (viz)"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+
+      - task: PowerShell@2
+        displayName: "Measure import time (viz, Windows)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_import.json"
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_size.json
         displayName: "Size benchmark (viz)"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+
+      - task: PowerShell@2
+        displayName: "Size benchmark (viz, Windows)"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
+            uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_size.json"
 
       - task: PublishBuildArtifacts@1
         inputs:
