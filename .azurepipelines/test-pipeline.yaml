@@ -187,13 +187,12 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            try {
-              winget --version
-            } catch {
-              Write-Host "winget not available on this runner; skipping Graphviz install"
-              exit 0
-            }
-            winget install --id Graphviz.Graphviz -e --silent || Write-Host "Graphviz may already be installed"
+            script: |
+              if (Get-Command winget -ErrorAction SilentlyContinue) {
+                winget install -e --id Graphviz.Graphviz --silent
+              } else {
+                Write-Host "winget not available; skipping Graphviz install on Windows"
+              }
 
       - script: |
           set -e
@@ -207,12 +206,16 @@ jobs:
         inputs:
           targetType: inline
           script: |
-              powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
-              if (elseif (Test-Path "$env:USERPROFILE\.local\bin\uv.exe") {
-                Write-Host "##vso[task.setvariable variable=UV_BIN_DIR]$env:USERPROFILE\.local\bin"
-              } else {
-                Write-Host "##vso[task.setvariable variable=UV_BIN_DIR]$env:USERPROFILE\.cargo\bin"
-              }
+            powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
+            $candidates = @("$env:USERPROFILE\.cargo\bin", "$env:USERPROFILE\.local\bin")
+            $found = $null
+            foreach ($d in $candidates) {
+              if (Test-Path (Join-Path $d 'uv.exe')) { $found = $d; break }
+            }
+            if (-not $found) { $found = "$env:USERPROFILE\.cargo\bin" }
+            Write-Host "Using UV from: $found"
+            Write-Host "##vso[task.setvariable variable=UV_BIN_DIR]$found"
+
 
       - script: |
           set -e
@@ -250,10 +253,14 @@ jobs:
         inputs:
           targetType: inline
           script: |
-              $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-              uv venv
-              uv --version
-              uv run python --version
+              $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+              $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+              if (-not (Test-Path $uv)) {
+                Write-Error "uv.exe not found at $(UV_BIN_DIR)"
+              }
+              & $uv venv
+              & $uv --version
+              & $uv run python --version
 
       - script: |
           set -e
@@ -276,9 +283,10 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv pip install -e .
-            uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv pip install -e .
+            & $uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
 
       - script: |
           set -e
@@ -293,8 +301,9 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_import.json"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_import.json"
 
       - script: |
           set -e
@@ -309,8 +318,9 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_size.json"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_size.json"
 
       # CLI
       - script: |
@@ -328,9 +338,10 @@ jobs:
         inputs:
           targetType: inline
           script: |
-              $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-              uv pip install -e ".[cli]"
-              uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv pip install -e ".[cli]"
+            & $uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
 
       - script: |
           set -e
@@ -345,8 +356,9 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_import.json"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_import.json"
 
       - script: |
           set -e
@@ -361,8 +373,9 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_size.json"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_size.json"
 
       # VIZ
       - script: |
@@ -380,9 +393,10 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv pip install -e ".[viz]"
-            uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv pip install -e ".[viz]"
+            & $uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
 
       - script: |
           set -e
@@ -397,8 +411,9 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_import.json"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_import.json"
 
       - script: |
           set -e
@@ -413,8 +428,9 @@ jobs:
         inputs:
           targetType: inline
           script: |
-            $env:PATH = "$env:UV_BIN_DIR;$env:PATH"
-            uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_size.json"
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_size.json"
 
       - task: PublishBuildArtifacts@1
         inputs:
