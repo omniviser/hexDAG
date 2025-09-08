@@ -5,8 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from hexai.core.application.events.events import NodeStarted, PipelineStarted
-from hexai.core.application.events.observer_manager import ObserverManager
+from hexai.core.application.events import NodeStarted, ObserverManager, PipelineStarted
 
 
 class TestObserverManager:

@@ -2,15 +2,17 @@
 
 import pytest
 
-from hexai.core.application.events.context import ExecutionContext
-from hexai.core.application.events.control_manager import ControlHandler, ControlManager
-from hexai.core.application.events.events import (
+from hexai.core.application.events import (
+    ControlHandler,
+    ControlManager,
+    ControlResponse,
+    ControlSignal,
+    ExecutionContext,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
     PipelineStarted,
 )
-from hexai.core.application.events.models import ControlResponse, ControlSignal
 
 
 class TestControlManager:

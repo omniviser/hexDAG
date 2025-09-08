@@ -1,68 +1,27 @@
 """Observer Manager: Manages event distribution to observers.
 
 This is a hexagonal architecture PORT that allows external systems
-to observe pipeline execution without affecting it. Observers can:
-- Log events
-- Collect metrics
-- Send telemetry
-- Update dashboards
-- Record audit trails
-
-This port defines the protocol for observability but contains no
-implementations (those belong in Tier 2 or external systems).
+to observe pipeline execution without affecting it.
 """
 
 import asyncio
 import logging
 import uuid
-from typing import Any, Union
+from typing import Any
 
-from .base_manager import BaseEventManager
-from .models import AsyncObserverFunc, Observer, ObserverFunc
+from .models import AsyncObserverFunc, BaseEventManager, Observer, ObserverFunc
 
 logger = logging.getLogger(__name__)
 
 
-def _make_observer(func: Union[ObserverFunc, AsyncObserverFunc]) -> Observer:
-    """Convert an observer function into an Observer protocol.
-
-    Args
-    ----
-        func: A function that takes an event and returns None (no return value)
-
-    Returns
-    -------
-        An object implementing the Observer protocol
-    """
-
-    class FunctionObserver:
-        def __init__(self, fn: Union[ObserverFunc, AsyncObserverFunc]):
-            self._func = fn
-            self.__name__ = getattr(fn, "__name__", "anonymous_observer")
-
-        async def handle(self, event: Any) -> None:
-            if asyncio.iscoroutinefunction(self._func):
-                await self._func(event)
-            else:
-                # For sync functions, call directly - user is responsible for non-blocking code
-                # This simplifies the implementation and avoids thread pool complexity
-                self._func(event)
-
-    return FunctionObserver(func)
-
-
-class ObserverManager(BaseEventManager[Observer]):
+class ObserverManager(BaseEventManager):
     """Observer Manager for distributing events to observers.
-
-    This is the primary port for observability in the hexagonal architecture.
-    It defines how external systems can monitor pipeline execution.
 
     Key principles:
     - Observers are READ-ONLY - they cannot affect execution
     - Failures in observers don't crash the pipeline (fault isolation)
     - Fire-and-forget pattern (async, non-blocking)
-    - No observer implementations here (Tier 1 = plumbing only)
-    - Async-first design (sync functions are called directly without thread pools)
+    - Async-first design
     """
 
     def __init__(
@@ -80,9 +39,8 @@ class ObserverManager(BaseEventManager[Observer]):
         super().__init__()
         self._max_concurrent = max_concurrent_observers
         self._timeout = observer_timeout
-        self._closed = False
 
-    def register(self, handler: Any, **kwargs: Any) -> Any:
+    def register(self, handler: Any, **kwargs: Any) -> str:
         """Register an observer with optional ID.
 
         Args
@@ -95,25 +53,21 @@ class ObserverManager(BaseEventManager[Observer]):
         -------
             str: The ID of the registered observer
         """
-        observer = handler
-        observer_id = kwargs.get("observer_id", None)
-        # Generate ID if not provided
-        if observer_id is None:
-            observer_id = str(uuid.uuid4())
+        observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
 
-        # Wrap if needed
-        if hasattr(observer, "handle"):
-            # Already implements protocol
-            self._handlers[observer_id] = observer
-        elif callable(observer):
+        # Wrap function if needed
+        if hasattr(handler, "handle"):
+            # Already implements Observer protocol
+            self._handlers[observer_id] = handler
+        elif callable(handler):
             # Wrap function to implement the protocol
-            self._handlers[observer_id] = _make_observer(observer)
+            self._handlers[observer_id] = FunctionObserver(handler)
         else:
             raise TypeError(
-                f"Observer must be callable or implement Observer protocol, got {type(observer)}"
+                f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
 
-        return observer_id
+        return str(observer_id)
 
     async def notify(self, event: Any) -> None:
         """Notify all observers of an event.
@@ -126,9 +80,9 @@ class ObserverManager(BaseEventManager[Observer]):
         # Create semaphore to limit concurrency
         semaphore = asyncio.Semaphore(self._max_concurrent)
 
-        async def limited_invoke(obs: Observer) -> None:
+        async def limited_invoke(observer: Observer) -> None:
             async with semaphore:
-                await self._safe_invoke(obs, event)
+                await self._safe_invoke(observer, event)
 
         # Fire all observers with limited concurrency
         tasks = [limited_invoke(observer) for observer in self._handlers.values()]
@@ -138,10 +92,10 @@ class ObserverManager(BaseEventManager[Observer]):
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=self._timeout * 2,  # Total timeout for all observers
+                    timeout=self._timeout * len(tasks) / self._max_concurrent + self._timeout,
                 )
             except asyncio.TimeoutError:
-                logger.warning(f"Observer notification timed out after {self._timeout * 2}s")
+                logger.warning("Observer notification timed out")
 
     async def _safe_invoke(self, observer: Observer, event: Any) -> None:
         """Safely invoke an observer with timeout."""
@@ -159,9 +113,19 @@ class ObserverManager(BaseEventManager[Observer]):
             name = getattr(observer, "__name__", observer.__class__.__name__)
             logger.error(f"Observer {name} failed: {e}")
 
-    async def close(self) -> None:
-        """Explicitly close the observer manager and cleanup resources."""
-        if not self._closed:
-            self._closed = True
-            self.clear()
-            # Any additional cleanup can be added here
+
+class FunctionObserver:
+    """Wrapper to make functions implement the Observer protocol."""
+
+    def __init__(self, func: ObserverFunc | AsyncObserverFunc):
+        self._func = func
+        self.__name__ = getattr(func, "__name__", "anonymous_observer")
+
+    async def handle(self, event: Any) -> None:
+        """Handle the event by calling the wrapped function."""
+        if asyncio.iscoroutinefunction(self._func):
+            await self._func(event)
+        else:
+            # For sync functions, call directly
+            # User is responsible for ensuring non-blocking code
+            self._func(event)

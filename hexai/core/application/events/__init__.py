@@ -1,15 +1,27 @@
-"""Clean event system with clear separation of concerns.
+"""Event system for the Hex-DAG framework.
 
-This module provides a simple event system for pipeline execution:
-- Events: Simple data classes representing what happened
-- ObserverManager: Fire-and-forget observability (logging, metrics)
-- ControlManager: Execution control that can veto operations
-- BaseEventManager: Common base class for managers
+Clean, simplified event system with clear separation of concerns:
+- events.py: Event data classes (just data, no behavior)
+- models.py: Core types, protocols, and base classes
+- observer_manager.py: Observer management (read-only monitoring)
+- control_manager.py: Control flow management (can affect execution)
+- config.py: Configuration and null implementations
 """
 
-from .base_manager import BaseEventManager
-from .context import ExecutionContext
-from .control_manager import ControlHandler, ControlHandlerBase, ControlManager
+# Configuration and helpers
+from .config import (
+    NULL_CONTROL_MANAGER,
+    NULL_OBSERVER_MANAGER,
+    NullControlManager,
+    NullObserverManager,
+    get_control_manager,
+    get_observer_manager,
+)
+
+# Managers
+from .control_manager import ControlManager
+
+# Event classes
 from .events import (
     Event,
     LLMPromptSent,
@@ -24,34 +36,22 @@ from .events import (
     WaveCompleted,
     WaveStarted,
 )
-from .models import ControlResponse, ControlSignal, HandlerMetadata, Observer
-from .null_manager import NULL_CONTROL_MANAGER, NULL_OBSERVER_MANAGER
-from .observer_manager import ObserverManager
-from .observers import (
-    FileObserver,
-    LoggingObserver,
-    MetricsObserver,
-    NodeStateObserver,
-    WebSocketObserver,
+
+# Models and protocols
+from .models import (
+    BaseEventManager,
+    ControlHandler,
+    ControlResponse,
+    ControlSignal,
+    ExecutionContext,
+    HandlerMetadata,
+    Observer,
 )
+from .observer_manager import ObserverManager
 
 __all__ = [
-    # Core system
-    "BaseEventManager",
+    # Events
     "Event",
-    "ObserverManager",
-    "Observer",
-    "ControlManager",
-    "ControlHandler",
-    "ControlHandlerBase",
-    "HandlerMetadata",
-    "ControlResponse",
-    "ControlSignal",
-    "ExecutionContext",
-    # Null implementations for testing
-    "NULL_CONTROL_MANAGER",
-    "NULL_OBSERVER_MANAGER",
-    # Event types
     "NodeStarted",
     "NodeCompleted",
     "NodeFailed",
@@ -63,10 +63,22 @@ __all__ = [
     "LLMResponseReceived",
     "ToolCalled",
     "ToolCompleted",
-    # Observers
-    "LoggingObserver",
-    "MetricsObserver",
-    "FileObserver",
-    "NodeStateObserver",
-    "WebSocketObserver",
+    # Models
+    "ExecutionContext",
+    "ControlSignal",
+    "ControlResponse",
+    "HandlerMetadata",
+    "Observer",
+    "ControlHandler",
+    "BaseEventManager",
+    # Managers
+    "ObserverManager",
+    "ControlManager",
+    # Config
+    "NullObserverManager",
+    "NullControlManager",
+    "NULL_OBSERVER_MANAGER",
+    "NULL_CONTROL_MANAGER",
+    "get_observer_manager",
+    "get_control_manager",
 ]
