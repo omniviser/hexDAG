@@ -337,7 +337,7 @@ jobs:
           export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_import.json
         displayName: "Measure import time (cli)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main')
+        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
 
       - task: PowerShell@2
         displayName: "Measure import time (cli, Windows)"
