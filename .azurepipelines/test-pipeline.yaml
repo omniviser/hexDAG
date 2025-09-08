@@ -320,7 +320,7 @@ jobs:
           uv pip install -e ".[cli]"
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK cli', sys.version.split()[0], platform.platform())"
         displayName: "Install (cli)"
-        condition: ne(variables['Agent.OS'], 'Windows_NT'
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
 
       - task: PowerShell@2
         displayName: "Install (cli, Windows)"
