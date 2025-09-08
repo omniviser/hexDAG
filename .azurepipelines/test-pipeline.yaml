@@ -44,7 +44,7 @@ jobs:
       - script: |
           if [ "$BUILD_REASON" == "PullRequest" ] && [ "$TARGETBRANCH" == "refs/heads/main" ]; then
               echo "PullRequest reason for build"
-              echo "Main target branch
+              echo "Main target branch"
             pr_data=$(az repos pr show --id $PULLREQUESTID --organization $ORGANIZATION_URI)
             title=$(echo "$pr_data" | jq -r '.title')
               echo "PR Title: $title"
@@ -181,66 +181,108 @@ jobs:
         displayName: "Install system deps"
 
       - script: |
+          set -e
           curl -LsSf https://astral.sh/uv/install.sh | sh
         displayName: "Install UV"
 
       - script: |
+          set -e
+          CANDIDATES=("$HOME/.local/bin" "$HOME/.cargo/bin" "/Users/runner/.local/bin" "/Users/runner/.cargo/bin")
+          FOUND=""
+          for d in "${CANDIDATES[@]}"; do
+            if [ -x "$d/uv" ]; then
+              FOUND="$d"
+              break
+            fi
+          done
+          if [ -z "$FOUND" ]; then
+            echo "uv not found in common dirs; listing for debug"
+            ls -la "$HOME/.local/bin" || true
+            ls -la "$HOME/.cargo/bin" || true
+            # fallback
+            FOUND="$HOME/.local/bin"
+          fi
+          echo "Using UV from: $FOUND"
+          echo "##vso[task.setvariable variable=UV_BIN_DIR]$FOUND"
+        displayName: "Locate UV and set PATH var"
+
+      - script: |
+          set -e
           export PATH="$UV_BIN_DIR:$PATH"
+          which uv || true
           uv venv
         displayName: "Create UV virtual environment"
 
-      - bash: |
+      - script: |
           set -e
           mkdir -p $(ARTIFACT_DIR)
         displayName: "Artifacts dir"
 
       # BASE
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           echo "=== Install profile: base ==="
           uv pip install -e .
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK base', sys.version.split()[0], platform.platform())"
         displayName: "Install (base)"
 
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_import.json
         displayName: "Measure import time (base)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
 
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_size.json
         displayName: "Size benchmark (base)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
 
       # CLI
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           echo "=== Install profile: cli ==="
           uv pip install -e ".[cli]"
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK cli', sys.version.split()[0], platform.platform())"
         displayName: "Install (cli)"
 
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_import.json
         displayName: "Measure import time (cli)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
 
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_size.json
         displayName: "Size benchmark (cli)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
 
       # VIZ
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           echo "=== Install profile: viz ==="
           uv pip install -e ".[viz]"
           uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK viz', sys.version.split()[0], platform.platform())"
         displayName: "Install (viz)"
 
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_import.json
         displayName: "Measure import time (viz)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
 
       - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
           uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_size.json
         displayName: "Size benchmark (viz)"
         condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
