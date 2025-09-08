@@ -7,6 +7,8 @@ from typing import Any, Callable, get_type_hints
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
 from hexai.core.ports.tool_router import ToolRouter
 
+__all__ = ["FunctionBasedToolRouter"]
+
 
 class FunctionBasedToolRouter(ToolRouter):
     """Real ToolRouter implementation that auto-generates ToolDefinitions from functions.

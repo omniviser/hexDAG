@@ -81,7 +81,6 @@ class Orchestrator:
 
         # Initialize validator with default coerce strategy for compatibility
         if validator is None:
-
             self.validator = coerce_validator()
         else:
             self.validator = validator
