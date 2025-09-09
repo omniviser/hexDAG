@@ -7,10 +7,11 @@ This module provides shared utilities used across different node types:
 - Shared regex patterns
 """
 
-import json
 import logging
 import re
 from typing import Any
+
+from ...validation.secure_json import loads as secure_json_loads
 
 logger = logging.getLogger("hexai.app.application.nodes.utils")
 
@@ -68,19 +69,14 @@ class JsonUtils:
     @staticmethod
     def _is_valid_json(text: str) -> bool:
         """Check if text is valid JSON."""
-        try:
-            json.loads(text)
-            return True
-        except (json.JSONDecodeError, ValueError):
-            return False
+        parsed = secure_json_loads(text)
+        return parsed is not None
 
     @staticmethod
     def parse_json_safely(text: str, fallback: Any = None) -> Any:
         """Safely parse JSON with fallback value."""
-        try:
-            return json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            return fallback
+        parsed = secure_json_loads(text)
+        return parsed if parsed is not None else fallback
 
 
 class ToolUtils:
@@ -118,17 +114,9 @@ class ToolUtils:
         params_match = re.search(ToolUtils.TOOL_PARAMS_PATTERN, response, re.DOTALL)
         if params_match:
             json_str = params_match.group(1)
-            try:
-                return json.loads(json_str)  # type: ignore[no-any-return]
-            except json.JSONDecodeError:
-                # Try simple cleanup and parse again
-                cleaned = json_str.strip()
-                # Remove trailing commas
-                cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
-                try:
-                    return json.loads(cleaned)  # type: ignore[no-any-return]
-                except json.JSONDecodeError:
-                    pass
+            parsed = secure_json_loads(json_str)
+            if parsed is not None:
+                return parsed  # type: ignore[no-any-return]
 
         return fallback_params
 

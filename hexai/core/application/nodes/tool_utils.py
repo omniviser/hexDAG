@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ...validation.secure_json import loads as secure_json_loads
+
 
 class ToolCallFormat(Enum):
     """Tool calling formats supported by INVOKE_TOOL: prefix."""
@@ -127,7 +129,7 @@ class ToolParser:
         for match in cls.INVOKE_TOOL_JSON_PATTERN.finditer(text):
             try:
                 json_str = match.group(1)
-                data = json.loads(json_str)
+                data = secure_json_loads(json_str)
 
                 # Check if it's a tool call
                 if isinstance(data, dict) and "tool" in data:
@@ -156,10 +158,8 @@ class ToolParser:
             value = match.group(2) or match.group(3) or match.group(4)
 
             # Try to parse as JSON for complex types
-            try:
-                params[key] = json.loads(value)
-            except (json.JSONDecodeError, TypeError):
-                params[key] = value
+            parsed = secure_json_loads(value)
+            params[key] = parsed if parsed is not None else value
 
         return params
 
