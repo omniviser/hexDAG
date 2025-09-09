@@ -135,7 +135,7 @@ jobs:
 
       - script: |
           echo "Running Safety for dependency vulnerability scanning..."
-          uv run safety check --json --output safety-report.json
+          uv run safety check --output json > safety-report.json
           SAFETY_EXIT_CODE=$?
           echo "Safety exit code: $SAFETY_EXIT_CODE"
           if [ $SAFETY_EXIT_CODE -ne 0 ]; then
