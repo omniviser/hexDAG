@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ....adapters.function_tool_router import FunctionBasedToolRouter
 from ...domain.dag import NodeSpec
@@ -35,10 +35,7 @@ class AgentState(BaseModel):
     # Loop iteration tracking
     loop_iteration: int = 0
 
-    class Config:
-        """Pydantic config."""
-
-        extra = "allow"  # Allow additional fields from input mapping
+    model_config = ConfigDict(extra="allow")  # Allow additional fields from input mapping
 
 
 @dataclass

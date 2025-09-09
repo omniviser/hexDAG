@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from hexai.agent_factory.yaml_validator import YamlValidator
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.nodes import NodeFactory
 from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
@@ -36,6 +37,7 @@ class YamlPipelineBuilder:
         self.registered_functions: dict[str, Any] = {}
         self.event_manager = event_manager or PipelineEventManager()
         self.field_mapping_registry = FieldMappingRegistry()
+        self.validator = YamlValidator()
 
     def register_function(self, name: str, func: Any) -> None:
         """Register a function for use in YAML pipelines."""
@@ -67,6 +69,21 @@ class YamlPipelineBuilder:
             config = yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
             raise YamlPipelineBuilderError(f"Invalid YAML content: {e}") from e
+
+        # Validate configuration
+        validation_result = self.validator.validate(config)
+
+        if not validation_result.is_valid:
+            error_msg = "YAML validation failed:\n"
+            for error in validation_result.errors:
+                error_msg += f"  ERROR: {error}\n"
+            raise YamlPipelineBuilderError(error_msg)
+
+        # Log warnings and suggestions
+        for warning in validation_result.warnings:
+            logger.warning(f"YAML validation warning: {warning}")
+        for suggestion in validation_result.suggestions:
+            logger.info(f"YAML validation suggestion: {suggestion}")
 
         graph = DirectedGraph()
 

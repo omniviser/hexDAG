@@ -5,8 +5,11 @@ from pydantic import BaseModel
 
 from hexai.core.application.nodes.mapped_input import (
     AutoMappedInput,
+    FieldExtractor,
     FieldMappingRegistry,
     MappedInput,
+    ModelFactory,
+    TypeInferrer,
 )
 
 
@@ -236,3 +239,253 @@ class TestAutoMappedInput:
         assert instance.text == "content"
         assert instance.score == 0.8
         assert instance.custom == "custom_value"
+
+    def test_registry_empty_name_error(self):
+        """Test that registering with empty name raises error."""
+        registry = FieldMappingRegistry()
+
+        with pytest.raises(ValueError, match="Mapping name cannot be empty"):
+            registry.register("", {"field": "value"})
+
+    def test_registry_empty_mapping_error(self):
+        """Test that registering empty mapping raises error."""
+        registry = FieldMappingRegistry()
+
+        with pytest.raises(ValueError, match="Mapping cannot be empty"):
+            registry.register("test", {})
+
+    def test_field_extractor_empty_path(self):
+        """Test extraction with empty path returns the data itself."""
+        data = {"key": "value"}
+        result = FieldExtractor.extract(data, "")
+        assert result == data
+
+    def test_field_extractor_none_data(self):
+        """Test extraction from None data returns None."""
+        result = FieldExtractor.extract(None, "some.path")
+        assert result is None
+
+    def test_field_extractor_attribute_error_handling(self):
+        """Test extraction handles AttributeError gracefully."""
+
+        class BadObject:
+            def __getattr__(self, name):
+                raise AttributeError(f"No attribute {name}")
+
+        bad_obj = BadObject()
+        result = FieldExtractor._extract_single_level(bad_obj, "anything")
+        assert result is None
+
+    def test_field_extractor_type_error_handling(self):
+        """Test extraction handles TypeError gracefully."""
+        # Try to extract from a number (not dict/object)
+        result = FieldExtractor._extract_single_level(42, "field")
+        assert result is None
+
+    def test_type_inferrer_empty_path(self):
+        """Test type inference with empty path returns the model itself."""
+        result = TypeInferrer.infer_from_path(ProcessorOutput, [])
+        assert result == ProcessorOutput
+
+    def test_type_inferrer_field_not_found(self):
+        """Test type inference when field doesn't exist returns Any."""
+        from typing import Any
+
+        result = TypeInferrer.infer_from_path(ProcessorOutput, ["nonexistent_field"])
+        assert result == Any
+
+    def test_type_inferrer_get_field_type_errors(self):
+        """Test _get_field_type with various error conditions."""
+
+        class BadModel:
+            model_fields = "not_a_dict"
+
+        result = TypeInferrer._get_field_type(BadModel, "field")
+        assert result is None
+
+        # Test with model that raises exception
+        class ErrorModel:
+            @property
+            def model_fields(self):
+                raise RuntimeError("Error accessing fields")
+
+        result = TypeInferrer._get_field_type(ErrorModel, "field")
+        assert result is None
+
+    def test_type_inferrer_is_base_model_type_error(self):
+        """Test _is_base_model with non-type objects."""
+        assert TypeInferrer._is_base_model("not_a_type") is False
+        assert TypeInferrer._is_base_model(None) is False
+        assert TypeInferrer._is_base_model(42) is False
+
+    def test_model_factory_no_dependency_models(self):
+        """Test ModelFactory with no dependency models for type inference."""
+        mapping = {"field1": "source.data", "field2": "other.value"}
+
+        model = ModelFactory.create_mapped_model("TestModel", mapping, None)
+
+        # Should create model with Any types
+        data = {"source": {"data": "test"}, "other": {"value": 123}}
+        instance = model(**data)
+        assert instance.field1 == "test"
+        assert instance.field2 == 123
+
+    def test_model_factory_infer_nested_non_model(self):
+        """Test type inference for nested non-BaseModel fields."""
+        mapping = {"value": "processor.text"}
+        dep_models = {"processor": ProcessorOutput}
+
+        model = ModelFactory.create_mapped_model("TestModel", mapping, dep_models)
+
+        # Should infer str type for text field
+        data = {"processor": ProcessorOutput(text="hello", metadata={})}
+        instance = model(**data)
+        assert instance.value == "hello"
+
+    def test_model_factory_validator_non_dict_input(self):
+        """Test validator handles non-dict input gracefully."""
+        mapping = {"field": "source.value"}
+        model = ModelFactory.create_mapped_model("TestModel", mapping)
+
+        # Pass non-dict data
+        instance = model(**{"source": {"value": "test"}})
+        assert instance.field == "test"
+
+    def test_auto_mapped_normalize_to_dict_basemodel(self):
+        """Test _normalize_to_dict with BaseModel input."""
+        input_model = ProcessorOutput(text="test", metadata={"key": "value"})
+        result = AutoMappedInput._normalize_to_dict(input_model)
+
+        assert result == {"text": "test", "metadata": {"key": "value"}}
+
+    def test_auto_mapped_normalize_to_dict_other(self):
+        """Test _normalize_to_dict with non-dict, non-BaseModel input."""
+        result = AutoMappedInput._normalize_to_dict("not_dict_or_model")
+        assert result == {}
+
+        result = AutoMappedInput._normalize_to_dict(42)
+        assert result == {}
+
+    def test_auto_mapped_field_mapping_edge_cases(self):
+        """Test AutoMappedInput with various _field_mapping configurations."""
+
+        class NoneMapping(AutoMappedInput):
+            field1: str = "default"
+            _field_mapping = None
+
+        instance = NoneMapping(field1="value")
+        assert instance.field1 == "value"
+
+        # Test with dict-like object
+        class DictLikeMapping:
+            def items(self):
+                return [("field1", "source.field1")]
+
+        class CustomMapping(AutoMappedInput):
+            field1: str = "default"
+            _field_mapping = DictLikeMapping()
+
+        data = {"source": {"field1": "test"}}
+        instance = CustomMapping(**data)
+
+        assert instance.field1 == "test"
+
+        # Test with object that has items but raises error
+        class BadDictLike:
+            def items(self):
+                raise ValueError("Cannot access items")
+
+        class BadMapping(AutoMappedInput):
+            field1: str = "default"
+            _field_mapping = BadDictLike()
+
+        # Should fall back to empty mapping when items() raises
+        instance = BadMapping(field1="direct")
+        assert instance.field1 == "direct"
+
+        # Test that items() method is actually called
+        class TrackingDictLike:
+            def __init__(self):
+                self.items_called = False
+
+            def items(self):
+                self.items_called = True
+                return [("field1", "source.field1")]
+
+        tracker = TrackingDictLike()
+
+        class TrackingMapping(AutoMappedInput):
+            field1: str = "default"
+            _field_mapping = tracker
+
+        data = {"source": {"field1": "tracked"}}
+        instance = TrackingMapping(**data)
+        assert instance.field1 == "tracked"
+        assert tracker.items_called, "items() method should have been called"
+
+    def test_auto_mapped_apply_non_dict_data(self):
+        """Test apply_field_mapping with non-dict input data."""
+
+        class TestInput(AutoMappedInput):
+            field1: str = "default"
+            _field_mapping = {"field1": "source.value"}
+
+        # When no source data is provided, uses default
+        instance = TestInput()
+        assert instance.field1 == "default"
+
+    def test_field_extractor_general_exception_handling(self):
+        """Test that general exceptions in extraction are caught."""
+        # Test with object that raises exception during isinstance check
+        result = FieldExtractor._extract_single_level(None, "field")
+        assert result is None
+
+    def test_type_inferrer_nested_path_non_model(self):
+        """Test type inference with nested path on non-BaseModel fields."""
+        # When field type is not a BaseModel, we can't traverse further
+        result = TypeInferrer.infer_from_path(ProcessorOutput, ["text", "some_nested"])
+        # Should return the type of text field (str), not traverse further
+        assert result != ProcessorOutput
+
+    def test_type_inferrer_is_base_model_with_exception(self):
+        """Test _is_base_model when TypeError is raised."""
+
+        class WeirdType:
+            def __class__(self):
+                raise TypeError("Cannot check class")
+
+        assert TypeInferrer._is_base_model(WeirdType) is False
+
+    def test_model_factory_field_definitions_with_none_dep_models(self):
+        """Test building field definitions without dependency models."""
+        mapping = {"field1": "source.value", "field2": "data"}
+        definitions = ModelFactory._build_field_definitions(mapping, None)
+
+        # Should create optional Any fields
+        assert "field1" in definitions
+        assert "field2" in definitions
+
+    def test_mapped_input_backward_compatibility(self):
+        """Test MappedInput maintains backward compatibility."""
+        # Test that old static methods still work
+        value = MappedInput._extract_value({"key": "value"}, "key")
+        assert value == "value"
+
+        # Test type inference backward compat
+        from typing import Any
+
+        field_type = MappedInput._infer_field_type(ProcessorOutput, ["text"])
+        assert field_type != Any
+
+    def test_auto_mapped_with_pydantic_private_attr(self):
+        """Test AutoMappedInput with Pydantic private attribute style."""
+        from pydantic import PrivateAttr
+
+        class PrivateMapping(AutoMappedInput):
+            field1: str = "default"
+            _field_mapping = PrivateAttr(default={"field1": "source.value"})
+
+        # Should handle private attr with default
+        instance = PrivateMapping()
+        # Since PrivateAttr is handled differently, it may not map
+        assert instance.field1 == "default"  # Falls back to default

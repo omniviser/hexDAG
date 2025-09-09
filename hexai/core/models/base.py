@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 T = TypeVar("T")
 
@@ -37,10 +37,7 @@ class DataReference(BaseModel):
     row_count: int | None = None
     created_at: str | None = None
 
-    class Config:
-        """Pydantic config."""
-
-        frozen = True  # Immutable references
+    model_config = ConfigDict(frozen=True)  # Immutable references
 
 
 class FileData(BaseModel):
@@ -63,10 +60,7 @@ class FileData(BaseModel):
     mime_type: str | None = None
     size_bytes: int | None = None
 
-    class Config:
-        """Pydantic config."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class InMemoryData(BaseModel, Generic[T]):
@@ -86,10 +80,7 @@ class InMemoryData(BaseModel, Generic[T]):
     data: T
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        """Pydantic config."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class StringData(BaseModel):
@@ -106,10 +97,7 @@ class StringData(BaseModel):
     value: str
     encoding: str = "utf-8"
 
-    class Config:
-        """Pydantic config."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class JsonData(BaseModel):
@@ -126,10 +114,7 @@ class JsonData(BaseModel):
     data: dict[str, Any]
     schema_version: str | None = None
 
-    class Config:
-        """Pydantic config."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class ListData(BaseModel, Generic[T]):
@@ -150,7 +135,4 @@ class ListData(BaseModel, Generic[T]):
         """Get the count of items."""
         return len(self.items)
 
-    class Config:
-        """Pydantic config."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)

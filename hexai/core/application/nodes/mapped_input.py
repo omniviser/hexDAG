@@ -456,14 +456,23 @@ class AutoMappedInput(BaseModel):
         # Pydantic private attr with default
         if hasattr(mapping_attr, "default"):
             default_value = getattr(mapping_attr, "default", {})
-            return default_value if isinstance(default_value, dict) else {}
+            if isinstance(default_value, dict):
+                return default_value
+            # Check if default is dict-like
+            if hasattr(default_value, "items"):
+                try:
+                    return dict(default_value.items())
+                except (TypeError, ValueError):
+                    pass
+            return {}
 
         # Try to use it directly if it's dict-like
-        try:
-            if hasattr(mapping_attr, "items"):
-                return dict(mapping_attr)
-        except (TypeError, ValueError):
-            pass
+        if hasattr(mapping_attr, "items"):
+            try:
+                # Call items() method to get the key-value pairs
+                return dict(mapping_attr.items())
+            except (TypeError, ValueError, AttributeError):
+                pass
 
         return {}
 
