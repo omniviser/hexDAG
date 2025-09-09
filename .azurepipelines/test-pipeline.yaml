@@ -147,8 +147,10 @@ jobs:
 
       - script: |
           echo "Running Gitleaks for secret detection..."
-          # Install gitleaks if not available
-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_latest_linux_x64.tar.gz | tar -xz -C /tmp
+          # Install gitleaks
+          VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+          echo "Installing Gitleaks version: $VERSION"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
           /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json
           GITLEAKS_EXIT_CODE=$?
           echo "Gitleaks exit code: $GITLEAKS_EXIT_CODE"
