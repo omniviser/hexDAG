@@ -146,7 +146,6 @@ class GenerateResult(TypedDict, total=False):
 try:
     from hexai.helpers.secrets import get_secret as _get_secret
 except Exception:  # fallback
-
     # TODO: replace with hexai.helpers.secrets.get_secret
     # once Wojtek's secret handler is merged into main
 

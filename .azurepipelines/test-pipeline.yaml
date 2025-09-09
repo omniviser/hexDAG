@@ -1,6 +1,9 @@
 variables:
-  CI_USERNAME: "CI Pipeline"
-  CI_EMAIL: developers@omniviser.ai
+  - name: CI_USERNAME
+    value: "CI Pipeline"
+  - name: CI_EMAIL
+    value: developers@omniviser.ai
+  - group: hexai_secrets
 
 trigger:
   branches:
