@@ -1,6 +1,9 @@
 variables:
-  CI_USERNAME: "CI Pipeline"
-  CI_EMAIL: developers@omniviser.ai
+- group: pypi-secrets
+- name: CI_USERNAME
+  value: "CI Pipeline"
+- name: CI_EMAIL
+  value: developers@omniviser.ai
 
 trigger:
   branches:
