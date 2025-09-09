@@ -6,6 +6,7 @@ to observe pipeline execution without affecting it.
 
 import asyncio
 import uuid
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Type
 
@@ -38,6 +39,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         observer_timeout: float = 5.0,
         max_sync_workers: int = 4,
         error_handler: ErrorHandler | None = None,
+        use_weak_refs: bool = True,
     ) -> None:
         """Initialize the observer manager.
 
@@ -47,11 +49,13 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             observer_timeout: Timeout in seconds for each observer
             max_sync_workers: Maximum thread pool workers for sync observers
             error_handler: Optional error handler, defaults to LoggingErrorHandler
+            use_weak_refs: If True, use weak references to prevent memory leaks
         """
         super().__init__()
         self._max_concurrent = max_concurrent_observers
         self._timeout = observer_timeout
         self._error_handler = error_handler or LoggingErrorHandler()
+        self._use_weak_refs = use_weak_refs
 
         # Create semaphore once, not per event
         self._semaphore = asyncio.Semaphore(max_concurrent_observers)
@@ -62,6 +66,12 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         # Track which event types each observer wants
         self._event_filters: dict[str, set[Type] | None] = {}
+
+        # Use WeakValueDictionary for automatic cleanup if enabled
+        # Store strong references only for wrapped functions that need to be kept alive
+        if use_weak_refs:
+            self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+            self._strong_refs: dict[str, Any] = {}  # Keep functions alive
 
     def register(self, handler: Any, **kwargs: Any) -> str:
         """Register an observer with optional event type filtering.
@@ -84,14 +94,34 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         # Wrap function if needed
         if hasattr(handler, "handle"):
             # Already implements Observer protocol
-            self._handlers[observer_id] = handler
+            observer = handler
+            keep_alive = kwargs.get("keep_alive", False)
         elif callable(handler):
             # Wrap function to implement the protocol
-            self._handlers[observer_id] = FunctionObserver(handler, self._executor)
+            observer = FunctionObserver(handler, self._executor)
+            # Functions need to be kept alive since they're wrapped
+            keep_alive = True
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
+
+        # Store the observer with appropriate reference type
+        if self._use_weak_refs:
+            try:
+                # Try to create weak reference
+                self._weak_handlers[observer_id] = observer
+                # Keep strong ref if requested or for wrapped functions
+                if keep_alive:
+                    self._strong_refs[observer_id] = observer
+            except TypeError:
+                # Some objects can't be weakly referenced (e.g., bound methods)
+                # Fall back to strong reference
+                self._handlers[observer_id] = observer
+                self._strong_refs[observer_id] = observer
+        else:
+            # Normal strong reference when weak refs disabled
+            self._handlers[observer_id] = observer
 
         # Store event type filter
         if event_types is not None:
@@ -114,13 +144,27 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         Only observers registered for this event type will be notified.
         Errors are logged but don't affect execution.
         """
-        if not self._handlers:
+        # Check both strong and weak handlers
+        if not self._handlers and (not self._use_weak_refs or not self._weak_handlers):
             return
 
         # Filter observers based on event type
+        # Collect from both weak and strong references
+        all_observers = {}
+
+        if self._use_weak_refs:
+            # Get observers from weak references (auto-cleaned)
+            for obs_id in list(self._weak_handlers.keys()):
+                observer = self._weak_handlers.get(obs_id)
+                if observer is not None:
+                    all_observers[obs_id] = observer
+
+        # Add strong references
+        all_observers.update(self._handlers)
+
         interested_observers = [
             observer
-            for obs_id, observer in self._handlers.items()
+            for obs_id, observer in all_observers.items()
             if self._should_notify(obs_id, event)
         ]
 
@@ -191,18 +235,35 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         -------
             bool: True if observer was found and removed, False otherwise
         """
+        found = False
+
+        # Remove from all storage locations
         if handler_id in self._handlers:
             del self._handlers[handler_id]
-            # Also remove event filter
-            if handler_id in self._event_filters:
-                del self._event_filters[handler_id]
-            return True
-        return False
+            found = True
+
+        if self._use_weak_refs:
+            if handler_id in self._weak_handlers:
+                del self._weak_handlers[handler_id]
+                found = True
+
+            if handler_id in self._strong_refs:
+                del self._strong_refs[handler_id]
+                found = True
+
+        # Also remove event filter
+        if handler_id in self._event_filters:
+            del self._event_filters[handler_id]
+
+        return found
 
     def clear(self) -> None:
         """Remove all registered observers."""
         super().clear()
         self._event_filters.clear()
+        if self._use_weak_refs:
+            self._weak_handlers.clear()
+            self._strong_refs.clear()
 
     async def close(self) -> None:
         """Close the manager and cleanup resources."""

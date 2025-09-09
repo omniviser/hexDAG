@@ -162,7 +162,25 @@ class BaseEventManager(ABC):
 
     def __len__(self) -> int:
         """Return number of registered handlers."""
-        return len(self._handlers)
+        # Count handlers from appropriate storage
+        # Subclasses may override if they use different storage
+        count = len(self._handlers)
+
+        # Check if this is an ObserverManager with weak refs
+        if (
+            hasattr(self, "_use_weak_refs")
+            and self._use_weak_refs
+            and hasattr(self, "_weak_handlers")
+        ):
+            # Count weak handlers that are still alive
+            for handler_id in list(self._weak_handlers.keys()):
+                if (
+                    handler_id not in self._handlers
+                    and self._weak_handlers.get(handler_id) is not None
+                ):
+                    count += 1
+
+        return count
 
     async def close(self) -> None:
         """Close the manager and cleanup resources."""

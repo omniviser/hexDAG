@@ -149,9 +149,12 @@ class TestObserverManager:
         """Test clearing all observers."""
         manager = ObserverManager()
 
-        # Add multiple observers
+        # Add multiple observers (keep references to prevent GC)
+        observers = []
         for _ in range(5):
-            manager.register(MagicMock())
+            mock = MagicMock()
+            observers.append(mock)  # Keep reference
+            manager.register(mock)
 
         assert len(manager) == 5
 
@@ -282,3 +285,176 @@ class TestObserverManager:
 
         for obs in tool_observers:
             assert obs.handle.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_weak_ref_cleanup(self):
+        """Test that observers are automatically cleaned up when dereferenced."""
+        import gc
+        import weakref
+
+        manager = ObserverManager(use_weak_refs=True)
+
+        # Create an observer object
+        class TestObserver:
+            async def handle(self, event):
+                pass
+
+        observer = TestObserver()
+        weak_ref = weakref.ref(observer)
+
+        # Register the observer
+        manager.register(observer)
+
+        # Verify it's registered
+        assert len(manager._weak_handlers) == 1
+
+        # Delete the observer
+        del observer
+
+        # Force garbage collection
+        gc.collect()
+
+        # The weak reference should be dead
+        assert weak_ref() is None
+
+        # The manager should auto-clean on next operation
+        await manager.notify(NodeStarted(name="test", wave_index=0))
+
+        # Weak dict should be empty now
+        assert len(manager._weak_handlers) == 0
+
+    @pytest.mark.asyncio
+    async def test_function_kept_alive_with_weak_refs(self):
+        """Test that wrapped functions are kept alive."""
+        import gc
+
+        manager = ObserverManager(use_weak_refs=True)
+
+        called = []
+
+        # Register a function (will be wrapped)
+        def observer_func(event):
+            called.append(event)
+
+        obs_id = manager.register(observer_func)
+
+        # Function should be in strong refs (kept alive)
+        assert obs_id in manager._strong_refs
+
+        # Delete original function reference
+        del observer_func
+        gc.collect()
+
+        # Should still work because wrapper keeps it alive
+        await manager.notify(NodeStarted(name="test", wave_index=0))
+
+        # Verify it was called
+        assert len(called) == 1
+
+    @pytest.mark.asyncio
+    async def test_explicit_keep_alive_flag(self):
+        """Test that keep_alive flag forces strong reference."""
+        import gc
+        import weakref
+
+        manager = ObserverManager(use_weak_refs=True)
+
+        class TestObserver:
+            async def handle(self, event):
+                pass
+
+        observer = TestObserver()
+        weak_ref = weakref.ref(observer)
+
+        # Register with keep_alive=True
+        obs_id = manager.register(observer, keep_alive=True)
+
+        # Should be in strong refs
+        assert obs_id in manager._strong_refs
+
+        # Delete the observer
+        del observer
+        gc.collect()
+
+        # Should still be alive due to strong ref
+        assert weak_ref() is not None
+
+        # Should still work
+        await manager.notify(NodeStarted(name="test", wave_index=0))
+
+    def test_no_weak_refs_mode(self):
+        """Test that manager works without weak refs."""
+        obs_manager = ObserverManager(use_weak_refs=False)
+
+        class TestObserver:
+            async def handle(self, event):
+                pass
+
+        observer = TestObserver()
+        obs_id = obs_manager.register(observer)
+
+        # Should be in normal handlers dict
+        assert obs_id in obs_manager._handlers
+        assert not hasattr(obs_manager, "_weak_handlers")
+
+    @pytest.mark.asyncio
+    async def test_bound_method_fallback(self):
+        """Test that bound methods fall back to strong refs."""
+        manager = ObserverManager(use_weak_refs=True)
+
+        class TestClass:
+            def __init__(self):
+                self.called = False
+
+            async def handle(self, event):
+                self.called = True
+
+        instance = TestClass()
+
+        # Register bound method (can't be weakly referenced)
+        obs_id = manager.register(instance.handle)
+
+        # Should fall back to strong reference
+        assert obs_id in manager._strong_refs
+
+        # Should work normally
+        await manager.notify(NodeStarted(name="test", wave_index=0))
+        assert instance.called
+
+    def test_memory_leak_prevention(self):
+        """Test that weak refs actually prevent memory leaks."""
+        import gc
+        import weakref
+
+        manager = ObserverManager(use_weak_refs=True)
+
+        # Track memory usage
+        observers = []
+        refs = []
+
+        # Create many observers
+        for i in range(100):
+
+            class TempObserver:
+                def __init__(self, num):
+                    self.num = num
+                    self.data = "x" * 1000  # Some data
+
+                async def handle(self, event):
+                    pass
+
+            obs = TempObserver(i)
+            observers.append(obs)
+            refs.append(weakref.ref(obs))
+            manager.register(obs)
+
+        # All should be registered
+        assert len(manager._weak_handlers) == 100
+
+        # Clear observers list
+        observers.clear()
+        gc.collect()
+
+        # Most weak refs should be dead (allowing for 1-2 due to Python GC quirks)
+        alive_count = sum(1 for ref in refs if ref() is not None)
+        assert alive_count <= 2  # Allow for minor GC delays

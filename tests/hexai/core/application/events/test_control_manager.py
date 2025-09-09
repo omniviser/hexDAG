@@ -407,3 +407,84 @@ class TestControlManager:
             NodeStarted(name="sensitive_data_export", wave_index=1), ctx
         )
         assert response.signal == ControlSignal.SKIP
+
+    @pytest.mark.asyncio
+    async def test_control_weak_ref_cleanup(self):
+        """Test that control handlers are cleaned up when appropriate."""
+        manager = ControlManager(use_weak_refs=True)
+
+        # Create a handler object
+        class TestHandler:
+            async def handle(self, event, context):
+                return ControlResponse()
+
+        handler = TestHandler()
+
+        # Register with keep_alive=False - but handlers are kept in heap which maintains strong ref
+        # This is expected behavior for ControlManager since handlers need to
+        # stay alive for priority ordering
+        manager.register(handler, priority=10, name="test_handler")
+
+        # Handler should be in heap
+        assert len(manager._handler_heap) == 1
+
+        # For ControlManager, the handler stays alive because it's stored in the heap entry
+        # This is different from ObserverManager which truly uses weak refs
+        # We can still test that explicit unregister works
+
+        # Unregister the handler
+        manager.unregister("test_handler")
+
+        # Handler should be marked as deleted (lazy deletion)
+        assert manager._handler_heap[0].deleted is True
+
+        # Should return default PROCEED since handler is deleted
+        context = ExecutionContext(dag_id="test")
+        response = await manager.check(NodeStarted(name="test", wave_index=0), context)
+        assert response.signal.value == "proceed"
+
+    @pytest.mark.asyncio
+    async def test_control_function_kept_alive(self):
+        """Test that wrapped control functions are kept alive."""
+        import gc
+
+        manager = ControlManager(use_weak_refs=True)
+
+        called = []
+
+        # Register a function (will be wrapped)
+        def control_func(event, context):
+            called.append(event)
+            return ControlResponse()
+
+        manager.register(control_func, priority=10, name="test_func")
+
+        # Function should be in strong refs
+        assert "test_func" in manager._strong_refs
+
+        # Delete original function
+        del control_func
+        gc.collect()
+
+        # Should still work
+        context = ExecutionContext(dag_id="test")
+        response = await manager.check(NodeStarted(name="test", wave_index=0), context)
+
+        # Verify it was called
+        assert len(called) == 1
+        assert response.signal.value == "proceed"
+
+    def test_control_no_weak_refs_mode(self):
+        """Test that control manager works without weak refs."""
+        ctrl_manager = ControlManager(use_weak_refs=False)
+
+        class TestHandler:
+            async def handle(self, event, context):
+                return ControlResponse()
+
+        handler = TestHandler()
+        ctrl_manager.register(handler, name="test")
+
+        # Should be in normal handlers dict
+        assert "test" in ctrl_manager._handlers
+        assert isinstance(ctrl_manager._handlers["test"], TestHandler)

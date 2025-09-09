@@ -6,6 +6,7 @@ the execution flow of the pipeline through control handlers.
 
 import asyncio
 import heapq
+import weakref
 from dataclasses import dataclass
 from typing import Any, Type
 
@@ -55,15 +56,19 @@ class ControlManager(BaseEventManager, EventFilterMixin):
     - Event type filtering for efficiency
     """
 
-    def __init__(self, error_handler: ErrorHandler | None = None) -> None:
+    def __init__(
+        self, error_handler: ErrorHandler | None = None, use_weak_refs: bool = True
+    ) -> None:
         """Initialize the control manager.
 
         Args
         ----
             error_handler: Optional error handler, defaults to LoggingErrorHandler
+            use_weak_refs: If True, use weak references where possible to prevent memory leaks
         """
         super().__init__()
         self._error_handler = error_handler or LoggingErrorHandler()
+        self._use_weak_refs = use_weak_refs
         # Single source of truth for handlers
         self._handler_heap: list[HandlerEntry] = []
         # Quick lookup by name
@@ -71,6 +76,8 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         # Track deletions for periodic cleanup
         self._deletion_count = 0
         self._cleanup_threshold = 50
+        # Keep wrapped functions alive
+        self._strong_refs: dict[str, Any] = {}
 
     def register(self, handler: Any, **kwargs: Any) -> str:
         """Register a control handler with optional priority and event filtering.
@@ -106,12 +113,15 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         metadata = HandlerMetadata(priority=priority, name=name, description=description)
 
         # Wrap function if needed
+        keep_alive = kwargs.get("keep_alive", False)
         if hasattr(handler, "handle"):
             # Already implements ControlHandler protocol
             wrapped_handler = handler
         elif callable(handler):
             # Wrap function to implement the protocol
             wrapped_handler = FunctionControlHandler(handler, metadata)
+            # Wrapped functions need to be kept alive
+            keep_alive = True
         else:
             raise TypeError(
                 f"Handler must be callable or implement ControlHandler protocol, "
@@ -134,7 +144,22 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         # Store in both structures
         heapq.heappush(self._handler_heap, entry)
         self._handler_index[name] = entry
-        self._handlers[name] = wrapped_handler  # For BaseEventManager compatibility
+
+        # Store handler with appropriate reference type
+        if self._use_weak_refs and not keep_alive:
+            try:
+                # Try to store as weak reference in base class dict
+                weak_ref = weakref.ref(wrapped_handler)
+                self._handlers[name] = weak_ref
+            except TypeError:
+                # Can't create weak ref, use strong ref
+                self._handlers[name] = wrapped_handler
+                self._strong_refs[name] = wrapped_handler
+        else:
+            # Use strong reference
+            self._handlers[name] = wrapped_handler
+            if keep_alive:
+                self._strong_refs[name] = wrapped_handler
 
         return str(name)
 
@@ -166,7 +191,10 @@ class ControlManager(BaseEventManager, EventFilterMixin):
 
         # Remove from index
         del self._handler_index[handler_id]
-        del self._handlers[handler_id]
+        if handler_id in self._handlers:
+            del self._handlers[handler_id]
+        if handler_id in self._strong_refs:
+            del self._strong_refs[handler_id]
 
         # Track deletions for cleanup
         self._deletion_count += 1
@@ -189,6 +217,7 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         super().clear()
         self._handler_heap.clear()
         self._handler_index.clear()
+        self._strong_refs.clear()
         self._deletion_count = 0
 
     async def check(self, event: Event, context: ExecutionContext) -> ControlResponse:
