@@ -2,8 +2,9 @@
 
 import ast
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Type
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -77,7 +78,7 @@ class ReActAgentNode(BaseNodeFactory):
         name: str,
         main_prompt: PromptInput,
         continuation_prompts: dict[str, PromptInput] | None = None,
-        output_schema: dict[str, type] | Type[BaseModel] | None = None,
+        output_schema: dict[str, type] | type[BaseModel] | None = None,
         config: AgentConfig | None = None,
         deps: list[str] | None = None,
         input_mapping: dict[str, str] | None = None,
@@ -152,7 +153,7 @@ class ReActAgentNode(BaseNodeFactory):
         name: str,
         main_prompt: PromptInput,
         continuation_prompts: dict[str, PromptInput],
-        output_model: Type[BaseModel],
+        output_model: type[BaseModel],
         config: AgentConfig,
         input_mapping: dict[str, str] | None = None,
     ) -> Callable[..., Any]:
@@ -192,10 +193,7 @@ class ReActAgentNode(BaseNodeFactory):
 
             # Stop if tool_end was detected
             response = result.get("response", "")
-            if "tool_end" in response.lower():
-                return True
-
-            return False
+            return "tool_end" in response.lower()
 
         async def agent_with_internal_loop(input_data: Any, **ports: Any) -> Any:
             """Agent executor that uses loop concepts for iteration control."""
@@ -562,7 +560,7 @@ class ReActAgentNode(BaseNodeFactory):
     async def _check_for_final_output(
         self,
         state: AgentState,
-        output_model: Type[BaseModel],
+        output_model: type[BaseModel],
         event_manager: Any,
     ) -> Any | None:
         """Check if we have a final output from tool_end calls."""

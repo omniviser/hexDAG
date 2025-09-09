@@ -30,7 +30,7 @@ class OntologyPort(Protocol):
         """
         ...
 
-    def get_ontology_nodes(self, ontology_id: UUID | None = None) -> list[dict[str, Any]]:
+    def get_ontology_nodes(self, _ontology_id: UUID | None = None) -> list[dict[str, Any]]:
         """Get all ontology nodes, optionally filtered by ontology.
 
         Returns
@@ -48,7 +48,7 @@ class OntologyPort(Protocol):
         """
         ...
 
-    def get_ontology_relations(self, ontology_id: UUID | None = None) -> list[dict[str, Any]]:
+    def get_ontology_relations(self, _ontology_id: UUID | None = None) -> list[dict[str, Any]]:
         """Get all ontology relations, optionally filtered by ontology.
 
         Returns
@@ -66,7 +66,7 @@ class OntologyPort(Protocol):
         """
         ...
 
-    def get_database_metadata(self, ontology_node_id: UUID | None = None) -> list[dict[str, Any]]:
+    def get_database_metadata(self, _ontology_node_id: UUID | None = None) -> list[dict[str, Any]]:
         """Get database metadata for ontology nodes.
 
         Returns
@@ -88,7 +88,7 @@ class OntologyPort(Protocol):
         """
         ...
 
-    def get_context(self, query: str = "") -> list[dict[str, Any]]:
+    def get_context(self, _query: str = "") -> list[dict[str, Any]]:
         """Get relevant context for a user query.
 
         Note: This is a placeholder for future embedding-based semantic matching.

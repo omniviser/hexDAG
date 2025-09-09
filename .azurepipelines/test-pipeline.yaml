@@ -89,25 +89,20 @@ jobs:
         displayName: "Install UV"
 
       - script: |
-          uv run black --check ./hexai
-        displayName: "Check Black"
+          uv run ruff check ./hexai --config pyproject.toml
+        displayName: "Run Ruff linting (replaces flake8, isort)"
 
       - script: |
-          uv run pre-commit install
-          uv run pre-commit run flake8 --all-files
-        displayName: "Run Flake8"
-
-      - script: |
-          uv run isort ./hexai --check-only
-        displayName: "Run Isort"
+          uv run ruff format ./hexai --check
+        displayName: "Run Ruff formatting check (replaces Black)"
 
       - script: |
           uv run mypy ./hexai
         displayName: "Run Mypy"
 
       - script: |
-          uv run ruff check ./hexai
-        displayName: "Run Ruff ./hexai"
+          uv run pyright ./hexai
+        displayName: "Run Pyright"
 
       - script: |
           echo "Running tests with coverage..."
@@ -137,3 +132,44 @@ jobs:
       - script: |
           uv run deptry .
         displayName: "Run deptry"
+
+      - script: |
+          echo "Running Safety for dependency vulnerability scanning..."
+          uv run safety check --json --output safety-report.json
+          SAFETY_EXIT_CODE=$?
+          echo "Safety exit code: $SAFETY_EXIT_CODE"
+          if [ $SAFETY_EXIT_CODE -ne 0 ]; then
+              echo "Safety found vulnerabilities. See safety-report.json for details."
+              cat safety-report.json
+              exit 1
+          fi
+        displayName: "Run Safety - dependency vulnerability scan"
+
+      - script: |
+          echo "Running Gitleaks for secret detection..."
+          # Install gitleaks if not available
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_latest_linux_x64.tar.gz | tar -xz -C /tmp
+          /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json
+          GITLEAKS_EXIT_CODE=$?
+          echo "Gitleaks exit code: $GITLEAKS_EXIT_CODE"
+          if [ $GITLEAKS_EXIT_CODE -ne 0 ]; then
+              echo "Gitleaks found secrets or encountered an error. See gitleaks-report.json for details."
+              cat gitleaks-report.json
+              exit 1
+          fi
+        displayName: "Run Gitleaks - secret detection"
+
+      - script: |
+          echo "Running yamllint for YAML config quality..."
+          uv run yamllint -d relaxed .
+        displayName: "Run yamllint - YAML config quality"
+
+      - script: |
+          echo "Running vulture for dead code detection..."
+          uv run vulture hexai/ --min-confidence 90
+        displayName: "Run vulture - dead code detection"
+
+      - script: |
+          echo "Running radon for code complexity analysis..."
+          uv run radon cc hexai/ --min B --show-complexity
+        displayName: "Run radon - code complexity analysis"

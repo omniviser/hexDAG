@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from .base import EventType, PipelineEvent
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _init_event(event_type: EventType, session_id: str = "default") -> Callable[[Any], None]:

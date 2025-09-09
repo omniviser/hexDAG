@@ -89,7 +89,7 @@ class BooleanConverter(TypeConverter):
                 )
 
         # Handle numeric conversion
-        elif isinstance(value, (int, float)):
+        elif isinstance(value, int | float):
             if value == 0 or value == 0.0:
                 return False
             elif value == 1 or value == 1.0:

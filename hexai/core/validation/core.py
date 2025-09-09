@@ -1,7 +1,7 @@
 """Core validation interfaces and implementations for the unified validation framework."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -21,7 +21,7 @@ class IValidator(ABC):
     def validate_input(
         self,
         data: Any,
-        expected_type: Type[Any] | None = None,
+        expected_type: type[Any] | None = None,
         context: ValidationContext | None = None,
     ) -> ValidationResult:
         """Validate input data before node execution.
@@ -46,7 +46,7 @@ class IValidator(ABC):
     def validate_output(
         self,
         data: Any,
-        expected_type: Type[Any] | None = None,
+        expected_type: type[Any] | None = None,
         context: ValidationContext | None = None,
     ) -> ValidationResult:
         """Validate output data after node execution.
@@ -85,7 +85,7 @@ class BaseValidator(IValidator):
         """
         self.strategy = strategy
 
-    def _is_pydantic_model(self, type_hint: Type[Any] | None) -> bool:
+    def _is_pydantic_model(self, type_hint: type[Any] | None) -> bool:
         """Check if a type hint is a Pydantic model."""
         if type_hint is None:
             return False
@@ -94,14 +94,14 @@ class BaseValidator(IValidator):
         except TypeError:
             return False
 
-    def _is_basic_type(self, type_hint: Type[Any] | None) -> bool:
+    def _is_basic_type(self, type_hint: type[Any] | None) -> bool:
         """Check if a type hint is a basic Python type."""
         if type_hint is None:
             return False
         return type_hint in (str, int, float, bool, list, dict)
 
     def _validate_pydantic_model(
-        self, data: Any, model_type: Type[BaseModel], context: ValidationContext | None = None
+        self, data: Any, model_type: type[BaseModel], context: ValidationContext | None = None
     ) -> ValidationResult:
         """Validate data against a Pydantic model using converter registry."""
         # Try direct validation first
@@ -148,7 +148,7 @@ class BaseValidator(IValidator):
                 return ValidationResult.failure(data, [error_msg])
 
     def _validate_basic_type(
-        self, data: Any, expected_type: Type[Any], context: ValidationContext | None = None
+        self, data: Any, expected_type: type[Any], context: ValidationContext | None = None
     ) -> ValidationResult:
         """Validate data against a basic Python type using converter registry."""
         if isinstance(data, expected_type):
@@ -229,7 +229,7 @@ class BaseValidator(IValidator):
     def validate_input(
         self,
         data: Any,
-        expected_type: Type[Any] | None = None,
+        expected_type: type[Any] | None = None,
         context: ValidationContext | None = None,
     ) -> ValidationResult:
         """Validate input data using the configured strategy."""
@@ -274,7 +274,7 @@ class BaseValidator(IValidator):
     def validate_output(
         self,
         data: Any,
-        expected_type: Type[Any] | None = None,
+        expected_type: type[Any] | None = None,
         context: ValidationContext | None = None,
     ) -> ValidationResult:
         """Validate output data using the configured strategy."""

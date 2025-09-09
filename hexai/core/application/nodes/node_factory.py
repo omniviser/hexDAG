@@ -1,6 +1,7 @@
 """Unified node factory for creating different types of nodes."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ...domain.dag import NodeSpec
 

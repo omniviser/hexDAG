@@ -109,10 +109,7 @@ class YamlPipelineBuilder:
 
             # Add dependencies
             if deps:
-                if isinstance(deps, list):
-                    node = node.after(*deps)
-                else:
-                    node = node.after(deps)
+                node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
 
             graph.add(node)
 
@@ -250,7 +247,7 @@ class YamlPipelineBuilder:
         """Validate mapping references and return warnings."""
         warnings = []
 
-        for _target_field, source_path in mapping.items():
+        for source_path in mapping.values():
             # Skip validation for non-string values (like defaults)
             if not isinstance(source_path, str):
                 continue

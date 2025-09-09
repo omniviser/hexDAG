@@ -3,7 +3,7 @@
 import os
 import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any
 
 import yaml
 
@@ -401,9 +401,9 @@ class PipelineCatalog:
 
     def __init__(self) -> None:
         """Initialize the pipeline catalog."""
-        self._pipelines: dict[str, Type[PipelineDefinition]] = {}
+        self._pipelines: dict[str, type[PipelineDefinition]] = {}
 
-    def register_pipeline(self, pipeline_class: Type[PipelineDefinition]) -> None:
+    def register_pipeline(self, pipeline_class: type[PipelineDefinition]) -> None:
         """Manually register a pipeline class."""
         instance = pipeline_class()
         self._pipelines[instance.name] = pipeline_class

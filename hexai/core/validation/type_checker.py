@@ -38,12 +38,15 @@ def check_pipeline_type_safety(
                 continue
 
             # Check type compatibility if both have types specified
-            if node_spec.in_type and dep_spec.out_type:
-                if not can_convert_schema(dep_spec.out_type, node_spec.in_type):
-                    errors.append(
-                        f"Type mismatch: '{dep_name}' outputs {dep_spec.out_type.__name__} "
-                        f"but '{node_name}' expects {node_spec.in_type.__name__}"
-                    )
+            if (
+                node_spec.in_type
+                and dep_spec.out_type
+                and not can_convert_schema(dep_spec.out_type, node_spec.in_type)
+            ):
+                errors.append(
+                    f"Type mismatch: '{dep_name}' outputs {dep_spec.out_type.__name__} "
+                    f"but '{node_name}' expects {node_spec.in_type.__name__}"
+                )
 
     return len(errors) == 0, errors
 

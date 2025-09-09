@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
-from .base import EventType, Observer, PipelineEvent
+if TYPE_CHECKING:
+    from .base import EventType, Observer, PipelineEvent
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +77,8 @@ class PipelineEventManager:
         """Stop async event processing."""
         if self._processing_task:
             self._processing_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._processing_task
-            except asyncio.CancelledError:
-                pass
             self._processing_task = None
             self._async_queue = None
 

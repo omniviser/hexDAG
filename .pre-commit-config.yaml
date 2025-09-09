@@ -2,6 +2,26 @@ default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
 
 repos:
+  # Ruff - Fast Python linter and formatter (replaces Black, isort, flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.7
+    hooks:
+      # Run the linter first
+      - id: ruff-check
+        args: [--fix, --config=pyproject.toml]
+      # Run the formatter
+      - id: ruff-format
+        args: [--line-length=100]
+
+  # Pyupgrade - Automatically upgrade Python syntax
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.19.1
+    hooks:
+      - id: pyupgrade
+        args: [--py312-plus]
+        exclude: ^(tests/|examples/)
+
+  # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -34,32 +54,6 @@ repos:
     hooks:
       - id: validate-pyproject
 
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
-        language_version: python3.12
-        args: [--line-length=100]
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        args: [--profile=black, --line-length=100]
-
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
-    hooks:
-       - id: flake8
-         exclude: ^examples/
-         additional_dependencies:
-           - flake8-docstrings
-           - flake8-import-order
-           - flake8-bugbear
-           - flake8-comprehensions
-           - flake8-print
-           - pep8-naming
-
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.17.1
     hooks:
@@ -67,15 +61,16 @@ repos:
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
         exclude: ^(tests/|examples/)
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.7
+  - repo: local
     hooks:
-      # Run the linter.
-      - id: ruff-check
-        args: [ --fix, --line-length=100]
-      # Run the formatter.
-      - id: ruff-format
-        args: [--line-length=100]
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        exclude: ^(tests/|examples/)
+        pass_filenames: false
+
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.10
@@ -83,6 +78,30 @@ repos:
       - id: bandit
         args: [-r, hexai]
         exclude: ^tests/
+
+  # Security - Dependency vulnerabilities
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.2
+    hooks:
+      - id: python-safety-dependencies-check
+        files: requirements.*\.txt$
+        stages: [pre-commit]
+
+  # Secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-d, relaxed]
+        types: [yaml]
+        stages: [pre-commit]
 
   - repo: local
     hooks:
@@ -117,6 +136,30 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+
+      - id: vulture
+        name: vulture - dead code detection
+        entry: uv run vulture hexai/ --min-confidence 90
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: radon-complexity
+        name: radon - code complexity analysis
+        entry: uv run radon cc hexai/ --min B --show-complexity
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: safety-check
+        name: safety - dependency vulnerability scan
+        entry: uv run safety check --json
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
 
       - id: branch-name-check
         name: Branch Name Check

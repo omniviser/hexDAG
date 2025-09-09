@@ -4,10 +4,11 @@ This module provides the core building blocks for defining and executing
 directed acyclic graphs of agents in the Hex-DAG framework.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Callable
+from typing import Any
 
 from hexai.core.validation import can_convert_schema
 
@@ -263,11 +264,13 @@ class DirectedGraph:
             SchemaCompatibilityError: If connected nodes have incompatible schemas
         """
         # Check for missing dependencies
-        missing_deps = []
+        missing_deps: list[str] = []
         for node_name, node_spec in self.nodes.items():
-            for dep in node_spec.deps:
-                if dep not in self.nodes:
-                    missing_deps.append(f"Node '{node_name}' depends on missing node '{dep}'")
+            missing_deps.extend(
+                f"Node '{node_name}' depends on missing node '{dep}'"
+                for dep in node_spec.deps
+                if dep not in self.nodes
+            )
 
         if missing_deps:
             raise MissingDependencyError("; ".join(missing_deps))

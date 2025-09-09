@@ -1,7 +1,7 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models and core event emission."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel, create_model
 
@@ -113,8 +113,8 @@ class BaseNodeFactory(ABC):
             )
 
     def create_pydantic_model(
-        self, name: str, schema: dict[str, Any] | Type[BaseModel] | Type[Any] | None
-    ) -> Type[BaseModel] | None:
+        self, name: str, schema: dict[str, Any] | type[BaseModel] | type[Any] | None
+    ) -> type[BaseModel] | None:
         """Create a Pydantic model from a schema."""
         if schema is None:
             return None
@@ -124,24 +124,34 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
-            field_definitions = {}
+            # Convert dict values to proper Pydantic field format
+            field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                field_definitions[field_name] = field_type
-
-            return create_model(name, **field_definitions)
+                # If it's just a type, make it required (no default)
+                if isinstance(field_type, type):
+                    field_definitions[field_name] = (field_type, ...)
+                elif isinstance(field_type, tuple):
+                    # Already in the correct format (type, default)
+                    field_definitions[field_name] = field_type
+                else:
+                    # Assume it's a default value, use Any as type
+                    field_definitions[field_name] = (Any, field_type)
+            result: type[BaseModel] = create_model(name, **field_definitions)
+            return result
 
         # Handle primitive types - create a simple wrapper model
-        if isinstance(schema, type):
+        # At this point, schema should be a type
+        try:
             return create_model(name, value=(schema, ...))
-
-        raise ValueError("Schema must be a dict, type, or Pydantic model")
+        except Exception:
+            raise ValueError("Schema must be a dict, type, or Pydantic model") from None
 
     def create_node_with_mapping(
         self,
         name: str,
         wrapped_fn: Any,
         input_schema: dict[str, Any] | None,
-        output_schema: dict[str, Any] | Type[BaseModel] | None,
+        output_schema: dict[str, Any] | type[BaseModel] | None,
         deps: list[str] | None = None,
         input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
