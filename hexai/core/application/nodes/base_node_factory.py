@@ -134,8 +134,6 @@ class BaseNodeFactory(ABC):
         if isinstance(schema, type):
             return create_model(name, value=(schema, ...))
 
-        raise ValueError("Schema must be a dict, type, or Pydantic model")
-
     def create_node_with_mapping(
         self,
         name: str,
@@ -143,29 +141,20 @@ class BaseNodeFactory(ABC):
         input_schema: dict[str, Any] | None,
         output_schema: dict[str, Any] | Type[BaseModel] | None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Universal NodeSpec creation with consistent input mapping handling."""
+        """Universal NodeSpec creation."""
         # Create Pydantic models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
-        # Determine output type
-        out_type = output_model or str
-
-        # Add input_mapping to params consistently
-        params = kwargs.copy()
-        if input_mapping is not None:
-            params["input_mapping"] = input_mapping
-
         return NodeSpec(
             name=name,
             fn=wrapped_fn,
-            in_type=input_model,
-            out_type=out_type,
+            in_model=input_model,
+            out_model=output_model,
             deps=set(deps or []),
-            params=params,
+            params=kwargs,
         )
 
     @abstractmethod

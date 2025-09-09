@@ -26,7 +26,6 @@ from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.events.observers import LoggingObserver
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator
 
 
 class CustomMetricsObserver(Observer):
@@ -234,7 +233,7 @@ async def demonstrate_event_monitoring():
     event_manager.subscribe(logging_observer)
 
     # Create orchestrator
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     print("\n🔍 Observers attached:")
     print("   • CustomMetricsObserver - Performance tracking")

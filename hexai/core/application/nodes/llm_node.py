@@ -22,7 +22,6 @@ class LLMNode(BaseLLMNode):
         template: PromptInput,
         output_schema: dict[str, Any] | Type[BaseModel] | None = None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Create a NodeSpec for an LLM-based node with rich template support.
@@ -33,7 +32,6 @@ class LLMNode(BaseLLMNode):
             template: Template for LLM prompt
             output_schema: Output schema for validation
             deps: List of dependency node names
-            input_mapping: Optional field mapping dict {target_field: source_path}
             **kwargs: Additional parameters
         """
         # String templates don't support rich features (structured output)
@@ -53,7 +51,6 @@ class LLMNode(BaseLLMNode):
             template=template,
             output_schema=output_schema,
             deps=deps,
-            input_mapping=input_mapping,
             rich_features=rich_features,
             **kwargs,
         )

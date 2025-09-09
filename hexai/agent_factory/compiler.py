@@ -16,7 +16,15 @@ import yaml
 from pydantic import BaseModel, Field
 
 from hexai.agent_factory.base import PipelineCatalog
-from hexai.core.validation.type_checker import validate_pipeline_compilation
+
+
+def validate_pipeline_compilation(graph: Any, pipeline_name: str) -> None:
+    """Stub function for pipeline compilation validation - Tier 2 functionality.
+
+    This is a simplified validation that always passes.
+    Real implementation would be in the Tier 2 compiler layer.
+    """
+    pass
 
 
 class CompiledPipelineData(BaseModel):

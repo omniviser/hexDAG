@@ -175,7 +175,7 @@ class TestPipelineDefinition:
 
         # Mock graph with single first node
         mock_node_spec = Mock()
-        mock_node_spec.in_type = InputModel
+        mock_node_spec.in_model = InputModel
 
         mock_graph = Mock()
         mock_graph.nodes = {"first_node": mock_node_spec}
@@ -193,9 +193,9 @@ class TestPipelineDefinition:
 
         # Mock graph with multiple first nodes
         mock_node_spec1 = Mock()
-        mock_node_spec1.in_type = InputModel
+        mock_node_spec1.in_model = InputModel
         mock_node_spec2 = Mock()
-        mock_node_spec2.in_type = str
+        mock_node_spec2.in_model = str
 
         mock_graph = Mock()
         mock_graph.nodes = {
@@ -225,7 +225,7 @@ class TestPipelineDefinition:
 
         # Mock graph with single last node
         mock_node_spec = Mock()
-        mock_node_spec.out_type = OutputModel
+        mock_node_spec.out_model = OutputModel
 
         mock_graph = Mock()
         mock_graph.nodes = {"last_node": mock_node_spec}
@@ -243,9 +243,9 @@ class TestPipelineDefinition:
 
         # Mock graph with multiple last nodes
         mock_node_spec1 = Mock()
-        mock_node_spec1.out_type = OutputModel
+        mock_node_spec1.out_model = OutputModel
         mock_node_spec2 = Mock()
-        mock_node_spec2.out_type = dict
+        mock_node_spec2.out_model = dict
 
         mock_graph = Mock()
         mock_graph.nodes = {
@@ -272,14 +272,14 @@ class TestPipelineDefinition:
 
         # Mock node specs
         mock_node_spec1 = Mock()
-        mock_node_spec1.in_type = InputModel
-        mock_node_spec1.out_type = dict
+        mock_node_spec1.in_model = InputModel
+        mock_node_spec1.out_model = dict
         mock_node_spec1.fn = Mock()
         mock_node_spec1.fn.__name__ = "process_input"
 
         mock_node_spec2 = Mock()
-        mock_node_spec2.in_type = dict
-        mock_node_spec2.out_type = OutputModel
+        mock_node_spec2.in_model = dict
+        mock_node_spec2.out_model = OutputModel
         mock_node_spec2.fn = Mock()
         mock_node_spec2.fn.__name__ = "generate_output"
 
@@ -315,8 +315,8 @@ class TestPipelineDefinition:
 
         # Mock node spec without function name
         mock_node_spec = Mock()
-        mock_node_spec.in_type = str
-        mock_node_spec.out_type = dict
+        mock_node_spec.in_model = str
+        mock_node_spec.out_model = dict
         mock_node_spec.fn = Mock(spec=[])  # Mock without __name__ attribute
 
         mock_graph = Mock()

@@ -1,5 +1,6 @@
 """Clean tests for the FunctionNode implementation."""
 
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,12 +24,12 @@ class TestFunctionNode:
     """Test the FunctionNode factory."""
 
     @pytest.fixture
-    def factory(self):
+    def factory(self) -> FunctionNode:
         """Create function node factory."""
         return FunctionNode()
 
     @pytest.fixture
-    def mock_ports(self):
+    def mock_ports(self) -> dict[str, Any]:
         """Create mock ports."""
         return {
             "event_manager": AsyncMock(),
@@ -46,8 +47,8 @@ class TestFunctionNode:
 
         assert isinstance(node, NodeSpec)
         assert node.name == "add_one"
-        assert node.in_type is None
-        assert node.out_type is None
+        assert node.in_model is None
+        assert node.out_model is None
         assert node.deps == frozenset()
 
     def test_create_node_with_schemas(self, factory):
@@ -64,8 +65,8 @@ class TestFunctionNode:
         )
 
         assert node.name == "process_user"
-        assert node.in_type is not None
-        assert node.out_type is not None
+        assert node.in_model is not None
+        assert node.out_model is not None
 
     def test_create_node_with_dependencies(self, factory):
         """Test creating a node with dependencies."""
@@ -381,8 +382,8 @@ class TestFunctionNode:
             },
         )
 
-        assert node.in_type is not None
-        assert node.out_type is not None
+        assert node.in_model is not None
+        assert node.out_model is not None
         assert "input_mapping" in node.params
         assert node.params["input_mapping"]["name"] == "user_source.name"
         assert node.params["input_mapping"]["age"] == "age_source.age"
@@ -449,8 +450,8 @@ class TestFunctionNode:
         # Verify other properties are preserved
         assert enhanced_node.name == "basic"
         assert enhanced_node.fn == basic_node.fn
-        assert enhanced_node.in_type == basic_node.in_type
-        assert enhanced_node.out_type == basic_node.out_type
+        assert enhanced_node.in_model == basic_node.in_model
+        assert enhanced_node.out_model == basic_node.out_model
 
     def test_with_input_mapping_overwrite(self, factory):
         """Test that with_input_mapping overwrites existing mapping."""
