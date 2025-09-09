@@ -3,10 +3,11 @@
 This module contains all data classes, protocols, and types used by the event system.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, Type
 
 # Execution Context
 # -----------------
@@ -178,3 +179,79 @@ AsyncObserverFunc = Callable[[Any], Any]  # Returns awaitable
 # Control handler types
 ControlHandlerFunc = Callable[[Any, ExecutionContext], ControlResponse]
 AsyncControlHandlerFunc = Callable[[Any, ExecutionContext], Any]  # Returns awaitable
+
+
+# Event Filtering Mixin
+# ---------------------
+
+
+class EventFilterMixin:
+    """Mixin for event type filtering logic.
+
+    Provides common filtering functionality for both ObserverManager
+    and ControlManager to avoid code duplication.
+    """
+
+    def _should_process_event(self, event_filter: set[Type] | None, event: Any) -> bool:
+        """Check if an event should be processed based on type filter.
+
+        Args
+        ----
+            event_filter: Set of event types to accept, or None for all
+            event: The event to check
+
+        Returns
+        -------
+            True if event should be processed, False otherwise
+        """
+        # None means accept all events
+        if event_filter is None:
+            return True
+
+        # Check if event type is in the filter
+        return type(event) in event_filter
+
+
+# Error Handling
+# --------------
+
+
+class ErrorHandler(Protocol):
+    """Protocol for handling errors in event system."""
+
+    def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
+        """Handle an error that occurred during event processing.
+
+        Args
+        ----
+            error: The exception that occurred
+            context: Additional context about where/when the error occurred
+        """
+        ...
+
+
+class LoggingErrorHandler:
+    """Default error handler that logs errors."""
+
+    def __init__(self, logger: Any | None = None):
+        """Initialize with optional logger.
+
+        Args
+        ----
+            logger: Logger instance, or None to use default
+        """
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        self.logger = logger
+
+    def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
+        """Log the error with context."""
+        handler_name = context.get("handler_name", "unknown")
+        event_type = context.get("event_type", "unknown")
+
+        if context.get("is_critical", False):
+            self.logger.error(
+                f"Critical handler {handler_name} failed for {event_type}: {error}", exc_info=True
+            )
+        else:
+            self.logger.warning(f"Handler {handler_name} failed for {event_type}: {error}")

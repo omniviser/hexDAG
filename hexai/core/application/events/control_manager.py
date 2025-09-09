@@ -6,7 +6,6 @@ the execution flow of the pipeline through control handlers.
 
 import asyncio
 import heapq
-import logging
 from dataclasses import dataclass
 from typing import Any, Type
 
@@ -18,11 +17,12 @@ from .models import (
     ControlHandlerFunc,
     ControlResponse,
     ControlSignal,
+    ErrorHandler,
+    EventFilterMixin,
     ExecutionContext,
     HandlerMetadata,
+    LoggingErrorHandler,
 )
-
-logger = logging.getLogger(__name__)
 
 # Priority threshold for critical handlers
 CRITICAL_HANDLER_PRIORITY = 50
@@ -44,7 +44,7 @@ class HandlerEntry:
         return self.priority < other.priority
 
 
-class ControlManager(BaseEventManager):
+class ControlManager(BaseEventManager, EventFilterMixin):
     """Manages control policy handlers that can affect execution.
 
     Key principles:
@@ -55,9 +55,15 @@ class ControlManager(BaseEventManager):
     - Event type filtering for efficiency
     """
 
-    def __init__(self) -> None:
-        """Initialize the control manager."""
+    def __init__(self, error_handler: ErrorHandler | None = None) -> None:
+        """Initialize the control manager.
+
+        Args
+        ----
+            error_handler: Optional error handler, defaults to LoggingErrorHandler
+        """
         super().__init__()
+        self._error_handler = error_handler or LoggingErrorHandler()
         # Single source of truth for handlers
         self._handler_heap: list[HandlerEntry] = []
         # Quick lookup by name
@@ -138,12 +144,7 @@ class ControlManager(BaseEventManager):
         if entry.deleted:
             return False
 
-        # None means handle all events
-        if entry.event_types is None:
-            return True
-
-        # Check if event type is in the filter
-        return type(event) in entry.event_types
+        return self._should_process_event(entry.event_types, event)
 
     def unregister(self, handler_id: str) -> bool:
         """Remove a handler by ID/name.
@@ -218,19 +219,35 @@ class ControlManager(BaseEventManager):
 
                 # First non-PROCEED response wins
                 if response.should_interrupt():
-                    logger.info(
-                        f"Handler {entry.name} (priority {entry.priority}) returned "
-                        f"{response.signal.value} for {event.__class__.__name__}"
+                    # Log via error handler for consistency
+                    self._error_handler.handle_error(
+                        Exception(
+                            f"Handler {entry.name} (priority {entry.priority}) returned "
+                            f"{response.signal.value} for {event.__class__.__name__}"
+                        ),
+                        {
+                            "handler_name": entry.name,
+                            "event_type": event.__class__.__name__,
+                            "is_critical": False,
+                        },
                     )
                     return response
 
             except Exception as e:
-                logger.error(
-                    f"Control handler {entry.name} (priority {entry.priority}) failed: {e}"
+                is_critical = entry.priority < CRITICAL_HANDLER_PRIORITY
+
+                self._error_handler.handle_error(
+                    e,
+                    {
+                        "handler_name": entry.name,
+                        "event_type": event.__class__.__name__,
+                        "is_critical": is_critical,
+                        "priority": entry.priority,
+                    },
                 )
 
                 # For critical handlers, return ERROR signal
-                if entry.priority < CRITICAL_HANDLER_PRIORITY:
+                if is_critical:
                     return ControlResponse(
                         signal=ControlSignal.ERROR,
                         data=f"Critical handler {entry.name} failed: {e}",
@@ -243,13 +260,19 @@ class ControlManager(BaseEventManager):
     def _validate_response(self, response: Any, handler_name: str) -> ControlResponse:
         """Validate and normalize handler response."""
         if response is None:
-            logger.warning(f"Handler {handler_name} returned None, assuming PROCEED")
+            self._error_handler.handle_error(
+                ValueError(f"Handler {handler_name} returned None, assuming PROCEED"),
+                {"handler_name": handler_name, "is_critical": False},
+            )
             return ControlResponse()
 
         if not isinstance(response, ControlResponse):
-            logger.warning(
-                f"Handler {handler_name} returned {type(response).__name__}, "
-                f"not ControlResponse. Assuming PROCEED"
+            self._error_handler.handle_error(
+                TypeError(
+                    f"Handler {handler_name} returned {type(response).__name__}, "
+                    f"not ControlResponse. Assuming PROCEED"
+                ),
+                {"handler_name": handler_name, "is_critical": False},
             )
             return ControlResponse()
 
