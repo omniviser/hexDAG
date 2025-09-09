@@ -176,9 +176,7 @@ def _extract_by_bracket_matching(text: str) -> str | None:
     string_quote: str | None = None
     escaping = False
 
-    for i in range(start, len(text)):
-        ch = text[i]
-
+    for i, ch in enumerate(text[start:], start=start):
         if string_quote is not None:
             if escaping:
                 escaping = False
