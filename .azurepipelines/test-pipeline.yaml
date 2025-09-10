@@ -1,24 +1,24 @@
 variables:
-  CI_USERNAME: "CI Pipeline"
-  CI_EMAIL: developers@omniviser.ai
+- group: pypi-secrets
+- name: CI_USERNAME
+  value: "CI Pipeline"
+- name: CI_EMAIL
+  value: developers@omniviser.ai
 
 trigger:
   branches:
     include:
       - main
-      - feat/*
 
 pr:
   branches:
     include:
       - main
-
 pool:
   vmImage: 'ubuntu-latest'
 
 jobs:
   - job: DevelopmentStandards
-    displayName: "Development standards"
     steps:
       - checkout: self
         persistCredentials: true
@@ -27,37 +27,43 @@ jobs:
       - script: |
           # Define your naming convention regex pattern
           PATTERN="(^(chore|ci|docs|experiment|feat|fix|refactor|test)\/[A-Za-z0-9_-]+$)|main|^snyk|^dependabot"
+
           if [[ $(Build.Reason) == "PullRequest" ]]; then
             BRANCH="$(echo $(System.PullRequest.SourceBranch) | sed 's/refs\/heads\///')"
           else
             BRANCH="$(echo $(Build.SourceBranch) | sed 's/refs\/heads\///')"
           fi
+
           # Check if the branch name matches the pattern
           if [[ $BRANCH =~ $PATTERN ]]; then
-            echo "Branch name '$BRANCH' is valid."
+              echo "Branch name '$BRANCH' is valid."
           else
-            echo "Branch name [$BRANCH] does not follow convention."
-            exit 1
+              echo "Branch name [${BRANCH}] does not follow convention: [chore/* | ci/* | dependabot/* | docs/* | experiment/* | feat/* | fix/* | refactor/* | test/* | main | snyk | dependabot]."
+              exit 1
           fi
         displayName: "Check the branch name"
+
 
       - script: |
           if [ "$BUILD_REASON" == "PullRequest" ] && [ "$TARGETBRANCH" == "refs/heads/main" ]; then
               echo "PullRequest reason for build"
               echo "Main target branch"
-            pr_data=$(az repos pr show --id $PULLREQUESTID --organization $ORGANIZATION_URI)
-            title=$(echo "$pr_data" | jq -r '.title')
+
+              pr_data=$(az repos pr show --id $PULLREQUESTID --organization $ORGANIZATION_URI)
+              title=$(echo "$pr_data" | jq -r '.title')
               echo "PR Title: $title"
               echo "Keep in mind that 'Bump' and 'chore' are for AZURE BOTS ONLY, don't use them!"
-            pattern="^(ci|docs|experiment|feat|fix|refactor|test|chore|Bump)"
-            if [[ "$title" =~ $pattern ]]; then
-              echo "PR title is valid"
-            else
-              echo "ERROR: PR TITLE IS INVALID"
+
+              pattern="^(ci|docs|experiment|feat|fix|refactor|test|chore|Bump)"
+
+              if [[ "$title" =~ $pattern ]]; then
+                  echo "PR title is valid"
+              else
+                  echo "ERROR: PR TITLE IS INVALID"
                   echo "Please ensure your PR title starts with one of the following prefixes:"
                   echo "ci, Bump, docs, experiment, feat, fix, refactor, test, chore"
-              exit 1
-            fi
+                  exit 1
+              fi
           fi
         displayName: "Validate PR title"
         env:
@@ -66,78 +72,6 @@ jobs:
           PULLREQUESTID: $(System.PullRequest.PullRequestId)
           TARGETBRANCH: $(System.PullRequest.TargetBranch)
           BUILD_REASON: $(Build.Reason)
-
-  - job: CodeQuality
-    displayName: "Code quality (Ubuntu, Py 3.12)"
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-      - checkout: self
-        persistCredentials: true
-        clean: true
-
-      - task: UsePythonVersion@0
-        inputs:
-          versionSpec: "3.12"
-        displayName: "Use Python 3.12"
-
-      - bash: sudo apt-get install graphviz -f
-        displayName: Install graphviz
-
-      - script: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-        displayName: "Install UV"
-
-      - script: uv venv
-        displayName: "Create UV virtual environment"
-
-      - script: uv pip install -e ".[viz]"
-        displayName: "Install package (editable + viz deps)"
-
-      - script: uv run black --check ./hexai
-        displayName: "Check Black"
-
-      - script: |
-          uv run pre-commit install
-          uv run pre-commit run flake8 --all-files
-        displayName: "Run Flake8"
-
-      - script: uv run isort ./hexai --check-only
-        displayName: "Run Isort"
-
-      - script: uv run mypy ./hexai
-        displayName: "Run Mypy"
-
-      - script: uv run ruff check ./hexai
-        displayName: "Run Ruff ./hexai"
-
-      - script: |
-          echo "Running tests with coverage..."
-          uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
-        displayName: "Run unit tests"
-
-      - script: |
-          echo "Running Bandit for SAST..."
-          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
-          BANDIT_EXIT_CODE=$?
-          echo "Bandit exit code: $BANDIT_EXIT_CODE"
-          if [ $BANDIT_EXIT_CODE -ne 0 ]; then
-              echo "Bandit found issues or encountered an error. See bandit-report.json for details."
-              cat bandit-report.json
-              exit 1
-          fi
-        displayName: "Run Bandit"
-
-      - script: uv run scripts/check_test_structure.py
-        displayName: "Check test structure"
-
-      - script: |
-          uv run scripts/check_examples.py
-        displayName: "Check examples"
-
-      - script: |
-          uv run deptry .
-        displayName: "Run deptry"
 
   - job: CIMatrix
     displayName: "Matrix: OS × Python × profiles"
@@ -287,151 +221,124 @@ jobs:
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
-          uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_import.json
-        displayName: "Measure import time (base)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-
-      - task: PowerShell@2
-        displayName: "Measure import time (base, Windows)"
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-        inputs:
-          targetType: inline
-          script: |
-            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_import.json"
-
-      - script: |
-          set -e
-          export PATH="$(UV_BIN_DIR):$PATH"
-          uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_base_size.json
-        displayName: "Size benchmark (base)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-
-      - task: PowerShell@2
-        displayName: "Size benchmark (base, Windows)"
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-        inputs:
-          targetType: inline
-          script: |
-            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_base_size.json"
-
-      # CLI
-      - script: |
-          set -e
-          export PATH="$(UV_BIN_DIR):$PATH"
-          echo "=== Install profile: cli ==="
-          uv pip install -e ".[cli]"
-          uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK cli', sys.version.split()[0], platform.platform())"
-        displayName: "Install (cli)"
+          uv pip install -e ".[dev]"
+          echo "=== Quality (ruff, black --check, isort --check-only, pre-commit flake8, mypy) ==="
+          uv run ruff check ./hexai
+          uv run black --check ./hexai
+          uv run isort ./hexai --check-only
+          uv run pre-commit install
+          uv run pre-commit run flake8 --all-files
+          uv run mypy ./hexai
+        displayName: "Static checks [Unix]"
         condition: ne(variables['Agent.OS'], 'Windows_NT')
 
       - task: PowerShell@2
-        displayName: "Install (cli, Windows)"
+        displayName: "Static checks [Windows]"
         condition: eq(variables['Agent.OS'], 'Windows_NT')
         inputs:
           targetType: inline
           script: |
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv pip install -e ".[cli]"
-            & $uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
+            & "$(UV_BIN_DIR)\uv.exe" pip install -e ".[dev]"
+            & "$(UV_BIN_DIR)\uv.exe" run ruff check ./hexai
+            & "$(UV_BIN_DIR)\uv.exe" run black --check ./hexai
+            & "$(UV_BIN_DIR)\uv.exe" run isort ./hexai --check-only
+            & "$(UV_BIN_DIR)\uv.exe" run pre-commit install
+            & "$(UV_BIN_DIR)\uv.exe" run pre-commit run flake8 --all-files
+            & "$(UV_BIN_DIR)\uv.exe" run mypy ./hexai
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
-          uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_import.json
-        displayName: "Measure import time (cli)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-
-      - task: PowerShell@2
-        displayName: "Measure import time (cli, Windows)"
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-        inputs:
-          targetType: inline
-          script: |
-            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_import.json"
-
-      - script: |
-          set -e
-          export PATH="$(UV_BIN_DIR):$PATH"
-          uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_cli_size.json
-        displayName: "Size benchmark (cli)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-
-      - task: PowerShell@2
-        displayName: "Size benchmark (cli, Windows)"
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
-        inputs:
-          targetType: inline
-          script: |
-            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_cli_size.json"
-
-      # VIZ
-      - script: |
-          set -e
-          export PATH="$(UV_BIN_DIR):$PATH"
-          echo "=== Install profile: viz ==="
-          uv pip install -e ".[viz]"
-          uv run python -c "import importlib, sys, platform; importlib.import_module('$(PACKAGE_NAME)'); print('OK viz', sys.version.split()[0], platform.platform())"
-        displayName: "Install (viz)"
+          echo "Running tests with coverage..."
+          uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
+        displayName: "Run unit tests with coverage [Unix]"
         condition: ne(variables['Agent.OS'], 'Windows_NT')
 
       - task: PowerShell@2
-        displayName: "Install (viz, Windows)"
+        displayName: "Run unit tests with coverage [Windows]"
         condition: eq(variables['Agent.OS'], 'Windows_NT')
         inputs:
           targetType: inline
           script: |
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv pip install -e ".[viz]"
-            & $uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
+            & "$(UV_BIN_DIR)\uv.exe" run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
-          uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_import.json
-        displayName: "Measure import time (viz)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+          echo "Running Bandit for SAST..."
+          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
+          BANDIT_EXIT_CODE=$?
+          echo "Bandit exit code: $BANDIT_EXIT_CODE"
+          if [ $BANDIT_EXIT_CODE -ne 0 ]; then
+            echo "Bandit found issues or encountered an error. See bandit-report.json for details."
+            cat bandit-report.json
+            exit 1
+          fi
+        displayName: "Run Bandit [Unix]"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
 
       - task: PowerShell@2
-        displayName: "Measure import time (viz, Windows)"
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        displayName: "Run Bandit [Windows]"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
         inputs:
           targetType: inline
           script: |
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv run python scripts/measure_import_time.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_import.json"
+            & "$(UV_BIN_DIR)\uv.exe" run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
+            if ($LASTEXITCODE -ne 0) {
+              Get-Content bandit-report.json
+              exit 1
+            }
 
       - script: |
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
-          uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/$(Agent.OS)_py$(python)_viz_size.json
-        displayName: "Size benchmark (viz)"
-        condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+          uv run scripts/check_test_structure.py
+        displayName: "Check test structure consistency [Unix]"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
 
       - task: PowerShell@2
-        displayName: "Size benchmark (viz, Windows)"
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'), eq(variables['Build.SourceBranchName'], 'main'))
+        displayName: "Check test structure consistency [Windows]"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
         inputs:
           targetType: inline
           script: |
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
-            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
-            & $uv run python scripts/size_benchmark.py --package "$(PACKAGE_NAME)" --out "$(ARTIFACT_DIR)\$(Agent.OS)_py$(python)_viz_size.json"
+            & "$(UV_BIN_DIR)\uv.exe" run scripts/check_test_structure.py
 
-      - task: PublishBuildArtifacts@1
+      - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
+          uv run scripts/check_examples.py
+        displayName: "Check examples functionality [Unix]"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+
+      - task: PowerShell@2
+        displayName: "Check examples functionality [Windows]"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
         inputs:
-          PathtoPublish: "$(ARTIFACT_DIR)"
-          ArtifactName: "benchmarks_$(Agent.OS)_py$(python)"
-          publishLocation: "Container"
-        displayName: "Publish artifacts"
-        condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run scripts/check_examples.py
+
+      - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
+          uv run deptry .
+        displayName: "Run deptry [Unix]"
+        condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+      - task: PowerShell@2
+        displayName: "Run deptry [Windows]"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run deptry .

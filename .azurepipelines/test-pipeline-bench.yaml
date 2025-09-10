@@ -1,0 +1,70 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  PACKAGE_NAME: "hexai"
+  ARTIFACT_DIR: "artifacts"
+
+jobs:
+  - job: Benchmarks
+    displayName: "Benchmarks + publish artifacts (Ubuntu, Python 3.12)"
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+          addToPath: true
+        displayName: "Use Python 3.12"
+
+      - script: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+        displayName: "Install system deps"
+
+      - script: |
+          set -e
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv venv
+        displayName: "Install UV + venv "
+
+      - script: |
+          set -e
+          export PATH="$(UV_BIN_DIR):$PATH"
+          mkdir -p $(ARTIFACT_DIR)
+
+          # base
+          uv pip install -e .
+          uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/base_import.json
+          uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/base_size.json
+
+          # cli
+          uv pip install -e ".[cli]"
+          uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/cli_import.json
+          uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/cli_size.json
+
+          # viz
+          uv pip install -e ".[viz]"
+          uv run python scripts/measure_import_time.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/viz_import.json
+          uv run python scripts/size_benchmark.py --package $(PACKAGE_NAME) --out $(ARTIFACT_DIR)/viz_size.json
+        displayName: "Run benchmarks"
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: "$(ARTIFACT_DIR)"
+          ArtifactName: "benchmarks"
+          publishLocation: "Container"
+        displayName: "Publish artifacts"
