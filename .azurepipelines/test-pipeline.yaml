@@ -124,6 +124,16 @@ jobs:
             choco --version
             choco install graphviz -y --no-progress
 
+      - task: PowerShell@2
+        displayName: "Verify Graphviz (dot) on PATH [Windows]"
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        inputs:
+          targetType: inline
+          script: |
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin","C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) { if (Test-Path $p) { $env:PATH = "$p;$env:PATH" } }
+            dot -V
+
       - script: |
           set -e
           curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -263,7 +273,15 @@ jobs:
         inputs:
           targetType: inline
           script: |
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            chcp 65001 > $null
+            $env:PYTHONUTF8 = "1"
+            $env:PYTHONIOENCODING = "utf-8"
+
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin","C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) { if (Test-Path $p) { $env:PATH = "$p;$env:PATH" } }
+
             & "$(UV_BIN_DIR)\uv.exe" run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
 
       - script: |
@@ -309,7 +327,16 @@ jobs:
         inputs:
           targetType: inline
           script: |
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            chcp 65001 > $null
+            $env:PYTHONUTF8 = "1"
+            $env:PYTHONIOENCODING = "utf-8"
+
+            # Ensure Graphviz (dot) is on PATH
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin","C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) { if (Test-Path $p) { $env:PATH = "$p;$env:PATH" } }
+
             & "$(UV_BIN_DIR)\uv.exe" run scripts/check_test_structure.py
 
       - script: |
@@ -326,7 +353,17 @@ jobs:
         inputs:
           targetType: inline
           script: |
+            # Ensure UTF-8 to avoid UnicodeEncodeError with emojis
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            chcp 65001 > $null
+            $env:PYTHONUTF8 = "1"
+            $env:PYTHONIOENCODING = "utf-8"
+
+            # Ensure Graphviz (dot) is on PATH
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin","C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) { if (Test-Path $p) { $env:PATH = "$p;$env:PATH" } }
+
             & "$(UV_BIN_DIR)\uv.exe" run scripts/check_examples.py
 
       - script: |
