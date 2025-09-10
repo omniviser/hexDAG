@@ -222,6 +222,7 @@ jobs:
           set -e
           export PATH="$(UV_BIN_DIR):$PATH"
           uv pip install -e ".[dev]"
+          uv pip install -e ".[viz]"
           echo "=== Quality (ruff, black --check, isort --check-only, pre-commit flake8, mypy) ==="
           uv run ruff check ./hexai
           uv run black --check ./hexai
@@ -240,6 +241,7 @@ jobs:
           script: |
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
             & "$(UV_BIN_DIR)\uv.exe" pip install -e ".[dev]"
+            & "$(UV_BIN_DIR)\uv.exe" pip install -e ".[viz]"
             & "$(UV_BIN_DIR)\uv.exe" run ruff check ./hexai
             & "$(UV_BIN_DIR)\uv.exe" run black --check ./hexai
             & "$(UV_BIN_DIR)\uv.exe" run isort ./hexai --check-only
