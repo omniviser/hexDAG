@@ -1,14 +1,14 @@
 """Tests for YAML pipeline validator."""
 
-from hexai.agent_factory.yaml_validator import ValidationResult, YamlValidator
+from hexai.agent_factory.yaml_validator import ValidationReport, YamlValidator
 
 
-class TestValidationResult:
-    """Tests for ValidationResult class."""
+class TestValidationReport:
+    """Tests for ValidationReport class."""
 
     def test_empty_result_is_valid(self):
         """Test that empty result is valid."""
-        result = ValidationResult()
+        result = ValidationReport()
         assert result.is_valid
         assert len(result.errors) == 0
         assert len(result.warnings) == 0
@@ -16,14 +16,14 @@ class TestValidationResult:
 
     def test_result_with_errors_is_invalid(self):
         """Test that result with errors is invalid."""
-        result = ValidationResult()
+        result = ValidationReport()
         result.add_error("Test error")
         assert not result.is_valid
         assert len(result.errors) == 1
 
     def test_warnings_dont_affect_validity(self):
         """Test that warnings don't make result invalid."""
-        result = ValidationResult()
+        result = ValidationReport()
         result.add_warning("Test warning")
         result.add_suggestion("Test suggestion")
         assert result.is_valid

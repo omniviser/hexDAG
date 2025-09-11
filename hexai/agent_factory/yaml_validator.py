@@ -3,31 +3,46 @@
 from typing import Any
 
 
-class ValidationResult:
+class ValidationReport:
     """Container for validation results."""
 
     def __init__(self) -> None:
         """Initialize validation result."""
-        self.errors: list[str] = []
-        self.warnings: list[str] = []
-        self.suggestions: list[str] = []
+        self._errors: list[str] = []
+        self._warnings: list[str] = []
+        self._suggestions: list[str] = []
 
     @property
     def is_valid(self) -> bool:
         """Check if validation passed (no errors)."""
-        return len(self.errors) == 0
+        return len(self._errors) == 0
 
     def add_error(self, message: str) -> None:
         """Add an error message."""
-        self.errors.append(message)
+        self._errors.append(message)
 
     def add_warning(self, message: str) -> None:
         """Add a warning message."""
-        self.warnings.append(message)
+        self._warnings.append(message)
 
     def add_suggestion(self, message: str) -> None:
         """Add a suggestion message."""
-        self.suggestions.append(message)
+        self._suggestions.append(message)
+
+    @property
+    def errors(self) -> list[str]:
+        """Get all error messages."""
+        return self._errors
+
+    @property
+    def warnings(self) -> list[str]:
+        """Get all warning messages."""
+        return self._warnings
+
+    @property
+    def suggestions(self) -> list[str]:
+        """Get all suggestion messages."""
+        return self._suggestions
 
 
 class YamlValidator:
@@ -36,7 +51,7 @@ class YamlValidator:
     VALID_NODE_TYPES = {"function", "llm", "agent", "loop"}
     REQUIRED_NODE_FIELDS = {"id"}
 
-    def validate(self, config: Any) -> ValidationResult:
+    def validate(self, config: Any) -> ValidationReport:
         """Validate complete YAML configuration.
 
         Args
@@ -45,10 +60,10 @@ class YamlValidator:
 
         Returns
         -------
-            ValidationResult with errors, warnings, and suggestions
+            ValidationReport with errors, warnings, and suggestions
 
         """
-        result = ValidationResult()
+        result = ValidationReport()
 
         # Validate structure
         self._validate_structure(config, result)
@@ -61,7 +76,7 @@ class YamlValidator:
 
         return result
 
-    def _validate_structure(self, config: Any, result: ValidationResult) -> None:
+    def _validate_structure(self, config: Any, result: ValidationReport) -> None:
         """Validate overall YAML structure."""
         if not isinstance(config, dict):
             result.add_error("Configuration must be a dictionary")
@@ -78,7 +93,7 @@ class YamlValidator:
         if len(config["nodes"]) == 0:
             result.add_warning("Pipeline has no nodes defined")
 
-    def _validate_nodes(self, nodes: list[dict[str, Any]], result: ValidationResult) -> None:
+    def _validate_nodes(self, nodes: list[dict[str, Any]], result: ValidationReport) -> None:
         """Validate individual nodes."""
         node_ids = set()
 
@@ -107,7 +122,7 @@ class YamlValidator:
             self._validate_node_params(node_id, node_type, node.get("params", {}), result)
 
     def _validate_node_params(
-        self, node_id: str | None, node_type: str, params: dict[str, Any], result: ValidationResult
+        self, node_id: str | None, node_type: str, params: dict[str, Any], result: ValidationReport
     ) -> None:
         """Validate node-specific parameters."""
         if node_type == "function":
@@ -124,7 +139,7 @@ class YamlValidator:
                     f"Node '{node_id}': Agent nodes should have 'initial_prompt_template'"
                 )
 
-    def _validate_dependencies(self, nodes: list[dict[str, Any]], result: ValidationResult) -> None:
+    def _validate_dependencies(self, nodes: list[dict[str, Any]], result: ValidationReport) -> None:
         """Validate node dependencies and check for cycles."""
         node_ids = {node.get("id") for node in nodes if node.get("id")}
         dependency_graph = {}
@@ -177,7 +192,7 @@ class YamlValidator:
 
         return False
 
-    def _validate_field_mappings(self, config: dict[str, Any], result: ValidationResult) -> None:
+    def _validate_field_mappings(self, config: dict[str, Any], result: ValidationReport) -> None:
         """Validate field mapping configurations."""
         common_mappings = config.get("common_field_mappings", {})
 

@@ -124,15 +124,21 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
-            field_definitions = {}
+            field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                field_definitions[field_name] = field_type
+                # Pydantic v2 requires (type, default) tuple for field definitions
+                # Use ... (Ellipsis) to indicate required field
+                field_definitions[field_name] = (field_type, ...)
 
+            # create_model returns Type[BaseModel]
             return create_model(name, **field_definitions)
 
         # Handle primitive types - create a simple wrapper model
         if isinstance(schema, type):
             return create_model(name, value=(schema, ...))
+
+        # If we get here, schema is an unexpected type
+        return None  # type: ignore[unreachable]
 
     def create_node_with_mapping(
         self,
