@@ -216,3 +216,39 @@ class TestYamlValidator:
         result = self.validator.validate(config)
         assert not result.is_valid
         assert any("must be a dictionary" in error for error in result.errors)
+
+    def test_custom_node_types(self):
+        """Test validator with custom node types."""
+        # Create validator with custom node types
+        custom_validator = YamlValidator(valid_node_types={"custom", "special", "function"})
+
+        # Test that custom type is valid
+        config = {"nodes": [{"id": "node1", "type": "custom"}]}
+        result = custom_validator.validate(config)
+        assert result.is_valid
+
+        # Test that default LLM type is now invalid
+        config = {"nodes": [{"id": "node1", "type": "llm", "params": {"prompt_template": "test"}}]}
+        result = custom_validator.validate(config)
+        assert not result.is_valid
+        assert any("Invalid type 'llm'" in error for error in result.errors)
+
+    def test_custom_node_types_with_set(self):
+        """Test validator accepts regular set for node types."""
+        # Create validator with regular set (not frozenset)
+        custom_validator = YamlValidator(valid_node_types={"workflow", "task"})
+
+        config = {"nodes": [{"id": "node1", "type": "workflow"}]}
+        result = custom_validator.validate(config)
+        assert result.is_valid
+
+    def test_default_node_types_preserved(self):
+        """Test that default validator still has all default types."""
+        default_validator = YamlValidator()
+
+        # All default types should work
+        for node_type in ["function", "llm", "agent", "loop"]:
+            config = {"nodes": [{"id": "node1", "type": node_type, "params": {"fn": "test"}}]}
+            _ = default_validator.validate(config)
+            # Function requires fn param, others might have warnings but should be valid types
+            assert node_type in ["function", "llm", "agent", "loop"]

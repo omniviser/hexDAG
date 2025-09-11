@@ -4,7 +4,9 @@ from typing import Any
 
 
 class ValidationReport:
-    """Container for validation results."""
+    """Container for validation results with optimized memory usage."""
+
+    __slots__ = ("_errors", "_warnings", "_suggestions")
 
     def __init__(self) -> None:
         """Initialize validation result."""
@@ -46,13 +48,27 @@ class ValidationReport:
 
 
 class YamlValidator:
-    """Validates YAML pipeline configurations."""
+    """Validates YAML pipeline configurations with optimized performance."""
 
-    VALID_NODE_TYPES = {"function", "llm", "agent", "loop"}
-    REQUIRED_NODE_FIELDS = {"id"}
+    # Default valid node types - can be overridden in __init__
+    DEFAULT_NODE_TYPES = frozenset({"function", "llm", "agent", "loop"})
+    REQUIRED_NODE_FIELDS = frozenset({"id"})
+
+    def __init__(self, valid_node_types: set[str] | frozenset[str] | None = None) -> None:
+        """Initialize validator with configurable node types.
+
+        Args
+        ----
+            valid_node_types: Set of valid node type names. If None, uses defaults.
+        """
+        # Convert to frozenset for O(1) membership testing and immutability
+        if valid_node_types is None:
+            self.valid_node_types = self.DEFAULT_NODE_TYPES
+        else:
+            self.valid_node_types = frozenset(valid_node_types)
 
     def validate(self, config: Any) -> ValidationReport:
-        """Validate complete YAML configuration.
+        """Validate complete YAML configuration with optimized caching.
 
         Args
         ----
@@ -69,9 +85,16 @@ class YamlValidator:
         self._validate_structure(config, result)
 
         if result.is_valid:
-            # Only validate nodes if structure is valid
-            self._validate_nodes(config.get("nodes", []), result)
-            self._validate_dependencies(config.get("nodes", []), result)
+            # Extract nodes once to avoid repeated lookups
+            nodes = config.get("nodes", [])
+
+            # Validate nodes and cache the IDs for reuse
+            node_ids = self._validate_nodes(nodes, result)
+
+            # Reuse cached node_ids for dependency validation
+            self._validate_dependencies_with_cache(nodes, result, node_ids)
+
+            # Validate field mappings
             self._validate_field_mappings(config, result)
 
         return result
@@ -93,15 +116,20 @@ class YamlValidator:
         if len(config["nodes"]) == 0:
             result.add_warning("Pipeline has no nodes defined")
 
-    def _validate_nodes(self, nodes: list[dict[str, Any]], result: ValidationReport) -> None:
-        """Validate individual nodes."""
+    def _validate_nodes(self, nodes: list[dict[str, Any]], result: ValidationReport) -> set[str]:
+        """Validate individual nodes and return the set of node IDs for reuse.
+
+        Returns
+        -------
+            Set of valid node IDs for caching and reuse in dependency validation
+        """
         node_ids = set()
 
         for i, node in enumerate(nodes):
-            # Check required fields
-            for field in self.REQUIRED_NODE_FIELDS:
-                if field not in node:
-                    result.add_error(f"Node {i}: Missing required field '{field}'")
+            # Check required fields efficiently using set difference
+            missing_fields = self.REQUIRED_NODE_FIELDS - node.keys()
+            for field in missing_fields:
+                result.add_error(f"Node {i}: Missing required field '{field}'")
 
             # Check node ID uniqueness
             node_id = node.get("id")
@@ -112,14 +140,16 @@ class YamlValidator:
 
             # Validate node type
             node_type = node.get("type", "function")
-            if node_type not in self.VALID_NODE_TYPES:
+            if node_type not in self.valid_node_types:
                 result.add_error(
                     f"Node '{node_id}': Invalid type '{node_type}'. "
-                    f"Valid types: {', '.join(self.VALID_NODE_TYPES)}"
+                    f"Valid types: {', '.join(sorted(self.valid_node_types))}"
                 )
 
             # Validate node-specific requirements
             self._validate_node_params(node_id, node_type, node.get("params", {}), result)
+
+        return node_ids
 
     def _validate_node_params(
         self, node_id: str | None, node_type: str, params: dict[str, Any], result: ValidationReport
@@ -139,9 +169,20 @@ class YamlValidator:
                     f"Node '{node_id}': Agent nodes should have 'initial_prompt_template'"
                 )
 
-    def _validate_dependencies(self, nodes: list[dict[str, Any]], result: ValidationReport) -> None:
-        """Validate node dependencies and check for cycles."""
-        node_ids = {node.get("id") for node in nodes if node.get("id")}
+    def _validate_dependencies_with_cache(
+        self, nodes: list[dict[str, Any]], result: ValidationReport, node_ids: set[str]
+    ) -> None:
+        """Validate node dependencies using cached node IDs and check for cycles.
+
+        Parameters
+        ----------
+        nodes : list[dict[str, Any]]
+            List of node configurations
+        result : ValidationReport
+            Report to add errors to
+        node_ids : set[str]
+            Cached set of valid node IDs from _validate_nodes
+        """
         dependency_graph = {}
 
         for node in nodes:
@@ -153,40 +194,48 @@ class YamlValidator:
             if not isinstance(deps, list):
                 deps = [deps]
 
-            # Check all dependencies exist
+            # Check all dependencies exist using cached node_ids
+            valid_deps = set()
             for dep in deps:
                 if dep not in node_ids:
                     result.add_error(f"Node '{node_id}': Dependency '{dep}' does not exist")
+                else:
+                    valid_deps.add(dep)
 
-            dependency_graph[node_id] = set(deps)
+            dependency_graph[node_id] = valid_deps
 
-        # Check for cycles
+        # Check for cycles using optimized algorithm
         if self._has_cycle(dependency_graph):
             result.add_error("Dependency cycle detected in pipeline")
 
     def _has_cycle(self, graph: dict[str, set[str]]) -> bool:
-        """Check if dependency graph has cycles using DFS."""
-        visited = set()
-        rec_stack = set()
+        """Check if dependency graph has cycles using optimized DFS with colors.
+
+        Uses integer colors for better performance than set operations:
+        - 0 (WHITE): Not visited
+        - 1 (GRAY): Currently being processed (in recursion stack)
+        - 2 (BLACK): Completely processed
+        """
+        # Use integers for colors (more efficient than set operations)
+        white, gray, black = 0, 1, 2
+        colors = {node: white for node in graph}
 
         def visit(node: str) -> bool:
-            if node in rec_stack:
-                return True  # Cycle detected
-            if node in visited:
-                return False
+            if colors[node] == gray:
+                return True  # Back edge found - cycle detected
+            if colors[node] == black:
+                return False  # Already processed
 
-            visited.add(node)
-            rec_stack.add(node)
-
+            colors[node] = gray
             for neighbor in graph.get(node, []):
                 if visit(neighbor):
                     return True
 
-            rec_stack.remove(node)
+            colors[node] = black
             return False
 
         for node in graph:
-            if node not in visited:
+            if colors[node] == white:
                 if visit(node):
                     return True
 
