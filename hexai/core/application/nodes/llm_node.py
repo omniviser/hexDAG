@@ -1,6 +1,6 @@
 """LLM node factory for creating LLM-based pipeline nodes."""
 
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ class LLMNode(BaseLLMNode):
         self,
         name: str,
         template: PromptInput,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
@@ -63,7 +63,7 @@ class LLMNode(BaseLLMNode):
         cls,
         name: str,
         template: PromptInput,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:

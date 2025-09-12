@@ -137,12 +137,15 @@ class YamlPipelineBuilder:
             # Create node using factory
             node = factory(node_id, **params)
 
+            # Ensure node is a NodeSpec
+            from hexai.core.domain.dag import NodeSpec
+
+            if not isinstance(node, NodeSpec):
+                raise TypeError(f"Factory {factory_name} did not return a NodeSpec")
+
             # Add dependencies
             if deps:
-                if isinstance(deps, list):
-                    node = node.after(*deps)
-                else:
-                    node = node.after(deps)
+                node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
 
             graph.add(node)
 
@@ -244,11 +247,21 @@ class YamlPipelineBuilder:
 
         # Validate node field_mapping references
         nodes = config.get("nodes", [])
+        common_mappings = config.get("common_field_mappings", {})
+
+        # Collect all node names for validation
+        node_names = {node.get("id") for node in nodes if node.get("id")}
+
         for node_config in nodes:
             node_id = node_config.get("id")
             params = node_config.get("params", {})
             field_mapping = params.get("field_mapping")
+            input_mapping = params.get("input_mapping")
 
+            # Get dependencies for this node
+            dependencies = set(node_config.get("depends_on", []))
+
+            # Validate field_mapping
             if field_mapping:
                 # If it's a string, check it references a known common mapping
                 if isinstance(field_mapping, str):
@@ -266,6 +279,44 @@ class YamlPipelineBuilder:
                 else:
                     warnings.append(
                         f"Node '{node_id}' field_mapping must be a string reference or dict"
+                    )
+
+            # Validate input_mapping if present
+            if input_mapping:
+                warnings.extend(
+                    self._validate_mapping_references(
+                        node_id, input_mapping, node_names, dependencies, "input_mapping"
+                    )
+                )
+
+        return warnings
+
+    def _validate_mapping_references(
+        self,
+        node_id: str,
+        mapping: dict[str, Any],
+        node_names: set[str],
+        dependencies: set[str],
+        mapping_type: str,
+    ) -> list[str]:
+        """Validate mapping references and return warnings."""
+        warnings = []
+
+        for source_path in mapping.values():
+            # Skip validation for non-string values (like defaults)
+            if not isinstance(source_path, str):
+                continue
+
+            if "." in source_path:
+                node_name, _field_name = source_path.split(".", 1)
+                if node_name not in node_names:
+                    warnings.append(
+                        f"Node '{node_id}' {mapping_type} references unknown node '{node_name}'"
+                    )
+                elif node_name not in dependencies:
+                    warnings.append(
+                        f"Node '{node_id}' {mapping_type} references '{node_name}' "
+                        f"which is not a dependency"
                     )
 
         return warnings

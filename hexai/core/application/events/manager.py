@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections import defaultdict, deque
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .base import EventType, Observer, PipelineEvent
+from .base import EventType
+
+if TYPE_CHECKING:
+    from .base import Observer, PipelineEvent
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +101,9 @@ class PipelineEventManager:
 
         # Cache by node name if available
         if hasattr(event, "node_name"):
-            self._event_cache_by_node[event.node_name].append(event)
+            node_name = getattr(event, "node_name", None)
+            if node_name is not None:
+                self._event_cache_by_node[node_name].append(event)
 
     async def _process_batch(self) -> None:
         """Process pending batch of events."""
@@ -132,10 +138,8 @@ class PipelineEventManager:
         """Stop async event processing."""
         if self._processing_task:
             self._processing_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._processing_task
-            except asyncio.CancelledError:
-                pass
             self._processing_task = None
             self._async_queue = None
 
@@ -209,7 +213,9 @@ class PipelineEventManager:
         if not self._enable_caching:
             # Fallback to scanning if caching disabled
             events = [
-                e for e in self._events if hasattr(e, "node_name") and e.node_name == node_name
+                e
+                for e in self._events
+                if hasattr(e, "node_name") and getattr(e, "node_name", None) == node_name
             ]
             return events[:limit] if limit else events
 

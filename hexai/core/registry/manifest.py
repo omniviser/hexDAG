@@ -14,6 +14,7 @@ try:
 
     HAS_YAML = True
 except ImportError:
+    yaml = None  # type: ignore[assignment]
     HAS_YAML = False
 
 
@@ -56,11 +57,7 @@ class ComponentManifest:
         self._namespace_to_modules: dict[str, list[str]] = {}
 
         for entry in entries:
-            if isinstance(entry, dict):
-                manifest_entry = ManifestEntry(**entry)
-            else:
-                manifest_entry = entry
-
+            manifest_entry = ManifestEntry(**entry) if isinstance(entry, dict) else entry
             self.entries.append(manifest_entry)
 
             # Build namespace mapping
@@ -109,7 +106,7 @@ def load_manifest_from_yaml(yaml_path: str | Path) -> ComponentManifest:
     >>> manifest = load_manifest_from_yaml("hexai/core/component_manifest.yaml")
     >>> registry.bootstrap(manifest)
     """
-    if not HAS_YAML:
+    if not HAS_YAML or yaml is None:
         raise ImportError(
             "PyYAML is required to load YAML manifests. Install it with: pip install pyyaml"
         )
@@ -119,7 +116,7 @@ def load_manifest_from_yaml(yaml_path: str | Path) -> ComponentManifest:
     if not yaml_path.exists():
         raise FileNotFoundError(f"Manifest file not found: {yaml_path}")
 
-    with open(yaml_path, "r") as f:
+    with open(yaml_path) as f:
         data = yaml.safe_load(f)
 
     if not data or "components" not in data:

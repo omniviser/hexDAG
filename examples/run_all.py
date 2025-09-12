@@ -259,7 +259,7 @@ def main():
             "  python examples/run_all.py --example=05_event_system # Run specific example with output"
         )
         print("\nCategories:")
-        for category in EXAMPLE_CATEGORIES.keys():
+        for category in EXAMPLE_CATEGORIES:
             print(f"  • {category}: {len(EXAMPLE_CATEGORIES[category])} examples")
 
         print(f"\nTotal: {len(ALL_EXAMPLES)} examples available")

@@ -8,7 +8,8 @@ This module provides the LoopNode factory that creates nodes capable of:
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ...domain.dag import NodeSpec
 from ...registry import node

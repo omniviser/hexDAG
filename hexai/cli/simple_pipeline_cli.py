@@ -67,7 +67,7 @@ class PipelineSchema:
 
     def __init__(self, pipeline: Any):
         self.pipeline = pipeline
-        self._compiled_data = None
+        self._compiled_data: Any = None
         self._load_compiled_schemas()
 
     def _load_compiled_schemas(self) -> None:
@@ -79,7 +79,7 @@ class PipelineSchema:
 
             # Try to compile the pipeline to get schemas
             yaml_path = Path(self.pipeline._yaml_path)
-            self._compiled_data = compile_pipeline(yaml_path)  # type: ignore[assignment]
+            self._compiled_data = compile_pipeline(yaml_path)
         except Exception:
             # Compilation failed or not available
             self._compiled_data = None
@@ -97,17 +97,17 @@ class PipelineSchema:
 
     def get_output_schema(self) -> dict[str, Any]:
         """Get normalized output schema for any pipeline."""
-        if self._compiled_data:
-            # Find the output schema of the last node(s) in the pipeline
-            # For simplicity, assume the last node in execution_waves is the primary output
-            if self._compiled_data.execution_waves:  # type: ignore[unreachable]
-                last_wave_nodes = self._compiled_data.execution_waves[-1]
-                if last_wave_nodes:
-                    # Assuming single output node for now, or combine if multiple
-                    last_node_id = last_wave_nodes[0]
-                    for node_config in self._compiled_data.node_configs:
-                        if node_config["id"] == last_node_id:
-                            return node_config["params"].get("output_schema", {})
+        # Find the output schema of the last node(s) in the pipeline
+        # For simplicity, assume the last node in execution_waves is the primary output
+        if self._compiled_data and self._compiled_data.execution_waves:
+            last_wave_nodes = self._compiled_data.execution_waves[-1]
+            if last_wave_nodes:
+                # Assuming single output node for now, or combine if multiple
+                last_node_id = last_wave_nodes[0]
+                for node_config in self._compiled_data.node_configs:
+                    if node_config["id"] == last_node_id:
+                        output_schema = node_config["params"].get("output_schema", {})
+                        return dict(output_schema) if output_schema else {}
         # Fallback to existing methods
         try:
             output_type = self.pipeline.get_output_type()
@@ -321,7 +321,7 @@ class PipelineVisualizer:
 
             if not compiled_data:
                 # Use basic YAML data (fallback mode)
-                for node_id in dag.nodes.keys():
+                for node_id in dag.nodes:
                     node_type = basic_node_types.get(node_id, "unknown")
                     node_schemas = basic_node_types.get(node_id, {})
 
@@ -620,8 +620,8 @@ class PipelineCLI:
             success_count = 0
 
             for pipeline_info in pipelines:
+                pipeline_name = pipeline_info.get("name", "unknown")
                 try:
-                    pipeline_name = pipeline_info["name"]
                     pipeline = self.catalog.get_pipeline(pipeline_name)
                     if pipeline and pipeline._yaml_path:
                         compile_single(pipeline._yaml_path)

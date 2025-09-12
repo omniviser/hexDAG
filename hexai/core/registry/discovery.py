@@ -9,13 +9,26 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
-from types import ModuleType
-from typing import TYPE_CHECKING, Callable
-
-from hexai.core.registry.models import DecoratorMetadata
+from types import ModuleType  # noqa: TC003
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from hexai.core.registry.models import DecoratorMetadata
     from hexai.core.registry.registry import ComponentRegistry as RegistryProtocol
+else:
+    # Runtime imports - needed for actual execution
+    from collections.abc import Callable  # noqa: TC003
+
+    from hexai.core.registry.models import DecoratorMetadata  # noqa: TC001
+
+
+class ComponentWithMetadata(Protocol):
+    """Protocol for components with HexDAG metadata."""
+
+    __hexdag_metadata__: DecoratorMetadata
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +65,14 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
 
         obj = getattr(module, name)
 
-        # Check if object has our metadata marker
-        if hasattr(obj, "__hexdag_metadata__"):
-            # Only register classes and callables defined in this module
-            if inspect.isclass(obj) or callable(obj):
-                # Check if it's from this module or a submodule
-                obj_module = getattr(obj, "__module__", None)
-                if obj_module and (
-                    obj_module == module.__name__ or obj_module.startswith(module.__name__ + ".")
-                ):
-                    components.append((name, obj))
+        # Check if object has our metadata marker and is a class or callable
+        if hasattr(obj, "__hexdag_metadata__") and (inspect.isclass(obj) or callable(obj)):
+            # Check if it's from this module or a submodule
+            obj_module = getattr(obj, "__module__", None)
+            if obj_module and (
+                obj_module == module.__name__ or obj_module.startswith(module.__name__ + ".")
+            ):
+                components.append((name, obj))
 
     return components
 
@@ -113,7 +124,8 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
         # Type guard - we know from discover_components that these have metadata
         if not hasattr(component, "__hexdag_metadata__"):
             continue
-        metadata: DecoratorMetadata = component.__hexdag_metadata__
+        # Use getattr to access dynamic attribute (type checkers can't verify this)
+        metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
         meta_name = metadata.name
         meta_type = metadata.type
         meta_subtype = metadata.subtype

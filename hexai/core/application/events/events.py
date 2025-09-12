@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Type
+from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
 
 from .base import EventType, PipelineEvent
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _init_event(event_type: EventType, session_id: str = "default") -> Callable[[Any], None]:
@@ -307,11 +311,11 @@ class ToolCompletedEvent(PipelineEvent):
 # --- Performance Optimizations ---
 
 # Cache of TypeAdapters for event types
-_event_adapters: dict[Type[PipelineEvent], TypeAdapter] = {}
+_event_adapters: dict[type[PipelineEvent], TypeAdapter] = {}
 
 
 @lru_cache(maxsize=32)
-def get_event_adapter(event_class: Type[PipelineEvent]) -> TypeAdapter:
+def get_event_adapter(event_class: type[PipelineEvent]) -> TypeAdapter:
     """Get or create a cached TypeAdapter for an event class.
 
     This provides significant performance improvements for:
@@ -355,9 +359,9 @@ def validate_event(event_data: dict[str, Any]) -> PipelineEvent:
     raise ValueError(f"Unknown event type: {event_type}")
 
 
-def get_event_class(event_type: EventType) -> Type[PipelineEvent] | None:
+def get_event_class(event_type: EventType) -> type[PipelineEvent] | None:
     """Get event class for a given event type."""
-    event_class_map: dict[EventType, Type[PipelineEvent]] = {
+    event_class_map: dict[EventType, type[PipelineEvent]] = {
         EventType.NODE_STARTED: NodeStartedEvent,
         EventType.NODE_COMPLETED: NodeCompletedEvent,
         EventType.NODE_FAILED: NodeFailedEvent,
@@ -523,13 +527,12 @@ class BulkEventProcessor:
             events_by_type[event_type].append(event_data)
 
         # Process each type in batch
-        results = []
+        results: list[PipelineEvent] = []
         for event_type, batch in events_by_type.items():
             event_class = get_event_class(event_type)
             if event_class:
                 adapter = get_event_adapter(event_class)
-                for event_data in batch:
-                    results.append(adapter.validate_python(event_data))
+                results.extend(adapter.validate_python(event_data) for event_data in batch)
 
         return results
 

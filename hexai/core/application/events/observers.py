@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from collections import defaultdict
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from .base import PipelineEvent, SyncObserver
 from .events import (
@@ -21,6 +21,9 @@ from .events import (
     ToolCompletedEvent,
     ValidationWarningEvent,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
