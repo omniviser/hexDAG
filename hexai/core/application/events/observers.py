@@ -120,7 +120,7 @@ class MetricsObserver(SyncObserver):
             logger.info("📊 Pipeline Execution Metrics:")
             logger.info("   Total Time: %.2fs", event.total_execution_time)
             logger.info(
-                f"   Nodes Completed: {metrics['completed_nodes']}/{metrics['total_nodes']}"
+                "   Nodes Completed: %d/%d", metrics["completed_nodes"], metrics["total_nodes"]
             )
             logger.info("   Success Rate: %.1f%%", metrics["success_rate"])
             logger.info("   Errors: %d", metrics["error_count"])
@@ -230,7 +230,10 @@ class NodeObserver(SyncObserver):
             deps_str = f" (deps: {event.dependencies})" if event.dependencies else ""
             self.logger.log(
                 self.log_level,
-                f"🔄 Node '{event.node_name}' started in wave {event.wave_index}{deps_str}",
+                "🔄 Node '%s' started in wave %d%s",
+                event.node_name,
+                event.wave_index,
+                deps_str,
             )
 
     def _handle_node_completed(self, event: PipelineEvent) -> None:
@@ -248,7 +251,10 @@ class NodeObserver(SyncObserver):
             result_info = f" -> {type(event.result).__name__}"
             self.logger.log(
                 self.log_level,
-                f"✅ Node '{event.node_name}' completed in {event.execution_time:.2f}s{result_info}",
+                "✅ Node '%s' completed in %.2fs%s",
+                event.node_name,
+                event.execution_time,
+                result_info,
             )
 
             # Log wave progress
@@ -267,8 +273,11 @@ class NodeObserver(SyncObserver):
                 )
 
             self.logger.error(
-                f"❌ Node '{event.node_name}' failed in wave {event.wave_index}: "
-                f"{type(event.error).__name__}: {event.error}"
+                "❌ Node '%s' failed in wave %d: %s: %s",
+                event.node_name,
+                event.wave_index,
+                type(event.error).__name__,
+                event.error,
             )
 
     def _handle_llm_prompt_generated(self, event: PipelineEvent) -> None:
@@ -289,8 +298,11 @@ class NodeObserver(SyncObserver):
             template_info = f" (template: {event.template[:50]}...)" if event.template else ""
             self.llm_logger.log(
                 self.log_level,
-                f"📝 LLM prompt generated for node '{event.node_name}'{template_info} "
-                f"({len(event.messages)} messages, {interaction['total_prompt_length']} chars)",
+                "📝 LLM prompt generated for node '%s'%s (%d messages, %d chars)",
+                event.node_name,
+                template_info,
+                len(event.messages),
+                interaction["total_prompt_length"],
             )
 
             if self.log_level <= logging.DEBUG:
@@ -318,8 +330,9 @@ class NodeObserver(SyncObserver):
 
             self.llm_logger.log(
                 self.log_level,
-                f"🤖 LLM response received for node '{event.node_name}' "
-                f"({event.response_length or len(event.response)} chars)",
+                "🤖 LLM response received for node '%s' (%d chars)",
+                event.node_name,
+                event.response_length or len(event.response),
             )
 
             if self.log_level <= logging.DEBUG:
@@ -330,8 +343,10 @@ class NodeObserver(SyncObserver):
         if isinstance(event, ToolCalledEvent) and self.track_llm_details:
             self.llm_logger.log(
                 self.log_level,
-                f"🔧 Tool '{event.tool_name}' called from node '{event.node_name}' "
-                f"(params: {event.tool_params})",
+                "🔧 Tool '%s' called from node '%s' (params: %s)",
+                event.tool_name,
+                event.node_name,
+                event.tool_params,
             )
 
     def _handle_tool_completed(self, event: PipelineEvent) -> None:
@@ -339,8 +354,11 @@ class NodeObserver(SyncObserver):
         if isinstance(event, ToolCompletedEvent) and self.track_llm_details:
             self.llm_logger.log(
                 self.log_level,
-                f"✅ Tool '{event.tool_name}' completed for node '{event.node_name}' "
-                f"({type(event.result).__name__} in {event.execution_time:.2f}s)",
+                "✅ Tool '%s' completed for node '%s' (%s in %.2fs)",
+                event.tool_name,
+                event.node_name,
+                type(event.result).__name__,
+                event.execution_time,
             )
 
     def _count_nodes_with_status(self, nodes: list[str], status: str) -> int:
@@ -361,8 +379,11 @@ class NodeObserver(SyncObserver):
             success_rate = (completed / total * 100) if total > 0 else 0
             self.logger.log(
                 self.log_level,
-                f"🌊 Wave {wave_index} completed: {completed}/{total} nodes successful "
-                f"({success_rate:.1f}% success rate)",
+                "🌊 Wave %d completed: %d/%d nodes successful (%.1f%% success rate)",
+                wave_index,
+                completed,
+                total,
+                success_rate,
             )
 
     def get_node_summary(self) -> dict[str, Any]:
