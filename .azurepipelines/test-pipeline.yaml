@@ -88,49 +88,57 @@ jobs:
         displayName: Install graphviz
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
           curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "UV installed at: $(which uv)"
+          echo "UV version: $(uv --version)"
         displayName: "Install UV"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
-          echo "Running Ruff linting with pyproject.toml configuration..."
-          uv run ruff check ./hexai --config pyproject.toml
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Installing dependencies with UV..."
+          uv sync
+          echo "Running Ruff linting..."
+          # Ruff automatically reads configuration from pyproject.toml
+          uv run ruff check ./hexai
         displayName: "Run Ruff linting (replaces flake8, isort)"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running Ruff formatting check..."
           uv run ruff format ./hexai --check
         displayName: "Run Ruff formatting check (replaces Black)"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running Mypy with pyproject.toml configuration..."
           uv run mypy ./hexai
         displayName: "Run Mypy"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running Pyright with pyproject.toml configuration..."
           uv run pyright ./hexai
         displayName: "Run Pyright"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running tests with pytest configuration from pyproject.toml..."
-          # The pytest configuration in pyproject.toml includes:
-          # - testpaths = ["tests"]
-          # - addopts = "--cov=hexai --cov-report=html --cov-report=term-missing"
-          # We override the report formats for Azure DevOps integration
+          # Pytest automatically reads configuration from pyproject.toml
           uv run pytest --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
-          echo "Running Bandit for SAST with pyproject.toml configuration..."
-          # Bandit configuration from pyproject.toml:
-          # exclude_dirs = ["tests", "examples"]
-          # skips = ["B101", "B601"]
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running Bandit for SAST..."
+          # Bandit reads configuration from pyproject.toml automatically
           uv run bandit -r ./hexai -f json -o bandit-report.json || {
               echo "Bandit found issues or encountered an error. See bandit-report.json for details."
               cat bandit-report.json
@@ -140,27 +148,30 @@ jobs:
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Checking test structure consistency..."
           uv run scripts/check_test_structure.py
         displayName: "Check test structure consistency"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Checking examples functionality..."
           uv run scripts/check_examples.py
         displayName: "Check examples functionality"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running deptry for dependency analysis..."
           uv run deptry .
         displayName: "Run deptry"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running Safety for dependency vulnerability scanning..."
-          # Safety configuration from pyproject.toml:
-          # audit-and-monitor = true
+          # Safety reads configuration from pyproject.toml automatically
           uv run safety check --output json > safety-report.json || {
               echo "Safety found vulnerabilities. See safety-report.json for details."
               cat safety-report.json
@@ -184,26 +195,23 @@ jobs:
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running yamllint for YAML config quality..."
           uv run yamllint -d relaxed .
         displayName: "Run yamllint - YAML config quality"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
-          echo "Running vulture for dead code detection with pyproject.toml configuration..."
-          # Vulture configuration from pyproject.toml:
-          # min_confidence = 90
-          # paths = ["hexai"]
-          # exclude = ["tests/", "examples/"]
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running vulture for dead code detection..."
+          # Vulture reads configuration from pyproject.toml automatically
           uv run vulture hexai/ --min-confidence 90
         displayName: "Run vulture - dead code detection"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
-          echo "Running radon for code complexity analysis with pyproject.toml configuration..."
-          # Radon configuration from pyproject.toml:
-          # exclude = "tests/*,examples/*"
-          # cc_min = "B"
-          # show_complexity = true
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running radon for code complexity analysis..."
+          # Radon configuration is read from pyproject.toml
           uv run radon cc hexai/ --min B --show-complexity
         displayName: "Run radon - code complexity analysis"
