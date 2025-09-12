@@ -7,7 +7,10 @@ from the YAML manifest. It's the entry point for application initialization.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from hexai.core.registry import registry
 from hexai.core.registry.manifest import get_default_manifest, load_manifest_from_yaml
