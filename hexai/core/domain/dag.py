@@ -461,14 +461,12 @@ class DirectedGraph:
 
                 # Check basic type compatibility
                 # For single dependencies only - multiple deps are handled by aggregation
-                if len(node_spec.deps) == 1:
-                    # Check if types are exactly the same
-                    if dep_node.out_model != node_spec.in_model:
-                        # Types don't match exactly - report incompatibility
-                        incompatibilities.append(
-                            f"Node '{node_name}' expects {node_spec.in_model.__name__} "
-                            f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
-                        )
+                if len(node_spec.deps) == 1 and dep_node.out_model != node_spec.in_model:
+                    # Types don't match exactly - report incompatibility
+                    incompatibilities.append(
+                        f"Node '{node_name}' expects {node_spec.in_model.__name__} "
+                        f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
+                    )
 
         if incompatibilities:
             raise SchemaCompatibilityError("; ".join(incompatibilities))

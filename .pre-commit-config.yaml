@@ -4,18 +4,18 @@ default_stages: [pre-commit]
 repos:
   # Ruff - Fast Python linter and formatter (replaces Black, isort, flake8)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.7
+    rev: v0.13.0
     hooks:
-      # Run the linter first
+      # Run the linter first - without --fix to catch all issues
       - id: ruff-check
-        args: [--fix, --config=pyproject.toml]
+        args: [ --fix,--config=pyproject.toml]
       # Run the formatter
       - id: ruff-format
         args: [--line-length=100]
 
   # Pyupgrade - Automatically upgrade Python syntax
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.19.1
+    rev: v3.20.0
     hooks:
       - id: pyupgrade
         args: [--py312-plus]
@@ -23,7 +23,7 @@ repos:
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         stages: [pre-commit]
@@ -50,12 +50,12 @@ repos:
         stages: [pre-commit]
 
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.23
+    rev: v0.24.1
     hooks:
       - id: validate-pyproject
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.17.1
+    rev: v1.18.1
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
@@ -73,7 +73,7 @@ repos:
 
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.10
+    rev: 1.8.6
     hooks:
       - id: bandit
         args: [-r, hexai]
@@ -81,7 +81,7 @@ repos:
 
   # Security - Dependency vulnerabilities
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
-    rev: v1.3.2
+    rev: v1.4.2
     hooks:
       - id: python-safety-dependencies-check
         files: requirements.*\.txt$
@@ -89,14 +89,14 @@ repos:
 
   # Secret detection
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.2
+    rev: v8.28.0
     hooks:
       - id: gitleaks
         stages: [pre-commit]
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+    rev: v1.37.1
     hooks:
       - id: yamllint
         args: [-d, relaxed]

@@ -527,13 +527,12 @@ class BulkEventProcessor:
             events_by_type[event_type].append(event_data)
 
         # Process each type in batch
-        results = []
+        results: list[PipelineEvent] = []
         for event_type, batch in events_by_type.items():
             event_class = get_event_class(event_type)
             if event_class:
                 adapter = get_event_adapter(event_class)
-                for event_data in batch:
-                    results.append(adapter.validate_python(event_data))
+                results.extend(adapter.validate_python(event_data) for event_data in batch)
 
         return results
 

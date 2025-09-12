@@ -163,11 +163,10 @@ class YamlValidator:
             if "prompt_template" not in params:
                 result.add_error(f"Node '{node_id}': LLM nodes require 'prompt_template' parameter")
 
-        elif node_type == "agent":
-            if "initial_prompt_template" not in params:
-                result.add_warning(
-                    f"Node '{node_id}': Agent nodes should have 'initial_prompt_template'"
-                )
+        elif node_type == "agent" and "initial_prompt_template" not in params:
+            result.add_warning(
+                f"Node '{node_id}': Agent nodes should have 'initial_prompt_template'"
+            )
 
     def _validate_dependencies_with_cache(
         self, nodes: list[dict[str, Any]], result: ValidationReport, node_ids: set[str]
@@ -234,12 +233,7 @@ class YamlValidator:
             colors[node] = black
             return False
 
-        for node in graph:
-            if colors[node] == white:
-                if visit(node):
-                    return True
-
-        return False
+        return any(colors[node] == white and visit(node) for node in graph)
 
     def _validate_field_mappings(self, config: dict[str, Any], result: ValidationReport) -> None:
         """Validate field mapping configurations."""
