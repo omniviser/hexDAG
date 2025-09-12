@@ -25,6 +25,7 @@ from hexai.core.registry.models import (
     InstanceFactory,
     NodeSubtype,
 )
+from hexai.core.registry.types import ClassComponent, FunctionComponent, InstanceComponent
 
 logger = logging.getLogger(__name__)
 
@@ -209,11 +210,12 @@ class ComponentRegistry:
     def register(
         self,
         name: str,
-        component: Any,
+        component: object,
         component_type: str,
         namespace: str = "user",
         privileged: bool = False,
-        **kwargs: Any,
+        subtype: NodeSubtype | str | None = None,
+        description: str = "",
     ) -> ComponentInfo:
         """Register a component in the registry.
 
@@ -234,7 +236,8 @@ class ComponentRegistry:
                 )
             namespace_str = self._normalize_namespace(namespace)
             component_type_enum = self._validate_component_type(component_type)
-            self._validate_component(name, component)
+            wrapped_component = self._wrap_component(component)
+            self._validate_component(name, wrapped_component)
 
             if namespace_str in self.PROTECTED_NAMESPACES and not privileged:
                 raise NamespacePermissionError(name, namespace_str)
@@ -247,10 +250,10 @@ class ComponentRegistry:
             metadata = ComponentMetadata(
                 name=name,
                 component_type=component_type_enum,
-                component=component,
+                component=wrapped_component,
                 namespace=namespace_str,
-                subtype=kwargs.get("subtype"),
-                description=kwargs.get("description", ""),
+                subtype=subtype,
+                description=description,
             )
 
             # Store component
@@ -317,13 +320,15 @@ class ComponentRegistry:
             # Search needed
             return name, None
 
-    def get(self, name: str, namespace: str | None = None, **kwargs: Any) -> Any:
+    def get(
+        self, name: str, namespace: str | None = None, init_params: dict[str, Any] | None = None
+    ) -> object:
         """Get and instantiate a component.
 
         This is a convenience wrapper around get_metadata() + instantiation.
         """
         metadata = self.get_metadata(name, namespace)
-        return InstanceFactory.create_instance(metadata.component, **kwargs)
+        return InstanceFactory.create_instance(metadata.component, init_params)
 
     def get_info(self, name: str, namespace: str | None = None) -> ComponentInfo:
         """Get detailed information about a component."""
@@ -442,7 +447,20 @@ class ComponentRegistry:
                 component_type, f"Invalid component type. Must be one of: {valid}"
             )
 
-    def _validate_component(self, name: str, component: Any) -> None:
+    def _wrap_component(
+        self, component: object
+    ) -> ClassComponent | FunctionComponent | InstanceComponent:
+        """Wrap raw component in appropriate type wrapper."""
+        if inspect.isclass(component):
+            return ClassComponent(value=component)
+        elif inspect.isfunction(component) or inspect.ismethod(component):
+            return FunctionComponent(value=component)
+        else:
+            return InstanceComponent(value=component)
+
+    def _validate_component(
+        self, name: str, component: ClassComponent | FunctionComponent | InstanceComponent
+    ) -> None:
         """Validate component name and value."""
         if not name or not isinstance(name, str):
             raise InvalidComponentError(
@@ -452,10 +470,10 @@ class ComponentRegistry:
         if not re.match(r"^[a-zA-Z0-9_]+$", name):
             raise InvalidComponentError(name, f"Component name must be alphanumeric, got '{name}'")
 
-        # No need to check for None - inspect.isclass and callable handle it
-        if not (inspect.isclass(component) or callable(component)):
+        # Component is already wrapped, so we just check it's one of our wrapper types
+        if not isinstance(component, (ClassComponent, FunctionComponent, InstanceComponent)):
             raise InvalidComponentError(
-                name, f"Component must be class or callable, got {type(component)}"
+                name, f"Component must be wrapped type, got {type(component)}"
             )
 
     def _get_metadata_internal(self, name: str, namespace: str) -> ComponentMetadata | None:

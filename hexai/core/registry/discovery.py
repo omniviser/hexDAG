@@ -9,29 +9,28 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any
+from types import ModuleType
+from typing import TYPE_CHECKING, Callable
 
 from hexai.core.registry.models import DecoratorMetadata
 
 if TYPE_CHECKING:
     from hexai.core.registry.registry import ComponentRegistry as RegistryProtocol
-else:
-    RegistryProtocol = Any
 
 logger = logging.getLogger(__name__)
 
 
-def discover_components(module: Any) -> list[tuple[str, Any]]:
+def discover_components(module: ModuleType) -> list[tuple[str, type | Callable | object]]:
     """Discover all components with __hexdag_metadata__ in a module.
 
     Parameters
     ----------
-    module : Any
+    module : ModuleType
         The module to scan for components.
 
     Returns
     -------
-    list[tuple[str, Any]]
+    list[tuple[str, type | Callable | object]]
         List of (name, component) tuples for all discovered components.
     """
     components = []
@@ -100,6 +99,9 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
     count = 0
 
     for _, component in components:
+        # Type guard - we know from discover_components that these have metadata
+        if not hasattr(component, "__hexdag_metadata__"):
+            continue
         metadata: DecoratorMetadata = component.__hexdag_metadata__
         meta_name = metadata.name
         meta_type = metadata.type

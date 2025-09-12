@@ -1,7 +1,7 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models and core event emission."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any, Type, cast
 
 from pydantic import BaseModel, create_model
 
@@ -124,11 +124,14 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
-            field_definitions = {}
+            # Pydantic requires (type, default) tuples for field definitions
+            field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                field_definitions[field_name] = field_type
+                # Use ... (Ellipsis) to indicate required field
+                field_definitions[field_name] = (field_type, ...)
 
-            return create_model(name, **field_definitions)
+            # Cast is safe here as create_model returns a BaseModel subclass
+            return cast(Type[BaseModel], create_model(name, **field_definitions))
 
         # Handle primitive types - create a simple wrapper model
         if isinstance(schema, type):

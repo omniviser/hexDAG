@@ -7,7 +7,7 @@ components. Registration happens during bootstrap via the manifest.
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, TypeVar
+from typing import Callable, TypeVar
 
 from hexai.core.registry.models import ComponentType, DecoratorMetadata, NodeSubtype
 
@@ -126,7 +126,7 @@ def make_component_decorator(
         *,
         namespace: str = "user",
         description: str | None = None,
-        **kwargs: Any,
+        **kwargs: str | None,  # Allows subtype override when needed
     ) -> Callable[[type[T]], type[T]]:
         # If subtype is provided via factory, it takes precedence
         actual_subtype = subtype or kwargs.get("subtype")

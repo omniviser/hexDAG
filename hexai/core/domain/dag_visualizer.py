@@ -329,7 +329,6 @@ class DAGVisualizer:
                     schema[field_name] = field_type
                 return schema
 
-            # Handle TypedDict
             elif hasattr(type_obj, "__annotations__"):
                 schema = {}
                 for field_name, field_type in type_obj.__annotations__.items():

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
+
+from hexai.core.registry.types import (
+    ClassComponent,
+    FunctionComponent,
+    InstanceComponent,
+    MetadataExtension,
+)
 
 
 class ComponentType(StrEnum):
@@ -64,12 +70,17 @@ class ComponentMetadata:
 
     name: str
     component_type: ComponentType
-    component: Any
+    component: ClassComponent | FunctionComponent | InstanceComponent
     namespace: str = "core"
     subtype: NodeSubtype | str | None = None
     description: str = ""
-    # Extensible metadata for future features
-    metadata_extensions: dict[str, Any] = field(default_factory=dict)
+    # Extensible metadata with strict typing
+    metadata_extensions: MetadataExtension = field(default_factory=MetadataExtension)
+
+    @property
+    def raw_component(self) -> Any:
+        """Get the raw unwrapped component (class, function, or instance)."""
+        return self.component.value
 
     @property
     def is_core(self) -> bool:
@@ -101,7 +112,10 @@ class InstanceFactory:
     """
 
     @staticmethod
-    def create_instance(component: Any, **kwargs: Any) -> Any:
+    def create_instance(
+        component: ClassComponent | FunctionComponent | InstanceComponent,
+        init_params: dict[str, Any] | None = None,
+    ) -> object:
         """Create instance from component.
 
         For classes: Creates new instance with provided kwargs
@@ -110,14 +124,14 @@ class InstanceFactory:
 
         Parameters
         ----------
-        component : Any
-            Component class, function, or instance
-        **kwargs : Any
+        component : ClassComponent | FunctionComponent | InstanceComponent
+            Component wrapper with type information
+        init_params : dict[str, Any] | None
             Arguments for class instantiation (ignored for functions/instances)
 
         Returns
         -------
-        Any
+        object
             Component instance or callable
 
         Examples
@@ -126,21 +140,19 @@ class InstanceFactory:
         >>> class MyNode:
         ...     def __init__(self, value=42):
         ...         self.value = value
-        >>> instance = InstanceFactory.create_instance(MyNode, value=100)
+        >>> component = ClassComponent(value=MyNode)
+        >>> instance = InstanceFactory.create_instance(component, value=100)
         >>> assert instance.value == 100
 
         >>> # Function - returned as-is
         >>> def my_tool(x): return x * 2
-        >>> tool = InstanceFactory.create_instance(my_tool)
+        >>> component = FunctionComponent(value=my_tool)
+        >>> tool = InstanceFactory.create_instance(component)
         >>> assert tool(5) == 10
         """
-        # Functions and methods are returned as-is (not called)
-        if inspect.isfunction(component) or inspect.ismethod(component):
-            return component
-
-        # If it's not a class, it's already an instance
-        if not inspect.isclass(component):
-            return component
-
-        # It's a class - instantiate it with kwargs
-        return component(**kwargs)
+        if isinstance(component, ClassComponent) and init_params:
+            return component.instantiate(**init_params)
+        elif isinstance(component, (FunctionComponent, InstanceComponent)):
+            return component.instantiate()
+        else:
+            return component.instantiate()

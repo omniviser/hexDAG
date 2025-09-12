@@ -8,7 +8,8 @@ the bootstrap phase and for development mode.
 from __future__ import annotations
 
 from threading import RLock
-from typing import Any, Literal
+from types import TracebackType
+from typing import Literal
 
 
 class ReaderContext:
@@ -22,7 +23,12 @@ class ReaderContext:
         self._lock.acquire_read()
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
         """Exit the read lock context."""
         self._lock.release_read()
         return False
@@ -39,7 +45,12 @@ class WriterContext:
         self._lock.acquire_write()
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
         """Exit the write lock context."""
         self._lock.release_write()
         return False

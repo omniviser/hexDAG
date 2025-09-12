@@ -113,6 +113,12 @@ class YamlPipelineBuilder:
             factory_name = f"{node_type}_node"
             factory = registry.get(factory_name, namespace="core")
 
+            # Ensure factory is callable
+            if not callable(factory):
+                raise TypeError(
+                    f"Expected callable factory for {factory_name}, got {type(factory)}"
+                )
+
             # Create node using factory
             node = factory(node_id, **params)
 

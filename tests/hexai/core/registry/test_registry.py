@@ -58,7 +58,7 @@ class TestComponentRegistry:
         assert instance.value == 42
 
         # Get with custom args
-        instance = registry.get("test_comp", namespace="test", value=100)
+        instance = registry.get("test_comp", namespace="test", init_params={"value": 100})
         assert instance.value == 100
 
     def test_namespace_searching(self):
@@ -393,7 +393,7 @@ class TestImprovedAPI:
         # Getting metadata should NOT instantiate
         metadata = self.registry.get_metadata("tracked")
         assert instantiation_count == 0
-        assert metadata.component is TrackedComponent
+        assert metadata.raw_component is TrackedComponent
         assert metadata.name == "tracked"
 
         # Using get() should instantiate
@@ -459,8 +459,8 @@ class TestImprovedAPI:
         metadata1 = self.registry.get_metadata("ns1:tool")
         metadata2 = self.registry.get_metadata("ns2:tool")
 
-        assert metadata1.component() == 1
-        assert metadata2.component() == 2
+        assert metadata1.raw_component() == 1
+        assert metadata2.raw_component() == 2
 
     def test_metadata_lookup_error_handling(self):
         """Test error handling in metadata lookup."""
