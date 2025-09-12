@@ -7,7 +7,10 @@ components. Registration happens during bootstrap via the manifest.
 from __future__ import annotations
 
 import re
-from typing import Callable, TypeVar
+from typing import TYPE_CHECKING, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from hexai.core.registry.models import ComponentType, DecoratorMetadata, NodeSubtype
 

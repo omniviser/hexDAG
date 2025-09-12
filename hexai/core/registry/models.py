@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable  # noqa: TC003 - needed at runtime for TypeAdapter
 from enum import StrEnum
-from typing import Annotated, Any, Callable, Literal, Protocol, TypeVar
+from typing import Annotated, Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter, field_validator
 
