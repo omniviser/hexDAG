@@ -12,7 +12,6 @@ from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator, passthrough_validator, strict_validator
 
 
 async def process_strict(input_data: str) -> dict:
@@ -97,9 +96,9 @@ async def main():
         print("-" * 60)
 
         # Create orchestrators with different strategies
-        strict_orchestrator = Orchestrator(validator=strict_validator())
-        coerce_orchestrator = Orchestrator(validator=coerce_validator())
-        passthrough_orchestrator = Orchestrator(validator=passthrough_validator())
+        strict_orchestrator = Orchestrator(strict_validation=True)
+        coerce_orchestrator = Orchestrator(strict_validation=False)
+        passthrough_orchestrator = Orchestrator(strict_validation=False)
 
         # Create graphs for each strategy
         strict_graph = DirectedGraph()
@@ -107,8 +106,8 @@ async def main():
         passthrough_graph = DirectedGraph()
 
         # Add nodes
-        strict_node = NodeSpec("process", process_strict, in_type=str)
-        coerce_node = NodeSpec("process", process_coerce, in_type=int)
+        strict_node = NodeSpec("process", process_strict, in_model=None, out_model=None)
+        coerce_node = NodeSpec("process", process_coerce, in_model=None, out_model=None)
         passthrough_node = NodeSpec("process", process_passthrough)
 
         strict_graph.add(strict_node)

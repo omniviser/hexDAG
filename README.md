@@ -67,6 +67,16 @@ nodes:
         Provide actionable insights.
       max_steps: 3
     depends_on: [researcher]
+
+  - type: function
+    id: formatter
+    params:
+      fn: format_report
+      input_mapping:
+        title: "researcher.topic"
+        findings: "researcher.results"
+        insights: "analyst.insights"
+    depends_on: [researcher, analyst]
 ```
 
 Run it with Python:
@@ -146,7 +156,14 @@ uv run pre-commit run --all-files
 ### 🔧 Low-Code Development
 - YAML-based workflow definitions
 - Template system for reusable patterns
+- Automatic field mapping between nodes
 - Visual workflow editor (coming soon)
+
+### 🔄 Smart Data Mapping
+- **Automatic Input Mapping**: Define how data flows between nodes with simple mappings
+- **Nested Field Extraction**: Access deeply nested data with dot notation
+- **Type Inference**: Automatic type detection from Pydantic models
+- **Flexible Patterns**: Support for passthrough, rename, and prefixed mappings
 
 ## 🤝 Community
 

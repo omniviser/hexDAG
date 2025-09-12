@@ -17,7 +17,6 @@ from typing import Any
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.core.domain.dag_visualizer import DAGVisualizer
-from hexai.core.validation import coerce_validator
 
 
 async def data_ingestion(input_data: str) -> dict:
@@ -233,7 +232,7 @@ async def demonstrate_execution_analysis():
     print("=" * 40)
 
     graph = create_complex_pipeline()
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     print("\n🚀 Executing pipeline for performance analysis...")
 

@@ -8,9 +8,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Literal, TypeVar
 
-from hexai.core.validation import can_convert_schema
+from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class ValidationError(Exception):
+    """Validation error for all validation failures in the domain."""
+
+    pass
 
 
 class Color(Enum):
@@ -28,7 +37,7 @@ class NodeSpec:
     A NodeSpec defines:
     - A unique name within the DAG
     - The function to execute (agent)
-    - Input/output types for validation
+    - Input/output types for validation (Pydantic models or legacy types)
     - Dependencies (explicit and computed)
     - Arbitrary metadata parameters
 
@@ -37,8 +46,8 @@ class NodeSpec:
 
     name: str
     fn: Callable[..., Any]
-    in_type: type | None = None
-    out_type: type | None = None
+    in_model: type[BaseModel] | None = None  # Pydantic model for input validation
+    out_model: type[BaseModel] | None = None  # Pydantic model for output validation
     deps: set[str] = field(default_factory=set)
     params: dict[str, Any] = field(default_factory=dict)
 
@@ -46,6 +55,99 @@ class NodeSpec:
         """Ensure deps and params are immutable."""
         object.__setattr__(self, "deps", frozenset(self.deps))
         object.__setattr__(self, "params", MappingProxyType(self.params))
+
+    def _validate_with_model(
+        self, data: Any, model: type[T] | None, validation_type: Literal["input", "output"]
+    ) -> T | Any:
+        """Validate data using the provided Pydantic model.
+
+        Parameters
+        ----------
+        data : Any
+            Data to validate
+        model : Type[T] | None
+            Pydantic model to validate against
+        validation_type : Literal["input", "output"]
+            Type of validation for error messages
+
+        Returns
+        -------
+        T | Any
+            Validated model instance or original data if no model
+
+        Raises
+        ------
+        ValidationError
+            If validation fails
+        """
+        if model is None:
+            # No validation needed
+            return data
+
+        # If already the correct type, return as-is
+        if isinstance(data, model):
+            return data
+
+        try:
+            # Check if data is a Pydantic model (more robust than hasattr)
+            if isinstance(data, BaseModel):
+                # Data is a Pydantic model, convert to dict first
+                return model.model_validate(data.model_dump())
+            else:
+                # Data is dict or other type
+                return model.model_validate(data)
+        except PydanticValidationError as e:
+            # Format Pydantic validation errors nicely
+            error_msg = (
+                f"{validation_type.capitalize()} validation failed for node '{self.name}': {e}"
+            )
+            raise ValidationError(error_msg) from e
+        except Exception as e:
+            # Other unexpected errors
+            error_msg = (
+                f"{validation_type.capitalize()} validation error for node '{self.name}': {e}"
+            )
+            raise ValidationError(error_msg) from e
+
+    def validate_input(self, data: Any) -> BaseModel | Any:
+        """Validate and convert input data using Pydantic model if available.
+
+        Parameters
+        ----------
+        data : Any
+            Input data to validate
+
+        Returns
+        -------
+        BaseModel | Any
+            Validated/converted data
+
+        Raises
+        ------
+        ValidationError
+            If validation fails
+        """
+        return self._validate_with_model(data, self.in_model, "input")
+
+    def validate_output(self, data: Any) -> BaseModel | Any:
+        """Validate and convert output data using Pydantic model if available.
+
+        Parameters
+        ----------
+        data : Any
+            Output data to validate
+
+        Returns
+        -------
+        BaseModel | Any
+            Validated/converted data
+
+        Raises
+        ------
+        ValidationError
+            If validation fails
+        """
+        return self._validate_with_model(data, self.out_model, "output")
 
     def after(self, *node_names: str) -> "NodeSpec":
         """Create a new NodeSpec that depends on the specified nodes.
@@ -68,8 +170,8 @@ class NodeSpec:
         return NodeSpec(
             name=self.name,
             fn=self.fn,
-            in_type=self.in_type,
-            out_type=self.out_type,
+            in_model=self.in_model,
+            out_model=self.out_model,
             deps=new_deps,
             params=dict(self.params),
         )
@@ -78,13 +180,11 @@ class NodeSpec:
         """Readable representation for debugging."""
         deps_str = f", deps={sorted(self.deps)}" if self.deps else ""
         types_str = ""
-        if self.in_type or self.out_type:
-            in_name = (
-                getattr(self.in_type, "__name__", str(self.in_type)) if self.in_type else "Any"
-            )
-            out_name = (
-                getattr(self.out_type, "__name__", str(self.out_type)) if self.out_type else "Any"
-            )
+
+        # Show Pydantic models if available
+        if self.in_model or self.out_model:
+            in_name = self.in_model.__name__ if self.in_model else "Any"
+            out_name = self.out_model.__name__ if self.out_model else "Any"
             types_str = f", {in_name} -> {out_name}"
 
         params_str = f", params={dict(self.params)}" if self.params else ""
@@ -129,9 +229,13 @@ class DirectedGraph:
     - Node management with cycle detection
     - Dependency validation
     - Topological sorting into execution waves
+    - Optional Pydantic model compatibility checking
     """
 
-    def __init__(self, nodes: list[NodeSpec] | None = None) -> None:
+    def __init__(
+        self,
+        nodes: list[NodeSpec] | None = None,
+    ) -> None:
         """Initialize DirectedGraph, optionally with a list of nodes.
 
         Args
@@ -249,19 +353,24 @@ class DirectedGraph:
             raise KeyError(f"Node '{node_name}' not found in graph")
         return self._forward_edges.get(node_name, set()).copy()
 
-    def validate(self) -> None:
-        """Validate the DAG structure.
+    def validate(self, check_type_compatibility: bool = True) -> None:
+        """Validate the DAG structure and optionally type compatibility.
 
         Checks for:
         - Missing dependencies
         - Cycles in the graph
-        - Schema compatibility between connected nodes
+        - Type compatibility between connected nodes (optional)
+
+        Parameters
+        ----------
+        check_type_compatibility : bool
+            If True, validates that connected nodes have compatible types
 
         Raises
         ------
             MissingDependencyError: If any node depends on a non-existent node
             CycleDetectedError: If a cycle is detected in the graph
-            SchemaCompatibilityError: If connected nodes have incompatible schemas
+            SchemaCompatibilityError: If connected nodes have incompatible types
         """
         # Check for missing dependencies
         missing_deps: list[str] = []
@@ -278,8 +387,9 @@ class DirectedGraph:
         # Check for cycles using DFS
         self._detect_cycles()
 
-        # Check schema compatibility between connected nodes
-        self._validate_schema_compatibility()
+        # Check type compatibility between connected nodes
+        if check_type_compatibility:
+            self._validate_type_compatibility()
 
     def _detect_cycles(self) -> None:
         """Detect cycles using depth-first search with three states.
@@ -320,31 +430,48 @@ class DirectedGraph:
             if colors[node] == Color.WHITE:
                 dfs(node, [])
 
-    def _validate_schema_compatibility(self) -> None:
-        """Validate that connected nodes have compatible input/output schemas."""
+    def _validate_type_compatibility(self) -> None:
+        """Validate type compatibility between connected nodes.
+
+        For nodes with multiple dependencies, we check if the dependent node
+        can handle the aggregated output types from its dependencies.
+
+        Raises
+        ------
+            SchemaCompatibilityError: If connected nodes have incompatible types
+        """
+        incompatibilities = []
+
         for node_name, node_spec in self.nodes.items():
-            # Skip nodes with input mapping - validation framework handles conversion
-            if node_spec.params.get("input_mapping"):
+            if not node_spec.deps:
                 continue
 
-            # Skip nodes with multiple dependencies - orchestrator handles aggregation
-            if len(node_spec.deps) > 1 and node_spec.in_type is dict:
+            # Check if this node has input validation defined
+            if not node_spec.in_model:
+                # No input model means it accepts Any, so skip validation
                 continue
 
-            # Check each dependency connection
+            # For each dependency, check if output is compatible
             for dep_name in node_spec.deps:
                 dep_node = self.nodes[dep_name]
 
-                # Skip if either node doesn't specify types
-                if node_spec.in_type is None or dep_node.out_type is None:
+                # If dependency has no output model, we can't validate
+                if not dep_node.out_model:
                     continue
 
-                # Check compatibility using validation framework
-                if not can_convert_schema(dep_node.out_type, node_spec.in_type):
-                    raise SchemaCompatibilityError(
-                        f"Schema mismatch: Node '{dep_name}' outputs {dep_node.out_type} "
-                        f"but node '{node_name}' expects {node_spec.in_type}"
-                    )
+                # Check basic type compatibility
+                # For single dependencies only - multiple deps are handled by aggregation
+                if len(node_spec.deps) == 1:
+                    # Check if types are exactly the same
+                    if dep_node.out_model != node_spec.in_model:
+                        # Types don't match exactly - report incompatibility
+                        incompatibilities.append(
+                            f"Node '{node_name}' expects {node_spec.in_model.__name__} "
+                            f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
+                        )
+
+        if incompatibilities:
+            raise SchemaCompatibilityError("; ".join(incompatibilities))
 
     def waves(self) -> list[list[str]]:
         """Compute execution waves using topological sorting.

@@ -127,23 +127,39 @@ class BaseNodeFactory(ABC):
             # Convert dict values to proper Pydantic field format
             field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                # If it's just a type, make it required (no default)
-                if isinstance(field_type, type):
+                # Handle various type specifications
+                if isinstance(field_type, str):
+                    # String type names - convert to actual types
+                    type_map = {
+                        "str": str,
+                        "int": int,
+                        "float": float,
+                        "bool": bool,
+                        "list": list,
+                        "dict": dict,
+                        "Any": Any,
+                    }
+                    actual_type = type_map.get(field_type, Any)
+                    field_definitions[field_name] = (actual_type, ...)
+                elif isinstance(field_type, type):
+                    # Already a type
                     field_definitions[field_name] = (field_type, ...)
                 elif isinstance(field_type, tuple):
                     # Already in the correct format (type, default)
                     field_definitions[field_name] = field_type
                 else:
-                    # Assume it's a default value, use Any as type
-                    field_definitions[field_name] = (Any, field_type)
-            result: type[BaseModel] = create_model(name, **field_definitions)
-            return result
+                    # Unknown type specification - use Any
+                    field_definitions[field_name] = (Any, ...)
+
+            # create_model returns Type[BaseModel]
+            return create_model(name, **field_definitions)
 
         # Handle primitive types - create a simple wrapper model
         # At this point, schema should be a type
         try:
             return create_model(name, value=(schema, ...))
         except Exception:
+            # If we get here, schema is an unexpected type
             raise ValueError("Schema must be a dict, type, or Pydantic model") from None
 
     def create_node_with_mapping(
@@ -153,29 +169,20 @@ class BaseNodeFactory(ABC):
         input_schema: dict[str, Any] | None,
         output_schema: dict[str, Any] | type[BaseModel] | None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Universal NodeSpec creation with consistent input mapping handling."""
+        """Universal NodeSpec creation."""
         # Create Pydantic models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
-        # Determine output type
-        out_type = output_model or str
-
-        # Add input_mapping to params consistently
-        params = kwargs.copy()
-        if input_mapping is not None:
-            params["input_mapping"] = input_mapping
-
         return NodeSpec(
             name=name,
             fn=wrapped_fn,
-            in_type=input_model,
-            out_type=out_type,
+            in_model=input_model,
+            out_model=output_model,
             deps=set(deps or []),
-            params=params,
+            params=kwargs,
         )
 
     @abstractmethod

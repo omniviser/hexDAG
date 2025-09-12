@@ -195,7 +195,6 @@ Example: {example_json}
         template: PromptInput,
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         rich_features: bool = True,
         **kwargs: Any,
     ) -> NodeSpec:
@@ -226,7 +225,6 @@ Example: {example_json}
             input_schema=input_schema,
             output_schema=output_schema if rich_features else None,
             deps=deps,
-            input_mapping=input_mapping,
             **kwargs,
         )
 

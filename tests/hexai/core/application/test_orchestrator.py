@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import strict_validator
 
 
 # Test data models
@@ -66,21 +65,29 @@ async def validator_function(input_data: str, **ports) -> ValidatorOutput:
     return ValidatorOutput(status="valid", score=0.95)
 
 
-async def mapper_consumer(input_data: dict, **ports) -> str:
-    """Consume mapped data."""
-    content = input_data.get("content", "")
-    language = input_data.get("language", "unknown")
-    validation_status = input_data.get("validation_status", "unknown")
+class MappedConsumerInput(BaseModel):
+    """Input model for mapped consumer."""
+
+    processor: ProcessorOutput
+    validator: ValidatorOutput
+
+
+async def mapper_consumer(input_data: MappedConsumerInput, **ports) -> str:
+    """Consume mapped data using Pydantic model."""
+    content = input_data.processor.text
+    language = input_data.processor.metadata.get("lang", "unknown")
+    validation_status = input_data.validator.status
     return f"{content} ({language}) - {validation_status}"
 
 
 async def structured_consumer(input_data: dict, **ports) -> str:
     """Consume structured aggregated data."""
-    processor_data = input_data.get("processor", {})
-    validator_data = input_data.get("validator", {})
+    processor_data = input_data.get("processor")
+    validator_data = input_data.get("validator")
 
-    text = processor_data.get("text", "")
-    status = validator_data.get("status", "unknown")
+    # Handle Pydantic models
+    text = processor_data.text if hasattr(processor_data, "text") else ""
+    status = validator_data.status if hasattr(validator_data, "status") else "unknown"
 
     return f"{text} - {status}"
 
@@ -457,7 +464,7 @@ class TestOrchestrator:
         node_spec = NodeSpec(
             "strict_processor",
             strict_processor,
-            in_type=ProcessingInput,  # This will trigger validation
+            in_model=ProcessingInput,  # This will trigger validation
         )
         graph.add(node_spec)
 
@@ -473,8 +480,10 @@ class TestOrchestrator:
         assert result["priority_level"] == 20
 
     @pytest.mark.asyncio
-    async def test_input_validation_failure(self, orchestrator, event_manager):
+    async def test_input_validation_failure(self, event_manager):
         """Test that input validation failures are properly handled."""
+        # Use strict validation to ensure errors are raised
+        orchestrator = Orchestrator(strict_validation=True)
 
         class StrictInput(BaseModel):
             required_field: str
@@ -484,7 +493,7 @@ class TestOrchestrator:
             return {"status": "processed"}
 
         graph = DirectedGraph()
-        node_spec = NodeSpec("validate_node", validate_node, in_type=StrictInput)
+        node_spec = NodeSpec("validate_node", validate_node, in_model=StrictInput)
         graph.add(node_spec)
 
         # Test with invalid input (missing required_field)
@@ -524,8 +533,8 @@ class TestOrchestrator:
 
         # Create DAG with validation chain
         graph = DirectedGraph()
-        graph.add(NodeSpec("producer", producer_node, out_type=NodeAOutput))
-        graph.add(NodeSpec("consumer", consumer_node, in_type=NodeBInput).after("producer"))
+        graph.add(NodeSpec("producer", producer_node, out_model=NodeAOutput))
+        graph.add(NodeSpec("consumer", consumer_node, in_model=NodeBInput).after("producer"))
 
         results = await orchestrator.run(
             graph, "test data", additional_ports={"event_manager": event_manager}
@@ -544,13 +553,15 @@ class TestOrchestrator:
         """Test validation with basic type mismatches."""
         # Use strict validation for this test
 
-        strict_orchestrator = Orchestrator(validator=strict_validator())
+        strict_orchestrator = Orchestrator(strict_validation=True)
 
         async def string_only_node(input_data: str, **ports) -> str:
             return input_data.upper()
 
         graph = DirectedGraph()
-        node_spec = NodeSpec("string_node", string_only_node, in_type=str)
+        node_spec = NodeSpec(
+            "string_node", string_only_node
+        )  # No type checking without Pydantic models
         graph.add(node_spec)
 
         # Pass dict when expecting string
@@ -560,16 +571,15 @@ class TestOrchestrator:
             )
 
         error_str = str(exc_info.value)
-        assert "expects input of type str" in error_str
-        assert "but received dict" in error_str
+        # With no Pydantic validation, the error comes from the function itself
+        assert "'dict' object has no attribute 'upper'" in error_str
 
     @pytest.mark.asyncio
     async def test_node_to_node_validation_strict(self, event_manager):
         """Test validation of data flowing between nodes using strict Pydantic models."""
         # Use strict validation for this test
-        from hexai.core.validation import strict_validator
 
-        strict_orchestrator = Orchestrator(validator=strict_validator())
+        strict_orchestrator = Orchestrator(strict_validation=True)
 
         class NodeAOutput(BaseModel):
             result: str
@@ -591,8 +601,8 @@ class TestOrchestrator:
 
         # Create DAG with validation chain
         graph = DirectedGraph()
-        graph.add(NodeSpec("producer", producer_node, out_type=NodeAOutput))
-        graph.add(NodeSpec("consumer", consumer_node, in_type=NodeBInput).after("producer"))
+        graph.add(NodeSpec("producer", producer_node, out_model=NodeAOutput))
+        graph.add(NodeSpec("consumer", consumer_node, in_model=NodeBInput).after("producer"))
 
         results = await strict_orchestrator.run(
             graph, "test data", additional_ports={"event_manager": event_manager}
@@ -607,9 +617,9 @@ class TestOrchestrator:
         assert results["consumer"]["passed_threshold"] is True
 
     @pytest.mark.asyncio
-    async def test_graph_level_schema_validation(self, orchestrator, event_manager):
-        """Test that graph validates schema compatibility at construction time."""
-        from hexai.core.domain.dag import SchemaCompatibilityError
+    async def test_runtime_schema_validation(self, event_manager):
+        """Test that incompatible schemas fail at runtime with strict validation."""
+        orchestrator = Orchestrator(strict_validation=True)
 
         class OutputSchemaA(BaseModel):
             data: str
@@ -625,17 +635,16 @@ class TestOrchestrator:
 
         # Build DAG with incompatible schemas
         graph = DirectedGraph()
-        graph.add(NodeSpec("producer", producer, out_type=OutputSchemaA))
-        graph.add(NodeSpec("consumer", consumer, in_type=InputSchemaB).after("producer"))
+        graph.add(NodeSpec("producer", producer, out_model=OutputSchemaA))
+        graph.add(NodeSpec("consumer", consumer, in_model=InputSchemaB).after("producer"))
 
-        # Should fail at validation time, not execution time
-        with pytest.raises(SchemaCompatibilityError) as exc_info:
-            graph.validate()
+        # Should fail at runtime when data flows between incompatible nodes
+        with pytest.raises(NodeExecutionError) as exc_info:
+            await orchestrator.run(graph, "test", additional_ports={"event_manager": event_manager})
 
         error_str = str(exc_info.value)
-        assert "Schema mismatch" in error_str
-        assert "producer" in error_str
         assert "consumer" in error_str
+        assert "validation failed" in error_str.lower()
 
     @pytest.mark.asyncio
     async def test_graph_level_compatible_schemas(self, orchestrator, event_manager):
@@ -653,8 +662,8 @@ class TestOrchestrator:
 
         # Build DAG with compatible schemas
         graph = DirectedGraph()
-        graph.add(NodeSpec("producer", producer, out_type=SharedSchema))
-        graph.add(NodeSpec("consumer", consumer, in_type=SharedSchema).after("producer"))
+        graph.add(NodeSpec("producer", producer, out_model=SharedSchema))
+        graph.add(NodeSpec("consumer", consumer, in_model=SharedSchema).after("producer"))
 
         # Should pass validation
         graph.validate()  # Should not raise
@@ -728,40 +737,35 @@ class TestOrchestrator:
 
     @pytest.mark.asyncio
     async def test_data_mapping_functionality(self):
-        """Test explicit data mapping between nodes."""
-        orchestrator = Orchestrator(field_mapping_mode="default")
+        """Test data mapping between nodes using Pydantic models."""
+        orchestrator = Orchestrator()
 
-        # Create nodes with explicit input mapping
+        # Create nodes
         processor_node = NodeSpec(
             name="processor",
             fn=processor_function,
-            in_type=str,
-            out_type=ProcessorOutput,
+            in_model=str,
+            out_model=ProcessorOutput,
             deps=set(),
         )
 
         validator_node = NodeSpec(
             name="validator",
             fn=validator_function,
-            in_type=str,
-            out_type=ValidatorOutput,
+            in_model=str,
+            out_model=ValidatorOutput,
             deps=set(),
         )
 
-        # Consumer with explicit data mapping using new API
+        # Consumer using Pydantic model for structured input
         from hexai.core.application.nodes.function_node import FunctionNode
 
         consumer_node = FunctionNode()(
             name="consumer",
             fn=mapper_consumer,
-            input_schema=dict,
+            input_schema=MappedConsumerInput,
             output_schema=str,
             deps=["processor", "validator"],
-            input_mapping={
-                "content": "processor.text",
-                "language": "processor.metadata.lang",
-                "validation_status": "validator.status",
-            },
         )
 
         # Create DAG
@@ -770,29 +774,29 @@ class TestOrchestrator:
         # Execute pipeline
         result = await orchestrator.run(graph, "test_input")
 
-        # Verify explicit mapping worked
+        # Verify data mapping worked through Pydantic
         expected = "processed_test_input (en) - valid"
         assert result["consumer"] == expected
 
     @pytest.mark.asyncio
     async def test_structured_aggregation(self):
         """Test structured data aggregation preserving namespaces."""
-        orchestrator = Orchestrator(field_mapping_mode="default")
+        orchestrator = Orchestrator()
 
         # Create nodes that will be aggregated
         processor_node = NodeSpec(
             name="processor",
             fn=processor_function,
-            in_type=str,
-            out_type=ProcessorOutput,
+            in_model=str,
+            out_model=ProcessorOutput,
             deps=set(),
         )
 
         validator_node = NodeSpec(
             name="validator",
             fn=validator_function,
-            in_type=str,
-            out_type=ValidatorOutput,
+            in_model=str,
+            out_model=ValidatorOutput,
             deps=set(),
         )
 
@@ -817,99 +821,60 @@ class TestOrchestrator:
         expected = "processed_test_input - valid"
         assert result["consumer"] == expected
 
-    async def test_field_mapping_modes(self):
-        """Test different field mapping modes in orchestrator."""
-        # Test "none" mode
-        orchestrator_none = Orchestrator(field_mapping_mode="none")
-        assert orchestrator_none.field_mapping_mode == "none"
-
-        # Test "default" mode
-        orchestrator_default = Orchestrator(field_mapping_mode="default")
-        assert orchestrator_default.field_mapping_mode == "default"
-
-        # Test "custom" mode
-        orchestrator_custom = Orchestrator(field_mapping_mode="custom")
-        assert orchestrator_custom.field_mapping_mode == "custom"
-
     async def test_custom_field_mappings_runtime(self):
-        """Test custom field mappings provided at runtime."""
-        orchestrator = Orchestrator(field_mapping_mode="custom")
+        """Test data mapping using Pydantic models."""
+        orchestrator = Orchestrator()
 
-        # Custom mapping function that expects specific field names
-        async def custom_consumer(input_data: dict, **ports) -> str:
-            title = input_data.get("title", "")
-            description = input_data.get("description", "")
+        # Source node that produces specific field names
+        class SourceOutput(BaseModel):
+            name: str
+            content: str
+
+        async def source_function(input_data: str, **ports) -> SourceOutput:
+            return SourceOutput(name=f"processed_{input_data}", content="test content")
+
+        # Consumer receives the source output directly due to single dependency
+        async def custom_consumer(input_data: SourceOutput, **ports) -> str:
+            title = input_data.name
+            description = input_data.content
             return f"{title}: {description}"
-
-        # Source node that produces different field names
-        async def source_function(input_data: str, **ports) -> dict:
-            return {"name": f"processed_{input_data}", "content": "test content"}
 
         source_node = NodeSpec(
             name="source",
             fn=source_function,
-            in_type=str,
-            out_type=dict,
+            in_model=str,
+            out_model=SourceOutput,
             deps=set(),
         )
 
-        # Consumer with custom field mapping using new API
+        # Consumer using Pydantic model
         from hexai.core.application.nodes.function_node import FunctionNode
 
         consumer_node = FunctionNode()(
             name="consumer",
             fn=custom_consumer,
-            input_schema=dict,
+            input_schema=SourceOutput,
             output_schema=str,
             deps=["source"],
-            input_mapping={
-                "title": "source.name",
-                "description": "source.content",
-            },
         )
 
         graph = DirectedGraph([source_node, consumer_node])
 
-        # Custom mappings for this specific run
-        custom_mappings = {
-            "title": ["name", "heading"],
-            "description": ["content", "text"],
-        }
-
-        # Execute with custom mappings
-        result = await orchestrator.run(graph, "test", custom_field_mappings=custom_mappings)
+        # Execute the graph
+        result = await orchestrator.run(graph, "test")
 
         assert result["consumer"] == "processed_test: test content"
 
-    async def test_custom_field_mappings_required_error(self):
-        """Test that custom mode requires field mappings."""
-        orchestrator = Orchestrator(field_mapping_mode="custom")
-
-        # Simple node for testing
-        node = NodeSpec(
-            name="test_node",
-            fn=async_add_one,
-            in_type=int,
-            out_type=int,
-            deps=set(),
-        )
-
-        graph = DirectedGraph([node])
-
-        # Should raise error when custom_field_mappings not provided
-        with pytest.raises(ValueError, match="custom_field_mappings required"):
-            await orchestrator.run(graph, 1)
-
     async def test_single_dependency_passthrough(self):
         """Test that single dependencies pass through directly."""
-        orchestrator = Orchestrator(field_mapping_mode="default")
+        orchestrator = Orchestrator()
 
         # First node
         first_node = NodeSpec(
             name="first",
             fn=processor_function,
-            in_type=str,
-            out_type=ProcessorOutput,
+            in_model=str,
+            out_model=ProcessorOutput,
             deps=set(),
         )
 
@@ -920,8 +885,8 @@ class TestOrchestrator:
         second_node = NodeSpec(
             name="second",
             fn=single_dep_consumer,
-            in_type=ProcessorOutput,
-            out_type=str,
+            in_model=ProcessorOutput,
+            out_model=str,
             deps={"first"},
         )
 
@@ -933,40 +898,35 @@ class TestOrchestrator:
 
     @pytest.mark.asyncio
     async def test_mixed_mapping_and_aggregation(self):
-        """Test pipeline with both explicit mapping and structured aggregation."""
-        orchestrator = Orchestrator(field_mapping_mode="default")
+        """Test pipeline with data mapping and aggregation using Pydantic."""
+        orchestrator = Orchestrator()
 
         # Source nodes
         processor_node = NodeSpec(
             name="processor",
             fn=processor_function,
-            in_type=str,
-            out_type=ProcessorOutput,
+            in_model=str,
+            out_model=ProcessorOutput,
             deps=set(),
         )
 
         validator_node = NodeSpec(
             name="validator",
             fn=validator_function,
-            in_type=str,
-            out_type=ValidatorOutput,
+            in_model=str,
+            out_model=ValidatorOutput,
             deps=set(),
         )
 
-        # Node with explicit mapping using new API
+        # Node using Pydantic model for structured input
         from hexai.core.application.nodes.function_node import FunctionNode
 
         mapped_node = FunctionNode()(
             name="mapped",
             fn=mapper_consumer,
-            input_schema=dict,
+            input_schema=MappedConsumerInput,
             output_schema=str,
             deps=["processor", "validator"],
-            input_mapping={
-                "content": "processor.text",
-                "language": "processor.metadata.lang",
-                "validation_status": "validator.status",
-            },
         )
 
         # Node with structured aggregation (depends on mapped result)
@@ -987,167 +947,3 @@ class TestOrchestrator:
 
         expected = "final: processed_test (en) - valid"
         assert result["final"] == expected
-
-    async def test_input_mapping_convenience_methods(self):
-        """Test convenience methods for creating input mappings."""
-        from hexai.core.application.nodes.function_node import FunctionNode
-
-        # Test passthrough mapping
-        passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
-        expected_passthrough = {"text": "text", "status": "status", "score": "score"}
-        assert passthrough == expected_passthrough
-
-        # Test rename mapping
-        rename = FunctionNode.create_rename_mapping({"content": "text", "validation": "status"})
-        expected_rename = {"content": "text", "validation": "status"}
-        assert rename == expected_rename
-
-        # Test prefixed mapping
-        prefixed = FunctionNode.create_prefixed_mapping(["text", "score"], "processor", "proc_")
-        expected_prefixed = {"proc_text": "processor.text", "proc_score": "processor.score"}
-        assert prefixed == expected_prefixed
-
-    async def test_with_input_mapping_enhancement(self):
-        """Test enhancing existing nodes with input mapping."""
-        from hexai.core.application.nodes.function_node import FunctionNode
-
-        # Create basic node
-        factory = FunctionNode()
-        basic_node = factory(
-            name="basic",
-            fn=mapper_consumer,
-            input_schema=dict,
-            output_schema=str,
-            deps=["source"],
-        )
-
-        # Enhance with input mapping
-        enhanced_node = factory.with_input_mapping(
-            basic_node, {"content": "source.text", "language": "source.lang"}
-        )
-
-        # Verify input mapping was added
-        assert "input_mapping" in enhanced_node.params
-        assert enhanced_node.params["input_mapping"]["content"] == "source.text"
-        assert enhanced_node.params["input_mapping"]["language"] == "source.lang"
-
-    @pytest.mark.asyncio
-    async def test_llm_node_with_input_mapping(self):
-        """Test LLMNode with input mapping functionality."""
-        orchestrator = Orchestrator(field_mapping_mode="default")
-
-        # Source nodes
-        processor_node = NodeSpec(
-            name="processor",
-            fn=processor_function,
-            in_type=str,
-            out_type=ProcessorOutput,
-            deps=set(),
-        )
-
-        validator_node = NodeSpec(
-            name="validator",
-            fn=validator_function,
-            in_type=str,
-            out_type=ValidatorOutput,
-            deps=set(),
-        )
-
-        # LLM node with input mapping
-        from hexai.core.application.nodes.llm_node import LLMNode
-
-        # Mock LLM for testing
-        async def mock_llm_response(input_data: dict, **ports) -> str:
-            content = input_data.get("content", "")
-            language = input_data.get("language", "unknown")
-            status = input_data.get("validation_status", "unknown")
-            return f"LLM analyzed: {content} ({language}) - {status}"
-
-        llm_node = LLMNode()(
-            name="llm_analyzer",
-            template="Analyze {{content}} in {{language}}. Status: {{validation_status}}",
-            deps=["processor", "validator"],
-            input_mapping={
-                "content": "processor.text",
-                "language": "processor.metadata.lang",
-                "validation_status": "validator.status",
-            },
-        )
-
-        # Replace the LLM function for testing
-        llm_node = NodeSpec(
-            name="llm_analyzer",
-            fn=mock_llm_response,
-            in_type=dict,
-            out_type=str,
-            deps={"processor", "validator"},
-            params={
-                "input_mapping": {
-                    "content": "processor.text",
-                    "language": "processor.metadata.lang",
-                    "validation_status": "validator.status",
-                }
-            },
-        )
-
-        graph = DirectedGraph([processor_node, validator_node, llm_node])
-
-        result = await orchestrator.run(graph, "test_input")
-
-        expected = "LLM analyzed: processed_test_input (en) - valid"
-        assert result["llm_analyzer"] == expected
-
-    @pytest.mark.asyncio
-    async def test_agent_node_with_input_mapping(self):
-        """Test ReActAgentNode with input mapping functionality."""
-        orchestrator = Orchestrator(field_mapping_mode="default")
-
-        # Source nodes
-        processor_node = NodeSpec(
-            name="processor",
-            fn=processor_function,
-            in_type=str,
-            out_type=ProcessorOutput,
-            deps=set(),
-        )
-
-        validator_node = NodeSpec(
-            name="validator",
-            fn=validator_function,
-            in_type=str,
-            out_type=ValidatorOutput,
-            deps=set(),
-        )
-
-        # Mock agent for testing
-        async def mock_agent_response(input_data: dict, **ports) -> dict:
-            content = input_data.get("content", "")
-            score = input_data.get("score", 0.0)
-            return {
-                "result": f"Agent analyzed: {content}",
-                "reasoning_steps": [f"Step 1: Analyzed content with score {score}"],
-                "tools_used": [],
-                "reasoning_phases": ["main"],
-            }
-
-        # Create agent node with input mapping (simplified for testing)
-        agent_node = NodeSpec(
-            name="reasoning_agent",
-            fn=mock_agent_response,
-            in_type=dict,
-            out_type=dict,
-            deps={"processor", "validator"},
-            params={
-                "input_mapping": {
-                    "content": "processor.text",
-                    "score": "validator.score",
-                }
-            },
-        )
-
-        graph = DirectedGraph([processor_node, validator_node, agent_node])
-
-        result = await orchestrator.run(graph, "test_input")
-
-        expected_result = result["reasoning_agent"]["result"]
-        assert "Agent analyzed: processed_test_input" in expected_result

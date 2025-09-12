@@ -83,16 +83,12 @@ class PipelineDefinition(ABC):
             # Build and execute
             graph, pipeline_metadata = self.builder.build_from_yaml_file(self._yaml_path)
 
-            # Create orchestrator with pipeline-specific field mapping
-            field_mapping_mode = pipeline_metadata.get("field_mapping_mode", "default")
-            custom_field_mappings = pipeline_metadata.get("custom_field_mappings")
-
-            orchestrator = Orchestrator(field_mapping_mode=field_mapping_mode)
+            # Create orchestrator
+            orchestrator = Orchestrator()
             results = await orchestrator.run(
                 graph,
                 input_data,
                 additional_ports=ports,
-                custom_field_mappings=custom_field_mappings,
             )
 
             return {"status": "success", "results": results}
@@ -154,9 +150,9 @@ class PipelineDefinition(ABC):
                 input_types = {}
                 for node_name in first_wave:
                     node = graph.nodes[node_name]
-                    # First try to get in_type attribute
-                    if hasattr(node, "in_type") and node.in_type is not None:
-                        input_types[node_name] = node.in_type
+                    # First try to get in_model attribute
+                    if hasattr(node, "in_model") and node.in_model is not None:
+                        input_types[node_name] = node.in_model
                     # Fallback to params.input_schema
                     elif hasattr(node, "params") and node.params:
                         input_schema = node.params.get("input_schema")
@@ -168,9 +164,9 @@ class PipelineDefinition(ABC):
             first_node_name = first_wave[0]
             first_node = graph.nodes[first_node_name]
 
-            # First try to get in_type attribute
-            if hasattr(first_node, "in_type") and first_node.in_type is not None:
-                return first_node.in_type
+            # First try to get in_model attribute
+            if hasattr(first_node, "in_model") and first_node.in_model is not None:
+                return first_node.in_model
             # Fallback to params.input_schema
             elif hasattr(first_node, "params") and first_node.params:
                 return first_node.params.get("input_schema")
@@ -204,9 +200,9 @@ class PipelineDefinition(ABC):
                 output_types = {}
                 for node_name in last_wave:
                     node = graph.nodes[node_name]
-                    # First try to get out_type attribute
-                    if hasattr(node, "out_type") and node.out_type:
-                        output_types[node_name] = node.out_type
+                    # First try to get out_model attribute
+                    if hasattr(node, "out_model") and node.out_model:
+                        output_types[node_name] = node.out_model
                     # Fallback to params.output_schema
                     elif hasattr(node, "params") and node.params:
                         output_schema = node.params.get("output_schema")
@@ -218,9 +214,9 @@ class PipelineDefinition(ABC):
             last_node_name = last_wave[0]
             node = graph.nodes[last_node_name]
 
-            # First try to get out_type attribute
-            if hasattr(node, "out_type") and node.out_type:
-                return node.out_type
+            # First try to get out_model attribute
+            if hasattr(node, "out_model") and node.out_model:
+                return node.out_model
             # Fallback to params.output_schema
             elif hasattr(node, "params") and node.params:
                 return node.params.get("output_schema")
@@ -246,8 +242,8 @@ class PipelineDefinition(ABC):
             for node_name, node_spec in graph.nodes.items():
                 node_types[node_name] = {
                     "name": node_name,
-                    "input_type": node_spec.in_type,
-                    "output_type": node_spec.out_type,
+                    "input_type": node_spec.in_model,
+                    "output_type": node_spec.out_model,
                 }
 
                 # Add function name if available

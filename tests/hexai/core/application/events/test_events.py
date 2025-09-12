@@ -12,6 +12,14 @@ from hexai.core.application.events import (
     PipelineStartedEvent,
     ValidationWarningEvent,
 )
+from hexai.core.application.events.base import EventType
+from hexai.core.application.events.events import (
+    BulkEventProcessor,
+    EventFactory,
+    construct_event_unsafe,
+    get_event_adapter,
+    get_event_class,
+)
 
 
 class MockEventManager:
@@ -171,3 +179,100 @@ class TestEventClasses:
 
         assert len(event_manager.events) == 1
         assert event_manager.events[0].pipeline_name == "test_pipeline"
+
+
+# --- Additional tests for optimizations ---
+
+
+class TestEventFactory:
+    """Test the EventFactory for optimized event creation."""
+
+    def test_create_node_started(self):
+        """Test creating NodeStartedEvent with factory."""
+        event = EventFactory.create_node_started(
+            node_name="test_node",
+            wave_index=0,
+            dependencies=["dep1", "dep2"],
+            session_id="test-session",
+        )
+
+        assert event.node_name == "test_node"
+        assert event.wave_index == 0
+        assert event.dependencies == ["dep1", "dep2"]
+        assert event.session_id == "test-session"
+        assert event.event_type == EventType.NODE_STARTED
+
+    def test_create_node_completed(self):
+        """Test creating NodeCompletedEvent with factory."""
+        result = {"processed": 100, "failed": 0}
+        event = EventFactory.create_node_completed(
+            node_name="test_node",
+            wave_index=1,
+            result=result,
+            execution_time=1.5,
+            session_id="test-session",
+        )
+
+        assert event.node_name == "test_node"
+        assert event.result == result
+        assert event.execution_time == 1.5
+        assert event.event_type == EventType.NODE_COMPLETED
+
+    def test_create_node_failed(self):
+        """Test creating NodeFailedEvent with factory."""
+        error = ValueError("Test error")
+        event = EventFactory.create_node_failed(
+            node_name="test_node", wave_index=0, error=error, session_id="test-session"
+        )
+
+        assert event.node_name == "test_node"
+        assert event.error == error
+        assert event.event_type == EventType.NODE_FAILED
+
+
+class TestEventOptimizations:
+    """Test optimization functions for events."""
+
+    def test_get_event_adapter_caching(self):
+        """Test that TypeAdapters are cached."""
+        # Get adapter twice
+        adapter1 = get_event_adapter(NodeStartedEvent)
+        adapter2 = get_event_adapter(NodeStartedEvent)
+
+        # Should be the same cached instance
+        assert adapter1 is adapter2
+
+    def test_get_event_class(self):
+        """Test event class lookup."""
+        assert get_event_class(EventType.NODE_STARTED) == NodeStartedEvent
+        assert get_event_class(EventType.NODE_COMPLETED) == NodeCompletedEvent
+        assert get_event_class(EventType.NODE_FAILED) == NodeFailedEvent
+
+    def test_construct_event_unsafe(self):
+        """Test fast event construction for trusted data."""
+        data = {"node_name": "fast_node", "wave_index": 0, "dependencies": [], "metadata": {}}
+
+        # Fast construction without validation
+        event = construct_event_unsafe(EventType.NODE_STARTED, data)
+
+        assert isinstance(event, NodeStartedEvent)
+        assert event.node_name == "fast_node"
+        assert event.wave_index == 0
+        assert event.event_type == EventType.NODE_STARTED
+
+
+class TestBulkEventProcessor:
+    """Test bulk event processing capabilities."""
+
+    def test_bulk_serialization(self):
+        """Test serializing multiple events efficiently."""
+        events = [
+            NodeStartedEvent(node_name=f"node_{i}", wave_index=0, dependencies=[], metadata={})
+            for i in range(5)
+        ]
+
+        # Serialize all events
+        serialized = BulkEventProcessor.serialize_events(events)
+
+        assert len(serialized) == 5
+        assert all(isinstance(s, dict) for s in serialized)
