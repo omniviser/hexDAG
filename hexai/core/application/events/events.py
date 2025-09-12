@@ -59,6 +59,7 @@ class NodeCompletedEvent(PipelineEvent):
         _init_event(EventType.NODE_COMPLETED)(self)
 
     def _extra_fields(self) -> dict[str, Any]:
+        """Return event-specific fields for serialization."""
         return {
             "node_name": self.node_name,
             "wave_index": self.wave_index,
@@ -326,6 +327,20 @@ def get_event_adapter(event_class: Type[PipelineEvent]) -> TypeAdapter:
 def validate_event(event_data: dict[str, Any]) -> PipelineEvent:
     """Validate and parse event data efficiently using TypeAdapters.
 
+    Args
+    ----
+    event_data: Dictionary containing event data
+
+    Returns
+    -------
+    Validated PipelineEvent instance
+
+    Raises
+    ------
+    ValueError: If event type is unknown
+
+    Note
+    ----
     Uses pre-compiled TypeAdapters for 3-5x faster validation
     compared to standard instantiation.
     """

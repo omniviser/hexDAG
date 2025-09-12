@@ -16,9 +16,10 @@ import yaml
 from pydantic import BaseModel, Field
 
 from hexai.agent_factory.base import PipelineCatalog
+from hexai.core.domain.dag import DirectedGraph
 
 
-def validate_pipeline_compilation(graph: Any, pipeline_name: str) -> None:
+def validate_pipeline_compilation(graph: DirectedGraph, pipeline_name: str) -> None:
     """Stub function for pipeline compilation validation - Tier 2 functionality.
 
     This is a simplified validation that always passes.
@@ -166,7 +167,7 @@ class PipelineCompiler:
         return True
 
     def _validate_type_safety(
-        self, node_configs: list[dict[str, Any]], pipeline_name: str, graph: Any
+        self, node_configs: list[dict[str, Any]], pipeline_name: str, graph: DirectedGraph
     ) -> tuple[int, int]:
         """Validate type safety for compilation."""
         # Validate using simple type checker - will raise error if not safe
@@ -184,7 +185,7 @@ class PipelineCompiler:
         return typed_count, total_count
 
     def _extract_from_built_graph(
-        self, graph: Any, yaml_config: dict[str, Any], builder: Any
+        self, graph: DirectedGraph, yaml_config: dict[str, Any], builder: Any
     ) -> list[dict[str, Any]]:
         """Extract node configurations from PipelineBuilder's BUILT graph + registry access."""
         node_configs = []

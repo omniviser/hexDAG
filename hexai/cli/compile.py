@@ -15,16 +15,19 @@ import yaml
 
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.agent_factory.compiler import CompiledPipelineData, compile_pipeline
+from hexai.core.domain.dag import DirectedGraph
 
 logger = logging.getLogger(__name__)
 
 
-def check_pipeline_type_safety(graph: Any, pipeline_name: str) -> tuple[bool, list[str]]:
+def check_pipeline_type_safety(graph: DirectedGraph, pipeline_name: str) -> tuple[bool, list[str]]:
     """Stub function for type safety checking - Tier 2 functionality.
 
     This is a simplified type check that always passes.
     Real implementation would be in the Tier 2 compiler layer.
     """
+    # Parameters will be used in future implementation
+    _ = (graph, pipeline_name)
     return True, []
 
 
