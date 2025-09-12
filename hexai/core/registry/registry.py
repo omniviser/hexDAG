@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import logging
 import re
-from typing import Any
 
 from hexai.core.registry.discovery import register_components as default_register_components
 from hexai.core.registry.exceptions import (
@@ -19,13 +18,15 @@ from hexai.core.registry.exceptions import (
 from hexai.core.registry.locks import ReadWriteLock
 from hexai.core.registry.manifest import ComponentManifest
 from hexai.core.registry.models import (
+    ClassComponent,
     ComponentInfo,
     ComponentMetadata,
     ComponentType,
+    FunctionComponent,
+    InstanceComponent,
     InstanceFactory,
     NodeSubtype,
 )
-from hexai.core.registry.types import ClassComponent, FunctionComponent, InstanceComponent
 
 logger = logging.getLogger(__name__)
 
@@ -321,7 +322,7 @@ class ComponentRegistry:
             return name, None
 
     def get(
-        self, name: str, namespace: str | None = None, init_params: dict[str, Any] | None = None
+        self, name: str, namespace: str | None = None, init_params: dict[str, object] | None = None
     ) -> object:
         """Get and instantiate a component.
 

@@ -32,7 +32,18 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
     -------
     list[tuple[str, type | Callable | object]]
         List of (name, component) tuples for all discovered components.
+
+    Raises
+    ------
+    TypeError
+        If module is not a ModuleType instance.
     """
+    if not isinstance(module, ModuleType):
+        raise TypeError(
+            f"Expected ModuleType, got {type(module).__name__}. "
+            "Pass a module object, not a string or path."
+        )
+
     components = []
 
     for name in dir(module):
