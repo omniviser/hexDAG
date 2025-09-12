@@ -144,7 +144,7 @@ class ComponentRegistry:
         self._manifest = manifest
         self._dev_mode = dev_mode
 
-        logger.info(f"Bootstrapping registry with {len(manifest.entries)} entries")
+        logger.info("Bootstrapping registry with %d entries", len(manifest.entries))
         return manifest
 
     def _load_manifest_modules(self, manifest: ComponentManifest) -> int:
@@ -167,7 +167,7 @@ class ComponentRegistry:
                     f"into namespace '{entry.namespace}'"
                 )
             except ImportError as e:
-                logger.error(f"Failed to import module {entry.module}: {e}")
+                logger.error("Failed to import module %s: %s", entry.module, e)
                 self._cleanup_state()
                 raise
             except (
@@ -175,7 +175,7 @@ class ComponentRegistry:
                 InvalidComponentError,
                 NamespacePermissionError,
             ) as e:
-                logger.error(f"Failed to register components from {entry.module}: {e}")
+                logger.error("Failed to register components from %s: %s", entry.module, e)
                 self._cleanup_state()
                 raise
 
@@ -275,7 +275,7 @@ class ComponentRegistry:
                 self._protected_components.add(f"{namespace_str}:{name}")
                 registration_info.is_protected = True
 
-            logger.debug(f"Registered {registration_info.qualified_name}")
+            logger.debug("Registered %s", registration_info.qualified_name)
             return registration_info
 
     def get_metadata(self, name: str, namespace: str | None = None) -> ComponentMetadata:

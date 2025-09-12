@@ -492,7 +492,7 @@ class ReActAgentNode(BaseNodeFactory):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.debug(f"Unexpected error parsing tool_end result: {e}")
+            logger.debug("Unexpected error parsing tool_end result: %s", e)
 
         return None
 
@@ -541,7 +541,7 @@ class ReActAgentNode(BaseNodeFactory):
                     import logging
 
                     logger = logging.getLogger(__name__)
-                    logger.debug(f"Failed to validate tool_end result: {e}")
+                    logger.debug("Failed to validate tool_end result: %s", e)
                     continue  # Skip this tool result and try the next one
 
         return None

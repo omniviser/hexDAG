@@ -58,7 +58,7 @@ def bootstrap_registry(
 
     # Load manifest
     if manifest_path:
-        logger.info(f"Loading manifest from {manifest_path}")
+        logger.info("Loading manifest from %s", manifest_path)
         manifest = load_manifest_from_yaml(manifest_path)
     else:
         logger.info("Loading default HexDAG manifest")
@@ -71,10 +71,10 @@ def bootstrap_registry(
         dev_mode = os.getenv("HEXDAG_DEV_MODE", "false").lower() == "true"
 
     # Bootstrap the registry
-    logger.info(f"Bootstrapping registry (dev_mode={dev_mode})")
+    logger.info("Bootstrapping registry (dev_mode=%s)", dev_mode)
     registry.bootstrap(manifest, dev_mode=dev_mode)
 
-    logger.info(f"Registry initialized with {len(registry.list_components())} components")
+    logger.info("Registry initialized with %d components", len(registry.list_components()))
 
 
 def ensure_bootstrapped(manifest_path: str | Path | None = None) -> None:

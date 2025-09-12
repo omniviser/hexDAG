@@ -97,7 +97,7 @@ class MetricsObserver(SyncObserver):
             self.pipeline_start_time = time.time()
             self.error_count = 0
             self.completed_nodes = 0
-            logger.debug(f"Started metrics collection for pipeline '{event.pipeline_name}'")
+            logger.debug("Started metrics collection for pipeline '%s'", event.pipeline_name)
 
     def _handle_node_started(self, event: PipelineEvent) -> None:
         if isinstance(event, NodeStartedEvent):
@@ -118,12 +118,12 @@ class MetricsObserver(SyncObserver):
         if isinstance(event, PipelineCompletedEvent):
             metrics = self.get_metrics()
             logger.info("📊 Pipeline Execution Metrics:")
-            logger.info(f"   Total Time: {event.total_execution_time:.2f}s")
+            logger.info("   Total Time: %.2fs", event.total_execution_time)
             logger.info(
                 f"   Nodes Completed: {metrics['completed_nodes']}/{metrics['total_nodes']}"
             )
-            logger.info(f"   Success Rate: {metrics['success_rate']:.1f}%")
-            logger.info(f"   Errors: {metrics['error_count']}")
+            logger.info("   Success Rate: %.1f%%", metrics["success_rate"])
+            logger.info("   Errors: %d", metrics["error_count"])
 
             if metrics["node_execution_times"]:
                 logger.info("   Slowest Nodes:")
@@ -133,7 +133,7 @@ class MetricsObserver(SyncObserver):
                     reverse=True,
                 )[:3]
                 for node, times in slowest:
-                    logger.info(f"      - {node}: {sum(times) / len(times):.2f}s avg")
+                    logger.info("      - %s: %.2fs avg", node, sum(times) / len(times))
 
     def get_metrics(self) -> dict[str, Any]:
         """Get current metrics summary."""
@@ -300,7 +300,7 @@ class NodeObserver(SyncObserver):
                         if len(msg["content"]) > 200
                         else msg["content"]
                     )
-                    self.llm_logger.debug(f"   Message {i + 1} ({msg['role']}): {preview}")
+                    self.llm_logger.debug("   Message %d (%s): %s", i + 1, msg["role"], preview)
 
     def _handle_llm_response_received(self, event: PipelineEvent) -> None:
         """Handle LLM response events."""
@@ -323,7 +323,7 @@ class NodeObserver(SyncObserver):
             )
 
             if self.log_level <= logging.DEBUG:
-                self.llm_logger.debug(f"   Response: {interaction['response_preview']}")
+                self.llm_logger.debug("   Response: %s", interaction["response_preview"])
 
     def _handle_tool_called(self, event: PipelineEvent) -> None:
         """Handle tool call events."""

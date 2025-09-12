@@ -722,14 +722,14 @@ class DAGVisualizer:
                     break
 
             if not yaml_file:
-                logger.debug(f"Pipeline YAML not found for {pipeline_name}")
+                logger.debug("Pipeline YAML not found for %s", pipeline_name)
                 return {}, None
 
             # Compile on-the-fly to get all schemas
             try:
                 compiled_data = compile_pipeline(yaml_file)
             except Exception as e:
-                logger.debug(f"Failed to compile pipeline {pipeline_name}: {e}")
+                logger.debug("Failed to compile pipeline %s: %s", pipeline_name, e)
                 return {}, None
 
             # Extract node schemas from compiled data
@@ -749,7 +749,7 @@ class DAGVisualizer:
 
         except Exception as e:
             # Silently fail - compiled schemas are optional for visualization
-            logger.debug(f"Exception in schema loading: {e}")
+            logger.debug("Exception in schema loading: %s", e)
             return {}, None
 
     def _get_node_attributes(

@@ -94,13 +94,13 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
     try:
         module = importlib.import_module(module_path)
     except ImportError as e:
-        logger.error(f"Failed to import module '{module_path}': {e}")
+        logger.error("Failed to import module '%s': %s", module_path, e)
         raise
 
     # Check if module has a custom register_components function
     if hasattr(module, "register_components"):
         # Module has custom registration logic
-        logger.debug(f"Using custom register_components from {module_path}")
+        logger.debug("Using custom register_components from %s", module_path)
         result = module.register_components(registry, namespace)
         # Ensure we return an int
         return int(result) if result is not None else 0
@@ -136,7 +136,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
                 description=meta_description,
             )
             count += 1
-            logger.debug(f"Registered {actual_namespace}:{meta_name} from {module_path}")
+            logger.debug("Registered %s:%s from %s", actual_namespace, meta_name, module_path)
         except Exception as e:
             logger.error(
                 f"Failed to register {actual_namespace}:{meta_name} from {module_path}: {e}"
