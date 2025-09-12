@@ -277,8 +277,8 @@ class DAGVisualizer:
             Dictionary of input schema fields or None
         """
         # Check if node has input type information
-        if hasattr(node_spec, "in_type") and node_spec.in_type:
-            return self._convert_type_to_schema_dict(node_spec.in_type)
+        if hasattr(node_spec, "in_model") and node_spec.in_model:
+            return self._convert_type_to_schema_dict(node_spec.in_model)
 
         # Check for function-specific schema info
         if hasattr(node_spec, "fn") and hasattr(node_spec.fn, "__annotations__"):
@@ -298,8 +298,8 @@ class DAGVisualizer:
             Dictionary of output schema fields or None
         """
         # Check if node has output type information
-        if hasattr(node_spec, "out_type") and node_spec.out_type:
-            return self._convert_type_to_schema_dict(node_spec.out_type)
+        if hasattr(node_spec, "out_model") and node_spec.out_model:
+            return self._convert_type_to_schema_dict(node_spec.out_model)
 
         # Check for function-specific schema info
         if hasattr(node_spec, "fn") and hasattr(node_spec.fn, "__annotations__"):
@@ -767,10 +767,12 @@ class DAGVisualizer:
         attrs = {"label": node_name, "fontname": "Arial", "fontsize": "10"}
 
         # Enhanced type information with generated schemas
-        if node_spec.in_type or node_spec.out_type or generated_schemas:
-            in_name = getattr(node_spec.in_type, "__name__", "Any") if node_spec.in_type else "Any"
+        if node_spec.in_model or node_spec.out_model or generated_schemas:
+            in_name = (
+                getattr(node_spec.in_model, "__name__", "Any") if node_spec.in_model else "Any"
+            )
             out_name = (
-                getattr(node_spec.out_type, "__name__", "Any") if node_spec.out_type else "Any"
+                getattr(node_spec.out_model, "__name__", "Any") if node_spec.out_model else "Any"
             )
 
             # Check for enhanced schema names from generated files
