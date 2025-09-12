@@ -92,89 +92,118 @@ jobs:
         displayName: "Install UV"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running Ruff linting with pyproject.toml configuration..."
           uv run ruff check ./hexai --config pyproject.toml
         displayName: "Run Ruff linting (replaces flake8, isort)"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running Ruff formatting check..."
           uv run ruff format ./hexai --check
         displayName: "Run Ruff formatting check (replaces Black)"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running Mypy with pyproject.toml configuration..."
           uv run mypy ./hexai
         displayName: "Run Mypy"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running Pyright with pyproject.toml configuration..."
           uv run pyright ./hexai
         displayName: "Run Pyright"
 
       - script: |
-          echo "Running tests with coverage..."
-          uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running tests with pytest configuration from pyproject.toml..."
+          # The pytest configuration in pyproject.toml includes:
+          # - testpaths = ["tests"]
+          # - addopts = "--cov=hexai --cov-report=html --cov-report=term-missing"
+          # We override the report formats for Azure DevOps integration
+          uv run pytest --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"
 
       - script: |
-          echo "Running Bandit for SAST..."
-          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
-          BANDIT_EXIT_CODE=$?
-          echo "Bandit exit code: $BANDIT_EXIT_CODE"
-          if [ $BANDIT_EXIT_CODE -ne 0 ]; then
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running Bandit for SAST with pyproject.toml configuration..."
+          # Bandit configuration from pyproject.toml:
+          # exclude_dirs = ["tests", "examples"]
+          # skips = ["B101", "B601"]
+          uv run bandit -r ./hexai -f json -o bandit-report.json || {
               echo "Bandit found issues or encountered an error. See bandit-report.json for details."
               cat bandit-report.json
               exit 1
-          fi
+          }
         displayName: "Run Bandit"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Checking test structure consistency..."
           uv run scripts/check_test_structure.py
         displayName: "Check test structure consistency"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Checking examples functionality..."
           uv run scripts/check_examples.py
         displayName: "Check examples functionality"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running deptry for dependency analysis..."
           uv run deptry .
         displayName: "Run deptry"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
           echo "Running Safety for dependency vulnerability scanning..."
-          uv run safety check --output json > safety-report.json
-          SAFETY_EXIT_CODE=$?
-          echo "Safety exit code: $SAFETY_EXIT_CODE"
-          if [ $SAFETY_EXIT_CODE -ne 0 ]; then
+          # Safety configuration from pyproject.toml:
+          # audit-and-monitor = true
+          uv run safety check --output json > safety-report.json || {
               echo "Safety found vulnerabilities. See safety-report.json for details."
               cat safety-report.json
               exit 1
-          fi
+          }
         displayName: "Run Safety - dependency vulnerability scan"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
           echo "Running Gitleaks for secret detection..."
-          # Install gitleaks
-          VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          echo "Installing Gitleaks version: $VERSION"
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
-          /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json
-          GITLEAKS_EXIT_CODE=$?
-          echo "Gitleaks exit code: $GITLEAKS_EXIT_CODE"
-          if [ $GITLEAKS_EXIT_CODE -ne 0 ]; then
+          # Install gitleaks - using fixed version for reproducibility
+          GITLEAKS_VERSION="8.21.2"
+          echo "Installing Gitleaks version: $GITLEAKS_VERSION"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
+          /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json || {
               echo "Gitleaks found secrets or encountered an error. See gitleaks-report.json for details."
               cat gitleaks-report.json
               exit 1
-          fi
+          }
         displayName: "Run Gitleaks - secret detection"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
           echo "Running yamllint for YAML config quality..."
           uv run yamllint -d relaxed .
         displayName: "Run yamllint - YAML config quality"
 
       - script: |
-          echo "Running vulture for dead code detection..."
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running vulture for dead code detection with pyproject.toml configuration..."
+          # Vulture configuration from pyproject.toml:
+          # min_confidence = 90
+          # paths = ["hexai"]
+          # exclude = ["tests/", "examples/"]
           uv run vulture hexai/ --min-confidence 90
         displayName: "Run vulture - dead code detection"
 
       - script: |
-          echo "Running radon for code complexity analysis..."
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running radon for code complexity analysis with pyproject.toml configuration..."
+          # Radon configuration from pyproject.toml:
+          # exclude = "tests/*,examples/*"
+          # cc_min = "B"
+          # show_complexity = true
           uv run radon cc hexai/ --min B --show-complexity
         displayName: "Run radon - code complexity analysis"
