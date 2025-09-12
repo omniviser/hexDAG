@@ -48,8 +48,8 @@ class TestReActAgentNode:
 
         assert node_spec.name == "test_agent"
         assert node_spec.fn.__name__ == "agent_with_internal_loop"
-        assert node_spec.in_type is not None
-        assert node_spec.out_type is not None
+        assert node_spec.in_model is not None
+        assert node_spec.out_model is not None
 
     def test_agent_with_custom_config(self, agent_node):
         """Test agent with custom configuration."""

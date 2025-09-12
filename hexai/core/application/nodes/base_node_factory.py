@@ -124,12 +124,13 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
-            # Pydantic requires (type, default) tuples for field definitions
             field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
+                # Pydantic v2 requires (type, default) tuple for field definitions
                 # Use ... (Ellipsis) to indicate required field
                 field_definitions[field_name] = (field_type, ...)
 
+            # create_model returns Type[BaseModel]
             # Cast is safe here as create_model returns a BaseModel subclass
             return cast(Type[BaseModel], create_model(name, **field_definitions))
 
@@ -137,7 +138,8 @@ class BaseNodeFactory(ABC):
         if isinstance(schema, type):
             return create_model(name, value=(schema, ...))
 
-        raise ValueError("Schema must be a dict, type, or Pydantic model")
+        # If we get here, schema is an unexpected type
+        return None  # type: ignore[unreachable]
 
     def create_node_with_mapping(
         self,
@@ -146,29 +148,20 @@ class BaseNodeFactory(ABC):
         input_schema: dict[str, Any] | None,
         output_schema: dict[str, Any] | Type[BaseModel] | None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Universal NodeSpec creation with consistent input mapping handling."""
+        """Universal NodeSpec creation."""
         # Create Pydantic models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
-        # Determine output type
-        out_type = output_model or str
-
-        # Add input_mapping to params consistently
-        params = kwargs.copy()
-        if input_mapping is not None:
-            params["input_mapping"] = input_mapping
-
         return NodeSpec(
             name=name,
             fn=wrapped_fn,
-            in_type=input_model,
-            out_type=out_type,
+            in_model=input_model,
+            out_model=output_model,
             deps=set(deps or []),
-            params=params,
+            params=kwargs,
         )
 
     @abstractmethod

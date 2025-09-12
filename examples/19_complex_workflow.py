@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator
 
 
 class CustomerData(BaseModel):
@@ -487,7 +486,7 @@ async def demonstrate_complex_workflow():
         {"customer_id": "CUST003", "product_id": "PROD003"},  # Premium customer, sports product
     ]
 
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     for i, scenario in enumerate(test_scenarios, 1):
         print(
@@ -548,7 +547,7 @@ async def demonstrate_error_handling():
     graph.add(NodeSpec("failing", failing_node))
     graph.add(NodeSpec("recovery", recovery_node).after("failing"))
 
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     # Test normal execution
     print("\n   🟢 Normal execution:")
@@ -611,7 +610,7 @@ async def demonstrate_performance_optimization():
     print(f"   • Parallel opportunities: {sum(1 for wave in waves if len(wave) > 1)}")
 
     # Execute and measure
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     start_time = time.time()
     results = await orchestrator.run(graph, {"test": "data"})

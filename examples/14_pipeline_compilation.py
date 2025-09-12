@@ -14,7 +14,6 @@ from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator
 
 
 async def data_loader(input_data: str, **kwargs) -> dict:
@@ -110,7 +109,7 @@ async def demonstrate_basic_compilation():
             print(f"      Wave {i + 1}: {wave}")
 
         # Execute compiled pipeline
-        orchestrator = Orchestrator(validator=coerce_validator())
+        orchestrator = Orchestrator()
         result = await orchestrator.run(graph, "test data for compilation")
 
         print("   ✅ Pipeline compilation and execution successful")
@@ -129,11 +128,11 @@ async def demonstrate_compilation_with_validation():
     graph = DirectedGraph()
 
     # Add nodes with type hints
-    loader = NodeSpec("data_loader", data_loader, in_type=str, out_type=dict)
-    processor = NodeSpec("data_processor", data_processor, in_type=dict, out_type=dict).after(
+    loader = NodeSpec("data_loader", data_loader, in_model=None, out_model=None)
+    processor = NodeSpec("data_processor", data_processor, in_model=None, out_model=None).after(
         "data_loader"
     )
-    validator = NodeSpec("data_validator", data_validator, in_type=dict, out_type=dict).after(
+    validator = NodeSpec("data_validator", data_validator, in_model=None, out_model=None).after(
         "data_processor"
     )
 
@@ -154,7 +153,7 @@ async def demonstrate_compilation_with_validation():
         # This would normally check type compatibility between nodes
 
         # Execute with validation
-        orchestrator = Orchestrator(validator=coerce_validator())
+        orchestrator = Orchestrator()
         result = await orchestrator.run(graph, "validation test")
 
         print("   ✅ Compilation with validation successful")
@@ -198,7 +197,7 @@ async def demonstrate_compilation_optimization():
         # This would normally optimize the graph structure
 
         # Execute optimized pipeline
-        orchestrator = Orchestrator(validator=coerce_validator())
+        orchestrator = Orchestrator()
         result = await orchestrator.run(graph, "optimization test")
 
         print("   ✅ Optimized compilation successful")

@@ -27,8 +27,8 @@ class MockNodeFactory(BaseNodeFactory):
         return NodeSpec(
             name=name,
             fn=mock_fn,
-            in_type=dict,
-            out_type=str,
+            in_model=None,
+            out_model=None,
             deps=set(kwargs.get("deps", [])),
             params=kwargs,
         )
