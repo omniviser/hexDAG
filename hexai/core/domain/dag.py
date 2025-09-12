@@ -4,10 +4,11 @@ This module provides the core building blocks for defining and executing
 directed acyclic graphs of agents in the Hex-DAG framework.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Callable, Literal, Type, TypeVar
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
@@ -45,8 +46,8 @@ class NodeSpec:
 
     name: str
     fn: Callable[..., Any]
-    in_model: Type[BaseModel] | None = None  # Pydantic model for input validation
-    out_model: Type[BaseModel] | None = None  # Pydantic model for output validation
+    in_model: type[BaseModel] | None = None  # Pydantic model for input validation
+    out_model: type[BaseModel] | None = None  # Pydantic model for output validation
     deps: set[str] = field(default_factory=set)
     params: dict[str, Any] = field(default_factory=dict)
 
@@ -56,7 +57,7 @@ class NodeSpec:
         object.__setattr__(self, "params", MappingProxyType(self.params))
 
     def _validate_with_model(
-        self, data: Any, model: Type[T] | None, validation_type: Literal["input", "output"]
+        self, data: Any, model: type[T] | None, validation_type: Literal["input", "output"]
     ) -> T | Any:
         """Validate data using the provided Pydantic model.
 
@@ -372,11 +373,13 @@ class DirectedGraph:
             SchemaCompatibilityError: If connected nodes have incompatible types
         """
         # Check for missing dependencies
-        missing_deps = []
+        missing_deps: list[str] = []
         for node_name, node_spec in self.nodes.items():
-            for dep in node_spec.deps:
-                if dep not in self.nodes:
-                    missing_deps.append(f"Node '{node_name}' depends on missing node '{dep}'")
+            missing_deps.extend(
+                f"Node '{node_name}' depends on missing node '{dep}'"
+                for dep in node_spec.deps
+                if dep not in self.nodes
+            )
 
         if missing_deps:
             raise MissingDependencyError("; ".join(missing_deps))
@@ -458,14 +461,12 @@ class DirectedGraph:
 
                 # Check basic type compatibility
                 # For single dependencies only - multiple deps are handled by aggregation
-                if len(node_spec.deps) == 1:
-                    # Check if types are exactly the same
-                    if dep_node.out_model != node_spec.in_model:
-                        # Types don't match exactly - report incompatibility
-                        incompatibilities.append(
-                            f"Node '{node_name}' expects {node_spec.in_model.__name__} "
-                            f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
-                        )
+                if len(node_spec.deps) == 1 and dep_node.out_model != node_spec.in_model:
+                    # Types don't match exactly - report incompatibility
+                    incompatibilities.append(
+                        f"Node '{node_name}' expects {node_spec.in_model.__name__} "
+                        f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
+                    )
 
         if incompatibilities:
             raise SchemaCompatibilityError("; ".join(incompatibilities))

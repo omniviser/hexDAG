@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Literal, Type
+from typing import Any, ClassVar, Literal
 
 # Allowed kinds of ports
 # ruff: formatter-ignore
@@ -42,7 +43,7 @@ class PortInfo:
     """
 
     name: str
-    port_cls: Type[Any]
+    port_cls: type[Any]
     kind: PortKind
     sync: bool = True
     streaming: bool = False
@@ -60,7 +61,7 @@ class PortRegistry:
     _registry: ClassVar[dict[str, PortInfo]] = {}
 
     @classmethod
-    def register(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
+    def register(cls, name: str, port_cls: type[Any], **meta: Any) -> None:
         """Register a port implementation under a unique name.
 
         Parameters
@@ -84,7 +85,7 @@ class PortRegistry:
         logging.info(f"Port '{name}' registered.")
 
     @classmethod
-    def override(cls, name: str, port_cls: Type[Any], **meta: Any) -> None:
+    def override(cls, name: str, port_cls: type[Any], **meta: Any) -> None:
         """Force override of an existing definition."""
         if name in cls._registry:
             logging.warning(f"Port '{name}' is being overridden in the registry.")
@@ -98,7 +99,7 @@ class PortRegistry:
         del cls._registry[name]
 
     @classmethod
-    def get(cls, name: str) -> Type[Any]:
+    def get(cls, name: str) -> type[Any]:
         """Retrieve a port implementation under a unique name."""
         try:
             return cls._registry[name].port_cls
@@ -146,7 +147,7 @@ class PortRegistry:
         return results
 
     @classmethod
-    def all(cls) -> dict[str, Type[Any]]:
+    def all(cls) -> dict[str, type[Any]]:
         """Return all registered ports."""
         return {name: meta.port_cls for name, meta in cls._registry.items()}
 

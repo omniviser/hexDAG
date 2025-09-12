@@ -2,7 +2,8 @@
 
 import asyncio
 import inspect
-from typing import Any, Callable, get_type_hints
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
 from hexai.core.ports.tool_router import ToolRouter
@@ -140,10 +141,7 @@ class FunctionBasedToolRouter(ToolRouter):
             param_type = type_hints.get(param_name, str)
 
             # Convert type to string for ToolParameter
-            if hasattr(param_type, "__name__"):
-                type_str = param_type.__name__
-            else:
-                type_str = str(param_type)
+            type_str = param_type.__name__ if hasattr(param_type, "__name__") else str(param_type)
 
             tool_param = ToolParameter(
                 name=param_name,
@@ -285,7 +283,7 @@ class FunctionBasedToolRouter(ToolRouter):
 
     def get_all_tool_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schemas for all available tools."""
-        return {name: self.get_tool_schema(name) for name in self.tools.keys()}
+        return {name: self.get_tool_schema(name) for name in self.tools}
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
         """Get ToolDefinitions for integration with ToolDescriptionManager.

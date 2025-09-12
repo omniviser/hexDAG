@@ -2,7 +2,8 @@
 
 import asyncio
 import inspect
-from typing import Any, Callable, Type, get_type_hints
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
@@ -18,8 +19,8 @@ class FunctionNode(BaseNodeFactory):
         self,
         name: str,
         fn: Callable[..., Any],
-        input_schema: dict[str, Any] | Type[BaseModel] | None = None,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        input_schema: dict[str, Any] | type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
@@ -70,7 +71,7 @@ class FunctionNode(BaseNodeFactory):
             "float",
             "bool",
         }:
-            input_model: Type[BaseModel] | type | None = input_schema
+            input_model: type[BaseModel] | type | None = input_schema
         else:
             input_model = self.create_pydantic_model(f"{name}Input", input_schema)
 
@@ -83,7 +84,7 @@ class FunctionNode(BaseNodeFactory):
             "float",
             "bool",
         }:
-            output_model: Type[BaseModel] | type | None = output_schema
+            output_model: type[BaseModel] | type | None = output_schema
         else:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
@@ -103,8 +104,8 @@ class FunctionNode(BaseNodeFactory):
         self,
         name: str,
         fn: Callable[..., Any],
-        input_model: Type[BaseModel] | type | None,
-        output_model: Type[BaseModel] | type | None,
+        input_model: type[BaseModel] | type | None,
+        output_model: type[BaseModel] | type | None,
     ) -> Callable[..., Any]:
         """Create a simple wrapped function with explicit port handling."""
         # Analyze function signature once
@@ -164,7 +165,7 @@ class FunctionNode(BaseNodeFactory):
 
     def _infer_schemas_from_function(
         self, fn: Callable[..., Any]
-    ) -> tuple[Type[BaseModel] | None, Type[BaseModel] | None]:
+    ) -> tuple[type[BaseModel] | None, type[BaseModel] | None]:
         """Infer input and output schemas from function type annotations.
 
         Args

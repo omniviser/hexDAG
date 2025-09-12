@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from collections import defaultdict
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from .base import PipelineEvent, SyncObserver
 from .events import (
@@ -21,6 +21,9 @@ from .events import (
     ToolCompletedEvent,
     ValidationWarningEvent,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -246,10 +249,8 @@ class NodeObserver(SyncObserver):
                 )
 
             result_info = f" -> {type(event.result).__name__}"
-            self.logger.log(
-                self.log_level,
-                f"✅ Node '{event.node_name}' completed in {event.execution_time:.2f}s{result_info}",
-            )
+            msg = f"✅ Node '{event.node_name}' completed in {event.execution_time:.2f}s"
+            self.logger.log(self.log_level, f"{msg}{result_info}")
 
             # Log wave progress
             self._log_wave_progress(event.wave_index)

@@ -1,7 +1,7 @@
 """Base Pydantic models for HexDAG nodes."""
 
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -63,7 +63,7 @@ class FileData(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-class InMemoryData(BaseModel, Generic[T]):
+class InMemoryData[T](BaseModel):
     """Container for small data that stays in memory.
 
     Use this for configuration, metadata, or small datasets
@@ -117,7 +117,7 @@ class JsonData(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-class ListData(BaseModel, Generic[T]):
+class ListData[T](BaseModel):
     """Container for list data.
 
     Attributes

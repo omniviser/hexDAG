@@ -1,7 +1,7 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models and core event emission."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel, create_model
 
@@ -113,8 +113,8 @@ class BaseNodeFactory(ABC):
             )
 
     def create_pydantic_model(
-        self, name: str, schema: dict[str, Any] | Type[BaseModel] | Type[Any] | None
-    ) -> Type[BaseModel] | None:
+        self, name: str, schema: dict[str, Any] | type[BaseModel] | type[Any] | None
+    ) -> type[BaseModel] | None:
         """Create a Pydantic model from a schema."""
         if schema is None:
             return None
@@ -124,28 +124,50 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
+            # Convert dict values to proper Pydantic field format
             field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                # Pydantic v2 requires (type, default) tuple for field definitions
-                # Use ... (Ellipsis) to indicate required field
-                field_definitions[field_name] = (field_type, ...)
+                # Handle various type specifications
+                if isinstance(field_type, str):
+                    # String type names - convert to actual types
+                    type_map = {
+                        "str": str,
+                        "int": int,
+                        "float": float,
+                        "bool": bool,
+                        "list": list,
+                        "dict": dict,
+                        "Any": Any,
+                    }
+                    actual_type = type_map.get(field_type, Any)
+                    field_definitions[field_name] = (actual_type, ...)
+                elif isinstance(field_type, type):
+                    # Already a type
+                    field_definitions[field_name] = (field_type, ...)
+                elif isinstance(field_type, tuple):
+                    # Already in the correct format (type, default)
+                    field_definitions[field_name] = field_type
+                else:
+                    # Unknown type specification - use Any
+                    field_definitions[field_name] = (Any, ...)
 
             # create_model returns Type[BaseModel]
             return create_model(name, **field_definitions)
 
         # Handle primitive types - create a simple wrapper model
-        if isinstance(schema, type):
+        # At this point, schema should be a type
+        try:
             return create_model(name, value=(schema, ...))
-
-        # If we get here, schema is an unexpected type
-        return None  # type: ignore[unreachable]
+        except Exception:
+            # If we get here, schema is an unexpected type
+            raise ValueError("Schema must be a dict, type, or Pydantic model") from None
 
     def create_node_with_mapping(
         self,
         name: str,
         wrapped_fn: Any,
         input_schema: dict[str, Any] | None,
-        output_schema: dict[str, Any] | Type[BaseModel] | None,
+        output_schema: dict[str, Any] | type[BaseModel] | None,
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
