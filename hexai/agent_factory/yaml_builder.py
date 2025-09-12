@@ -294,7 +294,8 @@ class YamlPipelineBuilder:
                     )
                 elif node_name not in dependencies:
                     warnings.append(
-                        f"Node '{node_id}' {mapping_type} references '{node_name}' which is not a dependency"
+                        f"Node '{node_id}' {mapping_type} references '{node_name}' "
+                        f"which is not a dependency"
                     )
 
         return warnings

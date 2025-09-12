@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Type, cast
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, create_model, model_validator
 
@@ -17,7 +17,7 @@ class FieldMappingRegistry:
     def register(self, name: str, mapping: dict[str, str]) -> None:
         """Register a reusable field mapping.
 
-        Args:
+        Args
         ----
             name: Name for the mapping pattern
             mapping: dict of {target_field: "source.path"}
@@ -32,7 +32,7 @@ class FieldMappingRegistry:
     def get(self, name_or_mapping: str | dict[str, str]) -> dict[str, str]:
         """Get mapping by name or return inline mapping.
 
-        Args:
+        Args
         ----
             name_or_mapping: Either a string name or inline mapping dict
 
@@ -66,7 +66,7 @@ class FieldExtractor:
     def extract(data: dict[Any, Any] | BaseModel, path: str) -> Any:
         """Extract value from nested data structure using dot notation path.
 
-        Args:
+        Args
         ----
             data: The data structure to extract from
             path: Dot-separated path to the value (e.g., "user.profile.name")
@@ -93,7 +93,7 @@ class FieldExtractor:
     def _extract_single_level(data: Any, key: str) -> Any:
         """Extract a single level from the data.
 
-        Args:
+        Args
         ----
             data: Current data object
             key: The key/attribute to extract
@@ -125,10 +125,10 @@ class TypeInferrer:
     """Handles type inference from Pydantic models."""
 
     @staticmethod
-    def infer_from_path(model: Type[BaseModel], field_path: list[str]) -> Type[Any]:
+    def infer_from_path(model: type[BaseModel], field_path: list[str]) -> type[Any]:
         """Infer field type from a Pydantic model and field path.
 
-        Args:
+        Args
         ----
             model: The Pydantic model class
             field_path: list of field names forming the path
@@ -139,13 +139,13 @@ class TypeInferrer:
 
         """
         if not field_path:
-            return cast(Type[Any], model)
+            return model
 
         field_name = field_path[0]
         field_type = TypeInferrer._get_field_type(model, field_name)
 
         if field_type is None:
-            return Any
+            return cast("type[Any]", Any)
 
         # Recurse for nested paths
         if len(field_path) > 1 and TypeInferrer._is_base_model(field_type):
@@ -154,10 +154,10 @@ class TypeInferrer:
         return field_type
 
     @staticmethod
-    def _get_field_type(model: Type[BaseModel], field_name: str) -> Type[Any] | None:
+    def _get_field_type(model: type[BaseModel], field_name: str) -> type[Any] | None:
         """Get the type of a specific field from a model.
 
-        Args:
+        Args
         ----
             model: The Pydantic model class
             field_name: Name of the field
@@ -172,7 +172,8 @@ class TypeInferrer:
             if hasattr(model, "model_fields"):
                 model_fields = getattr(model, "model_fields", {})
                 if field_name in model_fields:
-                    return cast(Type[Any], model_fields[field_name].annotation)
+                    annotation: type[Any] = model_fields[field_name].annotation
+                    return annotation
         except (AttributeError, TypeError, KeyError):
             # Field not found or error accessing it
             pass
@@ -183,7 +184,7 @@ class TypeInferrer:
     def _is_base_model(field_type: Any) -> bool:
         """Check if a type is a BaseModel subclass.
 
-        Args:
+        Args
         ----
             field_type: The type to check
 
@@ -205,11 +206,11 @@ class ModelFactory:
     def create_mapped_model(
         name: str,
         mapping: dict[str, str],
-        dependency_models: dict[str, Type[BaseModel]] | None = None,
-    ) -> Type[BaseModel]:
+        dependency_models: dict[str, type[BaseModel]] | None = None,
+    ) -> type[BaseModel]:
         """Create a Pydantic model with automatic field mapping.
 
-        Args:
+        Args
         ----
             name: Name for the generated model
             mapping: Field mapping {target_field: "source.field.path"}
@@ -227,7 +228,7 @@ class ModelFactory:
         validator = ModelFactory._create_validator(mapping)
 
         # Create the dynamic model
-        model: Type[BaseModel] = create_model(
+        model: type[BaseModel] = create_model(
             name,
             __validators__={"extract_mapped_fields": validator},
             **field_definitions,
@@ -240,11 +241,11 @@ class ModelFactory:
 
     @staticmethod
     def _build_field_definitions(
-        mapping: dict[str, str], dependency_models: dict[str, Type[BaseModel]] | None
+        mapping: dict[str, str], dependency_models: dict[str, type[BaseModel]] | None
     ) -> dict[str, Any]:
         """Build field definitions with type inference.
 
-        Args:
+        Args
         ----
             mapping: Field mapping dictionary
             dependency_models: Optional dependency models for type inference
@@ -265,11 +266,11 @@ class ModelFactory:
 
     @staticmethod
     def _infer_field_type(
-        source_path: str, dependency_models: dict[str, Type[BaseModel]] | None
-    ) -> Type[Any]:
+        source_path: str, dependency_models: dict[str, type[BaseModel]] | None
+    ) -> type[Any]:
         """Infer type for a field from source path.
 
-        Args:
+        Args
         ----
             source_path: The source path string
             dependency_models: Optional dependency models
@@ -280,13 +281,13 @@ class ModelFactory:
 
         """
         if not dependency_models or "." not in source_path:
-            return Any
+            return cast("type[Any]", Any)
 
         parts = source_path.split(".")
         dep_name = parts[0]
 
         if dep_name not in dependency_models:
-            return Any
+            return cast("type[Any]", Any)
 
         return TypeInferrer.infer_from_path(dependency_models[dep_name], parts[1:])
 
@@ -294,7 +295,7 @@ class ModelFactory:
     def _create_validator(mapping: dict[str, str]) -> Any:
         """Create the field extraction validator.
 
-        Args:
+        Args
         ----
             mapping: Field mapping dictionary
 
@@ -307,7 +308,7 @@ class ModelFactory:
         def extract_mapped_fields(data: Any) -> dict[str, Any]:
             """Extract fields from nested structure based on mapping."""
             if not isinstance(data, dict):
-                return cast(dict[str, Any], data) if isinstance(data, dict) else {}
+                return {}
 
             result: dict[str, Any] = {}
             for target_field, source_path in mapping.items():
@@ -326,7 +327,7 @@ class MappedInput:
     This class provides a simple API for creating Pydantic models
     that automatically map fields from nested input structures.
 
-    Example:
+    Example
     -------
         # Create a model that maps fields from dependencies
         ConsumerInput = MappedInput.create_model(
@@ -344,8 +345,8 @@ class MappedInput:
     def create_model(
         name: str,
         mapping: dict[str, str],
-        dependency_models: dict[str, Type[BaseModel]] | None = None,
-    ) -> Type[BaseModel]:
+        dependency_models: dict[str, type[BaseModel]] | None = None,
+    ) -> type[BaseModel]:
         """Create a Pydantic model with automatic field mapping.
 
         Args:
@@ -358,7 +359,7 @@ class MappedInput:
         -------
             Pydantic model class with automatic field extraction
 
-        Example:
+        Example
         -------
             # Create a model that maps fields from dependencies
             ConsumerInput = MappedInput.create_model(
@@ -383,7 +384,7 @@ class AutoMappedInput(BaseModel):
 
     Users can subclass this to create models with field mapping.
 
-    Example:
+    Example
     -------
         class ConsumerInput(AutoMappedInput):
             content: str
@@ -400,10 +401,10 @@ class AutoMappedInput(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def apply_field_mapping(cls: Type[AutoMappedInput], data: Any) -> dict[str, Any]:
+    def apply_field_mapping(cls: type[AutoMappedInput], data: Any) -> dict[str, Any]:
         """Automatically apply field mapping before validation.
 
-        Args:
+        Args
         ----
             cls: The class being instantiated
             data: Input data to be mapped
@@ -480,7 +481,7 @@ class AutoMappedInput(BaseModel):
     def _normalize_to_dict(data: Any) -> dict[str, Any]:
         """Normalize data to a dictionary.
 
-        Args:
+        Args
         ----
             data: Input data
 
@@ -490,7 +491,7 @@ class AutoMappedInput(BaseModel):
 
         """
         if isinstance(data, dict):
-            return cast(dict[str, Any], data)
+            return data
         if isinstance(data, BaseModel):
             return data.model_dump()
         return {}
