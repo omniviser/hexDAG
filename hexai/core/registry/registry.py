@@ -442,11 +442,11 @@ class ComponentRegistry:
         """Validate component type."""
         try:
             return ComponentType(component_type)
-        except ValueError:
+        except ValueError as e:
             valid = ", ".join(t.value for t in ComponentType)
             raise InvalidComponentError(
                 component_type, f"Invalid component type. Must be one of: {valid}"
-            )
+            ) from e
 
     def _wrap_component(
         self, component: object
@@ -503,10 +503,9 @@ class ComponentRegistry:
 
     def _get_available_components(self) -> list[str]:
         """Get list of all available component names."""
-        available = []
+        available: list[str] = []
         for ns, components in self._components.items():
-            for name in components:
-                available.append(f"{ns}:{name}")
+            available.extend(f"{ns}:{name}" for name in components)
         return available
 
 
