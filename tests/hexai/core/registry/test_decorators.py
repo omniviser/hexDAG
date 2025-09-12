@@ -20,37 +20,120 @@ from hexai.core.registry.models import NodeSubtype
 
 
 class TestSnakeCase:
-    """Test snake_case conversion."""
+    """Test the _snake_case function with various input patterns."""
 
     def test_simple_camel_case(self):
-        """Test simple CamelCase conversion."""
+        """Test simple CamelCase conversions."""
         assert _snake_case("CamelCase") == "camel_case"
+        assert _snake_case("SimpleCase") == "simple_case"
+        assert _snake_case("TwoWords") == "two_words"
         assert _snake_case("SimpleTest") == "simple_test"
 
-    def test_consecutive_capitals(self):
-        """Test handling of consecutive capital letters."""
+    def test_lower_camel_case(self):
+        """Test lowerCamelCase (camelCase) conversions."""
+        assert _snake_case("camelCase") == "camel_case"
+        assert _snake_case("userId") == "user_id"
+        assert _snake_case("firstName") == "first_name"
+
+    def test_acronyms(self):
+        """Test handling of acronyms."""
+        assert _snake_case("XMLHttpRequest") == "xml_http_request"
+        assert _snake_case("HTMLParser") == "html_parser"
+        assert _snake_case("HTTPSConnection") == "https_connection"
+        assert _snake_case("URLPattern") == "url_pattern"
+        assert _snake_case("JSONDecoder") == "json_decoder"
+        assert _snake_case("XMLDocument") == "xml_document"
+        assert _snake_case("PDFReader") == "pdf_reader"
+        assert _snake_case("IOError") == "io_error"
         assert _snake_case("HTTPServer") == "http_server"
         assert _snake_case("XMLParser") == "xml_parser"
 
-    def test_mixed_case(self):
-        """Test mixed case handling."""
+    def test_mixed_acronyms(self):
+        """Test mixed cases with acronyms."""
+        assert _snake_case("SimpleHTTPServer") == "simple_http_server"
+        assert _snake_case("MyAPIClass") == "my_api_class"
         assert _snake_case("getHTTPResponseCode") == "get_http_response_code"
-        assert _snake_case("HTTPSConnection") == "https_connection"
+        assert _snake_case("HTTPResponseCodeError") == "http_response_code_error"
+        assert _snake_case("parseHTMLString") == "parse_html_string"
+        assert _snake_case("XMLToHTMLConverter") == "xml_to_html_converter"
 
-    def test_already_snake_case(self):
-        """Test strings already in snake_case."""
-        assert _snake_case("already_snake_case") == "already_snake_case"
-        assert _snake_case("snake_case") == "snake_case"
+    def test_all_caps(self):
+        """Test all capital letters."""
+        assert _snake_case("HTTP") == "http"
+        assert _snake_case("API") == "api"
+        assert _snake_case("HTTPAPI") == "httpapi"
+        assert _snake_case("XMLHTTP") == "xmlhttp"
+
+    def test_numbers(self):
+        """Test handling of numbers in names."""
+        assert _snake_case("Base64Encoder") == "base64_encoder"
+        assert _snake_case("SHA256Hash") == "sha256_hash"
+        assert _snake_case("Python3Parser") == "python3_parser"
+        assert _snake_case("HTML5Parser") == "html5_parser"
 
     def test_single_word(self):
-        """Test single word conversion."""
+        """Test single word conversions."""
         assert _snake_case("Word") == "word"
         assert _snake_case("word") == "word"
+        assert _snake_case("WORD") == "word"
+        assert _snake_case("w") == "w"
+        assert _snake_case("W") == "w"
 
-    def test_leading_underscore(self):
-        """Test handling of leading underscores."""
+    def test_underscores_preserved(self):
+        """Test that existing underscores are preserved."""
+        assert _snake_case("Already_Snake_Case") == "already_snake_case"
+        assert _snake_case("Mixed_CamelCase") == "mixed_camel_case"
+        assert _snake_case("_PrivateMethod") == "_private_method"
+        assert _snake_case("__DoublePrivate") == "__double_private"
+        assert _snake_case("already_snake_case") == "already_snake_case"
+        assert _snake_case("snake_case") == "snake_case"
         assert _snake_case("_Leading") == "_leading"
         assert _snake_case("__DoubleLeading") == "__double_leading"
+
+    def test_consecutive_capitals(self):
+        """Test handling of consecutive capital letters."""
+        assert _snake_case("ABCDef") == "abc_def"
+        assert _snake_case("ABCD") == "abcd"
+        assert _snake_case("AbCdEf") == "ab_cd_ef"
+
+    def test_empty_string(self):
+        """Test empty string input."""
+        assert _snake_case("") == ""
+
+    def test_real_world_examples(self):
+        """Test with real-world class names."""
+        # Node types
+        assert _snake_case("FunctionNode") == "function_node"
+        assert _snake_case("LLMNode") == "llm_node"
+        assert _snake_case("ReActAgentNode") == "re_act_agent_node"
+
+        # Component types
+        assert _snake_case("InMemoryMemory") == "in_memory_memory"
+        assert _snake_case("ComponentRegistry") == "component_registry"
+        assert _snake_case("NodeFactory") == "node_factory"
+
+        # Event types
+        assert _snake_case("NodeStartedEvent") == "node_started_event"
+        assert _snake_case("ToolCalledEvent") == "tool_called_event"
+
+        # Common patterns
+        assert _snake_case("BaseNodeFactory") == "base_node_factory"
+        assert _snake_case("AbstractBaseClass") == "abstract_base_class"
+
+    def test_edge_cases(self):
+        """Test edge cases and unusual patterns."""
+        # Multiple transitions
+        assert _snake_case("aB") == "a_b"
+        assert _snake_case("aBc") == "a_bc"
+        assert _snake_case("aBcD") == "a_bc_d"
+
+        # Starting with lowercase
+        assert _snake_case("iPhone") == "i_phone"
+        assert _snake_case("eBay") == "e_bay"
+
+        # Ending with acronym
+        assert _snake_case("RequestHTTP") == "request_http"
+        assert _snake_case("ParserXML") == "parser_xml"
 
 
 class TestComponentDecorator:
@@ -342,6 +425,47 @@ class TestFunctionMetadata:
         assert hasattr(generator_tool, "__hexdag_metadata__")
         assert generator_tool.__hexdag_metadata__.name == "generator_tool"
         assert generator_tool.__hexdag_metadata__.type == ComponentType.TOOL
+
+
+class TestSnakeCaseInDecorator:
+    """Test snake_case conversion when used in decorators."""
+
+    def test_decorator_without_name(self):
+        """Test that decorator uses snake_case of class name when name not provided."""
+
+        @component(ComponentType.NODE, namespace="test")
+        class XMLHttpRequest:
+            pass
+
+        assert XMLHttpRequest.__hexdag_metadata__.name == "xml_http_request"
+
+    def test_decorator_with_explicit_name(self):
+        """Test that explicit name overrides snake_case conversion."""
+
+        @component(ComponentType.NODE, name="custom_name", namespace="test")
+        class XMLHttpRequest:
+            pass
+
+        assert XMLHttpRequest.__hexdag_metadata__.name == "custom_name"
+
+    def test_various_class_names(self):
+        """Test decorator with various class name patterns."""
+
+        @component(ComponentType.NODE, namespace="test")
+        class SimpleHTTPServer:
+            pass
+
+        @component(ComponentType.TOOL, namespace="test")
+        class JSONDecoder:
+            pass
+
+        @component(ComponentType.ADAPTER, namespace="test")
+        class MyAPIClass:
+            pass
+
+        assert SimpleHTTPServer.__hexdag_metadata__.name == "simple_http_server"
+        assert JSONDecoder.__hexdag_metadata__.name == "json_decoder"
+        assert MyAPIClass.__hexdag_metadata__.name == "my_api_class"
 
 
 class TestStringUsage:

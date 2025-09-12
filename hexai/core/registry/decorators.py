@@ -15,12 +15,20 @@ T = TypeVar("T")
 
 
 def _snake_case(name: str) -> str:
-    """Convert CamelCase to snake_case."""
-    # Insert underscore before uppercase letters that follow lowercase letters
-    s1 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", name)
-    # Insert underscore before uppercase letters followed by lowercase (except at start)
-    s2 = re.sub("([A-Z]+)([A-Z][a-z])", r"\1_\2", s1)
-    return s2.lower()
+    """Convert CamelCase/PascalCase to snake_case, handling acronyms properly.
+
+    Examples
+    --------
+    XMLHttpRequest -> xml_http_request
+    HTMLParser -> html_parser
+    SimpleHTTPServer -> simple_http_server
+    MyAPIClass -> my_api_class
+    IOError -> io_error
+    """
+    name = re.sub("([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+    name = re.sub("([a-z0-9])([A-Z])", r"\1_\2", name)
+    name = re.sub("([a-z])([A-Z]+)$", r"\1_\2", name)
+    return name.lower()
 
 
 def component(
