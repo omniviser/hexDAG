@@ -45,7 +45,7 @@ dev = [
     "pytest-mock>=3.14.0,<4",
     "black==24.10.0",
     "isort==5.13.2",
-    "ruff>=0.12.8",
+    "ruff>=0.13.0",
     "flake8==7.1.1",
     "flake8-docstrings==1.7.0",
     "flake8-import-order==0.18.2",
@@ -70,6 +70,7 @@ dev = [
     "twine>=6.1.0",
 
 ]
+
 
 [tool.hatch.build.targets.sdist]
 include = ["hexai"]
@@ -245,6 +246,7 @@ ignore = []
 "tests/*" = ["UP"]  # Don't enforce modern types in tests
 "examples/*" = ["UP"]  # Don't enforce modern types in examples
 "hexai/core/application/events/observers.py" = ["SIM115"]  # FileObserver manages file handle with close()
+"hexai/core/registry/discovery.py" = ["TC003", "TC001"]  # Runtime imports needed, not just for type checking
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexai"]

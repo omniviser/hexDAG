@@ -7,7 +7,9 @@ import pytest
 from pydantic import BaseModel
 
 from hexai.core.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.registry import registry
 
 
 # Test data models
@@ -739,10 +741,10 @@ class TestOrchestrator:
             deps=set(),
         )
 
-        # Consumer using Pydantic model for structured input
-        from hexai.core.application.nodes.function_node import FunctionNode
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
 
-        consumer_node = FunctionNode()(
+        consumer_node = function_node(
             name="consumer",
             fn=mapper_consumer,
             input_schema=MappedConsumerInput,
@@ -783,9 +785,13 @@ class TestOrchestrator:
         )
 
         # Consumer without explicit mapping - uses structured aggregation
-        from hexai.core.application.nodes.function_node import FunctionNode
+        from hexai.core.bootstrap import ensure_bootstrapped
+        from hexai.core.registry import registry
 
-        consumer_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        consumer_node = function_node(
             name="consumer",
             fn=structured_consumer,
             input_schema=dict,
@@ -830,9 +836,11 @@ class TestOrchestrator:
         )
 
         # Consumer using Pydantic model
-        from hexai.core.application.nodes.function_node import FunctionNode
 
-        consumer_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        consumer_node = function_node(
             name="consumer",
             fn=custom_consumer,
             input_schema=SourceOutput,
@@ -901,9 +909,11 @@ class TestOrchestrator:
         )
 
         # Node using Pydantic model for structured input
-        from hexai.core.application.nodes.function_node import FunctionNode
 
-        mapped_node = FunctionNode()(
+        ensure_bootstrapped()
+        function_node = registry.get("function_node", namespace="core")
+
+        mapped_node = function_node(
             name="mapped",
             fn=mapper_consumer,
             input_schema=MappedConsumerInput,
@@ -915,7 +925,7 @@ class TestOrchestrator:
         async def final_consumer(input_data: str, **ports) -> str:
             return f"final: {input_data}"
 
-        final_node = FunctionNode()(
+        final_node = function_node(
             name="final",
             fn=final_consumer,
             input_schema=str,

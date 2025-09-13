@@ -8,10 +8,13 @@ from typing import Any, get_type_hints
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
+from ...registry import node
+from ...registry.models import NodeSubtype
 from .base_node_factory import BaseNodeFactory
 from .mapped_input import MappedInput
 
 
+@node(name="function_node", subtype=NodeSubtype.FUNCTION, namespace="core")
 class FunctionNode(BaseNodeFactory):
     """Simple factory for creating function-based nodes with optional Pydantic validation."""
 

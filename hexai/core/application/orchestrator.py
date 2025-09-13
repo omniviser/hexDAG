@@ -246,7 +246,7 @@ class Orchestrator:
                     if self.strict_validation:
                         raise
                     else:
-                        logger.debug(f"Input validation failed for node '{node_name}': {e}")
+                        logger.debug("Input validation failed for node '%s': %s", node_name, e)
                         validated_input = node_input
             else:
                 validated_input = node_input
@@ -289,7 +289,7 @@ class Orchestrator:
                     if self.strict_validation:
                         raise
                     else:
-                        logger.debug(f"Output validation failed for node '{node_name}': {e}")
+                        logger.debug("Output validation failed for node '%s': %s", node_name, e)
                         validated_output = raw_output
             else:
                 validated_output = raw_output

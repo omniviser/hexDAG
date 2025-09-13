@@ -53,7 +53,6 @@ class BaseNodeFactory(ABC):
                     # Unknown type specification - use Any
                     field_definitions[field_name] = (Any, ...)
 
-            # Cast the result to the expected type for mypy
             return cast("type[BaseModel]", create_model(name, **field_definitions))
 
         # Handle primitive types - create a simple wrapper model
