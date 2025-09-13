@@ -24,7 +24,7 @@ jobs:
   - job: BuildAndPublish
     displayName: "Build package & publish to TestPyPI"
     dependsOn: CodeQuality
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     steps:
       - checkout: self
         clean: true
@@ -39,7 +39,7 @@ jobs:
 
       - script: |
           uvx --from build pyproject-build
-          uv run twine check dist/*
+          uvx twine check dist/*
         displayName: "Build sdist & wheel"
 
       - task: PublishPipelineArtifact@1
@@ -155,11 +155,99 @@ jobs:
       - script: |
           uv venv .venv_test
           source .venv_test/bin/activate || .venv_test\Scripts\activate
-          # spróbuj wheel, a jeśli brak to sdist
           if ls dist-$(Agent.OS)/*.whl 1> /dev/null 2>&1; then
             uv pip install dist-$(Agent.OS)/*.whl
           else
             uv pip install dist-$(Agent.OS)/*.tar.gz
           fi
           python -c "import hexai; print('hexai import ok')"
+        shell: bash
         displayName: "Install from artifact (wheel or sdist) + import check"
+
+  - job: DocsArtifacts
+    displayName: "Publish packaging docs artifacts"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: self
+        clean: true
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: "$(System.DefaultWorkingDirectory)/CHANGELOG.md"
+          artifact: "CHANGELOG"
+          publishLocation: "pipeline"
+        displayName: "Publish CHANGELOG.md"
+      - task: PublishPipelineArtifact@1
+        condition: exists('$(System.DefaultWorkingDirectory)/docs/PACKAGING_PLAN.md')
+        inputs:
+          targetPath: "$(System.DefaultWorkingDirectory)/docs/PACKAGING_PLAN.md"
+          artifact: "PACKAGING_PLAN"
+          publishLocation: "pipeline"
+        displayName: "Publish PACKAGING_PLAN.md (if present)"
+
+
+  - job: DeptryReport
+    displayName: "Deptry dependency report"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: self
+        clean: true
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+      - script: |
+          uv venv .venv && source .venv/bin/activate
+          uv pip install deptry
+          uv run deptry hexai > deptry_report.txt || true
+        displayName: "Run deptry (collect issues)"
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: "$(System.DefaultWorkingDirectory)/deptry_report.txt"
+          artifact: "DEPTRY_REPORT"
+          publishLocation: "pipeline"
+        displayName: "Publish deptry report"
+
+  - job: PublishProdPyPI
+    displayName: "Publish to PyPI (manual)"
+    dependsOn: BuildMatrix
+    condition: and(succeeded(), false)   # turn off
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: self
+        clean: true
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+      - download: current
+        artifact: dist-ubuntu
+      - script: |
+          uvx twine check dist-ubuntu/*
+        displayName: "Twine check"
+      - script: |
+          TWINE_USERNAME="__token__" \
+          TWINE_PASSWORD="$(PYPI_TOKEN)" \
+          uvx twine upload dist-ubuntu/*
+        displayName: "Upload to PyPI"
+
+  - job: ReleaseNotes
+    displayName: "Generate release notes (from conventional commits)"
+    pool: { vmImage: 'ubuntu-latest' }
+    steps:
+      - checkout: self
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+      - script: |
+          uvx --from commitizen cz changelog --unreleased --dry-run > RELEASE_NOTES.md || true
+        displayName: "Build release notes (unreleased)"
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: "$(System.DefaultWorkingDirectory)/RELEASE_NOTES.md"
+          artifact: "RELEASE_NOTES"
+          publishLocation: "pipeline"
+        displayName: "Publish release notes"
