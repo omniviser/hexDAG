@@ -109,3 +109,38 @@ jobs:
           artifact: "dist-$(Agent.OS)"
           publishLocation: "pipeline"
         displayName: "Publish dist/ as artifact"
+
+  - job: InstallSmoke
+    displayName: "Smoke test install dist on Linux/Windows/macOS"
+    dependsOn: BuildMatrix
+    strategy:
+      matrix:
+        linux:
+          image: "ubuntu-latest"
+        windows:
+          image: "windows-latest"
+        macos:
+          image: "macos-latest"
+    pool:
+      vmImage: $(image)
+
+    steps:
+      - checkout: none
+
+      - download: current
+        artifact: dist-$(Agent.OS)
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+
+      - script: |
+          uv venv .venv_test
+          source .venv_test/bin/activate || .venv_test\Scripts\activate
+          uv pip install dist-$(Agent.OS)/*.whl
+          python -c "import hexai; print('hexai import ok')"
+        displayName: "Install from artifact + import check"
