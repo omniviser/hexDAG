@@ -213,8 +213,6 @@ class ReActAgentNode(BaseNodeFactory):
 
                 # Check success condition
                 if success_condition(step_result):
-                    # If success condition is met but we still have a dict,
-                    # try to extract final output one more time
                     final_output = await self._check_for_final_output(
                         self._initialize_or_update_state(step_result, input_mapping),
                         output_model,
@@ -391,9 +389,6 @@ class ReActAgentNode(BaseNodeFactory):
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"
 
-        # Event emission is now handled by the orchestrator
-
-        # Get current prompt based on phase
         current_prompt = self._get_current_prompt(
             main_prompt, continuation_prompts, state.current_phase
         )
@@ -405,7 +400,7 @@ class ReActAgentNode(BaseNodeFactory):
         state_dict = state.model_dump()
         llm_input = {
             **state_dict,
-            **state_dict.get("input_data", {}),  # Include original input fields at top level
+            **state_dict.get("input_data", {}),
             "reasoning_so_far": "\n".join(state.reasoning_steps) or "Starting reasoning...",
         }
 
@@ -421,8 +416,6 @@ class ReActAgentNode(BaseNodeFactory):
         state.reasoning_steps.append(f"Step {current_step}: {response}")
         state.response = response
         state.step = current_step
-
-        # Event emission is now handled by the orchestrator
 
         return state
 
@@ -447,8 +440,6 @@ class ReActAgentNode(BaseNodeFactory):
         tool_calls = self.tool_parser.parse_tool_calls(response, format=config.tool_call_style)
 
         for tool_call in tool_calls:
-            # Event emission is now handled by the orchestrator
-
             try:
                 # Execute tool
                 result = await tool_router.call_tool(tool_call.name, tool_call.params)
@@ -456,8 +447,6 @@ class ReActAgentNode(BaseNodeFactory):
                 # Store result
                 state.tool_results.append(f"{tool_call.name}: {result}")
                 state.tools_used.append(tool_call.name)
-
-                # Event emission is now handled by the orchestrator
 
                 # Handle special tools
                 if tool_call.name in ["change_phase", "phase"] and isinstance(result, dict):
@@ -549,7 +538,7 @@ class ReActAgentNode(BaseNodeFactory):
                     import logging
 
                     logger = logging.getLogger(__name__)
-                    logger.debug(f"Failed to validate tool_end result: {e}")
+                    logger.debug("Failed to validate tool_end result: %e", e)
                     continue  # Skip this tool result and try the next one
 
         return None

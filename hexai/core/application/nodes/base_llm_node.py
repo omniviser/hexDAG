@@ -34,14 +34,12 @@ class BaseLLMNode(BaseNodeFactory):
     @staticmethod
     def infer_input_schema_from_template(template: TemplateType) -> dict[str, Any]:
         """Infer input schema from template variables."""
-        # All templates have input_vars after our refactoring
         variables = getattr(template, "input_vars", [])
 
         # Filter out special parameters that are not template variables
         special_params = {"context_history", "system_prompt"}
         variables = [var for var in variables if var not in special_params]
 
-        # Create schema with string fields for each variable
         if not variables:
             return {"input": str}  # Default single input field
 
@@ -61,7 +59,6 @@ class BaseLLMNode(BaseNodeFactory):
         schema_instruction = self._create_schema_instruction(output_model)
         return template + schema_instruction
 
-    # LLM Interaction Methods
     def create_llm_wrapper(
         self,
         name: str,
@@ -79,40 +76,28 @@ class BaseLLMNode(BaseNodeFactory):
             if not llm:
                 raise ValueError("LLM port is required")
 
-            # Event emission is now handled by the orchestrator
-
             try:
-                # Enhance template with schema if needed
                 enhanced_template = template
                 if rich_features and output_model:
                     enhanced_template = self.enhance_template_with_schema(template, output_model)
 
-                # Convert Pydantic model to dict if needed
                 input_dict = validated_input
                 if hasattr(validated_input, "model_dump"):
                     input_dict = validated_input.model_dump()
 
-                # Generate messages and extract template variables
                 messages, template_vars = self._generate_messages(enhanced_template, input_dict)
-
-                # Event emission removed - now handled at orchestrator level
 
                 # Call LLM
                 if rich_features and output_model:
-                    # For structured output, we'll parse the response
                     response = await llm.aresponse(messages)
-                    # Parse structured response (basic implementation)
                     result = self._parse_structured_response(response, output_model)
                 else:
                     response = await llm.aresponse(messages)
                     result = response
 
-                # Event emission removed - now handled at orchestrator level
-
                 return result
 
             except Exception as e:
-                # Event emission is now handled by the orchestrator
                 raise e
 
         return llm_wrapper
@@ -121,12 +106,8 @@ class BaseLLMNode(BaseNodeFactory):
         self, template: TemplateType, validated_input: dict[str, Any]
     ) -> tuple[list[dict[str, str]], dict[str, Any]]:
         """Generate messages from template and extract variables."""
-        # All templates have to_messages method
         messages = template.to_messages(**validated_input)
         return messages, validated_input
-
-    # Remove the individual message generation methods - they're not needed
-    # All templates support to_messages() method
 
     def _create_schema_instruction(self, output_model: Type[BaseModel]) -> str:
         """Create schema instruction for structured output."""

@@ -1,7 +1,7 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any, Type, cast
 
 from pydantic import BaseModel, create_model
 
@@ -26,11 +26,17 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
-            field_definitions = {}
+            field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                field_definitions[field_name] = field_type
+                # Pydantic expects (type, default) tuple or just type with annotation
+                # If field_type is just a type, add ... as required marker
+                if isinstance(field_type, type):
+                    field_definitions[field_name] = (field_type, ...)
+                else:
+                    field_definitions[field_name] = field_type
 
-            return create_model(name, **field_definitions)
+            # Cast the result to the expected type
+            return cast(Type[BaseModel], create_model(name, **field_definitions))
 
         # Handle primitive types - create a simple wrapper model
         if isinstance(schema, type):

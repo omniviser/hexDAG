@@ -152,7 +152,7 @@ class Orchestrator:
             # Fire wave started event and check control
             wave_event = WaveStarted(
                 wave_index=wave_idx,
-                nodes=list(wave),  # wave is already a list of node names
+                nodes=wave,
             )
             await observer_manager.notify(wave_event)
             wave_response = await control_manager.check(wave_event, context)
@@ -298,7 +298,7 @@ class Orchestrator:
             raw_output = (
                 await node_spec.fn(validated_input, **ports, **kwargs)
                 if asyncio.iscoroutinefunction(node_spec.fn)
-                else await asyncio.get_event_loop().run_in_executor(
+                else await asyncio.get_running_loop().run_in_executor(
                     None, lambda: node_spec.fn(validated_input, **ports, **kwargs)
                 )
             )

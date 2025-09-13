@@ -79,7 +79,9 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         # Keep wrapped functions alive
         self._strong_refs: dict[str, Any] = {}
 
-    def register(self, handler: Any, **kwargs: Any) -> str:
+    def register(
+        self, handler: ControlHandler | ControlHandlerFunc | AsyncControlHandlerFunc, **kwargs: Any
+    ) -> str:
         """Register a control handler with optional priority and event filtering.
 
         Args

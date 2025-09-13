@@ -7,7 +7,10 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Protocol, Type
+from typing import TYPE_CHECKING, Any, Callable, Protocol, Type
+
+if TYPE_CHECKING:
+    from .events import Event
 
 # Execution Context
 # -----------------
@@ -94,7 +97,7 @@ class HandlerMetadata:
 class Observer(Protocol):
     """Protocol for observers that monitor events."""
 
-    async def handle(self, event: Any) -> None:
+    async def handle(self, event: "Event") -> None:
         """Handle an event (read-only, no return value)."""
         ...
 
@@ -106,7 +109,7 @@ class Observer(Protocol):
 class ControlHandler(Protocol):
     """Protocol for control handlers that can affect execution."""
 
-    async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:
+    async def handle(self, event: "Event", context: ExecutionContext) -> ControlResponse:
         """Handle an event and return control response."""
         ...
 
@@ -191,12 +194,12 @@ class BaseEventManager(ABC):
 # ------------
 
 # Observer types
-ObserverFunc = Callable[[Any], None]
-AsyncObserverFunc = Callable[[Any], Any]  # Returns awaitable
+ObserverFunc = Callable[["Event"], None]
+AsyncObserverFunc = Callable[["Event"], Any]  # Returns awaitable
 
 # Control handler types
-ControlHandlerFunc = Callable[[Any, ExecutionContext], ControlResponse]
-AsyncControlHandlerFunc = Callable[[Any, ExecutionContext], Any]  # Returns awaitable
+ControlHandlerFunc = Callable[["Event", ExecutionContext], ControlResponse]
+AsyncControlHandlerFunc = Callable[["Event", ExecutionContext], Any]  # Returns awaitable
 
 
 # Event Filtering Mixin
@@ -210,7 +213,7 @@ class EventFilterMixin:
     and ControlManager to avoid code duplication.
     """
 
-    def _should_process_event(self, event_filter: set[Type] | None, event: Any) -> bool:
+    def _should_process_event(self, event_filter: set[Type] | None, event: "Event") -> bool:
         """Check if an event should be processed based on type filter.
 
         Args

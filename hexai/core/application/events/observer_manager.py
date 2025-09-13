@@ -8,7 +8,10 @@ import asyncio
 import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Type
+from typing import TYPE_CHECKING, Any, Type
+
+if TYPE_CHECKING:
+    from .events import Event
 
 from .models import (
     AsyncObserverFunc,
@@ -73,7 +76,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
             self._strong_refs: dict[str, Any] = {}  # Keep functions alive
 
-    def register(self, handler: Any, **kwargs: Any) -> str:
+    def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
         """Register an observer with optional event type filtering.
 
         Args
@@ -83,6 +86,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             **kwargs: Can include:
                 - 'observer_id': Optional ID for the observer
                 - 'event_types': List of event types to observe (None = all events)
+                - 'keep_alive': Whether to keep strong reference (for weak-referenceable objects)
 
         Returns
         -------
@@ -133,12 +137,12 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         return str(observer_id)
 
-    def _should_notify(self, observer_id: str, event: Any) -> bool:
+    def _should_notify(self, observer_id: str, event: "Event") -> bool:
         """Check if observer should be notified of this event type."""
         event_filter = self._event_filters.get(observer_id)
         return self._should_process_event(event_filter, event)
 
-    async def notify(self, event: Any) -> None:
+    async def notify(self, event: "Event") -> None:
         """Notify all interested observers of an event.
 
         Only observers registered for this event type will be notified.
@@ -189,12 +193,12 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
                 {"event_type": type(event).__name__, "handler_name": "ObserverManager"},
             )
 
-    async def _limited_invoke(self, observer: Observer, event: Any) -> None:
+    async def _limited_invoke(self, observer: Observer, event: "Event") -> None:
         """Invoke observer with concurrency limit."""
         async with self._semaphore:
             await self._safe_invoke(observer, event)
 
-    async def _safe_invoke(self, observer: Observer, event: Any) -> None:
+    async def _safe_invoke(self, observer: Observer, event: "Event") -> None:
         """Safely invoke an observer with timeout."""
         try:
             # Apply timeout to individual observer
@@ -299,11 +303,11 @@ class FunctionObserver:
         self._executor = executor
         self.__name__ = getattr(func, "__name__", "anonymous_observer")
 
-    async def handle(self, event: Any) -> None:
+    async def handle(self, event: "Event") -> None:
         """Handle the event by calling the wrapped function."""
         if asyncio.iscoroutinefunction(self._func):
             await self._func(event)
         else:
             # Run sync function in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(self._executor, self._func, event)
