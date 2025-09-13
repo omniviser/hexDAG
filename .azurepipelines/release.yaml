@@ -8,9 +8,23 @@ pool:
   vmImage: 'ubuntu-latest'
 
 jobs:
+  - job: ConventionalCommits
+    displayName: "Check conventional commits"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - checkout: self
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+      - script: |
+          uvx --from commitizen cz check
+        displayName: "cz check"
+
   - job: BuildAndPublish
     displayName: "Build package & publish to TestPyPI"
     dependsOn: CodeQuality
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     steps:
       - checkout: self
         clean: true
@@ -141,6 +155,11 @@ jobs:
       - script: |
           uv venv .venv_test
           source .venv_test/bin/activate || .venv_test\Scripts\activate
-          uv pip install dist-$(Agent.OS)/*.whl
+          # spróbuj wheel, a jeśli brak to sdist
+          if ls dist-$(Agent.OS)/*.whl 1> /dev/null 2>&1; then
+            uv pip install dist-$(Agent.OS)/*.whl
+          else
+            uv pip install dist-$(Agent.OS)/*.tar.gz
+          fi
           python -c "import hexai; print('hexai import ok')"
-        displayName: "Install from artifact + import check"
+        displayName: "Install from artifact (wheel or sdist) + import check"

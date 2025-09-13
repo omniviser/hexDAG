@@ -256,6 +256,9 @@ tag_format = "v$version"
 version_files = [
     "pyproject.toml:version"
 ]
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"
+
 
 [tool.vulture]
 min_confidence = 90

@@ -103,6 +103,13 @@ repos:
         types: [yaml]
         stages: [pre-commit]
 
+  # commitizen
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.30.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
   - repo: local
     hooks:
       - id: check-test-structure
