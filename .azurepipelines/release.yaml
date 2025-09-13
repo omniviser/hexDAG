@@ -69,3 +69,43 @@ jobs:
           PKG_NAME: $(PKG_NAME)
           PKG_VERSION: $(PKG_VERSION)
         condition: succeeded()
+
+  - job: BuildMatrix
+    displayName: "Build sdist & universal wheel on Linux/Windows/macOS"
+    strategy:
+      matrix:
+        linux:
+          image: "ubuntu-latest"
+        windows:
+          image: "windows-latest"
+        macos:
+          image: "macos-latest"
+    pool:
+      vmImage: $(image)
+
+    steps:
+      - checkout: self
+        clean: true
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        displayName: "Install uv"
+
+      - script: |
+          uvx --from build pyproject-build
+        displayName: "Build sdist & wheel"
+
+      - script: |
+          uvx twine check dist/*
+        displayName: "Twine check"
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: "$(System.DefaultWorkingDirectory)/dist"
+          artifact: "dist-$(Agent.OS)"
+          publishLocation: "pipeline"
+        displayName: "Publish dist/ as artifact"
