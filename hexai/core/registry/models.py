@@ -93,11 +93,13 @@ class ComponentType(StrEnum):
     """Enumeration of component types in the registry."""
 
     NODE = "node"
-    ADAPTER = "adapter"
+    PORT = "port"  # The interface/protocol (e.g., LLM)
+    ADAPTER = "adapter"  # Implementation of a port (e.g., AnthropicAdapter)
     TOOL = "tool"
     POLICY = "policy"
     MEMORY = "memory"
     OBSERVER = "observer"
+    CONTROLLER = "controller"
 
 
 class NodeSubtype(StrEnum):
@@ -118,6 +120,25 @@ class Namespace(StrEnum):
     USER = "user"  # Default for user-defined components
     TEST = "test"  # For testing purposes
     PLUGIN = "plugin"  # For plugin components
+
+
+class PortMetadata(BaseModel):
+    """Metadata specific to PORT components (interfaces/protocols)."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    protocol_class: type  # The Protocol being defined
+    required_methods: list[str] = Field(default_factory=list)
+    optional_methods: list[str] = Field(default_factory=list)
+
+
+class AdapterMetadata(BaseModel):
+    """Metadata specific to ADAPTER components (port implementations)."""
+
+    implements_port: str  # Name of port it implements
+    capabilities: list[str] = Field(default_factory=list)
+    requires_config: list[str] = Field(default_factory=list)
+    singleton: bool = Field(default=True)
 
 
 class MetadataExtension(BaseModel):
@@ -189,6 +210,9 @@ class ComponentMetadata(BaseModel):
     namespace: str = Field(default="core")
     subtype: NodeSubtype | str | None = None
     description: str = Field(default="")
+    port_metadata: PortMetadata | None = None
+    adapter_metadata: AdapterMetadata | None = None
+    port_requirements: list = Field(default_factory=list)  # List of PortRequirement
     # Extensible metadata with strict typing
     metadata_extensions: MetadataExtension = Field(default_factory=MetadataExtension)
 

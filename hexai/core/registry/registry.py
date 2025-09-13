@@ -278,19 +278,32 @@ class ComponentRegistry:
             logger.debug("Registered %s", registration_info.qualified_name)
             return registration_info
 
-    def get_metadata(self, name: str, namespace: str | None = None) -> ComponentMetadata:
+    def get_metadata(
+        self, name: str, namespace: str | None = None, component_type: ComponentType | None = None
+    ) -> ComponentMetadata:
         """Get component metadata without instantiation.
 
         This is useful when you want to inspect a component
         before deciding whether/how to instantiate it.
+
+        Parameters
+        ----------
+        name : str
+            Component name
+        namespace : str | None
+            Namespace to search in
+        component_type : ComponentType | None
+            Filter by component type
         """
         # No lock needed after bootstrap (immutable)
         if not self._ready:
             with self._lock.read():
-                return self._get_metadata_unlocked(name, namespace)
-        return self._get_metadata_unlocked(name, namespace)
+                return self._get_metadata_unlocked(name, namespace, component_type)
+        return self._get_metadata_unlocked(name, namespace, component_type)
 
-    def _get_metadata_unlocked(self, name: str, namespace: str | None = None) -> ComponentMetadata:
+    def _get_metadata_unlocked(
+        self, name: str, namespace: str | None = None, component_type: ComponentType | None = None
+    ) -> ComponentMetadata:
         """Get metadata without holding lock (assumes lock already held or not needed)."""
         # Parse the component name and namespace
         component_name, resolved_namespace = self._resolve_component_location(name, namespace)
@@ -303,6 +316,15 @@ class ComponentRegistry:
 
         if not metadata:
             raise ComponentNotFoundError(name, namespace, self._get_available_components())
+
+        # Check component type if specified
+        if component_type and metadata.component_type != component_type:
+            raise ComponentNotFoundError(
+                f"Component '{name}' exists but "
+                f"is type {metadata.component_type}, not {component_type}",
+                namespace,
+                self._get_available_components(),
+            )
 
         return metadata
 
