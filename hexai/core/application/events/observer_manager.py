@@ -8,7 +8,7 @@ import asyncio
 import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Any, Type
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .events import Event
@@ -68,7 +68,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         self._executor_shutdown = False
 
         # Track which event types each observer wants
-        self._event_filters: dict[str, set[Type] | None] = {}
+        self._event_filters: dict[str, set[type] | None] = {}
 
         # Use WeakValueDictionary for automatic cleanup if enabled
         # Store strong references only for wrapped functions that need to be kept alive
@@ -93,7 +93,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             str: The ID of the registered observer
         """
         observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
-        event_types = kwargs.get("event_types", None)
+        event_types = kwargs.get("event_types")
 
         # Wrap function if needed
         if hasattr(handler, "handle"):
@@ -187,9 +187,9 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
                 asyncio.gather(*tasks, return_exceptions=True),
                 timeout=total_timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._error_handler.handle_error(
-                asyncio.TimeoutError(f"Observer notification timed out after {total_timeout}s"),
+                TimeoutError(f"Observer notification timed out after {total_timeout}s"),
                 {"event_type": type(event).__name__, "handler_name": "ObserverManager"},
             )
 
@@ -206,7 +206,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
                 observer.handle(event),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(
                 e,
@@ -280,7 +280,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
         """Context manager exit with cleanup."""
         if not self._executor_shutdown:
             self._executor.shutdown(wait=True)
@@ -290,7 +290,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
         """Async context manager exit with cleanup."""
         await self.close()
 

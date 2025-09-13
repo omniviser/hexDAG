@@ -8,7 +8,7 @@ import asyncio
 import heapq
 import weakref
 from dataclasses import dataclass
-from typing import Any, Type
+from typing import Any, cast
 
 from .events import Event
 from .models import (
@@ -35,8 +35,8 @@ class HandlerEntry:
 
     priority: int
     name: str
-    handler: ControlHandler
-    event_types: set[Type] | None
+    handler: "ControlHandler | FunctionControlHandler"
+    event_types: set[type] | None
     metadata: HandlerMetadata
     deleted: bool = False
 
@@ -102,7 +102,7 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         priority = kwargs.get("priority", 100)
         name = kwargs.get("name", "")
         description = kwargs.get("description", "")
-        event_types = kwargs.get("event_types", None)
+        event_types = kwargs.get("event_types")
 
         # Generate handler ID
         if not name:
@@ -116,9 +116,10 @@ class ControlManager(BaseEventManager, EventFilterMixin):
 
         # Wrap function if needed
         keep_alive = kwargs.get("keep_alive", False)
+        wrapped_handler: ControlHandler | FunctionControlHandler
         if hasattr(handler, "handle"):
             # Already implements ControlHandler protocol
-            wrapped_handler = handler
+            wrapped_handler = cast("ControlHandler", handler)
         elif callable(handler):
             # Wrap function to implement the protocol
             wrapped_handler = FunctionControlHandler(handler, metadata)

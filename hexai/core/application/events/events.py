@@ -1,5 +1,7 @@
 """Simple event data classes - just data, no behavior."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime

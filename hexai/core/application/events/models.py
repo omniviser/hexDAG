@@ -5,9 +5,10 @@ This module contains all data classes, protocols, and types used by the event sy
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Protocol, Type
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from .events import Event
@@ -170,17 +171,14 @@ class BaseEventManager(ABC):
         count = len(self._handlers)
 
         # Check if this is an ObserverManager with weak refs
-        if (
-            hasattr(self, "_use_weak_refs")
-            and self._use_weak_refs
-            and hasattr(self, "_weak_handlers")
-        ):
+        # Use getattr to avoid type checker complaints
+        use_weak_refs = getattr(self, "_use_weak_refs", False)
+        weak_handlers = getattr(self, "_weak_handlers", None)
+
+        if use_weak_refs and weak_handlers is not None:
             # Count weak handlers that are still alive
-            for handler_id in list(self._weak_handlers.keys()):
-                if (
-                    handler_id not in self._handlers
-                    and self._weak_handlers.get(handler_id) is not None
-                ):
+            for handler_id in list(weak_handlers.keys()):
+                if handler_id not in self._handlers and weak_handlers.get(handler_id) is not None:
                     count += 1
 
         return count
@@ -213,7 +211,7 @@ class EventFilterMixin:
     and ControlManager to avoid code duplication.
     """
 
-    def _should_process_event(self, event_filter: set[Type] | None, event: "Event") -> bool:
+    def _should_process_event(self, event_filter: set[type] | None, event: "Event") -> bool:
         """Check if an event should be processed based on type filter.
 
         Args

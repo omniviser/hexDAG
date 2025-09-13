@@ -3,7 +3,7 @@
 This module provides shared utilities used across different node types:
 - JSON parsing and extraction
 - Tool call parsing
-- Common validation patterns
+- Logging utilities
 - Shared regex patterns
 """
 
@@ -140,27 +140,6 @@ class ToolUtils:
         return tool_name, params
 
 
-class ValidationUtils:
-    """Common validation utilities for node operations."""
-
-    @staticmethod
-    def validate_required_fields(data: dict[str, Any], required_fields: list[str]) -> None:
-        """Validate that required fields are present in data."""
-        missing_fields = [field for field in required_fields if field not in data]
-        if missing_fields:
-            raise ValueError(f"Missing required fields: {missing_fields}")
-
-    @staticmethod
-    def validate_field_types(data: dict[str, Any], field_types: dict[str, type]) -> None:
-        """Validate that fields have correct types."""
-        for field, expected_type in field_types.items():
-            if field in data and not isinstance(data[field], expected_type):
-                raise ValueError(
-                    f"Field '{field}' must be of type {expected_type.__name__}, "
-                    f"got {type(data[field]).__name__}"
-                )
-
-
 class LoggingUtils:
     """Common logging utilities for node operations."""
 
@@ -179,13 +158,3 @@ class LoggingUtils:
     def log_node_error(node_name: str, error: Exception) -> None:
         """Log node execution error."""
         logger.error("❌ Node %s failed: %s", node_name, error)
-
-    @staticmethod
-    def log_validation_success(node_name: str, validation_type: str) -> None:
-        """Log successful validation."""
-        logger.debug("📥 %s validation passed for %s", validation_type, node_name)
-
-    @staticmethod
-    def log_validation_error(node_name: str, validation_type: str, error: Exception) -> None:
-        """Log validation error."""
-        logger.error("❌ %s validation failed for %s: %s", validation_type, node_name, error)
