@@ -111,7 +111,8 @@ from typing import Any
 from hexai.core.application.events.manager import PipelineEventManager
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
-from hexai.core.application.nodes import NodeFactory
+from hexai.core.registry import registry
+from hexai.core.bootstrap import ensure_bootstrapped
 
 # PRE-COMPUTED DATA
 EXECUTION_WAVES: list[list[str]] = {data.execution_waves!r}
@@ -154,8 +155,16 @@ class Compiled{class_name}Pipeline:
 
         # Build nodes from compiled configs
         for node_config in NODE_CONFIGS:
-            node = NodeFactory.create_node(
-                node_config["type"],
+            # Ensure registry is bootstrapped
+            ensure_bootstrapped()
+
+            # Get node factory from registry
+            node_type = node_config["type"]  # noqa: F821
+            factory_name = f"{{node_type}}_node"  # noqa: F821
+            factory = registry.get(factory_name, namespace="core")
+
+            # Create node using factory
+            node = factory(
                 node_config["id"],
                 **node_config.get("params", {{}})
             )
@@ -378,7 +387,7 @@ def compile_to_python(name_or_path: str | Path, output_path: str | Path | None =
     else:
         output_path = Path(output_path)
 
-    logger.info(f"🚀 Compiling pipeline: {yaml_path}")
+    logger.info("🚀 Compiling pipeline: %s", yaml_path)
 
     # Use the core compiler
     compiled_data = compile_pipeline(yaml_path)
@@ -386,10 +395,10 @@ def compile_to_python(name_or_path: str | Path, output_path: str | Path | None =
     # Generate Python file
     _generate_pipeline_python_file(compiled_data, str(yaml_path), output_path)
 
-    logger.info(f"✅ Generated: {output_path}")
-    logger.info(f"📊 Type Safety: {compiled_data.type_safety_score}")
-    logger.info(f"🔧 Nodes: {len(compiled_data.node_configs)}")
-    logger.info(f"🌊 Waves: {len(compiled_data.execution_waves)}")
+    logger.info("✅ Generated: %s", output_path)
+    logger.info("📊 Type Safety: %s", compiled_data.type_safety_score)
+    logger.info("🔧 Nodes: %d", len(compiled_data.node_configs))
+    logger.info("🌊 Waves: %d", len(compiled_data.execution_waves))
 
     return output_path
 
@@ -403,9 +412,9 @@ def compile_single(yaml_path: str | Path) -> None:
     """
     try:
         output_path = compile_to_python(yaml_path)
-        logger.info(f"🎉 Compilation complete: {output_path}")
+        logger.info("🎉 Compilation complete: %s", output_path)
     except Exception as e:
-        logger.error(f"❌ Compilation failed: {e}")
+        logger.error("❌ Compilation failed: %s", e)
         raise
 
 
@@ -422,7 +431,7 @@ def validate_pipeline_types(name_or_path: str | Path) -> bool:
     """
     try:
         yaml_path = resolve_pipeline_path(str(name_or_path))
-        logger.info(f"🔍 Validating pipeline types: {yaml_path}")
+        logger.info("🔍 Validating pipeline types: %s", yaml_path)
 
         # Load pipeline and build graph (same as compiler)
         with open(yaml_path) as f:
@@ -433,7 +442,7 @@ def validate_pipeline_types(name_or_path: str | Path) -> bool:
         catalog = PipelineCatalog()
         pipeline_instance = catalog.get_pipeline(pipeline_name)
         if not pipeline_instance:
-            logger.error(f"❌ Pipeline '{pipeline_name}' not found in catalog")
+            logger.error("❌ Pipeline '%s' not found in catalog", pipeline_name)
             return False
 
         # Build graph using PipelineBuilder
@@ -442,21 +451,21 @@ def validate_pipeline_types(name_or_path: str | Path) -> bool:
         # Simple type safety check
         is_type_safe, errors = check_pipeline_type_safety(graph, pipeline_name)
 
-        logger.info(f"\n🔍 Pipeline Type Safety Check: {pipeline_name}")
+        logger.info("\n🔍 Pipeline Type Safety Check: %s", pipeline_name)
         logger.info("=" * 50)
-        logger.info(f"✅ Type Safe: {'Yes' if is_type_safe else 'No'}")
+        logger.info("✅ Type Safe: %s", "Yes" if is_type_safe else "No")
 
         if errors:
-            logger.info(f"\n❌ Type Safety Issues ({len(errors)}):")
+            logger.info("\n❌ Type Safety Issues (%d):", len(errors))
             for i, error in enumerate(errors, 1):
-                logger.info(f"  {i}. {error}")
+                logger.info("  %d. %s", i, error)
         else:
             logger.info("🎉 No type compatibility issues found!")
 
         return is_type_safe
 
     except Exception as e:
-        logger.error(f"❌ Type validation failed: {e}")
+        logger.error("❌ Type validation failed: %s", e)
         return False
 
 
@@ -488,9 +497,9 @@ def main() -> None:
         else:
             # Compile mode (includes validation)
             output_path = compile_to_python(args.pipeline, args.output)
-            logger.info(f"🎉 Compilation complete: {output_path}")
+            logger.info("🎉 Compilation complete: %s", output_path)
     except Exception as e:
-        logger.error(f"❌ Operation failed: {e}")
+        logger.error("❌ Operation failed: %s", e)
         raise
 
 

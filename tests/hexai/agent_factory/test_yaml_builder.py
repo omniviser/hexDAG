@@ -4,7 +4,11 @@ import pytest
 import yaml
 
 from hexai.agent_factory.yaml_builder import YamlPipelineBuilder, YamlPipelineBuilderError
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class TestPipelineBuilder:

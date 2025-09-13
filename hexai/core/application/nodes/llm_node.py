@@ -5,10 +5,13 @@ from typing import Any
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
+from ...registry import node
+from ...registry.models import NodeSubtype
 from ..prompt import PromptInput
 from .base_llm_node import BaseLLMNode
 
 
+@node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core")
 class LLMNode(BaseLLMNode):
     """Simple factory for creating LLM-based nodes with rich template support.
 

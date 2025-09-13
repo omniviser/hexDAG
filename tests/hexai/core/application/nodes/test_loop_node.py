@@ -2,8 +2,12 @@
 
 import pytest
 
-from hexai.core.application.nodes import ConditionalNode, LoopNode
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import registry
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class MockEventManager:
@@ -23,7 +27,8 @@ class TestLoopNode:
 
     def test_loop_node_creation(self):
         """Test that LoopNode creates valid NodeSpec instances."""
-        loop_node = LoopNode()
+        ensure_bootstrapped()
+        loop_node = registry.get("loop_node", namespace="core")
         node_spec = loop_node("test_loop", max_iterations=5)
 
         assert isinstance(node_spec, NodeSpec)
@@ -33,7 +38,8 @@ class TestLoopNode:
     @pytest.mark.asyncio
     async def test_loop_node_successful_execution(self):
         """Test loop node execution with success condition."""
-        loop_node = LoopNode()
+        ensure_bootstrapped()
+        loop_node = registry.get("loop_node", namespace="core")
 
         def success_condition(data):
             return data.get("score", 0) > 0.8
@@ -66,7 +72,8 @@ class TestLoopNode:
     @pytest.mark.asyncio
     async def test_loop_node_max_iterations(self):
         """Test loop node hitting max iterations without success."""
-        loop_node = LoopNode()
+        ensure_bootstrapped()
+        loop_node = registry.get("loop_node", namespace="core")
 
         def never_succeeds(data):
             return False
@@ -80,7 +87,8 @@ class TestLoopNode:
     @pytest.mark.asyncio
     async def test_loop_node_no_success_condition(self):
         """Test loop node without success condition (runs full iterations)."""
-        loop_node = LoopNode()
+        ensure_bootstrapped()
+        loop_node = registry.get("loop_node", namespace="core")
         node_spec = loop_node("test_loop", max_iterations=3)
 
         # Verify node structure
@@ -90,7 +98,8 @@ class TestLoopNode:
     @pytest.mark.asyncio
     async def test_loop_node_custom_iteration_key(self):
         """Test loop node with custom iteration key."""
-        loop_node = LoopNode()
+        ensure_bootstrapped()
+        loop_node = registry.get("loop_node", namespace="core")
         node_spec = loop_node("test_loop", max_iterations=2, iteration_key="custom_iteration")
 
         # Verify node was created with custom iteration key
@@ -99,7 +108,8 @@ class TestLoopNode:
 
     def test_loop_node_invalid_max_iterations(self):
         """Test loop node with invalid max_iterations."""
-        loop_node = LoopNode()
+        ensure_bootstrapped()
+        loop_node = registry.get("loop_node", namespace="core")
 
         with pytest.raises(ValueError, match="max_iterations must be positive"):
             loop_node("test_loop", max_iterations=0)
@@ -113,7 +123,8 @@ class TestConditionalNode:
 
     def test_conditional_node_creation(self):
         """Test that ConditionalNode creates valid NodeSpec instances."""
-        conditional_node = ConditionalNode()
+        ensure_bootstrapped()
+        conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional",
             condition_key="should_continue",
@@ -128,7 +139,8 @@ class TestConditionalNode:
     @pytest.mark.asyncio
     async def test_conditional_node_true_condition(self):
         """Test conditional node when condition is True."""
-        conditional_node = ConditionalNode()
+        ensure_bootstrapped()
+        conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional",
             condition_key="should_continue",
@@ -160,7 +172,8 @@ class TestConditionalNode:
     @pytest.mark.asyncio
     async def test_conditional_node_false_condition(self):
         """Test conditional node when condition is False."""
-        conditional_node = ConditionalNode()
+        ensure_bootstrapped()
+        conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional",
             condition_key="should_continue",
@@ -182,7 +195,8 @@ class TestConditionalNode:
     @pytest.mark.asyncio
     async def test_conditional_node_missing_condition_key(self):
         """Test conditional node when condition key is missing."""
-        conditional_node = ConditionalNode()
+        ensure_bootstrapped()
+        conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional",
             condition_key="missing_key",
@@ -203,7 +217,8 @@ class TestConditionalNode:
     @pytest.mark.asyncio
     async def test_conditional_node_non_boolean_condition(self):
         """Test conditional node with non-boolean condition value."""
-        conditional_node = ConditionalNode()
+        ensure_bootstrapped()
+        conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional",
             condition_key="score",
@@ -228,7 +243,8 @@ class TestConditionalNode:
     @pytest.mark.asyncio
     async def test_conditional_node_event_manager_integration(self):
         """Test conditional node integration with event manager."""
-        conditional_node = ConditionalNode()
+        ensure_bootstrapped()
+        conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional",
             condition_key="ready",

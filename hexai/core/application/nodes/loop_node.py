@@ -12,9 +12,12 @@ from collections.abc import Callable
 from typing import Any
 
 from ...domain.dag import NodeSpec
+from ...registry import node
+from ...registry.models import NodeSubtype
 from .base_node_factory import BaseNodeFactory
 
 
+@node(name="loop_node", subtype=NodeSubtype.LOOP, namespace="core")
 class LoopNode(BaseNodeFactory):
     """Factory class for creating loop control nodes with iteration management."""
 
@@ -120,6 +123,7 @@ class LoopNode(BaseNodeFactory):
         )
 
 
+@node(name="conditional_node", subtype=NodeSubtype.CONDITIONAL, namespace="core")
 class ConditionalNode(BaseNodeFactory):
     """Factory class for creating conditional routing nodes."""
 
