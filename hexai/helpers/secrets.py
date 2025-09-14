@@ -46,4 +46,4 @@ class Secret:
                 raise ValueError(f"Secret '{name}' not found in environment variables.")
             return Secret(value)
         except Exception as e:
-            raise ValueError(f"Error fetching secret '{name}': {e}")
+            raise ValueError(f"Error fetching secret '{name}': {e}") from e
