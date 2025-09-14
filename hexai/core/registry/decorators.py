@@ -17,6 +17,7 @@ from hexai.core.registry.models import (
     ComponentType,
     DecoratorMetadata,
     NodeSubtype,
+    PortMetadata,
 )
 
 T = TypeVar("T")
@@ -157,70 +158,101 @@ def make_component_decorator(
     return wrapper
 
 
+# Port decorator - accepts explicit required/optional methods
+def port(
+    name: str | None = None,
+    *,
+    namespace: str = "core",
+    description: str | None = None,
+    required_methods: list[str] | None = None,
+    optional_methods: list[str] | None = None,
+) -> Callable[[type[T]], type[T]]:
+    """Create a decorator for Protocol ports with explicit method requirements.
+
+    Parameters
+    ----------
+    name : str | None
+        Port name. If None, uses class name in snake_case.
+    namespace : str
+        Port namespace. Defaults to 'core'.
+    description : str | None
+        Port description. If None, uses class docstring.
+    required_methods : list[str] | None
+        List of method names that adapters MUST implement.
+    optional_methods : list[str] | None
+        List of method names that adapters MAY implement.
+    """
+
+    def decorator(cls: type[T]) -> type[T]:
+        # Apply base component decorator
+        base_decorator = component(
+            ComponentType.PORT, name, namespace=namespace, description=description
+        )
+        cls = base_decorator(cls)
+
+        # Update metadata with port-specific information
+        if hasattr(cls, "__hexdag_metadata__"):
+            old_meta = cls.__hexdag_metadata__  # type: ignore[attr-defined]
+
+            # Create port metadata
+            port_meta = PortMetadata(
+                protocol_class=cls,
+                required_methods=required_methods or [],
+                optional_methods=optional_methods or [],
+            )
+
+            # Replace metadata with one that includes port_metadata
+            new_meta = DecoratorMetadata(
+                type=old_meta.type,
+                name=old_meta.name,
+                declared_namespace=old_meta.declared_namespace,
+                subtype=old_meta.subtype,
+                description=old_meta.description,
+                port_metadata=port_meta,
+            )
+            cls.__hexdag_metadata__ = new_meta  # type: ignore[attr-defined]
+
+        return cls
+
+    return decorator
+
+
 def adapter(
-    implements_port: str,
+    implements_port: str | None = None,
     name: str | None = None,
     *,
     namespace: str = "user",
     description: str | None = None,
     capabilities: list[str] | None = None,
-    singleton: bool = True,
 ) -> Callable[[type[T]], type[T]]:
-    """Decorator for adapter components that implement ports.
-
-    Parameters
-    ----------
-    implements_port : str
-        Name of the port this adapter implements (required)
-    name : str | None
-        Adapter name. If None, uses class name in snake_case
-    namespace : str
-        Component namespace. Defaults to 'user'
-    description : str | None
-        Adapter description. If None, uses class docstring
-    capabilities : list[str] | None
-        List of capabilities this adapter provides
-    singleton : bool
-        Whether adapter should be a singleton (default True)
-
-    Returns
-    -------
-    Callable[[type[T]], type[T]]
-        Decorator function that adds metadata to the class
-
-    Examples
-    --------
-    >>> @adapter(implements_port='llm_port')
-    >>> class OpenAIAdapter:
-    ...     def generate(self, prompt: str) -> str:
-    ...         return "response"
-    """
+    """Create an adapter decorator with minimal extra logic for port implementation tracking."""
+    base_decorator = make_component_decorator(ComponentType.ADAPTER)
 
     def decorator(cls: type[T]) -> type[T]:
-        # Infer name from class name if not provided
-        adapter_name = name or _snake_case(cls.__name__)
+        # Apply base decorator
+        cls = base_decorator(name=name, namespace=namespace, description=description)(cls)
 
-        # Use class docstring as description if not provided
-        adapter_description = description or (cls.__doc__ or "").strip()
+        # If implements_port is specified, add adapter metadata
+        if implements_port and hasattr(cls, "__hexdag_metadata__"):
+            old_meta = cls.__hexdag_metadata__  # type: ignore[attr-defined]
 
-        # Create adapter-specific metadata
-        adapter_meta = AdapterMetadata(
-            implements_port=implements_port,
-            capabilities=capabilities or [],
-            singleton=singleton,
-        )
+            # Create adapter metadata
+            adapter_meta = AdapterMetadata(
+                implements_port=implements_port,
+                capabilities=capabilities or [],
+                singleton=True,
+            )
 
-        # Create complete metadata with adapter info
-        metadata = DecoratorMetadata(
-            type=ComponentType.ADAPTER,
-            name=adapter_name,
-            declared_namespace=namespace,
-            description=adapter_description,
-            adapter_metadata=adapter_meta,
-        )
-
-        # Attach metadata to the class
-        cls.__hexdag_metadata__ = metadata  # type: ignore[attr-defined]
+            # Replace metadata with one that includes adapter_metadata
+            new_meta = DecoratorMetadata(
+                type=old_meta.type,
+                name=old_meta.name,
+                declared_namespace=old_meta.declared_namespace,
+                subtype=old_meta.subtype,
+                description=old_meta.description,
+                adapter_metadata=adapter_meta,
+            )
+            cls.__hexdag_metadata__ = new_meta  # type: ignore[attr-defined]
 
         return cls
 

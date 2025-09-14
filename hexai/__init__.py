@@ -33,7 +33,7 @@ from hexai.core.application.prompt import FewShotPromptTemplate, PromptTemplate
 from hexai.core.domain import DirectedGraph, NodeSpec
 
 # Port interfaces
-from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
+from hexai.core.ports import LLM, APICall, DatabasePort, ToolRouter
 
 # Initialize the component registry early so it's available for all imports
 # This ensures core components are loaded and plugins are discovered
@@ -62,10 +62,7 @@ def __getattr__(name: str) -> Any:
         from hexai.adapters.mock import MockDatabaseAdapter
 
         return MockDatabaseAdapter
-    elif name == "MockEmbeddingSelectorPort":
-        from hexai.adapters.mock import MockEmbeddingSelectorPort
 
-        return MockEmbeddingSelectorPort
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -89,10 +86,9 @@ __all__ = [
     "FewShotPromptTemplate",
     # Port Interfaces
     "LLM",
-    "LongTermMemory",
+    "APICall",
     "ToolRouter",
     "DatabasePort",
-    "OntologyPort",
     # Testing and Development Adapters
     "InMemoryMemory",
     "MockLLM",

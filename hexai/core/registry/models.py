@@ -194,6 +194,7 @@ class DecoratorMetadata(BaseModel):
     subtype: NodeSubtype | str | None = None
     description: str = Field(default="")
     adapter_metadata: AdapterMetadata | None = None  # For adapter components
+    port_metadata: PortMetadata | None = None  # For port components
 
 
 # ============================================================================

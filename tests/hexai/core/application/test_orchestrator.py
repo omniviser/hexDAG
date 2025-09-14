@@ -350,7 +350,9 @@ class TestOrchestrator:
                 result["llm_response"] = llm_response
 
             if tool_router:
-                tool_result = await tool_router.aroute("test_tool", "test_input")
+                tool_result = await tool_router.acall_tool(
+                    "test_tool", {"input_data": "test_input"}
+                )
                 result["tool_result"] = tool_result
 
             return result
