@@ -1,10 +1,14 @@
 """Tests for the new bootstrap-based registry architecture."""
 
+import os
+import tempfile
+
 import pytest
 
+from hexai.core.bootstrap import bootstrap_registry
 from hexai.core.registry.decorators import node
 from hexai.core.registry.exceptions import RegistryAlreadyBootstrappedError, RegistryImmutableError
-from hexai.core.registry.manifest import ComponentManifest
+from hexai.core.config import ManifestEntry
 from hexai.core.registry.models import ComponentType
 from hexai.core.registry.registry import ComponentRegistry
 
@@ -45,17 +49,15 @@ class TestBootstrapArchitecture:
         """Bootstrap should populate registry from manifest."""
         registry = ComponentRegistry()
 
-        # Create manifest pointing to our sample module
-        manifest = ComponentManifest(
-            [{"namespace": "test", "module": "tests.hexai.core.registry.sample_components"}]
-        )
+        # Create entries pointing to our sample module
+        entries = [ManifestEntry(namespace="test", module="tests.hexai.core.registry.sample_components")]
 
         # Bootstrap
-        registry.bootstrap(manifest, dev_mode=True)
+        registry.bootstrap(entries, dev_mode=True)
 
         # Registry should now be ready
         assert registry.ready
-        assert registry.manifest == manifest
+        assert len(registry.manifest) == 1
 
         # Components should be registered (3 decorated + 1 port = 4 total)
         components = registry.list_components()
@@ -76,9 +78,9 @@ class TestBootstrapArchitecture:
         """In production mode, registration after bootstrap should fail."""
         registry = ComponentRegistry()
 
-        # Bootstrap with empty manifest
-        manifest = ComponentManifest([])
-        registry.bootstrap(manifest, dev_mode=False)
+        # Bootstrap with empty entries
+        entries: list[ManifestEntry] = []
+        registry.bootstrap(entries, dev_mode=False)
 
         assert registry.ready
 
@@ -98,8 +100,8 @@ class TestBootstrapArchitecture:
         registry = ComponentRegistry()
 
         # Bootstrap with dev_mode=True
-        manifest = ComponentManifest([])
-        registry.bootstrap(manifest, dev_mode=True)
+        entries: list[ManifestEntry] = []
+        registry.bootstrap(entries, dev_mode=True)
 
         assert registry.ready
 
@@ -119,12 +121,12 @@ class TestBootstrapArchitecture:
         """Bootstrap should be idempotent - can't bootstrap twice."""
         registry = ComponentRegistry()
 
-        manifest = ComponentManifest([])
-        registry.bootstrap(manifest)
+        entries: list[ManifestEntry] = []
+        registry.bootstrap(entries)
 
         # Second bootstrap should fail
         with pytest.raises(RegistryAlreadyBootstrappedError) as exc_info:
-            registry.bootstrap(manifest)
+            registry.bootstrap(entries)
 
         assert "already been bootstrapped" in str(exc_info.value)
 
@@ -136,13 +138,13 @@ class TestBootstrapArchitecture:
 
     def test_manifest_validation(self):
         """Manifest should validate for duplicates."""
+        registry = ComponentRegistry()
         with pytest.raises(ValueError) as exc_info:
-            ComponentManifest(
-                [
-                    {"namespace": "test", "module": "module1"},
-                    {"namespace": "test", "module": "module1"},  # Duplicate
-                ]
-            ).validate()
+            entries = [
+                ManifestEntry(namespace="test", module="module1"),
+                ManifestEntry(namespace="test", module="module1"),  # Duplicate
+            ]
+            registry.bootstrap(entries)
 
         assert "Duplicate manifest entry" in str(exc_info.value)
 
@@ -158,7 +160,8 @@ class TestBootstrapArchitecture:
             # Create a module with an invalid adapter
             module_path = os.path.join(tmpdir, "invalid_adapter.py")
             with open(module_path, "w") as f:
-                f.write(textwrap.dedent("""
+                f.write(
+                    textwrap.dedent("""
                     from hexai.core.registry.decorators import adapter
                     from hexai.core.registry.models import (
                         ClassComponent, ComponentMetadata, ComponentType, PortMetadata
@@ -207,19 +210,18 @@ class TestBootstrapArchitecture:
                                     adapter_metadata=getattr(metadata, "adapter_metadata", None),
                                 )
                         return 1
-                """))
+                """)
+                )
 
             # Add tmpdir to sys.path
             sys.path.insert(0, tmpdir)
             try:
                 registry = ComponentRegistry()
-                manifest = ComponentManifest(
-                    [{"namespace": "test", "module": "invalid_adapter"}]
-                )
+                entries = [ManifestEntry(namespace="test", module="invalid_adapter")]
 
                 # Bootstrap should fail due to adapter validation
                 with pytest.raises(Exception) as exc_info:
-                    registry.bootstrap(manifest, dev_mode=True)
+                    registry.bootstrap(entries, dev_mode=True)
 
                 # Should fail with InvalidComponentError mentioning missing method
                 assert "does not implement required methods" in str(exc_info.value)
@@ -234,14 +236,113 @@ class TestBootstrapArchitecture:
         """Failed imports should rollback bootstrap."""
         registry = ComponentRegistry()
 
-        # Create manifest with non-existent module
-        manifest = ComponentManifest([{"namespace": "test", "module": "non_existent_module_xyz"}])
+        # Create entries with non-existent module
+        entries = [ManifestEntry(namespace="test", module="non_existent_module_xyz")]
 
         # Bootstrap should fail and rollback
         with pytest.raises(ImportError):
-            registry.bootstrap(manifest)
+            registry.bootstrap(entries)
 
         # Registry should be rolled back to empty state
         assert not registry.ready
         assert registry.manifest is None
         assert len(registry.list_components()) == 0
+
+
+class TestTOMLBootstrap:
+    """Test bootstrap functionality with TOML configuration."""
+
+    def setup_method(self):
+        """Reset registry before each test."""
+        from hexai.core.registry import registry
+
+        # Clear registry if it's bootstrapped
+        if registry.ready:
+            registry._components.clear()
+            registry._protected_components.clear()
+            registry._ready = False
+            registry._manifest = None
+            registry._bootstrap_context = False
+
+    def test_bootstrap_from_toml(self):
+        """Test bootstrapping from TOML configuration."""
+        from hexai.core.registry import registry
+
+        config_content = """
+modules = [
+    "tests.hexai.core.registry.sample_components",
+]
+
+dev_mode = true
+
+[bindings]
+llm = "mock_llm"
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(config_content)
+            config_path = f.name
+
+        try:
+            bootstrap_registry(config_path)
+            assert registry.ready
+            assert registry.dev_mode
+
+            # Check that components were loaded
+            components = registry.list_components()
+            assert len(components) > 0
+        finally:
+            os.unlink(config_path)
+            # Clean up registry
+            registry._components.clear()
+            registry._protected_components.clear()
+            registry._ready = False
+
+    def test_bootstrap_dev_mode_from_config(self):
+        """Test that dev_mode is read from TOML config."""
+        from hexai.core.registry import registry
+
+        config_content = """
+modules = ["tests.hexai.core.registry.sample_components"]
+dev_mode = true
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(config_content)
+            config_path = f.name
+
+        try:
+            # Bootstrap without explicit dev_mode parameter
+            bootstrap_registry(config_path)
+
+            # Should pick up dev_mode from config
+            assert registry.dev_mode is True
+        finally:
+            os.unlink(config_path)
+            # Clean up registry
+            registry._components.clear()
+            registry._protected_components.clear()
+            registry._ready = False
+
+    def test_bootstrap_dev_mode_override(self):
+        """Test that parameter dev_mode overrides config."""
+        from hexai.core.registry import registry
+
+        config_content = """
+modules = ["tests.hexai.core.registry.sample_components"]
+dev_mode = false
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(config_content)
+            config_path = f.name
+
+        try:
+            # Override config's dev_mode=false with parameter
+            bootstrap_registry(config_path, dev_mode=True)
+
+            # Parameter should override config
+            assert registry.dev_mode is True
+        finally:
+            os.unlink(config_path)
+            # Clean up registry
+            registry._components.clear()
+            registry._protected_components.clear()
+            registry._ready = False

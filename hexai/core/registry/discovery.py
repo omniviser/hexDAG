@@ -15,13 +15,13 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from hexai.core.registry.models import DecoratorMetadata
+    from hexai.core.registry.models import ComponentType, DecoratorMetadata
     from hexai.core.registry.registry import ComponentRegistry as RegistryProtocol
 else:
     # Runtime imports - needed for actual execution
     from collections.abc import Callable  # noqa: TC003
 
-    from hexai.core.registry.models import DecoratorMetadata  # noqa: TC001
+    from hexai.core.registry.models import ComponentType, DecoratorMetadata  # noqa: TC001
 
 
 class ComponentWithMetadata(Protocol):
@@ -132,7 +132,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
         metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
 
         # Skip non-ports in phase A
-        if metadata.type != "PORT":
+        if metadata.type != ComponentType.PORT:
             continue
 
         meta_name = metadata.name
@@ -178,7 +178,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
         component_metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
 
         # Skip ports (already registered in phase A)
-        if component_metadata.type == "PORT":
+        if component_metadata.type == ComponentType.PORT:
             continue
 
         meta_name = component_metadata.name

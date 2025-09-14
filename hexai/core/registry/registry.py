@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from hexai.core.registry.discovery import register_components as default_register_components
 from hexai.core.registry.exceptions import (
@@ -16,7 +17,6 @@ from hexai.core.registry.exceptions import (
     RegistryImmutableError,
 )
 from hexai.core.registry.locks import ReadWriteLock
-from hexai.core.registry.manifest import ComponentManifest
 from hexai.core.registry.models import (
     ClassComponent,
     ComponentInfo,
@@ -28,6 +28,9 @@ from hexai.core.registry.models import (
     InstanceFactory,
     NodeSubtype,
 )
+
+if TYPE_CHECKING:
+    from hexai.core.config import ManifestEntry
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +74,7 @@ class ComponentRegistry:
 
         # Bootstrap state
         self._ready = False
-        self._manifest: ComponentManifest | None = None
+        self._manifest: list[ManifestEntry] | None = None
         self._dev_mode = False  # If True, allows post-bootstrap registration
         self._bootstrap_context = False  # True during bootstrap process
 
@@ -85,7 +88,7 @@ class ComponentRegistry:
 
     def bootstrap(
         self,
-        manifest: ComponentManifest | list[dict[str, str]],
+        manifest: list[ManifestEntry],
         dev_mode: bool = False,
     ) -> None:
         """Bootstrap the registry from a manifest.
@@ -98,7 +101,7 @@ class ComponentRegistry:
 
         Parameters
         ----------
-        manifest : ComponentManifest | list[dict[str, str]]
+        manifest : list[ManifestEntry]
             The component manifest declaring what to load.
         dev_mode : bool
             If True, allows post-bootstrap registration (for development).
@@ -123,39 +126,43 @@ class ComponentRegistry:
                 self._bootstrap_context = False
 
     def _prepare_bootstrap(
-        self, manifest: ComponentManifest | list[dict[str, str]], dev_mode: bool
-    ) -> ComponentManifest:
+        self, manifest: list[ManifestEntry], dev_mode: bool
+    ) -> list[ManifestEntry]:
         """Prepare registry for bootstrap.
 
-        Returns validated ComponentManifest.
+        Returns validated list of ManifestEntry.
         """
         if self._ready:
             raise RegistryAlreadyBootstrappedError(
                 "Registry has already been bootstrapped. Use reset() if you need to re-bootstrap."
             )
 
-        # Convert list to ComponentManifest if needed
-        if isinstance(manifest, list):
-            manifest = ComponentManifest(manifest)
-
-        # Validate manifest
-        manifest.validate()
+        # Validate entries for duplicates
+        seen = set()
+        for entry in manifest:
+            key = (entry.namespace, entry.module)
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate manifest entry: namespace='{entry.namespace}', "
+                    f"module='{entry.module}'"
+                )
+            seen.add(key)
 
         # Store configuration
         self._manifest = manifest
         self._dev_mode = dev_mode
 
-        logger.info("Bootstrapping registry with %d entries", len(manifest.entries))
+        logger.info("Bootstrapping registry with %d entries", len(manifest))
         return manifest
 
-    def _load_manifest_modules(self, manifest: ComponentManifest) -> int:
+    def _load_manifest_modules(self, manifest: list[ManifestEntry]) -> int:
         """Load and register components from all manifest modules.
 
         Returns total number of components registered.
         """
         total_registered = 0
 
-        for entry in manifest.entries:
+        for entry in manifest:
             try:
                 count = default_register_components(
                     registry=self,
@@ -196,7 +203,7 @@ class ComponentRegistry:
         return self._ready
 
     @property
-    def manifest(self) -> ComponentManifest | None:
+    def manifest(self) -> list[ManifestEntry] | None:
         """Get the current manifest."""
         return self._manifest
 
