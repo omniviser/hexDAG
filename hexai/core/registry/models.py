@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable  # noqa: TC003 - needed at runtime for TypeAdapter
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Protocol, TypeVar
+from typing import Annotated, Any, Literal, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter, field_validator
 
@@ -193,6 +193,19 @@ class DecoratorMetadata(BaseModel):
     declared_namespace: str = Field(default="user")
     subtype: NodeSubtype | str | None = None
     description: str = Field(default="")
+    adapter_metadata: AdapterMetadata | None = None  # For adapter components
+
+
+# ============================================================================
+# Protocols for type safety
+# ============================================================================
+
+
+@runtime_checkable
+class HasMetadata(Protocol):
+    """Protocol for components with decorator metadata."""
+
+    __hexdag_metadata__: DecoratorMetadata
 
 
 class ComponentMetadata(BaseModel):

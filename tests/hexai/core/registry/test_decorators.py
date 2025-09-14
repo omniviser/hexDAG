@@ -254,13 +254,15 @@ class TestTypeSpecificDecorators:
     def test_adapter_decorator(self):
         """Test @adapter decorator."""
 
-        @adapter(namespace="test")
+        @adapter(implements_port="test_port", namespace="test")
         class TestAdapter:
             pass
 
         assert hasattr(TestAdapter, "__hexdag_metadata__")
         metadata = TestAdapter.__hexdag_metadata__
         assert metadata.type == ComponentType.ADAPTER
+        assert metadata.adapter_metadata is not None
+        assert metadata.adapter_metadata.implements_port == "test_port"
 
     def test_policy_decorator(self):
         """Test @policy decorator."""

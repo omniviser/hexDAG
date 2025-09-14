@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, TypeVar
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from hexai.core.registry.models import ComponentType, DecoratorMetadata, NodeSubtype
+from hexai.core.registry.models import (
+    AdapterMetadata,
+    ComponentType,
+    DecoratorMetadata,
+    NodeSubtype,
+)
 
 T = TypeVar("T")
 
@@ -152,10 +157,79 @@ def make_component_decorator(
     return wrapper
 
 
+def adapter(
+    implements_port: str,
+    name: str | None = None,
+    *,
+    namespace: str = "user",
+    description: str | None = None,
+    capabilities: list[str] | None = None,
+    singleton: bool = True,
+) -> Callable[[type[T]], type[T]]:
+    """Decorator for adapter components that implement ports.
+
+    Parameters
+    ----------
+    implements_port : str
+        Name of the port this adapter implements (required)
+    name : str | None
+        Adapter name. If None, uses class name in snake_case
+    namespace : str
+        Component namespace. Defaults to 'user'
+    description : str | None
+        Adapter description. If None, uses class docstring
+    capabilities : list[str] | None
+        List of capabilities this adapter provides
+    singleton : bool
+        Whether adapter should be a singleton (default True)
+
+    Returns
+    -------
+    Callable[[type[T]], type[T]]
+        Decorator function that adds metadata to the class
+
+    Examples
+    --------
+    >>> @adapter(implements_port='llm_port')
+    >>> class OpenAIAdapter:
+    ...     def generate(self, prompt: str) -> str:
+    ...         return "response"
+    """
+
+    def decorator(cls: type[T]) -> type[T]:
+        # Infer name from class name if not provided
+        adapter_name = name or _snake_case(cls.__name__)
+
+        # Use class docstring as description if not provided
+        adapter_description = description or (cls.__doc__ or "").strip()
+
+        # Create adapter-specific metadata
+        adapter_meta = AdapterMetadata(
+            implements_port=implements_port,
+            capabilities=capabilities or [],
+            singleton=singleton,
+        )
+
+        # Create complete metadata with adapter info
+        metadata = DecoratorMetadata(
+            type=ComponentType.ADAPTER,
+            name=adapter_name,
+            declared_namespace=namespace,
+            description=adapter_description,
+            adapter_metadata=adapter_meta,
+        )
+
+        # Attach metadata to the class
+        cls.__hexdag_metadata__ = metadata  # type: ignore[attr-defined]
+
+        return cls
+
+    return decorator
+
+
 # Generate base type decorators using the factory
 node = make_component_decorator(ComponentType.NODE)
 tool = make_component_decorator(ComponentType.TOOL)
-adapter = make_component_decorator(ComponentType.ADAPTER)
 policy = make_component_decorator(ComponentType.POLICY)
 memory = make_component_decorator(ComponentType.MEMORY)
 observer = make_component_decorator(ComponentType.OBSERVER)

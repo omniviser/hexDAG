@@ -23,6 +23,7 @@ from hexai.core.registry.models import (
     ComponentMetadata,
     ComponentType,
     FunctionComponent,
+    HasMetadata,
     InstanceComponent,
     InstanceFactory,
     NodeSubtype,
@@ -217,6 +218,7 @@ class ComponentRegistry:
         privileged: bool = False,
         subtype: NodeSubtype | str | None = None,
         description: str = "",
+        adapter_metadata: object | None = None,
     ) -> ComponentInfo:
         """Register a component in the registry.
 
@@ -240,12 +242,31 @@ class ComponentRegistry:
             wrapped_component = self._wrap_component(component)
             self._validate_component(name, wrapped_component)
 
+            # Validate adapter if it's an adapter component
+            if component_type_enum == ComponentType.ADAPTER:
+                self._validate_adapter_registration(name, component, namespace_str)
+
             if namespace_str in self.PROTECTED_NAMESPACES and not privileged:
                 raise NamespacePermissionError(name, namespace_str)
 
             # Check for duplicates - always error
             if namespace_str in self._components and name in self._components[namespace_str]:
                 raise ComponentAlreadyRegisteredError(name, namespace_str)
+
+            # Get adapter metadata from decorator if not passed explicitly
+            from hexai.core.registry.models import AdapterMetadata
+
+            actual_adapter_metadata: AdapterMetadata | None = None
+            if isinstance(adapter_metadata, AdapterMetadata):
+                actual_adapter_metadata = adapter_metadata
+            elif (
+                component_type_enum == ComponentType.ADAPTER
+                and not adapter_metadata
+                and isinstance(component, HasMetadata)
+            ):
+                decorator_meta = component.__hexdag_metadata__
+                if hasattr(decorator_meta, "adapter_metadata"):
+                    actual_adapter_metadata = decorator_meta.adapter_metadata
 
             # Create metadata
             metadata = ComponentMetadata(
@@ -255,6 +276,11 @@ class ComponentRegistry:
                 namespace=namespace_str,
                 subtype=subtype,
                 description=description,
+                adapter_metadata=(
+                    actual_adapter_metadata
+                    if component_type_enum == ComponentType.ADAPTER
+                    else None
+                ),
             )
 
             # Store component
@@ -529,6 +555,167 @@ class ComponentRegistry:
         for ns, components in self._components.items():
             available.extend(f"{ns}:{name}" for name in components)
         return available
+
+    def _validate_adapter_registration(
+        self,
+        adapter_name: str,
+        adapter_component: object,
+        namespace: str,
+    ) -> None:
+        """Validate adapter implementation at registration time.
+
+        Parameters
+        ----------
+        adapter_name : str
+            Name of the adapter being registered
+        adapter_component : object
+            The adapter class/instance being registered
+        namespace : str
+            Namespace where adapter is being registered
+
+        Raises
+        ------
+        InvalidComponentError
+            If adapter doesn't properly implement its declared port
+        """
+        import inspect
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Get adapter metadata - can come from decorator or direct registration
+        implements_port = None
+
+        # Check decorator metadata first
+        if isinstance(adapter_component, HasMetadata):
+            decorator_meta = adapter_component.__hexdag_metadata__
+            if hasattr(decorator_meta, "adapter_metadata") and decorator_meta.adapter_metadata:
+                implements_port = decorator_meta.adapter_metadata.implements_port
+
+        if not implements_port:
+            # No port declared, skip validation
+            return
+
+        # Try to find the port in registry
+        try:
+            # Look for port with various namespace combinations
+            port_meta = None
+            for attempt in [
+                implements_port,  # As declared
+                f"{namespace}:{implements_port}",  # Same namespace
+                f"core:{implements_port}",  # Core namespace
+            ]:
+                try:
+                    port_meta = self._get_metadata_unlocked(
+                        attempt, component_type=ComponentType.PORT
+                    )
+                    if port_meta:
+                        break
+                except ComponentNotFoundError:
+                    continue
+
+            if not port_meta:
+                raise InvalidComponentError(
+                    adapter_name,
+                    f"Adapter '{adapter_name}' declares it implements port '{implements_port}', "
+                    f"but port '{implements_port}' does not exist in registry",
+                )
+
+            # Validate required methods if port specifies them
+            if port_meta.port_metadata and port_meta.port_metadata.required_methods:
+                # Get the actual class to check
+                if inspect.isclass(adapter_component):
+                    adapter_class = adapter_component
+                else:
+                    adapter_class = type(adapter_component)
+
+                missing_methods = [
+                    method_name
+                    for method_name in port_meta.port_metadata.required_methods
+                    if not hasattr(adapter_class, method_name)
+                ]
+
+                if missing_methods:
+                    raise InvalidComponentError(
+                        adapter_name,
+                        f"Adapter '{adapter_name}' does not implement required methods "
+                        f"from port '{implements_port}': {', '.join(missing_methods)}",
+                    )
+
+            # Check optional methods and warn if missing
+            if port_meta.port_metadata and port_meta.port_metadata.optional_methods:
+                if inspect.isclass(adapter_component):
+                    adapter_class = adapter_component
+                else:
+                    adapter_class = type(adapter_component)
+
+                missing_optional = [
+                    method_name
+                    for method_name in port_meta.port_metadata.optional_methods
+                    if not hasattr(adapter_class, method_name)
+                ]
+
+                if missing_optional:
+                    logger.warning(
+                        f"Adapter '{adapter_name}' is missing optional methods "
+                        f"from port '{implements_port}': {', '.join(missing_optional)}"
+                    )
+
+        except ComponentNotFoundError as e:
+            # Port doesn't exist
+            raise InvalidComponentError(
+                adapter_name,
+                f"Adapter '{adapter_name}' declares it implements port '{implements_port}', "
+                f"but port does not exist: {e}",
+            ) from e
+
+    def get_adapters_for_port(self, port_name: str) -> list[ComponentInfo]:
+        """Get all adapters that implement a specific port.
+
+        Parameters
+        ----------
+        port_name : str
+            Name of the port
+
+        Returns
+        -------
+        list[ComponentInfo]
+            List of adapter components that implement the port
+        """
+        with self._lock.read():
+            adapters = []
+
+            # Search all namespaces for adapters
+            for namespace, components in self._components.items():
+                for name, metadata in components.items():
+                    # Check if it's an adapter
+                    if metadata.component_type != ComponentType.ADAPTER:
+                        continue
+
+                    # Check if it implements the requested port
+                    if metadata.adapter_metadata and metadata.adapter_metadata.implements_port:
+                        implements = metadata.adapter_metadata.implements_port
+                        # Handle namespaced port names
+                        port_base = port_name.split(":")[-1] if ":" in port_name else port_name
+                        implements_base = (
+                            implements.split(":")[-1] if ":" in implements else implements
+                        )
+
+                        if implements == port_name or implements_base == port_base:
+                            adapters.append(
+                                ComponentInfo(
+                                    name=name,
+                                    namespace=namespace,
+                                    qualified_name=f"{namespace}:{name}",
+                                    component_type=ComponentType.ADAPTER,
+                                    metadata=metadata,
+                                    is_protected=(
+                                        f"{namespace}:{name}" in self._protected_components
+                                    ),
+                                )
+                            )
+
+            return adapters
 
 
 # Global registry instance

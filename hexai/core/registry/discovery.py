@@ -130,6 +130,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
         meta_type = metadata.type
         meta_subtype = metadata.subtype
         meta_description = metadata.description
+        meta_adapter = metadata.adapter_metadata
 
         # Namespace from manifest overrides decorator's declared_namespace
         actual_namespace = namespace
@@ -146,6 +147,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
                 privileged=privileged,
                 subtype=meta_subtype,
                 description=meta_description,
+                adapter_metadata=meta_adapter,
             )
             count += 1
             logger.debug("Registered %s:%s from %s", actual_namespace, meta_name, module_path)

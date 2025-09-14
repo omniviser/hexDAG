@@ -5,6 +5,7 @@ import pytest
 from hexai.core.registry.decorators import node
 from hexai.core.registry.exceptions import RegistryAlreadyBootstrappedError, RegistryImmutableError
 from hexai.core.registry.manifest import ComponentManifest
+from hexai.core.registry.models import ComponentType
 from hexai.core.registry.registry import ComponentRegistry
 
 
@@ -56,12 +57,14 @@ class TestBootstrapArchitecture:
         assert registry.ready
         assert registry.manifest == manifest
 
-        # Components should be registered
+        # Components should be registered (3 decorated + 1 port = 4 total)
         components = registry.list_components()
-        assert len(components) == 3  # sample_node, sample_tool, sample_adapter
+        # Filter out the port since list_components might include it
+        non_port_components = [c for c in components if c.component_type != ComponentType.PORT]
+        assert len(non_port_components) == 3  # sample_node, sample_tool, sample_adapter
 
         # Check specific components
-        node_names = {c.name for c in components}
+        node_names = {c.name for c in non_port_components}
         assert "sample_node" in node_names
         assert "sample_tool" in node_names
         assert "sample_adapter" in node_names
@@ -142,6 +145,90 @@ class TestBootstrapArchitecture:
             ).validate()
 
         assert "Duplicate manifest entry" in str(exc_info.value)
+
+    def test_adapter_validation_during_bootstrap(self):
+        """Test that adapter validation happens during bootstrap."""
+        # Create a test file with an invalid adapter (missing required method)
+        import tempfile
+        import textwrap
+        import sys
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a module with an invalid adapter
+            module_path = os.path.join(tmpdir, "invalid_adapter.py")
+            with open(module_path, "w") as f:
+                f.write(textwrap.dedent("""
+                    from hexai.core.registry.decorators import adapter
+                    from hexai.core.registry.models import (
+                        ClassComponent, ComponentMetadata, ComponentType, PortMetadata
+                    )
+
+                    # Define a port
+                    class TestPort:
+                        def required_method(self): pass
+
+                    # Invalid adapter - missing required_method
+                    @adapter(implements_port="test_port", name="invalid_adapter")
+                    class InvalidAdapter:
+                        pass  # Missing required_method!
+
+                    def register_components(registry, namespace):
+                        # Register the port first
+                        port_meta = ComponentMetadata(
+                            name="test_port",
+                            component_type=ComponentType.PORT,
+                            component=ClassComponent(value=TestPort),
+                            namespace=namespace,
+                            port_metadata=PortMetadata(
+                                protocol_class=TestPort,
+                                required_methods=["required_method"],
+                                optional_methods=[],
+                            ),
+                        )
+                        if namespace not in registry._components:
+                            registry._components[namespace] = {}
+                        registry._components[namespace]["test_port"] = port_meta
+
+                        # Try to register the invalid adapter
+                        from hexai.core.registry.discovery import discover_components
+                        import sys
+                        module = sys.modules[__name__]
+                        components = discover_components(module)
+
+                        for _, component in components:
+                            if hasattr(component, "__hexdag_metadata__"):
+                                metadata = getattr(component, "__hexdag_metadata__")
+                                registry.register(
+                                    name=metadata.name,
+                                    component=component,
+                                    component_type=metadata.type,
+                                    namespace=namespace,
+                                    adapter_metadata=getattr(metadata, "adapter_metadata", None),
+                                )
+                        return 1
+                """))
+
+            # Add tmpdir to sys.path
+            sys.path.insert(0, tmpdir)
+            try:
+                registry = ComponentRegistry()
+                manifest = ComponentManifest(
+                    [{"namespace": "test", "module": "invalid_adapter"}]
+                )
+
+                # Bootstrap should fail due to adapter validation
+                with pytest.raises(Exception) as exc_info:
+                    registry.bootstrap(manifest, dev_mode=True)
+
+                # Should fail with InvalidComponentError mentioning missing method
+                assert "does not implement required methods" in str(exc_info.value)
+                assert "required_method" in str(exc_info.value)
+            finally:
+                # Clean up
+                sys.path.remove(tmpdir)
+                if "invalid_adapter" in sys.modules:
+                    del sys.modules["invalid_adapter"]
 
     def test_import_error_rollback(self):
         """Failed imports should rollback bootstrap."""
