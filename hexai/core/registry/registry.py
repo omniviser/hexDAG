@@ -556,6 +556,15 @@ class ComponentRegistry:
             available.extend(f"{ns}:{name}" for name in components)
         return available
 
+    def _get_available_ports(self) -> list[str]:
+        """Get list of all available port names."""
+        available: list[str] = []
+        for ns, components in self._components.items():
+            for name, metadata in components.items():
+                if metadata.component_type == ComponentType.PORT:
+                    available.append(f"{ns}:{name}")
+        return available
+
     def _validate_adapter_registration(
         self,
         adapter_name: str,
@@ -596,29 +605,48 @@ class ComponentRegistry:
             # No port declared, skip validation
             return
 
-        # Try to find the port in registry
+        # Try to find the port in registry - ports should be registered by now (Phase A)
         try:
             # Look for port with various namespace combinations
             port_meta = None
-            for attempt in [
-                implements_port,  # As declared
-                f"{namespace}:{implements_port}",  # Same namespace
-                f"core:{implements_port}",  # Core namespace
-            ]:
+            search_attempts = []
+
+            # Handle both qualified and unqualified port names
+            if ":" in implements_port:
+                # Qualified name provided
+                search_attempts.append(implements_port)
+            else:
+                # Unqualified - search with priority
+                # Follow DEFAULT_SEARCH_PRIORITY: "core", "user", "plugin"
+                search_attempts = [
+                    f"core:{implements_port}",  # Core namespace first
+                    f"{namespace}:{implements_port}",  # Same namespace as adapter
+                    implements_port,  # As declared (will search all)
+                ]
+
+            for attempt in search_attempts:
                 try:
                     port_meta = self._get_metadata_unlocked(
                         attempt, component_type=ComponentType.PORT
                     )
                     if port_meta:
+                        logger.debug(
+                            "Found port '%s' for adapter '%s' as '%s'",
+                            implements_port,
+                            adapter_name,
+                            attempt,
+                        )
                         break
                 except ComponentNotFoundError:
                     continue
 
             if not port_meta:
+                # Port must exist - this is now an error since ports are registered first
                 raise InvalidComponentError(
                     adapter_name,
                     f"Adapter '{adapter_name}' declares it implements port '{implements_port}', "
-                    f"but port '{implements_port}' does not exist in registry",
+                    f"but port '{implements_port}' does not exist in registry. "
+                    f"Available ports: {', '.join(self._get_available_ports())}",
                 )
 
             # Validate required methods if port specifies them

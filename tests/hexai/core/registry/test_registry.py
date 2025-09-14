@@ -4,7 +4,7 @@ import warnings
 
 import pytest
 
-from hexai.core.registry import adapter, component, node, registry, tool
+from hexai.core.registry import adapter, component, node, port, registry, tool
 from hexai.core.registry.registry import ComponentRegistry
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
@@ -591,3 +591,71 @@ class TestAdapterRegistration:
         adapter_names = [a.name for a in adapters]
         assert "adapter1" in adapter_names
         assert "adapter2" in adapter_names
+
+    def test_two_phase_discovery(self, test_registry):
+        """Test that ports are registered before adapters in two-phase discovery."""
+        reg = test_registry
+
+        # First register a port
+        @port(
+            name="discovery_test_port",
+            namespace="test",
+            required_methods=["process"],
+            optional_methods=["validate"],
+        )
+        class DiscoveryTestPort:
+            def process(self, data: str) -> str: ...
+
+        # Register the port first (simulating phase A)
+        reg.register(
+            name="discovery_test_port",
+            component=DiscoveryTestPort,
+            component_type="port",
+            namespace="test",
+        )
+
+        # Now create and register an adapter that depends on it (simulating phase B)
+        @adapter(implements_port="discovery_test_port")
+        class DiscoveryTestAdapter:
+            def process(self, data: str) -> str:
+                return f"processed: {data}"
+
+        # This should succeed because port exists
+        reg.register(
+            name="discovery_test_adapter",
+            component=DiscoveryTestAdapter,
+            component_type="adapter",
+            namespace="test",
+        )
+
+        # Port should be available
+        port_info = reg.get_info("discovery_test_port", namespace="test")
+        assert port_info.component_type == ComponentType.PORT
+
+        # Adapter should be available and validated against port
+        adapter_info = reg.get_info("discovery_test_adapter", namespace="test")
+        assert adapter_info.component_type == ComponentType.ADAPTER
+
+        # Adapter should be listed for the port
+        adapters = reg.get_adapters_for_port("discovery_test_port")
+        assert len(adapters) == 1
+        assert adapters[0].name == "discovery_test_adapter"
+
+    def test_adapter_registration_before_port_fails(self, test_registry):
+        """Test that registering adapter before its port fails."""
+        reg = test_registry
+
+        # Create an adapter without registering its port first
+        @adapter(implements_port="not_yet_registered_port")
+        class EarlyAdapter:
+            def process(self, data: str) -> str:
+                return "data"
+
+        # This should fail because port doesn't exist yet
+        with pytest.raises(InvalidComponentError, match="does not exist in registry"):
+            reg.register(
+                name="early_adapter",
+                component=EarlyAdapter,
+                component_type="adapter",
+                namespace="test",
+            )
