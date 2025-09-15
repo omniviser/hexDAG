@@ -16,7 +16,15 @@ from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.domain.dag_visualizer import DAGVisualizer
+
+try:
+    from hexai.visualization import DAGVisualizer
+except ImportError:
+    print("Error: Visualization requires graphviz. Install with:")
+    print("  pip install hexdag[viz]")
+    print("  or")
+    print("  uv pip install hexdag[viz]")
+    raise SystemExit(1)
 
 
 async def data_ingestion(input_data: str) -> dict:

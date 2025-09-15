@@ -24,8 +24,24 @@ classifiers = [
 ]
 dependencies = [
     "pydantic~=2.0",
+]
+
+[project.optional-dependencies]
+cli = [
+    "pyyaml~=6.0",  # For CLI and YAML pipeline support
+]
+viz = [
     "graphviz>=0.20.0,<0.21",
-    "pyyaml~=6.0",
+]
+adapters-openai = [
+    "openai>=1.0.0",
+]
+adapters-anthropic = [
+    "anthropic>=0.25.0",
+]
+all = [
+    "hexdag[cli]",
+    "hexdag[viz]",
 ]
 
 [project.urls]
@@ -289,3 +305,13 @@ show_complexity = true
 # Ignore specific vulnerability IDs if needed
 # ignore = ["12345"]
 audit-and-monitor = true
+
+[tool.deptry]
+# Ignore checks for optional dependencies
+ignore = ["DEP002"]  # Dependencies defined but not used
+
+# Per-rule ignores for specific packages
+per_rule_ignores = { DEP002 = ["openai", "anthropic"] }
+
+# Package name mappings
+package_module_name_map = { openai = "openai", anthropic = "anthropic" }

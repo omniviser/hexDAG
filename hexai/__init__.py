@@ -47,9 +47,10 @@ import hexai.core.application.nodes  # noqa: F401, E402 - triggers decorator reg
 registry._core_loading = False  # type: ignore  # Block core namespace registration
 
 
-# Lazy loading for adapters to avoid circular imports
+# Lazy loading for adapters and optional modules to avoid circular imports
 def __getattr__(name: str) -> Any:
-    """Lazy import for adapters."""
+    """Lazy import for adapters and optional components."""
+    # Mock adapters
     if name == "MockLLM":
         from hexai.adapters.mock import MockLLM as _MockLLM
 
@@ -62,6 +63,20 @@ def __getattr__(name: str) -> Any:
         from hexai.adapters.mock import MockToolRouter as _MockToolRouter
 
         return _MockToolRouter
+
+    # Visualization components (optional)
+    elif name == "DAGVisualizer":
+        try:
+            from hexai.visualization import DAGVisualizer as _DAGVisualizer
+
+            return _DAGVisualizer
+        except ImportError as e:
+            raise ImportError(
+                "Visualization module not available. Install with:\n"
+                "  pip install hexdag[viz]\n"
+                "  or\n"
+                "  uv pip install hexdag[viz]"
+            ) from e
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
@@ -105,4 +120,6 @@ __all__ = [
     "QueryIntent",
     "SQLQuery",
     "RelationshipType",
+    # Visualization (optional)
+    "DAGVisualizer",
 ]

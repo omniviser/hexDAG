@@ -15,7 +15,41 @@ from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.cli.compile import compile_single
-from hexai.core.domain.dag_visualizer import render_dag_to_image
+
+try:
+    from hexai.visualization.dag_visualizer import render_dag_to_image
+
+    VIZ_AVAILABLE = True
+except ImportError:
+    from typing import Any as _Any
+
+    from hexai.core.domain import DirectedGraph as _DirectedGraph
+
+    VIZ_AVAILABLE = False
+
+    def render_dag_to_image(
+        graph: _DirectedGraph,
+        output_path: str,
+        format: str = "png",
+        title: str = "Pipeline DAG",
+        show_io_nodes: bool = True,
+        input_schema: _Any = None,
+        output_schema: _Any = None,
+        show_node_schemas: bool = True,
+        show_intermediate_input: bool = False,
+        show_intermediate_output: bool = False,
+        basic_node_types: dict[str, str] | None = None,
+        basic_node_schemas: dict[str, dict[str, _Any]] | None = None,
+    ) -> str:
+        """Placeholder when visualization is not available."""
+        logger.warning(
+            "Visualization not available. Install with:\n"
+            "  pip install hexdag[viz]\n"
+            "  or\n"
+            "  uv pip install hexdag[viz]"
+        )
+        return ""  # Return empty string instead of None to match expected type
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
