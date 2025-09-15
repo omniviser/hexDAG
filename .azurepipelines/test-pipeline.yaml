@@ -365,9 +365,9 @@ jobs:
               if (Test-Path $p) { $env:PATH = "$p;$env:PATH" }
             }
 
-            & "$(UV_BIN_DIR)\uv.exe" run pytest ./tests \
-              --cov=./hexai \
-              --cov-report=xml:./coverage.xml \
+            & "$(UV_BIN_DIR)\uv.exe" run pytest ./tests `
+              --cov=./hexai `
+              --cov-report=xml:./coverage.xml `
               --junitxml=./test-results.xml
 
       - script: |
@@ -499,6 +499,8 @@ jobs:
           echo "Installing Gitleaks version: $GITLEAKS_VERSION"
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/\
           download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
+
+          chmod +x /tmp/gitleaks
           /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json || {
             echo "Gitleaks found secrets or encountered an error. See gitleaks-report.json for details."
             cat gitleaks-report.json
@@ -516,7 +518,7 @@ jobs:
             $ErrorActionPreference = "Stop"
             $version = "8.21.2"
             $zip = "$env:TEMP\gitleaks.zip"
-            $url = "https://github.com/gitleaks/gitleaks/releases/\
+            $url = "https://github.com/gitleaks/gitleaks/releases/`
                   download/v$version/gitleaks_${version}_windows_x64.zip"
             Write-Host "Downloading Gitleaks v$version from $url"
             Invoke-WebRequest -Uri $url -OutFile $zip
@@ -545,6 +547,15 @@ jobs:
           targetType: inline
           script: |
             $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+
+            Write-Host "Converting line endings to LF..."
+            Get-ChildItem -Path . -Recurse -Include *.yaml,*.yml | ForEach-Object {
+              $content = Get-Content $_.FullName -Raw
+              $content = $content -replace "`r`n", "`n"
+              Set-Content $_.FullName -Value $content
+            }
+
+            Write-Host "Running yamllint..."
             & "$(UV_BIN_DIR)\uv.exe" run yamllint -d relaxed .
 
       - script: |
