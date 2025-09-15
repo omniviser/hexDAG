@@ -47,7 +47,7 @@ class TestSecret:
 
     def test_retrieve_missing_secret(self, env_setup):
         """Test retrieving a missing secret."""
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(KeyError) as exc_info:
             Secret.retrieve_secret_from_env("MISSING_SECRET")
         assert "not found in environment variables" in str(exc_info.value)
 

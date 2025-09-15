@@ -40,10 +40,11 @@ class Secret:
         ------
             ValueError: If the secret is not found.
         """
-        try:
-            value = os.getenv(name)
-            if value is None:
-                raise ValueError(f"Secret '{name}' not found in environment variables.")
-            return Secret(value)
-        except Exception as e:
-            raise ValueError(f"Error fetching secret '{name}': {e}") from e
+        value = os.getenv(name)
+
+        if value is None:
+            raise KeyError(f"Secret '{name}' not found in environment variables.")
+        if value == "":
+            raise ValueError(f"Secret value cannot be empty for '{name}'.")
+
+        return Secret(value)
