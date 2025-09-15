@@ -138,6 +138,10 @@ jobs:
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
           export PATH="$HOME/.local/bin:$PATH"
+
+          echo "Installing all dependencies for tests..."
+          uv pip install -e ".[viz,cli]"
+
           echo "Running tests with pytest configuration from pyproject.toml..."
           # Pytest automatically reads configuration from pyproject.toml
           uv run pytest --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
