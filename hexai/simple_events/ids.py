@@ -5,10 +5,8 @@ Prefer ULID if the optional 'ulid' package is available.
 Fallback to UUIDv7 when supported by the runtime.
 """
 
-from typing import Optional
 
-
-def _generate_ulid() -> Optional[str]:
+def _generate_ulid() -> str | None:
     """Return ULID string if 'ulid' package is available, otherwise None."""
     try:
         import importlib
@@ -26,16 +24,17 @@ def _generate_ulid() -> Optional[str]:
         return None
 
 
-def _generate_uuidv7() -> Optional[str]:
+def _generate_uuidv7() -> str | None:
     """Return UUIDv7 string if supported by this Python, otherwise None."""
     import uuid
 
-    if hasattr(uuid, "uuid7"):
-        return str(uuid.uuid7())
+    func = getattr(uuid, "uuid7", None)
+    if func is not None:
+        return str(func())
     return None
 
 
-def generate_event_id(preferred: Optional[str] = None) -> str:
+def generate_event_id(preferred: str | None = None) -> str:
     """
     Return provided ID or generate a ULID/UUIDv7 string.
 

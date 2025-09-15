@@ -10,8 +10,9 @@ This module enforces lintable rules:
 """
 
 import json
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any
 
 from .types import APPROVED_ACTIONS, EVENT_TYPE_RE
 
@@ -51,7 +52,7 @@ def validate_json_serializable(obj: Any) -> None:
     try:
         json.dumps(obj)
     except TypeError as e:
-        raise TypeError(f"attrs not JSON-serializable: {e}")
+        raise TypeError(f"attrs not JSON-serializable: {e}") from e
 
 
 def validate_envelope(env: Mapping[str, Any]) -> None:

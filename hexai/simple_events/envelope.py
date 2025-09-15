@@ -5,8 +5,8 @@ Builds a minimal, structured payload and validates it.
 """
 
 from dataclasses import asdict, dataclass, is_dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from .ids import generate_event_id
 from .mapping import map_classname_to_event_type
@@ -20,17 +20,17 @@ class SimpleContext:
 
     pipeline: str
     pipeline_run_id: str
-    tenant: Optional[str] = None
-    project: Optional[str] = None
-    environment: Optional[str] = None
-    correlation_id: Optional[str] = None
-    node: Optional[str] = None
-    wave: Optional[int] = None
+    tenant: str | None = None
+    project: str | None = None
+    environment: str | None = None
+    correlation_id: str | None = None
+    node: str | None = None
+    wave: int | None = None
 
 
 def _now_rfc3339_ms() -> str:
     """Return current UTC time in RFC3339 with milliseconds and Z."""
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _coerce(v: Any) -> Any:
@@ -51,7 +51,7 @@ def _coerce(v: Any) -> Any:
     return v
 
 
-def _obj_to_attrs(event: Any) -> Dict[str, Any]:
+def _obj_to_attrs(event: Any) -> dict[str, Any]:
     if is_dataclass(event) and not isinstance(event, type):
         data = asdict(event)  # instance OK
     elif hasattr(event, "__dict__"):
@@ -85,12 +85,12 @@ def _infer_severity(event_type: str) -> str:
     return Severity.info.value
 
 
-def to_simple_event(event: Any, context: SimpleContext) -> Dict[str, Any]:
+def to_simple_event(event: Any, context: SimpleContext) -> dict[str, Any]:
     """Translate an internal event object into a canonical envelope dict."""
     class_name = type(event).__name__
     event_type = map_classname_to_event_type(class_name)
 
-    env: Dict[str, Any] = {
+    env: dict[str, Any] = {
         "event_type": event_type,
         "event_id": generate_event_id(getattr(event, "event_id", None)),
         "timestamp": _now_rfc3339_ms(),

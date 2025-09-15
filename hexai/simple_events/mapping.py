@@ -7,12 +7,10 @@ This module provides:
 - map_classname_to_event_type: convert class name to event_type
 """
 
-from typing import Dict, Tuple
-
 from .types import APPROVED_ACTIONS, EVENT_TYPE_RE, Namespace
 
 #: Single source of truth for mapping class names to taxonomy.
-_MAP_CLASS_TO_TYPE: Dict[str, Tuple[str, str]] = {
+_MAP_CLASS_TO_TYPE: dict[str, tuple[str, str]] = {
     # Pipeline
     "PipelineStartedEvent": (Namespace.pipeline.value, "started"),
     "PipelineCompletedEvent": (Namespace.pipeline.value, "completed"),
@@ -93,6 +91,6 @@ def map_classname_to_event_type(class_name: str) -> str:
     """
     try:
         ns, act = _MAP_CLASS_TO_TYPE[class_name]
-    except KeyError:
-        raise KeyError(f"unmapped event class: {class_name}")
+    except KeyError as err:
+        raise KeyError(f"unmapped event class: {class_name}") from err
     return build_event_type(ns, act)
