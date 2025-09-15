@@ -10,6 +10,11 @@ Anything **not listed here** is considered internal and may change without notic
 - `DirectedGraph`
 - `NodeSpec`
 - `YamlPipelineBuilder`
+- `ComponentType`
+
+## Registry
+- `registry`
+
 
 ## Node Factories
 - `FunctionNode`
