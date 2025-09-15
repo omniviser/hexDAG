@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 from hexai.agent_factory.yaml_validator import YamlValidator
-from hexai.core.application.events.manager import PipelineEventManager
+from hexai.core.application.events import ObserverManager
 from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.bootstrap import ensure_bootstrapped
@@ -28,7 +28,7 @@ class YamlPipelineBuilderError(Exception):
 class YamlPipelineBuilder:
     """Simple pipeline builder with basic data mapping support and intelligent auto-conversion."""
 
-    def __init__(self, event_manager: PipelineEventManager | None = None) -> None:
+    def __init__(self, event_manager: ObserverManager | None = None) -> None:
         """Initialize the pipeline builder.
 
         Args
@@ -36,7 +36,8 @@ class YamlPipelineBuilder:
             event_manager: Optional event manager for observer pattern
         """
         self.registered_functions: dict[str, Any] = {}
-        self.event_manager = event_manager or PipelineEventManager()
+
+        self.event_manager = event_manager or ObserverManager()
         self.field_mapping_registry = FieldMappingRegistry()
         self.validator = YamlValidator()
 

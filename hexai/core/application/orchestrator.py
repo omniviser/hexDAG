@@ -12,13 +12,17 @@ from typing import Any
 from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
 
 from .events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineCompletedEvent,
-    PipelineStartedEvent,
-    WaveCompletedEvent,
-    WaveStartedEvent,
+    ControlManager,
+    ControlSignal,
+    ExecutionContext,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
+    ObserverManager,
+    PipelineCompleted,
+    PipelineStarted,
+    WaveCompleted,
+    WaveStarted,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,24 +98,37 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        event_manager = all_ports.get("event_manager")
+        # Get observer manager and control manager from ports
+        observer_manager: ObserverManager = all_ports.get("observer_manager", ObserverManager())
+        control_manager: ControlManager = all_ports.get("control_manager", ControlManager())
 
-        # Emit pipeline started event using elegant null-safe syntax
-        if event_manager:
-            await event_manager.emit(
-                PipelineStartedEvent(
-                    pipeline_name=getattr(graph, "name", "unnamed"),
-                    total_waves=len(waves),
-                    total_nodes=len(graph.nodes),
-                )
-            )
+        # Create execution context for this DAG run
+        pipeline_name = getattr(graph, "name", "unnamed")
+        context = ExecutionContext(dag_id=pipeline_name)
+
+        # Fire pipeline started event and check control
+        event = PipelineStarted(
+            name=pipeline_name,
+            total_waves=len(waves),
+            total_nodes=len(graph.nodes),
+        )
+        await observer_manager.notify(event)
+        control_response = await control_manager.check(event, context)
+        if control_response.signal != ControlSignal.PROCEED:
+            raise OrchestratorError(f"Pipeline start blocked: {control_response.signal.value}")
 
         for wave_idx, wave in enumerate(waves, 1):
             wave_start_time = time.time()
 
-            # Emit wave started event
-            if event_manager:
-                await event_manager.emit(WaveStartedEvent(wave_index=wave_idx, nodes=wave))
+            # Fire wave started event and check control
+            wave_event = WaveStarted(
+                wave_index=wave_idx,
+                nodes=wave,
+            )
+            await observer_manager.notify(wave_event)
+            wave_response = await control_manager.check(wave_event, context)
+            if wave_response.signal != ControlSignal.PROCEED:
+                raise OrchestratorError(f"Wave {wave_idx} blocked: {wave_response.signal.value}")
 
             wave_results = await self._execute_wave(
                 wave,
@@ -119,31 +136,29 @@ class Orchestrator:
                 node_results,
                 initial_input,
                 all_ports,
+                context=context,
+                observer_manager=observer_manager,
+                control_manager=control_manager,
                 wave_index=wave_idx,
                 validate=validate,
                 **kwargs,
             )
             node_results.update(wave_results)
 
-            # Emit wave completed event
-            if event_manager:
-                await event_manager.emit(
-                    WaveCompletedEvent(
-                        wave_index=wave_idx,
-                        nodes=wave,
-                        execution_time=time.time() - wave_start_time,
-                    )
-                )
-
-        # Emit pipeline completed event
-        if event_manager:
-            await event_manager.emit(
-                PipelineCompletedEvent(
-                    pipeline_name=getattr(graph, "name", "unnamed"),
-                    total_execution_time=time.time() - pipeline_start_time,
-                    node_results=node_results,
-                )
+            # Fire wave completed event (observation only)
+            wave_completed = WaveCompleted(
+                wave_index=wave_idx,
+                duration_ms=(time.time() - wave_start_time) * 1000,
             )
+            await observer_manager.notify(wave_completed)
+
+        # Fire pipeline completed event (observation only)
+        pipeline_completed = PipelineCompleted(
+            name=pipeline_name,
+            duration_ms=(time.time() - pipeline_start_time) * 1000,
+            node_results=node_results,
+        )
+        await observer_manager.notify(pipeline_completed)
 
         return node_results
 
@@ -154,6 +169,9 @@ class Orchestrator:
         node_results: dict[str, Any],
         initial_input: Any,
         ports: dict[str, Any],
+        context: ExecutionContext,
+        observer_manager: ObserverManager,
+        control_manager: ControlManager,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -168,6 +186,9 @@ class Orchestrator:
                     node_results,
                     initial_input,
                     ports,
+                    context=context,
+                    observer_manager=observer_manager,
+                    control_manager=control_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,
@@ -196,13 +217,22 @@ class Orchestrator:
         node_results: dict[str, Any],
         initial_input: Any,
         ports: dict[str, Any],
+        context: ExecutionContext,
+        observer_manager: ObserverManager,
+        control_manager: ControlManager,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
-        """Execute a single node."""
+        """Execute a single node.
+
+        The orchestrator provides the MECHANISM for retries through the RETRY signal,
+        but the retry POLICY (when to retry, how many times, delays) is determined
+        by control handlers registered with the EventBus.
+        """
         node_start_time = time.time()
-        event_manager = ports.get("event_manager")
+        # Create node context early so it's available in exception handler
+        node_context = context.with_node(node_name, wave_index)
 
         try:
             node_spec = graph.nodes[node_name]
@@ -221,21 +251,32 @@ class Orchestrator:
             else:
                 validated_input = node_input
 
-            # Emit node started event
-            if event_manager:
-                await event_manager.emit(
-                    NodeStartedEvent(
-                        node_name=node_name,
-                        wave_index=wave_index,
-                        dependencies=list(node_spec.deps),
-                    )
+            # Fire node started event and check control
+            start_event = NodeStarted(
+                name=node_name,
+                wave_index=wave_index,
+                dependencies=list(node_spec.deps),
+            )
+            await observer_manager.notify(start_event)
+            start_response = await control_manager.check(start_event, node_context)
+
+            # Handle control signals
+            if start_response.signal == ControlSignal.SKIP:
+                # Skip this node and return fallback value if provided
+                return start_response.data
+            elif start_response.signal == ControlSignal.FAIL:
+                raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
+            elif start_response.signal != ControlSignal.PROCEED:
+                # For now, treat other signals as errors
+                raise OrchestratorError(
+                    f"Node '{node_name}' blocked: {start_response.signal.value}"
                 )
 
             # Execute node function
             raw_output = (
                 await node_spec.fn(validated_input, **ports, **kwargs)
                 if asyncio.iscoroutinefunction(node_spec.fn)
-                else await asyncio.get_event_loop().run_in_executor(
+                else await asyncio.get_running_loop().run_in_executor(
                     None, lambda: node_spec.fn(validated_input, **ports, **kwargs)
                 )
             )
@@ -253,27 +294,59 @@ class Orchestrator:
             else:
                 validated_output = raw_output
 
-            # Emit node completed event
-            if event_manager:
-                await event_manager.emit(
-                    NodeCompletedEvent(
-                        node_name=node_name,
-                        result=validated_output,
-                        execution_time=time.time() - node_start_time,
-                        wave_index=wave_index,
-                    )
-                )
+            # Fire node completed event (observation only)
+            complete_event = NodeCompleted(
+                name=node_name,
+                wave_index=wave_index,
+                result=validated_output,
+                duration_ms=(time.time() - node_start_time) * 1000,
+            )
+            await observer_manager.notify(complete_event)
 
             return validated_output
 
         except Exception as e:
-            # Emit node failed event
-            if event_manager:
-                await event_manager.emit(
-                    NodeFailedEvent(node_name=node_name, error=e, wave_index=wave_index)
-                )
+            # Fire node failed event and check control
+            fail_event = NodeFailed(
+                name=node_name,
+                wave_index=wave_index,
+                error=e,
+            )
+            await observer_manager.notify(fail_event)
+            fail_response = await control_manager.check(fail_event, node_context)
 
-            raise NodeExecutionError(node_name, e) from e
+            # Handle control signals
+            if fail_response.signal == ControlSignal.FALLBACK:
+                # Return fallback value instead of failing
+                return fail_response.data
+            elif fail_response.signal == ControlSignal.RETRY:
+                # RETRY signal indicates the policy wants to retry
+                # The orchestrator enables this by re-executing the node
+                # The retry policy (attempts, delays) is managed by the handler
+                retry_data = fail_response.data if isinstance(fail_response.data, dict) else {}
+                delay = retry_data.get("delay", 0)
+
+                if delay > 0:
+                    await asyncio.sleep(delay)
+
+                # Recursive call to retry the node execution
+                # The policy handler tracks attempts and decides when to stop
+                return await self._execute_node(
+                    node_name=node_name,
+                    graph=graph,
+                    node_results=node_results,
+                    initial_input=initial_input,
+                    ports=ports,
+                    context=context.with_attempt(context.attempt + 1),
+                    observer_manager=observer_manager,
+                    control_manager=control_manager,
+                    wave_index=wave_index,
+                    validate=validate,
+                    **kwargs,
+                )
+            else:
+                # Default: propagate the error
+                raise NodeExecutionError(node_name, e) from e
 
     def _prepare_node_input(
         self, node_spec: NodeSpec, node_results: dict[str, Any], initial_input: Any

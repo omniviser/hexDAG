@@ -108,7 +108,7 @@ This file contains pre-built DAG objects to eliminate runtime parsing.
 from typing import Any
 
 # Only necessary imports for compiled execution - PYDANTIC-FIRST
-from hexai.core.application.events.manager import PipelineEventManager
+from hexai.core.application.events.observer_manager import ObserverManager
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
 from hexai.core.registry import registry
@@ -184,7 +184,7 @@ class Compiled{class_name}Pipeline:
     async def execute_optimized(
         self,
         input_data: Any = None,
-        event_manager: PipelineEventManager | None = None,
+        event_manager: ObserverManager | None = None,
         ports: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Execute with pre-built graph - no parsing overhead, Pydantic-first.
@@ -192,7 +192,7 @@ class Compiled{class_name}Pipeline:
         Args
         ----
             input_data: Input data (preferably Pydantic model)
-            event_manager: Event manager for tracing and memory
+            event_manager: Observer manager for tracing and memory
             ports: Injected dependencies (adapters)
 
         Returns
@@ -200,7 +200,7 @@ class Compiled{class_name}Pipeline:
             Pipeline execution results
         """
         input_data = input_data or {{}}
-        event_manager = event_manager or PipelineEventManager()
+        event_manager = event_manager or ObserverManager()
         ports = ports or {{}}
 
         # Ensure event_manager is in ports
@@ -271,7 +271,7 @@ class Compiled{class_name}Pipeline:
 # Convenience function for direct execution
 async def execute_{data.name.lower()}(
     input_data: Any = None,
-    event_manager: PipelineEventManager | None = None,
+    event_manager: ObserverManager | None = None,
     ports: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Execute the compiled {data.name} pipeline directly.
@@ -279,7 +279,7 @@ async def execute_{data.name.lower()}(
     Args
     ----
         input_data: Input data (preferably Pydantic model)
-        event_manager: Event manager for tracing and memory
+        event_manager: Observer manager for tracing and memory
         ports: Injected dependencies (adapters)
 
     Returns

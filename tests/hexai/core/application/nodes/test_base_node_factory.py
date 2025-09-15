@@ -1,16 +1,10 @@
 """Test cases for BaseNodeFactory class."""
 
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import BaseModel
 
-from hexai.core.application.events.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-)
 from hexai.core.application.nodes.base_node_factory import BaseNodeFactory
 from hexai.core.domain.dag import NodeSpec
 
@@ -41,12 +35,6 @@ class TestBaseNodeFactory:
     def factory(self):
         """Fixture for MockNodeFactory."""
         return MockNodeFactory()
-
-    @pytest.fixture
-    def mock_event_manager(self):
-        """Fixture for mock event manager."""
-        event_manager = AsyncMock()
-        return event_manager
 
     def test_create_pydantic_model_from_dict(self, factory):
         """Test creating Pydantic model from dict schema."""
@@ -86,46 +74,13 @@ class TestBaseNodeFactory:
         instance = model(value="test")
         assert instance.value == "test"
 
-    @pytest.mark.asyncio
-    async def test_emit_node_started(self, factory, mock_event_manager):
-        """Test emitting node started event."""
-        await factory.emit_node_started(
-            "test_node", 0, ["dep1", "dep2"], mock_event_manager, {"test": "metadata"}
-        )
-
-        mock_event_manager.emit.assert_called_once()
-        event = mock_event_manager.emit.call_args[0][0]
-        assert isinstance(event, NodeStartedEvent)
-        assert event.node_name == "test_node"
-        assert event.dependencies == ["dep1", "dep2"]
-        assert event.metadata == {"test": "metadata"}
-
-    @pytest.mark.asyncio
-    async def test_emit_node_completed(self, factory, mock_event_manager):
-        """Test emitting node completed event."""
-        await factory.emit_node_completed(
-            "test_node", "result", 1.5, 0, mock_event_manager, {"test": "metadata"}
-        )
-
-        mock_event_manager.emit.assert_called_once()
-        event = mock_event_manager.emit.call_args[0][0]
-        assert isinstance(event, NodeCompletedEvent)
-        assert event.node_name == "test_node"
-        assert event.result == "result"
-        assert event.execution_time == 1.5
-        assert event.metadata == {"test": "metadata"}
-
-    @pytest.mark.asyncio
-    async def test_emit_node_failed(self, factory, mock_event_manager):
-        """Test emitting node failed event."""
-        error = Exception("test error")
-        await factory.emit_node_failed("test_node", error, 0, mock_event_manager)
-
-        mock_event_manager.emit.assert_called_once()
-        event = mock_event_manager.emit.call_args[0][0]
-        assert isinstance(event, NodeFailedEvent)
-        assert event.node_name == "test_node"
-        assert event.error == error
+    def test_emit_methods_removed(self, factory):
+        """Test that event emission methods have been removed."""
+        # The BaseNodeFactory no longer handles events
+        # Events are now managed by the orchestrator via ObserverManager
+        assert not hasattr(factory, "emit_node_started")
+        assert not hasattr(factory, "emit_node_completed")
+        assert not hasattr(factory, "emit_node_failed")
 
     def test_create_node_with_mapping(self, factory):
         """Test creating node with input mapping."""
