@@ -50,18 +50,18 @@ registry._core_loading = False  # type: ignore  # Block core namespace registrat
 # Lazy loading for adapters to avoid circular imports
 def __getattr__(name: str) -> Any:
     """Lazy import for adapters."""
-    if name == "InMemoryMemory":
-        from hexai.adapters.in_memory_memory import InMemoryMemory
+    if name == "MockLLM":
+        from hexai.adapters.mock import MockLLM as _MockLLM
 
-        return InMemoryMemory
-    elif name == "MockLLM":
-        from hexai.adapters.mock import MockLLM
-
-        return MockLLM
+        return _MockLLM
     elif name == "MockDatabaseAdapter":
-        from hexai.adapters.mock import MockDatabaseAdapter
+        from hexai.adapters.mock import MockDatabaseAdapter as _MockDatabaseAdapter
 
-        return MockDatabaseAdapter
+        return _MockDatabaseAdapter
+    elif name == "MockToolRouter":
+        from hexai.adapters.mock import MockToolRouter as _MockToolRouter
+
+        return _MockToolRouter
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

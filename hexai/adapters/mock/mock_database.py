@@ -1,16 +1,38 @@
 """Mock database port implementation for testing."""
 
+import asyncio
 from typing import Any
 
+from hexai.adapters.configs import MockDatabaseConfig
 from hexai.core.ports.database import DatabasePort
+from hexai.core.registry import adapter
 
 
+@adapter(name="mock_database", implements_port="database", namespace="plugin")
 class MockDatabaseAdapter(DatabasePort):
     """Mock implementation of DatabasePort for testing and demos."""
 
-    def __init__(self) -> None:
-        """Initialize with sample database schema."""
-        self._table_schemas: dict[str, dict[str, Any]] = {
+    def __init__(self, config: MockDatabaseConfig | None = None) -> None:
+        """Initialize with configuration.
+
+        Args
+        ----
+            config: Configuration for the mock database
+        """
+        if config is None:
+            config = MockDatabaseConfig()
+
+        self.delay_seconds = config.delay_seconds
+        self.enable_sample_data = config.enable_sample_data
+
+        if not self.enable_sample_data:
+            self._table_schemas: dict[str, dict[str, Any]] = {}
+            self._relationships: list[dict[str, Any]] = []
+            self._indexes: list[dict[str, Any]] = []
+            self._table_statistics: dict[str, dict[str, Any]] = {}
+            return
+
+        self._table_schemas = {
             "customers": {
                 "table_name": "customers",
                 "columns": {
@@ -80,7 +102,7 @@ class MockDatabaseAdapter(DatabasePort):
             },
         }
 
-        self._relationships: list[dict[str, Any]] = [
+        self._relationships = [
             {
                 "from_table": "orders",
                 "from_column": "customer_id",
@@ -104,7 +126,7 @@ class MockDatabaseAdapter(DatabasePort):
             },
         ]
 
-        self._indexes: list[dict[str, Any]] = [
+        self._indexes = [
             {
                 "index_name": "idx_customers_email",
                 "table_name": "customers",
@@ -135,7 +157,7 @@ class MockDatabaseAdapter(DatabasePort):
             },
         ]
 
-        self._table_statistics: dict[str, dict[str, Any]] = {
+        self._table_statistics = {
             "customers": {
                 "row_count": 10000,
                 "size_bytes": 2048000,
@@ -161,12 +183,17 @@ class MockDatabaseAdapter(DatabasePort):
     # Required methods from DatabasePort
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables."""
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._table_schemas.copy()
 
     async def aexecute_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Execute a SQL query and return results."""
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
+
         # Mock implementation - returns sample data based on query keywords
         if "customers" in query.lower():
             return [
@@ -183,12 +210,18 @@ class MockDatabaseAdapter(DatabasePort):
     # Optional methods from DatabasePort
     async def aget_relationships(self) -> list[dict[str, Any]]:
         """Get foreign key relationships between tables."""
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._relationships.copy()
 
     async def aget_indexes(self) -> list[dict[str, Any]]:
         """Get index information for performance optimization."""
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._indexes.copy()
 
     async def aget_table_statistics(self) -> dict[str, dict[str, Any]]:
         """Get table statistics for query optimization."""
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._table_statistics.copy()

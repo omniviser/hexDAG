@@ -1,9 +1,18 @@
 """Port interface for Long Term Memory."""
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
+
+from hexai.core.registry.decorators import port
 
 
-class LongTermMemory(Protocol):
+@port(
+    name="memory",
+    namespace="core",
+    required_methods=["aget", "aset"],
+    optional_methods=[],
+)
+@runtime_checkable
+class Memory(Protocol):
     """Protocol for long-term memory storage and retrieval."""
 
     async def aget(self, key: str) -> Any:

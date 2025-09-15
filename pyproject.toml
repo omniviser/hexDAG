@@ -78,6 +78,21 @@ include = ["hexai"]
 [tool.hatch.build.targets.wheel]
 include = ["hexai"]
 
+[tool.hexdag]
+# Core modules to load - these are the essential framework components
+modules = [
+    "hexai.core.ports",               # Core port definitions (must load before adapters)
+    "hexai.core.application.nodes",  # Core node factories
+]
+
+# Default plugins - mock and local adapters for testing and development
+plugins = [
+    "hexai.adapters.local",  # Local in-process implementations
+]
+
+# Development mode enabled by default
+dev_mode = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -18,15 +18,19 @@ class TestMockLLM:
     @pytest.mark.asyncio
     async def test_single_custom_response(self):
         """Test MockLLM with a single custom response."""
-        mock_llm = MockLLM("Custom response")
+        from hexai.adapters.configs import MockLLMConfig
+        config = MockLLMConfig(responses="Custom response")
+        mock_llm = MockLLM(config)
         response = await mock_llm.aresponse([{"role": "user", "content": "Test"}])
         assert response == "Custom response"
 
     @pytest.mark.asyncio
     async def test_multiple_responses(self):
         """Test MockLLM with multiple responses."""
+        from hexai.adapters.configs import MockLLMConfig
         responses = ["First response", "Second response", "Third response"]
-        mock_llm = MockLLM(responses)
+        config = MockLLMConfig(responses=responses)
+        mock_llm = MockLLM(config)
 
         response1 = await mock_llm.aresponse([{"role": "user", "content": "Test 1"}])
         response2 = await mock_llm.aresponse([{"role": "user", "content": "Test 2"}])
@@ -39,8 +43,10 @@ class TestMockLLM:
     @pytest.mark.asyncio
     async def test_exhausted_responses_repeat_last(self):
         """Test that exhausted responses repeat the last one."""
+        from hexai.adapters.configs import MockLLMConfig
         responses = ["First", "Second"]
-        mock_llm = MockLLM(responses)
+        config = MockLLMConfig(responses=responses)
+        mock_llm = MockLLM(config)
 
         # Use up all responses
         await mock_llm.aresponse([{"role": "user", "content": "Test 1"}])
@@ -53,7 +59,9 @@ class TestMockLLM:
     @pytest.mark.asyncio
     async def test_last_messages_tracking(self):
         """Test that last_messages is tracked for testing."""
-        mock_llm = MockLLM("Test response")
+        from hexai.adapters.configs import MockLLMConfig
+        config = MockLLMConfig(responses="Test response")
+        mock_llm = MockLLM(config)
         messages = [{"role": "user", "content": "Test message"}]
 
         await mock_llm.aresponse(messages)
@@ -61,7 +69,9 @@ class TestMockLLM:
 
     def test_reset_functionality(self):
         """Test that reset clears the mock state."""
-        mock_llm = MockLLM(["First", "Second"])
+        from hexai.adapters.configs import MockLLMConfig
+        config = MockLLMConfig(responses=["First", "Second"])
+        mock_llm = MockLLM(config)
 
         # Make a call
         import asyncio
@@ -75,3 +85,18 @@ class TestMockLLM:
         mock_llm.reset()
         assert mock_llm.call_count == 0
         assert mock_llm.last_messages is None
+
+    @pytest.mark.asyncio
+    async def test_responses_parameter_override(self):
+        """Test that responses parameter overrides config."""
+        from hexai.adapters.configs import MockLLMConfig
+        config = MockLLMConfig(responses="Config response")
+
+        # Pass responses directly, should override config
+        mock_llm = MockLLM(config, responses=["Direct response 1", "Direct response 2"])
+
+        response1 = await mock_llm.aresponse([{"role": "user", "content": "Test"}])
+        response2 = await mock_llm.aresponse([{"role": "user", "content": "Test"}])
+
+        assert response1 == "Direct response 1"
+        assert response2 == "Direct response 2"
