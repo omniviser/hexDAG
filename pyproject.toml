@@ -63,7 +63,7 @@ dev = [
     "mkdocs-mermaid2-plugin==1.2.1",
     "types-pyyaml==6.0.12",
     "Sphinx==7.2.6",
-    "sphinx-rtd-theme==1.2.0",
+    "sphinx-rtd-theme==2.0.0",
 ]
 
 [tool.hatch.build.targets.sdist]
