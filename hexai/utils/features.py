@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
-from typing import Iterable
+from typing import TYPE_CHECKING
 
 from .optional_deps import get_feature_to_pkg
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 class FeatureMissingError(ImportError):
