@@ -519,7 +519,7 @@ jobs:
             $version = "8.21.2"
             $zip = "$env:TEMP\gitleaks.zip"
             $url = "https://github.com/gitleaks/gitleaks/releases/`
-                  download/v$version/gitleaks_${version}_windows_x64.zip"
+            download/v$version/gitleaks_${version}_windows_x64.zip"
             Write-Host "Downloading Gitleaks v$version from $url"
             Invoke-WebRequest -Uri $url -OutFile $zip
             $dest = "$env:TEMP\gitleaks"
