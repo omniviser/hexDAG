@@ -1,7 +1,7 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models and core event emission."""
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, create_model
 
@@ -152,7 +152,8 @@ class BaseNodeFactory(ABC):
                     field_definitions[field_name] = (Any, ...)
 
             # create_model returns Type[BaseModel]
-            return create_model(name, **field_definitions)
+            # Cast is safe here as create_model returns a BaseModel subclass
+            return cast("type[BaseModel]", create_model(name, **field_definitions))
 
         # Handle primitive types - create a simple wrapper model
         # At this point, schema should be a type

@@ -10,10 +10,11 @@ import yaml
 
 from hexai.agent_factory.yaml_validator import YamlValidator
 from hexai.core.application.events.manager import PipelineEventManager
-from hexai.core.application.nodes import NodeFactory
 from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
 from hexai.core.application.prompt.template import ChatPromptTemplate
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.registry import registry
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +82,9 @@ class YamlPipelineBuilder:
 
         # Log warnings and suggestions
         for warning in validation_result.warnings:
-            logger.warning(f"YAML validation warning: {warning}")
+            logger.warning("YAML validation warning: %s", warning)
         for suggestion in validation_result.suggestions:
-            logger.info(f"YAML validation suggestion: {suggestion}")
+            logger.info("YAML validation suggestion: %s", suggestion)
 
         graph = DirectedGraph()
 
@@ -104,13 +105,13 @@ class YamlPipelineBuilder:
                 # Resolve mapping (could be a string reference or inline dict)
                 resolved_mapping = self.field_mapping_registry.get(field_mapping)
                 params["field_mapping"] = resolved_mapping
-                logger.debug(f"Node '{node_id}' using field mapping: {resolved_mapping}")
+                logger.debug("Node '%s' using field mapping: %s", node_id, resolved_mapping)
 
             # Auto-convert LLM nodes with incompatible template + schema combinations
             if node_type == "llm":
-                logger.debug(f"📋 LLM node '{node_id}' original params: {list(params.keys())}")
+                logger.debug("📋 LLM node '%s' original params: %s", node_id, list(params.keys()))
                 params = self._auto_convert_llm_node(node_id, params)
-                logger.debug(f"📋 LLM node '{node_id}' final params: {list(params.keys())}")
+                logger.debug("📋 LLM node '%s' final params: %s", node_id, list(params.keys()))
 
             # Resolve function references (no schema inference)
             if node_type == "function" and "fn" in params:
@@ -120,7 +121,27 @@ class YamlPipelineBuilder:
                     params["fn"] = actual_func
 
             # Create node using NodeFactory (let nodes handle their own logic)
-            node = NodeFactory.create_node(node_type, node_id, **params)
+            # Ensure registry is bootstrapped
+            ensure_bootstrapped()
+
+            # Get node factory from registry
+            factory_name = f"{node_type}_node"
+            factory = registry.get(factory_name, namespace="core")
+
+            # Ensure factory is callable
+            if not callable(factory):
+                raise TypeError(
+                    f"Expected callable factory for {factory_name}, got {type(factory)}"
+                )
+
+            # Create node using factory
+            node = factory(node_id, **params)
+
+            # Ensure node is a NodeSpec
+            from hexai.core.domain.dag import NodeSpec
+
+            if not isinstance(node, NodeSpec):
+                raise TypeError(f"Factory {factory_name} did not return a NodeSpec")
 
             # Add dependencies
             if deps:
@@ -128,7 +149,7 @@ class YamlPipelineBuilder:
 
             graph.add(node)
 
-        logger.info(f"✅ Built pipeline with {len(graph.nodes)} nodes")
+        logger.info("✅ Built pipeline with %d nodes", len(graph.nodes))
 
         return graph, pipeline_metadata
 
@@ -165,7 +186,7 @@ class YamlPipelineBuilder:
         common_mappings = config.get("common_field_mappings", {})
         for name, mapping in common_mappings.items():
             self.field_mapping_registry.register(name, mapping)
-            logger.debug(f"Registered common field mapping '{name}': {mapping}")
+            logger.debug("Registered common field mapping '%s': %s", name, mapping)
 
     def _auto_convert_llm_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Auto-convert LLM node parameters to handle common configuration incompatibilities.

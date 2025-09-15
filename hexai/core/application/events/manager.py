@@ -56,11 +56,11 @@ class PipelineEventManager:
         """Subscribe observer to events."""
         if event_type is None:
             self._global_observers.append(observer)
-            logger.debug(f"Registered global observer: {observer.__class__.__name__}")
+            logger.debug("Registered global observer: %s", observer.__class__.__name__)
         else:
             self._observers[event_type].append(observer)
             logger.debug(
-                f"Registered observer {observer.__class__.__name__} for {event_type.value}"
+                "Registered observer %s for %s", observer.__class__.__name__, event_type.value
             )
 
     def unsubscribe(self, observer: Observer, event_type: EventType | None = None) -> None:
@@ -89,7 +89,9 @@ class PipelineEventManager:
         observers = [obs for obs in observers if obs.can_handle(event)]
 
         if observers:
-            logger.debug(f"Emitting event: {event.event_type.value} to {len(observers)} observers")
+            logger.debug(
+                "Emitting event: %s to %d observers", event.event_type.value, len(observers)
+            )
             await asyncio.gather(*[obs.handle(event) for obs in observers], return_exceptions=True)
 
     def _update_caches(self, event: PipelineEvent) -> None:
@@ -154,7 +156,7 @@ class PipelineEventManager:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error processing event: {e}")
+                logger.error("Error processing event: %s", e)
 
     def get_observer_count(self, event_type: EventType | None = None) -> int:
         """Get total number of observers."""
