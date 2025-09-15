@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator, strict_validator
 
 
 class UserInput(BaseModel):
@@ -108,7 +107,7 @@ async def demonstrate_validation_success():
     graph.add(NodeSpec("process", process_user_data).after("validate"))
     graph.add(NodeSpec("format", format_output).after("process"))
 
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     # Valid dictionary input
     valid_input = {"name": "Alice Johnson", "age": 28, "email": "alice@example.com"}
@@ -135,7 +134,7 @@ async def demonstrate_type_coercion():
     graph.add(NodeSpec("process", process_user_data).after("validate"))
     graph.add(NodeSpec("format", format_output).after("process"))
 
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     # Input with string age (will be coerced to int)
     coercion_input = {
@@ -163,7 +162,7 @@ async def demonstrate_validation_errors():
     graph.add(NodeSpec("validate", validate_user_input))
     graph.add(NodeSpec("process", process_user_data).after("validate"))
 
-    orchestrator = Orchestrator(validator=strict_validator())
+    orchestrator = Orchestrator(strict_validation=True)
 
     # Invalid data that should fail validation
     invalid_inputs = [
@@ -193,7 +192,7 @@ async def demonstrate_string_parsing():
     graph.add(NodeSpec("process", process_user_data).after("validate"))
     graph.add(NodeSpec("format", format_output).after("process"))
 
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     # String input that gets parsed
     string_input = "Carol Davis, 35, carol@email.com"

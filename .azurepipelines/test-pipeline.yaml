@@ -1,6 +1,9 @@
 variables:
-  CI_USERNAME: "CI Pipeline"
-  CI_EMAIL: developers@omniviser.ai
+- group: pypi-secrets
+- name: CI_USERNAME
+  value: "CI Pipeline"
+- name: CI_EMAIL
+  value: developers@omniviser.ai
 
 trigger:
   branches:
@@ -85,7 +88,11 @@ jobs:
         displayName: Install graphviz
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
           curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "UV installed at: $(which uv)"
+          echo "UV version: $(uv --version)"
         displayName: "Install UV"
 
       - script: uv venv
@@ -95,51 +102,122 @@ jobs:
         displayName: "Install package (editable + viz deps)"
 
       - script: |
-          uv run black --check ./hexai
-        displayName: "Check Black"
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Installing dependencies with UV..."
+          uv sync
+          echo "Running Ruff linting..."
+          # Ruff automatically reads configuration from pyproject.toml
+          uv run ruff check ./hexai
+        displayName: "Run Ruff linting (replaces flake8, isort)"
 
       - script: |
-          uv run pre-commit install
-          uv run pre-commit run flake8 --all-files
-        displayName: "Run Flake8"
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running Ruff formatting check..."
+          uv run ruff format ./hexai --check
+        displayName: "Run Ruff formatting check (replaces Black)"
 
       - script: |
-          uv run isort ./hexai --check-only
-        displayName: "Run Isort"
-
-      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running Mypy with pyproject.toml configuration..."
           uv run mypy ./hexai
         displayName: "Run Mypy"
 
       - script: |
-          uv run ruff check ./hexai
-        displayName: "Run Ruff ./hexai"
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running Pyright with pyproject.toml configuration..."
+          uv run pyright ./hexai
+        displayName: "Run Pyright"
 
       - script: |
-          echo "Running tests with coverage..."
-          uv run pytest ./tests --cov=./hexai --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running tests with pytest configuration from pyproject.toml..."
+          # Pytest automatically reads configuration from pyproject.toml
+          uv run pytest --cov-report=xml:./coverage.xml --junitxml=./test-results.xml
         displayName: "Run unit tests"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Running Bandit for SAST..."
-          uv run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
-          BANDIT_EXIT_CODE=$?
-          echo "Bandit exit code: $BANDIT_EXIT_CODE"
-          if [ $BANDIT_EXIT_CODE -ne 0 ]; then
+          # Bandit reads configuration from pyproject.toml automatically
+          uv run bandit -r ./hexai -f json -o bandit-report.json || {
               echo "Bandit found issues or encountered an error. See bandit-report.json for details."
               cat bandit-report.json
               exit 1
-          fi
+          }
         displayName: "Run Bandit"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Checking test structure consistency..."
           uv run scripts/check_test_structure.py
         displayName: "Check test structure consistency"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Checking examples functionality..."
           uv run scripts/check_examples.py
         displayName: "Check examples functionality"
 
       - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running deptry for dependency analysis..."
           uv run deptry .
         displayName: "Run deptry"
+
+      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running Safety for dependency vulnerability scanning..."
+          # Safety reads configuration from pyproject.toml automatically
+          uv run safety check --output json > safety-report.json || {
+              echo "Safety found vulnerabilities. See safety-report.json for details."
+              cat safety-report.json
+              exit 1
+          }
+        displayName: "Run Safety - dependency vulnerability scan"
+
+      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          echo "Running Gitleaks for secret detection..."
+          # Install gitleaks - using fixed version for reproducibility
+          GITLEAKS_VERSION="8.21.2"
+          echo "Installing Gitleaks version: $GITLEAKS_VERSION"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
+          /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json || {
+              echo "Gitleaks found secrets or encountered an error. See gitleaks-report.json for details."
+              cat gitleaks-report.json
+              exit 1
+          }
+        displayName: "Run Gitleaks - secret detection"
+
+      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running yamllint for YAML config quality..."
+          uv run yamllint -d relaxed .
+        displayName: "Run yamllint - YAML config quality"
+
+      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running vulture for dead code detection..."
+          # Vulture reads configuration from pyproject.toml automatically
+          uv run vulture hexai/ --min-confidence 90
+        displayName: "Run vulture - dead code detection"
+
+      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "Running radon for code complexity analysis..."
+          # Radon configuration is read from pyproject.toml
+          uv run radon cc hexai/ --min B --show-complexity
+        displayName: "Run radon - code complexity analysis"

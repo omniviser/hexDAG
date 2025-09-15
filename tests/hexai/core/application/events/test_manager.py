@@ -1,7 +1,7 @@
-"""Tests for pipeline event manager functionality.
+"""Tests for optimized pipeline event manager functionality.
 
 This module tests the event system that manages pipeline execution lifecycle events
-without Context dependency.
+with performance optimizations including caching and batch processing.
 """
 
 import asyncio
@@ -13,11 +13,12 @@ from hexai.core.application.events import (
     NodeCompletedEvent,
     NodeFailedEvent,
     NodeStartedEvent,
+    PipelineCompletedEvent,
     PipelineEventManager,
     PipelineStartedEvent,
     ValidationWarningEvent,
 )
-from hexai.core.application.events.base import SyncObserver
+from hexai.core.application.events.base import EventType, SyncObserver
 from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 
 
@@ -215,3 +216,95 @@ class TestPipelineEventManager:
 
         # Observer should not have received the event
         assert len(self.mock_observer.received_events) == 0
+
+
+class TestOptimizedEventManager:
+    """Test the optimized features of PipelineEventManager."""
+
+    @pytest.mark.asyncio
+    async def test_event_caching_by_type(self) -> None:
+        """Test that events are cached by type for O(1) lookup."""
+        manager = PipelineEventManager(enable_caching=True)
+
+        # Emit various events
+        for i in range(3):
+            await manager.emit(
+                NodeStartedEvent(node_name=f"node_{i}", wave_index=0, dependencies=[])
+            )
+
+        for i in range(2):
+            await manager.emit(
+                NodeCompletedEvent(
+                    node_name=f"node_{i}",
+                    wave_index=0,
+                    result={"success": True},
+                    execution_time=1.0,
+                )
+            )
+
+        # Retrieve by type (should use cache)
+        started_events = manager.get_events_by_type(EventType.NODE_STARTED)
+        assert len(started_events) == 3
+
+        completed_events = manager.get_events_by_type(EventType.NODE_COMPLETED)
+        assert len(completed_events) == 2
+
+    @pytest.mark.asyncio
+    async def test_event_caching_by_node(self) -> None:
+        """Test that events are cached by node name for O(1) lookup."""
+        manager = PipelineEventManager(enable_caching=True)
+
+        # Emit events for different nodes
+        await manager.emit(NodeStartedEvent(node_name="node1", wave_index=0, dependencies=[]))
+        await manager.emit(
+            NodeCompletedEvent(
+                node_name="node1", wave_index=0, result={"success": True}, execution_time=1.0
+            )
+        )
+        await manager.emit(
+            NodeFailedEvent(node_name="node1", wave_index=0, error=ValueError("Test error"))
+        )
+        await manager.emit(NodeStartedEvent(node_name="node2", wave_index=0, dependencies=[]))
+
+        # Retrieve by node (should use cache)
+        node1_events = manager.get_events_by_node("node1")
+        assert len(node1_events) == 3
+
+        node2_events = manager.get_events_by_node("node2")
+        assert len(node2_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_event_stats(self) -> None:
+        """Test event statistics collection."""
+        manager = PipelineEventManager()
+
+        # Emit various events
+        await manager.emit(
+            PipelineStartedEvent(pipeline_name="test_pipeline", total_waves=3, total_nodes=10)
+        )
+
+        for i in range(3):
+            await manager.emit(
+                NodeStartedEvent(node_name=f"node_{i}", wave_index=0, dependencies=[])
+            )
+
+        for i in range(2):
+            await manager.emit(
+                NodeCompletedEvent(
+                    node_name=f"node_{i}", wave_index=0, result={}, execution_time=1.0
+                )
+            )
+
+        await manager.emit(
+            PipelineCompletedEvent(
+                pipeline_name="test_pipeline", total_execution_time=5.0, node_results={}
+            )
+        )
+
+        # Get stats
+        stats = manager.get_event_stats()
+        assert stats["total_events"] == 7
+        assert stats["caching_enabled"] is True
+        assert EventType.NODE_STARTED.value in stats["events_by_type"]
+        assert stats["events_by_type"][EventType.NODE_STARTED.value] == 3
+        assert stats["events_by_type"][EventType.NODE_COMPLETED.value] == 2

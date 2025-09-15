@@ -2,15 +2,17 @@
 
 import ast
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Type
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ....adapters.function_tool_router import FunctionBasedToolRouter
 from ...domain.dag import NodeSpec
 from ...ports.tool_router import ToolRouter
-from ..data_mapping import DataMapper
+from ...registry import node
+from ...registry.models import NodeSubtype
 from ..prompt import PromptInput
 from ..prompt.template import PromptTemplate
 from .base_node_factory import BaseNodeFactory
@@ -36,10 +38,7 @@ class AgentState(BaseModel):
     # Loop iteration tracking
     loop_iteration: int = 0
 
-    class Config:
-        """Pydantic config."""
-
-        extra = "allow"  # Allow additional fields from input mapping
+    model_config = ConfigDict(extra="allow")  # Allow additional fields from input mapping
 
 
 @dataclass
@@ -50,6 +49,7 @@ class AgentConfig:
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
 
 
+@node(name="agent_node", subtype=NodeSubtype.AGENT, namespace="core")
 class ReActAgentNode(BaseNodeFactory):
     """Multi-step reasoning agent.
 
@@ -77,10 +77,9 @@ class ReActAgentNode(BaseNodeFactory):
         name: str,
         main_prompt: PromptInput,
         continuation_prompts: dict[str, PromptInput] | None = None,
-        output_schema: dict[str, type] | Type[BaseModel] | None = None,
+        output_schema: dict[str, type] | type[BaseModel] | None = None,
         config: AgentConfig | None = None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Create a multi-step reasoning agent with internal loop control.
@@ -93,7 +92,6 @@ class ReActAgentNode(BaseNodeFactory):
             output_schema: Custom output schema for tool_end results
             config: Agent configuration
             deps: Dependencies
-            input_mapping: Optional field mapping dict {target_field: source_path}
             **kwargs: Additional parameters
         """
         config = config or AgentConfig()
@@ -111,7 +109,7 @@ class ReActAgentNode(BaseNodeFactory):
 
         # Create the agent function with internal loop composition
         agent_fn = self._create_agent_with_loop(
-            name, main_prompt, continuation_prompts or {}, output_model, config, input_mapping
+            name, main_prompt, continuation_prompts or {}, output_model, config
         )
 
         # Use universal input mapping method
@@ -121,7 +119,6 @@ class ReActAgentNode(BaseNodeFactory):
             input_schema=input_schema,
             output_schema=output_model,
             deps=deps,
-            input_mapping=input_mapping,
             **kwargs,
         )
 
@@ -152,16 +149,15 @@ class ReActAgentNode(BaseNodeFactory):
         name: str,
         main_prompt: PromptInput,
         continuation_prompts: dict[str, PromptInput],
-        output_model: Type[BaseModel],
+        output_model: type[BaseModel],
         config: AgentConfig,
-        input_mapping: dict[str, str] | None = None,
     ) -> Callable[..., Any]:
         """Create agent function with internal loop composition for multi-step iteration."""
 
         async def single_step_executor(input_data: Any, **ports: Any) -> Any:
             """Execute single reasoning step - designed for internal loop orchestration."""
             # Initialize or update state from previous iteration
-            state = self._initialize_or_update_state(input_data, input_mapping)
+            state = self._initialize_or_update_state(input_data)
 
             # Execute single reasoning step
             updated_state = await self._execute_single_step(
@@ -192,10 +188,7 @@ class ReActAgentNode(BaseNodeFactory):
 
             # Stop if tool_end was detected
             response = result.get("response", "")
-            if "tool_end" in response.lower():
-                return True
-
-            return False
+            return "tool_end" in response.lower()
 
         async def agent_with_internal_loop(input_data: Any, **ports: Any) -> Any:
             """Agent executor that uses loop concepts for iteration control."""
@@ -216,7 +209,7 @@ class ReActAgentNode(BaseNodeFactory):
                     # If success condition is met but we still have a dict,
                     # try to extract final output one more time
                     final_output = await self._check_for_final_output(
-                        self._initialize_or_update_state(step_result, input_mapping),
+                        self._initialize_or_update_state(step_result),
                         output_model,
                         ports.get("event_manager"),
                     )
@@ -232,9 +225,7 @@ class ReActAgentNode(BaseNodeFactory):
 
         return agent_with_internal_loop
 
-    def _initialize_or_update_state(
-        self, input_data: Any, input_mapping: dict[str, str] | None = None
-    ) -> AgentState:
+    def _initialize_or_update_state(self, input_data: Any) -> AgentState:
         """Initialize new state or update existing state from loop iteration."""
         # Case 1: Continuing from previous iteration (loop passes AgentState dict)
         if isinstance(input_data, dict) and "reasoning_steps" in input_data:
@@ -252,43 +243,8 @@ class ReActAgentNode(BaseNodeFactory):
             # Fallback for other types
             raw_input = {"input": str(input_data)}
 
-        # Apply input mapping if provided
-        if input_mapping:
-            mapped_data = self._apply_input_mapping(raw_input, input_mapping)
-            raw_input.update(mapped_data)
-
         # Create fresh AgentState
         return AgentState(input_data=raw_input)
-
-    def _apply_input_mapping(
-        self, raw_input: dict[str, Any], mapping: dict[str, str]
-    ) -> dict[str, Any]:
-        """Apply input mapping using DataMapper for field transformation.
-
-        Args
-        ----
-        raw_input : dict[str, Any]
-            Raw input data dictionary
-        mapping : dict[str, str]
-            Mapping dictionary {target_field: source_path}
-
-        Returns
-        -------
-        dict[str, Any]
-            Mapped data dictionary
-        """
-        if not mapping:
-            return {}
-
-        mapper = DataMapper()
-        mapped_data = {}
-
-        for target_field, source_path in mapping.items():
-            value = mapper._extract_field(raw_input, source_path)
-            if value is not None:
-                mapped_data[target_field] = value
-
-        return mapped_data
 
     def _enhance_prompt_with_tools(
         self, prompt: PromptInput, tool_router: ToolRouter | None, config: AgentConfig
@@ -534,7 +490,7 @@ class ReActAgentNode(BaseNodeFactory):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.debug(f"Unexpected error parsing tool_end result: {e}")
+            logger.debug("Unexpected error parsing tool_end result: %s", e)
 
         return None
 
@@ -562,7 +518,7 @@ class ReActAgentNode(BaseNodeFactory):
     async def _check_for_final_output(
         self,
         state: AgentState,
-        output_model: Type[BaseModel],
+        output_model: type[BaseModel],
         event_manager: Any,
     ) -> Any | None:
         """Check if we have a final output from tool_end calls."""
@@ -583,7 +539,7 @@ class ReActAgentNode(BaseNodeFactory):
                     import logging
 
                     logger = logging.getLogger(__name__)
-                    logger.debug(f"Failed to validate tool_end result: {e}")
+                    logger.debug("Failed to validate tool_end result: %s", e)
                     continue  # Skip this tool result and try the next one
 
         return None

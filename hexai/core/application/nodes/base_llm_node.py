@@ -2,7 +2,8 @@
 
 import json
 import time
-from typing import Any, Callable, Type
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -57,7 +58,7 @@ class BaseLLMNode(BaseNodeFactory):
         return schema
 
     def enhance_template_with_schema(
-        self, template: TemplateType, output_model: Type[BaseModel]
+        self, template: TemplateType, output_model: type[BaseModel]
     ) -> TemplateType:
         """Add schema instructions to template for structured output."""
         schema_instruction = self._create_schema_instruction(output_model)
@@ -68,8 +69,8 @@ class BaseLLMNode(BaseNodeFactory):
         self,
         name: str,
         template: TemplateType,
-        input_model: Type[BaseModel] | None,
-        output_model: Type[BaseModel] | None,
+        input_model: type[BaseModel] | None,
+        output_model: type[BaseModel] | None,
         rich_features: bool = True,
     ) -> Callable[..., Any]:
         """Create an LLM wrapper function with event emission."""
@@ -95,9 +96,10 @@ class BaseLLMNode(BaseNodeFactory):
                     enhanced_template = self.enhance_template_with_schema(template, output_model)
 
                 # Convert Pydantic model to dict if needed
-                input_dict = validated_input
                 if hasattr(validated_input, "model_dump"):
-                    input_dict = validated_input.model_dump()
+                    input_dict = validated_input.model_dump()  # pyright: ignore
+                else:
+                    input_dict = validated_input
 
                 # Generate messages and extract template variables
                 messages, template_vars = self._generate_messages(enhanced_template, input_dict)
@@ -157,7 +159,7 @@ class BaseLLMNode(BaseNodeFactory):
     # Remove the individual message generation methods - they're not needed
     # All templates support to_messages() method
 
-    def _create_schema_instruction(self, output_model: Type[BaseModel]) -> str:
+    def _create_schema_instruction(self, output_model: type[BaseModel]) -> str:
         """Create schema instruction for structured output."""
         # Get the JSON schema
         schema = output_model.model_json_schema()
@@ -174,7 +176,7 @@ class BaseLLMNode(BaseNodeFactory):
         fields_text = "\n".join(fields_info) if fields_info else "  - (no specific fields defined)"
 
         # Create example JSON separately to avoid indentation issues
-        example_data = {field: f"<{field}_value>" for field in schema.get("properties", {}).keys()}
+        example_data = {field: f"<{field}_value>" for field in schema.get("properties", {})}
         example_json = json.dumps(example_data, indent=2)
 
         return f"""
@@ -191,9 +193,8 @@ Example: {example_json}
         self,
         name: str,
         template: PromptInput,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         rich_features: bool = True,
         **kwargs: Any,
     ) -> NodeSpec:
@@ -224,11 +225,10 @@ Example: {example_json}
             input_schema=input_schema,
             output_schema=output_schema if rich_features else None,
             deps=deps,
-            input_mapping=input_mapping,
             **kwargs,
         )
 
-    def _parse_structured_response(self, response: str, output_model: Type[BaseModel]) -> Any:
+    def _parse_structured_response(self, response: str, output_model: type[BaseModel]) -> Any:
         """Parse response into structured output."""
         try:
             # Try to parse as JSON first
