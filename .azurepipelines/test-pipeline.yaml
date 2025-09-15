@@ -502,9 +502,9 @@ jobs:
 
           chmod +x /tmp/gitleaks
           /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json || {
-            echo "Gitleaks found secrets or encountered an error. See gitleaks-report.json for details."
-            cat gitleaks-report.json
-            exit 1
+          echo "Gitleaks found secrets or encountered an error. See gitleaks-report.json for details."
+          cat gitleaks-report.json
+          exit 1
           }
         displayName: "Run Gitleaks - secret detection"
         condition: ne(variables['Agent.OS'], 'Windows_NT')
