@@ -1,12 +1,17 @@
 """Clean tests for the FunctionNode implementation."""
 
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import BaseModel
 
-from hexai.core.application.nodes.function_node import FunctionNode
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import registry
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class _UserInput(BaseModel):
@@ -24,11 +29,12 @@ class TestFunctionNode:
 
     @pytest.fixture
     def factory(self):
-        """Create function node factory."""
-        return FunctionNode()
+        """Get function node factory from registry."""
+        ensure_bootstrapped()
+        return registry.get("function_node", namespace="core")
 
     @pytest.fixture
-    def mock_ports(self):
+    def mock_ports(self) -> dict[str, Any]:
         """Create mock ports."""
         return {
             "event_manager": AsyncMock(),
@@ -46,8 +52,8 @@ class TestFunctionNode:
 
         assert isinstance(node, NodeSpec)
         assert node.name == "add_one"
-        assert node.in_type is None
-        assert node.out_type is None
+        assert node.in_model is None
+        assert node.out_model is None
         assert node.deps == frozenset()
 
     def test_create_node_with_schemas(self, factory):
@@ -64,8 +70,8 @@ class TestFunctionNode:
         )
 
         assert node.name == "process_user"
-        assert node.in_type is not None
-        assert node.out_type is not None
+        assert node.in_model is not None
+        assert node.out_model is not None
 
     def test_create_node_with_dependencies(self, factory):
         """Test creating a node with dependencies."""
@@ -381,8 +387,8 @@ class TestFunctionNode:
             },
         )
 
-        assert node.in_type is not None
-        assert node.out_type is not None
+        assert node.in_model is not None
+        assert node.out_model is not None
         assert "input_mapping" in node.params
         assert node.params["input_mapping"]["name"] == "user_source.name"
         assert node.params["input_mapping"]["age"] == "age_source.age"
@@ -412,17 +418,17 @@ class TestFunctionNode:
     def test_convenience_methods(self, factory):
         """Test convenience methods for creating input mappings."""
         # Test passthrough mapping
-        passthrough = FunctionNode.create_passthrough_mapping(["text", "status", "score"])
+        passthrough = factory.create_passthrough_mapping(["text", "status", "score"])
         expected_passthrough = {"text": "text", "status": "status", "score": "score"}
         assert passthrough == expected_passthrough
 
         # Test rename mapping
-        rename = FunctionNode.create_rename_mapping({"content": "text", "validation": "status"})
+        rename = factory.create_rename_mapping({"content": "text", "validation": "status"})
         expected_rename = {"content": "text", "validation": "status"}
         assert rename == expected_rename
 
         # Test prefixed mapping
-        prefixed = FunctionNode.create_prefixed_mapping(["text", "score"], "processor", "proc_")
+        prefixed = factory.create_prefixed_mapping(["text", "score"], "processor", "proc_")
         expected_prefixed = {
             "proc_text": "processor.text",
             "proc_score": "processor.score",
@@ -449,8 +455,8 @@ class TestFunctionNode:
         # Verify other properties are preserved
         assert enhanced_node.name == "basic"
         assert enhanced_node.fn == basic_node.fn
-        assert enhanced_node.in_type == basic_node.in_type
-        assert enhanced_node.out_type == basic_node.out_type
+        assert enhanced_node.in_model == basic_node.in_model
+        assert enhanced_node.out_model == basic_node.out_model
 
     def test_with_input_mapping_overwrite(self, factory):
         """Test that with_input_mapping overwrites existing mapping."""

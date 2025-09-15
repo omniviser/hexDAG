@@ -1,14 +1,17 @@
 """LLM node factory for creating LLM-based pipeline nodes."""
 
-from typing import Any, Type
+from typing import Any
 
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
+from ...registry import node
+from ...registry.models import NodeSubtype
 from ..prompt import PromptInput
 from .base_llm_node import BaseLLMNode
 
 
+@node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core")
 class LLMNode(BaseLLMNode):
     """Simple factory for creating LLM-based nodes with rich template support.
 
@@ -20,9 +23,8 @@ class LLMNode(BaseLLMNode):
         self,
         name: str,
         template: PromptInput,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
-        input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Create a NodeSpec for an LLM-based node with rich template support.
@@ -33,7 +35,6 @@ class LLMNode(BaseLLMNode):
             template: Template for LLM prompt
             output_schema: Output schema for validation
             deps: List of dependency node names
-            input_mapping: Optional field mapping dict {target_field: source_path}
             **kwargs: Additional parameters
         """
         # String templates don't support rich features (structured output)
@@ -53,7 +54,6 @@ class LLMNode(BaseLLMNode):
             template=template,
             output_schema=output_schema,
             deps=deps,
-            input_mapping=input_mapping,
             rich_features=rich_features,
             **kwargs,
         )
@@ -63,7 +63,7 @@ class LLMNode(BaseLLMNode):
         cls,
         name: str,
         template: PromptInput,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
