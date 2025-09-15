@@ -497,8 +497,7 @@ jobs:
           echo "Running Gitleaks for secret detection..."
           GITLEAKS_VERSION="8.21.2"
           echo "Installing Gitleaks version: $GITLEAKS_VERSION"
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/\
-          download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp  # yamllint disable-line rule:line-length
 
           chmod +x /tmp/gitleaks
           /tmp/gitleaks detect --source . --report-format json --report-path gitleaks-report.json || {
@@ -518,8 +517,7 @@ jobs:
             $ErrorActionPreference = "Stop"
             $version = "8.21.2"
             $zip = "$env:TEMP\gitleaks.zip"
-            $url = "https://github.com/gitleaks/gitleaks/releases/`
-            download/v$version/gitleaks_${version}_windows_x64.zip"
+            $url = "https://github.com/gitleaks/gitleaks/releases/download/v$version/gitleaks_${version}_windows_x64.zip" # yamllint disable-line rule:line-length
             Write-Host "Downloading Gitleaks v$version from $url"
             Invoke-WebRequest -Uri $url -OutFile $zip
             $dest = "$env:TEMP\gitleaks"
