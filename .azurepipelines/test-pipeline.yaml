@@ -102,7 +102,7 @@ jobs:
           set -e
           export PATH="$HOME/.local/bin:$PATH" # Set PATH here
           uv pip install -e ".[viz]"
-          displayName: "Install package (editable + viz deps)"
+        displayName: "Install package (editable + viz deps)"
 
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
