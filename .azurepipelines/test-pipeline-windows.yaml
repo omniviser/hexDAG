@@ -21,7 +21,7 @@ pool:
 
 
 jobs:
-  - job: CIMatrix - Windows
+  - job: CIMatrix_Windows
     displayName: "Matrix: OS × Python × profiles"
     strategy:
       matrix:

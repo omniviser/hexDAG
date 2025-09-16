@@ -76,7 +76,7 @@ jobs:
           TARGETBRANCH: $(System.PullRequest.TargetBranch)
           BUILD_REASON: $(Build.Reason)
 
-  - job: CIMatrix - Linux and MacOS
+  - job: CIMatrix_Linux_MacOS
     displayName: "Matrix: OS × Python × profiles"
     strategy:
       matrix:
