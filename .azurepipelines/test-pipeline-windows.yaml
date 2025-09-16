@@ -1,0 +1,312 @@
+variables:
+  - group: pypi-secrets
+  - name: CI_USERNAME
+    value: "CI Pipeline"
+  - name: CI_EMAIL
+    value: developers@omniviser.ai
+
+trigger:
+  branches:
+    include:
+      - main
+
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'windows-latest'
+
+
+jobs:
+  - job: CIMatrix - Windows
+    displayName: "Matrix: OS × Python × profiles"
+    strategy:
+      matrix:
+        windows-py310: { vmImage: "windows-latest", python: "3.10" }
+        windows-py311: { vmImage: "windows-latest", python: "3.11" }
+        windows-py312: { vmImage: "windows-latest", python: "3.12" }
+    pool:
+      vmImage: $(vmImage)
+    variables:
+      PACKAGE_NAME: "hexai"
+      ARTIFACT_DIR: "artifacts"
+      VENV_DIR: ".venv"
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "$(python)"
+          addToPath: true
+        displayName: "Use Python $(python)"
+
+      - task: PowerShell@2
+        displayName: "Install system deps (Windows via Chocolatey)"
+        inputs:
+          targetType: inline
+          script: |
+            choco --version
+            choco install graphviz -y --no-progress
+
+      - task: PowerShell@2
+        displayName: "Verify Graphviz (dot) on PATH [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin",
+                               "C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) {
+              if (Test-Path $p) { $env:PATH = "$p;$env:PATH" }
+            }
+            dot -V
+
+      - task: PowerShell@2
+        displayName: "Install UV (Windows)"
+        inputs:
+          targetType: inline
+          script: |
+            powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
+            $candidates = @("$env:USERPROFILE\.cargo\bin",
+                            "$env:USERPROFILE\.local\bin")
+            $found = $null
+            foreach ($d in $candidates) {
+              if (Test-Path (Join-Path $d 'uv.exe')) {
+                $found = $d
+                break
+              }
+            }
+            if (-not $found) { $found = "$env:USERPROFILE\.cargo\bin" }
+            Write-Host "Using UV from: $found"
+            Write-Host "##vso[task.setvariable variable=UV_BIN_DIR]$found"
+
+
+      - task: PowerShell@2
+        displayName: "Create UV virtual environment (Windows)"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            if (-not (Test-Path $uv)) {
+              Write-Error "uv.exe not found at $(UV_BIN_DIR)"
+            }
+            & $uv venv
+            & $uv --version
+            & $uv run python --version
+
+
+      # BASE
+      - task: PowerShell@2
+        displayName: "Install (base, Windows)"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $uv = Join-Path "$(UV_BIN_DIR)" "uv.exe"
+            & $uv pip install -e .
+            & $uv run python -c "import importlib; importlib.import_module('$(PACKAGE_NAME)')"
+
+
+      - task: PowerShell@2
+        displayName: "Install extras [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" pip install -e ".[dev]"
+            & "$(UV_BIN_DIR)\uv.exe" pip install -e ".[viz]"
+
+      - task: PowerShell@2
+        displayName: "Ruff check [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run ruff check ./hexai
+
+
+      - task: PowerShell@2
+        displayName: "Ruff format --check [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run ruff format ./hexai --check
+
+      - task: PowerShell@2
+        displayName: "Black --check [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run black --check ./hexai
+
+
+      - task: PowerShell@2
+        displayName: "isort --check-only [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run isort ./hexai --check-only
+
+      - task: PowerShell@2
+        displayName: "mypy [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run mypy ./hexai
+
+      - task: PowerShell@2
+        displayName: "Run unit tests with coverage [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            chcp 65001 > $null
+            $env:PYTHONUTF8 = "1"
+            $env:PYTHONIOENCODING = "utf-8"
+
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin",
+                               "C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) {
+              if (Test-Path $p) { $env:PATH = "$p;$env:PATH" }
+            }
+
+            & "$(UV_BIN_DIR)\uv.exe" run pytest ./tests `
+              --cov=./hexai `
+              --cov-report=xml:./coverage.xml `
+              --junitxml=./test-results.xml
+
+
+      - task: PowerShell@2
+        displayName: "Run Bandit [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run bandit -r ./hexai -x ./tests -f json -o bandit-report.json
+            if ($LASTEXITCODE -ne 0) {
+              Get-Content bandit-report.json
+              exit 1
+            }
+
+
+      - task: PowerShell@2
+        displayName: "Check test structure consistency [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            chcp 65001 > $null
+            $env:PYTHONUTF8 = "1"
+            $env:PYTHONIOENCODING = "utf-8"
+
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin",
+                               "C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) {
+              if (Test-Path $p) { $env:PATH = "$p;$env:PATH" }
+            }
+            & "$(UV_BIN_DIR)\uv.exe" run scripts/check_test_structure.py
+
+
+      - task: PowerShell@2
+        displayName: "Check examples functionality [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            chcp 65001 > $null
+            $env:PYTHONUTF8 = "1"
+            $env:PYTHONIOENCODING = "utf-8"
+
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            $graphvizPaths = @("C:\Program Files\Graphviz\bin",
+                               "C:\Program Files (x86)\Graphviz2.38\bin")
+            foreach ($p in $graphvizPaths) {
+              if (Test-Path $p) { $env:PATH = "$p;$env:PATH" }
+            }
+            & "$(UV_BIN_DIR)\uv.exe" run scripts/check_examples.py
+
+
+      - task: PowerShell@2
+        displayName: "Run deptry [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run deptry .
+
+      - task: PowerShell@2
+        displayName: "Run Safety [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            Write-Host "Running Safety for dependency vulnerability scanning..."
+            & "$(UV_BIN_DIR)\uv.exe" run safety check --output json > safety-report.json
+            if ($LASTEXITCODE -ne 0) {
+              Get-Content safety-report.json
+              exit 1
+            }
+
+      - task: PowerShell@2
+        displayName: "Run Gitleaks [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $ErrorActionPreference = "Stop"
+            $version = "8.21.2"
+            $zip = "$env:TEMP\gitleaks.zip"
+            $url = "https://github.com/gitleaks/gitleaks/releases/download/v$version/gitleaks_${version}_windows_x64.zip" # yamllint disable-line rule:line-length
+            Write-Host "Downloading Gitleaks v$version from $url"
+            Invoke-WebRequest -Uri $url -OutFile $zip
+            $dest = "$env:TEMP\gitleaks"
+            if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+            Expand-Archive -Path $zip -DestinationPath $dest
+            $exe = Join-Path $dest "gitleaks.exe"
+            & $exe detect --source . --report-format json --report-path gitleaks-report.json
+            if ($LASTEXITCODE -ne 0) {
+              if (Test-Path gitleaks-report.json) { Get-Content gitleaks-report.json }
+              exit 1
+            }
+
+      - task: PowerShell@2
+        displayName: "yamllint [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+
+            Write-Host "Converting line endings to LF..."
+            Get-ChildItem -Path . -Recurse -Include *.yaml,*.yml | ForEach-Object {
+              $content = Get-Content $_.FullName -Raw
+              $content = $content -replace "`r`n", "`n"
+              Set-Content $_.FullName -Value $content
+            }
+
+            Write-Host "Running yamllint..."
+            & "$(UV_BIN_DIR)\uv.exe" run yamllint -d relaxed .
+
+      - task: PowerShell@2
+        displayName: "vulture [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run vulture hexai/ --min-confidence 90
+
+      - task: PowerShell@2
+        displayName: "radon [Windows]"
+        inputs:
+          targetType: inline
+          script: |
+            $env:PATH = "$(UV_BIN_DIR);$env:PATH"
+            & "$(UV_BIN_DIR)\uv.exe" run radon cc hexai/ --min B --show-complexity
