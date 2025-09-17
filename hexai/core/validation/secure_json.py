@@ -503,13 +503,11 @@ def _max_container_depth(obj: Any) -> int:
         if isinstance(node, dict):
             nd = d + 1
             max_d = max(max_d, nd)
-            for v in node.values():
-                stack.append((v, nd))
+            stack.extend((v, nd) for v in node.values())
         elif isinstance(node, list):
             nd = d + 1
             max_d = max(max_d, nd)
-            for v in node:
-                stack.append((v, nd))
+            stack.extend((v, nd) for v in node)
         # Scalars do not change depth
     return max_d
 
