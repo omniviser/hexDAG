@@ -33,15 +33,17 @@ cli = [
 viz = [
     "graphviz>=0.20.0,<0.21",
 ]
-adapters-openai = [
+openai = [
     "openai>=1.0.0",
 ]
-adapters-anthropic = [
+anthropic = [
     "anthropic>=0.25.0",
 ]
 all = [
     "hexdag[cli]",
     "hexdag[viz]",
+    "hexdag[openai]",
+    "hexdag[anthropic]",
 ]
 
 [project.urls]

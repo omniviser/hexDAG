@@ -129,6 +129,14 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: pytest-integration
+        name: Run integration tests
+        entry: uv run pytest tests/integration/ -x --tb=short
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
 
       - id: deptry
         name: deptry

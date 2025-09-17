@@ -160,9 +160,16 @@ class ComponentRegistry:
 
         Returns total number of components registered.
         """
+
         total_registered = 0
 
         for entry in manifest:
+            # Check if this is a plugin that requires special dependencies
+            skip_reason = self._check_plugin_requirements(entry.module)
+            if skip_reason:
+                logger.info(f"Skipping plugin {entry.module}: {skip_reason}")
+                continue
+
             try:
                 count = default_register_components(
                     registry=self,
@@ -175,9 +182,14 @@ class ComponentRegistry:
                     f"into namespace '{entry.namespace}'"
                 )
             except ImportError as e:
-                logger.error("Failed to import module %s: %s", entry.module, e)
-                self._cleanup_state()
-                raise
+                # For plugins, just log a warning and continue
+                if entry.namespace == "plugin":
+                    logger.warning(f"Plugin {entry.module} not available: {e}")
+                else:
+                    # For core modules, fail
+                    logger.error("Failed to import module %s: %s", entry.module, e)
+                    self._cleanup_state()
+                    raise
             except (
                 ComponentAlreadyRegisteredError,
                 InvalidComponentError,
@@ -188,6 +200,58 @@ class ComponentRegistry:
                 raise
 
         return total_registered
+
+    def _check_plugin_requirements(self, module_path: str) -> str | None:
+        """Check if a plugin's requirements are met.
+
+        Parameters
+        ----------
+        module_path : str
+            The module path to check
+
+        Returns
+        -------
+        str | None
+            Reason for skipping, or None if requirements are met
+        """
+        import importlib.util
+        import os
+
+        # Define plugin requirements
+        plugin_requirements = {
+            "hexai.adapters.llm.openai_adapter": {
+                "package": "openai",
+                "env_var": "OPENAI_API_KEY",
+                "name": "OpenAI",
+            },
+            "hexai.adapters.llm.anthropic_adapter": {
+                "package": "anthropic",
+                "env_var": "ANTHROPIC_API_KEY",
+                "name": "Anthropic",
+            },
+        }
+
+        # Check if this module has requirements
+        if module_path not in plugin_requirements:
+            return None  # Not a plugin with special requirements
+
+        requirements = plugin_requirements[module_path]
+        name = requirements["name"]
+
+        # Check if required package is installed
+        if requirements.get("package"):
+            spec = importlib.util.find_spec(requirements["package"])
+            if spec is None:
+                return (
+                    f"Missing package '{requirements['package']}'. "
+                    f"Install with: pip install hexdag[{name.lower()}]"
+                )
+
+        # Check if required environment variable is set
+        if requirements.get("env_var") and not os.getenv(requirements["env_var"]):
+            return f"Missing environment variable {requirements['env_var']}"
+
+        return None
 
     def _finalize_bootstrap(self, total_registered: int, dev_mode: bool) -> None:
         """Mark registry as ready and log completion."""

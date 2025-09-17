@@ -63,6 +63,7 @@ def list_components(
     # Bootstrap if not already done
     with contextlib.suppress(Exception):
         # Registry may already be bootstrapped or other initialization issue
+        # Auto-discovery happens during bootstrap
         bootstrap_registry()
 
     # Get components

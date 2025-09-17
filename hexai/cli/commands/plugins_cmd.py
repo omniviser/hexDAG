@@ -221,6 +221,7 @@ def _get_available_plugins() -> list[dict[str, Any]]:
 
     with contextlib.suppress(Exception):
         # Registry may already be bootstrapped or other initialization issue
+        # Auto-discovery happens during bootstrap
         bootstrap_registry()
 
     plugins = []
