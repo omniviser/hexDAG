@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator, passthrough_validator, strict_validator
 
 
 class StrictUserModel(BaseModel):
@@ -112,7 +111,7 @@ async def demonstrate_type_mismatch_errors():
         print(f"\n   Test 1.{i}: {test_case}")
 
         # Try with strict validator
-        orchestrator_strict = Orchestrator(validator=strict_validator())
+        orchestrator_strict = Orchestrator(strict_validation=True)
         try:
             result = await orchestrator_strict.run(graph, test_case)
             print("   ✅ Strict validation passed (unexpected)")
@@ -121,7 +120,7 @@ async def demonstrate_type_mismatch_errors():
             print(f"      Details: {str(e)[:80]}...")
 
         # Try with coerce validator
-        orchestrator_coerce = Orchestrator(validator=coerce_validator())
+        orchestrator_coerce = Orchestrator()
         try:
             result = await orchestrator_coerce.run(graph, test_case)
             print("   🔄 Coerce validation passed")
@@ -146,7 +145,7 @@ async def demonstrate_schema_compatibility_errors():
     graph.add(NodeSpec("wrong_processor", return_wrong_type))
     graph.add(NodeSpec("display", display_user_info).after("wrong_processor"))
 
-    orchestrator = Orchestrator(validator=strict_validator())
+    orchestrator = Orchestrator(strict_validation=True)
 
     print("\n   Testing incompatible schema connection...")
     try:
@@ -239,7 +238,7 @@ async def demonstrate_error_recovery_patterns():
         "score": "high",  # Invalid score
     }
 
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
     try:
         result = await orchestrator.run(graph_flexible, problematic_input)
         print("   ✅ Flexible processing succeeded")
@@ -259,7 +258,7 @@ async def demonstrate_error_recovery_patterns():
 
     # Recovery pattern 3: Passthrough validation
     print("\n   Pattern 3: Passthrough Validation")
-    orchestrator_passthrough = Orchestrator(validator=passthrough_validator())
+    orchestrator_passthrough = Orchestrator()
     try:
         result = await orchestrator_passthrough.run(graph_flexible, problematic_input)
         print("   ✅ Passthrough validation succeeded")

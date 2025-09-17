@@ -68,7 +68,7 @@ class PipelineSchema:
 
     def __init__(self, pipeline: Any):
         self.pipeline = pipeline
-        self._compiled_data = None
+        self._compiled_data: Any = None
         self._load_compiled_schemas()
 
     def _load_compiled_schemas(self) -> None:
@@ -80,7 +80,7 @@ class PipelineSchema:
 
             # Try to compile the pipeline to get schemas
             yaml_path = Path(self.pipeline._yaml_path)
-            self._compiled_data = compile_pipeline(yaml_path)  # type: ignore[assignment]
+            self._compiled_data = compile_pipeline(yaml_path)
         except Exception:
             # Compilation failed or not available
             self._compiled_data = None
@@ -98,17 +98,17 @@ class PipelineSchema:
 
     def get_output_schema(self) -> dict[str, Any]:
         """Get normalized output schema for any pipeline."""
-        if self._compiled_data:
-            # Find the output schema of the last node(s) in the pipeline
-            # For simplicity, assume the last node in execution_waves is the primary output
-            if self._compiled_data.execution_waves:  # type: ignore[unreachable]
-                last_wave_nodes = self._compiled_data.execution_waves[-1]
-                if last_wave_nodes:
-                    # Assuming single output node for now, or combine if multiple
-                    last_node_id = last_wave_nodes[0]
-                    for node_config in self._compiled_data.node_configs:
-                        if node_config["id"] == last_node_id:
-                            return node_config["params"].get("output_schema", {})
+        # Find the output schema of the last node(s) in the pipeline
+        # For simplicity, assume the last node in execution_waves is the primary output
+        if self._compiled_data and self._compiled_data.execution_waves:
+            last_wave_nodes = self._compiled_data.execution_waves[-1]
+            if last_wave_nodes:
+                # Assuming single output node for now, or combine if multiple
+                last_node_id = last_wave_nodes[0]
+                for node_config in self._compiled_data.node_configs:
+                    if node_config["id"] == last_node_id:
+                        output_schema = node_config["params"].get("output_schema", {})
+                        return dict(output_schema) if output_schema else {}
         # Fallback to existing methods
         try:
             output_type = self.pipeline.get_output_type()
@@ -163,7 +163,7 @@ class BasicPipelineSchema:
                             "depends_on": node.get("depends_on", []),
                         }
         except Exception as e:
-            logger.warning(f"⚠️ Could not parse YAML for basic node info: {e}")
+            logger.warning("⚠️ Could not parse YAML for basic node info: %s", e)
             self._yaml_data = {}
             self._node_info = {}
 
@@ -253,12 +253,12 @@ class PipelineVisualizer:
         try:
             dag = self.pipeline.builder.build_from_yaml_file(self.pipeline._yaml_path)
             logger.info("🔍 DAG Structure:")
-            logger.info(f"Pipeline: {self.pipeline.name}")
-            logger.info(f"Nodes: {list(dag.nodes.keys())}")
+            logger.info("Pipeline: %s", self.pipeline.name)
+            logger.info("Nodes: %s", list(dag.nodes.keys()))
             waves = dag.waves()
-            logger.info(f"Execution waves: {len(waves)}")
+            logger.info("Execution waves: %d", len(waves))
             for i, wave in enumerate(waves, 1):
-                logger.info(f"  Wave {i}: {wave}")
+                logger.info("  Wave %d: %s", i, wave)
 
             # Show intermediate schemas if requested and available (compiled or basic)
             if (self.show_intermediate_input or self.show_intermediate_output) and (
@@ -268,7 +268,7 @@ class PipelineVisualizer:
                 self._show_intermediate_schemas(dag)
 
         except Exception as e:
-            logger.error(f"❌ Failed to analyze DAG: {e}")
+            logger.error("❌ Failed to analyze DAG: %s", e)
 
     def _show_intermediate_schemas(self, dag: Any) -> None:
         """Show intermediate node schemas when compilation data is available."""
@@ -303,15 +303,15 @@ class PipelineVisualizer:
                 is_last_node = node_id in waves[-1] if waves else False
 
                 if not (is_first_node and is_last_node):  # Show intermediate nodes
-                    logger.info(f"\n  📦 {node_id} ({node_type}):")
+                    logger.info("\n  📦 %s (%s):", node_id, node_type)
 
                     if self.show_intermediate_input and params.get("input_schema"):
                         input_schema = params["input_schema"]
-                        logger.info(f"    ⬇️ INPUT: {input_schema}")
+                        logger.info("    ⬇️ INPUT: %s", input_schema)
 
                     if self.show_intermediate_output and params.get("output_schema"):
                         output_schema = params["output_schema"]
-                        logger.info(f"    ⬆️ OUTPUT: {output_schema}")
+                        logger.info("    ⬆️ OUTPUT: %s", output_schema)
         else:
             if compiled_data and hasattr(compiled_data, "node_configs"):
                 # Use compiled data if available
@@ -322,7 +322,7 @@ class PipelineVisualizer:
 
             if not compiled_data:
                 # Use basic YAML data (fallback mode)
-                for node_id in dag.nodes.keys():
+                for node_id in dag.nodes:
                     node_type = basic_node_types.get(node_id, "unknown")
                     node_schemas = basic_node_types.get(node_id, {})
 
@@ -331,15 +331,15 @@ class PipelineVisualizer:
                     is_last_node = node_id in dag.waves()[-1] if dag.waves() else False
 
                     if not (is_first_node and is_last_node):  # Show intermediate nodes
-                        logger.info(f"\n  📦 {node_id} ({node_type}):")
+                        logger.info("\n  📦 %s (%s):", node_id, node_type)
 
                         if self.show_intermediate_input and node_schemas.get("input_schema"):
                             input_schema = node_schemas["input_schema"]
-                            logger.info(f"    ⬇️ INPUT: {input_schema}")
+                            logger.info("    ⬇️ INPUT: %s", input_schema)
 
                         if self.show_intermediate_output and node_schemas.get("output_schema"):
                             output_schema = node_schemas["output_schema"]
-                            logger.info(f"    ⬆️ OUTPUT: {output_schema}")
+                            logger.info("    ⬆️ OUTPUT: %s", output_schema)
                         elif self.show_intermediate_output and node_type in ["llm", "agent"]:
                             # Show auto-assigned default for LLM/Agent nodes
                             logger.info("    ⬆️ OUTPUT: {'result': 'str'} (auto-assigned)")
@@ -382,9 +382,9 @@ class PipelineVisualizer:
                 basic_node_types=basic_node_types,
                 basic_node_schemas=basic_node_schemas,
             )
-            logger.info(f"✅ Image saved: {rendered_path}")
+            logger.info("✅ Image saved: %s", rendered_path)
         except Exception as e:
-            logger.error(f"❌ Image generation failed: {e}")
+            logger.error("❌ Image generation failed: %s", e)
 
 
 class PipelineCLI:
@@ -408,9 +408,9 @@ class PipelineCLI:
             for i, pipeline_info in enumerate(pipelines, 1):
                 name = pipeline_info.get("name", "Unknown")
                 description = pipeline_info.get("description", "No description")
-                logger.info(f" {i:2}. {name:20} - {description}")
+                logger.info(" %2d. %-20s - %s", i, name, description)
         except Exception as e:
-            logger.error(f"❌ Failed to list pipelines: {e}")
+            logger.error("❌ Failed to list pipelines: %s", e)
 
     def test_all_pipelines(self) -> None:
         """Test all pipelines with sample data."""
@@ -430,42 +430,42 @@ class PipelineCLI:
 
             for pipeline_info in pipelines:
                 name = pipeline_info["name"]
-                logger.info(f"\n📦 Testing {name}...")
+                logger.info("\n📦 Testing %s...", name)
 
                 try:
                     test_input = test_inputs.get(name)
                     if not test_input:
-                        logger.info(f"⚠️  No test input available for {name}")
+                        logger.info("⚠️  No test input available for %s", name)
                         continue
 
                     # Test the pipeline (mock execution)
-                    logger.info(f"✅ {name} - PASSED")
+                    logger.info("✅ %s - PASSED", name)
                     success_count += 1
 
                 except Exception as e:
-                    logger.info(f"❌ {name} - FAILED: {e}")
+                    logger.info("❌ %s - FAILED: %s", name, e)
 
-            logger.info(f"\n📊 Results: {success_count}/{total_count} pipelines passed")
+            logger.info("\n📊 Results: %d/%d pipelines passed", success_count, total_count)
 
         except Exception as e:
-            logger.error(f"Failed to test pipelines: {e}")
+            logger.error("Failed to test pipelines: %s", e)
             sys.exit(1)
 
     def test_pipeline(self, pipeline_name: str) -> None:
         """Test a specific pipeline."""
-        logger.info(f"🧪 Testing Pipeline: {pipeline_name}")
+        logger.info("🧪 Testing Pipeline: %s", pipeline_name)
         try:
             pipeline = self.catalog.get_pipeline(pipeline_name)
             if not pipeline:
-                logger.error(f"❌ Pipeline '{pipeline_name}' not found")
+                logger.error("❌ Pipeline '%s' not found", pipeline_name)
                 return
 
             schema = PipelineSchema(pipeline)
-            logger.info(f"📥 Input Schema: {schema.get_input_schema()}")
-            logger.info(f"📤 Output Schema: {schema.get_output_schema()}")
+            logger.info("📥 Input Schema: %s", schema.get_input_schema())
+            logger.info("📤 Output Schema: %s", schema.get_output_schema())
             logger.info("✅ Pipeline test completed")
         except Exception as e:
-            logger.error(f"❌ Pipeline test failed: {e}")
+            logger.error("❌ Pipeline test failed: %s", e)
 
     def visualize_pipeline(
         self,
@@ -477,7 +477,7 @@ class PipelineCLI:
         skip_compilation: bool = False,
     ) -> None:
         """Visualize any pipeline with dynamic schema detection and enhanced options."""
-        logger.info(f"📊 Visualizing pipeline: {pipeline_name}")
+        logger.info("📊 Visualizing pipeline: %s", pipeline_name)
         if show_intermediate_input:
             logger.info("⬇️ Showing intermediate node input schemas")
         if show_intermediate_output:
@@ -489,7 +489,7 @@ class PipelineCLI:
         try:
             pipeline = self.catalog.get_pipeline(pipeline_name)
             if not pipeline:
-                logger.error(f"❌ Pipeline '{pipeline_name}' not found")
+                logger.error("❌ Pipeline '%s' not found", pipeline_name)
                 return
 
             # Try to get compiled schema first
@@ -499,7 +499,7 @@ class PipelineCLI:
                     schema = PipelineSchema(pipeline)
                     logger.info("📊 Using compiled schema visualization")
             except Exception as e:
-                logger.warning(f"⚠️ Compilation failed, falling back to basic: {e}")
+                logger.warning("⚠️ Compilation failed, falling back to basic: %s", e)
                 schema = None
 
             # Fallback to basic schema if compilation unavailable
@@ -516,8 +516,8 @@ class PipelineCLI:
 
             # Show schema info
 
-            logger.info(f"📥 Input Schema: {schema.get_input_schema()}")
-            logger.info(f"📤 Output Schema: {schema.get_output_schema()}")
+            logger.info("📥 Input Schema: %s", schema.get_input_schema())
+            logger.info("📤 Output Schema: %s", schema.get_output_schema())
 
             # Show terminal visualization
             visualizer.show_terminal_view()
@@ -527,14 +527,14 @@ class PipelineCLI:
                 visualizer.generate_image(pipeline_name, output_file, format_type)
 
         except Exception as e:
-            logger.error(f"❌ Visualization failed: {e}")
+            logger.error("❌ Visualization failed: %s", e)
             import traceback
 
-            logger.error(f"🔍 Error details: {traceback.format_exc()}")
+            logger.error("🔍 Error details: %s", traceback.format_exc())
 
     def run_pipeline(self, pipeline_name: str, input_json: str) -> None:
         """Run any pipeline with provided input."""
-        logger.info(f"🚀 Running pipeline: {pipeline_name}")
+        logger.info("🚀 Running pipeline: %s", pipeline_name)
         logger.info("=" * 50)
 
         try:
@@ -545,7 +545,7 @@ class PipelineCLI:
 
             pipeline = self.catalog.get_pipeline(pipeline_name)
             if not pipeline:
-                logger.error(f"❌ Pipeline '{pipeline_name}' not found")
+                logger.error("❌ Pipeline '%s' not found", pipeline_name)
                 return
 
             # Set up mock ports for CLI execution
@@ -572,31 +572,31 @@ class PipelineCLI:
             result = asyncio.run(pipeline.execute(input_data, mock_ports))
 
             logger.info("✅ Pipeline execution completed!")
-            logger.info(f"📤 Result: {json.dumps(result, indent=2, default=str)}")
+            logger.info("📤 Result: %s", json.dumps(result, indent=2, default=str))
 
         except json.JSONDecodeError as e:
-            logger.error(f"❌ Invalid JSON input: {e}")
+            logger.error("❌ Invalid JSON input: %s", e)
         except Exception as e:
-            logger.error(f"❌ Pipeline run failed: {e}")
+            logger.error("❌ Pipeline run failed: %s", e)
             import traceback
 
-            logger.error(f"🔍 Error details: {traceback.format_exc()}")
+            logger.error("🔍 Error details: %s", traceback.format_exc())
 
     def compile_pipeline(self, pipeline_name: str, validate_only: bool = False) -> None:
         """Compile a single pipeline for production deployment with optional validation."""
         try:
             pipeline = self.catalog.get_pipeline(pipeline_name)
             if not pipeline:
-                logger.error(f"❌ Pipeline '{pipeline_name}' not found")
+                logger.error("❌ Pipeline '%s' not found", pipeline_name)
                 return
 
             yaml_path = pipeline._yaml_path
             if not yaml_path:
-                logger.error(f"❌ Pipeline '{pipeline_name}' has no YAML path")
+                logger.error("❌ Pipeline '%s' has no YAML path", pipeline_name)
                 return
 
             if validate_only:
-                logger.info(f"🔍 Validating pipeline types: {pipeline_name}")
+                logger.info("🔍 Validating pipeline types: %s", pipeline_name)
                 from hexai.cli.compile import validate_pipeline_types
 
                 is_type_safe = validate_pipeline_types(yaml_path)
@@ -605,38 +605,38 @@ class PipelineCLI:
                 else:
                     logger.error("❌ Type validation failed: Pipeline has type safety issues!")
             else:
-                logger.info(f"📦 Compiling pipeline: {pipeline_name}")
+                logger.info("📦 Compiling pipeline: %s", pipeline_name)
                 # Use the compile module
                 compile_single(yaml_path)
 
         except Exception as e:
-            logger.error(f"❌ Operation failed: {e}")
+            logger.error("❌ Operation failed: %s", e)
             import traceback
 
-            logger.error(f"🔍 Error details: {traceback.format_exc()}")
+            logger.error("🔍 Error details: %s", traceback.format_exc())
 
     def compile_all_pipelines(self) -> None:
         """Compile all pipelines for production deployment."""
         try:
             pipelines = self.catalog.list_pipelines()
-            logger.info(f"📦 Compiling {len(pipelines)} pipelines...")
+            logger.info("📦 Compiling %d pipelines...", len(pipelines))
             success_count = 0
 
             for pipeline_info in pipelines:
+                pipeline_name = pipeline_info.get("name", "unknown")
                 try:
-                    pipeline_name = pipeline_info["name"]
                     pipeline = self.catalog.get_pipeline(pipeline_name)
                     if pipeline and pipeline._yaml_path:
                         compile_single(pipeline._yaml_path)
                         success_count += 1  # Only increment if compilation succeeds
                     else:
-                        logger.error(f"❌ Failed to get pipeline {pipeline_name}")
+                        logger.error("❌ Failed to get pipeline %s", pipeline_name)
                 except Exception as e:
-                    logger.error(f"❌ Failed to compile {pipeline_name}: {e}")
+                    logger.error("❌ Failed to compile %s: %s", pipeline_name, e)
 
-            logger.info(f"✅ Compiled {success_count}/{len(pipelines)} pipelines")
+            logger.info("✅ Compiled %d/%d pipelines", success_count, len(pipelines))
         except Exception as e:
-            logger.error(f"❌ Failed to compile all pipelines: {e}")
+            logger.error("❌ Failed to compile all pipelines: %s", e)
 
 
 def main() -> None:
@@ -730,7 +730,7 @@ def main() -> None:
             sys.exit(1)
 
     except Exception as e:
-        logger.error(f"❌ Command failed: {e}")
+        logger.error("❌ Command failed: %s", e)
         sys.exit(1)
 
 

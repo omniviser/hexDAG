@@ -4,8 +4,12 @@ import pytest
 from pydantic import BaseModel
 
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.core.application.nodes.llm_node import LLMNode
 from hexai.core.application.prompt import ChatPromptTemplate, PromptTemplate
+from hexai.core.bootstrap import ensure_bootstrapped
+from hexai.core.registry import registry
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class OutputSchema(BaseModel):
@@ -20,8 +24,9 @@ class TestLLMNode:
 
     @pytest.fixture
     def llm_node(self):
-        """Fixture for LLMNode."""
-        return LLMNode()
+        """Get LLMNode factory from registry."""
+        ensure_bootstrapped()
+        return registry.get("llm_node", namespace="core")
 
     @pytest.fixture
     def mock_llm(self):
@@ -34,8 +39,8 @@ class TestLLMNode:
 
         assert node_spec.name == "simple_llm"
         assert node_spec.fn.__name__ == "llm_wrapper"
-        assert node_spec.in_type is not None
-        assert node_spec.out_type is str  # No rich features for string template
+        assert node_spec.in_model is not None
+        assert node_spec.out_model is None  # No rich features for string template
 
     def test_string_template_with_output_schema_rejected(self, llm_node):
         """Test that string templates with output schema are rejected."""
@@ -48,7 +53,7 @@ class TestLLMNode:
         node_spec = llm_node.from_template("rich_llm", template, OutputSchema)
 
         assert node_spec.name == "rich_llm"
-        assert node_spec.out_type == OutputSchema  # Rich features enabled
+        assert node_spec.out_model == OutputSchema  # Rich features enabled
 
     def test_from_template_with_chat_prompt_template(self, llm_node):
         """Test from_template with ChatPromptTemplate."""

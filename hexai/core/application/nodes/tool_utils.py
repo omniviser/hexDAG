@@ -55,8 +55,7 @@ class ToolDefinition(BaseModel):
 
         if self.examples:
             lines.append("Examples:")
-            for example in self.examples:
-                lines.append(f"  {example}")
+            lines.extend(f"  {example}" for example in self.examples)
 
         return "\n".join(lines)
 
@@ -184,8 +183,7 @@ class ToolDescriptionManager:
         """Get simplified tool descriptions for prompt."""
         lines = ["Available tools:"]
 
-        for tool in self.tools.values():
-            lines.append(f"- {tool.to_simplified_string()}")
+        lines.extend(f"- {tool.to_simplified_string()}" for tool in self.tools.values())
 
         return "\n".join(lines)
 

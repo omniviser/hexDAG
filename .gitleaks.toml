@@ -1,0 +1,43 @@
+# Gitleaks configuration for hexDAG project
+[detect]
+  # Enable all default rules
+  verbose = true
+
+  # Report format options: json, csv, junit, sarif
+  report-format = "json"
+
+  # Custom rules can be added here
+  [[rules]]
+    description = "Azure DevOps PAT Token"
+    id = "azure-devops-pat"
+    regex = '''(?i)(?:azure|ado|devops).{0,20}[=:\s][a-z0-9]{52}'''
+    tags = ["key", "azure", "devops"]
+
+  [[rules]]
+    description = "Generic API Key"
+    id = "generic-api-key"
+    regex = '''(?i)(?:api[_-]?key|apikey).{0,20}[=:\s][a-z0-9]{20,}'''
+    tags = ["key", "api"]
+
+# Files and directories to exclude from scanning
+[allowlist]
+  description = "Allowlisted files"
+  paths = [
+    '''.*\.lock''',
+    '''.*\.min\.js''',
+    '''dist/.*''',
+    '''htmlcov/.*''',
+    '''\.git/.*''',
+    '''__pycache__/.*''',
+    '''\.pytest_cache/.*''',
+    '''\.mypy_cache/.*''',
+    '''\.ruff_cache/.*'''
+  ]
+
+  # Allow certain patterns that are not actually secrets
+  regexes = [
+    '''example[_-]?key''',
+    '''test[_-]?token''',
+    '''dummy[_-]?secret''',
+    '''placeholder[_-]?password'''
+  ]

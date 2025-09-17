@@ -5,9 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from hexai.core.validation import JsonStringToPydanticConverter
-from hexai.core.validation.converters import ConversionError
 from hexai.core.validation.secure_json import (
     DEFAULT_MAX_DEPTH,
     extract_json_from_text,
@@ -95,26 +92,28 @@ def test_loads_from_llm_output_end_to_end():
     assert parsed == {"ok": True}
 
 
-def test_converter_uses_secure_loader_and_handles_invalid_json():
+def test_secure_loader_handles_invalid_json_returns_none():
     from pydantic import BaseModel
 
     class M(BaseModel):
         a: int
 
-    conv = JsonStringToPydanticConverter()
-    with pytest.raises(ConversionError):
-        conv.convert('{"a": not_a_number}', M)  # invalid JSON
+    # secure loader should return None for unrecoverable JSON
+    assert loads('{"a": not_a_number}') is None
 
 
-def test_converter_handles_minor_llm_formatting():
+def test_secure_loader_handles_minor_llm_formatting_and_pydantic_validation():
     from pydantic import BaseModel
 
     class M(BaseModel):
         a: int
         b: list[int]
 
-    conv = JsonStringToPydanticConverter()
     dirty = """{ 'a': 1, 'b': [1,2,], }"""
-    result = conv.convert(dirty, M)
+    data = loads(dirty)
+    assert data == {"a": 1, "b": [1, 2]}
+
+    # Validate via Pydantic directly
+    result = M.model_validate(data)
     assert result.a == 1
     assert result.b == [1, 2]
