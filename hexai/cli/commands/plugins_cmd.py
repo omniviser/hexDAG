@@ -20,7 +20,7 @@ class OutputFormat(str, Enum):
     YAML = "yaml"
 
 
-@app.command("list")  # type: ignore[misc]
+@app.command("list")
 def list_plugins(
     format: Annotated[
         OutputFormat | None,
@@ -65,7 +65,7 @@ def list_plugins(
         console.print(table)
 
 
-@app.command("check")  # type: ignore[misc]
+@app.command("check")
 def check_plugins() -> None:
     """Check plugin dependencies and suggest installation commands."""
     console.print("[bold]Checking plugin dependencies...[/bold]\n")
@@ -94,7 +94,7 @@ def check_plugins() -> None:
         )
 
 
-@app.command("install")  # type: ignore[misc]
+@app.command("install")
 def install_plugin(
     plugin_name: str = typer.Argument(
         ...,

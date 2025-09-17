@@ -4,9 +4,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from pydantic import BaseModel
-
 import pytest
+from pydantic import BaseModel
 
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 

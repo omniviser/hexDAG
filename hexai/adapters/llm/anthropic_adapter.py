@@ -12,7 +12,7 @@ from hexai.core.registry import adapter
 @adapter(
     name="anthropic",
     implements_port="llm",
-    namespace="adapters",
+    namespace="core",
     description="Anthropic Claude adapter for language model interactions",
 )
 class AnthropicAdapter:

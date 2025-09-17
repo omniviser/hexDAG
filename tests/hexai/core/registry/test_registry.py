@@ -1,13 +1,12 @@
 """Tests for the simplified component registry."""
 
-import warnings
 import os
+import warnings
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 from hexai.core.registry import adapter, component, node, port, registry, tool
-from hexai.core.registry.registry import ComponentRegistry
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
     ComponentNotFoundError,
@@ -15,7 +14,7 @@ from hexai.core.registry.exceptions import (
     NamespacePermissionError,
 )
 from hexai.core.registry.models import ComponentType  # Internal for tests
-
+from hexai.core.registry.registry import ComponentRegistry
 
 
 class TestComponentRegistry:
@@ -948,8 +947,8 @@ class TestRegistryPluginScenarios:
     def test_registry_list_shows_available_plugins(self):
         """Test that registry list only shows available plugins."""
         from hexai.core.bootstrap import bootstrap_registry
-        from hexai.core.registry import registry as global_registry
         from hexai.core.config.models import HexDAGConfig
+        from hexai.core.registry import registry as global_registry
 
         # Clear registry
         if global_registry.ready:
@@ -1013,8 +1012,8 @@ class TestRegistryPluginDiscovery:
     def test_progressive_plugin_availability(self, env_vars, expected_count):
         """Test that plugins become available as requirements are met."""
         from hexai.core.bootstrap import bootstrap_registry
-        from hexai.core.registry import registry as global_registry
         from hexai.core.config.models import HexDAGConfig
+        from hexai.core.registry import registry as global_registry
 
         # Clear registry
         if global_registry.ready:

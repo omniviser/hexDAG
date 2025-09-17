@@ -42,7 +42,7 @@ async def data_validation(input_data: dict) -> dict:
     await asyncio.sleep(0.05)
     raw_data = input_data.get("raw_data", "")
 
-    is_valid = len(raw_data) > 0 and not raw_data.strip() == ""
+    is_valid = len(raw_data) > 0 and raw_data.strip() != ""
 
     return {
         "validated_data": raw_data if is_valid else "default_data",

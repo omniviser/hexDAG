@@ -15,8 +15,10 @@ from hexai.core.registry.decorators import (
     policy,
     tool,
 )
-from hexai.core.registry.models import ComponentType  # Internal for tests
-from hexai.core.registry.models import NodeSubtype
+from hexai.core.registry.models import (
+    ComponentType,  # Internal for tests
+    NodeSubtype,
+)
 
 
 class TestSnakeCase:

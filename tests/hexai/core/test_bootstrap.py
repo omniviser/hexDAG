@@ -6,9 +6,9 @@ import tempfile
 import pytest
 
 from hexai.core.bootstrap import bootstrap_registry
+from hexai.core.config import ManifestEntry
 from hexai.core.registry.decorators import node
 from hexai.core.registry.exceptions import RegistryAlreadyBootstrappedError, RegistryImmutableError
-from hexai.core.config import ManifestEntry
 from hexai.core.registry.models import ComponentType
 from hexai.core.registry.registry import ComponentRegistry
 
@@ -151,10 +151,10 @@ class TestBootstrapArchitecture:
     def test_adapter_validation_during_bootstrap(self):
         """Test that adapter validation happens during bootstrap."""
         # Create a test file with an invalid adapter (missing required method)
+        import os
+        import sys
         import tempfile
         import textwrap
-        import sys
-        import os
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a module with an invalid adapter

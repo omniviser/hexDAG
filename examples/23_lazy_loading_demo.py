@@ -5,7 +5,6 @@ This example shows how HexDAG handles optional dependencies gracefully,
 only importing them when actually needed.
 """
 
-import sys
 
 
 def test_core_functionality():
@@ -18,7 +17,6 @@ def test_core_functionality():
     from hexai import (
         DirectedGraph,
         NodeSpec,
-        Orchestrator,
         registry,
     )
 
@@ -57,7 +55,7 @@ def test_visualization_lazy():
         graph = DirectedGraph()
         graph.add_node(NodeSpec(id="test", fn=lambda x: x))
 
-        viz = DAGVisualizer(graph)
+        DAGVisualizer(graph)
         print("✅ DAGVisualizer created successfully")
     else:
         print("⚠️  Graphviz not installed - visualization features unavailable")
@@ -141,7 +139,6 @@ def test_performance():
 
     # Time core import
     start = time.time()
-    import hexai.core.domain
 
     core_time = time.time() - start
     print(f"Core domain import time: {core_time:.4f}s")

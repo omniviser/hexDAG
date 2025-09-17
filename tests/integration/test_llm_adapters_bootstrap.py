@@ -20,12 +20,11 @@ class TestLLMAdaptersBootstrap:
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
             # Check if _cleanup_state method exists
-            if hasattr(global_registry, '_cleanup_state'):
+            if hasattr(global_registry, "_cleanup_state"):
                 global_registry._cleanup_state()
         yield
-        if global_registry.ready:
-            if hasattr(global_registry, '_cleanup_state'):
-                global_registry._cleanup_state()
+        if global_registry.ready and hasattr(global_registry, "_cleanup_state"):
+            global_registry._cleanup_state()
 
     def test_bootstrap_loads_llm_adapters(self):
         """Test that bootstrap loads LLM adapter plugins."""
@@ -34,15 +33,17 @@ class TestLLMAdaptersBootstrap:
             plugins=[
                 "hexai.adapters.llm.anthropic_adapter",
                 "hexai.adapters.llm.openai_adapter",
-            ]
+            ],
         )
 
         # Mock both API keys as available
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {
-                 "ANTHROPIC_API_KEY": "test-anthropic-key",
-                 "OPENAI_API_KEY": "test-openai-key"
-             }):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(
+                os.environ,
+                {"ANTHROPIC_API_KEY": "test-anthropic-key", "OPENAI_API_KEY": "test-openai-key"},
+            ),
+        ):
             bootstrap_registry()
 
         components = global_registry.list_components()
@@ -59,14 +60,13 @@ class TestLLMAdaptersBootstrap:
             plugins=[
                 "hexai.adapters.llm.anthropic_adapter",
                 "hexai.adapters.llm.openai_adapter",
-            ]
+            ],
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {
-                 "ANTHROPIC_API_KEY": "test-key",
-                 "OPENAI_API_KEY": "test-key"
-             }):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
+        ):
             bootstrap_registry()
 
         # Get adapters for LLM port
@@ -88,27 +88,27 @@ class TestLLMAdaptersBootstrap:
             plugins=[
                 "hexai.adapters.llm.anthropic_adapter",
                 "hexai.adapters.llm.openai_adapter",
-            ]
+            ],
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {
-                 "ANTHROPIC_API_KEY": "test-key",
-                 "OPENAI_API_KEY": "test-key"
-             }):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
+        ):
             bootstrap_registry()
 
         # Mock the API clients
-        with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic, \
-             patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
-
+        with (
+            patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
+            patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
+        ):
             mock_anthropic.return_value = AsyncMock()
             mock_openai.return_value = AsyncMock()
 
             # Try to get adapter info from registry
             try:
-                anthropic_info = global_registry.get_info("anthropic", namespace="adapters")
-                openai_info = global_registry.get_info("openai", namespace="adapters")
+                anthropic_info = global_registry.get_info("anthropic", namespace="core")
+                openai_info = global_registry.get_info("openai", namespace="core")
 
                 # Instantiate adapters
                 anthropic_adapter = anthropic_info.get_instance(api_key="test-key")
@@ -129,12 +129,13 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
-            plugins=["hexai.adapters.llm.anthropic_adapter"]
+            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.anthropic_adapter"]
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+        ):
             bootstrap_registry()
 
         # Mock Anthropic client
@@ -149,7 +150,7 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter from registry
             try:
-                adapter_info = global_registry.get_info("anthropic", namespace="adapters")
+                adapter_info = global_registry.get_info("anthropic", namespace="core")
                 adapter = adapter_info.get_instance(api_key="test-key")
 
                 # Test functionality
@@ -174,20 +175,20 @@ class TestLLMAdaptersBootstrap:
             plugins=[
                 "hexai.adapters.llm.anthropic_adapter",
                 "hexai.adapters.llm.openai_adapter",
-            ]
+            ],
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {
-                 "ANTHROPIC_API_KEY": "test-key",
-                 "OPENAI_API_KEY": "test-key"
-             }):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
+        ):
             bootstrap_registry()
 
         # Mock both clients
-        with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic, \
-             patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
-
+        with (
+            patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
+            patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
+        ):
             # Setup Anthropic mock
             anthropic_client = AsyncMock()
             anthropic_response = MagicMock()
@@ -208,8 +209,8 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get both adapters
             try:
-                anthropic_info = global_registry.get_info("anthropic", namespace="adapters")
-                openai_info = global_registry.get_info("openai", namespace="adapters")
+                anthropic_info = global_registry.get_info("anthropic", namespace="core")
+                openai_info = global_registry.get_info("openai", namespace="core")
 
                 anthropic_adapter = anthropic_info.get_instance(api_key="test-key")
                 openai_adapter = openai_info.get_instance(api_key="test-key")
@@ -218,9 +219,9 @@ class TestLLMAdaptersBootstrap:
                 messages: MessageList = [Message(role="user", content="Test")]
 
                 import asyncio
+
                 anthropic_result, openai_result = await asyncio.gather(
-                    anthropic_adapter.aresponse(messages),
-                    openai_adapter.aresponse(messages)
+                    anthropic_adapter.aresponse(messages), openai_adapter.aresponse(messages)
                 )
 
                 assert anthropic_result == "Response from Anthropic"
@@ -232,12 +233,13 @@ class TestLLMAdaptersBootstrap:
     def test_ensure_bootstrapped_with_llm_adapters(self):
         """Test that ensure_bootstrapped works with LLM adapters."""
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
-            plugins=["hexai.adapters.llm.openai_adapter"]
+            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.openai_adapter"]
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+        ):
             # First call bootstraps
             ensure_bootstrapped()
 
@@ -259,12 +261,13 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
-            plugins=["hexai.adapters.llm.openai_adapter"]
+            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.openai_adapter"]
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+        ):
             bootstrap_registry()
 
         # Mock OpenAI client to simulate error
@@ -277,7 +280,7 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter from registry
             try:
-                adapter_info = global_registry.get_info("openai", namespace="adapters")
+                adapter_info = global_registry.get_info("openai", namespace="core")
                 adapter = adapter_info.get_instance(api_key="invalid-key")
 
                 # Test error handling
@@ -298,12 +301,14 @@ class TestLLMAdaptersBootstrap:
             plugins=[
                 "hexai.adapters.llm.anthropic_adapter",
                 "hexai.adapters.llm.openai_adapter",
-            ]
+            ],
         )
 
         # No API keys in environment
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             bootstrap_registry()
 
         assert global_registry.ready
@@ -316,12 +321,13 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
-            plugins=["hexai.adapters.llm.anthropic_adapter"]
+            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.anthropic_adapter"]
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+        ):
             bootstrap_registry()
 
         with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic:
@@ -329,18 +335,14 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter info
             try:
-                adapter_info = global_registry.get_info("anthropic", namespace="adapters")
+                adapter_info = global_registry.get_info("anthropic", namespace="core")
 
                 # Create instances with different configurations
                 adapter1 = adapter_info.get_instance(
-                    api_key="key1",
-                    model="claude-3-opus-20240229",
-                    temperature=0.5
+                    api_key="key1", model="claude-3-opus-20240229", temperature=0.5
                 )
                 adapter2 = adapter_info.get_instance(
-                    api_key="key2",
-                    model="claude-3-5-sonnet-20241022",
-                    temperature=0.9
+                    api_key="key2", model="claude-3-5-sonnet-20241022", temperature=0.9
                 )
 
                 # Verify different configurations
@@ -364,24 +366,26 @@ class TestLLMAdaptersBootstrap:
             plugins=[
                 "hexai.adapters.llm.anthropic_adapter",
                 "hexai.adapters.llm.openai_adapter",
-            ]
+            ],
         )
 
         # Use clearly fake API keys that will trigger 401 errors
         fake_anthropic_key = "sk-ant-fake-test-key-xxxxxxxxxxxxx"
         fake_openai_key = "sk-fake-test-key-xxxxxxxxxxxxx"
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {
-                 "ANTHROPIC_API_KEY": fake_anthropic_key,
-                 "OPENAI_API_KEY": fake_openai_key
-             }):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(
+                os.environ,
+                {"ANTHROPIC_API_KEY": fake_anthropic_key, "OPENAI_API_KEY": fake_openai_key},
+            ),
+        ):
             bootstrap_registry()
 
         try:
             # Get adapters from registry
-            anthropic_info = global_registry.get_info("anthropic", namespace="adapters")
-            openai_info = global_registry.get_info("openai", namespace="adapters")
+            anthropic_info = global_registry.get_info("anthropic", namespace="core")
+            openai_info = global_registry.get_info("openai", namespace="core")
 
             # Create adapter instances with fake keys - NO MOCKING, real API calls
             anthropic_adapter = anthropic_info.get_instance(api_key=fake_anthropic_key)
@@ -397,7 +401,7 @@ class TestLLMAdaptersBootstrap:
             results = await asyncio.gather(
                 anthropic_adapter.aresponse(messages),
                 openai_adapter.aresponse(messages),
-                return_exceptions=False
+                return_exceptions=False,
             )
 
             # Both should return None because the adapters handle auth errors gracefully
@@ -411,7 +415,7 @@ class TestLLMAdaptersBootstrap:
             empty_results = await asyncio.gather(
                 empty_anthropic.aresponse(messages),
                 empty_openai.aresponse(messages),
-                return_exceptions=False
+                return_exceptions=False,
             )
 
             assert empty_results[0] is None, "Anthropic should fail with empty key"
@@ -424,7 +428,7 @@ class TestLLMAdaptersBootstrap:
             invalid_results = await asyncio.gather(
                 invalid_anthropic.aresponse(messages),
                 invalid_openai.aresponse(messages),
-                return_exceptions=False
+                return_exceptions=False,
             )
 
             assert invalid_results[0] is None, "Anthropic should fail with invalid format"

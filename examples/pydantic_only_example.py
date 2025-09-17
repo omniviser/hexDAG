@@ -8,7 +8,6 @@ This example demonstrates:
 """
 
 import asyncio
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,7 +23,7 @@ class TextInput(BaseModel):
 
     text: str
     language: str = "en"
-    max_length: Optional[int] = None
+    max_length: int | None = None
 
 
 class CleanedText(BaseModel):

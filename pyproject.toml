@@ -130,7 +130,8 @@ omit = [
     "*/test_*",
     "*/conftest.py",
     "*/__pycache__/*",
-    "*/examples/*"
+    "*/examples/*",
+    "*_plugins/*"
 ]
 
 [tool.coverage.report]
@@ -197,16 +198,17 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
+exclude = ["tests/", "examples/"]
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
-module = "tests.*"
+module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
 
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-exclude = ["tests/**", "examples/**", ".venv", "build", "dist", "**/test_*.py"]
+exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist"]
 include = ["hexai"]
 
 # Type checking settings
@@ -235,7 +237,7 @@ reportUndefinedVariable = true
 reportIncompatibleMethodOverride = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples"]
+exclude_dirs = ["tests", "examples", "hexai_plugins"]
 skips = ["B101", "B601"]
 
 [tool.ruff]
@@ -247,8 +249,6 @@ exclude = [
     "__pycache__",
     "build",
     "dist",
-    "tests",
-    "examples",
 ]
 
 [tool.ruff.lint]
@@ -276,10 +276,11 @@ extend-select = [
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["UP"]  # Don't enforce modern types in tests
-"examples/*" = ["UP"]  # Don't enforce modern types in examples
-"hexai/core/application/events/observers.py" = ["SIM115"]  # FileObserver manages file handle with close()
-"hexai/core/registry/discovery.py" = ["TC003", "TC001"]  # Runtime imports needed, not just for type checking
+"tests/*" = ["UP"]
+"examples/*" = ["UP"]
+"hexai_plugins/*" = ["UP", "TCH", "FA"]
+"hexai/core/application/events/observers.py" = ["SIM115"]
+"hexai/core/registry/discovery.py" = ["TC003", "TC001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexai"]
@@ -295,10 +296,10 @@ version_files = [
 [tool.vulture]
 min_confidence = 90
 paths = ["hexai"]
-exclude = ["tests/", "examples/", "hexai/core/ports/"]
+exclude = ["tests/", "examples/", "hexai/core/ports/", "hexai_plugins/"]
 
 [tool.radon]
-exclude = "tests/*,examples/*"
+exclude = "tests/*,examples/*,hexai_plugins/*"
 cc_min = "B"  # Minimum complexity grade (A, B, C, D, E, F)
 show_complexity = true
 
@@ -322,6 +323,7 @@ exclude = [
     "venv",  # Alternative virtual environment name
     "examples/demo",  # Demo files with mock langchain imports
     "tests",  # Test files use dev dependencies
+    "hexai_plugins",  # External plugin directories
 ]
 
 # Per-rule ignores for specific packages

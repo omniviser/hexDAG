@@ -11,7 +11,7 @@ app = typer.Typer()
 console = Console()
 
 
-@app.callback(invoke_without_command=True)  # type: ignore[misc]
+@app.callback(invoke_without_command=True)
 def init(
     ctx: typer.Context,
     with_adapters: Annotated[

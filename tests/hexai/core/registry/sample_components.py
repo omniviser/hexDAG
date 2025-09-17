@@ -46,6 +46,7 @@ class SampleAdapter:
 def register_components(registry, namespace):
     """Custom registration hook to register the test port first."""
     import sys
+
     from hexai.core.registry.discovery import discover_components
 
     # Register the test port that our adapter implements
@@ -74,7 +75,7 @@ def register_components(registry, namespace):
     for _, component in components:
         if not hasattr(component, "__hexdag_metadata__"):
             continue
-        metadata = getattr(component, "__hexdag_metadata__")
+        metadata = component.__hexdag_metadata__
 
         try:
             registry.register(

@@ -77,3 +77,12 @@ sbom.json
 
 # HexDAG config (only in root, not in subdirectories or examples)
 /hexdag.toml
+
+# Plugin build artifacts
+hexai_plugins/*/.ruff_cache/
+hexai_plugins/*/__pycache__/
+hexai_plugins/*/.mypy_cache/
+hexai_plugins/*/.pytest_cache/
+hexai_plugins/*/dist/
+hexai_plugins/*/build/
+hexai_plugins/*/*.egg-info/

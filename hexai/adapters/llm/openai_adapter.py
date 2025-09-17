@@ -12,7 +12,7 @@ from hexai.core.registry import adapter
 @adapter(
     name="openai",
     implements_port="llm",
-    namespace="adapters",
+    namespace="core",
     description="OpenAI GPT adapter for language model interactions",
 )
 class OpenAIAdapter:
@@ -65,14 +65,12 @@ class OpenAIAdapter:
         """
         try:
             # Convert MessageList to OpenAI format
-            openai_messages: list[dict[str, Any]] = [
-                {"role": msg.role, "content": msg.content} for msg in messages
-            ]
+            openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
             # Make API call
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=openai_messages,  # pyright: ignore[reportArgumentType]
+                messages=openai_messages,  # type: ignore[arg-type]
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )

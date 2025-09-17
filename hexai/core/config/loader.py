@@ -250,10 +250,10 @@ def config_to_manifest_entries(config: HexDAGConfig) -> list[ManifestEntry]:
     list[ManifestEntry]
         List of manifest entries for registry bootstrap
     """
-    # Core modules go to 'core' namespace, others to 'user'
+    # Core modules and built-in LLM adapters go to 'core' namespace, others to 'user'
     module_entries = [
         ManifestEntry(
-            namespace="core" if module.startswith("hexai.core") else "user", module=module
+            namespace="core" if (module.startswith("hexai.core")) else "user", module=module
         )
         for module in config.modules
     ]

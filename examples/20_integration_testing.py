@@ -6,7 +6,7 @@ for hexAI pipelines and components.
 
 import asyncio
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
@@ -27,7 +27,7 @@ class MockEmailAdapter:
         body: str,
         from_address: str = "noreply@example.com",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send a mock email."""
         await asyncio.sleep(0.1)  # Simulate network delay
 
@@ -55,12 +55,12 @@ class MockEmailAdapter:
 
     async def send_bulk_email(
         self,
-        recipients: List[str],
+        recipients: list[str],
         subject: str,
         body: str,
         from_address: str = "noreply@example.com",
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send bulk mock emails."""
         await asyncio.sleep(0.2)  # Simulate bulk processing delay
 
@@ -78,7 +78,7 @@ class MockEmailAdapter:
             "results": results,
         }
 
-    def get_sent_emails(self) -> List[Dict[str, Any]]:
+    def get_sent_emails(self) -> list[dict[str, Any]]:
         """Get all sent emails for testing."""
         return self.sent_emails.copy()
 
@@ -99,7 +99,7 @@ class MockDatabaseAdapter:
         self.data = {}
         self.fail_rate = 0.0
 
-    async def save_data(self, key: str, value: Any) -> Dict[str, Any]:
+    async def save_data(self, key: str, value: Any) -> dict[str, Any]:
         """Save data to mock database."""
         await asyncio.sleep(0.05)  # Simulate database write
 
@@ -109,7 +109,7 @@ class MockDatabaseAdapter:
         self.data[key] = value
         return {"status": "saved", "key": key}
 
-    async def get_data(self, key: str) -> Dict[str, Any]:
+    async def get_data(self, key: str) -> dict[str, Any]:
         """Get data from mock database."""
         await asyncio.sleep(0.02)  # Simulate database read
 
@@ -130,19 +130,19 @@ class MockLoggerAdapter:
         """Initialize the mock logger adapter."""
         self.logs = []
 
-    async def log_info(self, message: str, **kwargs: Any) -> Dict[str, Any]:
+    async def log_info(self, message: str, **kwargs: Any) -> dict[str, Any]:
         """Log info message."""
         await asyncio.sleep(0.01)  # Simulate logging delay
         self.logs.append({"level": "info", "message": message, **kwargs})
         return {"status": "logged", "level": "info"}
 
-    async def log_error(self, message: str, **kwargs: Any) -> Dict[str, Any]:
+    async def log_error(self, message: str, **kwargs: Any) -> dict[str, Any]:
         """Log error message."""
         await asyncio.sleep(0.01)  # Simulate logging delay
         self.logs.append({"level": "error", "message": message, **kwargs})
         return {"status": "logged", "level": "error"}
 
-    def get_logs(self) -> List[Dict[str, Any]]:
+    def get_logs(self) -> list[dict[str, Any]]:
         """Get all logs for testing."""
         return self.logs.copy()
 

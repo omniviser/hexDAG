@@ -26,7 +26,7 @@ class ComponentFilter(str, Enum):
     NODE = "node"
 
 
-@app.command("list")  # type: ignore[misc]
+@app.command("list")
 def list_components(
     type_filter: Annotated[
         ComponentFilter | None,
@@ -133,7 +133,7 @@ def list_components(
         console.print(f"\n[dim]Total: {len(components)} components[/dim]")
 
 
-@app.command("show")  # type: ignore[misc]
+@app.command("show")
 def show_component(
     component_name: str = typer.Argument(
         ...,
@@ -286,7 +286,7 @@ def show_component(
         raise typer.Exit(1) from None
 
 
-@app.command("tree")  # type: ignore[misc]
+@app.command("tree")
 def show_tree() -> None:
     """Show registry structure as a tree."""
     # Bootstrap if not already done
