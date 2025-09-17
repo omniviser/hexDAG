@@ -86,7 +86,9 @@ def register_components(registry, namespace):
                 privileged=(namespace == "core"),
                 subtype=metadata.subtype,
                 description=metadata.description,
-                adapter_metadata=metadata.adapter_metadata if hasattr(metadata, "adapter_metadata") else None,
+                adapter_metadata=metadata.adapter_metadata
+                if hasattr(metadata, "adapter_metadata")
+                else None,
             )
             count += 1
         except Exception:

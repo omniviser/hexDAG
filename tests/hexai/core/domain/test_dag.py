@@ -1,6 +1,5 @@
 """Tests for DAG primitives: NodeSpec and DirectedGraph."""
 
-
 import pytest
 from pydantic import BaseModel, Field
 

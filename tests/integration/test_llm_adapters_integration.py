@@ -106,9 +106,7 @@ class TestLLMAdaptersIntegration:
             assert call_kwargs["messages"][0]["role"] == "user"
 
     @pytest.mark.asyncio
-    async def test_openai_adapter_successful_response_simulation(
-        self, fake_api_key, test_messages
-    ):
+    async def test_openai_adapter_successful_response_simulation(self, fake_api_key, test_messages):
         """Test OpenAI adapter with simulated successful response."""
         with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
             # Simulate successful response
@@ -180,9 +178,7 @@ class TestLLMAdaptersIntegration:
         # Test Anthropic network error
         with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic:
             mock_client = AsyncMock()
-            mock_client.messages.create = AsyncMock(
-                side_effect=Exception("Connection timeout")
-            )
+            mock_client.messages.create = AsyncMock(side_effect=Exception("Connection timeout"))
             mock_anthropic.return_value = mock_client
 
             adapter = AnthropicAdapter(api_key=fake_key)
@@ -283,9 +279,7 @@ class TestLLMAdaptersIntegration:
                     assert call_kwargs["model"] == model
 
             elif provider == "openai":
-                with patch(
-                    "hexai.adapters.llm.openai_adapter.AsyncOpenAI"
-                ) as mock_client_class:
+                with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
                     mock_choice = MagicMock()
                     mock_choice.message.content = f"Response from {model}"
                     mock_response = MagicMock()
@@ -328,9 +322,7 @@ class TestLLMAdaptersIntegration:
             adapter = AnthropicAdapter(api_key="test-key")
 
             # Create multiple concurrent requests
-            messages_list = [
-                [Message(role="user", content=f"Test {i}")] for i in range(5)
-            ]
+            messages_list = [[Message(role="user", content=f"Test {i}")] for i in range(5)]
 
             tasks = [adapter.aresponse(msgs) for msgs in messages_list]
             results = await asyncio.gather(*tasks)

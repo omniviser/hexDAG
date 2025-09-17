@@ -231,9 +231,7 @@ class TestOpenAIAdapter:
         with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
             # Setup mock client to raise exception
             mock_client = AsyncMock()
-            mock_client.chat.completions.create = AsyncMock(
-                side_effect=Exception("API Error")
-            )
+            mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API Error"))
             mock_client_class.return_value = mock_client
 
             adapter = OpenAIAdapter(api_key="test-key")

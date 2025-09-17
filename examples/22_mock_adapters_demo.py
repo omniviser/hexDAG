@@ -92,8 +92,7 @@ async def demo_workflow_with_mocks():
         # Query database for customer info
         # Note: Using parameterized query to avoid SQL injection (mock adapter doesn't actually execute SQL)
         customer_data = await db.aexecute_query(
-            "SELECT * FROM customers WHERE id = ?",
-            {"id": input_data['customer_id']}
+            "SELECT * FROM customers WHERE id = ?", {"id": input_data["customer_id"]}
         )
 
         # Use tool to get additional info

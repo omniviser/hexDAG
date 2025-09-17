@@ -24,7 +24,7 @@ except ImportError:
     print("  pip install hexdag[viz]")
     print("  or")
     print("  uv pip install hexdag[viz]")
-    raise SystemExit(1)
+    raise SystemExit(1) from None
 
 
 async def data_ingestion(input_data: str) -> dict:

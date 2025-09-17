@@ -695,8 +695,10 @@ class TestRegistryPluginRequirements:
         registry = ComponentRegistry()
 
         # Mock package installed but env var missing
-        with patch("importlib.util.find_spec", return_value=MagicMock()), \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
 
         assert result is not None
@@ -707,16 +709,21 @@ class TestRegistryPluginRequirements:
         registry = ComponentRegistry()
 
         # Mock both package and env var present
-        with patch("importlib.util.find_spec", return_value=MagicMock()), \
-             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+        ):
             result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
 
         assert result is None  # No reason to skip
 
-    @pytest.mark.parametrize("module_path,package,env_var", [
-        ("hexai.adapters.llm.openai_adapter", "openai", "OPENAI_API_KEY"),
-        ("hexai.adapters.llm.anthropic_adapter", "anthropic", "ANTHROPIC_API_KEY"),
-    ])
+    @pytest.mark.parametrize(
+        "module_path,package,env_var",
+        [
+            ("hexai.adapters.llm.openai_adapter", "openai", "OPENAI_API_KEY"),
+            ("hexai.adapters.llm.anthropic_adapter", "anthropic", "ANTHROPIC_API_KEY"),
+        ],
+    )
     def test_check_plugin_requirements_parametrized(self, module_path, package, env_var):
         """Test requirement checking for different adapters."""
         registry = ComponentRegistry()
@@ -727,14 +734,18 @@ class TestRegistryPluginRequirements:
             assert f"Missing package '{package}'" in result
 
         # Test missing env var
-        with patch("importlib.util.find_spec", return_value=MagicMock()), \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             result = registry._check_plugin_requirements(module_path)
             assert f"Missing environment variable {env_var}" in result
 
         # Test all requirements met
-        with patch("importlib.util.find_spec", return_value=MagicMock()), \
-             patch.dict(os.environ, {env_var: "test-key"}):
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {env_var: "test-key"}),
+        ):
             result = registry._check_plugin_requirements(module_path)
             assert result is None
 
@@ -778,9 +789,10 @@ class TestRegistryManifestLoading:
             ManifestEntry(module="hexai.adapters.llm.openai_adapter", namespace="plugin"),
         ]
 
-        with patch("hexai.core.registry.registry.default_register_components") as mock_register, \
-             patch.object(clean_registry, "_check_plugin_requirements") as mock_check:
-
+        with (
+            patch("hexai.core.registry.registry.default_register_components") as mock_register,
+            patch.object(clean_registry, "_check_plugin_requirements") as mock_check,
+        ):
             # First module has no requirements, second is missing env var
             mock_check.side_effect = [None, "Missing environment variable"]
             mock_register.return_value = 5  # Core ports registers 5 components
@@ -883,10 +895,9 @@ plugins = [
             global_registry._cleanup_state()
 
         # Bootstrap with API keys set
-        with patch.dict(os.environ, {
-            "OPENAI_API_KEY": "test-key",
-            "ANTHROPIC_API_KEY": "test-key"
-        }):
+        with patch.dict(
+            os.environ, {"OPENAI_API_KEY": "test-key", "ANTHROPIC_API_KEY": "test-key"}
+        ):
             bootstrap_registry(config_path=temp_config)
 
         # Check all adapters are loaded
@@ -911,9 +922,7 @@ class TestRegistryPluginScenarios:
         from hexai.core.ports.llm import Message
 
         mock_llm = MockLLM()
-        response = await mock_llm.aresponse([
-            Message(role="user", content="Test")
-        ])
+        response = await mock_llm.aresponse([Message(role="user", content="Test")])
 
         assert response is not None
         assert "Mock response" in response
@@ -938,9 +947,7 @@ class TestRegistryPluginScenarios:
 
             adapter.client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-            response = await adapter.aresponse([
-                Message(role="user", content="Test")
-            ])
+            response = await adapter.aresponse([Message(role="user", content="Test")])
 
             assert response == "Test response"
 
@@ -960,12 +967,14 @@ class TestRegistryPluginScenarios:
             plugins=[
                 "hexai.adapters.llm.openai_adapter",
                 "hexai.adapters.mock",
-            ]
+            ],
         )
 
         # Bootstrap without OpenAI API key
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             bootstrap_registry()
 
         # List adapters
@@ -997,18 +1006,23 @@ class TestRegistryPluginDiscovery:
         """Test that env var requirements are clearly communicated."""
         registry = ComponentRegistry()
 
-        with patch("importlib.util.find_spec", return_value=MagicMock()), \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             reason = registry._check_plugin_requirements("hexai.adapters.llm.anthropic_adapter")
 
         assert "ANTHROPIC_API_KEY" in reason
 
-    @pytest.mark.parametrize("env_vars,expected_count", [
-        ({}, 0),  # No env vars = no real adapters
-        ({"OPENAI_API_KEY": "key"}, 1),  # Only OpenAI
-        ({"ANTHROPIC_API_KEY": "key"}, 1),  # Only Anthropic
-        ({"OPENAI_API_KEY": "key", "ANTHROPIC_API_KEY": "key"}, 2),  # Both
-    ])
+    @pytest.mark.parametrize(
+        "env_vars,expected_count",
+        [
+            ({}, 0),  # No env vars = no real adapters
+            ({"OPENAI_API_KEY": "key"}, 1),  # Only OpenAI
+            ({"ANTHROPIC_API_KEY": "key"}, 1),  # Only Anthropic
+            ({"OPENAI_API_KEY": "key", "ANTHROPIC_API_KEY": "key"}, 2),  # Both
+        ],
+    )
     def test_progressive_plugin_availability(self, env_vars, expected_count):
         """Test that plugins become available as requirements are met."""
         from hexai.core.bootstrap import bootstrap_registry
@@ -1024,19 +1038,21 @@ class TestRegistryPluginDiscovery:
             plugins=[
                 "hexai.adapters.llm.openai_adapter",
                 "hexai.adapters.llm.anthropic_adapter",
-            ]
+            ],
         )
 
-        with patch("hexai.core.config.loader.load_config", return_value=config), \
-             patch.dict(os.environ, env_vars):
+        with (
+            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch.dict(os.environ, env_vars),
+        ):
             bootstrap_registry()
 
         # Count LLM adapters (excluding mock)
         components = global_registry.list_components()
         llm_adapters = [
-            c for c in components
-            if c.component_type.value == "adapter"
-            and c.name in ["openai", "anthropic"]
+            c
+            for c in components
+            if c.component_type.value == "adapter" and c.name in ["openai", "anthropic"]
         ]
 
         assert len(llm_adapters) == expected_count

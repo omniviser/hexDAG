@@ -52,9 +52,7 @@ class TestMockToolRouter:
     @pytest.mark.asyncio
     async def test_custom_tools_from_config(self):
         """Test adding custom tools via configuration."""
-        config = MockToolRouterConfig(
-            available_tools=["custom_tool1", "custom_tool2"]
-        )
+        config = MockToolRouterConfig(available_tools=["custom_tool1", "custom_tool2"])
         router = MockToolRouter(config)
 
         tools = router.get_available_tools()
@@ -145,7 +143,7 @@ class TestMockToolRouter:
         router.add_tool(
             "dynamic_tool",
             "A dynamically added tool",
-            {"input": {"type": "string", "description": "Input parameter"}}
+            {"input": {"type": "string", "description": "Input parameter"}},
         )
 
         tools = router.get_available_tools()

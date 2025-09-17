@@ -220,7 +220,9 @@ async def main() -> None:
     print(f"🔧 Registered tools via decorator: {decorator_router.get_available_tools()}")
 
     # Test tool directly
-    diagnosis = await decorator_router.acall_tool("quick_diagnosis", {"symptoms": "fever, headache"})
+    diagnosis = await decorator_router.acall_tool(
+        "quick_diagnosis", {"symptoms": "fever, headache"}
+    )
     interactions = await decorator_router.acall_tool(
         "check_drug_interactions", {"medications": "aspirin,ibuprofen"}
     )

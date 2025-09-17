@@ -606,6 +606,7 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_graph_level_schema_validation(self, orchestrator, observers):
         """Test that graph validates schema compatibility at construction time."""
+
         class OutputSchemaA(BaseModel):
             data: str
 
@@ -630,7 +631,7 @@ class TestOrchestrator:
         error_str = str(exc_info.value)
         assert "consumer" in error_str
         # The error occurs when trying to access a field that doesn't exist
-        assert ("has no attribute" in error_str or "validation failed" in error_str.lower())
+        assert "has no attribute" in error_str or "validation failed" in error_str.lower()
 
     @pytest.mark.asyncio
     async def test_graph_level_compatible_schemas(self, orchestrator, observers):

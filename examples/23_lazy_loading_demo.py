@@ -6,7 +6,6 @@ only importing them when actually needed.
 """
 
 
-
 def test_core_functionality():
     """Test that core functionality works without optional dependencies."""
     print("=" * 60)

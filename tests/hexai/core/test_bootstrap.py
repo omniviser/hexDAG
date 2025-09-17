@@ -50,7 +50,9 @@ class TestBootstrapArchitecture:
         registry = ComponentRegistry()
 
         # Create entries pointing to our sample module
-        entries = [ManifestEntry(namespace="test", module="tests.hexai.core.registry.sample_components")]
+        entries = [
+            ManifestEntry(namespace="test", module="tests.hexai.core.registry.sample_components")
+        ]
 
         # Bootstrap
         registry.bootstrap(entries, dev_mode=True)
