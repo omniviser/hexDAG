@@ -16,10 +16,15 @@ Design principles:
 
 from __future__ import annotations
 
+import json
+import logging
 import re
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import orjson
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_SIZE_BYTES = 1_000_000  # 1 MB
 DEFAULT_MAX_DEPTH = 20
@@ -120,7 +125,7 @@ def loads(
     # First attempt: strict parse
     try:
         obj = orjson.loads(text)
-    except Exception:
+    except orjson.JSONDecodeError:
         obj = None
 
     # Optional cleanup & retry (regex-only)
@@ -130,7 +135,7 @@ def loads(
             return None
         try:
             obj = orjson.loads(cleaned)
-        except Exception:
+        except orjson.JSONDecodeError:
             return None
 
     if obj is None:
@@ -216,12 +221,182 @@ def extract_json_from_text(text: str) -> str | None:
     return None
 
 
+ErrorCode = Literal[
+    "too_large",
+    "too_deep",
+    "invalid_syntax",
+    "unrecoverable",
+    "no_json_found",
+]
+
+
+@dataclass
+class SafeJSONResult:
+    """Result container for safe JSON operations.
+
+    Attributes
+    ----------
+    ok : bool
+        Whether the operation succeeded.
+    data : Any | None
+        Parsed JSON value if successful.
+    error : ErrorCode | None
+        Machine-friendly error code when not successful.
+    message : str | None
+        Human-friendly error message when available.
+    line_no : int | None
+        1-based line number for syntax errors.
+    col_no : int | None
+        1-based column number for syntax errors.
+    preview : str | None
+        A short preview line with a caret position for diagnostics.
+    """
+
+    ok: bool
+    data: Any | None = None
+    error: ErrorCode | None = None
+    message: str | None = None
+    line_no: int | None = None
+    col_no: int | None = None
+    preview: str | None = None
+
+
+class SafeJSON:
+    """Stateful helper providing safe JSON parsing and extraction.
+
+    This class adds pre-parse size/depth checks, minimal cleanup/retry,
+    and helpful diagnostics suitable for LLM-oriented outputs.
+    """
+
+    def __init__(
+        self, max_size_bytes: int = DEFAULT_MAX_SIZE_BYTES, max_depth: int = DEFAULT_MAX_DEPTH
+    ):
+        self.max_size_bytes = max_size_bytes
+        self.max_depth = max_depth
+
+    def loads(self, data: str | bytes | bytearray) -> SafeJSONResult:
+        """Parse JSON safely with protections and diagnostics.
+
+        Parameters
+        ----------
+        data : str | bytes | bytearray
+            Input JSON buffer.
+
+        Returns
+        -------
+        SafeJSONResult
+            Structured result with either parsed data or error details.
+        """
+        text, size_bytes = _coerce_to_text_and_size(data)
+
+        if size_bytes > self.max_size_bytes:
+            return SafeJSONResult(False, error="too_large", message="JSON exceeds size limit")
+
+        if self._estimate_depth(text) > self.max_depth:
+            return SafeJSONResult(False, error="too_deep", message="JSON exceeds depth limit")
+
+        # Step 1: try orjson
+        try:
+            obj = orjson.loads(text)
+            if _max_container_depth(obj) > self.max_depth:
+                return SafeJSONResult(
+                    False, error="too_deep", message="JSON exceeds depth limit after parsing"
+                )
+            return SafeJSONResult(True, data=obj)
+        except orjson.JSONDecodeError as exc:
+            logger.debug("orjson failed to parse input: %s", exc)
+
+        # Step 2: cleanup + retry
+        cleaned = _cleanup_json_minimal(text)
+        cleaned_size = len(cleaned.encode("utf-8", errors="replace"))
+        if cleaned_size <= self.max_size_bytes and self._estimate_depth(cleaned) <= self.max_depth:
+            try:
+                obj = orjson.loads(cleaned)
+                if _max_container_depth(obj) > self.max_depth:
+                    return SafeJSONResult(
+                        False, error="too_deep", message="JSON exceeds depth limit after parsing"
+                    )
+                return SafeJSONResult(True, data=obj)
+            except orjson.JSONDecodeError as exc:
+                logger.debug("orjson failed to parse cleaned input: %s", exc)
+
+        # Step 3: stdlib json for diagnostics
+        try:
+            obj = json.loads(cleaned, parse_constant=lambda _: None)
+            if _max_container_depth(obj) > self.max_depth:
+                return SafeJSONResult(
+                    False, error="too_deep", message="JSON exceeds depth limit after parsing"
+                )
+            return SafeJSONResult(True, data=obj)
+        except json.JSONDecodeError as e:
+            preview = self._format_error_line(cleaned, e.lineno, e.colno)
+            return SafeJSONResult(
+                False,
+                error="invalid_syntax",
+                message=e.msg,
+                line_no=e.lineno,
+                col_no=e.colno,
+                preview=preview,
+            )
+        except (TypeError, ValueError, RecursionError) as exc:
+            logger.debug("stdlib json raised non-decode error: %s", exc)
+            return SafeJSONResult(False, error="unrecoverable", message="Unrecoverable JSON")
+
+    def loads_from_text(self, text: str) -> SafeJSONResult:
+        """Extract likely JSON from text/markdown and parse safely.
+
+        Returns a structured result, including a helpful error code when
+        no JSON-like content is found.
+        """
+        candidate = extract_json_from_text(text)
+        if not candidate:
+            return SafeJSONResult(False, error="no_json_found", message="No JSON found in text")
+        return self.loads(candidate)
+
+    @staticmethod
+    def _estimate_depth(text: str) -> int:
+        depth = 0
+        max_depth = 0
+        in_str: str | None = None
+        esc = False
+        for ch in text:
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == in_str:
+                    in_str = None
+                continue
+            if ch in ('"', "'"):
+                in_str = ch
+            elif ch in "{[":
+                depth += 1
+                if depth > max_depth:
+                    max_depth = depth
+            elif ch in "}]":
+                depth = max(depth - 1, 0)
+        return max_depth
+
+    @staticmethod
+    def _format_error_line(text: str, line_no: int, col_no: int) -> str | None:
+        lines = text.splitlines()
+        if 1 <= line_no <= len(lines):
+            line = lines[line_no - 1]
+            caret_line = " " * (col_no - 1) + "^"
+            return f"{line}\n{caret_line}"
+        return None
+
+
 __all__ = [
     "DEFAULT_MAX_SIZE_BYTES",
     "DEFAULT_MAX_DEPTH",
     "loads",
     "loads_from_llm_output",
     "extract_json_from_text",
+    "ErrorCode",
+    "SafeJSONResult",
+    "SafeJSON",
 ]
 
 
