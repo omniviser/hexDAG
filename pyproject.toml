@@ -308,7 +308,19 @@ audit-and-monitor = true
 
 [tool.deptry]
 # Ignore checks for optional dependencies
-ignore = ["DEP002"]  # Dependencies defined but not used
+ignore = [
+    "DEP002",  # Dependencies defined but not used
+    "DEP003",  # Transitive dependencies (typer, rich are pulled by other deps)
+    "DEP004",  # Dev dependencies used in tests
+]
+
+# Exclude paths from scanning
+exclude = [
+    ".venv",  # Virtual environment
+    "venv",  # Alternative virtual environment name
+    "examples/demo",  # Demo files with mock langchain imports
+    "tests",  # Test files use dev dependencies
+]
 
 # Per-rule ignores for specific packages
 per_rule_ignores = { DEP002 = ["openai", "anthropic"] }

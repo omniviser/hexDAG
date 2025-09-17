@@ -142,8 +142,11 @@ class ConfigLoader:
                 var_name = match.group(1)
                 value = os.environ.get(var_name)
                 if value is None:
-                    logger.warning(f"Environment variable ${{{var_name}}} not found")
-                    return match.group(0)  # Keep original
+                    # Only log at debug level to avoid cluttering CLI output
+                    logger.debug(
+                        f"Environment variable ${{{var_name}}} not found, keeping placeholder"
+                    )
+                    return match.group(0)  # Keep original placeholder
                 return value
 
             return self.ENV_VAR_PATTERN.sub(replacer, data)

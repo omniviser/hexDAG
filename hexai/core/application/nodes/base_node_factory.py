@@ -87,9 +87,15 @@ class BaseNodeFactory(ABC):
         )
 
     @abstractmethod
-    def __call__(self, name: str, *args: Any, **kwargs: Any) -> NodeSpec:
+    def __call__(self, name: str, *args: Any, **kwargs: Any) -> NodeSpec:  # noqa: ARG002
         """Create a NodeSpec.
 
         Must be implemented by subclasses.
+
+        Args:
+            name: Name of the node
+            *args: Additional positional arguments (unused, for subclass flexibility)
+            **kwargs: Additional keyword arguments
         """
-        pass
+        _ = args  # Marked as intentionally unused for subclass API flexibility
+        raise NotImplementedError
