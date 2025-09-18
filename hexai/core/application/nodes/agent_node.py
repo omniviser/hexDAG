@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from ....adapters.function_tool_router import FunctionBasedToolRouter
+from ....adapters.unified_tool_router import UnifiedToolRouter
 from ...domain.dag import NodeSpec
 from ...ports.tool_router import ToolRouter
 from ...registry import node
@@ -340,7 +340,7 @@ class ReActAgentNode(BaseNodeFactory):
     ) -> AgentState:
         """Execute a single reasoning step."""
         event_manager = ports.get("event_manager")
-        tool_router = ports.get("tool_router", FunctionBasedToolRouter())
+        tool_router = ports.get("tool_router", UnifiedToolRouter())
 
         # Get current step info
         current_step = max(state.loop_iteration, state.step) + 1

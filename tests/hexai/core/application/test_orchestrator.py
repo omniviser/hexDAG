@@ -338,8 +338,8 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_ports_with_mocks(self, orchestrator, observers):
         """Test orchestrator with mock LLM and ToolRouter ports."""
-        from hexai.adapters.function_tool_router import FunctionBasedToolRouter
         from hexai.adapters.mock.mock_llm import MockLLM
+        from hexai.adapters.unified_tool_router import UnifiedToolRouter
 
         async def async_dummy_node_with_ports(input_data, llm=None, tool_router=None, **ports):
             """Async dummy node that uses ports."""
@@ -361,9 +361,9 @@ class TestOrchestrator:
         graph = DirectedGraph()
         graph.add(NodeSpec("async_node", async_dummy_node_with_ports))
 
-        # Create mock ports - use FunctionBasedToolRouter with a simple mock function
+        # Create mock ports - use UnifiedToolRouter with a simple mock function
         mock_llm = MockLLM(responses=["Test LLM response"])
-        mock_tool_router = FunctionBasedToolRouter()
+        mock_tool_router = UnifiedToolRouter()
 
         # Add a simple mock tool
         def mock_test_tool(input_data):

@@ -11,8 +11,8 @@ This example demonstrates integration with the existing tool architecture:
 import asyncio
 from typing import Any
 
-from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
+from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
@@ -87,7 +87,7 @@ async def main() -> None:
     print("-" * 50)
 
     # Create router and register real functions
-    real_router = FunctionBasedToolRouter()
+    real_router = UnifiedToolRouter()
     real_router.register_function(search_medical_literature, "search")
     real_router.register_function(calculate_risk_score, "calculate_risk")
     real_router.register_function(generate_treatment_plan, "generate_plan")
@@ -156,7 +156,7 @@ async def main() -> None:
     print("-" * 50)
 
     # Create router with simple mock functions (replaces MockToolRouter)
-    mock_router = FunctionBasedToolRouter()
+    mock_router = UnifiedToolRouter()
 
     async def mock_search(query: str) -> str:
         return "Mock search found 5 relevant papers on diabetes"
@@ -202,7 +202,7 @@ async def main() -> None:
     print("🎨 Test 3: Decorator Pattern")
     print("-" * 35)
 
-    decorator_router = FunctionBasedToolRouter()
+    decorator_router = UnifiedToolRouter()
 
     @decorator_router.tool
     async def quick_diagnosis(symptoms: str) -> dict[str, Any]:
@@ -247,7 +247,7 @@ async def main() -> None:
     print("🚀 Test 4: Pre-built Demo Router")
     print("-" * 40)
 
-    demo_router = FunctionBasedToolRouter()
+    demo_router = UnifiedToolRouter()
     print(f"📦 Demo router tools: {demo_router.get_available_tools()}")
 
     # Test demo tools (only basic tools are available)
@@ -264,7 +264,7 @@ async def main() -> None:
     print("-" * 55)
 
     # Create function-based router
-    integration_router = FunctionBasedToolRouter()
+    integration_router = UnifiedToolRouter()
 
     @integration_router.tool
     async def medical_search(query: str, database: str = "pubmed") -> dict:

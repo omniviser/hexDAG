@@ -141,6 +141,19 @@ class AdapterMetadata(BaseModel):
     singleton: bool = Field(default=True)
 
 
+class ToolMetadata(BaseModel):
+    """Metadata specific to TOOL components."""
+
+    parameters: list[dict[str, Any]] = Field(default_factory=list)  # ToolParameter definitions
+    returns: str | None = None  # Return type description
+    examples: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    required_ports: dict[str, str] = Field(default_factory=dict)  # {param_name: port_type}
+    is_async: bool = Field(default=True)
+    supports_batch: bool = Field(default=False)
+    requires_context: bool = Field(default=False)
+
+
 class MetadataExtension(BaseModel):
     """Extension metadata with strict typing."""
 
@@ -195,6 +208,7 @@ class DecoratorMetadata(BaseModel):
     description: str = Field(default="")
     adapter_metadata: AdapterMetadata | None = None  # For adapter components
     port_metadata: PortMetadata | None = None  # For port components
+    tool_metadata: ToolMetadata | None = None  # For tool components
 
 
 # ============================================================================
@@ -226,6 +240,7 @@ class ComponentMetadata(BaseModel):
     description: str = Field(default="")
     port_metadata: PortMetadata | None = None
     adapter_metadata: AdapterMetadata | None = None
+    tool_metadata: ToolMetadata | None = None
     port_requirements: list = Field(default_factory=list)  # List of PortRequirement
     # Extensible metadata with strict typing
     metadata_extensions: MetadataExtension = Field(default_factory=MetadataExtension)
