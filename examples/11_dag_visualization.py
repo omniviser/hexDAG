@@ -188,9 +188,8 @@ async def demonstrate_dag_visualization():
         else:
             print(f"   Wave {i}: {', '.join(wave)} (parallel)")
 
-    print(
-        f"\n   💡 Total waves: {len(waves)} (parallelism opportunities: {sum(1 for wave in waves if len(wave) > 1)})"
-    )
+    parallel_ops = sum(1 for wave in waves if len(wave) > 1)
+    print(f"\n   💡 Total waves: {len(waves)} (parallelism opportunities: {parallel_ops})")
 
     # Show dependencies
     print("\n🔗 Dependency Analysis:")
@@ -260,9 +259,8 @@ async def demonstrate_execution_analysis():
     final_result = results.get("result_formatting", {}).get("final_result", {})
     audit_info = results.get("audit_logging", {}).get("audit_log", {})
 
-    print(
-        f"   📈 Prediction: {final_result.get('prediction')} (score: {final_result.get('score', 0):.3f})"
-    )
+    score = final_result.get("score", 0)
+    print(f"   📈 Prediction: {final_result.get('prediction')} (score: {score:.3f})")
     print(f"   🎯 Confidence: {final_result.get('confidence', 0):.3f}")
     print(f"   ✅ Data valid: {final_result.get('is_valid_input')}")
     print(f"   📋 Audit status: {audit_info.get('pipeline_execution')}")

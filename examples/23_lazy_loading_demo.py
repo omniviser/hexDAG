@@ -94,7 +94,7 @@ def test_yaml_lazy():
 
         # Try to import anyway to show the error
         try:
-            from hexai.agent_factory import YamlPipelineBuilder
+            from hexai.agent_factory import YamlPipelineBuilder  # noqa: F401
 
             print("❌ This shouldn't happen!")
         except ImportError as e:
@@ -152,7 +152,7 @@ def test_performance():
 
         if GRAPHVIZ_AVAILABLE:
             start = time.time()
-            from hexai.visualization import DAGVisualizer
+            from hexai.visualization import DAGVisualizer  # noqa: F401
 
             viz_time = time.time() - start
             print(f"Visualization import time: {viz_time:.4f}s")

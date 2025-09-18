@@ -489,9 +489,9 @@ async def demonstrate_complex_workflow():
     orchestrator = Orchestrator()
 
     for i, scenario in enumerate(test_scenarios, 1):
-        print(
-            f"\n🧪 Scenario {i}: Customer {scenario['customer_id']} → Product {scenario['product_id']}"
-        )
+        customer_id = scenario["customer_id"]
+        product_id = scenario["product_id"]
+        print(f"\n🧪 Scenario {i}: Customer {customer_id} → Product {product_id}")
 
         start_time = time.time()
         results = await orchestrator.run(graph, scenario)
@@ -507,9 +507,8 @@ async def demonstrate_complex_workflow():
         print(f"   💰 Customer value: {executive_summary.get('customer_value', 'unknown')}")
         print(f"   📊 Recommendations: {executive_summary.get('recommendation_count', 0)}")
         print(f"   ⚠️  Risk level: {executive_summary.get('risk_level', 'unknown')}")
-        print(
-            f"   🎯 Optimization priority: {executive_summary.get('optimization_priority', 'medium')}"
-        )
+        opt_priority = executive_summary.get("optimization_priority", "medium")
+        print(f"   🎯 Optimization priority: {opt_priority}")
 
         # Show business impact
         business_impact = final_report.get("business_impact", {})
@@ -517,9 +516,8 @@ async def demonstrate_complex_workflow():
             f"   💵 Revenue potential: ${business_impact.get('estimated_revenue_potential', 0):.0f}"
         )
         print(f"   🛡️  Risk factors: {business_impact.get('risk_mitigation_value', 0)}")
-        print(
-            f"   🔧 Optimization opportunities: {business_impact.get('optimization_opportunities', 0)}"
-        )
+        opt_opportunities = business_impact.get("optimization_opportunities", 0)
+        print(f"   🔧 Optimization opportunities: {opt_opportunities}")
 
     return results
 

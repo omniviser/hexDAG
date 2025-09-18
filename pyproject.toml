@@ -205,6 +205,10 @@ disable_error_code = ["import-untyped"]
 module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = ["hexai.cli.*"]
+disallow_untyped_decorators = false
+
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
@@ -276,8 +280,9 @@ extend-select = [
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["UP"]
-"examples/*" = ["UP"]
+"tests/*" = ["UP", "SIM117", "SIM102", "SIM105", "PERF401"]
+"examples/*" = ["UP", "E501"]
+"examples/demo/*" = ["E501"]
 "hexai_plugins/*" = ["UP", "TCH", "FA"]
 "hexai/core/application/events/observers.py" = ["SIM115"]
 "hexai/core/registry/discovery.py" = ["TC003", "TC001"]

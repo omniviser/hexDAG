@@ -1,7 +1,7 @@
 """OpenAI adapter for LLM interactions."""
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from openai import AsyncOpenAI
 
@@ -65,12 +65,15 @@ class OpenAIAdapter:
         """
         try:
             # Convert MessageList to OpenAI format
-            openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+            # Cast to Any to handle type mismatch between our simple dict and OpenAI's complex types
+            openai_messages = cast(
+                "Any", [{"role": msg.role, "content": msg.content} for msg in messages]
+            )
 
             # Make API call
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=openai_messages,  # type: ignore[arg-type]
+                messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )

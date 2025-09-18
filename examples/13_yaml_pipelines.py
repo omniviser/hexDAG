@@ -244,13 +244,11 @@ async def demonstrate_pipeline_execution():
             report = results.get("report_generator", {}).get("report", {})
             sentiment = report.get("sentiment_analysis", {})
 
-            print(
-                f"   📈 Sentiment: {sentiment.get('sentiment')} (confidence: {sentiment.get('confidence', 0):.2f})"
-            )
+            confidence = sentiment.get("confidence", 0)
+            print(f"   📈 Sentiment: {sentiment.get('sentiment')} (confidence: {confidence:.2f})")
             print(f"   📊 Word count: {report.get('text_summary', {}).get('word_count', 0)}")
-            print(
-                f"   ✅ Analysis complete: {results.get('report_generator', {}).get('analysis_complete', False)}"
-            )
+            analysis_complete = results.get("report_generator", {}).get("analysis_complete", False)
+            print(f"   ✅ Analysis complete: {analysis_complete}")
 
         except Exception as e:
             print(f"   ❌ Execution failed: {e}")

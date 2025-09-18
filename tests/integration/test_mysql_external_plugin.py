@@ -30,7 +30,7 @@ class TestMySQLExternalPlugin:
         """Ensure MySQL plugin is installed before running tests."""
         try:
             # Try importing to check if installed
-            import hexai_plugins.mysql_adapter
+            import hexai_plugins.mysql_adapter  # noqa: F401
         except ImportError:
             pytest.skip(
                 "MySQL plugin not installed. Run: uv pip install -e hexai_plugins/mysql_adapter/"

@@ -36,7 +36,8 @@ class SQLiteAdapter:
     def _ensure_database(self) -> None:
         """Ensure database and tables exist."""
         self.connection = sqlite3.connect(str(self.db_path))
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         # Create a generic key-value store table
@@ -70,7 +71,8 @@ class SQLiteAdapter:
         Returns:
             ID of inserted record
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         # Get next ID for this collection
@@ -104,7 +106,8 @@ class SQLiteAdapter:
         Returns:
             Document data or None if not found
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         cursor.execute(
@@ -134,7 +137,8 @@ class SQLiteAdapter:
         Returns:
             List of matching documents
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         query = "SELECT value FROM hexdag_store WHERE collection = ?"
@@ -166,7 +170,8 @@ class SQLiteAdapter:
         Returns:
             True if updated, False if not found
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         # Get existing document
@@ -200,7 +205,8 @@ class SQLiteAdapter:
         Returns:
             True if deleted, False if not found
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         cursor.execute(
@@ -220,7 +226,8 @@ class SQLiteAdapter:
         Returns:
             List of collection names
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         cursor.execute("SELECT DISTINCT collection FROM hexdag_store")
@@ -235,7 +242,8 @@ class SQLiteAdapter:
         Returns:
             Number of documents
         """
-        assert self.connection is not None
+        if self.connection is None:
+            raise RuntimeError("Database connection not established")
         cursor = self.connection.cursor()
 
         cursor.execute(

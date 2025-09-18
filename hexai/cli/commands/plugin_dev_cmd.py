@@ -1,6 +1,6 @@
 """Plugin development commands for hexDAG CLI."""
 
-import subprocess
+import subprocess  # nosec B404 - subprocess is used safely with controlled inputs
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -106,7 +106,7 @@ class {class_name}:
     (plugin_path / f"{name}.py").write_text(adapter_content)
 
     # Create pyproject.toml
-    pyproject_content = f'''[project]
+    pyproject_content = f"""[project]
 name = "hexdag-{name.replace("_", "-")}"
 version = "0.1.0"
 description = "{class_name} plugin for hexDAG"
@@ -146,11 +146,11 @@ python_version = "3.12"
 warn_return_any = true
 disallow_untyped_defs = false
 check_untyped_defs = true
-'''
+"""
     (plugin_path / "pyproject.toml").write_text(pyproject_content)
 
     # Create README
-    readme_content = f'''# {class_name}
+    readme_content = f"""# {class_name}
 
 A hexDAG plugin that provides {name.replace("_", " ")} functionality.
 
@@ -196,7 +196,7 @@ hexdag plugin format {name}
 # Lint code
 hexdag plugin lint {name}
 ```
-'''
+"""
     (plugin_path / "README.md").write_text(readme_content)
 
     # Create test file
@@ -329,7 +329,7 @@ def lint_plugin(
     if fix:
         check_cmd.append("--fix")
 
-    result = subprocess.run(check_cmd, capture_output=True, text=True)
+    result = subprocess.run(check_cmd, capture_output=True, text=True)  # nosec B603
     if result.stdout:
         console.print(result.stdout)
     if result.stderr:
@@ -337,7 +337,7 @@ def lint_plugin(
 
     # Run ruff format
     format_cmd = ["ruff", "format", str(plugin_path)]
-    result = subprocess.run(format_cmd, capture_output=True, text=True)
+    result = subprocess.run(format_cmd, capture_output=True, text=True)  # nosec B603
     if result.stdout:
         console.print(result.stdout)
 
@@ -364,7 +364,7 @@ def format_plugin(
 
     # Run ruff format
     cmd = ["ruff", "format", str(plugin_path), "--line-length=100"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
 
     if result.stdout:
         console.print(result.stdout)
@@ -403,7 +403,7 @@ def test_plugin(
     if verbose:
         cmd.append("-v")
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
 
     if result.stdout:
         console.print(result.stdout)
@@ -440,7 +440,7 @@ def install_plugin(
         cmd.append("-e")
     cmd.append(str(plugin_path))
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
 
     if result.stdout:
         console.print(result.stdout)

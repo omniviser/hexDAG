@@ -133,16 +133,16 @@ async def timestamp_aggregator(input_data: Any, **kwargs) -> dict:
     # Collect all data with timestamps
     timestamp_data = []
 
-    for result in results.values():
-        if isinstance(result, dict) and "timestamp" in result:
-            timestamp_data.append(
-                {
-                    "source": result["source"],
-                    "data": result["data"],
-                    "timestamp": result["timestamp"],
-                    "priority": result["priority"],
-                }
-            )
+    timestamp_data = [
+        {
+            "source": result["source"],
+            "data": result["data"],
+            "timestamp": result["timestamp"],
+            "priority": result["priority"],
+        }
+        for result in results.values()
+        if isinstance(result, dict) and "timestamp" in result
+    ]
 
     # Sort by timestamp
     timestamp_data.sort(key=lambda x: x["timestamp"])
@@ -389,9 +389,8 @@ async def demonstrate_complex_aggregation():
 
     print("   ✅ Complex aggregation completed")
     print(f"   📊 Final aggregation type: {result['statistical_aggregator']['aggregation_type']}")
-    print(
-        f"   📊 Total sources in final: {result['statistical_aggregator']['statistical_summary']['total_sources']}"
-    )
+    total_sources = result["statistical_aggregator"]["statistical_summary"]["total_sources"]
+    print(f"   📊 Total sources in final: {total_sources}")
 
 
 async def main():

@@ -105,13 +105,21 @@ async def main() -> None:
     agent_factory = ReActAgentNode()
     mock_llm = MockLLM(
         responses=[
-            "I'll search for information about diabetes treatment.\n\nINVOKE_TOOL: search(query='diabetes treatment', database='pubmed')\n\nBased on the search results, I'll calculate the risk score.\n\nINVOKE_TOOL: calculate_risk(factors='diabetes,hypertension', patient_age=70)\n\nGiven the high risk level, I'll generate a treatment plan.\n\nINVOKE_TOOL: generate_plan(condition='diabetes', risk_level='high')\n\nBased on the medical literature and risk assessment, I recommend immediate intervention with specialist consultation and medication, with follow-up in 2 weeks."
+            "I'll search for information about diabetes treatment.\n\n"
+            "INVOKE_TOOL: search(query='diabetes treatment', database='pubmed')\n\n"
+            "Based on the search results, I'll calculate the risk score.\n\n"
+            "INVOKE_TOOL: calculate_risk(factors='diabetes,hypertension', patient_age=70)\n\n"
+            "Given the high risk level, I'll generate a treatment plan.\n\n"
+            "INVOKE_TOOL: generate_plan(condition='diabetes', risk_level='high')\n\n"
+            "Based on the medical literature and risk assessment, I recommend immediate "
+            "intervention with specialist consultation and medication, with follow-up in 2 weeks."
         ]
     )
 
     medical_agent = agent_factory(
         name="medical_agent",
-        main_prompt="You are a medical AI assistant. Analyze the patient case: {{input}}. Use available tools to research, assess risk, and generate treatment plans.",
+        main_prompt="You are a medical AI assistant. Analyze the patient case: {{input}}. "
+        "Use available tools to research, assess risk, and generate treatment plans.",
         config=AgentConfig(max_steps=3),
         output_schema=AgentState,  # Use AgentState as the output schema
     )
@@ -166,7 +174,11 @@ async def main() -> None:
     # Create new MockLLM with different response for mock test
     mock_llm_2 = MockLLM(
         responses=[
-            "I'll analyze this case using available tools.\n\nINVOKE_TOOL: search(query='patient analysis')\n\nINVOKE_TOOL: calculate_risk(factors='multiple')\n\nINVOKE_TOOL: generate_plan(condition='complex')\n\nBased on mock analysis, treatment recommended."
+            "I'll analyze this case using available tools.\n\n"
+            "INVOKE_TOOL: search(query='patient analysis')\n\n"
+            "INVOKE_TOOL: calculate_risk(factors='multiple')\n\n"
+            "INVOKE_TOOL: generate_plan(condition='complex')\n\n"
+            "Based on mock analysis, treatment recommended."
         ]
     )
 
@@ -290,7 +302,11 @@ async def main() -> None:
 
     integration_llm = MockLLM(
         responses=[
-            "I'll search for medical information.\n\nINVOKE_TOOL: medical_search(query='diabetes treatment', database='pubmed')\n\nNow I'll calculate risk.\n\nINVOKE_TOOL: risk_calculator(factors='diabetes', age=65)\n\nBased on the search and risk calculation, here's my analysis."
+            "I'll search for medical information.\n\n"
+            "INVOKE_TOOL: medical_search(query='diabetes treatment', database='pubmed')\n\n"
+            "Now I'll calculate risk.\n\n"
+            "INVOKE_TOOL: risk_calculator(factors='diabetes', age=65)\n\n"
+            "Based on the search and risk calculation, here's my analysis."
         ]
     )
 
