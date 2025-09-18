@@ -1,9 +1,11 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
-from typing import Protocol, TypedDict
+from typing import Protocol
+
+from pydantic import BaseModel
 
 
-class Message(TypedDict):
+class Message(BaseModel):
     """A single message in a conversation."""
 
     role: str

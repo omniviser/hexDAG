@@ -10,7 +10,6 @@ from typing import Any, Dict, List
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator
 
 
 class MockEmailAdapter:
@@ -203,7 +202,7 @@ async def test_basic_integration():
     graph.add(NodeSpec("notification_sender", notification_sender).after("data_processor"))
 
     # Set up orchestrator with mock services
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     # Execute with mock services
     ports = {"email": email_service, "database": database_service, "logger": logger_service}
@@ -285,7 +284,7 @@ async def test_error_handling():
     )
 
     # Execute
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
     ports = {"email": email_service, "database": database_service, "logger": logger_service}
 
     result = await orchestrator.run(graph, {"test": "error_handling"}, additional_ports=ports)
@@ -356,7 +355,7 @@ async def test_performance_monitoring():
     graph.add(NodeSpec("op3", performance_monitored_operation).after("op2"))
 
     # Execute
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
     ports = {"email": email_service, "database": database_service, "logger": logger_service}
 
     start_time = time.time()

@@ -5,7 +5,8 @@ object access without the security risks of full template engines like Jinja2.
 """
 
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 class PromptTemplateError(Exception):
@@ -109,11 +110,7 @@ class PromptTemplate:
         parts = key.split(".")
         value = data
         for part in parts:
-            if isinstance(value, dict):
-                value = value[part]
-            else:
-                # Handle object attribute access
-                value = getattr(value, part)  # type: ignore[unreachable]
+            value = value[part] if isinstance(value, dict) else getattr(value, part)
         return value
 
     def render(self, **kwargs: Any) -> str:
@@ -141,10 +138,7 @@ class PromptTemplate:
             result = template.render(user={"name": "Bob"})  # "User: Bob"
         """
         # Check for missing required variables
-        missing_vars = []
-        for var in self.input_vars:
-            if var not in kwargs:
-                missing_vars.append(var)
+        missing_vars = [var for var in self.input_vars if var not in kwargs]
 
         if missing_vars:
             raise MissingVariableError(
@@ -265,9 +259,7 @@ class PromptTemplate:
 
     def __repr__(self) -> str:
         """Return detailed representation for debugging."""
-        return (
-            f"PromptTemplate(template='{self.template[:50]}...', " f"input_vars={self.input_vars})"
-        )
+        return f"PromptTemplate(template='{self.template[:50]}...', input_vars={self.input_vars})"
 
     def __add__(self, other: str) -> "PromptTemplate":
         """Add text to template using + operator.

@@ -8,10 +8,13 @@ from typing import Any
 
 import yaml
 
-from hexai.core.application.events.manager import PipelineEventManager
-from hexai.core.application.nodes import NodeFactory
+from hexai.agent_factory.yaml_validator import YamlValidator
+from hexai.core.application.events import ObserverManager
+from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
 from hexai.core.application.prompt.template import ChatPromptTemplate
+from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.registry import registry
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ class YamlPipelineBuilderError(Exception):
 class YamlPipelineBuilder:
     """Simple pipeline builder with basic data mapping support and intelligent auto-conversion."""
 
-    def __init__(self, event_manager: PipelineEventManager | None = None) -> None:
+    def __init__(self, event_manager: ObserverManager | None = None) -> None:
         """Initialize the pipeline builder.
 
         Args
@@ -33,7 +36,10 @@ class YamlPipelineBuilder:
             event_manager: Optional event manager for observer pattern
         """
         self.registered_functions: dict[str, Any] = {}
-        self.event_manager = event_manager or PipelineEventManager()
+
+        self.event_manager = event_manager or ObserverManager()
+        self.field_mapping_registry = FieldMappingRegistry()
+        self.validator = YamlValidator()
 
     def register_function(self, name: str, func: Any) -> None:
         """Register a function for use in YAML pipelines."""
@@ -66,10 +72,26 @@ class YamlPipelineBuilder:
         except yaml.YAMLError as e:
             raise YamlPipelineBuilderError(f"Invalid YAML content: {e}") from e
 
+        # Validate configuration
+        validation_result = self.validator.validate(config)
+
+        if not validation_result.is_valid:
+            error_msg = "YAML validation failed:\n"
+            for error in validation_result.errors:
+                error_msg += f"  ERROR: {error}\n"
+            raise YamlPipelineBuilderError(error_msg)
+
+        # Log warnings and suggestions
+        for warning in validation_result.warnings:
+            logger.warning("YAML validation warning: %s", warning)
+        for suggestion in validation_result.suggestions:
+            logger.info("YAML validation suggestion: %s", suggestion)
+
         graph = DirectedGraph()
 
-        # Extract pipeline-wide metadata
+        # Extract pipeline-wide metadata and register common mappings
         pipeline_metadata = self._extract_pipeline_metadata(config)
+        self._register_common_mappings(config)
 
         # Build nodes with simple processing and data mapping
         for node_config in config["nodes"]:
@@ -78,24 +100,19 @@ class YamlPipelineBuilder:
             params = node_config.get("params", {})
             deps = node_config.get("depends_on", [])
 
-            # Handle input_mapping for data flow
-            input_mapping = params.get("input_mapping")
-
-            if input_mapping:
-                # Validate input_mapping format
-                if not isinstance(input_mapping, dict):
-                    raise YamlPipelineBuilderError(
-                        f"input_mapping for node '{node_id}' must be a dictionary"
-                    )
-                # Store input_mapping in params for the orchestrator to use
-                params["input_mapping"] = input_mapping
-                logger.debug(f"Node '{node_id}' has input mapping: {input_mapping}")
+            # Handle field_mapping parameter
+            field_mapping = params.get("field_mapping")
+            if field_mapping:
+                # Resolve mapping (could be a string reference or inline dict)
+                resolved_mapping = self.field_mapping_registry.get(field_mapping)
+                params["field_mapping"] = resolved_mapping
+                logger.debug("Node '%s' using field mapping: %s", node_id, resolved_mapping)
 
             # Auto-convert LLM nodes with incompatible template + schema combinations
             if node_type == "llm":
-                logger.debug(f"📋 LLM node '{node_id}' original params: {list(params.keys())}")
+                logger.debug("📋 LLM node '%s' original params: %s", node_id, list(params.keys()))
                 params = self._auto_convert_llm_node(node_id, params)
-                logger.debug(f"📋 LLM node '{node_id}' final params: {list(params.keys())}")
+                logger.debug("📋 LLM node '%s' final params: %s", node_id, list(params.keys()))
 
             # Resolve function references (no schema inference)
             if node_type == "function" and "fn" in params:
@@ -105,27 +122,35 @@ class YamlPipelineBuilder:
                     params["fn"] = actual_func
 
             # Create node using NodeFactory (let nodes handle their own logic)
-            node = NodeFactory.create_node(node_type, node_id, **params)
+            # Ensure registry is bootstrapped
+            ensure_bootstrapped()
+
+            # Get node factory from registry
+            factory_name = f"{node_type}_node"
+            factory = registry.get(factory_name, namespace="core")
+
+            # Ensure factory is callable
+            if not callable(factory):
+                raise TypeError(
+                    f"Expected callable factory for {factory_name}, got {type(factory)}"
+                )
+
+            # Create node using factory
+            node = factory(node_id, **params)
+
+            # Ensure node is a NodeSpec
+            from hexai.core.domain.dag import NodeSpec
+
+            if not isinstance(node, NodeSpec):
+                raise TypeError(f"Factory {factory_name} did not return a NodeSpec")
 
             # Add dependencies
             if deps:
-                if isinstance(deps, list):
-                    node = node.after(*deps)
-                else:
-                    node = node.after(deps)
+                node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
 
             graph.add(node)
 
-        logger.info(f"✅ Built pipeline with {len(graph.nodes)} nodes")
-        logger.info(
-            f"🔧 Field mapping mode: {pipeline_metadata.get('field_mapping_mode', 'default')}"
-        )
-
-        # Validate data mapping after building
-        warnings = self.validate_data_mapping(config)
-        if warnings:
-            for warning in warnings:
-                logger.warning(f"⚠️  Data mapping: {warning}")
+        logger.info("✅ Built pipeline with %d nodes", len(graph.nodes))
 
         return graph, pipeline_metadata
 
@@ -134,33 +159,16 @@ class YamlPipelineBuilder:
 
         Returns
         -------
-            dict: Pipeline metadata including field mapping configuration
+            dict: Pipeline metadata
         """
         metadata = {
             "name": config.get("name"),
             "description": config.get("description"),
-            "field_mapping_mode": config.get("field_mapping_mode", "default"),
         }
 
-        # Validate field mapping mode
-        field_mapping_mode = metadata["field_mapping_mode"]
-        if field_mapping_mode not in ["none", "default", "custom"]:
-            raise YamlPipelineBuilderError(
-                f"Invalid field_mapping_mode '{field_mapping_mode}'. "
-                f"Must be 'none', 'default', or 'custom'"
-            )
-
-        # Handle custom field mappings
-        custom_field_mappings = config.get("custom_field_mappings")
-        if field_mapping_mode == "custom":
-            if not custom_field_mappings:
-                raise YamlPipelineBuilderError(
-                    "custom_field_mappings required when field_mapping_mode='custom'"
-                )
-            metadata["custom_field_mappings"] = custom_field_mappings
-        elif custom_field_mappings:
-            # Store custom mappings even if not in custom mode (for potential future use)
-            metadata["custom_field_mappings"] = custom_field_mappings
+        # Include common_field_mappings in metadata
+        if "common_field_mappings" in config:
+            metadata["common_field_mappings"] = config["common_field_mappings"]
 
         # Extract other pipeline-wide configurations
         for key in ["version", "author", "tags", "environment"]:
@@ -168,6 +176,18 @@ class YamlPipelineBuilder:
                 metadata[key] = config[key]
 
         return metadata
+
+    def _register_common_mappings(self, config: dict[str, Any]) -> None:
+        """Register common field mappings from config.
+
+        Args
+        ----
+            config: Pipeline configuration
+        """
+        common_mappings = config.get("common_field_mappings", {})
+        for name, mapping in common_mappings.items():
+            self.field_mapping_registry.register(name, mapping)
+            logger.debug("Registered common field mapping '%s': %s", name, mapping)
 
     def _auto_convert_llm_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Auto-convert LLM node parameters to handle common configuration incompatibilities.
@@ -215,21 +235,54 @@ class YamlPipelineBuilder:
         return params
 
     def validate_data_mapping(self, config: dict[str, Any]) -> list[str]:
-        """Validate data mapping in YAML configuration.
+        """Validate field mappings in YAML configuration.
 
         Returns a list of validation warnings (not errors).
         """
         warnings = []
+
+        # Validate common_field_mappings
+        common_mappings = config.get("common_field_mappings", {})
+        if common_mappings and not isinstance(common_mappings, dict):
+            warnings.append("common_field_mappings must be a dictionary")
+
+        # Validate node field_mapping references
         nodes = config.get("nodes", [])
-        node_names = {node.get("id") for node in nodes}
+        common_mappings = config.get("common_field_mappings", {})
+
+        # Collect all node names for validation
+        node_names = {node.get("id") for node in nodes if node.get("id")}
 
         for node_config in nodes:
             node_id = node_config.get("id")
             params = node_config.get("params", {})
+            field_mapping = params.get("field_mapping")
             input_mapping = params.get("input_mapping")
+
+            # Get dependencies for this node
             dependencies = set(node_config.get("depends_on", []))
 
-            # Validate input_mapping
+            # Validate field_mapping
+            if field_mapping:
+                # If it's a string, check it references a known common mapping
+                if isinstance(field_mapping, str):
+                    if field_mapping not in common_mappings:
+                        warnings.append(
+                            f"Node '{node_id}' references unknown field mapping '{field_mapping}'"
+                        )
+                # If it's a dict, validate it's properly formatted
+                elif isinstance(field_mapping, dict):
+                    for target, source in field_mapping.items():
+                        if not isinstance(source, str):
+                            warnings.append(
+                                f"Node '{node_id}' field mapping has invalid source for '{target}'"
+                            )
+                else:
+                    warnings.append(
+                        f"Node '{node_id}' field_mapping must be a string reference or dict"
+                    )
+
+            # Validate input_mapping if present
             if input_mapping:
                 warnings.extend(
                     self._validate_mapping_references(
@@ -250,7 +303,7 @@ class YamlPipelineBuilder:
         """Validate mapping references and return warnings."""
         warnings = []
 
-        for _target_field, source_path in mapping.items():
+        for source_path in mapping.values():
             # Skip validation for non-string values (like defaults)
             if not isinstance(source_path, str):
                 continue
@@ -259,19 +312,12 @@ class YamlPipelineBuilder:
                 node_name, _field_name = source_path.split(".", 1)
                 if node_name not in node_names:
                     warnings.append(
-                        f"Node '{node_id}' {mapping_type} references " f"unknown node '{node_name}'"
+                        f"Node '{node_id}' {mapping_type} references unknown node '{node_name}'"
                     )
                 elif node_name not in dependencies:
                     warnings.append(
                         f"Node '{node_id}' {mapping_type} references '{node_name}' "
-                        f"but it's not in dependencies"
-                    )
-            else:
-                # Direct node reference
-                if source_path not in node_names:
-                    warnings.append(
-                        f"Node '{node_id}' {mapping_type} references "
-                        f"unknown node '{source_path}'"
+                        f"which is not a dependency"
                     )
 
         return warnings

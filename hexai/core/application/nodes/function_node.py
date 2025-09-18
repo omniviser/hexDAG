@@ -2,14 +2,19 @@
 
 import asyncio
 import inspect
-from typing import Any, Callable, Type, get_type_hints
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
+from ...registry import node
+from ...registry.models import NodeSubtype
 from .base_node_factory import BaseNodeFactory
+from .mapped_input import MappedInput
 
 
+@node(name="function_node", subtype=NodeSubtype.FUNCTION, namespace="core")
 class FunctionNode(BaseNodeFactory):
     """Simple factory for creating function-based nodes with optional Pydantic validation."""
 
@@ -17,8 +22,8 @@ class FunctionNode(BaseNodeFactory):
         self,
         name: str,
         fn: Callable[..., Any],
-        input_schema: dict[str, Any] | Type[BaseModel] | None = None,
-        output_schema: dict[str, Any] | Type[BaseModel] | None = None,
+        input_schema: dict[str, Any] | type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         input_mapping: dict[str, str] | None = None,
         **kwargs: Any,
@@ -32,11 +37,25 @@ class FunctionNode(BaseNodeFactory):
             input_schema: Input schema for validation (if None, inferred from function)
             output_schema: Output schema for validation (if None, inferred from function)
             deps: List of dependency node names
-            input_mapping: Optional field mapping dict {target_field: source_path}
+            input_mapping: Optional field mapping dict {target_field: "source.path"}
             **kwargs: Additional parameters
         """
         # Validate function can be used properly
         self._validate_function(fn)
+
+        # Store input_mapping in kwargs if provided
+        if input_mapping is not None:
+            kwargs["input_mapping"] = input_mapping
+
+        # Handle input_mapping: auto-generate input schema if mapping provided
+        if input_mapping and not input_schema:
+            # Auto-generate Pydantic model from field mapping
+            input_schema = MappedInput.create_model(
+                f"{name}MappedInput",
+                input_mapping,
+                dependency_models=None,  # Could enhance with dependency introspection
+            )
+
         # Infer schemas from function annotations if not provided
         if input_schema is None or output_schema is None:
             inferred_input, inferred_output = self._infer_schemas_from_function(fn)
@@ -55,7 +74,7 @@ class FunctionNode(BaseNodeFactory):
             "float",
             "bool",
         }:
-            input_model: Type[BaseModel] | type | None = input_schema
+            input_model: type[BaseModel] | type | None = input_schema
         else:
             input_model = self.create_pydantic_model(f"{name}Input", input_schema)
 
@@ -68,33 +87,28 @@ class FunctionNode(BaseNodeFactory):
             "float",
             "bool",
         }:
-            output_model: Type[BaseModel] | type | None = output_schema
+            output_model: type[BaseModel] | type | None = output_schema
         else:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
         # Create the wrapped function
         wrapped_fn = self._create_wrapped_function(name, fn, input_model, output_model)
 
-        # Add input_mapping to params if provided (including empty dict)
-        params = kwargs.copy()
-        if input_mapping is not None:
-            params["input_mapping"] = input_mapping
-
         return NodeSpec(
             name=name,
             fn=wrapped_fn,
-            in_type=input_model,
-            out_type=output_model,
+            in_model=input_model,
+            out_model=output_model,
             deps=set(deps or []),
-            params=params,
+            params=kwargs,
         )
 
     def _create_wrapped_function(
         self,
         name: str,
         fn: Callable[..., Any],
-        input_model: Type[BaseModel] | type | None,
-        output_model: Type[BaseModel] | type | None,
+        input_model: type[BaseModel] | type | None,
+        output_model: type[BaseModel] | type | None,
     ) -> Callable[..., Any]:
         """Create a simple wrapped function with explicit port handling."""
         # Analyze function signature once
@@ -154,7 +168,7 @@ class FunctionNode(BaseNodeFactory):
 
     def _infer_schemas_from_function(
         self, fn: Callable[..., Any]
-    ) -> tuple[Type[BaseModel] | None, Type[BaseModel] | None]:
+    ) -> tuple[type[BaseModel] | None, type[BaseModel] | None]:
         """Infer input and output schemas from function type annotations.
 
         Args
@@ -202,87 +216,70 @@ class FunctionNode(BaseNodeFactory):
 
     @staticmethod
     def create_passthrough_mapping(fields: list[str]) -> dict[str, str]:
-        """Create a passthrough mapping where field names are preserved.
+        """Create a passthrough mapping where field names are unchanged.
 
-        Args
+        Args:
         ----
-            fields: List of field names to create passthrough mapping for
+            fields: List of field names to pass through
 
         Returns
         -------
-            Dict mapping each field to itself
-
-        Example
-        -------
-            create_passthrough_mapping(["text", "score"])
-            # Returns: {"text": "text", "score": "score"}
+            Mapping dict {field: field} for each field
         """
         return {field: field for field in fields}
 
     @staticmethod
-    def create_rename_mapping(field_mapping: dict[str, str]) -> dict[str, str]:
-        """Create a rename mapping from source to target field names.
+    def create_rename_mapping(mapping: dict[str, str]) -> dict[str, str]:
+        """Create a simple rename mapping.
 
-        Args
+        Args:
         ----
-            field_mapping: Dict mapping target field names to source field names
+            mapping: Dict of {new_name: old_name}
 
         Returns
         -------
-            The same mapping (for consistency with other mapping methods)
-
-        Example
-        -------
-            create_rename_mapping({"content": "text", "validation": "status"})
-            # Returns: {"content": "text", "validation": "status"}
+            The mapping dict as-is (for consistency with other methods)
         """
-        return field_mapping.copy()
+        return mapping
 
     @staticmethod
-    def create_prefixed_mapping(
-        fields: list[str], source_node: str, prefix: str = ""
-    ) -> dict[str, str]:
-        """Create a mapping that prefixes field names and maps to a source node.
+    def create_prefixed_mapping(fields: list[str], source_node: str, prefix: str) -> dict[str, str]:
+        """Create a mapping with prefixed field names.
 
-        Args
+        Args:
         ----
             fields: List of field names to map
-            source_node: Name of the source node to map from
-            prefix: Prefix to add to field names (default: "")
+            source_node: Name of the source node
+            prefix: Prefix to add to field names
 
         Returns
         -------
-            Dict mapping prefixed field names to source node paths
-
-        Example
-        -------
-            create_prefixed_mapping(["text", "score"], "processor", "proc_")
-            # Returns: {"proc_text": "processor.text", "proc_score": "processor.score"}
+            Mapping dict {prefix_field: source_node.field}
         """
         return {f"{prefix}{field}": f"{source_node}.{field}" for field in fields}
 
-    def with_input_mapping(self, node_spec: NodeSpec, input_mapping: dict[str, str]) -> NodeSpec:
-        """Enhance an existing NodeSpec with input mapping.
+    def with_input_mapping(self, node: NodeSpec, input_mapping: dict[str, str]) -> NodeSpec:
+        """Enhance an existing node with input mapping.
 
-        Args
+        Args:
         ----
-            node_spec: Existing NodeSpec to enhance
-            input_mapping: Input mapping to add
+            node: The node to enhance
+            input_mapping: The input mapping to apply
 
         Returns
         -------
-            New NodeSpec with input mapping added to params
+            New NodeSpec with the input mapping applied
         """
-        # Create a copy of the existing params
-        new_params = node_spec.params.copy()
+        # Create new params with the input_mapping
+        new_params = dict(node.params) if node.params else {}
         new_params["input_mapping"] = input_mapping
 
-        # Return new NodeSpec with updated params
+        # Create new node with updated params
         return NodeSpec(
-            name=node_spec.name,
-            fn=node_spec.fn,
-            in_type=node_spec.in_type,
-            out_type=node_spec.out_type,
-            deps=node_spec.deps,
+            name=node.name,
+            fn=node.fn,
+            in_model=node.in_model,
+            out_model=node.out_model,
+            deps=node.deps,
             params=new_params,
         )

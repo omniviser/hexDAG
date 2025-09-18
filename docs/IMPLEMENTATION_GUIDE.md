@@ -586,7 +586,7 @@ from hexai.core.application.events.observers import (
 )
 
 # Set up comprehensive monitoring
-event_manager = PipelineEventManager()
+event_manager = ObserverManager()
 event_manager.subscribe(LoggingObserver())
 event_manager.subscribe(MetricsObserver())
 event_manager.subscribe(FileObserver("pipeline_events.log"))
@@ -610,12 +610,12 @@ The event system provides comprehensive monitoring capabilities for production e
 
 **Essential Monitoring Setup:**
 ```python
-from hexai.core.application.events import PipelineEventManager
+from hexai.core.application.events import ObserverManager
 from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 import logging
 
 # Production monitoring
-event_manager = PipelineEventManager()
+event_manager = ObserverManager()
 event_manager.subscribe(LoggingObserver(log_level=logging.INFO))
 event_manager.subscribe(MetricsObserver())
 

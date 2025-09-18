@@ -16,7 +16,6 @@ from hexai.adapters.mock.mock_llm import MockLLM
 from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
-from hexai.core.validation import coerce_validator
 
 
 # Define real tool functions with proper type hints
@@ -121,9 +120,7 @@ async def main() -> None:
     graph = DirectedGraph()
     graph.add(medical_agent)
 
-    orchestrator = Orchestrator(
-        validator=coerce_validator(), ports={"llm": mock_llm, "tool_router": real_router}
-    )
+    orchestrator = Orchestrator(ports={"llm": mock_llm, "tool_router": real_router})
 
     print("🚀 Running medical agent with real tools...")
     result = await orchestrator.run(
@@ -181,9 +178,12 @@ async def main() -> None:
     )
 
     agent_result = result["medical_agent"]
-    print(f"   📊 Tools used: {len(agent_result.tools_used)}")
-    print(f"   🛠️  Tool calls: {agent_result.tools_used}")
-    print(f"   📝 Response: {agent_result.response[:100]}...")
+    if hasattr(agent_result, "tools_used"):
+        print(f"   📊 Tools used: {len(agent_result.tools_used)}")
+        print(f"   🛠️  Tool calls: {agent_result.tools_used}")
+        print(f"   📝 Response: {agent_result.response[:100]}...")
+    else:
+        print(f"   📝 Response: {str(agent_result)[:200]}...")
     print()
 
     # Test 3: Decorator Pattern
@@ -300,9 +300,11 @@ async def main() -> None:
     )
 
     agent_result = result["integration_agent"]
-    print(f"   📊 Tools used: {len(agent_result.tools_used)}")
-    print(f"   🛠️  Tool calls: {agent_result.tools_used}")
-    print(f"   📝 Response: {agent_result.response[:100]}...")
+    if hasattr(agent_result, "tools_used"):
+        print(f"   📊 Tools used: {len(agent_result.tools_used)}")
+        print(f"   🛠️  Tool calls: {agent_result.tools_used}")
+    else:
+        print(f"   📝 Result: {str(agent_result)[:200]}...")
     print()
 
     # Show tool execution history

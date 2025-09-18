@@ -175,7 +175,7 @@ class TestPipelineDefinition:
 
         # Mock graph with single first node
         mock_node_spec = Mock()
-        mock_node_spec.in_type = InputModel
+        mock_node_spec.in_model = InputModel
 
         mock_graph = Mock()
         mock_graph.nodes = {"first_node": mock_node_spec}
@@ -193,9 +193,9 @@ class TestPipelineDefinition:
 
         # Mock graph with multiple first nodes
         mock_node_spec1 = Mock()
-        mock_node_spec1.in_type = InputModel
+        mock_node_spec1.in_model = InputModel
         mock_node_spec2 = Mock()
-        mock_node_spec2.in_type = str
+        mock_node_spec2.in_model = str
 
         mock_graph = Mock()
         mock_graph.nodes = {
@@ -208,7 +208,10 @@ class TestPipelineDefinition:
             "first_node2": [],  # No dependencies = first node
             "second_node": ["first_node1"],  # Has dependencies = not first node
         }
-        mock_graph.waves.return_value = [["first_node1", "first_node2"], ["second_node"]]
+        mock_graph.waves.return_value = [
+            ["first_node1", "first_node2"],
+            ["second_node"],
+        ]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -222,7 +225,7 @@ class TestPipelineDefinition:
 
         # Mock graph with single last node
         mock_node_spec = Mock()
-        mock_node_spec.out_type = OutputModel
+        mock_node_spec.out_model = OutputModel
 
         mock_graph = Mock()
         mock_graph.nodes = {"last_node": mock_node_spec}
@@ -240,9 +243,9 @@ class TestPipelineDefinition:
 
         # Mock graph with multiple last nodes
         mock_node_spec1 = Mock()
-        mock_node_spec1.out_type = OutputModel
+        mock_node_spec1.out_model = OutputModel
         mock_node_spec2 = Mock()
-        mock_node_spec2.out_type = dict
+        mock_node_spec2.out_model = dict
 
         mock_graph = Mock()
         mock_graph.nodes = {
@@ -251,7 +254,10 @@ class TestPipelineDefinition:
             "last_node2": mock_node_spec2,
         }
         # Only first_node appears in dependencies, so last_node1 and last_node2 are last nodes
-        mock_graph.dependencies = {"last_node1": ["first_node"], "last_node2": ["first_node"]}
+        mock_graph.dependencies = {
+            "last_node1": ["first_node"],
+            "last_node2": ["first_node"],
+        }
         mock_graph.waves.return_value = [["first_node"], ["last_node1", "last_node2"]]
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
@@ -266,19 +272,22 @@ class TestPipelineDefinition:
 
         # Mock node specs
         mock_node_spec1 = Mock()
-        mock_node_spec1.in_type = InputModel
-        mock_node_spec1.out_type = dict
+        mock_node_spec1.in_model = InputModel
+        mock_node_spec1.out_model = dict
         mock_node_spec1.fn = Mock()
         mock_node_spec1.fn.__name__ = "process_input"
 
         mock_node_spec2 = Mock()
-        mock_node_spec2.in_type = dict
-        mock_node_spec2.out_type = OutputModel
+        mock_node_spec2.in_model = dict
+        mock_node_spec2.out_model = OutputModel
         mock_node_spec2.fn = Mock()
         mock_node_spec2.fn.__name__ = "generate_output"
 
         mock_graph = Mock()
-        mock_graph.nodes = {"input_processor": mock_node_spec1, "output_generator": mock_node_spec2}
+        mock_graph.nodes = {
+            "input_processor": mock_node_spec1,
+            "output_generator": mock_node_spec2,
+        }
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -306,8 +315,8 @@ class TestPipelineDefinition:
 
         # Mock node spec without function name
         mock_node_spec = Mock()
-        mock_node_spec.in_type = str
-        mock_node_spec.out_type = dict
+        mock_node_spec.in_model = str
+        mock_node_spec.out_model = dict
         mock_node_spec.fn = Mock(spec=[])  # Mock without __name__ attribute
 
         mock_graph = Mock()
@@ -317,7 +326,13 @@ class TestPipelineDefinition:
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
             result = pipeline.get_node_types()
 
-            expected = {"test_node": {"name": "test_node", "input_type": str, "output_type": dict}}
+            expected = {
+                "test_node": {
+                    "name": "test_node",
+                    "input_type": str,
+                    "output_type": dict,
+                }
+            }
             assert result == expected
 
     def test_get_input_type_exception_handling(self):
@@ -325,7 +340,9 @@ class TestPipelineDefinition:
         pipeline = MockPipeline()
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(
-            pipeline.builder, "build_from_yaml_file", side_effect=Exception("Test error")
+            pipeline.builder,
+            "build_from_yaml_file",
+            side_effect=Exception("Test error"),
         ):
             result = pipeline.get_input_type()
             assert result is None
@@ -335,7 +352,9 @@ class TestPipelineDefinition:
         pipeline = MockPipeline()
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(
-            pipeline.builder, "build_from_yaml_file", side_effect=Exception("Test error")
+            pipeline.builder,
+            "build_from_yaml_file",
+            side_effect=Exception("Test error"),
         ):
             result = pipeline.get_output_type()
             assert result is None
@@ -345,7 +364,9 @@ class TestPipelineDefinition:
         pipeline = MockPipeline()
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(
-            pipeline.builder, "build_from_yaml_file", side_effect=Exception("Test error")
+            pipeline.builder,
+            "build_from_yaml_file",
+            side_effect=Exception("Test error"),
         ):
             result = pipeline.get_node_types()
             assert result == {}
@@ -357,7 +378,10 @@ class TestPipelineDefinition:
         # Mock graph where all nodes have dependencies
         mock_graph = Mock()
         mock_graph.nodes = {"node1": Mock(), "node2": Mock()}
-        mock_graph.dependencies = {"node1": ["node2"], "node2": ["node1"]}  # Circular dependency
+        mock_graph.dependencies = {
+            "node1": ["node2"],
+            "node2": ["node1"],
+        }  # Circular dependency
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -400,36 +424,36 @@ class TestPipelineDefinition:
 class TestPipelineCatalog:
     """Tests for PipelineCatalog."""
 
+    class TestRegistrationPipeline(PipelineDefinition):
+        """Test class for registration of a pipeline."""
+
+        @property
+        def name(self) -> str:
+            """Pipeline name."""
+            return "test_registration"
+
+        @property
+        def description(self) -> str:
+            """Pipeline description."""
+            return "Test registration pipeline"
+
+        def __init__(self, yaml_path: str | None = None):
+            super().__init__(yaml_path)
+            self.builder = Mock()
+            self._config = {"test": "config"}
+
+        def _register_functions(self):
+            pass
+
     def test_pipeline_registration(self):
         """Test manual pipeline registration."""
-
-        # Create a test pipeline class
-        class TestRegistrationPipeline(PipelineDefinition):
-            @property
-            def name(self) -> str:
-                """Pipeline name."""
-                return "test_registration"
-
-            @property
-            def description(self) -> str:
-                """Pipeline description."""
-                return "Test registration pipeline"
-
-            def __init__(self, yaml_path: str | None = None):
-                super().__init__(yaml_path)
-                self.builder = Mock()
-                self._config = {"test": "config"}
-
-            def _register_functions(self):
-                pass
-
         catalog = PipelineCatalog()
 
         # Initially empty
         assert len(catalog._pipelines) == 0
 
         # Register the pipeline
-        catalog.register_pipeline(TestRegistrationPipeline)
+        catalog.register_pipeline(self.TestRegistrationPipeline)
 
         # Should now contain the registered pipeline
         assert "test_registration" in catalog._pipelines

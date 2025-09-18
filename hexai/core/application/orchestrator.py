@@ -5,22 +5,27 @@ concurrently where possible using asyncio.gather().
 """
 
 import asyncio
+import logging
 import time
 from typing import Any
 
-from hexai.core.domain.dag import DirectedGraph
-from hexai.core.validation import IValidator, ValidationContext, coerce_validator
+from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
 
-from ..domain.dag import NodeSpec
 from .events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineCompletedEvent,
-    PipelineStartedEvent,
-    WaveCompletedEvent,
-    WaveStartedEvent,
+    ControlManager,
+    ControlSignal,
+    ExecutionContext,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
+    ObserverManager,
+    PipelineCompleted,
+    PipelineStarted,
+    WaveCompleted,
+    WaveStarted,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OrchestratorError(Exception):
@@ -38,12 +43,6 @@ class NodeExecutionError(OrchestratorError):
         super().__init__(f"Node '{node_name}' failed: {original_error}")
 
 
-class ValidationError(OrchestratorError):
-    """Exception raised when input validation fails."""
-
-    pass
-
-
 class Orchestrator:
     """Orchestrates DAG execution with concurrent processing and resource management.
 
@@ -59,8 +58,7 @@ class Orchestrator:
         self,
         max_concurrent_nodes: int = 10,
         ports: dict[str, Any] | None = None,
-        field_mapping_mode: str = "default",
-        validator: "IValidator | None" = None,
+        strict_validation: bool = False,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -68,23 +66,12 @@ class Orchestrator:
         ----
             max_concurrent_nodes: Maximum number of nodes to execute concurrently
             ports: Shared ports/dependencies for all pipeline executions
-            field_mapping_mode: Schema alignment mode: none/default/vector/custom
-            validator: Validator instance to use for input/output validation
+            strict_validation: If True, raise errors on validation failure
         """
         self.max_concurrent_nodes = max_concurrent_nodes
         self._semaphore = asyncio.Semaphore(max_concurrent_nodes)
         self.ports = ports or {}
-        self.field_mapping_mode = field_mapping_mode
-
-        # Simplified data mapping - removed complex components
-        self._schema_aligner: Any | None = None
-
-        # Initialize validator with default coerce strategy for compatibility
-        if validator is None:
-
-            self.validator = coerce_validator()
-        else:
-            self.validator = validator
+        self.strict_validation = strict_validation
 
     async def run(
         self,
@@ -92,31 +79,18 @@ class Orchestrator:
         initial_input: Any,
         additional_ports: dict[str, Any] | None = None,
         validate: bool = True,
-        custom_field_mappings: dict[str, list[str]] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Execute a DAG with concurrent processing and resource limits.
-
-        Args
-        ----
-            custom_field_mappings: Required when field_mapping_mode='custom'
-        """
-        # Initialize schema aligner based on mode
-        if self.field_mapping_mode == "custom":
-            if custom_field_mappings is None:
-                raise ValueError("custom_field_mappings required when field_mapping_mode='custom'")
-            self._schema_aligner = custom_field_mappings  # Simplified
-        else:
-            # Type-safe cast: field_mapping_mode is FieldMappingMode from __init__
-            self._schema_aligner = None  # Simplified
-
+        """Execute a DAG with concurrent processing and resource limits."""
         # Merge orchestrator ports with additional execution-specific ports
         all_ports = {**self.ports}
         if additional_ports:
             all_ports.update(additional_ports)
         if validate:
             try:
-                graph.validate()
+                # By default, skip type checking for backward compatibility
+                # Enable via graph.validate(check_type_compatibility=True)
+                graph.validate(check_type_compatibility=False)
             except Exception as e:
                 raise OrchestratorError(f"Invalid DAG: {e}") from e
 
@@ -124,24 +98,37 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        event_manager = all_ports.get("event_manager")
+        # Get observer manager and control manager from ports
+        observer_manager: ObserverManager = all_ports.get("observer_manager", ObserverManager())
+        control_manager: ControlManager = all_ports.get("control_manager", ControlManager())
 
-        # Emit pipeline started event using elegant null-safe syntax
-        if event_manager:
-            await event_manager.emit(
-                PipelineStartedEvent(
-                    pipeline_name=getattr(graph, "name", "unnamed"),
-                    total_waves=len(waves),
-                    total_nodes=len(graph.nodes),
-                )
-            )
+        # Create execution context for this DAG run
+        pipeline_name = getattr(graph, "name", "unnamed")
+        context = ExecutionContext(dag_id=pipeline_name)
+
+        # Fire pipeline started event and check control
+        event = PipelineStarted(
+            name=pipeline_name,
+            total_waves=len(waves),
+            total_nodes=len(graph.nodes),
+        )
+        await observer_manager.notify(event)
+        control_response = await control_manager.check(event, context)
+        if control_response.signal != ControlSignal.PROCEED:
+            raise OrchestratorError(f"Pipeline start blocked: {control_response.signal.value}")
 
         for wave_idx, wave in enumerate(waves, 1):
             wave_start_time = time.time()
 
-            # Emit wave started event
-            if event_manager:
-                await event_manager.emit(WaveStartedEvent(wave_index=wave_idx, nodes=wave))
+            # Fire wave started event and check control
+            wave_event = WaveStarted(
+                wave_index=wave_idx,
+                nodes=wave,
+            )
+            await observer_manager.notify(wave_event)
+            wave_response = await control_manager.check(wave_event, context)
+            if wave_response.signal != ControlSignal.PROCEED:
+                raise OrchestratorError(f"Wave {wave_idx} blocked: {wave_response.signal.value}")
 
             wave_results = await self._execute_wave(
                 wave,
@@ -149,31 +136,29 @@ class Orchestrator:
                 node_results,
                 initial_input,
                 all_ports,
+                context=context,
+                observer_manager=observer_manager,
+                control_manager=control_manager,
                 wave_index=wave_idx,
                 validate=validate,
                 **kwargs,
             )
             node_results.update(wave_results)
 
-            # Emit wave completed event
-            if event_manager:
-                await event_manager.emit(
-                    WaveCompletedEvent(
-                        wave_index=wave_idx,
-                        nodes=wave,
-                        execution_time=time.time() - wave_start_time,
-                    )
-                )
-
-        # Emit pipeline completed event
-        if event_manager:
-            await event_manager.emit(
-                PipelineCompletedEvent(
-                    pipeline_name=getattr(graph, "name", "unnamed"),
-                    total_execution_time=time.time() - pipeline_start_time,
-                    node_results=node_results,
-                )
+            # Fire wave completed event (observation only)
+            wave_completed = WaveCompleted(
+                wave_index=wave_idx,
+                duration_ms=(time.time() - wave_start_time) * 1000,
             )
+            await observer_manager.notify(wave_completed)
+
+        # Fire pipeline completed event (observation only)
+        pipeline_completed = PipelineCompleted(
+            name=pipeline_name,
+            duration_ms=(time.time() - pipeline_start_time) * 1000,
+            node_results=node_results,
+        )
+        await observer_manager.notify(pipeline_completed)
 
         return node_results
 
@@ -184,6 +169,9 @@ class Orchestrator:
         node_results: dict[str, Any],
         initial_input: Any,
         ports: dict[str, Any],
+        context: ExecutionContext,
+        observer_manager: ObserverManager,
+        control_manager: ControlManager,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -198,6 +186,9 @@ class Orchestrator:
                     node_results,
                     initial_input,
                     ports,
+                    context=context,
+                    observer_manager=observer_manager,
+                    control_manager=control_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,
@@ -226,105 +217,136 @@ class Orchestrator:
         node_results: dict[str, Any],
         initial_input: Any,
         ports: dict[str, Any],
+        context: ExecutionContext,
+        observer_manager: ObserverManager,
+        control_manager: ControlManager,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
-        """Execute a single node."""
+        """Execute a single node.
+
+        The orchestrator provides the MECHANISM for retries through the RETRY signal,
+        but the retry POLICY (when to retry, how many times, delays) is determined
+        by control handlers registered with the EventBus.
+        """
         node_start_time = time.time()
-        event_manager = ports.get("event_manager")
+        # Create node context early so it's available in exception handler
+        node_context = context.with_node(node_name, wave_index)
 
         try:
             node_spec = graph.nodes[node_name]
             node_input = self._prepare_node_input(node_spec, node_results, initial_input)
 
-            # Validate input after preparation if validation is enabled
-            # The validation framework will handle type conversion automatically
-            if validate and node_spec.in_type is not None:
-                validated_input = self._validate_input(node_input, node_spec.in_type, node_name)
+            # Use domain validation
+            if validate:
+                try:
+                    validated_input = node_spec.validate_input(node_input)
+                except ValidationError as e:
+                    if self.strict_validation:
+                        raise
+                    else:
+                        logger.debug("Input validation failed for node '%s': %s", node_name, e)
+                        validated_input = node_input
             else:
                 validated_input = node_input
 
-            # Emit node started event
-            if event_manager:
-                await event_manager.emit(
-                    NodeStartedEvent(
-                        node_name=node_name,
-                        wave_index=wave_index,
-                        dependencies=list(node_spec.deps),
-                    )
+            # Fire node started event and check control
+            start_event = NodeStarted(
+                name=node_name,
+                wave_index=wave_index,
+                dependencies=list(node_spec.deps),
+            )
+            await observer_manager.notify(start_event)
+            start_response = await control_manager.check(start_event, node_context)
+
+            # Handle control signals
+            if start_response.signal == ControlSignal.SKIP:
+                # Skip this node and return fallback value if provided
+                return start_response.data
+            elif start_response.signal == ControlSignal.FAIL:
+                raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
+            elif start_response.signal != ControlSignal.PROCEED:
+                # For now, treat other signals as errors
+                raise OrchestratorError(
+                    f"Node '{node_name}' blocked: {start_response.signal.value}"
                 )
 
             # Execute node function
             raw_output = (
                 await node_spec.fn(validated_input, **ports, **kwargs)
                 if asyncio.iscoroutinefunction(node_spec.fn)
-                else await asyncio.get_event_loop().run_in_executor(
+                else await asyncio.get_running_loop().run_in_executor(
                     None, lambda: node_spec.fn(validated_input, **ports, **kwargs)
                 )
             )
 
-            # Validate output if validation is enabled and node has output type specified
-            if validate and node_spec.out_type is not None:
-                validated_output = self._validate_output(raw_output, node_spec.out_type, node_name)
+            # Use domain validation
+            if validate:
+                try:
+                    validated_output = node_spec.validate_output(raw_output)
+                except ValidationError as e:
+                    if self.strict_validation:
+                        raise
+                    else:
+                        logger.debug("Output validation failed for node '%s': %s", node_name, e)
+                        validated_output = raw_output
             else:
                 validated_output = raw_output
 
-            # Emit node completed event
-            if event_manager:
-                await event_manager.emit(
-                    NodeCompletedEvent(
-                        node_name=node_name,
-                        result=validated_output,
-                        execution_time=time.time() - node_start_time,
-                        wave_index=wave_index,
-                    )
-                )
+            # Fire node completed event (observation only)
+            complete_event = NodeCompleted(
+                name=node_name,
+                wave_index=wave_index,
+                result=validated_output,
+                duration_ms=(time.time() - node_start_time) * 1000,
+            )
+            await observer_manager.notify(complete_event)
 
             return validated_output
 
         except Exception as e:
-            # Emit node failed event
-            if event_manager:
-                await event_manager.emit(
-                    NodeFailedEvent(node_name=node_name, error=e, wave_index=wave_index)
+            # Fire node failed event and check control
+            fail_event = NodeFailed(
+                name=node_name,
+                wave_index=wave_index,
+                error=e,
+            )
+            await observer_manager.notify(fail_event)
+            fail_response = await control_manager.check(fail_event, node_context)
+
+            # Handle control signals
+            if fail_response.signal == ControlSignal.FALLBACK:
+                # Return fallback value instead of failing
+                return fail_response.data
+            elif fail_response.signal == ControlSignal.RETRY:
+                # RETRY signal indicates the policy wants to retry
+                # The orchestrator enables this by re-executing the node
+                # The retry policy (attempts, delays) is managed by the handler
+                retry_data = fail_response.data if isinstance(fail_response.data, dict) else {}
+                delay = retry_data.get("delay", 0)
+
+                if delay > 0:
+                    await asyncio.sleep(delay)
+
+                # Recursive call to retry the node execution
+                # The policy handler tracks attempts and decides when to stop
+                return await self._execute_node(
+                    node_name=node_name,
+                    graph=graph,
+                    node_results=node_results,
+                    initial_input=initial_input,
+                    ports=ports,
+                    context=context.with_attempt(context.attempt + 1),
+                    observer_manager=observer_manager,
+                    control_manager=control_manager,
+                    wave_index=wave_index,
+                    validate=validate,
+                    **kwargs,
                 )
-
-            raise NodeExecutionError(node_name, e) from e
-
-    def _validate_input(self, input_data: Any, expected_type: type, node_name: str) -> Any:
-        """Validate input data against expected type using validation framework."""
-        # Create validation context with node information
-        context = ValidationContext(node_name=node_name, validation_stage="input")
-
-        # Use the validation framework
-        result = self.validator.validate_input(input_data, expected_type, context)
-
-        if result.is_valid:
-            return result.data
-        else:
-            # Convert validation errors to orchestrator ValidationError
-            error_messages = "; ".join(result.errors)
-            raise ValidationError(
-                f"Input validation failed for node '{node_name}': {error_messages}"
-            )
-
-    def _validate_output(self, output_data: Any, expected_type: type, node_name: str) -> Any:
-        """Validate output data against expected type using validation framework."""
-        # Create validation context with node information
-        context = ValidationContext(node_name=node_name, validation_stage="output")
-
-        # Use the validation framework
-        result = self.validator.validate_output(output_data, expected_type, context)
-
-        if result.is_valid:
-            return result.data
-        else:
-            # Convert validation errors to orchestrator ValidationError
-            error_messages = "; ".join(result.errors)
-            raise ValidationError(
-                f"Output validation failed for node '{node_name}': {error_messages}"
-            )
+            else:
+                # Default: propagate the error
+                raise NodeExecutionError(node_name, e) from e
 
     def _prepare_node_input(
         self, node_spec: NodeSpec, node_results: dict[str, Any], initial_input: Any
@@ -345,70 +367,7 @@ class Orchestrator:
             # No dependencies - use initial input
             return initial_input
 
-        # Check for explicit input mapping in node parameters
-        input_mapping = node_spec.params.get("input_mapping")
-        if input_mapping:
-            # Use explicit data mapping - simple dictionary mapping
-            mapped_data = {}
-
-            # Apply input mapping rules
-            for output_key, input_sources in input_mapping.items():
-                if isinstance(input_sources, list):
-                    # Multiple sources - use first available
-                    for source in input_sources:
-                        if isinstance(source, str) and source in node_results:
-                            mapped_data[output_key] = node_results[source]
-                            break
-                        elif isinstance(source, dict) and "node" in source and "field" in source:
-                            node_name = source["node"]
-                            field_name = source["field"]
-                            if node_name in node_results and field_name in node_results[node_name]:
-                                mapped_data[output_key] = node_results[node_name][field_name]
-                                break
-                elif isinstance(input_sources, str):
-                    # Single source - handle dotted notation like "processor.text"
-                    if "." in input_sources:
-                        # Handle dotted notation for field access
-                        parts = input_sources.split(".")
-                        node_name = parts[0]
-                        field_path = parts[1:]
-
-                        if node_name in node_results:
-                            current_value = node_results[node_name]
-                            # Navigate nested field path
-                            for field in field_path:
-                                if hasattr(current_value, field):
-                                    current_value = getattr(current_value, field)
-                                elif isinstance(current_value, dict) and field in current_value:
-                                    current_value = current_value[field]
-                                else:
-                                    current_value = None
-                                    break
-                            if current_value is not None:
-                                mapped_data[output_key] = current_value
-                    elif input_sources in node_results:
-                        # Direct node name
-                        mapped_data[output_key] = node_results[input_sources]
-                elif (
-                    isinstance(input_sources, dict)
-                    and "node" in input_sources
-                    and "field" in input_sources
-                ):
-                    # Specific field from specific node
-                    node_name = input_sources["node"]
-                    field_name = input_sources["field"]
-                    if node_name in node_results and field_name in node_results[node_name]:
-                        mapped_data[output_key] = node_results[node_name][field_name]
-
-            # Include any unmapped initial input fields
-            if isinstance(initial_input, dict):
-                for key, value in initial_input.items():
-                    if key not in mapped_data:
-                        mapped_data[key] = value
-
-            return mapped_data
-
-        elif len(node_spec.deps) == 1:
+        if len(node_spec.deps) == 1:
             # Single dependency - pass through directly
             dep_name = next(iter(node_spec.deps))
             return node_results.get(dep_name, initial_input)
@@ -420,11 +379,6 @@ class Orchestrator:
             # Keep dependency results with their node names as keys
             for dep_name in node_spec.deps:
                 if dep_name in node_results:
-                    value = node_results[dep_name]
-                    # If the node expects dict input and we have Pydantic models, convert them
-                    if node_spec.in_type is dict and hasattr(value, "model_dump"):
-                        aggregated_data[dep_name] = value.model_dump()
-                    else:
-                        aggregated_data[dep_name] = value
+                    aggregated_data[dep_name] = node_results[dep_name]
 
             return aggregated_data

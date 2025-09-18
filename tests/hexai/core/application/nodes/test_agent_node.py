@@ -5,8 +5,13 @@ from pydantic import BaseModel
 
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.core.application.nodes.agent_node import AgentConfig, ReActAgentNode
+from hexai.core.application.nodes.agent_node import AgentConfig
 from hexai.core.application.nodes.tool_utils import ToolCallFormat
+from hexai.core.bootstrap import ensure_bootstrapped
+from hexai.core.registry import registry
+
+# Ensure registry is bootstrapped for tests
+ensure_bootstrapped()
 
 
 class CustomOutput(BaseModel):
@@ -31,8 +36,9 @@ class TestReActAgentNode:
 
     @pytest.fixture
     def agent_node(self):
-        """Fixture for ReActAgentNode."""
-        return ReActAgentNode()
+        """Get ReActAgentNode factory from registry."""
+        ensure_bootstrapped()
+        return registry.get("agent_node", namespace="core")
 
     def test_basic_agent_creation(self, agent_node):
         """Test basic agent creation and NodeSpec generation."""
@@ -42,8 +48,8 @@ class TestReActAgentNode:
 
         assert node_spec.name == "test_agent"
         assert node_spec.fn.__name__ == "agent_with_internal_loop"
-        assert node_spec.in_type is not None
-        assert node_spec.out_type is not None
+        assert node_spec.in_model is not None
+        assert node_spec.out_model is not None
 
     def test_agent_with_custom_config(self, agent_node):
         """Test agent with custom configuration."""
