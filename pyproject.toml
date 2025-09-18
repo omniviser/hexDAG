@@ -206,6 +206,10 @@ module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+module = ["openai", "anthropic", "graphviz"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["hexai.cli.*"]
 disallow_untyped_decorators = false
 

@@ -53,21 +53,21 @@ stages:
           displayName: 'Install dependencies'
 
         - script: |
-            ruff check . --output-format=github
-            ruff format . --check
-            mypy hexai/
-            bandit -r hexai/ -f json -o bandit-output.json || true
+            uv run ruff check . --output-format=github
+            uv run ruff format . --check
+            uv run mypy hexai/
+            uv run bandit -r hexai/ -f json -o bandit-output.json || true
           displayName: 'Lint and type check'
 
         - script: |
             # Run main tests
-            pytest tests/hexai/ -v --junitxml=junit/test-results-main.xml --cov=hexai --cov-report=xml --cov-report=html
+            uv run pytest tests/hexai/ -v --junitxml=junit/test-results-main.xml --cov=hexai --cov-report=xml --cov-report=html
 
             # Run plugin tests if they exist
             for plugin_dir in hexai_plugins/*/; do
               if [ -d "$plugin_dir/tests" ]; then
                 plugin_name=$(basename "$plugin_dir")
-                pytest "$plugin_dir/tests/" -v --junitxml=junit/test-results-$plugin_name.xml || true
+                uv run pytest "$plugin_dir/tests/" -v --junitxml=junit/test-results-$plugin_name.xml || true
               fi
             done
           displayName: 'Run all tests'
