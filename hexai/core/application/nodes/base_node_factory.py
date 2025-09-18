@@ -1,7 +1,7 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models and core event emission."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any, Type, cast
 
 from pydantic import BaseModel, create_model
 
@@ -60,7 +60,11 @@ class BaseNodeFactory(ABC):
             )
 
     async def emit_node_failed(
-        self, node_name: str, error: Exception, wave_index: int, event_manager: Any = None
+        self,
+        node_name: str,
+        error: Exception,
+        wave_index: int,
+        event_manager: Any = None,
     ) -> None:
         """Emit node failed event."""
         if event_manager:
@@ -82,7 +86,6 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit tool called event."""
         if event_manager:
-
             await event_manager.emit(
                 ToolCalledEvent(
                     node_name=node_name,
@@ -103,7 +106,6 @@ class BaseNodeFactory(ABC):
     ) -> None:
         """Emit tool completed event."""
         if event_manager:
-
             await event_manager.emit(
                 ToolCompletedEvent(
                     node_name=node_name,
@@ -126,11 +128,12 @@ class BaseNodeFactory(ABC):
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
-            field_definitions = {}
+            field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                field_definitions[field_name] = field_type
+                # Pydantic expects (type, default) tuple or just type with proper annotation
+                field_definitions[field_name] = (field_type, ...)
 
-            return create_model(name, **field_definitions)
+            return cast(Type[BaseModel], create_model(name, **field_definitions))
 
         # Handle primitive types - create a simple wrapper model
         if isinstance(schema, type):

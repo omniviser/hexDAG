@@ -15,7 +15,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            Dictionary mapping table names to schema information:
+        Dictionary mapping table names to schema information with structure::
+
             {
                 "table_name": {
                     "table_name": str,
@@ -24,6 +25,7 @@ class DatabasePort(Protocol):
                     "foreign_keys": list[dict[str, str]]
                 }
             }
+
         """
         ...
 
@@ -32,7 +34,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            List of relationship dictionaries with structure:
+        List of relationship dictionaries with structure::
+
             {
                 "from_table": str,
                 "from_column": str,
@@ -40,6 +43,7 @@ class DatabasePort(Protocol):
                 "to_column": str,
                 "relationship_type": str  # "many_to_one", etc.
             }
+
         """
         ...
 
@@ -48,7 +52,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            List of index dictionaries with structure:
+        List of index dictionaries with structure::
+
             {
                 "index_name": str,
                 "table_name": str,
@@ -56,6 +61,7 @@ class DatabasePort(Protocol):
                 "index_type": str,  # "btree", "hash", etc.
                 "is_unique": bool
             }
+
         """
         ...
 
@@ -64,7 +70,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            Dictionary mapping table names to statistics:
+        Dictionary mapping table names to statistics with structure::
+
             {
                 "table_name": {
                     "row_count": int,
@@ -72,5 +79,6 @@ class DatabasePort(Protocol):
                     "last_updated": str
                 }
             }
+
         """
         ...
