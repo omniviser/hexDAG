@@ -102,16 +102,18 @@ stages:
         - script: |
             python -m pip install --upgrade pip uv
             uv sync --all-extras
-            # Install all plugins for integration testing
-            for plugin_dir in hexai_plugins/*/; do
-              if [ -f "$plugin_dir/pyproject.toml" ]; then
-                pip install -e "$plugin_dir"
-              fi
-            done
+            # Install all plugins for integration testing if they exist
+            if [ -d "hexai_plugins" ]; then
+              for plugin_dir in hexai_plugins/*/; do
+                if [ -f "$plugin_dir/pyproject.toml" ]; then
+                  pip install -e "$plugin_dir"
+                fi
+              done
+            fi
           displayName: 'Install everything'
 
         - script: |
-            pytest tests/integration/ -v --junitxml=junit/test-results-integration.xml
+            uv run pytest tests/integration/ -v --junitxml=junit/test-results-integration.xml
           displayName: 'Run integration tests'
 
         - task: PublishTestResults@2
