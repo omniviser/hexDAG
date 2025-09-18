@@ -13,14 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 # Always available imports (no external dependencies)
 from .base import PipelineCatalog, PipelineDefinition, get_catalog
-from .models import (
-    Ontology,
-    OntologyNode,
-    OntologyRelation,
-    QueryIntent,
-    RelationshipType,
-    SQLQuery,
-)
 
 if TYPE_CHECKING:
     from .yaml_builder import YamlPipelineBuilder
@@ -68,14 +60,5 @@ __all__ = [
     "PipelineCatalog",
     "get_catalog",
     "YamlPipelineBuilder",
-    # Agent Factory Models
-    "Ontology",
-    "OntologyNode",
-    "OntologyRelation",
-    # Query Models
-    "QueryIntent",
-    "SQLQuery",
-    "RelationshipType",
-    # Availability flags
     "YAML_AVAILABLE",
 ]

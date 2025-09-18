@@ -5,8 +5,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from mysql_adapter import MySQLAdapter
+from hexai_plugins.mysql_adapter.mysql_adapter import MySQLAdapter
 
 
 class TestMySQLAdapter:
@@ -27,7 +26,7 @@ class TestMySQLAdapter:
     async def test_mysql_adapter_with_mock_connection(self):
         """Test MySQL adapter operations with mocked connection."""
         # Mock pymysql to avoid needing actual MySQL server
-        with patch("mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
+        with patch("hexai_plugins.mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
             # Setup mock connection
             mock_connection = MagicMock()
             mock_cursor = MagicMock()
@@ -160,7 +159,7 @@ class TestMySQLAdapter:
     @pytest.mark.asyncio
     async def test_mysql_concurrent_operations(self):
         """Test concurrent operations with MySQL adapter."""
-        with patch("mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
+        with patch("hexai_plugins.mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
             # Setup mock
             mock_connection = MagicMock()
             mock_cursor = MagicMock()
@@ -187,7 +186,7 @@ class TestMySQLAdapter:
 
     def test_mysql_connection_parameters(self):
         """Test MySQL adapter initialization with various parameters."""
-        with patch("mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
+        with patch("hexai_plugins.mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
             mock_connection = MagicMock()
             mock_cursor = MagicMock()
             mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
@@ -216,7 +215,7 @@ class TestMySQLAdapter:
     @pytest.mark.asyncio
     async def test_mysql_json_handling(self):
         """Test MySQL adapter with complex JSON data."""
-        with patch("mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
+        with patch("hexai_plugins.mysql_adapter.mysql_adapter.pymysql") as mock_pymysql:
             mock_connection = MagicMock()
             mock_cursor = MagicMock()
             mock_connection.cursor.return_value.__enter__.return_value = mock_cursor

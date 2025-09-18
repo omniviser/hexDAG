@@ -58,7 +58,7 @@ class BaseNodeFactory(ABC):
         # Handle primitive types - create a simple wrapper model
         # At this point, schema should be a type
         try:
-            return create_model(name, value=(schema, ...))
+            return cast("type[Any] | None", create_model(name, value=(schema, ...)))
         except Exception:
             # If we get here, schema is an unexpected type
             raise ValueError("Schema must be a dict, type, or Pydantic model") from None

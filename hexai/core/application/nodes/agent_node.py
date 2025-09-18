@@ -227,7 +227,8 @@ class ReActAgentNode(BaseNodeFactory):
         """Initialize new state or update existing state from loop iteration."""
         # Case 1: Continuing from previous iteration (loop passes AgentState dict)
         if isinstance(input_data, dict) and "reasoning_steps" in input_data:
-            return AgentState.model_validate(input_data)
+            state: AgentState = AgentState.model_validate(input_data)
+            return state
 
         # Case 2: Fresh input (first iteration)
         # Handle both dict and Pydantic model inputs

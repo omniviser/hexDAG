@@ -8,20 +8,18 @@ from typing import Any
 
 import pymysql
 import pymysql.cursors
+from hexai.core.registry.decorators import adapter
 from pymysql.connections import Connection
 
 logger = logging.getLogger(__name__)
 
 
-# Plugin metadata for hexDAG registration
-__plugin_metadata__ = {
-    "name": "mysql",
-    "implements_port": "database",
-    "namespace": "plugin",
-    "description": "MySQL database adapter for production-ready scalable storage",
-}
-
-
+@adapter(
+    name="mysql",
+    implements_port="database",
+    namespace="plugin",
+    description="MySQL database adapter for production-ready scalable storage",
+)
 class MySQLAdapter:
     """MySQL adapter for database port.
 

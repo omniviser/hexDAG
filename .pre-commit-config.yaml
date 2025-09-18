@@ -98,10 +98,11 @@ repos:
     hooks:
       - id: mypy
         name: mypy-plugins
-        additional_dependencies: [pymysql>=1.1.0]  # Add plugin deps here
-        args: [--ignore-missing-imports, --python-version=3.12]
+        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]  # Add plugin deps here
+        args: [--ignore-missing-imports, --python-version=3.12, hexai_plugins/]
         files: ^hexai_plugins/.*\.py$
         exclude: ^hexai_plugins/.*\.venv/
+        pass_filenames: false
 
   # ============================================================================
   # Main code hooks (exclude plugins)
