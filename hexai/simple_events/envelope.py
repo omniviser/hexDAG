@@ -4,7 +4,7 @@ Envelope builder for the Simple Event Taxonomy.
 Builds a minimal, structured payload and validates it.
 """
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -52,29 +52,12 @@ def _coerce(v: Any) -> Any:
 
 
 def _obj_to_attrs(event: Any) -> dict[str, Any]:
-    if is_dataclass(event) and not isinstance(event, type):
-        data = asdict(event)  # instance OK
-    elif hasattr(event, "__dict__"):
-        data = dict(event.__dict__)
-    else:
-        data = {}
-
-    # Drop envelope-reserved keys if present on event object
-    for k in (
-        "event_id",
-        "timestamp",
-        "pipeline",
-        "pipeline_run_id",
-        "node",
-        "node_name",
-        "wave",
-        "wave_index",
-        "severity",
-        "event_type",
-    ):
-        data.pop(k, None)
-
-    return {k: _coerce(v) for k, v in data.items()}
+    """Extract whitelisted event-specific fields as attrs."""
+    attrs: dict[str, Any] = {}
+    for key in ("total_waves", "total_nodes", "error_type", "retryable"):
+        if hasattr(event, key):
+            attrs[key] = _coerce(getattr(event, key))
+    return attrs
 
 
 def _infer_severity(event_type: str) -> str:

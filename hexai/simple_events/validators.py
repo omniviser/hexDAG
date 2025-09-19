@@ -11,7 +11,7 @@ This module enforces lintable rules:
 
 import json
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from .types import APPROVED_ACTIONS, EVENT_TYPE_RE
@@ -28,18 +28,18 @@ REQUIRED_FIELDS = (
 
 
 def _is_rfc3339_z(ts: str) -> bool:
-    """Return True if timestamp is RFC3339 UTC with Z suffix and ms precision."""
+    """Validate that a timestamp is RFC3339 with Z (UTC) suffix."""
     try:
         if not ts.endswith("Z"):
             return False
-        datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return True
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) == UTC.utcoffset(dt)
     except Exception:
         return False
 
 
 def validate_event_type(et: str) -> None:
-    """Check that event_type matches regex and is in approved namespace/action sets."""
+    """Check that event_type matches regex and is in approved action sets."""
     if not EVENT_TYPE_RE.match(et):
         raise ValueError(f"event_type not matching ^[a-z]+:[a-z]+$: {et}")
     ns, act = et.split(":", 1)

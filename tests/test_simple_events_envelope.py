@@ -67,7 +67,6 @@ def test_validate_envelope_requires_pipeline_run_id():
     env = to_simple_event(e, ctx)
     env.pop("pipeline_run_id")
 
-    import pytest
 
     from hexai.simple_events.validators import validate_envelope
 
