@@ -95,15 +95,19 @@ def component(
         # Simplify name handling with convention over configuration
         if isinstance(name, list):
             # Multiple names provided - first is primary, rest are aliases
+            if not name:  # Validate list is not empty
+                raise ValueError("If providing a list of names, it cannot be empty")
             all_names = name
-            primary_name = name[0]  # We know name is a non-empty list here
+            primary_name = name[0]
         elif name:
             # Single name provided
             all_names = [name]
             primary_name = name
         else:
-            # No name provided - infer from class name
-            primary_name = _snake_case(cls.__name__)  # type: ignore[attr-defined]
+            # No name provided - infer from class/function name
+            # Use getattr to safely get __name__ from either class or function
+            obj_name = getattr(cls, "__name__", "unknown")
+            primary_name = _snake_case(obj_name)
             all_names = [primary_name]
 
         # Use class docstring as description if not provided
@@ -111,8 +115,11 @@ def component(
 
         # Validate component type - handle both enum and string
         validated_type: ComponentType
-        if not isinstance(component_type, ComponentType):
-            # It's a string, validate it
+        if isinstance(component_type, ComponentType):
+            # Already a ComponentType enum, use it directly
+            validated_type = component_type
+        elif isinstance(component_type, str):
+            # It's a string, convert to enum
             try:
                 validated_type = ComponentType(component_type)
             except ValueError:
@@ -121,8 +128,9 @@ def component(
                     f"Must be one of: {', '.join(ComponentType)}"
                 ) from None
         else:
-            # Already a ComponentType enum
-            validated_type = component_type
+            raise TypeError(
+                f"component_type must be ComponentType or str, not {type(component_type).__name__}"
+            )
 
         # Store everything as attributes (no metadata object)
         cls._hexdag_type = validated_type  # type: ignore[attr-defined]
@@ -210,7 +218,6 @@ def adapter(
     return decorator
 
 
-# Simple specialized decorators using partial
 tool = partial(component, ComponentType.TOOL)
 node = partial(component, ComponentType.NODE)
 policy = partial(component, ComponentType.POLICY)
@@ -218,7 +225,6 @@ memory = partial(component, ComponentType.MEMORY)
 observer = partial(component, ComponentType.OBSERVER)
 
 
-# For node subtypes, create explicit wrapper functions
 def function_node(
     name: str | None = None, *, namespace: str = "core", description: str | None = None
 ) -> Callable[[T], T]:
