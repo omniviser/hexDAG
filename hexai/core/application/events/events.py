@@ -5,14 +5,28 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass
 class Event:
     """Base class for all events - provides timestamp."""
 
+    event_namespace: ClassVar[str]
+    event_action: ClassVar[str]
     timestamp: datetime = field(default_factory=datetime.now, init=False)
+
+    @property
+    def event_type(self) -> str:
+        """Return canonical <namespace>:<action> identifier."""
+        try:
+            namespace = self.__class__.event_namespace
+            action = self.__class__.event_action
+        except AttributeError as exc:
+            raise NotImplementedError(
+                "Event subclasses must define event_namespace and event_action"
+            ) from exc
+        return f"{namespace}:{action}"
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Get a formatted log message for this event.
@@ -36,6 +50,8 @@ class Event:
 class NodeStarted(Event):
     """A node has started execution."""
 
+    event_namespace: ClassVar[str] = "node"
+    event_action: ClassVar[str] = "started"
     name: str
     wave_index: int
     dependencies: list[str] = field(default_factory=list)
@@ -51,6 +67,8 @@ class NodeStarted(Event):
 class NodeCompleted(Event):
     """A node has completed successfully."""
 
+    event_namespace: ClassVar[str] = "node"
+    event_action: ClassVar[str] = "completed"
     name: str
     wave_index: int
     result: Any
@@ -66,6 +84,8 @@ class NodeCompleted(Event):
 class NodeFailed(Event):
     """A node has failed."""
 
+    event_namespace: ClassVar[str] = "node"
+    event_action: ClassVar[str] = "failed"
     name: str
     wave_index: int
     error: Exception
@@ -81,6 +101,8 @@ class NodeFailed(Event):
 class WaveStarted(Event):
     """A wave of parallel nodes has started."""
 
+    event_namespace: ClassVar[str] = "wave"
+    event_action: ClassVar[str] = "started"
     wave_index: int
     nodes: list[str]
 
@@ -94,6 +116,8 @@ class WaveStarted(Event):
 class WaveCompleted(Event):
     """A wave has completed."""
 
+    event_namespace: ClassVar[str] = "wave"
+    event_action: ClassVar[str] = "completed"
     wave_index: int
     duration_ms: float
 
@@ -108,6 +132,8 @@ class WaveCompleted(Event):
 class PipelineStarted(Event):
     """Pipeline execution has started."""
 
+    event_namespace: ClassVar[str] = "pipeline"
+    event_action: ClassVar[str] = "started"
     name: str
     total_waves: int
     total_nodes: int
@@ -125,6 +151,8 @@ class PipelineStarted(Event):
 class PipelineCompleted(Event):
     """Pipeline has completed successfully."""
 
+    event_namespace: ClassVar[str] = "pipeline"
+    event_action: ClassVar[str] = "completed"
     name: str
     duration_ms: float
     node_results: dict[str, Any] = field(default_factory=dict)
@@ -140,6 +168,8 @@ class PipelineCompleted(Event):
 class LLMPromptSent(Event):
     """LLM prompt has been sent."""
 
+    event_namespace: ClassVar[str] = "llm"
+    event_action: ClassVar[str] = "prompt_sent"
     node_name: str
     messages: list[dict[str, str]]
 
@@ -153,6 +183,8 @@ class LLMPromptSent(Event):
 class LLMResponseReceived(Event):
     """LLM response has been received."""
 
+    event_namespace: ClassVar[str] = "llm"
+    event_action: ClassVar[str] = "response_received"
     node_name: str
     response: str
     duration_ms: float
@@ -168,6 +200,8 @@ class LLMResponseReceived(Event):
 class ToolCalled(Event):
     """A tool has been invoked."""
 
+    event_namespace: ClassVar[str] = "tool"
+    event_action: ClassVar[str] = "called"
     node_name: str
     tool_name: str
     params: dict[str, Any]
@@ -182,6 +216,8 @@ class ToolCalled(Event):
 class ToolCompleted(Event):
     """A tool has completed."""
 
+    event_namespace: ClassVar[str] = "tool"
+    event_action: ClassVar[str] = "completed"
     node_name: str
     tool_name: str
     result: Any

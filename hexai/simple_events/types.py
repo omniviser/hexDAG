@@ -11,7 +11,7 @@ import re
 from enum import Enum
 
 # Regex pattern validating <namespace>:<action>
-EVENT_TYPE_RE = re.compile(r"^[a-z]+:[a-z]+$")
+EVENT_TYPE_RE = re.compile(r"^[a-z]+:[a-z_]+$")
 
 # Allowed actions for each namespace (single source of truth)
 APPROVED_ACTIONS: dict[str, set[str]] = {
@@ -19,6 +19,8 @@ APPROVED_ACTIONS: dict[str, set[str]] = {
     "dag": {"started", "completed", "failed"},
     "wave": {"started", "completed"},
     "node": {"started", "completed", "failed", "skipped"},
+    "llm": {"prompt_sent", "response_received"},
+    "tool": {"called", "completed"},
     "policy": {"decision"},
     "observer": {"timeout", "error"},
     "registry": {"resolved", "missing"},

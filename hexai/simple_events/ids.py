@@ -1,14 +1,17 @@
 """
-Event ID generation utilities: uuid7 only.
+Event ID generation utilities: prefer uuid7, fallback to uuid4 if unavailable.
 """
+
+import uuid
+import warnings
 
 
 def generate_event_id(preferred: str | None = None) -> str:
     if preferred:
         return str(preferred)
-    import uuid
 
     func = getattr(uuid, "uuid7", None)
-    if func is None:
-        raise RuntimeError("uuid.uuid7() required by simple events")
-    return str(func())
+    if func is not None:
+        return str(func())
+    warnings.warn("uuid.uuid7() missing; falling back to uuid4 (dev only)", stacklevel=2)
+    return str(uuid.uuid4())

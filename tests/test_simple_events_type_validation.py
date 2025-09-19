@@ -9,6 +9,8 @@ from hexai.simple_events.validators import validate_event_type
         "pipeline:started",
         "node:skipped",
         "observer:error",
+        "llm:prompt_sent",
+        "tool:completed",
     ],
 )
 def test_event_type_valid(et):
