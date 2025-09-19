@@ -1,4 +1,4 @@
-"""Simplified BaseNodeFactory for creating nodes with Pydantic models and core event emission."""
+"""Simplified BaseNodeFactory for creating nodes with Pydantic models."""
 
 from abc import ABC, abstractmethod
 from typing import Any, cast
@@ -6,111 +6,13 @@ from typing import Any, cast
 from pydantic import BaseModel, create_model
 
 from ...domain.dag import NodeSpec
-from ..events.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    ToolCalledEvent,
-    ToolCompletedEvent,
-)
 
 
 class BaseNodeFactory(ABC):
-    """Minimal base class for node factories with Pydantic models and core event emission."""
+    """Minimal base class for node factories with Pydantic models."""
 
-    # Core node event emission methods (used by all nodes)
-    async def emit_node_started(
-        self,
-        node_name: str,
-        wave_index: int,
-        dependencies: list[str] | None = None,
-        event_manager: Any = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Emit node started event."""
-        if event_manager and dependencies is not None:
-            await event_manager.emit(
-                NodeStartedEvent(
-                    node_name=node_name,
-                    wave_index=wave_index,
-                    dependencies=dependencies,
-                    metadata=metadata or {},
-                )
-            )
-
-    async def emit_node_completed(
-        self,
-        node_name: str,
-        result: Any,
-        execution_time: float,
-        wave_index: int,
-        event_manager: Any = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Emit node completed event."""
-        if event_manager:
-            await event_manager.emit(
-                NodeCompletedEvent(
-                    node_name=node_name,
-                    result=result,
-                    execution_time=execution_time,
-                    wave_index=wave_index,
-                    metadata=metadata or {},
-                )
-            )
-
-    async def emit_node_failed(
-        self, node_name: str, error: Exception, wave_index: int, event_manager: Any = None
-    ) -> None:
-        """Emit node failed event."""
-        if event_manager:
-            await event_manager.emit(
-                NodeFailedEvent(
-                    node_name=node_name,
-                    error=error,
-                    wave_index=wave_index,
-                )
-            )
-
-    async def emit_tool_called(
-        self,
-        node_name: str,
-        tool_name: str,
-        tool_params: dict[str, Any],
-        event_manager: Any = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Emit tool called event."""
-        if event_manager:
-            await event_manager.emit(
-                ToolCalledEvent(
-                    node_name=node_name,
-                    tool_name=tool_name,
-                    tool_params=tool_params,
-                    metadata=metadata or {},
-                )
-            )
-
-    async def emit_tool_completed(
-        self,
-        node_name: str,
-        tool_name: str,
-        result: Any,
-        execution_time: float,
-        event_manager: Any = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Emit tool completed event."""
-        if event_manager:
-            await event_manager.emit(
-                ToolCompletedEvent(
-                    node_name=node_name,
-                    tool_name=tool_name,
-                    result=result,
-                    execution_time=execution_time,
-                    metadata=metadata or {},
-                )
-            )
+    # Note: Event emission has been removed as it's now handled by the orchestrator
+    # The new event system uses ObserverManager at the orchestrator level
 
     def create_pydantic_model(
         self, name: str, schema: dict[str, Any] | type[BaseModel] | type[Any] | None
@@ -151,8 +53,6 @@ class BaseNodeFactory(ABC):
                     # Unknown type specification - use Any
                     field_definitions[field_name] = (Any, ...)
 
-            # create_model returns Type[BaseModel]
-            # Cast is safe here as create_model returns a BaseModel subclass
             return cast("type[BaseModel]", create_model(name, **field_definitions))
 
         # Handle primitive types - create a simple wrapper model

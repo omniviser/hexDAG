@@ -206,8 +206,6 @@ class ReActAgentNode(BaseNodeFactory):
 
                 # Check success condition
                 if success_condition(step_result):
-                    # If success condition is met but we still have a dict,
-                    # try to extract final output one more time
                     final_output = await self._check_for_final_output(
                         self._initialize_or_update_state(step_result),
                         output_model,
@@ -347,17 +345,6 @@ class ReActAgentNode(BaseNodeFactory):
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"
 
-        # Emit step started event
-        if event_manager:
-            await self.emit_node_started(
-                node_step_name,
-                wave_index=current_step,
-                dependencies=[],
-                event_manager=event_manager,
-                metadata={"phase": state.current_phase},
-            )
-
-        # Get current prompt based on phase
         current_prompt = self._get_current_prompt(
             main_prompt, continuation_prompts, state.current_phase
         )
@@ -369,7 +356,7 @@ class ReActAgentNode(BaseNodeFactory):
         state_dict = state.model_dump()
         llm_input = {
             **state_dict,
-            **state_dict.get("input_data", {}),  # Include original input fields at top level
+            **state_dict.get("input_data", {}),
             "reasoning_so_far": "\n".join(state.reasoning_steps) or "Starting reasoning...",
         }
 
@@ -385,17 +372,6 @@ class ReActAgentNode(BaseNodeFactory):
         state.reasoning_steps.append(f"Step {current_step}: {response}")
         state.response = response
         state.step = current_step
-
-        # Emit step completed event
-        if event_manager:
-            await self.emit_node_completed(
-                node_step_name,
-                result=response,
-                execution_time=0.0,
-                wave_index=current_step,
-                event_manager=event_manager,
-                metadata={"phase": state.current_phase},
-            )
 
         return state
 
@@ -420,16 +396,6 @@ class ReActAgentNode(BaseNodeFactory):
         tool_calls = self.tool_parser.parse_tool_calls(response, format=config.tool_call_style)
 
         for tool_call in tool_calls:
-            # Emit tool called event
-            if event_manager:
-                await self.emit_tool_called(
-                    node_name=f"agent_step_{state.step}",
-                    tool_name=tool_call.name,
-                    tool_params=tool_call.params,
-                    event_manager=event_manager,
-                    metadata={"phase": state.current_phase},
-                )
-
             try:
                 # Execute tool
                 result = await tool_router.call_tool(tool_call.name, tool_call.params)
@@ -437,17 +403,6 @@ class ReActAgentNode(BaseNodeFactory):
                 # Store result
                 state.tool_results.append(f"{tool_call.name}: {result}")
                 state.tools_used.append(tool_call.name)
-
-                # Emit tool completed event
-                if event_manager:
-                    await self.emit_tool_completed(
-                        node_name=f"agent_step_{state.step}",
-                        tool_name=tool_call.name,
-                        result=result,
-                        execution_time=0.0,
-                        event_manager=event_manager,
-                        metadata={"phase": state.current_phase},
-                    )
 
                 # Handle special tools
                 if tool_call.name in ["change_phase", "phase"] and isinstance(result, dict):
@@ -473,7 +428,7 @@ class ReActAgentNode(BaseNodeFactory):
         dict[str, Any] | None
             Parsed data dictionary or None if parsing fails
         """
-        if not isinstance(tool_result, str) or not tool_result.startswith("tool_end:"):
+        if not tool_result or not tool_result.startswith("tool_end:"):
             return None
 
         try:
@@ -539,7 +494,7 @@ class ReActAgentNode(BaseNodeFactory):
                     import logging
 
                     logger = logging.getLogger(__name__)
-                    logger.debug("Failed to validate tool_end result: %s", e)
+                    logger.debug("Failed to validate tool_end result: %e", e)
                     continue  # Skip this tool result and try the next one
 
         return None

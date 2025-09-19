@@ -1,14 +1,12 @@
 """BaseLLMNode - Foundation class for all LLM-based nodes."""
 
 import json
-import time
 from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
 
 from ...domain.dag import NodeSpec
-from ..events.events import LLMPromptGeneratedEvent, LLMResponseReceivedEvent
 from ..prompt import PromptInput, TemplateType
 from ..prompt.template import PromptTemplate
 from .base_node_factory import BaseNodeFactory
@@ -37,14 +35,12 @@ class BaseLLMNode(BaseNodeFactory):
     @staticmethod
     def infer_input_schema_from_template(template: TemplateType) -> dict[str, Any]:
         """Infer input schema from template variables."""
-        # All templates have input_vars after our refactoring
         variables = getattr(template, "input_vars", [])
 
         # Filter out special parameters that are not template variables
         special_params = {"context_history", "system_prompt"}
         variables = [var for var in variables if var not in special_params]
 
-        # Create schema with string fields for each variable
         if not variables:
             return {"input": str}  # Default single input field
 
@@ -64,7 +60,6 @@ class BaseLLMNode(BaseNodeFactory):
         schema_instruction = self._create_schema_instruction(output_model)
         return template + schema_instruction
 
-    # LLM Interaction Methods
     def create_llm_wrapper(
         self,
         name: str,
@@ -78,72 +73,33 @@ class BaseLLMNode(BaseNodeFactory):
         async def llm_wrapper(validated_input: dict[str, Any], **ports: Any) -> Any:
             """Execute LLM call with proper event emission."""
             llm = ports.get("llm")
-            event_manager = ports.get("event_manager")
 
             if not llm:
                 raise ValueError("LLM port is required")
 
-            # Start timing
-            start_time = time.time()
-
-            # Emit node started event
-            await self.emit_node_started(name, 0, [], event_manager)
-
             try:
-                # Enhance template with schema if needed
                 enhanced_template = template
                 if rich_features and output_model:
                     enhanced_template = self.enhance_template_with_schema(template, output_model)
 
-                # Convert Pydantic model to dict if needed
                 if hasattr(validated_input, "model_dump"):
                     input_dict = validated_input.model_dump()  # pyright: ignore
                 else:
                     input_dict = validated_input
 
-                # Generate messages and extract template variables
                 messages, template_vars = self._generate_messages(enhanced_template, input_dict)
-
-                # Emit prompt generated event
-                if event_manager:
-                    await event_manager.emit(
-                        LLMPromptGeneratedEvent(
-                            node_name=name,
-                            messages=messages,
-                            template_vars=template_vars,
-                        )
-                    )
 
                 # Call LLM
                 if rich_features and output_model:
-                    # For structured output, we'll parse the response
                     response = await llm.aresponse(messages)
-                    # Parse structured response (basic implementation)
                     result = self._parse_structured_response(response, output_model)
                 else:
                     response = await llm.aresponse(messages)
                     result = response
 
-                # Emit response received event
-                if event_manager:
-                    await event_manager.emit(
-                        LLMResponseReceivedEvent(
-                            node_name=name,
-                            response=str(result),
-                        )
-                    )
-
-                # Calculate execution time
-                execution_time = time.time() - start_time
-
-                # Emit node completed event
-                await self.emit_node_completed(name, result, execution_time, 0, event_manager)
-
                 return result
 
             except Exception as e:
-                execution_time = time.time() - start_time
-                await self.emit_node_failed(name, e, 0, event_manager)
                 raise e
 
         return llm_wrapper
@@ -152,7 +108,6 @@ class BaseLLMNode(BaseNodeFactory):
         self, template: TemplateType, validated_input: dict[str, Any]
     ) -> tuple[list[dict[str, str]], dict[str, Any]]:
         """Generate messages from template and extract variables."""
-        # All templates have to_messages method
         messages = template.to_messages(**validated_input)
         return messages, validated_input
 
