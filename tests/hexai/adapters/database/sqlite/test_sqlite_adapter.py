@@ -1,6 +1,6 @@
 """Unit tests for SQLite adapter."""
 
-import asyncio
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -26,191 +26,203 @@ class TestSQLiteAdapter:
             test_db.unlink()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_basic_operations(self):
-        """Test basic CRUD operations with SQLite adapter."""
+    async def test_sqlite_adapter_query_execution(self):
+        """Test SQL query execution with SQLite adapter."""
         # Create adapter instance
         adapter = SQLiteAdapter(db_path="test_hexdag.db")
 
-        # Test insert
-        doc_id = await adapter.ainsert(
-            "users", {"name": "John Doe", "email": "john@example.com", "age": 30}
+        # Create a test table
+        await adapter.aexecute_query("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE,
+                age INTEGER
+            )
+        """)
+
+        # Insert data
+        await adapter.aexecute_query(
+            "INSERT INTO users (name, email, age) VALUES (:name, :email, :age)",
+            {"name": "John Doe", "email": "john@example.com", "age": 30},
         )
-        assert doc_id is not None
 
-        # Test get
-        user = await adapter.aget("users", doc_id)
-        assert user is not None
-        assert user["name"] == "John Doe"
-        assert user["email"] == "john@example.com"
+        # Query data
+        results = await adapter.aexecute_query(
+            "SELECT * FROM users WHERE email = :email", {"email": "john@example.com"}
+        )
+        assert len(results) == 1
+        assert results[0]["name"] == "John Doe"
+        assert results[0]["age"] == 30
 
-        # Test update
-        success = await adapter.aupdate("users", doc_id, {"age": 31, "city": "New York"})
-        assert success is True
+        # Update data
+        await adapter.aexecute_query(
+            "UPDATE users SET age = :age WHERE email = :email",
+            {"age": 31, "email": "john@example.com"},
+        )
 
         # Verify update
-        updated_user = await adapter.aget("users", doc_id)
-        assert updated_user["age"] == 31
-        assert updated_user["city"] == "New York"
-        assert updated_user["name"] == "John Doe"  # Original field preserved
-
-        # Test delete
-        deleted = await adapter.adelete("users", doc_id)
-        assert deleted is True
-
-        # Verify deletion
-        deleted_user = await adapter.aget("users", doc_id)
-        assert deleted_user is None
+        results = await adapter.aexecute_query(
+            "SELECT age FROM users WHERE email = :email", {"email": "john@example.com"}
+        )
+        assert results[0]["age"] == 31
 
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_query_operations(self):
-        """Test query operations with SQLite adapter."""
+    async def test_sqlite_adapter_schema_introspection(self):
+        """Test schema introspection capabilities."""
         adapter = SQLiteAdapter(db_path="test_hexdag.db")
 
-        # Insert multiple documents
-        await adapter.ainsert(
-            "products", {"id": "1", "name": "Laptop", "category": "Electronics", "price": 999}
-        )
-        await adapter.ainsert(
-            "products", {"id": "2", "name": "Mouse", "category": "Electronics", "price": 29}
-        )
-        await adapter.ainsert(
-            "products", {"id": "3", "name": "Desk", "category": "Furniture", "price": 299}
-        )
+        # Create tables with relationships
+        await adapter.aexecute_query("""
+            CREATE TABLE departments (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL
+            )
+        """)
 
-        # Test query all
-        all_products = await adapter.aquery("products")
-        assert len(all_products) == 3
+        await adapter.aexecute_query("""
+            CREATE TABLE employees (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                dept_id INTEGER,
+                FOREIGN KEY (dept_id) REFERENCES departments(id)
+            )
+        """)
 
-        # Test query with filter
-        electronics = await adapter.aquery("products", filter={"category": "Electronics"})
-        assert len(electronics) == 2
+        # Get table schemas
+        schemas = await adapter.aget_table_schemas()
+        assert "departments" in schemas
+        assert "employees" in schemas
 
-        # Test query with limit
-        limited = await adapter.aquery("products", limit=2)
-        assert len(limited) == 2
+        # Check department schema
+        dept_schema = schemas["departments"]
+        assert dept_schema["table_name"] == "departments"
+        assert "id" in dept_schema["columns"]
+        assert "name" in dept_schema["columns"]
+        assert "id" in dept_schema["primary_keys"]
 
-        # Test count
-        count = await adapter.acount("products")
-        assert count == 3
-
-        # Test list collections
-        collections = await adapter.alist_collections()
-        assert "products" in collections
+        # Check employee schema with foreign key
+        emp_schema = schemas["employees"]
+        assert emp_schema["table_name"] == "employees"
+        assert len(emp_schema["foreign_keys"]) > 0
+        fk = emp_schema["foreign_keys"][0]
+        assert fk["from_column"] == "dept_id"
+        assert fk["to_table"] == "departments"
+        assert fk["to_column"] == "id"
 
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_concurrent_operations(self):
-        """Test concurrent operations with SQLite adapter."""
+    async def test_sqlite_adapter_relationships(self):
+        """Test foreign key relationship detection."""
         adapter = SQLiteAdapter(db_path="test_hexdag.db")
 
-        # Prepare concurrent inserts
-        async def insert_doc(i):
-            return await adapter.ainsert(
-                "concurrent", {"id": f"doc_{i}", "value": i, "data": f"test_{i}"}
+        # Create tables with FK relationship
+        await adapter.aexecute_query("""
+            CREATE TABLE categories (
+                id INTEGER PRIMARY KEY,
+                name TEXT
+            )
+        """)
+
+        await adapter.aexecute_query("""
+            CREATE TABLE products (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                category_id INTEGER,
+                FOREIGN KEY (category_id) REFERENCES categories(id)
+            )
+        """)
+
+        # Get relationships
+        relationships = await adapter.aget_relationships()
+        assert len(relationships) > 0
+
+        # Find the product->category relationship
+        found = False
+        for rel in relationships:
+            if rel["from_table"] == "products" and rel["to_table"] == "categories":
+                assert rel["from_column"] == "category_id"
+                assert rel["to_column"] == "id"
+                assert rel["relationship_type"] == "many_to_one"
+                found = True
+                break
+        assert found
+
+        adapter.close()
+
+    @pytest.mark.asyncio
+    async def test_sqlite_adapter_indexes(self):
+        """Test index information retrieval."""
+        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+
+        # Create table
+        await adapter.aexecute_query("""
+            CREATE TABLE items (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                code TEXT UNIQUE
+            )
+        """)
+
+        # Create an index
+        await adapter.aexecute_query("CREATE INDEX idx_items_name ON items(name)")
+
+        # Get indexes
+        indexes = await adapter.aget_indexes()
+
+        # Find our created index
+        found = False
+        for idx in indexes:
+            if idx["index_name"] == "idx_items_name":
+                assert idx["table_name"] == "items"
+                assert "name" in idx["columns"]
+                assert idx["index_type"] == "btree"
+                assert idx["is_unique"] is False
+                found = True
+                break
+        assert found
+
+        adapter.close()
+
+    @pytest.mark.asyncio
+    async def test_sqlite_adapter_statistics(self):
+        """Test table statistics retrieval."""
+        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+
+        # Create table and insert data
+        await adapter.aexecute_query("""
+            CREATE TABLE records (
+                id INTEGER PRIMARY KEY,
+                data TEXT
+            )
+        """)
+
+        for i in range(10):
+            await adapter.aexecute_query(
+                "INSERT INTO records (data) VALUES (:data)", {"data": f"record_{i}"}
             )
 
-        # Insert 10 documents concurrently
-        doc_ids = await asyncio.gather(*[insert_doc(i) for i in range(10)])
+        # Get statistics
+        stats = await adapter.aget_table_statistics()
+        assert "records" in stats
 
-        assert len(doc_ids) == 10
+        record_stats = stats["records"]
+        assert record_stats["row_count"] == 10
+        assert "size_bytes" in record_stats
+        assert record_stats["last_updated"] is None  # SQLite doesn't track this
 
-        # Verify all were inserted
-        count = await adapter.acount("concurrent")
-        assert count == 10
-
-        # Test concurrent reads
-        async def read_doc(doc_id):
-            return await adapter.aget("concurrent", doc_id)
-
-        docs = await asyncio.gather(*[read_doc(doc_id) for doc_id in doc_ids])
-
-        assert len(docs) == 10
-        assert all(doc is not None for doc in docs)
-
-        adapter.close()
-
-    def test_sqlite_adapter_persistence(self):
-        """Test that SQLite adapter persists data between sessions."""
-        # First session - write data
-        adapter1 = SQLiteAdapter(db_path="test_hexdag.db")
-
-        async def write_data():
-            await adapter1.ainsert("persistent", {"id": "test1", "data": "This should persist"})
-
-        asyncio.run(write_data())
-        adapter1.close()
-
-        # Second session - read data
-        adapter2 = SQLiteAdapter(db_path="test_hexdag.db")
-
-        async def read_data():
-            docs = await adapter2.aquery("persistent", filter={"id": "test1"})
-            assert len(docs) == 1
-            assert docs[0]["data"] == "This should persist"
-
-        asyncio.run(read_data())
-        adapter2.close()
-
-    @pytest.mark.asyncio
-    async def test_sqlite_adapter_json_handling(self):
-        """Test SQLite adapter handles complex JSON data."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
-
-        # Complex nested data
-        complex_data = {
-            "id": "complex1",
-            "user": {
-                "name": "Alice",
-                "profile": {"age": 28, "interests": ["coding", "music", "travel"]},
-            },
-            "metadata": {
-                "created": "2024-01-01",
-                "tags": ["important", "verified"],
-                "settings": {"notifications": True, "theme": "dark"},
-            },
-        }
-
-        # Insert complex data
-        doc_id = await adapter.ainsert("complex", complex_data)
-
-        # Retrieve and verify
-        retrieved = await adapter.aget("complex", doc_id)
-        assert retrieved["user"]["name"] == "Alice"
-        assert retrieved["user"]["profile"]["age"] == 28
-        assert "coding" in retrieved["user"]["profile"]["interests"]
-        assert retrieved["metadata"]["settings"]["theme"] == "dark"
-
-        adapter.close()
-
-    @pytest.mark.asyncio
-    async def test_sqlite_adapter_in_memory(self):
-        """Test SQLite adapter with in-memory database."""
-        # Use :memory: for in-memory database
-        adapter = SQLiteAdapter(db_path=":memory:")
-
-        # Test basic operations
-        doc_id = await adapter.ainsert("test", {"key": "value"})
-        assert doc_id is not None
-
-        doc = await adapter.aget("test", doc_id)
-        assert doc["key"] == "value"
-
-        # No persistence for in-memory
         adapter.close()
 
     def test_sqlite_adapter_decorator_metadata(self):
-        """Test that SQLite adapter has proper registry attributes."""
-        # Check that the adapter has registry attributes
-        assert hasattr(SQLiteAdapter, "_hexdag_type")
-
+        """Test that SQLite adapter has correct decorator metadata."""
         from hexai.core.registry.models import ComponentType
 
         assert SQLiteAdapter._hexdag_type == ComponentType.ADAPTER
         assert SQLiteAdapter._hexdag_name == "sqlite"
-        assert SQLiteAdapter._hexdag_namespace == "database"
+        assert SQLiteAdapter._hexdag_namespace == "user"
         assert "SQLite database adapter" in SQLiteAdapter._hexdag_description
 
     @pytest.mark.asyncio
@@ -218,24 +230,44 @@ class TestSQLiteAdapter:
         """Test error handling in SQLite adapter."""
         adapter = SQLiteAdapter(db_path="test_hexdag.db")
 
-        # Test get with non-existent ID
-        result = await adapter.aget("nonexistent", "fake_id")
-        assert result is None
+        # Test query on non-existent table
+        with pytest.raises(sqlite3.OperationalError):
+            await adapter.aexecute_query("SELECT * FROM non_existent_table")
 
-        # Test update with non-existent ID
-        success = await adapter.aupdate("nonexistent", "fake_id", {"data": "test"})
-        assert success is False
+        # Test invalid SQL
+        with pytest.raises(sqlite3.OperationalError):
+            await adapter.aexecute_query("INVALID SQL STATEMENT")
 
-        # Test delete with non-existent ID
-        success = await adapter.adelete("nonexistent", "fake_id")
-        assert success is False
+        adapter.close()
 
-        # Test query on non-existent collection
-        results = await adapter.aquery("nonexistent")
-        assert results == []
+    @pytest.mark.asyncio
+    async def test_sqlite_adapter_parameterized_queries(self):
+        """Test parameterized query support for SQL injection prevention."""
+        adapter = SQLiteAdapter(db_path="test_hexdag.db")
 
-        # Test count on non-existent collection
-        count = await adapter.acount("nonexistent")
-        assert count == 0
+        # Create table
+        await adapter.aexecute_query("""
+            CREATE TABLE test_data (
+                id INTEGER PRIMARY KEY,
+                value TEXT
+            )
+        """)
 
+        # Insert with parameters (safe from injection)
+        await adapter.aexecute_query(
+            "INSERT INTO test_data (value) VALUES (:value)",
+            {"value": "'; DROP TABLE test_data; --"},  # Attempted injection
+        )
+
+        # Verify table still exists and data was inserted as string
+        results = await adapter.aexecute_query("SELECT * FROM test_data")
+        assert len(results) == 1
+        assert results[0]["value"] == "'; DROP TABLE test_data; --"
+
+        adapter.close()
+
+    def test_sqlite_adapter_repr(self):
+        """Test string representation of adapter."""
+        adapter = SQLiteAdapter(db_path="test.db")
+        assert repr(adapter) == "SQLiteAdapter(db_path='test.db')"
         adapter.close()

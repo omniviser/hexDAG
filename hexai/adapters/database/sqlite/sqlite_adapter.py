@@ -1,10 +1,10 @@
 """SQLite database adapter implementation."""
 
-import json
+import re
 import sqlite3
 from pathlib import Path
 from sqlite3 import Connection
-from typing import Any, cast
+from typing import Any
 
 from hexai.core.registry.decorators import adapter
 
@@ -12,14 +12,13 @@ from hexai.core.registry.decorators import adapter
 @adapter(
     name="sqlite",
     implements_port="database",
-    namespace="database",
-    description="SQLite database adapter for local file-based storage",
+    description="SQLite database adapter for SQL query execution and schema introspection",
 )
 class SQLiteAdapter:
     """SQLite adapter for database port.
 
-    Provides a lightweight, file-based database solution perfect for
-    development, testing, and small-scale deployments.
+    Provides a lightweight, file-based database solution that implements
+    the DatabasePort interface for SQL execution and schema introspection.
     """
 
     def __init__(self, db_path: str = "hexdag.db", **kwargs: Any) -> None:
@@ -34,228 +33,236 @@ class SQLiteAdapter:
         self._ensure_database()
 
     def _ensure_database(self) -> None:
-        """Ensure database and tables exist."""
+        """Ensure database connection exists."""
         self.connection = sqlite3.connect(str(self.db_path))
-        if self.connection is None:
-            raise RuntimeError("Database connection not established")
-        cursor = self.connection.cursor()
+        self.connection.row_factory = sqlite3.Row  # Return rows as dictionaries
 
-        # Create a generic key-value store table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS hexdag_store (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collection TEXT NOT NULL,
-                key TEXT NOT NULL,
-                value TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(collection, key)
-            )
-        """)
+    async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
+        """Get schema information for all tables.
 
-        # Create index for faster lookups
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_collection_key
-            ON hexdag_store(collection, key)
-        """)
-
-        self.connection.commit()
-
-    async def ainsert(self, collection: str, data: dict[str, Any]) -> str:
-        """Insert data into collection.
-
-        Args:
-            collection: Collection/table name
-            data: Data to insert
-
-        Returns:
-            ID of inserted record
+        Returns
+        -------
+            Dictionary mapping table names to schema information
         """
         if self.connection is None:
             raise RuntimeError("Database connection not established")
+
         cursor = self.connection.cursor()
 
-        # Get next ID for this collection
-        cursor.execute("SELECT MAX(id) FROM hexdag_store WHERE collection = ?", (collection,))
-        max_id = cursor.fetchone()[0]
-        next_id = (max_id or 0) + 1
-        key = data.get("_id") or data.get("id") or str(next_id)
+        # Get all tables
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+        """)
+        tables = [row[0] for row in cursor.fetchall()]
 
-        # Serialize data to JSON
-        value_json = json.dumps(data)
+        schemas = {}
+        for table in tables:
+            # Get column info
+            cursor.execute(f'PRAGMA table_info("{table}")')  # nosec B608 - table from sqlite_master
+            rows = cursor.fetchall()
 
-        # Insert or replace
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO hexdag_store (collection, key, value)
-            VALUES (?, ?, ?)
-        """,
-            (collection, str(key), value_json),
-        )
+            columns = {}
+            primary_keys = []
+            for row in rows:
+                col_name = row[1]
+                col_type = row[2]
+                is_pk = row[5]
 
-        self.connection.commit()
-        return str(key)
+                columns[col_name] = col_type
+                if is_pk:
+                    primary_keys.append(col_name)
 
-    async def aget(self, collection: str, id: str) -> dict[str, Any] | None:
-        """Get document by ID.
+            # Get foreign keys
+            cursor.execute(f'PRAGMA foreign_key_list("{table}")')  # nosec B608 - table from sqlite_master
+            fk_rows = cursor.fetchall()
+            foreign_keys = [
+                {"from_column": fk_row[3], "to_table": fk_row[2], "to_column": fk_row[4]}
+                for fk_row in fk_rows
+            ]
 
-        Args:
-            collection: Collection/table name
-            id: Document ID
+            schemas[table] = {
+                "table_name": table,
+                "columns": columns,
+                "primary_keys": primary_keys,
+                "foreign_keys": foreign_keys,
+            }
 
-        Returns:
-            Document data or None if not found
-        """
-        if self.connection is None:
-            raise RuntimeError("Database connection not established")
-        cursor = self.connection.cursor()
+        return schemas
 
-        cursor.execute(
-            """
-            SELECT value FROM hexdag_store
-            WHERE collection = ? AND key = ?
-        """,
-            (collection, str(id)),
-        )
-
-        result = cursor.fetchone()
-        if result:
-            data: dict[str, Any] = json.loads(result[0])
-            return data
-        return None
-
-    async def aquery(
-        self, collection: str, filter: dict[str, Any] | None = None, limit: int | None = None
+    async def aexecute_query(
+        self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        """Query documents from collection.
+        """Execute a SQL query and return results.
 
-        Args:
-            collection: Collection/table name
-            filter: Query filter (basic key-value matching on JSON fields)
-            limit: Maximum number of results
+        Args
+        ----
+            query: SQL query to execute
+            params: Optional query parameters for safe parameterized queries
 
-        Returns:
-            List of matching documents
+        Returns
+        -------
+            List of dictionaries representing query result rows
         """
         if self.connection is None:
             raise RuntimeError("Database connection not established")
+
         cursor = self.connection.cursor()
 
-        query = "SELECT value FROM hexdag_store WHERE collection = ?"
-        params: tuple[Any, ...] = (collection,)
+        # Convert dict params to list for sqlite3
+        if params:
+            # SQLite uses ? placeholders, need to convert from :name format
+            import re
 
-        # Basic filter support (exact match on JSON fields)
-        if filter:
-            for key, value in filter.items():
-                query += f" AND json_extract(value, '$.{key}') = ?"
-                # json_extract returns unquoted strings for string values
-                params = params + (value,)
+            param_names = re.findall(r":(\w+)", query)
+            query = re.sub(r":(\w+)", "?", query)
+            param_values = [params.get(name) for name in param_names]
+            cursor.execute(query, param_values)
+        else:
+            cursor.execute(query)
 
-        if limit:
-            query += f" LIMIT {limit}"
+        # For SELECT queries, fetch results
+        if query.strip().upper().startswith(("SELECT", "PRAGMA", "WITH")):
+            rows = cursor.fetchall()
+            # Convert sqlite3.Row objects to dicts
+            return [dict(row) for row in rows]
+        else:
+            # For INSERT/UPDATE/DELETE, commit and return empty list
+            self.connection.commit()
+            return []
 
-        cursor.execute(query, params)
+    async def aget_relationships(self) -> list[dict[str, Any]]:
+        """Get foreign key relationships between tables.
 
-        results = [json.loads(row[0]) for row in cursor.fetchall()]
-        return results
-
-    async def aupdate(self, collection: str, id: str, data: dict[str, Any]) -> bool:
-        """Update document in collection.
-
-        Args:
-            collection: Collection/table name
-            id: Document ID
-            data: Updated data
-
-        Returns:
-            True if updated, False if not found
+        Returns
+        -------
+            List of relationship dictionaries
         """
         if self.connection is None:
             raise RuntimeError("Database connection not established")
+
         cursor = self.connection.cursor()
 
-        # Get existing document
-        existing = await self.aget(collection, id)
-        if not existing:
-            return False
+        # Get all tables
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+        """)
+        tables = [row[0] for row in cursor.fetchall()]
 
-        # Merge data
-        existing.update(data)
+        relationships: list[dict[str, Any]] = []
+        for table in tables:
+            cursor.execute(f'PRAGMA foreign_key_list("{table}")')  # nosec B608 - table from sqlite_master
+            fk_rows = cursor.fetchall()
 
-        # Update in database
-        cursor.execute(
-            """
-            UPDATE hexdag_store
-            SET value = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE collection = ? AND key = ?
-        """,
-            (json.dumps(existing), collection, str(id)),
-        )
+            relationships.extend(
+                {
+                    "from_table": table,
+                    "from_column": fk_row[3],
+                    "to_table": fk_row[2],
+                    "to_column": fk_row[4],
+                    "relationship_type": "many_to_one",  # SQLite doesn't store this info
+                }
+                for fk_row in fk_rows
+            )
 
-        self.connection.commit()
-        return bool(cursor.rowcount > 0)
+        return relationships
 
-    async def adelete(self, collection: str, id: str) -> bool:
-        """Delete document from collection.
+    async def aget_indexes(self) -> list[dict[str, Any]]:
+        """Get index information for performance optimization.
 
-        Args:
-            collection: Collection/table name
-            id: Document ID
-
-        Returns:
-            True if deleted, False if not found
+        Returns
+        -------
+            List of index dictionaries
         """
         if self.connection is None:
             raise RuntimeError("Database connection not established")
+
         cursor = self.connection.cursor()
 
-        cursor.execute(
-            """
-            DELETE FROM hexdag_store
-            WHERE collection = ? AND key = ?
-        """,
-            (collection, str(id)),
-        )
+        # Get all indexes
+        cursor.execute("""
+            SELECT name, tbl_name, sql FROM sqlite_master
+            WHERE type='index' AND sql IS NOT NULL
+        """)
+        index_rows = cursor.fetchall()
 
-        self.connection.commit()
-        return bool(cursor.rowcount > 0)
+        indexes = []
+        for row in index_rows:
+            index_name = row[0]
+            table_name = row[1]
 
-    async def alist_collections(self) -> list[str]:
-        """List all collections in database.
+            # Get index info
+            cursor.execute(f'PRAGMA index_info("{index_name}")')  # nosec B608 - index from sqlite_master
+            col_rows = cursor.fetchall()
+            columns = [col_row[2] for col_row in col_rows]
 
-        Returns:
-            List of collection names
+            # Check if unique
+            cursor.execute(f'PRAGMA index_list("{table_name}")')  # nosec B608 - table from sqlite_master
+            idx_list = cursor.fetchall()
+            is_unique = False
+            for idx in idx_list:
+                if idx[1] == index_name:
+                    is_unique = bool(idx[2])
+                    break
+
+            indexes.append(
+                {
+                    "index_name": index_name,
+                    "table_name": table_name,
+                    "columns": columns,
+                    "index_type": "btree",  # SQLite primarily uses B-tree
+                    "is_unique": is_unique,
+                }
+            )
+
+        return indexes
+
+    async def aget_table_statistics(self) -> dict[str, dict[str, Any]]:
+        """Get table statistics for query optimization.
+
+        Returns
+        -------
+            Dictionary mapping table names to statistics
         """
         if self.connection is None:
             raise RuntimeError("Database connection not established")
+
         cursor = self.connection.cursor()
 
-        cursor.execute("SELECT DISTINCT collection FROM hexdag_store")
-        return [row[0] for row in cursor.fetchall()]
+        # Get all tables
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+        """)
+        tables = [row[0] for row in cursor.fetchall()]
 
-    async def acount(self, collection: str) -> int:
-        """Count documents in collection.
+        stats = {}
+        for table in tables:
+            # Validate table name to prevent injection (even though it comes from sqlite_master)
 
-        Args:
-            collection: Collection name
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table):
+                continue  # Skip invalid table names
 
-        Returns:
-            Number of documents
-        """
-        if self.connection is None:
-            raise RuntimeError("Database connection not established")
-        cursor = self.connection.cursor()
+            # Get row count - use quote for identifier
+            # SQLite uses double quotes for identifiers
+            cursor.execute(f'SELECT COUNT(*) FROM "{table}"')  # nosec B608 - table validated
+            row_count = cursor.fetchone()[0]
 
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM hexdag_store
-            WHERE collection = ?
-        """,
-            (collection,),
-        )
+            # Get table size (approximate)
+            cursor.execute(
+                "SELECT SUM(LENGTH(sql)) FROM sqlite_master WHERE tbl_name = ?", (table,)
+            )
+            size_result = cursor.fetchone()[0]
+            size_bytes = size_result if size_result else 0
 
-        result = cursor.fetchone()
-        return cast("int", result[0] if result else 0)
+            stats[table] = {
+                "row_count": row_count,
+                "size_bytes": size_bytes,
+                "last_updated": None,  # SQLite doesn't track this
+            }
+
+        return stats
 
     def close(self) -> None:
         """Close database connection."""
@@ -267,6 +274,6 @@ class SQLiteAdapter:
         """Cleanup on deletion."""
         self.close()
 
-    def __repr__(self) -> str:  # noqa: D105
+    def __repr__(self) -> str:
         """String representation."""
         return f"SQLiteAdapter(db_path='{self.db_path}')"

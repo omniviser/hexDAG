@@ -230,31 +230,38 @@ class TestPluginSystemIntegration:
             "sqlite", namespace="plugin", init_params={"db_path": ":memory:"}
         )
 
-        # Test basic operations
-        collection = "test_collection"
+        # Test DatabasePort interface
 
-        # Insert a document
-        doc_id = await sqlite.ainsert(collection, {"name": "Test", "value": 42})
-        assert doc_id is not None
+        # Create a test table
+        await sqlite.aexecute_query("""
+            CREATE TABLE test_table (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                value INTEGER
+            )
+        """)
 
-        # Retrieve the document
-        doc = await sqlite.aget(collection, doc_id)
-        assert doc["name"] == "Test"
-        assert doc["value"] == 42
+        # Insert data using parameterized query
+        await sqlite.aexecute_query(
+            "INSERT INTO test_table (name, value) VALUES (:name, :value)",
+            {"name": "Test", "value": 42},
+        )
 
-        # Update the document
-        success = await sqlite.aupdate(collection, doc_id, {"status": "updated"})
-        assert success
+        # Query data
+        results = await sqlite.aexecute_query(
+            "SELECT * FROM test_table WHERE name = :name", {"name": "Test"}
+        )
+        assert len(results) == 1
+        assert results[0]["name"] == "Test"
+        assert results[0]["value"] == 42
 
-        # Query documents
-        docs = await sqlite.aquery(collection)
-        assert len(docs) == 1
-        assert docs[0]["status"] == "updated"
+        # Test schema introspection
+        schemas = await sqlite.aget_table_schemas()
+        assert "test_table" in schemas
+        assert schemas["test_table"]["columns"]["name"] == "TEXT"
+        assert schemas["test_table"]["columns"]["value"] == "INTEGER"
 
-        # Delete the document
-        success = await sqlite.adelete(collection, doc_id)
-        assert success
-
-        # Verify deletion
-        doc = await sqlite.aget(collection, doc_id)
-        assert doc is None
+        # Test table statistics
+        stats = await sqlite.aget_table_statistics()
+        assert "test_table" in stats
+        assert stats["test_table"]["row_count"] == 1
