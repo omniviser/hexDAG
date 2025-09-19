@@ -45,7 +45,7 @@ dev = [
     "pytest-mock>=3.14.0,<4",
     "black==24.10.0",
     "isort==5.13.2",
-    "ruff>=0.12.8",
+    "ruff>=0.13.0",
     "flake8==7.1.1",
     "flake8-docstrings==1.7.0",
     "flake8-import-order==0.18.2",
@@ -54,6 +54,7 @@ dev = [
     "flake8-print==5.0.0",
     "pep8-naming==0.14.1",
     "mypy==1.17.1",
+    "pyright==1.1.405",
     "bandit==1.7.10",
     "pre-commit==3.8.0",
     "commitizen==4.8.3",
@@ -62,7 +63,14 @@ dev = [
     "mkdocs-material==9.6.16",
     "mkdocs-mermaid2-plugin==1.2.1",
     "types-pyyaml==6.0.12",
+    "safety>=3.0.0",
+    "yamllint>=1.35.0",
+    "vulture>=2.11",
+    "radon>=6.0.1",
+    "twine>=6.1.0",
+
 ]
+
 
 [tool.hatch.build.targets.sdist]
 include = ["hexai"]
@@ -131,6 +139,15 @@ include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
+skip = [
+    ".venv",
+    "build",
+    "dist",
+    ".git",
+    ".mypy_cache",
+    ".tox",
+    ".eggs",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -153,9 +170,86 @@ disable_error_code = ["import-untyped"]
 module = "tests.*"
 ignore_errors = true
 
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+exclude = ["tests/**", "examples/**", ".venv", "build", "dist", "**/test_*.py"]
+include = ["hexai"]
+
+# Type checking settings
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportMissingTypeArgument = false
+
+# Reduce strictness for practical development
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownLambdaType = false
+reportUnnecessaryIsInstance = "warning"
+reportUnnecessaryComparison = "warning"
+reportUnusedImport = false
+reportUnusedVariable = false
+reportUnusedFunction = false
+reportPrivateUsage = false
+
+# Keep important checks
+reportGeneralTypeIssues = true
+reportOptionalMemberAccess = true
+reportAttributeAccessIssue = true
+reportUndefinedVariable = true
+reportIncompatibleMethodOverride = true
+
 [tool.bandit]
 exclude_dirs = ["tests", "examples"]
 skips = ["B101", "B601"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "tests",
+    "examples",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "UP",     # pyupgrade - automatically upgrade syntax for newer Python versions
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "I",      # isort
+    "TCH",    # flake8-type-checking
+    "FA",     # flake8-future-annotations
+    "PERF",   # perflint - performance-focused best practices
+]
+# Specifically enforce modern type hints
+extend-select = [
+    "UP006",  # Use `list` instead of `List` from typing
+    "UP007",  # Use `X | Y` instead of `Union[X, Y]`
+    "UP035",  # Use `dict` instead of `Dict` from typing
+    "UP037",  # Use `X | None` instead of `Optional[X]`
+    "UP040",  # Use `type` alias syntax instead of `TypeAlias`
+]
+
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["UP"]  # Don't enforce modern types in tests
+"examples/*" = ["UP"]  # Don't enforce modern types in examples
+"hexai/core/application/events/observers.py" = ["SIM115"]  # FileObserver manages file handle with close()
+"hexai/core/registry/discovery.py" = ["TC003", "TC001"]  # Runtime imports needed, not just for type checking
+
+[tool.ruff.lint.isort]
+known-first-party = ["hexai"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
@@ -164,3 +258,19 @@ tag_format = "v$version"
 version_files = [
     "pyproject.toml:version"
 ]
+
+[tool.vulture]
+min_confidence = 90
+paths = ["hexai"]
+exclude = ["tests/", "examples/"]
+
+[tool.radon]
+exclude = "tests/*,examples/*"
+cc_min = "B"  # Minimum complexity grade (A, B, C, D, E, F)
+show_complexity = true
+
+
+[tool.safety]
+# Ignore specific vulnerability IDs if needed
+# ignore = ["12345"]
+audit-and-monitor = true

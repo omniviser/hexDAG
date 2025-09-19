@@ -143,7 +143,10 @@ class TestDAGVisualizer:
 
         visualizer = DAGVisualizer(graph)
         basic_node_schemas = {
-            "test_node": {"input_schema": {"text": "str"}, "output_schema": {"result": "str"}}
+            "test_node": {
+                "input_schema": {"text": "str"},
+                "output_schema": {"result": "str"},
+            }
         }
 
         dot_string = visualizer.to_dot(basic_node_schemas=basic_node_schemas)
@@ -251,7 +254,12 @@ class TestDAGVisualizer:
         output_schema = {"result": "str"}
 
         label = visualizer._create_enhanced_node_label(
-            "test_node", node_spec, input_schema, output_schema, "function", "test_function"
+            "test_node",
+            node_spec,
+            input_schema,
+            output_schema,
+            "function",
+            "test_function",
         )
 
         assert "test_node" in label
@@ -385,9 +393,9 @@ class TestDAGVisualizer:
         graph = DirectedGraph()
         visualizer = DAGVisualizer(graph)
 
-        # Mock node spec with in_type
+        # Mock node spec with in_model
         node_spec = Mock()
-        node_spec.in_type = TestInput
+        node_spec.in_model = TestInput
 
         schema = visualizer._extract_node_input_schema(node_spec)
         assert schema is not None
@@ -399,9 +407,9 @@ class TestDAGVisualizer:
         graph = DirectedGraph()
         visualizer = DAGVisualizer(graph)
 
-        # Mock node spec with out_type
+        # Mock node spec with out_model
         node_spec = Mock()
-        node_spec.out_type = TestOutput
+        node_spec.out_model = TestOutput
 
         schema = visualizer._extract_node_output_schema(node_spec)
         assert schema is not None
@@ -520,7 +528,10 @@ class TestExportFunctions:
         try:
             basic_node_types = {"test_node": "function"}
             basic_node_schemas = {
-                "test_node": {"input_schema": {"text": "str"}, "output_schema": {"result": "str"}}
+                "test_node": {
+                    "input_schema": {"text": "str"},
+                    "output_schema": {"result": "str"},
+                }
             }
 
             result = render_dag_to_image(
@@ -601,7 +612,7 @@ class TestDAGVisualizerEdgeCases:
     def test_node_with_none_schemas(self):
         """Test visualization of node with None schemas."""
         graph = DirectedGraph()
-        node = NodeSpec("test_node", create_test_function(), in_type=None, out_type=None)
+        node = NodeSpec("test_node", create_test_function(), in_model=None, out_model=None)
         graph.add(node)
 
         visualizer = DAGVisualizer(graph)
@@ -620,7 +631,7 @@ class TestDAGVisualizerEdgeCases:
             if i == 0:
                 node = NodeSpec(f"node{i}", create_test_function())
             else:
-                node = NodeSpec(f"node{i}", create_test_function()).after(f"node{i-1}")
+                node = NodeSpec(f"node{i}", create_test_function()).after(f"node{i - 1}")
             nodes.append(node)
 
         graph.add_many(*nodes)

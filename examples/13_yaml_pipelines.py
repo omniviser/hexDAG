@@ -15,7 +15,6 @@ import asyncio
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.validation import coerce_validator
 
 
 async def data_loader(input_data: str) -> dict:
@@ -228,7 +227,7 @@ async def demonstrate_pipeline_execution():
         print(f"   • Wave {i}: {wave}")
 
     # Execute
-    orchestrator = Orchestrator(validator=coerce_validator())
+    orchestrator = Orchestrator()
 
     test_inputs = [
         "I love this product! It's amazing and wonderful.",

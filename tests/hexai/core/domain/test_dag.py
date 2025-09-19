@@ -1,6 +1,9 @@
 """Tests for DAG primitives: NodeSpec and DirectedGraph."""
 
+from typing import Optional
+
 import pytest
+from pydantic import BaseModel, Field
 
 from hexai.core.domain.dag import (
     CycleDetectedError,
@@ -8,17 +11,35 @@ from hexai.core.domain.dag import (
     DuplicateNodeError,
     MissingDependencyError,
     NodeSpec,
+    SchemaCompatibilityError,
+    ValidationError,
 )
 
 
 def dummy_fn():
-    """Dummy function for testing."""
+    """Return a predefined string result for testing purposes."""
     return "result"
 
 
 def another_fn():
-    """Another dummy function for testing."""
+    """Return another predefined string result for testing purposes."""
     return "another_result"
+
+
+# Test models for validation
+class TestInputModel(BaseModel):
+    """Test input model for validation tests."""
+
+    name: str
+    value: int
+    optional_field: Optional[str] = None
+
+
+class TestOutputModel(BaseModel):
+    """Test output model for validation tests."""
+
+    result: str
+    count: int = Field(gt=0)
 
 
 class TestNodeSpec:
@@ -29,8 +50,8 @@ class TestNodeSpec:
         node = NodeSpec("test", dummy_fn)
         assert node.name == "test"
         assert node.fn == dummy_fn
-        assert node.in_type is None
-        assert node.out_type is None
+        assert node.in_model is None
+        assert node.out_model is None
         assert node.deps == frozenset()
 
     def test_after_method(self):
@@ -48,11 +69,11 @@ class TestNodeSpec:
         node = NodeSpec("test", dummy_fn).after("dep1").after("dep2")
         assert node.deps == frozenset({"dep1", "dep2"})
 
-    def test_with_types(self):
-        """Test setting input/output types."""
-        node = NodeSpec("test", dummy_fn, in_type=str, out_type=dict)
-        assert node.in_type is str
-        assert node.out_type is dict
+    def test_with_models(self):
+        """Test setting input/output Pydantic models."""
+        node = NodeSpec("test", dummy_fn, in_model=TestInputModel, out_model=TestOutputModel)
+        assert node.in_model is TestInputModel
+        assert node.out_model is TestOutputModel
 
     def test_repr(self):
         """Test string representation."""
@@ -60,11 +81,13 @@ class TestNodeSpec:
         repr_str = repr(node)
         assert "NodeSpec('test'" in repr_str
 
-        # Test with dependencies and types
-        node_with_deps = NodeSpec("test", dummy_fn, in_type=str, out_type=dict).after("dep1")
+        # Test with dependencies and models
+        node_with_deps = NodeSpec(
+            "test", dummy_fn, in_model=TestInputModel, out_model=TestOutputModel
+        ).after("dep1")
         repr_with_deps = repr(node_with_deps)
         assert "NodeSpec('test'" in repr_with_deps
-        assert "str -> dict" in repr_with_deps
+        assert "TestInputModel -> TestOutputModel" in repr_with_deps
         assert "deps=['dep1']" in repr_with_deps
 
     def test_immutability(self):
@@ -72,7 +95,7 @@ class TestNodeSpec:
         node = NodeSpec("test", dummy_fn, deps={"dep1"})
 
         # Should not be able to modify existing node
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError, match="has no attribute 'add'"):
             node.deps.add("dep2")  # type: ignore
 
         # Creating new node should not modify original
@@ -86,26 +109,26 @@ class TestNodeSpec:
         node = NodeSpec("test", dummy_fn, params=params)
 
         # Should not be able to modify params directly
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError, match="does not support item assignment"):
             node.params["new_key"] = "new_value"  # type: ignore
 
     def test_types_none_handling(self):
         """Test handling of None types."""
-        node = NodeSpec("test", dummy_fn, in_type=None, out_type=None)
-        assert node.in_type is None
-        assert node.out_type is None
+        node = NodeSpec("test", dummy_fn, in_model=None, out_model=None)
+        assert node.in_model is None
+        assert node.out_model is None
 
     def test_complex_chaining(self):
         """Test complex method chaining."""
-        node = NodeSpec("test", dummy_fn, in_type=str, out_type=dict).after("dep1").after("dep2")
+        node = NodeSpec("test", dummy_fn, in_model=str, out_model=dict).after("dep1").after("dep2")
         # Alternative chaining using a separate node for list/tuple types
-        node2 = NodeSpec("test2", dummy_fn, in_type=list, out_type=tuple).after("dep3")
+        node2 = NodeSpec("test2", dummy_fn, in_model=list, out_model=tuple).after("dep3")
 
-        assert node.in_type is str
-        assert node.out_type is dict
+        assert node.in_model is str
+        assert node.out_model is dict
         assert node.deps == frozenset({"dep1", "dep2"})
-        assert node2.in_type is list
-        assert node2.out_type is tuple
+        assert node2.in_model is list
+        assert node2.out_model is tuple
 
     def test_empty_node_name(self):
         """Test NodeSpec with empty name."""
@@ -116,20 +139,20 @@ class TestNodeSpec:
         """Test complex method chaining scenarios."""
         # Test chaining multiple after() calls
         node = (
-            NodeSpec("complex", dummy_fn, in_type=list, out_type=tuple)
+            NodeSpec("complex", dummy_fn, in_model=list, out_model=tuple)
             .after("dep1")
             .after("dep2", "dep3")
         )
 
         assert node.deps == frozenset({"dep1", "dep2", "dep3"})
-        assert node.in_type is list
-        assert node.out_type is tuple
+        assert node.in_model is list
+        assert node.out_model is tuple
 
     def test_node_with_none_types(self):
         """Test NodeSpec with explicit None types."""
-        node = NodeSpec("test", dummy_fn, in_type=None, out_type=None)
-        assert node.in_type is None
-        assert node.out_type is None
+        node = NodeSpec("test", dummy_fn, in_model=None, out_model=None)
+        assert node.in_model is None
+        assert node.out_model is None
 
     def test_after_with_duplicate_dependencies(self):
         """Test that duplicate dependencies are handled correctly."""
@@ -149,6 +172,108 @@ class TestNodeSpec:
         # Different instances with same data should be equal for frozen dataclass
         assert node1.name == node2.name
         assert node1.fn == node2.fn
+
+    # Validation tests for NodeSpec
+    def test_validate_input_with_no_model(self):
+        """Test validation when no input model is specified."""
+        node = NodeSpec("test_node", dummy_fn, in_model=None)
+
+        # Should return data as-is when no model
+        test_data = {"any": "data"}
+        result = node.validate_input(test_data)
+        assert result == test_data
+
+    def test_validate_input_with_valid_data(self):
+        """Test validation with valid input data."""
+        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+
+        # Test with dict
+        test_data = {"name": "test", "value": 42}
+        result = node.validate_input(test_data)
+        assert isinstance(result, TestInputModel)
+        assert result.name == "test"
+        assert result.value == 42
+        assert result.optional_field is None
+
+    def test_validate_input_already_correct_type(self):
+        """Test validation when data is already the correct type."""
+        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+
+        # Test with already validated model
+        test_data = TestInputModel(name="test", value=42)
+        result = node.validate_input(test_data)
+        assert result is test_data  # Should return same instance
+
+    def test_validate_input_with_invalid_data(self):
+        """Test validation with invalid input data."""
+        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+
+        # Missing required field
+        test_data = {"name": "test"}  # Missing 'value'
+
+        with pytest.raises(ValidationError) as exc_info:
+            node.validate_input(test_data)
+
+        assert "Input validation failed for node 'test_node'" in str(exc_info.value)
+
+    def test_validate_input_with_type_coercion(self):
+        """Test validation with automatic type coercion."""
+        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+
+        # String that can be converted to int
+        test_data = {"name": "test", "value": "42"}
+        result = node.validate_input(test_data)
+        assert isinstance(result, TestInputModel)
+        assert result.value == 42  # Coerced to int
+
+    def test_validate_output_with_no_model(self):
+        """Test output validation when no model is specified."""
+        node = NodeSpec("test_node", dummy_fn, out_model=None)
+
+        # Should return data as-is when no model
+        test_data = {"any": "output"}
+        result = node.validate_output(test_data)
+        assert result == test_data
+
+    def test_validate_output_with_valid_data(self):
+        """Test output validation with valid data."""
+        node = NodeSpec("test_node", dummy_fn, out_model=TestOutputModel)
+
+        # Test with dict
+        test_data = {"result": "success", "count": 5}
+        result = node.validate_output(test_data)
+        assert isinstance(result, TestOutputModel)
+        assert result.result == "success"
+        assert result.count == 5
+
+    def test_validate_output_with_invalid_data(self):
+        """Test output validation with invalid data."""
+        node = NodeSpec("test_node", dummy_fn, out_model=TestOutputModel)
+
+        # Invalid count (must be > 0)
+        test_data = {"result": "success", "count": 0}
+
+        with pytest.raises(ValidationError) as exc_info:
+            node.validate_output(test_data)
+
+        assert "Output validation failed for node 'test_node'" in str(exc_info.value)
+
+    def test_validate_with_model_shared_logic(self):
+        """Test that both input and output use same validation logic."""
+        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel, out_model=TestOutputModel)
+
+        # Both should handle None model the same way
+        assert node._validate_with_model({"test": "data"}, None, "input") == {"test": "data"}
+        assert node._validate_with_model({"test": "data"}, None, "output") == {"test": "data"}
+
+        # Both should handle already-correct type the same way
+        input_instance = TestInputModel(name="test", value=1)
+        output_instance = TestOutputModel(result="test", count=1)
+
+        assert node._validate_with_model(input_instance, TestInputModel, "input") is input_instance
+        assert (
+            node._validate_with_model(output_instance, TestOutputModel, "output") is output_instance
+        )
 
 
 class TestDirectedGraph:
@@ -567,6 +692,59 @@ class TestDirectedGraph:
 
         # Second wave should be alphabetically sorted
         assert waves[1] == ["a_node", "m_node", "z_node"]
+
+    def test_validate_type_compatibility(self):
+        """Test type compatibility validation between connected nodes."""
+        from pydantic import BaseModel
+
+        class OutputA(BaseModel):
+            result: str
+
+        class InputB(BaseModel):
+            result: str
+
+        # Create compatible nodes (same type)
+        node_a = NodeSpec("a", dummy_fn, out_model=OutputA)
+        node_b = NodeSpec("b", dummy_fn, in_model=OutputA, deps={"a"})  # Same type as output
+
+        graph = DirectedGraph()
+        graph.add(node_a)
+        graph.add(node_b)
+
+        # Should validate successfully with same types
+        graph.validate(check_type_compatibility=True)
+
+        # Create incompatible nodes
+        class InputC(BaseModel):
+            number: float
+
+        node_c = NodeSpec("c", dummy_fn, in_model=InputC, deps={"a"})
+        graph.add(node_c)
+
+        # Should raise SchemaCompatibilityError for incompatible types
+        with pytest.raises(SchemaCompatibilityError) as exc_info:
+            graph.validate(check_type_compatibility=True)
+        assert "expects InputC but dependency 'a' outputs OutputA" in str(exc_info.value)
+
+    def test_validate_without_type_checking(self):
+        """Test that validation can skip type compatibility checking."""
+        from pydantic import BaseModel
+
+        class OutputA(BaseModel):
+            result: str
+
+        class InputB(BaseModel):
+            number: float  # Incompatible with OutputA
+
+        node_a = NodeSpec("a", dummy_fn, out_model=OutputA)
+        node_b = NodeSpec("b", dummy_fn, in_model=InputB, deps={"a"})
+
+        graph = DirectedGraph()
+        graph.add(node_a)
+        graph.add(node_b)
+
+        # Should validate successfully when type checking is disabled
+        graph.validate(check_type_compatibility=False)
 
     def test_waves_complex_dag_performance(self):
         """Test wave generation with a larger, complex DAG."""

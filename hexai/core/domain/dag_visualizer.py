@@ -4,6 +4,7 @@ This module provides utilities to export DirectedGraph objects to Graphviz DOT f
 visualization and debugging purposes.
 """
 
+import contextlib
 import logging
 import os
 import platform
@@ -42,7 +43,7 @@ class DAGVisualizer:
         show_io_nodes: bool = True,
         input_schema: Any = None,
         output_schema: Any = None,
-        enhance_with_generated_schemas: bool = True,
+        _enhance_with_generated_schemas: bool = True,
         show_node_schemas: bool = True,
         show_intermediate_input: bool = False,
         show_intermediate_output: bool = False,
@@ -277,8 +278,8 @@ class DAGVisualizer:
             Dictionary of input schema fields or None
         """
         # Check if node has input type information
-        if hasattr(node_spec, "in_type") and node_spec.in_type:
-            return self._convert_type_to_schema_dict(node_spec.in_type)
+        if hasattr(node_spec, "in_model") and node_spec.in_model:
+            return self._convert_type_to_schema_dict(node_spec.in_model)
 
         # Check for function-specific schema info
         if hasattr(node_spec, "fn") and hasattr(node_spec.fn, "__annotations__"):
@@ -298,8 +299,8 @@ class DAGVisualizer:
             Dictionary of output schema fields or None
         """
         # Check if node has output type information
-        if hasattr(node_spec, "out_type") and node_spec.out_type:
-            return self._convert_type_to_schema_dict(node_spec.out_type)
+        if hasattr(node_spec, "out_model") and node_spec.out_model:
+            return self._convert_type_to_schema_dict(node_spec.out_model)
 
         # Check for function-specific schema info
         if hasattr(node_spec, "fn") and hasattr(node_spec.fn, "__annotations__"):
@@ -329,7 +330,6 @@ class DAGVisualizer:
                     schema[field_name] = field_type
                 return schema
 
-            # Handle TypedDict
             elif hasattr(type_obj, "__annotations__"):
                 schema = {}
                 for field_name, field_type in type_obj.__annotations__.items():
@@ -498,20 +498,16 @@ class DAGVisualizer:
         self, node_spec: Any, compiled_node_type: str | None = None
     ) -> dict[str, str]:
         """Get visual style for a node based on its type."""
-        node_type = compiled_node_type or getattr(node_spec, "type", "unknown")
+        node_type = str(compiled_node_type or getattr(node_spec, "type", "unknown"))
 
-        if node_type == "function":
-            return {"color": "lightgreen", "fillcolor": "lightgreen"}
-        elif node_type == "llm":
-            return {"color": "lightblue", "fillcolor": "lightblue"}
-        elif node_type == "agent":
-            return {"color": "lightcoral", "fillcolor": "lightcoral"}
-        elif node_type == "loop":
-            return {"color": "lightyellow", "fillcolor": "lightyellow"}
-        elif node_type == "conditional":
-            return {"color": "lightpink", "fillcolor": "lightpink"}
-        else:
-            return {"color": "lightgray", "fillcolor": "lightgray"}
+        node_styles = {
+            "function": {"color": "lightgreen", "fillcolor": "lightgreen"},
+            "llm": {"color": "lightblue", "fillcolor": "lightblue"},
+            "agent": {"color": "lightcoral", "fillcolor": "lightcoral"},
+            "loop": {"color": "lightyellow", "fillcolor": "lightyellow"},
+            "conditional": {"color": "lightpink", "fillcolor": "lightpink"},
+        }
+        return node_styles.get(node_type, {"color": "lightgray", "fillcolor": "lightgray"})
 
     def _find_io_nodes(self) -> tuple[list[str], list[str]]:
         """Find first nodes (no dependencies) and last nodes (no dependents).
@@ -522,20 +518,19 @@ class DAGVisualizer:
         """
         # Find first nodes (no dependencies)
         first_nodes = []
-        for node_name in self.graph.nodes.keys():
+        for node_name in self.graph.nodes:
             dependencies = self.graph.get_dependencies(node_name)
             if not dependencies:
                 first_nodes.append(node_name)
 
         # Find last nodes (no dependents)
         all_dependencies = set()
-        for node_name in self.graph.nodes.keys():
+        for node_name in self.graph.nodes:
             all_dependencies.update(self.graph.get_dependencies(node_name))
 
-        last_nodes = []
-        for node_name in self.graph.nodes.keys():
-            if node_name not in all_dependencies:
-                last_nodes.append(node_name)
+        last_nodes = [
+            node_name for node_name in self.graph.nodes if node_name not in all_dependencies
+        ]
 
         return first_nodes, last_nodes
 
@@ -548,20 +543,19 @@ class DAGVisualizer:
         """
         # Find first nodes (no dependencies)
         first_nodes = []
-        for node_name in self.graph.nodes.keys():
+        for node_name in self.graph.nodes:
             dependencies = self.graph.get_dependencies(node_name)
             if not dependencies:
                 first_nodes.append(node_name)
 
         # Find last nodes (no dependents)
         all_dependencies = set()
-        for node_name in self.graph.nodes.keys():
+        for node_name in self.graph.nodes:
             all_dependencies.update(self.graph.get_dependencies(node_name))
 
-        last_nodes = []
-        for node_name in self.graph.nodes.keys():
-            if node_name not in all_dependencies:
-                last_nodes.append(node_name)
+        last_nodes = [
+            node_name for node_name in self.graph.nodes if node_name not in all_dependencies
+        ]
 
         return first_nodes, last_nodes
 
@@ -613,10 +607,7 @@ class DAGVisualizer:
         elif hasattr(schema, "model_fields"):
             # Pydantic model instance
             fields = list(schema.model_fields.keys())
-            if len(fields) <= 3:
-                field_str = ", ".join(fields)
-            else:
-                field_str = f"{', '.join(fields[:3])}..."
+            field_str = ", ".join(fields) if len(fields) <= 3 else f"{', '.join(fields[:3])}..."
             return f"{label}\\n({field_str})"
         elif isinstance(schema, dict):
             # Dict schema - format as field: type pairs for input primitives
@@ -723,14 +714,14 @@ class DAGVisualizer:
                     break
 
             if not yaml_file:
-                logger.debug(f"Pipeline YAML not found for {pipeline_name}")
+                logger.debug("Pipeline YAML not found for %s", pipeline_name)
                 return {}, None
 
             # Compile on-the-fly to get all schemas
             try:
                 compiled_data = compile_pipeline(yaml_file)
             except Exception as e:
-                logger.debug(f"Failed to compile pipeline {pipeline_name}: {e}")
+                logger.debug("Failed to compile pipeline %s: %s", pipeline_name, e)
                 return {}, None
 
             # Extract node schemas from compiled data
@@ -750,7 +741,7 @@ class DAGVisualizer:
 
         except Exception as e:
             # Silently fail - compiled schemas are optional for visualization
-            logger.debug(f"Exception in schema loading: {e}")
+            logger.debug("Exception in schema loading: %s", e)
             return {}, None
 
     def _get_node_attributes(
@@ -767,10 +758,12 @@ class DAGVisualizer:
         attrs = {"label": node_name, "fontname": "Arial", "fontsize": "10"}
 
         # Enhanced type information with generated schemas
-        if node_spec.in_type or node_spec.out_type or generated_schemas:
-            in_name = getattr(node_spec.in_type, "__name__", "Any") if node_spec.in_type else "Any"
+        if node_spec.in_model or node_spec.out_model or generated_schemas:
+            in_name = (
+                getattr(node_spec.in_model, "__name__", "Any") if node_spec.in_model else "Any"
+            )
             out_name = (
-                getattr(node_spec.out_type, "__name__", "Any") if node_spec.out_type else "Any"
+                getattr(node_spec.out_model, "__name__", "Any") if node_spec.out_model else "Any"
             )
 
             # Check for enhanced schema names from generated files
@@ -784,9 +777,7 @@ class DAGVisualizer:
 
         # Enhanced coloring based on schema complexity
         has_complex_schema = (
-            any(
-                node_name.lower() in schema_name.lower() for schema_name in generated_schemas.keys()
-            )
+            any(node_name.lower() in schema_name.lower() for schema_name in generated_schemas)
             if generated_schemas
             else False
         )
@@ -842,7 +833,7 @@ class DAGVisualizer:
             else:
                 attr_pairs.append(f"{key}={value}")
 
-        return f'[{", ".join(attr_pairs)}]'
+        return f"[{', '.join(attr_pairs)}]"
 
     def render_to_file(
         self, output_path: str, format: str = "png", title: str = "Pipeline DAG", **kwargs: Any
@@ -885,10 +876,8 @@ class DAGVisualizer:
             )
 
             # Clean up temporary file
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(temp_dot_path)
-            except OSError:
-                pass
 
             return output_file
         except subprocess.CalledProcessError as e:
