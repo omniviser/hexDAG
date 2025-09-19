@@ -1,5 +1,6 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
+from abc import abstractmethod
 from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
@@ -20,8 +21,6 @@ MessageList = list[Message]
 @port(
     name="llm",
     namespace="core",
-    required_methods=["aresponse"],
-    optional_methods=[],
 )
 @runtime_checkable
 class LLM(Protocol):
@@ -32,6 +31,7 @@ class LLM(Protocol):
     must provide the aresponse method for generating text from messages.
     """
 
+    @abstractmethod
     async def aresponse(self, messages: MessageList) -> str | None:
         """Generate a response from a list of messages (async).
 

@@ -1,5 +1,6 @@
 """Database port interface for accessing database schema information."""
 
+from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
 from hexai.core.registry.decorators import port
@@ -8,8 +9,6 @@ from hexai.core.registry.decorators import port
 @port(
     name="database",
     namespace="core",
-    required_methods=["aget_table_schemas", "aexecute_query"],
-    optional_methods=["aget_relationships", "aget_indexes", "aget_table_statistics"],
 )
 @runtime_checkable
 class DatabasePort(Protocol):
@@ -21,6 +20,7 @@ class DatabasePort(Protocol):
     """
 
     # Required methods
+    @abstractmethod
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables.
 
@@ -38,6 +38,7 @@ class DatabasePort(Protocol):
         """
         ...
 
+    @abstractmethod
     async def aexecute_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:

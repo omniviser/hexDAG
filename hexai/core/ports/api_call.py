@@ -3,6 +3,7 @@
 This is a fundamental protocol that other ports can inherit from.
 """
 
+from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
 from hexai.core.registry.decorators import port
@@ -11,8 +12,6 @@ from hexai.core.registry.decorators import port
 @port(
     name="api_call",
     namespace="core",
-    required_methods=["aget", "apost"],
-    optional_methods=["aput", "adelete", "arequest"],
 )
 @runtime_checkable
 class APICall(Protocol):
@@ -26,6 +25,7 @@ class APICall(Protocol):
     """
 
     # Required methods
+    @abstractmethod
     async def aget(
         self,
         url: str,
@@ -48,6 +48,7 @@ class APICall(Protocol):
         """
         ...
 
+    @abstractmethod
     async def apost(
         self,
         url: str,

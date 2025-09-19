@@ -202,15 +202,16 @@ class TestSQLiteAdapter:
         adapter.close()
 
     def test_sqlite_adapter_decorator_metadata(self):
-        """Test that SQLite adapter has proper registry metadata."""
-        # Check that the adapter has registry metadata
-        assert hasattr(SQLiteAdapter, "__hexdag_metadata__")
+        """Test that SQLite adapter has proper registry attributes."""
+        # Check that the adapter has registry attributes
+        assert hasattr(SQLiteAdapter, "_hexdag_type")
 
-        metadata = SQLiteAdapter.__hexdag_metadata__
-        assert metadata.type == "adapter"
-        assert metadata.name == "sqlite"
-        assert metadata.declared_namespace == "database"
-        assert "SQLite database adapter" in metadata.description
+        from hexai.core.registry.models import ComponentType
+
+        assert SQLiteAdapter._hexdag_type == ComponentType.ADAPTER
+        assert SQLiteAdapter._hexdag_name == "sqlite"
+        assert SQLiteAdapter._hexdag_namespace == "database"
+        assert "SQLite database adapter" in SQLiteAdapter._hexdag_description
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_error_handling(self):

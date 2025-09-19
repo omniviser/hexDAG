@@ -1,268 +1,74 @@
-"""Unified ToolRouter adapter supporting both direct registration and ComponentRegistry."""
+"""ToolRouter adapter that uses the global registry singleton for tool management."""
 
 import asyncio
 import inspect
 import logging
-from collections.abc import Callable
-from typing import Any, get_type_hints
+from typing import Any
 
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
 from hexai.core.ports.tool_router import ToolRouter
+from hexai.core.registry import registry  # Use the direct module-level singleton
 from hexai.core.registry.decorators import adapter
-from hexai.core.registry.models import (
-    ClassComponent,
-    ComponentType,
-    FunctionComponent,
-    InstanceComponent,
-)
+from hexai.core.registry.models import ClassComponent, ComponentType, FunctionComponent
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["UnifiedToolRouter"]
 
 
-@adapter(
-    implements_port="tool_router",
-    name="unified_tool_router",
-    namespace="core",
-    description="Unified tool router supporting direct registration and ComponentRegistry",
-)
+@adapter(implements_port="tool_router")
 class UnifiedToolRouter(ToolRouter):
-    """Unified ToolRouter that supports multiple tool registration patterns.
+    """ToolRouter adapter that uses the global registry singleton.
 
-    This adapter supports:
-    1. Direct function registration (backward compatible)
-    2. ComponentRegistry tools with port injection
-    3. Auto-generation of ToolDefinitions
-    4. Future MCP server integration
-
-    Key Features:
-    - Backward compatible with direct function registration
-    - Integrates with ComponentRegistry for centralized tool management
-    - Supports port injection for tools requiring database/API connections
-    - Generates ToolDefinitions automatically from functions and classes
+    This adapter is a thin wrapper around the global ComponentRegistry that:
+    1. Retrieves tools from the registry
+    2. Executes tools with proper async/sync handling
+    3. Generates ToolDefinitions from registry metadata
 
     Example
     -------
-        # Direct registration (backward compatible)
+        # Create router - no parameters needed!
         router = UnifiedToolRouter()
 
-        @router.tool
-        async def search_papers(query: str, limit: int = 10) -> dict:
-            '''Search for research papers in medical databases.'''
-            return {"papers": [...], "count": 5}
-
-        # Auto-generates ToolDefinition for ToolDescriptionManager
-        tool_defs = router.get_tool_definitions()
-
-        # With ComponentRegistry support
-        router = UnifiedToolRouter(component_registry=registry, port_registry=ports)
-
-        # Both patterns work seamlessly
+        # Execute tools from registry
         result = await router.acall_tool("search_papers", {"query": "diabetes"})
+
+        # Get tool definitions for agent nodes
+        tool_defs = router.get_tool_definitions()
     """
 
-    def __init__(
-        self, component_registry: Any | None = None, port_registry: Any | None = None
-    ) -> None:
-        """Initialize the unified router with optional ComponentRegistry support.
-
-        Args
-        ----
-            component_registry: Optional ComponentRegistry for tool lookup
-            port_registry: Optional PortRegistry for dependency injection
-        """
-        self.component_registry = component_registry
-        self.port_registry = port_registry
-
-        # Direct registration storage (backward compatibility)
-        self.tools: dict[str, Callable[..., Any]] = {}
-        self.tool_definitions: dict[str, ToolDefinition] = {}
-
-        # Tool instance cache for registry tools
-        self._registry_instances: dict[str, Any] = {}
-
-        self.call_history: list[dict[str, Any]] = []
-
-        # Register built-in tools
-        self._register_builtin_tools()
-
-    def _register_builtin_tools(self) -> None:
-        """Register built-in tools that are always available."""
-
-        def tool_end(**kwargs: Any) -> dict[str, Any]:
-            """End tool execution with structured output.
-
-            This is a built-in tool that agents can use to return
-            structured data matching their output schema.
-
-            Args
-            ----
-                **kwargs: Any structured data to return
-
-            Returns
-            -------
-                The structured data as provided
-            """
-            return kwargs
-
-        # Register TOOL_CHANGE_PHASE for phase transitions
-        def change_phase(phase: str, **context: Any) -> dict[str, Any]:
-            """Change the agent's reasoning phase.
-
-            This tool allows agents to transition between different
-            reasoning phases with optional context data.
-
-            Args
-            ----
-                phase: The new phase name to transition to
-                **context: Optional context data for the phase transition
-
-            Returns
-            -------
-                Dictionary with phase change information
-            """
-            return {"action": "change_phase", "new_phase": phase, "context": context}
-
-        self.register_function(tool_end, "tool_end")
-        self.register_function(tool_end, "end")  # Alias
-        self.register_function(change_phase, "change_phase")
-        self.register_function(change_phase, "phase")  # Alias
-
-    def tool(self, func: Callable) -> Callable:
-        """Register a function as a tool decorator.
-
-        Args
-        ----
-            func: The function to register as a tool
-
-        Returns
-        -------
-            The original function (unmodified)
-        """
-        self.register_function(func)
-        return func
-
-    def register_function(self, func: Callable, name: str | None = None) -> None:
-        """Register a function as a tool and auto-generate ToolDefinition.
-
-        Args
-        ----
-            func: The function to register
-            name: Optional custom name (defaults to function name)
-        """
-        tool_name = name or func.__name__
-        self.tools[tool_name] = func
-        self.tool_definitions[tool_name] = self._generate_tool_definition(func, tool_name)
-
-    def _generate_tool_definition(self, func: Callable, tool_name: str) -> ToolDefinition:
-        """Auto-generate ToolDefinition from function signature and docstring.
-
-        This creates ToolDefinitions that integrate with the existing ToolDescriptionManager.
-
-        Args:
-        ----
-            func: Function to analyze
-            tool_name: Name to use for the tool
-
-        Returns
-        -------
-            ToolDefinition compatible with existing architecture
-        """
-        sig = inspect.signature(func)
-        type_hints = get_type_hints(func)
-
-        # Extract parameters with type information
-        parameters: list[ToolParameter] = []
-        for param_name, inspect_param in sig.parameters.items():
-            param_type = type_hints.get(param_name, str)
-
-            # Convert type to string for ToolParameter
-            type_str = param_type.__name__ if hasattr(param_type, "__name__") else str(param_type)
-
-            tool_param = ToolParameter(
-                name=param_name,
-                description=f"Parameter {param_name} of type {type_str}",
-                param_type=type_str,
-                required=inspect_param.default == inspect.Parameter.empty,
-                default=(
-                    inspect_param.default
-                    if inspect_param.default != inspect.Parameter.empty
-                    else None
-                ),
-            )
-            parameters.append(tool_param)
-
-        # Extract description from docstring
-        doc = func.__doc__ or f"Execute {tool_name} function"
-
-        # Split docstring into simplified and detailed descriptions
-        lines = doc.strip().split("\n")
-        simplified_desc = lines[0] if lines else f"Execute {tool_name}"
-        detailed_desc = (
-            doc.strip()
-            if len(doc.strip()) > 50
-            else f"Execute {tool_name} with provided parameters"
-        )
-
-        # Create examples based on function signature
-        if parameters:
-            example_params = []
-            for param in parameters:
-                if param.required:
-                    if param.param_type == "str":
-                        example_params.append(f"{param.name}='example'")
-                    elif param.param_type == "int":
-                        example_params.append(f"{param.name}=10")
-                    else:
-                        example_params.append(f"{param.name}='{param.param_type}_value'")
-
-            example = (
-                f"{tool_name}({', '.join(example_params)})" if example_params else f"{tool_name}()"
-            )
-        else:
-            example = f"{tool_name}()"
-
-        return ToolDefinition(
-            name=tool_name,
-            simplified_description=simplified_desc,
-            detailed_description=detailed_desc,
-            parameters=parameters,
-            examples=[example],
-        )
+    def __init__(self) -> None:
+        """Initialize the router - uses the global registry singleton."""
+        # No initialization needed - we use get_registry() when needed
+        pass
 
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Call a tool with parameters."""
-        # Try direct registered tools first
-        if tool_name in self.tools:
-            return await self._execute_direct_tool(tool_name, params)
+        """Call a tool with parameters from the registry.
 
-        # Try component registry if available
-        if self.component_registry:
-            tool = self._get_or_create_from_registry(tool_name)
-            if tool:
-                return await self._execute_tool(tool, params)
+        Args
+        ----
+            tool_name: Name of the tool to execute
+            params: Parameters to pass to the tool
 
-        # Tool not found
-        available = self.get_available_tools()
-        raise ValueError(f"Tool '{tool_name}' not found. Available: {available}")
+        Returns
+        -------
+            Tool execution result
 
-    async def _execute_direct_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Execute a directly registered tool."""
+        Raises
+        ------
+            ValueError: If tool not found in registry
+        """
+        try:
+            # Validate tool exists and is correct type
+            registry.get_metadata(tool_name, component_type=ComponentType.TOOL)
+            # Get and execute tool
+            tool = registry.get(tool_name)
+        except Exception as e:
+            available = self.get_available_tools()
+            raise ValueError(f"Tool '{tool_name}' not found. Available: {available}") from e
 
-        tool_func = self.tools[tool_name]
-        result = await self._execute_tool(tool_func, params)
-
-        # Log the call
-        self.call_history.append(
-            {
-                "tool_name": tool_name,
-                "input_data": params,
-                "result": result,
-            }
-        )
-
-        return result
+        # Execute tool outside the try/except so tool errors aren't wrapped
+        return await self._execute_tool(tool, params)
 
     async def _execute_tool(self, tool: Any, params: dict[str, Any]) -> Any:
         """Execute any tool (function, class, or instance) with parameters."""
@@ -321,176 +127,99 @@ class UnifiedToolRouter(ToolRouter):
             return func(**kwargs)
 
     def get_available_tools(self) -> list[str]:
-        """Get list of available tool names."""
-        tools = list(self.tools.keys())
-
-        # Add registry tools if available
-        if self.component_registry:
-            try:
-                registry_tools = self.component_registry.list_components(
-                    component_type=ComponentType.TOOL
-                )
-                tools.extend(tool.name for tool in registry_tools)
-            except Exception as e:
-                logger.debug("Could not list registry tools: %s", e)
-
-        return tools
+        """Get list of available tool names from registry."""
+        try:
+            registry_tools = registry.list_components(component_type=ComponentType.TOOL)
+            return [tool.name for tool in registry_tools]
+        except Exception as e:
+            logger.debug("Could not list registry tools: %s", e)
+            return []
 
     def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
-        """Get schema for a specific tool."""
-        if tool_name in self.tool_definitions:
-            tool_def = self.tool_definitions[tool_name]
-            return {
-                "name": tool_def.name,
-                "description": tool_def.simplified_description,
-                "detailed_description": tool_def.detailed_description,
-                "parameters": [
-                    {
-                        "name": p.name,
-                        "type": p.param_type,
-                        "required": p.required,
-                        "default": p.default,
-                        "description": p.description,
-                    }
-                    for p in tool_def.parameters
-                ],
-                "examples": tool_def.examples,
-            }
+        """Get schema for a specific tool from registry.
+
+        Args
+        ----
+            tool_name: Name of the tool
+
+        Returns
+        -------
+            Tool schema dictionary or empty dict if not found
+        """
+        try:
+            tool_info = registry.get_info(tool_name)
+            if tool_info.component_type == ComponentType.TOOL:
+                tool_def = self._get_tool_definition_from_component(tool_info)
+                return {
+                    "name": tool_def.name,
+                    "description": tool_def.simplified_description,
+                    "detailed_description": tool_def.detailed_description,
+                    "parameters": [
+                        {
+                            "name": p.name,
+                            "type": p.param_type,
+                            "required": p.required,
+                            "default": p.default,
+                            "description": p.description,
+                        }
+                        for p in tool_def.parameters
+                    ],
+                    "examples": tool_def.examples,
+                }
+        except Exception as e:
+            logger.debug("Could not get tool schema from registry: %s", e)
         return {}
 
     def get_all_tool_schemas(self) -> dict[str, dict[str, Any]]:
-        """Get schemas for all available tools."""
-        return {name: self.get_tool_schema(name) for name in self.tools}
+        """Get schemas for all available tools from registry."""
+        schemas = {}
+        for tool_name in self.get_available_tools():
+            schema = self.get_tool_schema(tool_name)
+            if schema:
+                schemas[tool_name] = schema
+        return schemas
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
-        """Get ToolDefinitions for integration with ToolDescriptionManager.
-
-        This is the key integration method - it returns ToolDefinitions that
-        can be passed to agent nodes and managed by ToolDescriptionManager.
+        """Get ToolDefinitions from registry for integration with ToolDescriptionManager.
 
         Returns
         -------
-            List of ToolDefinitions generated from registered functions
+            List of ToolDefinitions generated from registry tools
         """
-        definitions = list(self.tool_definitions.values())
-
-        # Add registry tools if available
-        if self.component_registry:
-            try:
-                registry_tools = self.component_registry.list_components(
-                    component_type=ComponentType.TOOL
-                )
-                for tool_info in registry_tools:
-                    tool_def = self._get_tool_definition_from_metadata(tool_info.metadata)
-                    definitions.append(tool_def)
-            except Exception as e:
-                logger.debug("Could not get tool definitions from registry: %s", e)
-
+        definitions = []
+        try:
+            registry_tools = registry.list_components(component_type=ComponentType.TOOL)
+            for tool_info in registry_tools:
+                tool_def = self._get_tool_definition_from_component(tool_info)
+                definitions.append(tool_def)
+        except Exception as e:
+            logger.debug("Could not get tool definitions from registry: %s", e)
         return definitions
 
-    def get_call_history(self) -> list[dict[str, Any]]:
-        """Get call history for debugging."""
-        return self.call_history.copy()
-
-    def reset(self) -> None:
-        """Reset call history and caches."""
-        self.call_history.clear()
-        self._registry_instances.clear()
-
-    def _get_or_create_from_registry(self, tool_name: str) -> Any | None:
-        """Get or create tool from component registry.
+    def _get_tool_definition_from_component(self, metadata: Any) -> ToolDefinition:
+        """Generate ToolDefinition from registry component.
 
         Args
         ----
-            tool_name: Tool name
+            metadata: ComponentMetadata from registry
 
         Returns
         -------
-            Tool instance or None if not found
-        """
-        if tool_name in self._registry_instances:
-            return self._registry_instances[tool_name]
-
-        if not self.component_registry:
-            return None
-
-        try:
-            metadata = self.component_registry.get_metadata(
-                tool_name, component_type=ComponentType.TOOL
-            )
-        except Exception as e:
-            logger.debug("Tool %s not found in registry: %s", tool_name, e)
-            return None
-
-        # Create instance based on component type
-        component = metadata.component
-
-        if isinstance(component, FunctionComponent):
-            tool = component.value
-        elif isinstance(component, ClassComponent):
-            # Instantiate with port injection if needed
-            tool = self._instantiate_with_ports(component.value, metadata)
-        elif isinstance(component, InstanceComponent):
-            tool = component.value
-        else:
-            return None
-
-        self._registry_instances[tool_name] = tool
-        return tool
-
-    def _instantiate_with_ports(self, tool_class: type, metadata: Any) -> Any:
-        """Instantiate tool class with port injection.
-
-        Args
-        ----
-            tool_class: Class to instantiate
-            metadata: Component metadata
-
-        Returns
-        -------
-            Tool instance
-        """
-        # Check if ports are required
-        if metadata.tool_metadata and metadata.tool_metadata.required_ports and self.port_registry:
-            ports = {}
-            for param_name, port_type in metadata.tool_metadata.required_ports.items():
-                adapter = self.port_registry.get_adapter(port_type)
-                ports[param_name] = adapter
-            return tool_class(**ports)
-        else:
-            return tool_class()
-
-    def _get_tool_definition_from_metadata(self, metadata: Any) -> ToolDefinition:
-        """Get or generate ToolDefinition from component metadata.
-
-        Args
-        ----
-            metadata: Component metadata
-
-        Returns
-        -------
-            ToolDefinition
+            ToolDefinition for the component
         """
         component = metadata.component
 
+        # Try to extract from function or class
+        target_func = None
         if isinstance(component, FunctionComponent):
-            return self._generate_tool_definition(component.value, metadata.name)
-        elif isinstance(component, ClassComponent):
-            # Generate from class's execute method if it has one
-            tool_class = component.value
-            if hasattr(tool_class, "execute"):
-                return self._generate_tool_definition(tool_class.execute, metadata.name)
-            else:
-                # Minimal definition
-                return ToolDefinition(
-                    name=metadata.name,
-                    simplified_description=metadata.description or f"Tool {metadata.name}",
-                    detailed_description=metadata.description or f"Tool {metadata.name}",
-                    parameters=[],
-                    examples=[f"{metadata.name}()"],
-                )
+            target_func = component.value
+        elif isinstance(component, ClassComponent) and hasattr(component.value, "execute"):
+            target_func = component.value.execute
+
+        if target_func:
+            return self._generate_tool_definition_from_function(target_func, metadata.name)
         else:
-            # Instance or unknown, return minimal definition
+            # Return minimal definition for other cases
             return ToolDefinition(
                 name=metadata.name,
                 simplified_description=metadata.description or f"Tool {metadata.name}",
@@ -498,3 +227,65 @@ class UnifiedToolRouter(ToolRouter):
                 parameters=[],
                 examples=[f"{metadata.name}()"],
             )
+
+    def _generate_tool_definition_from_function(self, func: Any, tool_name: str) -> ToolDefinition:
+        """Generate ToolDefinition from a function's signature and docstring.
+
+        Args
+        ----
+            func: Function to analyze
+            tool_name: Name for the tool
+
+        Returns
+        -------
+            ToolDefinition with extracted metadata
+        """
+        sig = inspect.signature(func)
+
+        # Extract parameters
+        parameters: list[ToolParameter] = []
+        for param_name, param in sig.parameters.items():
+            if param_name == "self":  # Skip self parameter for methods
+                continue
+
+            param_type = (
+                str(param.annotation) if param.annotation != inspect.Parameter.empty else "Any"
+            )
+            # Clean up type string
+            if "<class '" in param_type:
+                param_type = param_type.replace("<class '", "").replace("'>", "")
+
+            tool_param = ToolParameter(
+                name=param_name,
+                description=f"Parameter {param_name}",
+                param_type=param_type,
+                required=param.default == inspect.Parameter.empty,
+                default=param.default if param.default != inspect.Parameter.empty else None,
+            )
+            parameters.append(tool_param)
+
+        # Extract description from docstring
+        doc = inspect.getdoc(func) or f"Execute {tool_name}"
+        lines = doc.strip().split("\n")
+        simplified_desc = lines[0] if lines else f"Execute {tool_name}"
+
+        # Build example
+        example_args = []
+        for p in parameters:
+            if p.required:
+                if "str" in p.param_type:
+                    example_args.append(f"{p.name}='example'")
+                elif "int" in p.param_type:
+                    example_args.append(f"{p.name}=10")
+                else:
+                    example_args.append(f"{p.name}=...")
+
+        example = f"{tool_name}({', '.join(example_args)})" if example_args else f"{tool_name}()"
+
+        return ToolDefinition(
+            name=tool_name,
+            simplified_description=simplified_desc,
+            detailed_description=doc.strip() if len(doc.strip()) > 50 else simplified_desc,
+            parameters=parameters,
+            examples=[example],
+        )

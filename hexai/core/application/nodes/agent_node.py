@@ -406,7 +406,7 @@ class ReActAgentNode(BaseNodeFactory):
                 state.tools_used.append(tool_call.name)
 
                 # Handle special tools
-                if tool_call.name in ["change_phase", "phase"] and isinstance(result, dict):
+                if tool_call.name == "change_phase" and isinstance(result, dict):
                     new_phase = result.get("new_phase")
                     if new_phase and new_phase in continuation_prompts:
                         state.current_phase = new_phase

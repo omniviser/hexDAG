@@ -13,14 +13,16 @@ class TestMySQLAdapter:
 
     def test_mysql_plugin_registration_decorator(self):
         """Test that MySQL adapter is properly decorated for registry."""
-        # Check that the adapter has registry metadata
-        assert hasattr(MySQLAdapter, "__hexdag_metadata__")
+        # Check that the adapter has registry attributes
+        assert hasattr(MySQLAdapter, "_hexdag_type")
+        assert hasattr(MySQLAdapter, "_hexdag_name")
+        assert hasattr(MySQLAdapter, "_hexdag_namespace")
+        assert hasattr(MySQLAdapter, "_hexdag_description")
 
-        metadata = MySQLAdapter.__hexdag_metadata__
-        assert metadata.type == "adapter"
-        assert metadata.name == "mysql"
-        assert metadata.declared_namespace == "plugin"
-        assert "MySQL database adapter" in metadata.description
+        assert MySQLAdapter._hexdag_type == "adapter"
+        assert MySQLAdapter._hexdag_name == "mysql"
+        assert MySQLAdapter._hexdag_namespace == "plugin"
+        assert "MySQL database adapter" in MySQLAdapter._hexdag_description
 
     @pytest.mark.asyncio
     async def test_mysql_adapter_with_mock_connection(self):

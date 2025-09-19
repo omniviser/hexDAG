@@ -11,7 +11,7 @@ from rich.tree import Tree
 
 from hexai.core.bootstrap import bootstrap_registry
 from hexai.core.registry import registry
-from hexai.core.registry.models import ComponentType
+from hexai.core.registry.models import ComponentMetadata, ComponentType
 
 app = typer.Typer()
 console = Console()
@@ -90,7 +90,7 @@ def list_components(
                 "qualified_name": c.qualified_name,
                 "type": c.component_type.value,
                 "namespace": c.namespace,
-                "metadata": c.metadata,
+                "metadata": c.model_dump(),
             }
             for c in components
         ]
@@ -104,7 +104,7 @@ def list_components(
                 "qualified_name": c.qualified_name,
                 "type": c.component_type.value,
                 "namespace": c.namespace,
-                "metadata": c.metadata,
+                "metadata": c.model_dump(),
             }
             for c in components
         ]
@@ -198,9 +198,8 @@ def show_component(
         console.print(f"[dim]Namespace: {component_info.namespace}[/dim]")
 
         # Show metadata based on type
-        metadata = component_info.metadata
-        if metadata.description:
-            console.print(f"[dim]Description: {metadata.description}[/dim]")
+        if component_info.description:
+            console.print(f"[dim]Description: {component_info.description}[/dim]")
 
         # Show methods for ports
         if component_info.component_type == ComponentType.PORT:
@@ -253,8 +252,8 @@ def show_component(
 
         # Show implemented port for adapters
         elif component_info.component_type == ComponentType.ADAPTER:
-            if metadata.adapter_metadata and metadata.adapter_metadata.implements_port:
-                port_name = metadata.adapter_metadata.implements_port
+            if component_info.implements_port:
+                port_name = component_info.implements_port
                 console.print(f"\n[bold]Implements Port:[/bold] {port_name}")
 
                 # Show methods if we have the component
@@ -300,9 +299,7 @@ def show_tree() -> None:
     tree = Tree("[bold]Component Registry[/bold]")
 
     # Group by namespace
-    from hexai.core.registry.models import ComponentInfo
-
-    namespaces: dict[str, list[ComponentInfo]] = {}
+    namespaces: dict[str, list[ComponentMetadata]] = {}
     for comp in components:
         if comp.namespace not in namespaces:
             namespaces[comp.namespace] = []
@@ -313,7 +310,7 @@ def show_tree() -> None:
         ns_branch = tree.add(f"[yellow]{ns_name}[/yellow]")
 
         # Group by type within namespace
-        by_type: dict[str, list[ComponentInfo]] = {}
+        by_type: dict[str, list[ComponentMetadata]] = {}
         for comp in ns_components:
             type_name = comp.component_type.value
             if type_name not in by_type:
@@ -325,11 +322,8 @@ def show_tree() -> None:
             type_branch = ns_branch.add(f"[green]{type_name}[/green]")
             for comp in type_components:
                 metadata_str = ""
-                if (
-                    comp.metadata.adapter_metadata
-                    and comp.metadata.adapter_metadata.implements_port
-                ):
-                    metadata_str = f" [dim]→ {comp.metadata.adapter_metadata.implements_port}[/dim]"
+                if comp.implements_port:
+                    metadata_str = f" [dim]→ {comp.implements_port}[/dim]"
                 type_branch.add(f"[cyan]{comp.name}[/cyan]{metadata_str}")
 
     console.print(tree)

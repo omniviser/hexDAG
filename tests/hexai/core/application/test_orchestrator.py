@@ -365,11 +365,21 @@ class TestOrchestrator:
         mock_llm = MockLLM(responses=["Test LLM response"])
         mock_tool_router = UnifiedToolRouter()
 
-        # Add a simple mock tool
+        # Add a simple mock tool by registering it with the global registry
+        from hexai.core.registry import registry, tool
+        from hexai.core.registry.models import ComponentType
+
+        @tool(name="test_tool", namespace="test")
         def mock_test_tool(input_data):
             return f"Mock tool result for: {input_data}"
 
-        mock_tool_router.register_function(mock_test_tool, "test_tool")
+        # Register the tool with the global registry
+        registry.register(
+            name="test_tool",
+            component=mock_test_tool,
+            component_type=ComponentType.TOOL,
+            namespace="test",
+        )
         ports = {"llm": mock_llm, "tool_router": mock_tool_router, "observers": observers}
 
         # Execute the DAG

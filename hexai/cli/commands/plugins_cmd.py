@@ -231,9 +231,9 @@ def _get_available_plugins() -> list[dict[str, Any]]:
     adapters = [c for c in components if c.component_type == ComponentType.ADAPTER]
 
     # Group adapters by their namespace
-    from hexai.core.registry.models import ComponentInfo
+    from hexai.core.registry.models import ComponentMetadata
 
-    by_namespace: dict[str, list[ComponentInfo]] = {}
+    by_namespace: dict[str, list[ComponentMetadata]] = {}
     for adapter in adapters:
         ns = adapter.namespace
         if ns not in by_namespace:
@@ -245,8 +245,8 @@ def _get_available_plugins() -> list[dict[str, Any]]:
         # Get unique capabilities from all adapters
         capabilities = set()
         for adapter in ns_adapters:
-            if adapter.metadata.adapter_metadata:
-                port = adapter.metadata.adapter_metadata.implements_port
+            if adapter.implements_port:
+                port = adapter.implements_port
                 # Map port names to capabilities
                 capability_map = {
                     "llm": "LLM",
@@ -261,7 +261,7 @@ def _get_available_plugins() -> list[dict[str, Any]]:
         # Create a plugin entry for each namespace group
         if ns == "plugin" and ns_adapters:
             # Group adapters by their prefix (e.g., "mock" from "mock_llm", "mock_database")
-            prefix_groups: dict[str, list[ComponentInfo]] = {}
+            prefix_groups: dict[str, list[ComponentMetadata]] = {}
             for adapter in ns_adapters:
                 # Special case for in_memory_memory -> local
                 if adapter.name == "in_memory_memory":
@@ -281,8 +281,8 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                 # Collect capabilities from all adapters in this group
                 group_capabilities = set()
                 for adapter in group_adapters:
-                    if adapter.metadata.adapter_metadata:
-                        port = adapter.metadata.adapter_metadata.implements_port
+                    if adapter.implements_port:
+                        port = adapter.implements_port
                         # Map port names to capabilities
                         capability_map = {
                             "llm": "LLM",

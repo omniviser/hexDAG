@@ -7,7 +7,7 @@ from hexai.core.ports.llm import LLM, MessageList
 from hexai.core.registry import adapter
 
 
-@adapter(name="mock_llm", implements_port="llm", namespace="plugin")
+@adapter(implements_port="llm")
 class MockLLM(LLM):
     """Mock implementation of the LLM interface for testing.
 

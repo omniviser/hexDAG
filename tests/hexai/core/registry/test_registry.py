@@ -1,7 +1,10 @@
 """Tests for the simplified component registry."""
 
+import asyncio
 import os
 import warnings
+from abc import abstractmethod
+from typing import Protocol, runtime_checkable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -154,13 +157,12 @@ class TestDecorators:
 
             pass
 
-        # Decorator should add metadata to the class
-        assert hasattr(TestNode, "__hexdag_metadata__")
-        metadata = TestNode.__hexdag_metadata__
-        assert metadata.type == ComponentType.NODE
-        assert metadata.name == "test_node"
-        assert metadata.declared_namespace == "test"
-        assert metadata.description == "A test node."
+        # Decorator should add attributes to the class
+        assert hasattr(TestNode, "_hexdag_type")
+        assert TestNode._hexdag_type == ComponentType.NODE
+        assert TestNode._hexdag_name == "test_node"
+        assert TestNode._hexdag_namespace == "test"
+        assert TestNode._hexdag_description == "A test node."
 
     def test_type_specific_decorators_add_metadata(self):
         """Test that type-specific decorators add correct metadata."""
@@ -177,10 +179,10 @@ class TestDecorators:
         class TestAdapter:
             pass
 
-        # All should have metadata with correct types
-        assert TestNode.__hexdag_metadata__.type == ComponentType.NODE
-        assert TestTool.__hexdag_metadata__.type == ComponentType.TOOL
-        assert TestAdapter.__hexdag_metadata__.type == ComponentType.ADAPTER
+        # All should have attributes with correct types
+        assert TestNode._hexdag_type == ComponentType.NODE
+        assert TestTool._hexdag_type == ComponentType.TOOL
+        assert TestAdapter._hexdag_type == ComponentType.ADAPTER
 
     def test_decorator_with_custom_name(self):
         """Test decorator with custom name."""
@@ -189,8 +191,8 @@ class TestDecorators:
         class SomeClass:
             pass
 
-        # Should use custom name in metadata
-        assert SomeClass.__hexdag_metadata__.name == "custom_name"
+        # Should use custom name in attribute
+        assert SomeClass._hexdag_name == "custom_name"
 
     def test_decorator_with_subtype(self):
         """Test decorator with subtype."""
@@ -200,8 +202,8 @@ class TestDecorators:
         class LLMNode:
             pass
 
-        # Should have subtype in metadata
-        assert LLMNode.__hexdag_metadata__.subtype == NodeSubtype.LLM
+        # Should have subtype in attribute
+        assert LLMNode._hexdag_subtype == NodeSubtype.LLM
 
 
 class TestValidation:
@@ -492,19 +494,32 @@ class TestAdapterRegistration:
     @pytest.fixture
     def setup_test_port(self, test_registry):
         """Register a test port in the registry."""
-        from hexai.core.registry.models import ClassComponent, ComponentMetadata, PortMetadata
+        from abc import abstractmethod
 
-        # Register a test port with required and optional methods
+        from hexai.core.registry.models import ClassComponent, ComponentMetadata
+
+        # Create a proper Protocol class with required methods
+        @runtime_checkable
+        class LLMPort(Protocol):
+            @abstractmethod
+            def generate(self, prompt: str) -> str: ...
+
+            @abstractmethod
+            def stream(self, prompt: str): ...
+
+            # Optional methods (with default implementations)
+            def embed(self, text: str) -> list[float]:
+                return []
+
+            def tokenize(self, text: str) -> list[str]:
+                return text.split()
+
+        # Register the port
         port_meta = ComponentMetadata(
             name="llm_port",
             component_type=ComponentType.PORT,
-            component=ClassComponent(value=type("LLMPort", (), {})),
+            component=ClassComponent(value=LLMPort),
             namespace="core",
-            port_metadata=PortMetadata(
-                protocol_class=type("LLMProtocol", (), {}),
-                required_methods=["generate", "stream"],
-                optional_methods=["embed", "tokenize"],
-            ),
         )
         test_registry._components.setdefault("core", {})["llm_port"] = port_meta
         return test_registry
@@ -599,14 +614,20 @@ class TestAdapterRegistration:
         reg = test_registry
 
         # First register a port
+        from abc import abstractmethod
+
         @port(
             name="discovery_test_port",
             namespace="test",
-            required_methods=["process"],
-            optional_methods=["validate"],
         )
-        class DiscoveryTestPort:
+        @runtime_checkable
+        class DiscoveryTestPort(Protocol):
+            @abstractmethod
             def process(self, data: str) -> str: ...
+
+            # Optional method with default implementation
+            def validate(self, data: str) -> bool:
+                return True
 
         # Register the port first (simulating phase A)
         reg.register(
@@ -1059,3 +1080,108 @@ class TestRegistryPluginDiscovery:
 
         # Cleanup
         global_registry._cleanup_state()
+
+
+# ============================================================================
+# Convention Over Configuration Tests
+# Moved from test_registry_convention.py
+# ============================================================================
+
+
+class TestConventionIntegration:
+    """Integration tests showing the full convention over configuration flow."""
+
+    @pytest.fixture
+    def registry(self):
+        """Create a test registry."""
+        reg = ComponentRegistry()
+        reg.bootstrap(manifest=[], dev_mode=True)
+        return reg
+
+    def test_complete_port_adapter_workflow(self, registry):
+        """Test complete workflow: define port -> create adapters -> validate."""
+        from hexai.core.registry.introspection import (
+            extract_port_methods,
+            infer_adapter_capabilities,
+            validate_adapter_implementation,
+        )
+
+        # Define a port using Protocol
+        @port(name="messaging", namespace="test")
+        @runtime_checkable
+        class MessagingPort(Protocol):
+            """Messaging port with required and optional methods."""
+
+            @abstractmethod
+            async def send_message(self, to: str, message: str) -> bool:
+                """Required: Send a message."""
+                ...
+
+            @abstractmethod
+            async def receive_message(self, from_user: str) -> str | None:
+                """Required: Receive a message."""
+                ...
+
+            def get_status(self) -> dict:
+                """Optional: Get messaging status."""
+                return {"status": "unknown"}
+
+            def set_priority(self, level: int) -> None:
+                """Optional: Set message priority."""
+                pass
+
+        # Extract methods automatically
+        required, optional = extract_port_methods(MessagingPort)
+        assert set(required) == {"send_message", "receive_message"}
+        assert set(optional) == {"get_status", "set_priority"}
+
+        # Register the port
+        registry.register(
+            name="messaging",
+            component=MessagingPort,
+            component_type="port",
+            namespace="test",
+            privileged=True,
+        )
+
+        # Create a full adapter with all features
+        @adapter(implements_port="messaging", name="full_messenger")
+        class FullMessenger:
+            """Adapter with all optional methods."""
+
+            async def send_message(self, to: str, message: str) -> bool:
+                await asyncio.sleep(0.01)
+                return True
+
+            async def receive_message(self, from_user: str) -> str | None:
+                await asyncio.sleep(0.01)
+                return f"Hello from {from_user}"
+
+            def get_status(self) -> dict:
+                return {"status": "online", "queue": 5}
+
+            def set_priority(self, level: int) -> None:
+                self.priority = level
+
+        # Validate it implements the port correctly
+        is_valid, missing = validate_adapter_implementation(FullMessenger, MessagingPort)
+        assert is_valid is True
+        assert missing == []
+
+        # Check capabilities
+        capabilities = infer_adapter_capabilities(FullMessenger, MessagingPort)
+        assert set(capabilities) == {"supports_get_status", "supports_set_priority"}
+
+        # Register the adapter
+        registry.register(
+            name="full_messenger",
+            component=FullMessenger,
+            component_type="adapter",
+            namespace="test",
+            privileged=True,
+        )
+
+        # Get adapters for the port
+        adapters = registry.get_adapters_for_port("messaging")
+        assert len(adapters) == 1
+        assert adapters[0].name == "full_messenger"

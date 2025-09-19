@@ -150,13 +150,12 @@ class TestComponentDecorator:
 
             pass
 
-        # Decorator should add metadata to the class
-        assert hasattr(TestComponent, "__hexdag_metadata__")
-        metadata = TestComponent.__hexdag_metadata__
-        assert metadata.name == "test_component"
-        assert metadata.type == ComponentType.NODE
-        assert metadata.declared_namespace == "test"
-        assert metadata.description == "Test component."
+        # Decorator should add attributes to the class
+        assert hasattr(TestComponent, "_hexdag_type")
+        assert TestComponent._hexdag_type == ComponentType.NODE
+        assert TestComponent._hexdag_name == "test_component"
+        assert TestComponent._hexdag_namespace == "test"
+        assert TestComponent._hexdag_description == "Test component."
 
     def test_custom_name(self):
         """Test decoration with custom name."""
@@ -165,10 +164,9 @@ class TestComponentDecorator:
         class TestComponent:
             pass
 
-        # Should use custom name in metadata
-        assert hasattr(TestComponent, "__hexdag_metadata__")
-        metadata = TestComponent.__hexdag_metadata__
-        assert metadata.name == "custom"
+        # Should use custom name
+        assert hasattr(TestComponent, "_hexdag_type")
+        assert TestComponent._hexdag_name == "custom"
 
     def test_description_from_docstring(self):
         """Test description extraction from docstring."""
@@ -182,10 +180,9 @@ class TestComponentDecorator:
 
             pass
 
-        # Check metadata directly on the class
-        assert hasattr(DocumentedComponent, "__hexdag_metadata__")
-        metadata = DocumentedComponent.__hexdag_metadata__
-        assert "Well-documented component" in metadata.description
+        # Check attributes directly on the class
+        assert hasattr(DocumentedComponent, "_hexdag_type")
+        assert "Well-documented component" in DocumentedComponent._hexdag_description
 
     def test_explicit_description(self):
         """Test explicit description parameter."""
@@ -196,10 +193,9 @@ class TestComponentDecorator:
 
             pass
 
-        # Check metadata directly on the class
-        assert hasattr(TestComponent, "__hexdag_metadata__")
-        metadata = TestComponent.__hexdag_metadata__
-        assert metadata.description == "Explicit description"
+        # Check attributes directly on the class
+        assert hasattr(TestComponent, "_hexdag_type")
+        assert TestComponent._hexdag_description == "Explicit description"
 
     def test_subtype_parameter(self):
         """Test subtype parameter for nodes."""
@@ -208,10 +204,9 @@ class TestComponentDecorator:
         class FunctionComponent:
             pass
 
-        # Check metadata directly on the class
-        assert hasattr(FunctionComponent, "__hexdag_metadata__")
-        metadata = FunctionComponent.__hexdag_metadata__
-        assert metadata.subtype == NodeSubtype.FUNCTION
+        # Check attributes directly on the class
+        assert hasattr(FunctionComponent, "_hexdag_type")
+        assert FunctionComponent._hexdag_subtype == NodeSubtype.FUNCTION
 
     def test_core_namespace_privilege(self):
         """Test that core namespace gets privileged access."""
@@ -220,12 +215,11 @@ class TestComponentDecorator:
         class CoreComponent:
             pass
 
-        # Check metadata directly on the class
-        assert hasattr(CoreComponent, "__hexdag_metadata__")
-        metadata = CoreComponent.__hexdag_metadata__
-        # Note: declared_namespace is what's set by decorator
+        # Check attributes directly on the class
+        assert hasattr(CoreComponent, "_hexdag_type")
+        # Note: _hexdag_namespace is what's set by decorator
         # The actual namespace is determined during bootstrap
-        assert metadata.declared_namespace == "core"
+        assert CoreComponent._hexdag_namespace == "core"
 
 
 class TestTypeSpecificDecorators:
@@ -238,9 +232,8 @@ class TestTypeSpecificDecorators:
         class TestNode:
             pass
 
-        assert hasattr(TestNode, "__hexdag_metadata__")
-        metadata = TestNode.__hexdag_metadata__
-        assert metadata.type == ComponentType.NODE
+        assert hasattr(TestNode, "_hexdag_type")
+        assert TestNode._hexdag_type == ComponentType.NODE
 
     def test_tool_decorator(self):
         """Test @tool decorator."""
@@ -249,9 +242,8 @@ class TestTypeSpecificDecorators:
         class TestTool:
             pass
 
-        assert hasattr(TestTool, "__hexdag_metadata__")
-        metadata = TestTool.__hexdag_metadata__
-        assert metadata.type == ComponentType.TOOL
+        assert hasattr(TestTool, "_hexdag_type")
+        assert TestTool._hexdag_type == ComponentType.TOOL
 
     def test_adapter_decorator(self):
         """Test @adapter decorator."""
@@ -260,11 +252,11 @@ class TestTypeSpecificDecorators:
         class TestAdapter:
             pass
 
-        assert hasattr(TestAdapter, "__hexdag_metadata__")
-        metadata = TestAdapter.__hexdag_metadata__
-        assert metadata.type == ComponentType.ADAPTER
-        assert metadata.adapter_metadata is not None
-        assert metadata.adapter_metadata.implements_port == "test_port"
+        assert hasattr(TestAdapter, "_hexdag_type")
+        assert TestAdapter._hexdag_type == ComponentType.ADAPTER
+        # The implements_port is now stored directly on the class
+        assert hasattr(TestAdapter, "_hexdag_implements_port")
+        assert TestAdapter._hexdag_implements_port == "test_port"  # type: ignore[attr-defined]
 
     def test_policy_decorator(self):
         """Test @policy decorator."""
@@ -273,9 +265,8 @@ class TestTypeSpecificDecorators:
         class TestPolicy:
             pass
 
-        assert hasattr(TestPolicy, "__hexdag_metadata__")
-        metadata = TestPolicy.__hexdag_metadata__
-        assert metadata.type == ComponentType.POLICY
+        assert hasattr(TestPolicy, "_hexdag_type")
+        assert TestPolicy._hexdag_type == ComponentType.POLICY
 
     def test_memory_decorator(self):
         """Test @memory decorator."""
@@ -284,9 +275,8 @@ class TestTypeSpecificDecorators:
         class TestMemory:
             pass
 
-        assert hasattr(TestMemory, "__hexdag_metadata__")
-        metadata = TestMemory.__hexdag_metadata__
-        assert metadata.type == ComponentType.MEMORY
+        assert hasattr(TestMemory, "_hexdag_type")
+        assert TestMemory._hexdag_type == ComponentType.MEMORY
 
     def test_observer_decorator(self):
         """Test @observer decorator."""
@@ -295,9 +285,8 @@ class TestTypeSpecificDecorators:
         class TestObserver:
             pass
 
-        assert hasattr(TestObserver, "__hexdag_metadata__")
-        metadata = TestObserver.__hexdag_metadata__
-        assert metadata.type == ComponentType.OBSERVER
+        assert hasattr(TestObserver, "_hexdag_type")
+        assert TestObserver._hexdag_type == ComponentType.OBSERVER
 
     def test_function_node_decorator(self):
         """Test @function_node decorator."""
@@ -306,10 +295,9 @@ class TestTypeSpecificDecorators:
         class TestFunctionNode:
             pass
 
-        assert hasattr(TestFunctionNode, "__hexdag_metadata__")
-        metadata = TestFunctionNode.__hexdag_metadata__
-        assert metadata.type == ComponentType.NODE
-        assert metadata.subtype == NodeSubtype.FUNCTION
+        assert hasattr(TestFunctionNode, "_hexdag_type")
+        assert TestFunctionNode._hexdag_type == ComponentType.NODE
+        assert TestFunctionNode._hexdag_subtype == NodeSubtype.FUNCTION
 
     def test_llm_node_decorator(self):
         """Test @llm_node decorator."""
@@ -318,10 +306,9 @@ class TestTypeSpecificDecorators:
         class TestLLMNode:
             pass
 
-        assert hasattr(TestLLMNode, "__hexdag_metadata__")
-        metadata = TestLLMNode.__hexdag_metadata__
-        assert metadata.type == ComponentType.NODE
-        assert metadata.subtype == NodeSubtype.LLM
+        assert hasattr(TestLLMNode, "_hexdag_type")
+        assert TestLLMNode._hexdag_type == ComponentType.NODE
+        assert TestLLMNode._hexdag_subtype == NodeSubtype.LLM
 
     def test_agent_node_decorator(self):
         """Test @agent_node decorator."""
@@ -330,10 +317,9 @@ class TestTypeSpecificDecorators:
         class TestAgentNode:
             pass
 
-        assert hasattr(TestAgentNode, "__hexdag_metadata__")
-        metadata = TestAgentNode.__hexdag_metadata__
-        assert metadata.type == ComponentType.NODE
-        assert metadata.subtype == NodeSubtype.AGENT
+        assert hasattr(TestAgentNode, "_hexdag_type")
+        assert TestAgentNode._hexdag_type == ComponentType.NODE
+        assert TestAgentNode._hexdag_subtype == NodeSubtype.AGENT
 
 
 class TestDecoratorMetadata:
@@ -354,18 +340,18 @@ class TestDecoratorMetadata:
         class Tool1:
             pass
 
-        # All should have metadata attached
-        assert hasattr(Node1, "__hexdag_metadata__")
-        assert Node1.__hexdag_metadata__.name == "node1"
-        assert Node1.__hexdag_metadata__.type == ComponentType.NODE
+        # All should have attributes attached
+        assert hasattr(Node1, "_hexdag_type")
+        assert Node1._hexdag_name == "node1"
+        assert Node1._hexdag_type == ComponentType.NODE
 
-        assert hasattr(Node2, "__hexdag_metadata__")
-        assert Node2.__hexdag_metadata__.name == "node2"
-        assert Node2.__hexdag_metadata__.type == ComponentType.NODE
+        assert hasattr(Node2, "_hexdag_type")
+        assert Node2._hexdag_name == "node2"
+        assert Node2._hexdag_type == ComponentType.NODE
 
-        assert hasattr(Tool1, "__hexdag_metadata__")
-        assert Tool1.__hexdag_metadata__.name == "tool1"
-        assert Tool1.__hexdag_metadata__.type == ComponentType.TOOL
+        assert hasattr(Tool1, "_hexdag_type")
+        assert Tool1._hexdag_name == "tool1"
+        assert Tool1._hexdag_type == ComponentType.TOOL
 
     def test_same_name_different_classes(self):
         """Test that classes can have same component name."""
@@ -378,12 +364,12 @@ class TestDecoratorMetadata:
         class SecondNode:
             pass
 
-        # Both should have the metadata with same name but different namespaces
-        assert FirstNode.__hexdag_metadata__.name == "shared_name"
-        assert FirstNode.__hexdag_metadata__.declared_namespace == "test"
+        # Both should have the attributes with same name but different namespaces
+        assert FirstNode._hexdag_name == "shared_name"
+        assert FirstNode._hexdag_namespace == "test"
 
-        assert SecondNode.__hexdag_metadata__.name == "shared_name"
-        assert SecondNode.__hexdag_metadata__.declared_namespace == "other"
+        assert SecondNode._hexdag_name == "shared_name"
+        assert SecondNode._hexdag_namespace == "other"
 
 
 class TestFunctionMetadata:
@@ -397,11 +383,11 @@ class TestFunctionMetadata:
             """Tool that does something."""
             return "result"
 
-        # Function should have metadata
-        assert hasattr(my_tool, "__hexdag_metadata__")
-        assert my_tool.__hexdag_metadata__.name == "my_tool"
-        assert my_tool.__hexdag_metadata__.type == ComponentType.TOOL
-        assert my_tool.__hexdag_metadata__.declared_namespace == "test"
+        # Function should have attributes
+        assert hasattr(my_tool, "_hexdag_type")
+        assert my_tool._hexdag_name == "my_tool"
+        assert my_tool._hexdag_type == ComponentType.TOOL
+        assert my_tool._hexdag_namespace == "test"
 
     def test_function_with_parameters(self):
         """Test that functions with parameters get metadata."""
@@ -411,9 +397,9 @@ class TestFunctionMetadata:
             """Tool with parameters."""
             return x + y
 
-        # Function should have metadata
-        assert hasattr(parameterized_tool, "__hexdag_metadata__")
-        assert parameterized_tool.__hexdag_metadata__.name == "parameterized_tool"
+        # Function should have attributes
+        assert hasattr(parameterized_tool, "_hexdag_type")
+        assert parameterized_tool._hexdag_name == "parameterized_tool"
 
     def test_generator_function(self):
         """Test that generator functions can be decorated."""
@@ -425,10 +411,10 @@ class TestFunctionMetadata:
             yield 2
             yield 3
 
-        # Generator function should have metadata
-        assert hasattr(generator_tool, "__hexdag_metadata__")
-        assert generator_tool.__hexdag_metadata__.name == "generator_tool"
-        assert generator_tool.__hexdag_metadata__.type == ComponentType.TOOL
+        # Generator function should have attributes
+        assert hasattr(generator_tool, "_hexdag_type")
+        assert generator_tool._hexdag_name == "generator_tool"
+        assert generator_tool._hexdag_type == ComponentType.TOOL
 
 
 class TestSnakeCaseInDecorator:
@@ -441,7 +427,7 @@ class TestSnakeCaseInDecorator:
         class XMLHttpRequest:
             pass
 
-        assert XMLHttpRequest.__hexdag_metadata__.name == "xml_http_request"
+        assert XMLHttpRequest._hexdag_name == "xml_http_request"
 
     def test_decorator_with_explicit_name(self):
         """Test that explicit name overrides snake_case conversion."""
@@ -450,7 +436,7 @@ class TestSnakeCaseInDecorator:
         class XMLHttpRequest:
             pass
 
-        assert XMLHttpRequest.__hexdag_metadata__.name == "custom_name"
+        assert XMLHttpRequest._hexdag_name == "custom_name"
 
     def test_various_class_names(self):
         """Test decorator with various class name patterns."""
@@ -467,9 +453,9 @@ class TestSnakeCaseInDecorator:
         class MyAPIClass:
             pass
 
-        assert SimpleHTTPServer.__hexdag_metadata__.name == "simple_http_server"
-        assert JSONDecoder.__hexdag_metadata__.name == "json_decoder"
-        assert MyAPIClass.__hexdag_metadata__.name == "my_api_class"
+        assert SimpleHTTPServer._hexdag_name == "simple_http_server"
+        assert JSONDecoder._hexdag_name == "json_decoder"
+        assert MyAPIClass._hexdag_name == "my_api_class"
 
 
 class TestStringUsage:
@@ -490,10 +476,10 @@ class TestStringUsage:
         class StringAdapter:
             pass
 
-        # All should have correct metadata
-        assert StringNode.__hexdag_metadata__.type == ComponentType.NODE
-        assert StringTool.__hexdag_metadata__.type == ComponentType.TOOL
-        assert StringAdapter.__hexdag_metadata__.type == ComponentType.ADAPTER
+        # All should have correct attributes
+        assert StringNode._hexdag_type == ComponentType.NODE
+        assert StringTool._hexdag_type == ComponentType.TOOL
+        assert StringAdapter._hexdag_type == ComponentType.ADAPTER
 
     def test_string_namespace(self):
         """Test that namespaces can be strings."""
@@ -502,9 +488,9 @@ class TestStringUsage:
         class PluginNode:
             pass
 
-        # Should have declared namespace in metadata
-        assert hasattr(PluginNode, "__hexdag_metadata__")
-        assert PluginNode.__hexdag_metadata__.declared_namespace == "my_plugin"
+        # Should have declared namespace in attribute
+        assert hasattr(PluginNode, "_hexdag_type")
+        assert PluginNode._hexdag_namespace == "my_plugin"
 
     def test_string_subtype(self):
         """Test that subtypes can be strings."""
@@ -517,9 +503,9 @@ class TestStringUsage:
         class LLMNode:
             pass
 
-        # Should have correct subtypes in metadata
-        assert FuncNode.__hexdag_metadata__.subtype == "function"
-        assert LLMNode.__hexdag_metadata__.subtype == "llm"
+        # Should have correct subtypes in attributes
+        assert FuncNode._hexdag_subtype == "function"
+        assert LLMNode._hexdag_subtype == "llm"
 
     def test_mixed_string_and_enum(self):
         """Test mixing strings and enums works."""
@@ -532,9 +518,9 @@ class TestStringUsage:
         class MixedNode2:
             pass
 
-        # Both should have correct type in metadata
-        assert MixedNode1.__hexdag_metadata__.type == ComponentType.NODE
-        assert MixedNode2.__hexdag_metadata__.type == ComponentType.NODE
+        # Both should have correct type in attributes
+        assert MixedNode1._hexdag_type == ComponentType.NODE
+        assert MixedNode2._hexdag_type == ComponentType.NODE
 
     def test_default_string_namespace(self):
         """Test that default namespace is 'user' string."""
@@ -543,9 +529,9 @@ class TestStringUsage:
         class DefaultNode:
             pass
 
-        # Should have default namespace in metadata
-        assert hasattr(DefaultNode, "__hexdag_metadata__")
-        assert DefaultNode.__hexdag_metadata__.declared_namespace == "user"
+        # Should have default namespace in attribute
+        assert hasattr(DefaultNode, "_hexdag_type")
+        assert DefaultNode._hexdag_namespace == "user"
 
     def test_invalid_component_type(self):
         """Test that invalid component types raise an error."""

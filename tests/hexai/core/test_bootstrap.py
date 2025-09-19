@@ -33,10 +33,12 @@ class TestBootstrapArchitecture:
 
             pass
 
-        # Decorator should add metadata
-        assert hasattr(TestNode, "__hexdag_metadata__")
-        assert TestNode.__hexdag_metadata__.name == "test_node"
-        assert TestNode.__hexdag_metadata__.type == "node"
+        # Decorator should add attributes
+        assert hasattr(TestNode, "_hexdag_type")
+        assert TestNode._hexdag_name == "test_node"
+        from hexai.core.registry.models import ComponentType as CT
+
+        assert TestNode._hexdag_type == CT.NODE
 
         # But should NOT register in registry
         assert len(registry.list_components()) == 0
@@ -166,11 +168,15 @@ class TestBootstrapArchitecture:
                     textwrap.dedent("""
                     from hexai.core.registry.decorators import adapter
                     from hexai.core.registry.models import (
-                        ClassComponent, ComponentMetadata, ComponentType, PortMetadata
+                        ClassComponent, ComponentMetadata, ComponentType
                     )
+                    from typing import Protocol, runtime_checkable
+                    from abc import abstractmethod
 
-                    # Define a port
-                    class TestPort:
+                    # Define a port using Protocol
+                    @runtime_checkable
+                    class TestPort(Protocol):
+                        @abstractmethod
                         def required_method(self): pass
 
                     # Invalid adapter - missing required_method
@@ -185,11 +191,6 @@ class TestBootstrapArchitecture:
                             component_type=ComponentType.PORT,
                             component=ClassComponent(value=TestPort),
                             namespace=namespace,
-                            port_metadata=PortMetadata(
-                                protocol_class=TestPort,
-                                required_methods=["required_method"],
-                                optional_methods=[],
-                            ),
                         )
                         if namespace not in registry._components:
                             registry._components[namespace] = {}
@@ -202,14 +203,20 @@ class TestBootstrapArchitecture:
                         components = discover_components(module)
 
                         for _, component in components:
-                            if hasattr(component, "__hexdag_metadata__"):
-                                metadata = getattr(component, "__hexdag_metadata__")
+                            if hasattr(component, "_hexdag_type"):
+                                component_name = getattr(component, "_hexdag_name")
+                                component_type = getattr(component, "_hexdag_type")
+                                component_subtype = getattr(component, "_hexdag_subtype", None)
+                                component_description = getattr(
+                                    component, "_hexdag_description", ""
+                                )
                                 registry.register(
-                                    name=metadata.name,
+                                    name=component_name,
                                     component=component,
-                                    component_type=metadata.type,
+                                    component_type=component_type,
                                     namespace=namespace,
-                                    adapter_metadata=getattr(metadata, "adapter_metadata", None),
+                                    subtype=component_subtype,
+                                    description=component_description,
                                 )
                         return 1
                 """)

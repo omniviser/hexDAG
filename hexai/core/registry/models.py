@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable  # noqa: TC003 - needed at runtime for TypeAdapter
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Protocol, TypeVar, runtime_checkable
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter, field_validator
 
@@ -122,107 +122,6 @@ class Namespace(StrEnum):
     PLUGIN = "plugin"  # For plugin components
 
 
-class PortMetadata(BaseModel):
-    """Metadata specific to PORT components (interfaces/protocols)."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    protocol_class: type  # The Protocol being defined
-    required_methods: list[str] = Field(default_factory=list)
-    optional_methods: list[str] = Field(default_factory=list)
-
-
-class AdapterMetadata(BaseModel):
-    """Metadata specific to ADAPTER components (port implementations)."""
-
-    implements_port: str  # Name of port it implements
-    capabilities: list[str] = Field(default_factory=list)
-    requires_config: list[str] = Field(default_factory=list)
-    singleton: bool = Field(default=True)
-
-
-class ToolMetadata(BaseModel):
-    """Metadata specific to TOOL components."""
-
-    parameters: list[dict[str, Any]] = Field(default_factory=list)  # ToolParameter definitions
-    returns: str | None = None  # Return type description
-    examples: list[str] = Field(default_factory=list)
-    capabilities: list[str] = Field(default_factory=list)
-    required_ports: dict[str, str] = Field(default_factory=dict)  # {param_name: port_type}
-    is_async: bool = Field(default=True)
-    supports_batch: bool = Field(default=False)
-    requires_context: bool = Field(default=False)
-
-
-class MetadataExtension(BaseModel):
-    """Extension metadata with strict typing."""
-
-    string_values: dict[str, str] = Field(default_factory=dict)
-    int_values: dict[str, int] = Field(default_factory=dict)
-    bool_values: dict[str, bool] = Field(default_factory=dict)
-    float_values: dict[str, float] = Field(default_factory=dict)
-
-    def get(
-        self, key: str, default: str | int | bool | float | None = None
-    ) -> str | int | bool | float | None:
-        """Get value by key from any type dict."""
-        stores: list[dict] = [
-            self.string_values,
-            self.int_values,
-            self.bool_values,
-            self.float_values,
-        ]
-        for store in stores:
-            if key in store:
-                return store[key]  # type: ignore[no-any-return]
-        return default
-
-    def set(self, key: str, value: str | int | bool | float) -> None:
-        """Set value in appropriate type dict."""
-        match value:
-            case str():
-                self.string_values[key] = value
-            case int():
-                self.int_values[key] = value
-            case bool():
-                self.bool_values[key] = value
-            case float():
-                self.float_values[key] = value
-            case _:
-                raise TypeError(f"Unsupported metadata type: {type(value)}")
-
-
-class DecoratorMetadata(BaseModel):
-    """Immutable metadata attached by decorators.
-
-    This is what decorators attach to classes via __hexdag_metadata__.
-    It's frozen to prevent accidental mutation after decoration.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    type: ComponentType | str
-    name: str
-    declared_namespace: str = Field(default="user")
-    subtype: NodeSubtype | str | None = None
-    description: str = Field(default="")
-    adapter_metadata: AdapterMetadata | None = None  # For adapter components
-    port_metadata: PortMetadata | None = None  # For port components
-    tool_metadata: ToolMetadata | None = None  # For tool components
-
-
-# ============================================================================
-# Protocols for type safety
-# ============================================================================
-
-
-@runtime_checkable
-class HasMetadata(Protocol):
-    """Protocol for components with decorator metadata."""
-
-    __hexdag_metadata__: DecoratorMetadata
-
-
 class ComponentMetadata(BaseModel):
     """Metadata for registered components.
 
@@ -238,12 +137,9 @@ class ComponentMetadata(BaseModel):
     namespace: str = Field(default="core")
     subtype: NodeSubtype | str | None = None
     description: str = Field(default="")
-    port_metadata: PortMetadata | None = None
-    adapter_metadata: AdapterMetadata | None = None
-    tool_metadata: ToolMetadata | None = None
-    port_requirements: list = Field(default_factory=list)  # List of PortRequirement
-    # Extensible metadata with strict typing
-    metadata_extensions: MetadataExtension = Field(default_factory=MetadataExtension)
+    # Only non-inferable metadata
+    implements_port: str | None = None  # For adapters only
+    port_requirements: list[str] = Field(default_factory=list)  # For tools needing ports
 
     @property
     def raw_component(self) -> object:
@@ -322,14 +218,3 @@ class InstanceFactory:
         if isinstance(component, ClassComponent) and init_params:
             return component.instantiate(**init_params)
         return component.instantiate()
-
-
-# ============================================================================
-# Protocols and Extensions
-# ============================================================================
-
-
-class ComponentProtocol(Protocol):
-    """Protocol for components that can be registered."""
-
-    __hexdag_metadata__: object  # DecoratorMetadata

@@ -111,6 +111,7 @@ include = ["hexai"]
 modules = [
     "hexai.core.ports",               # Core port definitions (must load before adapters)
     "hexai.core.application.nodes",  # Core node factories
+    "hexai.tools.builtin_tools",     # Built-in tools (tool_end, change_phase)
 ]
 
 # Default plugins - mock and local adapters for testing and development

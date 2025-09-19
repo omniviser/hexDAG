@@ -10,31 +10,30 @@ import importlib
 import inspect
 import logging
 from types import ModuleType  # noqa: TC003
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from hexai.core.registry.models import ComponentType, DecoratorMetadata
+    from hexai.core.registry.models import ComponentType
     from hexai.core.registry.registry import ComponentRegistry as RegistryProtocol
 else:
     # Runtime imports - needed for actual execution
     from collections.abc import Callable  # noqa: TC003
 
-    from hexai.core.registry.models import ComponentType, DecoratorMetadata  # noqa: TC001
+    from hexai.core.registry.models import ComponentType  # noqa: TC001
 
 
-class ComponentWithMetadata(Protocol):
-    """Protocol for components with HexDAG metadata."""
-
-    __hexdag_metadata__: DecoratorMetadata
+def has_hexdag_attrs(obj: object) -> bool:
+    """Check if object has hexdag attributes."""
+    return hasattr(obj, "_hexdag_type") and hasattr(obj, "_hexdag_name")
 
 
 logger = logging.getLogger(__name__)
 
 
 def discover_components(module: ModuleType) -> list[tuple[str, type | Callable | object]]:
-    """Discover all components with __hexdag_metadata__ in a module.
+    """Discover all components with _hexdag_type in a module.
 
     Parameters
     ----------
@@ -65,8 +64,8 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
 
         obj = getattr(module, name)
 
-        # Check if object has our metadata marker and is a class or callable
-        if hasattr(obj, "__hexdag_metadata__") and (inspect.isclass(obj) or callable(obj)):
+        # Check if object has our hexdag type marker and is a class or callable
+        if hasattr(obj, "_hexdag_type") and (inspect.isclass(obj) or callable(obj)):
             # Check if it's from this module or a submodule
             obj_module = getattr(obj, "__module__", None)
             if obj_module and (
@@ -75,6 +74,102 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
                 components.append((name, obj))
 
     return components
+
+
+def _get_component_names(component: object) -> list[str]:
+    """Get all names a component should be registered under (including aliases).
+
+    Parameters
+    ----------
+    component : object
+        The component object
+
+    Returns
+    -------
+    list[str]
+        List of all names to register under
+    """
+    if hasattr(component, "_hexdag_names"):
+        names = getattr(component, "_hexdag_names")  # noqa: B009
+        return names if isinstance(names, list) else [names]
+    elif hasattr(component, "_hexdag_name"):
+        name = getattr(component, "_hexdag_name")  # noqa: B009
+        return [name] if isinstance(name, str) else []
+    else:
+        return []
+
+
+def _register_component_direct(
+    registry: RegistryProtocol,
+    component: object,
+    namespace: str,
+    module_path: str,
+) -> int:
+    """Register a component directly from its attributes.
+
+    Parameters
+    ----------
+    registry : RegistryProtocol
+        The registry to register into
+    component : object
+        The component to register
+    namespace : str
+        Namespace to register under
+    module_path : str
+        Source module path for logging
+
+    Returns
+    -------
+    int
+        Number of successful registrations
+    """
+    # Extract attributes directly from component
+    component_type = component._hexdag_type  # type: ignore[attr-defined]
+    names_to_register = _get_component_names(component)
+    subtype = getattr(component, "_hexdag_subtype", None)
+    description = getattr(component, "_hexdag_description", "")
+
+    privileged = namespace == "core"
+    count = 0
+
+    for name in names_to_register:
+        try:
+            registry.register(
+                name=name,
+                component=component,
+                component_type=component_type,
+                namespace=namespace,
+                privileged=privileged,
+                subtype=subtype,
+                description=description,
+            )
+            count += 1
+
+            # Log appropriate message based on type
+            if component_type == ComponentType.PORT:
+                logger.debug("Registered port %s:%s from %s", namespace, name, module_path)
+            else:
+                component_type_str = (
+                    component_type if isinstance(component_type, str) else "component"
+                )
+                logger.debug(
+                    "Registered %s %s:%s from %s",
+                    component_type_str,
+                    namespace,
+                    name,
+                    module_path,
+                )
+        except Exception as e:
+            component_type_str = (
+                "port" if component_type == ComponentType.PORT else str(component_type)
+            )
+            logger.error(
+                f"Failed to register {component_type_str} {namespace}:{name} from {module_path}"
+                f": {e}"
+            )
+            raise
+
+    return count
 
 
 def register_components(registry: RegistryProtocol, namespace: str, module_path: str) -> int:
@@ -120,103 +215,31 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
     components = discover_components(module)
     count = 0
 
-    # Two-phase registration: Phase A (ports first)
+    seen_objects = set()
+    unique_components = []
+    for name, component in components:
+        if id(component) not in seen_objects:
+            seen_objects.add(id(component))
+            unique_components.append((name, component))
+    components = unique_components
+
     logger.debug("Phase A: Registering ports from %s", module_path)
-    ports_registered = []
-
     for _, component in components:
-        # Type guard - we know from discover_components that these have metadata
-        if not hasattr(component, "__hexdag_metadata__"):
-            continue
-        # Use getattr to access dynamic attribute (type checkers can't verify this)
-        metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
-
-        # Skip non-ports in phase A
-        if metadata.type != ComponentType.PORT:
+        if not hasattr(component, "_hexdag_type"):
             continue
 
-        meta_name = metadata.name
-        meta_type = metadata.type
-        meta_subtype = metadata.subtype
-        meta_description = metadata.description
-        meta_adapter = metadata.adapter_metadata
+        component_type = getattr(component, "_hexdag_type")  # noqa: B009
+        if component_type == ComponentType.PORT:
+            count += _register_component_direct(registry, component, namespace, module_path)
 
-        # Namespace from manifest overrides decorator's declared_namespace
-        actual_namespace = namespace
-
-        # Determine if this needs privileged access
-        privileged = actual_namespace == "core"
-
-        try:
-            registry.register(
-                name=meta_name,
-                component=component,
-                component_type=meta_type,
-                namespace=actual_namespace,
-                privileged=privileged,
-                subtype=meta_subtype,
-                description=meta_description,
-                adapter_metadata=meta_adapter,
-            )
-            count += 1
-            ports_registered.append(meta_name)
-            logger.debug("Registered port %s:%s from %s", actual_namespace, meta_name, module_path)
-        except Exception as e:
-            logger.error(
-                f"Failed to register port {actual_namespace}:{meta_name} from {module_path}: {e}"
-            )
-            raise
-
-    # Phase B: Register adapters (and everything else)
+    # Phase B: Register everything else
     logger.debug("Phase B: Registering adapters and other components from %s", module_path)
-
     for _, component in components:
-        # Type guard - we know from discover_components that these have metadata
-        if not hasattr(component, "__hexdag_metadata__"):
-            continue
-        # Use getattr to access dynamic attribute (type checkers can't verify this)
-        component_metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
-
-        # Skip ports (already registered in phase A)
-        if component_metadata.type == ComponentType.PORT:
+        if not hasattr(component, "_hexdag_type"):
             continue
 
-        meta_name = component_metadata.name
-        meta_type = component_metadata.type
-        meta_subtype = component_metadata.subtype
-        meta_description = component_metadata.description
-        meta_adapter = component_metadata.adapter_metadata
-
-        # Namespace from manifest overrides decorator's declared_namespace
-        actual_namespace = namespace
-
-        # Determine if this needs privileged access
-        privileged = actual_namespace == "core"
-
-        try:
-            registry.register(
-                name=meta_name,
-                component=component,
-                component_type=meta_type,
-                namespace=actual_namespace,
-                privileged=privileged,
-                subtype=meta_subtype,
-                description=meta_description,
-                adapter_metadata=meta_adapter,
-            )
-            count += 1
-            component_type_str = meta_type if isinstance(meta_type, str) else "component"
-            logger.debug(
-                "Registered %s %s:%s from %s",
-                component_type_str,
-                actual_namespace,
-                meta_name,
-                module_path,
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to register {actual_namespace}:{meta_name} from {module_path}: {e}"
-            )
-            raise
+        component_type = getattr(component, "_hexdag_type")  # noqa: B009
+        if component_type != ComponentType.PORT:
+            count += _register_component_direct(registry, component, namespace, module_path)
 
     return count

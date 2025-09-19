@@ -1,21 +1,25 @@
 """Sample components for testing the bootstrap system."""
 
+from abc import abstractmethod
+from typing import Protocol, runtime_checkable
+
 from hexai.core.registry.decorators import adapter, node, tool
 from hexai.core.registry.models import (
     ClassComponent,
     ComponentMetadata,
     ComponentType,
-    PortMetadata,
 )
 
 
-# Define a test port that the adapter will implement
-class TestPort:
+# Define a test port using Protocol
+@runtime_checkable
+class TestPort(Protocol):
     """A test port interface."""
 
+    @abstractmethod
     def process(self, data: str) -> str:
         """Process data."""
-        raise NotImplementedError
+        ...
 
 
 @node(name="sample_node", description="A sample node for testing")
@@ -55,11 +59,6 @@ def register_components(registry, namespace):
         component_type=ComponentType.PORT,
         component=ClassComponent(value=TestPort),
         namespace=namespace,
-        port_metadata=PortMetadata(
-            protocol_class=TestPort,
-            required_methods=["process"],
-            optional_methods=[],
-        ),
     )
 
     # Manually register the port
@@ -73,22 +72,24 @@ def register_components(registry, namespace):
 
     count = 0
     for _, component in components:
-        if not hasattr(component, "__hexdag_metadata__"):
+        if not hasattr(component, "_hexdag_type"):
             continue
-        metadata = component.__hexdag_metadata__
+
+        # Extract attributes from component
+        component_type = component._hexdag_type
+        component_name = component._hexdag_name
+        component_subtype = getattr(component, "_hexdag_subtype", None)
+        component_description = getattr(component, "_hexdag_description", "")
 
         try:
             registry.register(
-                name=metadata.name,
+                name=component_name,
                 component=component,
-                component_type=metadata.type,
+                component_type=component_type,
                 namespace=namespace,
                 privileged=(namespace == "core"),
-                subtype=metadata.subtype,
-                description=metadata.description,
-                adapter_metadata=metadata.adapter_metadata
-                if hasattr(metadata, "adapter_metadata")
-                else None,
+                subtype=component_subtype,
+                description=component_description,
             )
             count += 1
         except Exception:

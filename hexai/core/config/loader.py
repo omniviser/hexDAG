@@ -229,6 +229,7 @@ def get_default_config() -> HexDAGConfig:
         modules=[
             "hexai.core.application.nodes",
             "hexai.adapters.mock",
+            "hexai.tools.builtin_tools",  # Essential built-in tools
         ],
         settings={
             "log_level": "INFO",
@@ -250,10 +251,13 @@ def config_to_manifest_entries(config: HexDAGConfig) -> list[ManifestEntry]:
     list[ManifestEntry]
         List of manifest entries for registry bootstrap
     """
-    # Core modules and built-in LLM adapters go to 'core' namespace, others to 'user'
+    # Core modules and built-in tools go to 'core' namespace, others to 'user'
     module_entries = [
         ManifestEntry(
-            namespace="core" if (module.startswith("hexai.core")) else "user", module=module
+            namespace="core"
+            if (module.startswith("hexai.core") or module.startswith("hexai.tools.builtin_tools"))
+            else "user",
+            module=module,
         )
         for module in config.modules
     ]
