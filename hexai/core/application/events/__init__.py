@@ -23,6 +23,7 @@ from .control_manager import ControlManager
 
 # Event classes
 from .events import (
+    EVENT_REGISTRY,
     Event,
     LLMPromptSent,
     LLMResponseReceived,
@@ -48,6 +49,14 @@ from .models import (
     Observer,
 )
 from .observer_manager import ObserverManager
+from .taxonomy import (
+    EventContext,
+    Severity,
+    build_envelope,
+    generate_event_id,
+    validate_envelope,
+    validate_event_type,
+)
 
 __all__ = [
     # Events
@@ -74,6 +83,14 @@ __all__ = [
     # Managers
     "ObserverManager",
     "ControlManager",
+    # Taxonomy
+    "EventContext",
+    "Severity",
+    "build_envelope",
+    "generate_event_id",
+    "validate_envelope",
+    "validate_event_type",
+    "EVENT_REGISTRY",
     # Config
     "NullObserverManager",
     "NullControlManager",

@@ -1,6 +1,6 @@
 import pytest
 
-from hexai.simple_events.validators import validate_event_type
+from hexai.core.application.events.taxonomy import validate_event_type
 
 
 @pytest.mark.parametrize(
@@ -9,7 +9,7 @@ from hexai.simple_events.validators import validate_event_type
         "pipeline:started",
         "node:skipped",
         "observer:error",
-        "llm:prompt_sent",
+        "llm:prompt",
         "tool:completed",
     ],
 )
