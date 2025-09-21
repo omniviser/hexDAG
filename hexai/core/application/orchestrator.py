@@ -13,6 +13,7 @@ from typing import Any
 from hexai.core.application.policies.models import PolicyContext, PolicyResponse, PolicySignal
 from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
+from hexai.core.ports.observer_manager import ObserverManagerPort
 from hexai.core.ports.policy_manager import PolicyManagerPort
 
 from .events import (
@@ -20,7 +21,6 @@ from .events import (
     NodeCompleted,
     NodeFailed,
     NodeStarted,
-    ObserverManager,
     PipelineCompleted,
     PipelineStarted,
     WaveCompleted,
@@ -222,8 +222,13 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        # Get observer manager and policy manager from ports
-        observer_manager: ObserverManager = all_ports.get("observer_manager", ObserverManager())
+        # Get observer manager from ports
+        observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
+        if observer_manager is None:
+            # Create default LocalObserverManager for backward compatibility
+            from hexai.adapters.local import LocalObserverManager
+
+            observer_manager = LocalObserverManager()
 
         # Get policy_manager from ports - required
         policy_manager: PolicyManagerPort | None = all_ports.get("policy_manager")
@@ -317,7 +322,7 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observer_manager: ObserverManager,
+        observer_manager: ObserverManagerPort,
         policy_manager: PolicyManagerPort,
         wave_index: int = 0,
         validate: bool = True,
@@ -365,7 +370,7 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observer_manager: ObserverManager,
+        observer_manager: ObserverManagerPort,
         policy_manager: PolicyManagerPort,
         wave_index: int = 0,
         validate: bool = True,
