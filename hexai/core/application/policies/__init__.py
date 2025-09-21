@@ -7,7 +7,6 @@ from .execution_policies import (
 )
 from .models import (
     PolicyContext,
-    PolicyMetadata,
     PolicyResponse,
     PolicySignal,
     SubscriberType,
@@ -22,6 +21,5 @@ __all__ = [
     "PolicyContext",
     "PolicyResponse",
     "PolicySignal",
-    "PolicyMetadata",
     "SubscriberType",
 ]

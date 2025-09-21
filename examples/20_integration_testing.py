@@ -163,10 +163,10 @@ async def test_basic_integration():
     logger_service = MockLoggerAdapter()
 
     # Create test functions
-    async def data_processor(input_data: Any, **kwargs) -> dict:
+    async def data_processor(input_data: Any, **ports) -> dict:
         """Process data and save to database."""
-        db = kwargs.get("database")
-        logger = kwargs.get("logger")
+        db = ports.get("database")
+        logger = ports.get("logger")
 
         # Process data
         processed_data = {"original": input_data, "processed": True, "timestamp": time.time()}
@@ -179,10 +179,10 @@ async def test_basic_integration():
 
         return processed_data
 
-    async def notification_sender(input_data: Any, **kwargs) -> dict:
+    async def notification_sender(input_data: Any, **ports) -> dict:
         """Send notification email."""
-        email = kwargs.get("email")
-        logger = kwargs.get("logger")
+        email = ports.get("email")
+        logger = ports.get("logger")
 
         # Send email
         email_result = await email.send_email(
@@ -235,10 +235,10 @@ async def test_error_handling():
 
     logger_service = MockLoggerAdapter()
 
-    async def unreliable_processor(input_data: Any, **kwargs) -> dict:
+    async def unreliable_processor(input_data: Any, **ports) -> dict:
         """Process data with potential failures."""
-        db = kwargs.get("database")
-        logger = kwargs.get("logger")
+        db = ports.get("database")
+        logger = ports.get("logger")
 
         try:
             # Try to save data
@@ -254,10 +254,10 @@ async def test_error_handling():
             # Return fallback result
             return {"status": "fallback", "error": str(e)}
 
-    async def notification_with_retry(input_data: Any, **kwargs) -> dict:
+    async def notification_with_retry(input_data: Any, **ports) -> dict:
         """Send notification with retry logic."""
-        email = kwargs.get("email")
-        logger = kwargs.get("logger")
+        email = ports.get("email")
+        logger = ports.get("logger")
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -312,9 +312,9 @@ async def test_performance_monitoring():
     database_service = MockDatabaseAdapter()
     logger_service = MockLoggerAdapter()
 
-    async def performance_monitored_operation(input_data: Any, **kwargs) -> dict:
+    async def performance_monitored_operation(input_data: Any, **ports) -> dict:
         """Operation with performance monitoring."""
-        logger = kwargs.get("logger")
+        logger = ports.get("logger")
 
         start_time = time.time()
 
@@ -322,11 +322,11 @@ async def test_performance_monitoring():
         await asyncio.sleep(0.2)
 
         # Save to database
-        db = kwargs.get("database")
+        db = ports.get("database")
         await db.save_data("performance_data", {"timestamp": start_time})
 
         # Send notification
-        email = kwargs.get("email")
+        email = ports.get("email")
         await email.send_email(
             to_address="monitoring@example.com",
             subject="Performance Report",

@@ -36,9 +36,9 @@ class UnreliableService:
 
 
 # Error handling functions
-async def reliable_processor(input_data: str, **kwargs) -> dict:
+async def reliable_processor(input_data: str, **ports) -> dict:
     """Process data with retry mechanism."""
-    service = kwargs.get("unreliable_service")
+    service = ports.get("unreliable_service")
     max_retries = 3
 
     for attempt in range(max_retries):
@@ -53,10 +53,10 @@ async def reliable_processor(input_data: str, **kwargs) -> dict:
     return {"status": "failed", "error": "Max retries exceeded"}
 
 
-async def graceful_degradation(input_data: Any, **kwargs) -> dict:
+async def graceful_degradation(input_data: Any, **ports) -> dict:
     """Process data with graceful degradation."""
-    primary_service = kwargs.get("primary_service")
-    fallback_service = kwargs.get("fallback_service")
+    primary_service = ports.get("primary_service")
+    fallback_service = ports.get("fallback_service")
 
     try:
         # Try primary service
@@ -71,10 +71,10 @@ async def graceful_degradation(input_data: Any, **kwargs) -> dict:
             return {"error": f"Primary: {e}, Fallback: {fallback_error}", "status": "failed"}
 
 
-async def circuit_breaker_processor(input_data: str, **kwargs) -> dict:
+async def circuit_breaker_processor(input_data: str, **ports) -> dict:
     """Process data with circuit breaker pattern."""
-    service = kwargs.get("circuit_service")
-    circuit = kwargs.get("circuit_breaker")
+    service = ports.get("circuit_service")
+    circuit = ports.get("circuit_breaker")
 
     if circuit.is_open():
         return {"status": "circuit_open", "message": "Circuit breaker is open, skipping call"}
@@ -88,7 +88,7 @@ async def circuit_breaker_processor(input_data: str, **kwargs) -> dict:
         return {"error": str(e), "status": "failed"}
 
 
-async def error_aggregator(input_data: Any, **kwargs) -> dict:
+async def error_aggregator(input_data: Any, **_) -> dict:
     """Aggregate results and handle partial failures."""
     results = input_data
 
@@ -171,15 +171,17 @@ async def main():
     # Create circuit breaker
     circuit_breaker = CircuitBreaker(failure_threshold=2, timeout=1.0)
 
-    # Create orchestrator with services
+    # Create orchestrator with services using PortsBuilder for proper defaults
+    from hexai.core.application.ports_builder import PortsBuilder
+
     orchestrator = Orchestrator(
-        ports={
-            "unreliable_service": unreliable_service,
-            "primary_service": primary_service,
-            "fallback_service": fallback_service,
-            "circuit_service": circuit_service,
-            "circuit_breaker": circuit_breaker,
-        }
+        ports=PortsBuilder()
+        .with_defaults()
+        .with_custom_port("unreliable_service", unreliable_service)
+        .with_custom_port("primary_service", primary_service)
+        .with_custom_port("fallback_service", fallback_service)
+        .with_custom_port("circuit_service", circuit_service)
+        .with_custom_port("circuit_breaker", circuit_breaker)
     )
 
     # Test 1: Retry Mechanism

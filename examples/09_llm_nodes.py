@@ -58,7 +58,9 @@ async def main():
     graph.add(basic_llm_node)
 
     # Execute
-    orchestrator = Orchestrator(ports={"llm": mock_llm})
+    from hexai.core.application.ports_builder import PortsBuilder
+
+    orchestrator = Orchestrator(ports=PortsBuilder().with_defaults().with_llm(mock_llm))
     result = await orchestrator.run(graph, {"input": "I love this new product!"})
 
     print("   ✅ Basic LLM node executed successfully")

@@ -53,7 +53,7 @@ async def fetch_analytics_data(input_data: dict) -> dict:
     }
 
 
-async def combine_user_product(input_data: Any, **kwargs) -> dict:
+async def combine_user_product(input_data: Any) -> dict:
     """Combine user and product data."""
     # Extract dependency results from input_data (which contains the aggregated results)
     fetch_users = input_data.get("fetch_users", {})
@@ -69,7 +69,7 @@ async def combine_user_product(input_data: Any, **kwargs) -> dict:
     }
 
 
-async def final_report(input_data: Any, **kwargs) -> dict:
+async def final_report(input_data: Any) -> dict:
     """Generate final report from all data sources."""
     # Extract dependency results from input_data
     combine_data = input_data.get("combine_data", {})

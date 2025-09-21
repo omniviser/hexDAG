@@ -18,7 +18,7 @@ from hexai.core.domain.dag import DirectedGraph
 
 
 # Define the functions that will be wrapped by FunctionNode
-async def text_processor(input_data: str, **kwargs) -> dict:
+async def text_processor(input_data: str) -> dict:
     """Process text data."""
     return {
         "original": input_data,
@@ -29,7 +29,7 @@ async def text_processor(input_data: str, **kwargs) -> dict:
     }
 
 
-async def number_calculator(input_data: dict, **kwargs) -> dict:
+async def number_calculator(input_data: dict) -> dict:
     """Calculate statistics from text processing."""
     return {
         "text_stats": {
@@ -41,9 +41,9 @@ async def number_calculator(input_data: dict, **kwargs) -> dict:
     }
 
 
-async def data_formatter(input_data: dict, **kwargs) -> dict:
+async def data_formatter(input_data: dict, **ports) -> dict:
     """Format data for output."""
-    formatter = kwargs.get("formatter", "json")
+    formatter = ports.get("formatter", "json")
 
     if formatter == "json":
         return {
@@ -67,7 +67,7 @@ async def data_formatter(input_data: dict, **kwargs) -> dict:
         return {"formatted_data": str(input_data), "format": "text", "size": len(str(input_data))}
 
 
-async def data_validator(input_data: dict, **kwargs) -> dict:
+async def data_validator(input_data: dict) -> dict:
     """Validate processed data."""
     errors = []
 
@@ -92,9 +92,9 @@ async def data_validator(input_data: dict, **kwargs) -> dict:
         return {"valid": True, "status": "validation_passed", "data": input_data}
 
 
-async def report_generator(input_data: dict, **kwargs) -> dict:
+async def report_generator(input_data: dict, **ports) -> dict:
     """Generate a comprehensive report."""
-    logger = kwargs.get("logger")
+    logger = ports.get("logger")
 
     if logger:
         await logger.log("INFO", "Generating report...")
@@ -211,7 +211,11 @@ async def main():
     # Execute with ports
     test_data = {"text_stats": {"characters": 15, "words": 3}}
 
-    orchestrator_with_ports = Orchestrator(ports={"formatter": "json"})
+    from hexai.core.application.ports_builder import PortsBuilder
+
+    orchestrator_with_ports = Orchestrator(
+        ports=PortsBuilder().with_defaults().with_custom_port("formatter", "json")
+    )
     result = await orchestrator_with_ports.run(graph, test_data)
 
     print("   ✅ Port-based function executed successfully")

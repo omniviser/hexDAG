@@ -118,10 +118,10 @@ async def process_user_data(input_data: dict, **ports) -> dict:
     }
 
 
-async def generate_report(input_data: Any, **kwargs) -> dict:
+async def generate_report(input_data: Any, **ports) -> dict:
     """Generate report using database port."""
-    db = kwargs.get("database")
-    logger = kwargs.get("logger")
+    db = ports.get("database")
+    logger = ports.get("logger")
 
     # Load data from database
     user_data = await db.load("default")
@@ -156,9 +156,15 @@ async def main():
     mock_email = MockEmailAdapter()
     mock_logger = MockLoggerAdapter()
 
-    # Create orchestrator with ports
+    # Create orchestrator with ports using PortsBuilder for proper defaults
+    from hexai.core.application.ports_builder import PortsBuilder
+
     orchestrator = Orchestrator(
-        ports={"database": mock_db, "email": mock_email, "logger": mock_logger}
+        ports=PortsBuilder()
+        .with_defaults()
+        .with_custom_port("database", mock_db)
+        .with_custom_port("email", mock_email)
+        .with_custom_port("logger", mock_logger)
     )
 
     # Create DAG

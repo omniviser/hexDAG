@@ -56,20 +56,3 @@ class PolicyResponse:
     signal: PolicySignal
     data: Any = None
     metadata: dict[str, Any] | None = None
-
-
-@dataclass
-class PolicyMetadata:
-    """Metadata about a registered policy.
-
-    Attributes:
-        name: Policy name
-        priority: Execution priority (lower executes first)
-        subscriber_type: Type of subscriber for lifecycle management
-        description: Human-readable description
-    """
-
-    name: str
-    priority: int = 100
-    subscriber_type: SubscriberType = SubscriberType.USER
-    description: str = ""

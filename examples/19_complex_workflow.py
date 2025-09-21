@@ -195,7 +195,7 @@ async def load_order_history(input_data: dict) -> dict:
 
 
 # Analysis functions
-async def analyze_customer_behavior(input_data: Any, **kwargs) -> dict:
+async def analyze_customer_behavior(input_data: Any) -> dict:
     """Analyze customer behavior and generate insights."""
     await asyncio.sleep(0.3)  # Simulate complex analysis
 
@@ -231,7 +231,7 @@ async def analyze_customer_behavior(input_data: Any, **kwargs) -> dict:
     }
 
 
-async def generate_product_recommendations(input_data: Any, **kwargs) -> dict:
+async def generate_product_recommendations(input_data: Any) -> dict:
     """Generate personalized product recommendations."""
     await asyncio.sleep(0.25)  # Simulate ML inference
 
@@ -289,7 +289,7 @@ async def generate_product_recommendations(input_data: Any, **kwargs) -> dict:
     }
 
 
-async def assess_business_risk(input_data: Any, **kwargs) -> dict:
+async def assess_business_risk(input_data: Any) -> dict:
     """Assess business and operational risks."""
     await asyncio.sleep(0.2)  # Simulate risk analysis
 
@@ -330,7 +330,7 @@ async def assess_business_risk(input_data: Any, **kwargs) -> dict:
     }
 
 
-async def generate_optimization_suggestions(input_data: Any, **kwargs) -> dict:
+async def generate_optimization_suggestions(input_data: Any) -> dict:
     """Generate optimization suggestions based on analysis."""
     await asyncio.sleep(0.15)  # Simulate optimization analysis
 
@@ -373,7 +373,7 @@ async def generate_optimization_suggestions(input_data: Any, **kwargs) -> dict:
     }
 
 
-async def compile_final_report(input_data: Any, **kwargs) -> dict:
+async def compile_final_report(input_data: Any) -> dict:
     """Compile comprehensive final report."""
     await asyncio.sleep(0.1)  # Simulate report generation
 
@@ -582,7 +582,7 @@ async def demonstrate_performance_optimization():
         await asyncio.sleep(0.05)  # Simulate quick operation
         return {"result": "quick", "input": input_data}
 
-    async def parallel_processor(input_data: Any, **kwargs) -> dict:
+    async def parallel_processor(input_data: Any) -> dict:
         """Process data in parallel."""
         await asyncio.sleep(0.1)
 

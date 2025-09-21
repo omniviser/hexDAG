@@ -94,7 +94,7 @@ async def model_prediction(input_data: dict) -> dict:
     }
 
 
-async def result_formatting(input_data: Any, **kwargs) -> dict:
+async def result_formatting(input_data: Any) -> dict:
     """Format the final results for output."""
     # Extract data from input_data dictionary
     prediction = input_data.get("model_prediction", {})
@@ -113,7 +113,7 @@ async def result_formatting(input_data: Any, **kwargs) -> dict:
     return {"final_result": final_result, "formatting_complete": True, "output_ready": True}
 
 
-async def audit_logging(input_data: Any, **kwargs) -> dict:
+async def audit_logging(input_data: Any) -> dict:
     """Log audit information about the pipeline execution."""
     # Extract data from input_data dictionary
     prediction = input_data.get("model_prediction", {})

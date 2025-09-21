@@ -687,7 +687,13 @@ class TestOrchestrator:
     async def test_orchestrator_with_shared_ports(self, observers):
         """Test orchestrator with shared ports in constructor."""
         # Create orchestrator with shared ports
-        shared_ports = {"database": "mock_db", "cache": "mock_cache"}
+        from hexai.adapters.local import LocalPolicyManager
+
+        shared_ports = {
+            "database": "mock_db",
+            "cache": "mock_cache",
+            "policy_manager": LocalPolicyManager(),
+        }
         orchestrator = Orchestrator(ports=shared_ports)
 
         def node_with_shared_ports(input_data, database=None, cache=None, **ports):
@@ -728,9 +734,13 @@ class TestOrchestrator:
 
         assert results["test_node"]["used_observers"] is True
 
-        # Test without event manager
+        # Test without providing observer_manager explicitly
+        # The orchestrator fixture has defaults which includes observer_manager
+        # So the node will still receive an observer_manager
         results = await orchestrator.run(graph, "test_input")
-        assert results["test_node"]["used_observers"] is False
+        assert (
+            results["test_node"]["used_observers"] is True
+        )  # True because orchestrator has default observer_manager
 
     @pytest.mark.asyncio
     async def test_data_mapping_functionality(self):
