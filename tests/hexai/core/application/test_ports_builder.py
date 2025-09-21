@@ -1,13 +1,17 @@
 """Tests for PortsBuilder - fluent builder for orchestrator ports."""
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
 
-from hexai.adapters.local import InMemoryMemory, LocalPolicyManager
+from hexai.adapters.local import InMemoryMemory, LocalObserverManager, LocalPolicyManager
 from hexai.adapters.mock import MockDatabaseAdapter, MockLLM, MockToolRouter
 from hexai.core.application.events import ControlManager, ObserverManager
+from hexai.core.application.events.models import ErrorHandler
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.ports import ObserverManagerPort
 
 
 class TestPortsBuilder:
@@ -110,7 +114,8 @@ class TestPortsBuilder:
         ports = builder.build()
         assert "observer_manager" in ports
         assert "policy_manager" not in ports
-        assert isinstance(ports["observer_manager"], ObserverManager)
+        # Now creates LocalObserverManager which implements ObserverManagerPort
+        assert isinstance(ports["observer_manager"], LocalObserverManager)
 
     def test_with_defaults_with_policy(self):
         """Test with_defaults includes policy manager when requested."""
@@ -140,8 +145,13 @@ class TestPortsBuilder:
 
         ports = builder.build()
         assert "observer_manager" in ports
-        # Should use minimal configurations
-        assert ports["observer_manager"]._max_concurrent == 1
+        # Should use minimal configurations for LocalObserverManager
+        manager = ports["observer_manager"]
+        assert isinstance(manager, LocalObserverManager)
+        assert manager._max_concurrent == 1
+        assert manager._timeout == 1.0
+        assert manager._executor._max_workers == 1
+        assert manager._use_weak_refs is False
 
     def test_has_port(self):
         """Test checking if a port exists."""
@@ -246,6 +256,198 @@ class TestPortsBuilder:
         assert "my_custom" in repr_str
 
 
+class TestPortsBuilderObserverManager:
+    """Test PortsBuilder observer manager configuration."""
+
+    def test_with_observer_manager_provided_instance(self):
+        """Test providing an existing observer manager instance."""
+        mock_manager = Mock(spec=ObserverManagerPort)
+        builder = PortsBuilder()
+
+        result = builder.with_observer_manager(mock_manager)
+
+        assert result is builder  # Fluent interface
+        ports = builder.build()
+        assert ports["observer_manager"] is mock_manager
+
+    def test_with_observer_manager_creates_local_with_config(self):
+        """Test creating LocalObserverManager with configuration when no manager provided."""
+        builder = PortsBuilder()
+
+        result = builder.with_observer_manager(
+            max_concurrent_observers=20,
+            observer_timeout=10.0,
+            max_sync_workers=8,
+            use_weak_refs=False,
+        )
+
+        assert result is builder
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        # Verify configuration was passed
+        assert manager._max_concurrent == 20
+        assert manager._timeout == 10.0
+        assert manager._executor._max_workers == 8
+        assert manager._use_weak_refs is False
+
+    def test_with_observer_manager_partial_config(self):
+        """Test creating LocalObserverManager with partial configuration."""
+        builder = PortsBuilder()
+
+        builder.with_observer_manager(
+            max_concurrent_observers=15,
+            use_weak_refs=True,
+        )
+
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        assert manager._max_concurrent == 15
+        assert manager._use_weak_refs is True
+
+    def test_with_observer_manager_with_error_handler(self):
+        """Test providing a custom error handler."""
+        error_handler = MagicMock(spec=ErrorHandler)
+        builder = PortsBuilder()
+
+        builder.with_observer_manager(error_handler=error_handler)
+
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        assert manager._error_handler is error_handler
+
+    def test_with_local_observer_manager(self):
+        """Test explicitly creating a LocalObserverManager."""
+        builder = PortsBuilder()
+
+        result = builder.with_local_observer_manager(
+            max_concurrent_observers=25,
+            observer_timeout=12.0,
+            max_sync_workers=10,
+            use_weak_refs=False,
+        )
+
+        assert result is builder
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        assert manager._max_concurrent == 25
+        assert manager._timeout == 12.0
+        assert manager._executor._max_workers == 10
+        assert manager._use_weak_refs is False
+
+    def test_with_local_observer_manager_defaults(self):
+        """Test LocalObserverManager with default values."""
+        builder = PortsBuilder()
+
+        builder.with_local_observer_manager()
+
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        # Check defaults
+        assert manager._max_concurrent == 10
+        assert manager._timeout == 5.0
+        assert manager._executor._max_workers == 4
+        assert manager._use_weak_refs is True
+
+    def test_with_observer_config(self):
+        """Test configuring observer manager from a dictionary."""
+        config = {
+            "max_concurrent_observers": 30,
+            "observer_timeout": 15.0,
+            "max_sync_workers": 12,
+            "use_weak_refs": True,
+        }
+        builder = PortsBuilder()
+
+        result = builder.with_observer_config(config)
+
+        assert result is builder
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        assert manager._max_concurrent == 30
+        assert manager._timeout == 15.0
+        assert manager._executor._max_workers == 12
+        assert manager._use_weak_refs is True
+
+    def test_with_observer_config_invalid_keys(self):
+        """Test that invalid configuration keys raise an error."""
+        config = {
+            "max_concurrent_observers": 10,
+            "invalid_key": "value",
+            "another_bad_key": 123,
+        }
+        builder = PortsBuilder()
+
+        with pytest.raises(ValueError, match="Invalid observer configuration keys"):
+            builder.with_observer_config(config)
+
+    def test_with_defaults_creates_local_observer_manager(self):
+        """Test that with_defaults creates a LocalObserverManager."""
+        builder = PortsBuilder()
+
+        builder.with_defaults()
+
+        ports = builder.build()
+        assert "observer_manager" in ports
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        # Check default configuration
+        assert manager._max_concurrent == 10
+        assert manager._timeout == 5.0
+        assert manager._executor._max_workers == 4
+        assert manager._use_weak_refs is True
+
+    def test_with_defaults_preserves_existing_observer_manager(self):
+        """Test that with_defaults doesn't overwrite existing observer manager."""
+        mock_manager = Mock(spec=ObserverManagerPort)
+        builder = PortsBuilder()
+
+        builder.with_observer_manager(mock_manager)
+        builder.with_defaults()
+
+        ports = builder.build()
+        assert ports["observer_manager"] is mock_manager
+
+    def test_with_test_defaults_creates_minimal_observer_manager(self):
+        """Test that with_test_defaults creates a minimal LocalObserverManager."""
+        builder = PortsBuilder()
+
+        builder.with_test_defaults()
+
+        ports = builder.build()
+        manager = ports["observer_manager"]
+
+        assert isinstance(manager, LocalObserverManager)
+        # Check minimal test configuration
+        assert manager._max_concurrent == 1
+        assert manager._timeout == 1.0
+        assert manager._executor._max_workers == 1
+        assert manager._use_weak_refs is False
+
+    def test_backward_compatibility_with_existing_code(self):
+        """Test that existing code patterns still work."""
+        # Old pattern: directly passing an ObserverManager instance
+        old_manager = ObserverManager()
+        builder = PortsBuilder()
+
+        builder.with_observer_manager(old_manager)
+
+        ports = builder.build()
+        assert ports["observer_manager"] is old_manager
+
+
 class TestOrchestratorIntegration:
     """Test PortsBuilder integration with Orchestrator."""
 
@@ -271,7 +473,8 @@ class TestOrchestratorIntegration:
 
         assert "observer_manager" in orchestrator.ports
         assert "policy_manager" in orchestrator.ports  # Should have policy_manager by default
-        assert isinstance(orchestrator.ports["observer_manager"], ObserverManager)
+        # Now creates LocalObserverManager through PortsBuilder.with_defaults()
+        assert isinstance(orchestrator.ports["observer_manager"], LocalObserverManager)
 
     def test_orchestrator_default_no_args(self):
         """Test Orchestrator default initialization."""
@@ -395,8 +598,10 @@ class TestPortsBuilderPatterns:
         dev_ports = build_dev_ports()
         prod_ports = build_prod_ports()
 
-        # Dev has minimal config
-        assert dev_ports["observer_manager"]._max_concurrent == 1
+        # Dev has minimal config (LocalObserverManager)
+        dev_manager = dev_ports["observer_manager"]
+        assert isinstance(dev_manager, LocalObserverManager)
+        assert dev_manager._max_concurrent == 1
 
         # Prod has full config
         assert "policy_manager" in prod_ports

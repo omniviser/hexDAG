@@ -240,7 +240,7 @@ class TestLocalObserverManager:
         await manager_with_weak_refs.notify(event)
 
         # The weak reference should be gone
-        assert observer_id not in manager_with_weak_refs._inner._weak_handlers
+        assert observer_id not in manager_with_weak_refs._weak_handlers
 
     @pytest.mark.asyncio
     async def test_keep_alive_parameter(self, manager_with_weak_refs):
@@ -263,7 +263,7 @@ class TestLocalObserverManager:
         await manager_with_weak_refs.notify(event)
 
         # Observer should still be in strong refs
-        assert observer_id in manager_with_weak_refs._inner._strong_refs
+        assert observer_id in manager_with_weak_refs._strong_refs
         assert len(manager_with_weak_refs) == 1
 
     @pytest.mark.asyncio
@@ -275,7 +275,7 @@ class TestLocalObserverManager:
             assert len(mgr) == 1
 
         # After exiting, thread pool should be shut down
-        assert manager._inner._executor_shutdown is True
+        assert manager._executor_shutdown is True
 
     @pytest.mark.asyncio
     async def test_async_context_manager(self, manager):
@@ -291,7 +291,7 @@ class TestLocalObserverManager:
             assert observer.handle_called
 
         # After exiting, resources should be cleaned up
-        assert manager._inner._executor_shutdown is True
+        assert manager._executor_shutdown is True
 
     @pytest.mark.asyncio
     async def test_concurrent_observer_limit(self):
@@ -348,9 +348,9 @@ class TestLocalObserverManager:
             use_weak_refs=False,
         )
 
-        # Check that parameters were passed correctly
-        assert manager._inner._max_concurrent == 15
-        assert manager._inner._timeout == 10.0
-        assert manager._inner._error_handler == custom_error_handler
-        assert manager._inner._use_weak_refs is False
-        assert manager._inner._executor._max_workers == 8
+        # Check that parameters were stored correctly
+        assert manager._max_concurrent == 15
+        assert manager._timeout == 10.0
+        assert manager._error_handler == custom_error_handler
+        assert manager._use_weak_refs is False
+        assert manager._executor._max_workers == 8
