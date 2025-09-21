@@ -222,11 +222,11 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        # Get observer manager from ports
+        # Get observer manager from ports (expecting ObserverManagerPort interface)
         observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
         if observer_manager is None:
-            # Create default LocalObserverManager for backward compatibility
-            from hexai.adapters.local import LocalObserverManager
+            # Create default LocalObserverManager implementation
+            from hexai.adapters.local.local_observer_manager import LocalObserverManager
 
             observer_manager = LocalObserverManager()
 
@@ -446,7 +446,7 @@ class Orchestrator:
             if accepts_all_kwargs:
                 # If function accepts **kwargs/**ports, filter out infrastructure ports
                 # unless they're explicitly requested as named parameters
-                infrastructure_ports = {"policy_manager", "control_manager"}
+                infrastructure_ports = {"policy_manager", "observer_manager", "control_manager"}
                 requested_params = set(params.keys())
 
                 # Pass infrastructure ports if explicitly requested, otherwise filter them

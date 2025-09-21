@@ -275,7 +275,10 @@ class LocalObserverManager:
         if self._use_weak_refs:
             # Count weak handlers that are still alive
             for handler_id in list(self._weak_handlers.keys()):
-                if handler_id not in self._handlers and self._weak_handlers.get(handler_id) is not None:
+                if (
+                    handler_id not in self._handlers
+                    and self._weak_handlers.get(handler_id) is not None
+                ):
                     count += 1
 
         return count
