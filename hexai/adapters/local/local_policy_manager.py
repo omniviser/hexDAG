@@ -7,14 +7,13 @@ from typing import Any
 from uuid import uuid4
 from weakref import WeakKeyDictionary, WeakSet
 
-from hexai.core.ports.policy_manager import (
-    Policy,
+from hexai.core.application.policies.models import (
     PolicyContext,
-    PolicyManagerPort,
     PolicyResponse,
     PolicySignal,
     SubscriberType,
 )
+from hexai.core.ports.policy_manager import Policy, PolicyManagerPort
 
 
 class LocalPolicyManager(PolicyManagerPort):

@@ -10,7 +10,7 @@ from hexai.core.application.policies.execution_policies import (
     FallbackPolicy,
     RetryPolicy,
 )
-from hexai.core.ports.policy_manager import (
+from hexai.core.application.policies.models import (
     PolicyContext,
     PolicySignal,
     SubscriberType,
@@ -231,7 +231,7 @@ class TestLocalPolicyManager:
             priority = 2
 
             async def evaluate(self, context):
-                from hexai.core.ports.policy_manager import PolicyResponse, PolicySignal
+                from hexai.core.application.policies.models import PolicyResponse, PolicySignal
 
                 if context.error:
                     return PolicyResponse(signal=PolicySignal.RETRY)

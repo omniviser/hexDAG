@@ -2,12 +2,9 @@
 
 from typing import Any
 
-from hexai.core.ports.policy_manager import (
-    PolicyContext,
-    PolicyResponse,
-    PolicySignal,
-)
 from hexai.core.registry.decorators import policy
+
+from .models import PolicyContext, PolicyResponse, PolicySignal
 
 
 @policy(name="retry", description="Retry failed operations up to a maximum number of attempts")

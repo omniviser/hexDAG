@@ -65,7 +65,7 @@ class TestPolicyRegistration:
     @pytest.mark.asyncio
     async def test_policies_work_with_registry_metadata(self):
         """Policies should work normally despite registry metadata."""
-        from hexai.core.ports.policy_manager import PolicyContext
+        from hexai.core.application.policies.models import PolicyContext
 
         # Test retry policy
         retry = RetryPolicy(max_retries=2)

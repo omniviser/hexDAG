@@ -1,50 +1,14 @@
 """Policy Manager Port - Clean interface for execution control policies."""
 
 from abc import abstractmethod
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Protocol
+from typing import Protocol
 
+from hexai.core.application.policies.models import (
+    PolicyContext,
+    PolicyResponse,
+    SubscriberType,
+)
 from hexai.core.registry import port
-
-
-class PolicySignal(Enum):
-    """Execution control signals."""
-
-    PROCEED = "proceed"
-    RETRY = "retry"
-    SKIP = "skip"
-    FALLBACK = "fallback"
-    FAIL = "fail"
-
-
-@dataclass
-class PolicyContext:
-    """Context for policy evaluation."""
-
-    dag_id: str
-    node_id: str | None = None
-    attempt: int = 1
-    error: Exception | None = None
-    metadata: dict[str, Any] | None = None
-
-
-@dataclass
-class PolicyResponse:
-    """Policy evaluation response."""
-
-    signal: PolicySignal = PolicySignal.PROCEED
-    data: Any = None
-    metadata: dict[str, Any] | None = None
-
-
-class SubscriberType(Enum):
-    """Types of policy subscribers for categorization."""
-
-    CORE = "core"  # Built-in framework policies
-    PLUGIN = "plugin"  # Plugin-provided policies
-    USER = "user"  # User-defined policies
-    TEMPORARY = "temporary"  # Temporary/test policies
 
 
 class Policy(Protocol):
