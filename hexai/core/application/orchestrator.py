@@ -23,6 +23,11 @@ from .events import (
     NodeStarted,
     PipelineCompleted,
     PipelineStarted,
+    PolicyEvaluated,
+    PolicyFallback,
+    PolicyRetry,
+    PolicySkipped,
+    PolicyTriggered,
     WaveCompleted,
     WaveStarted,
 )
@@ -118,7 +123,11 @@ class Orchestrator:
         self.strict_validation = strict_validation
 
     async def _evaluate_policy_safe(
-        self, policy_manager: PolicyManagerPort, policy_context: PolicyContext, check_point: str
+        self,
+        policy_manager: PolicyManagerPort,
+        policy_context: PolicyContext,
+        check_point: str,
+        observer_manager: ObserverManagerPort | None = None,
     ) -> PolicyResponse:
         """Safely evaluate policy with error handling and validation.
 
@@ -126,6 +135,7 @@ class Orchestrator:
             policy_manager: Policy manager to use
             policy_context: Context for policy evaluation
             check_point: Description of where evaluation is happening
+            observer_manager: Optional observer manager for emitting policy events
 
         Returns:
             PolicyResponse from evaluation
@@ -133,6 +143,8 @@ class Orchestrator:
         Raises:
             PolicyEvaluationError: If evaluation fails or returns invalid response
         """
+
+        start_time = time.time()
         try:
             response = await policy_manager.evaluate(policy_context)
 
@@ -152,6 +164,40 @@ class Orchestrator:
                 raise PolicyEvaluationError(
                     check_point, ValueError(f"Invalid signal type: {type(response.signal)}")
                 )
+
+            # Emit PolicyEvaluated event
+            if observer_manager:
+                duration_ms = (time.time() - start_time) * 1000
+                await observer_manager.notify(
+                    PolicyEvaluated(
+                        context_point=check_point,
+                        dag_id=policy_context.dag_id,
+                        node_id=policy_context.node_id,
+                        signal=response.signal,
+                        data=response.data,
+                        duration_ms=duration_ms,
+                    )
+                )
+
+                # If policy triggered an action (non-PROCEED), emit PolicyTriggered
+                if response.signal != PolicySignal.PROCEED:
+                    reason = None
+                    if response.data:
+                        if isinstance(response.data, dict):
+                            reason = response.data.get("reason")
+                        else:
+                            reason = str(response.data)
+
+                    await observer_manager.notify(
+                        PolicyTriggered(
+                            context_point=check_point,
+                            dag_id=policy_context.dag_id,
+                            node_id=policy_context.node_id,
+                            signal=response.signal,
+                            data=response.data,
+                            reason=reason,
+                        )
+                    )
 
             return response
 
@@ -253,7 +299,7 @@ class Orchestrator:
         # Convert to policy context and evaluate policies
         policy_context = self._convert_to_policy_context(event, context)
         policy_response = await self._evaluate_policy_safe(
-            policy_manager, policy_context, "pipeline_start"
+            policy_manager, policy_context, "pipeline_start", observer_manager
         )
         if policy_response.signal != PolicySignal.PROCEED:
             reason = policy_response.data if policy_response.data else policy_response.signal.value
@@ -272,7 +318,7 @@ class Orchestrator:
             # Convert to policy context and evaluate policies
             wave_policy_context = self._convert_to_policy_context(wave_event, context)
             wave_policy_response = await self._evaluate_policy_safe(
-                policy_manager, wave_policy_context, f"wave_{wave_idx}_start"
+                policy_manager, wave_policy_context, f"wave_{wave_idx}_start", observer_manager
             )
             if wave_policy_response.signal != PolicySignal.PROCEED:
                 reason = (
@@ -416,13 +462,26 @@ class Orchestrator:
                 start_event, node_context, node_name
             )
             start_response = await self._evaluate_policy_safe(
-                policy_manager, node_policy_context, f"node_{node_name}_start"
+                policy_manager, node_policy_context, f"node_{node_name}_start", observer_manager
             )
 
             # Handle policy signals
             if start_response.signal == PolicySignal.SKIP:
                 # Skip this node and return fallback value if provided
                 logger.info(f"Node '{node_name}' skipped by policy")
+
+                # Emit PolicySkipped event
+                await observer_manager.notify(
+                    PolicySkipped(
+                        node_name=node_name,
+                        dag_id=context.dag_id,
+                        reason=start_response.data.get("reason")
+                        if isinstance(start_response.data, dict)
+                        else str(start_response.data)
+                        if start_response.data
+                        else None,
+                    )
+                )
                 return start_response.data
             elif start_response.signal == PolicySignal.FAIL:
                 reason = start_response.data if start_response.data else "policy decision"
@@ -509,7 +568,7 @@ class Orchestrator:
                 fail_event, node_context, node_name
             )
             fail_response = await self._evaluate_policy_safe(
-                policy_manager, fail_policy_context, f"node_{node_name}_failure"
+                policy_manager, fail_policy_context, f"node_{node_name}_failure", observer_manager
             )
 
             # Handle policy signals
@@ -517,6 +576,16 @@ class Orchestrator:
                 # Return fallback value instead of failing
                 logger.info(
                     f"Node '{node_name}' using fallback value after error: {type(e).__name__}"
+                )
+
+                # Emit PolicyFallback event
+                await observer_manager.notify(
+                    PolicyFallback(
+                        node_name=node_name,
+                        dag_id=context.dag_id,
+                        fallback_value=fail_response.data,
+                        original_error=str(e),
+                    )
                 )
                 return fail_response.data
             elif fail_response.signal == PolicySignal.RETRY:
@@ -528,6 +597,19 @@ class Orchestrator:
 
                 delay = retry_metadata.get("delay", 0)
                 attempt_info = retry_metadata.get("attempt", context.attempt + 1)
+
+                # Emit PolicyRetry event
+                await observer_manager.notify(
+                    PolicyRetry(
+                        node_name=node_name,
+                        dag_id=context.dag_id,
+                        attempt=attempt_info,
+                        delay=delay,
+                        reason=fail_response.data.get("reason")
+                        if isinstance(fail_response.data, dict)
+                        else None,
+                    )
+                )
 
                 if delay > 0:
                     logger.info(

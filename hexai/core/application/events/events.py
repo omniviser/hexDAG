@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from hexai.core.application.policies.models import PolicySignal
 
 
 @dataclass
@@ -191,3 +194,93 @@ class ToolCompleted(Event):
         """Format log message for tool completion event."""
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Tool '{self.tool_name}' completed in {self.duration_ms / 1000:.2f}s"
+
+
+# Policy events
+@dataclass
+class PolicyEvaluated(Event):
+    """A policy has been evaluated."""
+
+    context_point: str  # Where in the execution (e.g., "pipeline_start", "node_start")
+    dag_id: str
+    node_id: str | None
+    signal: PolicySignal
+    data: Any = None
+    duration_ms: float = 0
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy evaluation event."""
+        _ = log_level  # Unused but kept for interface consistency
+        node_info = f" for node '{self.node_id}'" if self.node_id else ""
+        return f"⚖️ Policy evaluated at {self.context_point}{node_info}: {self.signal.value}"
+
+
+@dataclass
+class PolicyTriggered(Event):
+    """A policy has triggered an action (non-PROCEED signal)."""
+
+    context_point: str
+    dag_id: str
+    node_id: str | None
+    signal: PolicySignal
+    data: Any = None
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy trigger event."""
+        _ = log_level  # Unused but kept for interface consistency
+        node_info = f" for node '{self.node_id}'" if self.node_id else ""
+        reason_info = f": {self.reason}" if self.reason else ""
+        return (
+            f"🚨 Policy triggered at {self.context_point}{node_info} "
+            f"- {self.signal.value}{reason_info}"
+        )
+
+
+@dataclass
+class PolicySkipped(Event):
+    """A node was skipped due to policy decision."""
+
+    node_name: str
+    dag_id: str
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy skip event."""
+        _ = log_level  # Unused but kept for interface consistency
+        reason_info = f": {self.reason}" if self.reason else ""
+        return f"⏭️ Node '{self.node_name}' skipped by policy{reason_info}"
+
+
+@dataclass
+class PolicyRetry(Event):
+    """A retry was triggered by policy decision."""
+
+    node_name: str
+    dag_id: str
+    attempt: int
+    delay: float = 0
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy retry event."""
+        _ = log_level  # Unused but kept for interface consistency
+        delay_info = f" with {self.delay}s delay" if self.delay > 0 else ""
+        reason_info = f": {self.reason}" if self.reason else ""
+        return f"🔄 Node '{self.node_name}' retry #{self.attempt}{delay_info}{reason_info}"
+
+
+@dataclass
+class PolicyFallback(Event):
+    """A fallback value was used due to policy decision."""
+
+    node_name: str
+    dag_id: str
+    fallback_value: Any
+    original_error: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy fallback event."""
+        _ = log_level  # Unused but kept for interface consistency
+        error_info = f" after error: {self.original_error}" if self.original_error else ""
+        return f"↩️ Node '{self.node_name}' using fallback value{error_info}"
