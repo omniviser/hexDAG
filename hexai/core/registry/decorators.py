@@ -7,6 +7,7 @@ components. Registration happens during bootstrap via the manifest.
 from __future__ import annotations
 
 import re
+import warnings
 from functools import partial
 from typing import TYPE_CHECKING, TypeVar
 
@@ -174,7 +175,7 @@ def port(
 
 
 def adapter(
-    implements_port: str,
+    implements_port: str | type,
     name: str | None = None,
     *,
     namespace: str = "user",
@@ -184,8 +185,10 @@ def adapter(
 
     Parameters
     ----------
-    implements_port : str
+    implements_port : str | type
         The port this adapter implements (required).
+        Prefer using a direct reference to the port class for better type safety.
+        String names are deprecated but still supported for backwards compatibility.
     name : str | None
         Adapter name. If None, inferred from class name.
     namespace : str
@@ -195,13 +198,15 @@ def adapter(
 
     Examples
     --------
-    >>> @adapter("database")
+    >>> from hexai.core.ports import PolicyManagerPort
+    >>> @adapter(PolicyManagerPort)  # Preferred: Direct port reference
+    >>> class CustomPolicyManager:
+    ...     pass
+    >>>
+    >>> @adapter("database")  # Deprecated: String-based reference
     >>> class SQLiteAdapter:  # Name becomes 'sqlite_adapter'
     ...     '''SQLite database implementation.'''
     ...
-    >>> @adapter("llm", name="gpt4")  # Explicit name
-    >>> class OpenAIAdapter:
-    ...     pass
     """
 
     def decorator(cls: T) -> T:
@@ -210,8 +215,35 @@ def adapter(
             cls
         )
 
-        # Store the implemented port
-        cls._hexdag_implements_port = implements_port  # type: ignore[attr-defined]
+        # Handle both string and class reference for port
+        if isinstance(implements_port, type):
+            # It's a class reference - extract the port name (preferred approach)
+            # Check if it has the _hexdag_name attribute (decorated port)
+            if hasattr(implements_port, "_hexdag_name"):
+                port_name = implements_port._hexdag_name
+            else:
+                # Fallback to snake_case conversion of class name
+                port_name = _snake_case(implements_port.__name__)
+                # Remove 'Port' suffix if present
+                if port_name.endswith("_port"):
+                    port_name = port_name[:-5]
+        else:
+            # It's a string (deprecated but supported)
+            port_name = implements_port
+            # Issue deprecation warning
+            adapter_name = cls._hexdag_name if hasattr(cls, "_hexdag_name") else cls.__name__  # type: ignore[attr-defined]
+            warnings.warn(
+                f"Using string '{port_name}' for implements_port in @adapter decorator for"
+                f"'{adapter_name}' is deprecated."
+                f"Please use a direct reference to the port class instead."
+                f"'{adapter_name}' is deprecated. "
+                f"Please use a direct reference to the port class instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # Store the implemented port name
+        cls._hexdag_implements_port = port_name  # type: ignore[attr-defined]
 
         return cls
 

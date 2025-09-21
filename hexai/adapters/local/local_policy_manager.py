@@ -14,8 +14,10 @@ from hexai.core.application.policies.models import (
     SubscriberType,
 )
 from hexai.core.ports.policy_manager import Policy, PolicyManagerPort
+from hexai.core.registry import adapter
 
 
+@adapter(implements_port=PolicyManagerPort, name="local_policy_manager")
 class LocalPolicyManager(PolicyManagerPort):
     """Local policy manager using WeakSet and heapq for efficient management.
 
@@ -60,7 +62,7 @@ class LocalPolicyManager(PolicyManagerPort):
 
         Args:
         ----
-            context: Policy evaluation context
+            context: Policy evaluation context.
 
         Returns:
         -------
@@ -99,8 +101,8 @@ class LocalPolicyManager(PolicyManagerPort):
 
         Args:
         ----
-            policy: Policy to subscribe
-            subscriber_type: Type of subscriber
+            policy: Policy to subscribe.
+            subscriber_type: Type of subscriber.
 
         Returns:
         -------
@@ -135,7 +137,7 @@ class LocalPolicyManager(PolicyManagerPort):
 
         Args:
         ----
-            subscription_id: ID returned from subscribe
+            subscription_id: ID returned from subscribe.
 
         Returns:
         -------
@@ -168,7 +170,7 @@ class LocalPolicyManager(PolicyManagerPort):
 
         Args:
         ----
-            subscriber_type: If specified, only clear this type
+            subscriber_type: If specified, only clear this type.
         """
         if subscriber_type is None:
             # Clear all
@@ -206,7 +208,7 @@ class LocalPolicyManager(PolicyManagerPort):
 
         Args:
         ----
-            subscriber_type: Type to filter by
+            subscriber_type: Type to filter by.
 
         Returns:
         -------

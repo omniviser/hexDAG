@@ -258,6 +258,70 @@ class TestTypeSpecificDecorators:
         assert hasattr(TestAdapter, "_hexdag_implements_port")
         assert TestAdapter._hexdag_implements_port == "test_port"  # type: ignore[attr-defined]
 
+    def test_adapter_decorator_with_class_reference(self):
+        """Test @adapter decorator with direct port class reference."""
+        from hexai.core.registry.decorators import port
+
+        # Create a mock port class
+        @port(name="mock_port")
+        class MockPort:
+            """A mock port for testing."""
+
+            pass
+
+        # Test with decorated port (has _hexdag_name)
+        @adapter(implements_port=MockPort)
+        class AdapterWithDecoratedPort:
+            pass
+
+        assert hasattr(AdapterWithDecoratedPort, "_hexdag_implements_port")
+        assert AdapterWithDecoratedPort._hexdag_implements_port == "mock_port"  # type: ignore[attr-defined]
+
+        # Test with undecorated port class
+        class PlainPortClass:
+            """Plain port class without decorator."""
+
+            pass
+
+        @adapter(implements_port=PlainPortClass)
+        class AdapterWithPlainPort:
+            pass
+
+        assert hasattr(AdapterWithPlainPort, "_hexdag_implements_port")
+        assert AdapterWithPlainPort._hexdag_implements_port == "plain_port_class"  # type: ignore[attr-defined]
+
+        # Test with port class ending in 'Port'
+        class DatabasePort:
+            """Database port class."""
+
+            pass
+
+        @adapter(implements_port=DatabasePort)
+        class DatabaseAdapter:
+            pass
+
+        assert hasattr(DatabaseAdapter, "_hexdag_implements_port")
+        assert DatabaseAdapter._hexdag_implements_port == "database"  # type: ignore[attr-defined]
+
+    def test_adapter_string_reference_deprecation(self):
+        """Test that string-based port references emit deprecation warning."""
+        import warnings
+
+        # Test that string reference triggers deprecation warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")  # Ensure all warnings are captured
+
+            @adapter(implements_port="test_port")
+            class StringBasedAdapter:
+                pass
+
+            # Check that a deprecation warning was issued
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "deprecated" in str(w[0].message).lower()
+            assert "test_port" in str(w[0].message)
+            assert "string_based_adapter" in str(w[0].message)  # Name is converted to snake_case
+
     def test_policy_decorator(self):
         """Test @policy decorator."""
 

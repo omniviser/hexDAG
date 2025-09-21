@@ -10,7 +10,7 @@ from hexai.core.registry import adapter
 __all__ = ["InMemoryMemory"]
 
 
-@adapter(name="in_memory_memory", implements_port="memory")
+@adapter(implements_port=Memory, name="in_memory_memory")
 class InMemoryMemory(Memory):
     """In-memory implementation of Memory for testing.
 

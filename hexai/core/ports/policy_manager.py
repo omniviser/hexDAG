@@ -1,7 +1,7 @@
 """Policy Manager Port - Clean interface for execution control policies."""
 
 from abc import abstractmethod
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from hexai.core.application.policies.models import (
     PolicyContext,
@@ -31,6 +31,7 @@ class Policy(Protocol):
         ...
 
 
+@runtime_checkable
 @port(name="policy_manager", namespace="core")
 class PolicyManagerPort(Protocol):
     """Port for managing execution control policies.
@@ -95,3 +96,26 @@ class PolicyManagerPort(Protocol):
             Dict of subscription_id -> (policy, subscriber_type)
         """
         ...
+
+    @abstractmethod
+    def get_policies_by_type(self, subscriber_type: SubscriberType) -> list[Policy]:
+        """Get all policies of a specific subscriber type.
+
+        Args:
+            subscriber_type: Type to filter by
+
+        Returns:
+            List of policies of that type
+        """
+        ...
+
+    def count(self) -> int:
+        """Get the count of active policies.
+
+        Returns:
+            Number of active policies
+
+        Note:
+            Implementations should also support len() via __len__ for Pythonic usage
+        """
+        return len(self.get_subscriptions())
