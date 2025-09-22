@@ -8,7 +8,9 @@ import asyncio
 import time
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -202,10 +204,17 @@ async def test_basic_integration():
     graph.add(NodeSpec("notification_sender", notification_sender).after("data_processor"))
 
     # Set up orchestrator with mock services
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
-    # Execute with mock services
-    ports = {"email": email_service, "database": database_service, "logger": logger_service}
+    # Execute with mock services - merge with existing ports
+    ports.update({"email": email_service, "database": database_service, "logger": logger_service})
 
     start_time = time.time()
     result = await orchestrator.run(graph, {"test": "data"}, additional_ports=ports)
@@ -284,8 +293,15 @@ async def test_error_handling():
     )
 
     # Execute
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    ports = {"email": email_service, "database": database_service, "logger": logger_service}
+    ports.update({"email": email_service, "database": database_service, "logger": logger_service})
 
     result = await orchestrator.run(graph, {"test": "error_handling"}, additional_ports=ports)
 
@@ -355,8 +371,15 @@ async def test_performance_monitoring():
     graph.add(NodeSpec("op3", performance_monitored_operation).after("op2"))
 
     # Execute
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    ports = {"email": email_service, "database": database_service, "logger": logger_service}
+    ports.update({"email": email_service, "database": database_service, "logger": logger_service})
 
     start_time = time.time()
     result = await orchestrator.run(graph, {"test": "performance"}, additional_ports=ports)

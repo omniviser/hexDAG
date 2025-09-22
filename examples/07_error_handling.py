@@ -172,17 +172,21 @@ async def main():
     circuit_breaker = CircuitBreaker(failure_threshold=2, timeout=1.0)
 
     # Create orchestrator with services using PortsBuilder for proper defaults
+    from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
     from hexai.core.application.ports_builder import PortsBuilder
 
-    orchestrator = Orchestrator(
-        ports=PortsBuilder()
-        .with_defaults()
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
         .with_custom_port("unreliable_service", unreliable_service)
         .with_custom_port("primary_service", primary_service)
         .with_custom_port("fallback_service", fallback_service)
         .with_custom_port("circuit_service", circuit_service)
         .with_custom_port("circuit_breaker", circuit_breaker)
+        .build()
     )
+    orchestrator = Orchestrator(ports=ports)
 
     # Test 1: Retry Mechanism
     print("\n🔄 Test 1: Retry Mechanism")

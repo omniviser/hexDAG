@@ -5,9 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from hexai.adapters.local.local_observer_manager import LocalObserverManager
+from hexai.adapters.local.local_observer_manager import ErrorHandler, LocalObserverManager
 from hexai.core.application.events.events import Event, NodeCompleted, NodeStarted
-from hexai.core.application.events.models import ErrorHandler
 
 
 class TestObserver:

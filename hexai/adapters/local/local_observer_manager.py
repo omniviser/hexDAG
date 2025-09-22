@@ -6,21 +6,50 @@ concurrency control, and fault isolation.
 """
 
 import asyncio
+import logging
 import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Protocol
 
 from hexai.core.application.events.events import Event
-from hexai.core.application.events.models import (
+from hexai.core.ports.observer_manager import (
     AsyncObserverFunc,
-    ErrorHandler,
-    LoggingErrorHandler,
     Observer,
     ObserverFunc,
+    ObserverManagerPort,
 )
-from hexai.core.ports.observer_manager import ObserverManagerPort
 from hexai.core.registry import adapter
+
+
+class ErrorHandler(Protocol):
+    """Protocol for handling errors in event system."""
+
+    def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
+        """Handle an error that occurred during event processing."""
+        ...
+
+
+class LoggingErrorHandler:
+    """Default error handler that logs errors."""
+
+    def __init__(self, logger: Any | None = None):
+        """Initialize with optional logger."""
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        self.logger = logger
+
+    def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
+        """Log the error with context."""
+        handler_name = context.get("handler_name", "unknown")
+        event_type = context.get("event_type", "unknown")
+
+        if context.get("is_critical", False):
+            self.logger.error(
+                f"Critical handler {handler_name} failed for {event_type}: {error}", exc_info=True
+            )
+        else:
+            self.logger.warning(f"Handler {handler_name} failed for {event_type}: {error}")
 
 
 class FunctionObserver:

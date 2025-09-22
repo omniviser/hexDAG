@@ -13,7 +13,9 @@ import asyncio
 import time
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -123,8 +125,15 @@ async def demonstrate_parallel_execution():
     print("   ⏱️  Starting parallel execution...")
     start_time = time.time()
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    await orchestrator.run(graph, "parallel test data")
+    await orchestrator.run(graph, "parallel test data", additional_ports=ports)
 
     execution_time = time.time() - start_time
     print(f"   ⚡ Parallel execution time: {execution_time:.2f}s")
@@ -159,8 +168,15 @@ async def demonstrate_caching_strategy():
     print("   ⏱️  Starting cached execution...")
     start_time = time.time()
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "cache test data")
+    result = await orchestrator.run(graph, "cache test data", additional_ports=ports)
 
     execution_time = time.time() - start_time
     print(f"   💾 Cached execution time: {execution_time:.2f}s")
@@ -196,8 +212,15 @@ async def demonstrate_resource_management():
     print("   ⏱️  Starting resource-intensive execution...")
     start_time = time.time()
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "resource test")
+    result = await orchestrator.run(graph, "resource test", additional_ports=ports)
 
     execution_time = time.time() - start_time
     print(f"   🔧 Resource execution time: {execution_time:.2f}s")
@@ -232,8 +255,15 @@ async def demonstrate_performance_monitoring():
     print("   📊 Starting performance monitoring...")
     start_time = time.time()
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "monitoring test")
+    result = await orchestrator.run(graph, "monitoring test", additional_ports=ports)
 
     execution_time = time.time() - start_time
     print(f"   ⏱️  Total execution time: {execution_time:.2f}s")

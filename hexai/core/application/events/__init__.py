@@ -1,25 +1,8 @@
 """Event system for the Hex-DAG framework.
 
-Clean, simplified event system with clear separation of concerns:
-- events.py: Event data classes (just data, no behavior)
-- models.py: Core types, protocols, and base classes
-- observer_manager.py: Observer management (read-only monitoring)
-- control_manager.py: Control flow management (can affect execution)
-- config.py: Configuration and null implementations
+Provides event data classes for pipeline observability and
+basic observer implementations.
 """
-
-# Configuration and helpers
-from .config import (
-    NULL_CONTROL_MANAGER,
-    NULL_OBSERVER_MANAGER,
-    NullControlManager,
-    NullObserverManager,
-    get_control_manager,
-    get_observer_manager,
-)
-
-# Managers
-from .control_manager import ControlManager
 
 # Event classes
 from .events import (
@@ -42,17 +25,15 @@ from .events import (
     WaveStarted,
 )
 
-# Models and protocols
-from .models import (
-    BaseEventManager,
-    ControlHandler,
-    ControlResponse,
-    ControlSignal,
-    ExecutionContext,
-    HandlerMetadata,
+# Observer implementations
+from .observers import (
+    CollectingObserver,
+    CompositeObserver,
+    FilteringObserver,
+    LoggingObserver,
+    NullObserver,
     Observer,
 )
-from .observer_manager import ObserverManager
 
 __all__ = [
     # Events
@@ -73,22 +54,11 @@ __all__ = [
     "PolicyRetry",
     "PolicySkipped",
     "PolicyTriggered",
-    # Models
-    "ExecutionContext",
-    "ControlSignal",
-    "ControlResponse",
-    "HandlerMetadata",
+    # Observers
     "Observer",
-    "ControlHandler",
-    "BaseEventManager",
-    # Managers
-    "ObserverManager",
-    "ControlManager",
-    # Config
-    "NullObserverManager",
-    "NullControlManager",
-    "NULL_OBSERVER_MANAGER",
-    "NULL_CONTROL_MANAGER",
-    "get_observer_manager",
-    "get_control_manager",
+    "LoggingObserver",
+    "CollectingObserver",
+    "FilteringObserver",
+    "CompositeObserver",
+    "NullObserver",
 ]

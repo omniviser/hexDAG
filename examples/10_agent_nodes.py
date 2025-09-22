@@ -163,11 +163,18 @@ async def main() -> None:
     graph = DirectedGraph()
     graph.add(medical_agent)
 
+    from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
     from hexai.core.application.ports_builder import PortsBuilder
 
-    orchestrator = Orchestrator(
-        ports=PortsBuilder().with_defaults().with_llm(mock_llm).with_tool_router(real_router)
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .with_llm(mock_llm)
+        .with_tool_router(real_router)
+        .build()
     )
+    orchestrator = Orchestrator(ports=ports)
 
     print("🚀 Running medical agent with real tools...")
     result = await orchestrator.run(

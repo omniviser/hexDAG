@@ -142,10 +142,20 @@ async def main():
 
     # Execute and time it
     print("\n🚀 Executing with timing...")
+    from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
+    from hexai.core.application.ports_builder import PortsBuilder
+
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     start_time = time.time()
-    results = await orchestrator.run(graph, "customer analytics request")
+    results = await orchestrator.run(graph, "customer analytics request", additional_ports=ports)
     end_time = time.time()
 
     execution_time = end_time - start_time

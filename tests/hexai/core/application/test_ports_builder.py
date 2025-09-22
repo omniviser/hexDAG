@@ -1,13 +1,11 @@
 """Tests for PortsBuilder - fluent builder for orchestrator ports."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
 from hexai.adapters.local import InMemoryMemory, LocalObserverManager, LocalPolicyManager
 from hexai.adapters.mock import MockDatabaseAdapter, MockLLM, MockToolRouter
-from hexai.core.application.events import ControlManager, ObserverManager
-from hexai.core.application.events.models import ErrorHandler
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
@@ -47,12 +45,11 @@ class TestPortsBuilder:
             .with_database(MockDatabaseAdapter())
             .with_memory(InMemoryMemory())
             .with_policy_manager(LocalPolicyManager())
-            .with_observer_manager(ObserverManager())
-            .with_control_manager(ControlManager())
+            .with_observer_manager(LocalObserverManager())
         )
 
         ports = builder.build()
-        assert len(ports) == 7
+        assert len(ports) == 6
         assert all(
             key in ports
             for key in [
@@ -62,7 +59,6 @@ class TestPortsBuilder:
                 "memory",
                 "policy_manager",
                 "observer_manager",
-                "control_manager",
             ]
         )
 
@@ -107,51 +103,46 @@ class TestPortsBuilder:
             assert ports[key] is value
 
     def test_with_defaults_without_policy(self):
-        """Test with_defaults adds observer manager only when policy=False."""
+        """Test with_defaults is now a no-op placeholder."""
         builder = PortsBuilder()
-        builder.with_defaults(include_policy=False)
+        builder.with_defaults()
 
         ports = builder.build()
-        assert "observer_manager" in ports
+        # with_defaults no longer creates managers automatically
+        assert "observer_manager" not in ports
         assert "policy_manager" not in ports
-        # Now creates LocalObserverManager which implements ObserverManagerPort
-        assert isinstance(ports["observer_manager"], LocalObserverManager)
 
     def test_with_defaults_with_policy(self):
-        """Test with_defaults includes policy manager when requested."""
+        """Test with_defaults is now a no-op placeholder."""
         builder = PortsBuilder()
-        builder.with_defaults(include_policy=True)
+        # with_defaults no longer accepts parameters
+        builder.with_defaults()
 
         ports = builder.build()
-        assert "observer_manager" in ports
-        assert "policy_manager" in ports
-        assert isinstance(ports["policy_manager"], LocalPolicyManager)
+        # with_defaults no longer creates managers automatically
+        assert "observer_manager" not in ports
+        assert "policy_manager" not in ports
 
     def test_with_defaults_preserves_existing(self):
         """Test with_defaults doesn't override existing ports."""
         builder = PortsBuilder()
-        custom_observer = ObserverManager(max_concurrent_observers=100)
+        custom_observer = LocalObserverManager(max_concurrent_observers=100)
 
         builder.with_observer_manager(custom_observer)
-        builder.with_defaults()
+        builder.with_defaults()  # Should be a no-op
 
         ports = builder.build()
-        assert ports["observer_manager"] is custom_observer  # Not replaced
+        assert ports["observer_manager"] is custom_observer  # Still preserved
 
     def test_with_test_defaults(self):
-        """Test minimal configuration for testing."""
+        """Test with_test_defaults is now a no-op placeholder."""
         builder = PortsBuilder()
         builder.with_test_defaults()
 
         ports = builder.build()
-        assert "observer_manager" in ports
-        # Should use minimal configurations for LocalObserverManager
-        manager = ports["observer_manager"]
-        assert isinstance(manager, LocalObserverManager)
-        assert manager._max_concurrent == 1
-        assert manager._timeout == 1.0
-        assert manager._executor._max_workers == 1
-        assert manager._use_weak_refs is False
+        # with_test_defaults no longer creates managers automatically
+        assert "observer_manager" not in ports
+        assert "policy_manager" not in ports
 
     def test_has_port(self):
         """Test checking if a port exists."""
@@ -236,7 +227,7 @@ class TestPortsBuilder:
             PortsBuilder()
             .with_llm(MockLLM())
             .with_database(MockDatabaseAdapter())
-            .with_observer_manager(ObserverManager())
+            .with_observer_manager(LocalObserverManager())
         )
 
         repr_str = str(builder)
@@ -270,73 +261,37 @@ class TestPortsBuilderObserverManager:
         ports = builder.build()
         assert ports["observer_manager"] is mock_manager
 
-    def test_with_observer_manager_creates_local_with_config(self):
-        """Test creating LocalObserverManager with configuration when no manager provided."""
-        builder = PortsBuilder()
-
-        result = builder.with_observer_manager(
+        # Test providing a configured LocalObserverManager
+        configured_manager = LocalObserverManager(
             max_concurrent_observers=20,
             observer_timeout=10.0,
             max_sync_workers=8,
             use_weak_refs=False,
         )
+        builder2 = PortsBuilder()
+        result = builder2.with_observer_manager(configured_manager)
 
-        assert result is builder
-        ports = builder.build()
-        manager = ports["observer_manager"]
-
-        assert isinstance(manager, LocalObserverManager)
-        # Verify configuration was passed
-        assert manager._max_concurrent == 20
-        assert manager._timeout == 10.0
-        assert manager._executor._max_workers == 8
-        assert manager._use_weak_refs is False
-
-    def test_with_observer_manager_partial_config(self):
-        """Test creating LocalObserverManager with partial configuration."""
-        builder = PortsBuilder()
-
-        builder.with_observer_manager(
-            max_concurrent_observers=15,
-            use_weak_refs=True,
-        )
-
-        ports = builder.build()
-        manager = ports["observer_manager"]
-
-        assert isinstance(manager, LocalObserverManager)
-        assert manager._max_concurrent == 15
-        assert manager._use_weak_refs is True
-
-    def test_with_observer_manager_with_error_handler(self):
-        """Test providing a custom error handler."""
-        error_handler = MagicMock(spec=ErrorHandler)
-        builder = PortsBuilder()
-
-        builder.with_observer_manager(error_handler=error_handler)
-
-        ports = builder.build()
-        manager = ports["observer_manager"]
-
-        assert isinstance(manager, LocalObserverManager)
-        assert manager._error_handler is error_handler
+        assert result is builder2
+        ports = builder2.build()
+        assert ports["observer_manager"] is configured_manager
 
     def test_with_local_observer_manager(self):
         """Test explicitly creating a LocalObserverManager."""
-        builder = PortsBuilder()
-
-        result = builder.with_local_observer_manager(
+        # with_local_observer_manager no longer exists
+        manager = LocalObserverManager(
             max_concurrent_observers=25,
             observer_timeout=12.0,
             max_sync_workers=10,
             use_weak_refs=False,
         )
 
+        builder = PortsBuilder()
+        result = builder.with_observer_manager(manager)
+
         assert result is builder
         ports = builder.build()
-        manager = ports["observer_manager"]
 
-        assert isinstance(manager, LocalObserverManager)
+        assert ports["observer_manager"] is manager
         assert manager._max_concurrent == 25
         assert manager._timeout == 12.0
         assert manager._executor._max_workers == 10
@@ -344,14 +299,16 @@ class TestPortsBuilderObserverManager:
 
     def test_with_local_observer_manager_defaults(self):
         """Test LocalObserverManager with default values."""
-        builder = PortsBuilder()
+        # Create manager with defaults
+        manager = LocalObserverManager()
 
-        builder.with_local_observer_manager()
+        builder = PortsBuilder()
+        builder.with_observer_manager(manager)
 
         ports = builder.build()
-        manager = ports["observer_manager"]
+        retrieved = ports["observer_manager"]
 
-        assert isinstance(manager, LocalObserverManager)
+        assert retrieved is manager
         # Check defaults
         assert manager._max_concurrent == 10
         assert manager._timeout == 5.0
@@ -366,15 +323,17 @@ class TestPortsBuilderObserverManager:
             "max_sync_workers": 12,
             "use_weak_refs": True,
         }
-        builder = PortsBuilder()
 
-        result = builder.with_observer_config(config)
+        # with_observer_config no longer exists, create manager directly
+        manager = LocalObserverManager(**config)
+
+        builder = PortsBuilder()
+        result = builder.with_observer_manager(manager)
 
         assert result is builder
         ports = builder.build()
-        manager = ports["observer_manager"]
 
-        assert isinstance(manager, LocalObserverManager)
+        assert ports["observer_manager"] is manager
         assert manager._max_concurrent == 30
         assert manager._timeout == 15.0
         assert manager._executor._max_workers == 12
@@ -387,27 +346,21 @@ class TestPortsBuilderObserverManager:
             "invalid_key": "value",
             "another_bad_key": 123,
         }
-        builder = PortsBuilder()
 
-        with pytest.raises(ValueError, match="Invalid observer configuration keys"):
-            builder.with_observer_config(config)
+        # Error should come from LocalObserverManager constructor
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            LocalObserverManager(**config)
 
     def test_with_defaults_creates_local_observer_manager(self):
-        """Test that with_defaults creates a LocalObserverManager."""
+        """Test that with_defaults no longer creates managers."""
         builder = PortsBuilder()
 
         builder.with_defaults()
 
         ports = builder.build()
-        assert "observer_manager" in ports
-        manager = ports["observer_manager"]
-
-        assert isinstance(manager, LocalObserverManager)
-        # Check default configuration
-        assert manager._max_concurrent == 10
-        assert manager._timeout == 5.0
-        assert manager._executor._max_workers == 4
-        assert manager._use_weak_refs is True
+        # with_defaults no longer creates managers automatically
+        assert "observer_manager" not in ports
+        assert "policy_manager" not in ports
 
     def test_with_defaults_preserves_existing_observer_manager(self):
         """Test that with_defaults doesn't overwrite existing observer manager."""
@@ -421,25 +374,20 @@ class TestPortsBuilderObserverManager:
         assert ports["observer_manager"] is mock_manager
 
     def test_with_test_defaults_creates_minimal_observer_manager(self):
-        """Test that with_test_defaults creates a minimal LocalObserverManager."""
+        """Test that with_test_defaults no longer creates managers."""
         builder = PortsBuilder()
 
         builder.with_test_defaults()
 
         ports = builder.build()
-        manager = ports["observer_manager"]
-
-        assert isinstance(manager, LocalObserverManager)
-        # Check minimal test configuration
-        assert manager._max_concurrent == 1
-        assert manager._timeout == 1.0
-        assert manager._executor._max_workers == 1
-        assert manager._use_weak_refs is False
+        # with_test_defaults no longer creates managers automatically
+        assert "observer_manager" not in ports
+        assert "policy_manager" not in ports
 
     def test_backward_compatibility_with_existing_code(self):
         """Test that existing code patterns still work."""
         # Old pattern: directly passing an ObserverManager instance
-        old_manager = ObserverManager()
+        old_manager = LocalObserverManager()
         builder = PortsBuilder()
 
         builder.with_observer_manager(old_manager)
@@ -453,11 +401,17 @@ class TestOrchestratorIntegration:
 
     def test_orchestrator_with_builder(self):
         """Test passing PortsBuilder to Orchestrator."""
-        builder = PortsBuilder().with_llm(MockLLM()).with_defaults()
+        builder = (
+            PortsBuilder()
+            .with_llm(MockLLM())
+            .with_observer_manager(LocalObserverManager())
+            .with_policy_manager(LocalPolicyManager())
+        )
         orchestrator = Orchestrator(ports=builder)
 
         assert "llm" in orchestrator.ports
         assert "observer_manager" in orchestrator.ports
+        assert "policy_manager" in orchestrator.ports
         assert isinstance(orchestrator.ports["llm"], MockLLM)
 
     def test_orchestrator_with_dict(self):
@@ -468,20 +422,32 @@ class TestOrchestratorIntegration:
         assert orchestrator.ports == ports_dict
 
     def test_orchestrator_with_none(self):
-        """Test Orchestrator auto-configures when ports=None."""
-        orchestrator = Orchestrator(ports=None)
+        """Test Orchestrator requires both managers when ports=None."""
+        # Since we can't create defaults, Orchestrator will need explicit managers
+        # Create minimal ports for testing
+        orchestrator = Orchestrator(
+            ports={
+                "observer_manager": LocalObserverManager(),
+                "policy_manager": LocalPolicyManager(),
+            }
+        )
 
         assert "observer_manager" in orchestrator.ports
-        assert "policy_manager" in orchestrator.ports  # Should have policy_manager by default
-        # Now creates LocalObserverManager through PortsBuilder.with_defaults()
+        assert "policy_manager" in orchestrator.ports
         assert isinstance(orchestrator.ports["observer_manager"], LocalObserverManager)
 
     def test_orchestrator_default_no_args(self):
-        """Test Orchestrator default initialization."""
-        orchestrator = Orchestrator()
+        """Test Orchestrator requires explicit managers."""
+        # Provide required managers explicitly
+        orchestrator = Orchestrator(
+            ports={
+                "observer_manager": LocalObserverManager(),
+                "policy_manager": LocalPolicyManager(),
+            }
+        )
 
         assert "observer_manager" in orchestrator.ports
-        assert "policy_manager" in orchestrator.ports  # Should have policy_manager by default
+        assert "policy_manager" in orchestrator.ports
 
     @pytest.mark.asyncio
     async def test_end_to_end_with_builder(self):
@@ -493,8 +459,12 @@ class TestOrchestratorIntegration:
         graph = DirectedGraph()
         graph.add(NodeSpec("test", test_node))
 
-        # Using PortsBuilder
-        builder = PortsBuilder().with_defaults()
+        # Using PortsBuilder with explicit managers
+        builder = (
+            PortsBuilder()
+            .with_observer_manager(LocalObserverManager())
+            .with_policy_manager(LocalPolicyManager())
+        )
         orchestrator = Orchestrator(ports=builder)
 
         result = await orchestrator.run(graph, {"input": "test"})
@@ -513,7 +483,7 @@ class TestOrchestratorIntegration:
 
         # Using traditional dictionary (needs policy_manager for current orchestrator)
         ports_dict = {
-            "observer_manager": ObserverManager(),
+            "observer_manager": LocalObserverManager(),
             "policy_manager": LocalPolicyManager(),
         }
         orchestrator = Orchestrator(ports=ports_dict)
@@ -537,7 +507,12 @@ class TestOrchestratorIntegration:
         )
         graph.add(node_spec)
 
-        builder = PortsBuilder().with_llm(mock_llm).with_defaults()
+        builder = (
+            PortsBuilder()
+            .with_llm(mock_llm)
+            .with_observer_manager(LocalObserverManager())
+            .with_policy_manager(LocalPolicyManager())
+        )
         orchestrator = Orchestrator(ports=builder)
 
         result = await orchestrator.run(graph, {"input": "test data"})
@@ -555,17 +530,15 @@ class TestPortsBuilderPatterns:
         old_ports = {
             "llm": MockLLM(),
             "database": MockDatabaseAdapter(),
-            "observer_manager": ObserverManager(),
+            "observer_manager": LocalObserverManager(),
         }
 
         # Migration path
         builder = PortsBuilder.from_dict(old_ports)
-        builder.with_control_manager(ControlManager())  # Add new functionality
 
         new_ports = builder.build()
-        assert len(new_ports) == 4
+        assert len(new_ports) == 3
         assert all(k in new_ports for k in old_ports)
-        assert "control_manager" in new_ports
 
     def test_multi_llm_pattern(self):
         """Test configuring multiple LLMs for different purposes."""
@@ -584,12 +557,26 @@ class TestPortsBuilderPatterns:
         """Test building environment-specific configurations."""
 
         def build_dev_ports():
-            return PortsBuilder().with_test_defaults().with_llm(MockLLM()).build()
+            # Create minimal test configuration manually
+            return (
+                PortsBuilder()
+                .with_observer_manager(
+                    LocalObserverManager(
+                        max_concurrent_observers=1,
+                        observer_timeout=1.0,
+                        max_sync_workers=1,
+                        use_weak_refs=False,
+                    )
+                )
+                .with_llm(MockLLM())
+                .build()
+            )
 
         def build_prod_ports():
             return (
                 PortsBuilder()
-                .with_defaults()
+                .with_observer_manager(LocalObserverManager())
+                .with_policy_manager(LocalPolicyManager())
                 .with_llm(MockLLM())  # Would be real LLM in production
                 .with_database(MockDatabaseAdapter())  # Would be real DB
                 .build()
@@ -598,7 +585,7 @@ class TestPortsBuilderPatterns:
         dev_ports = build_dev_ports()
         prod_ports = build_prod_ports()
 
-        # Dev has minimal config (LocalObserverManager)
+        # Dev has minimal config
         dev_manager = dev_ports["observer_manager"]
         assert isinstance(dev_manager, LocalObserverManager)
         assert dev_manager._max_concurrent == 1
@@ -608,12 +595,12 @@ class TestPortsBuilderPatterns:
 
     def test_override_pattern(self):
         """Test overriding specific ports while keeping defaults."""
-        custom_observer = ObserverManager(max_concurrent_observers=50)
+        custom_observer = LocalObserverManager(max_concurrent_observers=50)
 
         builder = (
             PortsBuilder()
-            .with_defaults()  # Sets up default managers
-            .with_observer_manager(custom_observer)  # Override specific one
+            .with_policy_manager(LocalPolicyManager())
+            .with_observer_manager(custom_observer)  # Use custom observer
         )
 
         ports = builder.build()

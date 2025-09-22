@@ -16,7 +16,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -145,6 +147,13 @@ async def demonstrate_schema_compatibility_errors():
     graph.add(NodeSpec("wrong_processor", return_wrong_type))
     graph.add(NodeSpec("display", display_user_info).after("wrong_processor"))
 
+    # Create ports with observer and policy managers
+    (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator(strict_validation=True)
 
     print("\n   Testing incompatible schema connection...")
@@ -238,6 +247,13 @@ async def demonstrate_error_recovery_patterns():
         "score": "high",  # Invalid score
     }
 
+    # Create ports with observer and policy managers
+    (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
     try:
         result = await orchestrator.run(graph_flexible, problematic_input)

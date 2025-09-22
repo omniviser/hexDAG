@@ -12,7 +12,9 @@ This example demonstrates data aggregation in hexAI:
 import asyncio
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -216,8 +218,15 @@ async def demonstrate_fan_out_fan_in():
     # Execute
     print("   🚀 Starting fan-out and fan-in execution...")
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "test_data")
+    result = await orchestrator.run(graph, "test_data", additional_ports=ports)
 
     print("   ✅ Fan-out and fan-in completed")
     print(f"   📊 Total sources aggregated: {result['simple_aggregator']['total_sources']}")
@@ -256,8 +265,15 @@ async def demonstrate_priority_aggregation():
     # Execute
     print("   🚀 Starting priority-based aggregation...")
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "priority_test")
+    result = await orchestrator.run(graph, "priority_test", additional_ports=ports)
 
     print("   ✅ Priority aggregation completed")
     print(f"   📊 High priority: {result['priority_aggregator']['high_priority_count']}")
@@ -295,8 +311,15 @@ async def demonstrate_timestamp_aggregation():
     # Execute
     print("   🚀 Starting timestamp-based aggregation...")
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "timestamp_test")
+    result = await orchestrator.run(graph, "timestamp_test", additional_ports=ports)
 
     print("   ✅ Timestamp aggregation completed")
     print(f"   📊 Total records: {result['timestamp_aggregator']['total_records']}")
@@ -334,8 +357,15 @@ async def demonstrate_statistical_aggregation():
     # Execute
     print("   🚀 Starting statistical aggregation...")
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "statistical_test")
+    result = await orchestrator.run(graph, "statistical_test", additional_ports=ports)
 
     print("   ✅ Statistical aggregation completed")
     summary = result["statistical_aggregator"]["statistical_summary"]
@@ -384,8 +414,15 @@ async def demonstrate_complex_aggregation():
     # Execute
     print("   🚀 Starting complex multi-level aggregation...")
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "complex_test")
+    result = await orchestrator.run(graph, "complex_test", additional_ports=ports)
 
     print("   ✅ Complex aggregation completed")
     print(f"   📊 Final aggregation type: {result['statistical_aggregator']['aggregation_type']}")

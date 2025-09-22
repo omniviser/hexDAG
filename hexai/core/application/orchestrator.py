@@ -8,16 +8,18 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from hexai.core.application.policies.models import PolicyContext, PolicyResponse, PolicySignal
 from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
-from hexai.core.ports.observer_manager import ObserverManagerPort
-from hexai.core.ports.policy_manager import PolicyManagerPort
+
+if TYPE_CHECKING:
+    from hexai.core.ports.observer_manager import ObserverManagerPort
+    from hexai.core.ports.policy_manager import PolicyManagerPort
 
 from .events import (
-    ExecutionContext,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
@@ -33,6 +35,40 @@ from .events import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExecutionContext:
+    """Context that flows through node and event execution.
+
+    Carries metadata through the execution pipeline.
+    """
+
+    dag_id: str
+    node_id: str | None = None
+    wave_index: int = 0
+    attempt: int = 1
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def with_node(self, node_id: str, wave_index: int) -> "ExecutionContext":
+        """Create new context for a specific node execution."""
+        return ExecutionContext(
+            dag_id=self.dag_id,
+            node_id=node_id,
+            wave_index=wave_index,
+            attempt=self.attempt,
+            metadata=self.metadata.copy(),
+        )
+
+    def with_attempt(self, attempt: int) -> "ExecutionContext":
+        """Create new context with updated attempt number."""
+        return ExecutionContext(
+            dag_id=self.dag_id,
+            node_id=self.node_id,
+            wave_index=self.wave_index,
+            attempt=attempt,
+            metadata=self.metadata.copy(),
+        )
 
 
 class OrchestratorError(Exception):
@@ -124,10 +160,10 @@ class Orchestrator:
 
     async def _evaluate_policy_safe(
         self,
-        policy_manager: PolicyManagerPort,
+        policy_manager: "PolicyManagerPort",
         policy_context: PolicyContext,
         check_point: str,
-        observer_manager: ObserverManagerPort | None = None,
+        observer_manager: "ObserverManagerPort | None" = None,
     ) -> PolicyResponse:
         """Safely evaluate policy with error handling and validation.
 
@@ -268,13 +304,13 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_start_time = time.time()
 
-        # Get observer manager from ports (expecting ObserverManagerPort interface)
+        # Get observer manager from ports - required
         observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
         if observer_manager is None:
-            # Create default LocalObserverManager implementation
-            from hexai.adapters.local.local_observer_manager import LocalObserverManager
-
-            observer_manager = LocalObserverManager()
+            raise ValueError(
+                "ObserverManager not found in ports. "
+                "Use PortsBuilder().with_defaults() or provide an observer_manager port."
+            )
 
         # Get policy_manager from ports - required
         policy_manager: PolicyManagerPort | None = all_ports.get("policy_manager")
@@ -368,8 +404,8 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observer_manager: ObserverManagerPort,
-        policy_manager: PolicyManagerPort,
+        observer_manager: "ObserverManagerPort",
+        policy_manager: "PolicyManagerPort",
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -416,8 +452,8 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observer_manager: ObserverManagerPort,
-        policy_manager: PolicyManagerPort,
+        observer_manager: "ObserverManagerPort",
+        policy_manager: "PolicyManagerPort",
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -475,11 +511,13 @@ class Orchestrator:
                     PolicySkipped(
                         node_name=node_name,
                         dag_id=context.dag_id,
-                        reason=start_response.data.get("reason")
-                        if isinstance(start_response.data, dict)
-                        else str(start_response.data)
-                        if start_response.data
-                        else None,
+                        reason=(
+                            start_response.data.get("reason")
+                            if isinstance(start_response.data, dict)
+                            else str(start_response.data)
+                            if start_response.data
+                            else None
+                        ),
                     )
                 )
                 return start_response.data
@@ -605,9 +643,11 @@ class Orchestrator:
                         dag_id=context.dag_id,
                         attempt=attempt_info,
                         delay=delay,
-                        reason=fail_response.data.get("reason")
-                        if isinstance(fail_response.data, dict)
-                        else None,
+                        reason=(
+                            fail_response.data.get("reason")
+                            if isinstance(fail_response.data, dict)
+                            else None
+                        ),
                     )
                 )
 

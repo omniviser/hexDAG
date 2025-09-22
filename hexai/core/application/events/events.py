@@ -30,7 +30,7 @@ class Event:
         -------
             A formatted string suitable for logging
         """
-        _ = log_level  # Mark as intentionally unused in base class
+        del log_level  # Unused in base implementation
         return f"{self.__class__.__name__} at {self.timestamp.isoformat()}"
 
 
@@ -45,7 +45,7 @@ class NodeStarted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for node start event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         deps = f" (deps: {', '.join(self.dependencies)})" if self.dependencies else ""
         return f"🚀 Node '{self.name}' started in wave {self.wave_index}{deps}"
 
@@ -61,7 +61,7 @@ class NodeCompleted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for node completion event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"✅ Node '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -75,7 +75,7 @@ class NodeFailed(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for node failure event."""
-        _ = log_level  # This event always uses ERROR level
+        del log_level  # Unused
         return f"❌ Node '{self.name}' failed: {self.error}"
 
 
@@ -89,7 +89,7 @@ class WaveStarted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for wave start event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"🌊 Wave {self.wave_index} started with {len(self.nodes)} nodes"
 
 
@@ -102,7 +102,7 @@ class WaveCompleted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for wave completion event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"✅ Wave {self.wave_index} completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -117,7 +117,7 @@ class PipelineStarted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for pipeline start event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return (
             f"🎬 Pipeline '{self.name}' started "
             f"({self.total_nodes} nodes, {self.total_waves} waves)"
@@ -134,7 +134,7 @@ class PipelineCompleted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for pipeline completion event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -148,7 +148,7 @@ class LLMPromptSent(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for LLM prompt event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"💭 LLM prompt sent from '{self.node_name}' ({len(self.messages)} messages)"
 
 
@@ -162,7 +162,7 @@ class LLMResponseReceived(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for LLM response event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"🤖 LLM response for '{self.node_name}' in {self.duration_ms / 1000:.2f}s"
 
 
@@ -177,7 +177,7 @@ class ToolCalled(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for tool call event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"🔧 Tool '{self.tool_name}' called from '{self.node_name}'"
 
 
@@ -192,7 +192,7 @@ class ToolCompleted(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for tool completion event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         return f"✅ Tool '{self.tool_name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -210,7 +210,7 @@ class PolicyEvaluated(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for policy evaluation event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         node_info = f" for node '{self.node_id}'" if self.node_id else ""
         return f"⚖️ Policy evaluated at {self.context_point}{node_info}: {self.signal.value}"
 
@@ -228,7 +228,7 @@ class PolicyTriggered(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for policy trigger event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         node_info = f" for node '{self.node_id}'" if self.node_id else ""
         reason_info = f": {self.reason}" if self.reason else ""
         return (
@@ -247,7 +247,7 @@ class PolicySkipped(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for policy skip event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         reason_info = f": {self.reason}" if self.reason else ""
         return f"⏭️ Node '{self.node_name}' skipped by policy{reason_info}"
 
@@ -264,7 +264,7 @@ class PolicyRetry(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for policy retry event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         delay_info = f" with {self.delay}s delay" if self.delay > 0 else ""
         reason_info = f": {self.reason}" if self.reason else ""
         return f"🔄 Node '{self.node_name}' retry #{self.attempt}{delay_info}{reason_info}"
@@ -281,6 +281,6 @@ class PolicyFallback(Event):
 
     def log_message(self, log_level: int = logging.INFO) -> str:
         """Format log message for policy fallback event."""
-        _ = log_level  # Unused but kept for interface consistency
+        del log_level  # Unused
         error_info = f" after error: {self.original_error}" if self.original_error else ""
         return f"↩️ Node '{self.node_name}' using fallback value{error_info}"

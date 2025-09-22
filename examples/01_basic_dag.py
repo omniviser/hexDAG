@@ -86,11 +86,21 @@ async def main():
 
     # Step 5: Create orchestrator and run
     print("\n🚀 Executing pipeline...")
+    from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
+    from hexai.core.application.ports_builder import PortsBuilder
+
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     # Run with input data
     input_name = "hexAI Learner"
-    results = await orchestrator.run(graph, input_name)
+    results = await orchestrator.run(graph, input_name, additional_ports=ports)
 
     # Step 6: Show results
     print("\n📋 Execution Results:")

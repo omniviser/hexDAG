@@ -5,15 +5,25 @@ all safety features and configuration options from the concrete implementation.
 """
 
 from abc import abstractmethod
-from typing import Any, Protocol
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Protocol
 
-from hexai.core.application.events.events import Event
-from hexai.core.application.events.models import (
-    AsyncObserverFunc,
-    Observer,
-    ObserverFunc,
-)
+if TYPE_CHECKING:
+    from hexai.core.application.events.events import Event
+
 from hexai.core.registry import port
+
+# Type aliases for observer functions
+ObserverFunc = Callable[["Event"], None]
+AsyncObserverFunc = Callable[["Event"], Any]  # Returns awaitable
+
+
+class Observer(Protocol):
+    """Protocol for observers that monitor events."""
+
+    async def handle(self, event: "Event") -> None:
+        """Handle an event (read-only, no return value)."""
+        ...
 
 
 @port(name="observer_manager", namespace="core")
@@ -63,7 +73,7 @@ class ObserverManagerPort(Protocol):
         ...
 
     @abstractmethod
-    async def notify(self, event: Event) -> None:
+    async def notify(self, event: "Event") -> None:
         """Notify all interested observers of an event.
 
         Only observers registered for this event type will be notified.

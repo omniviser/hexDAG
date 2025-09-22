@@ -157,15 +157,19 @@ async def main():
     mock_logger = MockLoggerAdapter()
 
     # Create orchestrator with ports using PortsBuilder for proper defaults
+    from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
     from hexai.core.application.ports_builder import PortsBuilder
 
-    orchestrator = Orchestrator(
-        ports=PortsBuilder()
-        .with_defaults()
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
         .with_custom_port("database", mock_db)
         .with_custom_port("email", mock_email)
         .with_custom_port("logger", mock_logger)
+        .build()
     )
+    orchestrator = Orchestrator(ports=ports)
 
     # Create DAG
     graph = DirectedGraph()

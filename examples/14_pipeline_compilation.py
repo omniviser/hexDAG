@@ -12,7 +12,9 @@ This example demonstrates pipeline compilation in hexAI:
 import asyncio
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -109,8 +111,15 @@ async def demonstrate_basic_compilation():
             print(f"      Wave {i + 1}: {wave}")
 
         # Execute compiled pipeline
+        # Create ports with observer and policy managers
+        ports = (
+            PortsBuilder()
+            .with_observer_manager(LocalObserverManager())
+            .with_policy_manager(LocalPolicyManager())
+            .build()
+        )
         orchestrator = Orchestrator()
-        result = await orchestrator.run(graph, "test data for compilation")
+        result = await orchestrator.run(graph, "test data for compilation", additional_ports=ports)
 
         print("   ✅ Pipeline compilation and execution successful")
         print(f"   📋 Final result: {result['result_aggregator']['final_result']}")
@@ -153,8 +162,15 @@ async def demonstrate_compilation_with_validation():
         # This would normally check type compatibility between nodes
 
         # Execute with validation
+        # Create ports with observer and policy managers
+        ports = (
+            PortsBuilder()
+            .with_observer_manager(LocalObserverManager())
+            .with_policy_manager(LocalPolicyManager())
+            .build()
+        )
         orchestrator = Orchestrator()
-        result = await orchestrator.run(graph, "validation test")
+        result = await orchestrator.run(graph, "validation test", additional_ports=ports)
 
         print("   ✅ Compilation with validation successful")
         print(f"   📋 Validation result: {result['data_validator']['validation_passed']}")
@@ -197,8 +213,15 @@ async def demonstrate_compilation_optimization():
         # This would normally optimize the graph structure
 
         # Execute optimized pipeline
+        # Create ports with observer and policy managers
+        ports = (
+            PortsBuilder()
+            .with_observer_manager(LocalObserverManager())
+            .with_policy_manager(LocalPolicyManager())
+            .build()
+        )
         orchestrator = Orchestrator()
-        result = await orchestrator.run(graph, "optimization test")
+        result = await orchestrator.run(graph, "optimization test", additional_ports=ports)
 
         print("   ✅ Optimized compilation successful")
         print(f"   📋 Optimization result: {result['result_aggregator']['compilation_success']}")

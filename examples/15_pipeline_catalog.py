@@ -12,7 +12,9 @@ This example demonstrates pipeline catalog management in hexAI:
 import asyncio
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -218,8 +220,17 @@ async def demonstrate_pipeline_execution():
 
         if pipeline:
             # Execute pipeline
+            # Create ports with observer and policy managers
+            ports = (
+                PortsBuilder()
+                .with_observer_manager(LocalObserverManager())
+                .with_policy_manager(LocalPolicyManager())
+                .build()
+            )
             orchestrator = Orchestrator()
-            result = await orchestrator.run(pipeline, "test data from catalog")
+            result = await orchestrator.run(
+                pipeline, "test data from catalog", additional_ports=ports
+            )
 
             print("   ✅ Pipeline execution successful")
             print(f"   📋 Result: {result['result_aggregator']['final_result']}")

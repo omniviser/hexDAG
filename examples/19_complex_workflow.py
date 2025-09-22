@@ -17,7 +17,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -486,6 +488,13 @@ async def demonstrate_complex_workflow():
         {"customer_id": "CUST003", "product_id": "PROD003"},  # Premium customer, sports product
     ]
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     for i, scenario in enumerate(test_scenarios, 1):
@@ -494,7 +503,7 @@ async def demonstrate_complex_workflow():
         print(f"\n🧪 Scenario {i}: Customer {customer_id} → Product {product_id}")
 
         start_time = time.time()
-        results = await orchestrator.run(graph, scenario)
+        results = await orchestrator.run(graph, scenario, additional_ports=ports)
         end_time = time.time()
 
         execution_time = end_time - start_time
@@ -545,12 +554,19 @@ async def demonstrate_error_handling():
     graph.add(NodeSpec("failing", failing_node))
     graph.add(NodeSpec("recovery", recovery_node).after("failing"))
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     # Test normal execution
     print("\n   🟢 Normal execution:")
     try:
-        await orchestrator.run(graph, {"should_fail": False})
+        await orchestrator.run(graph, {"should_fail": False}, additional_ports=ports)
         print("   ✅ Normal execution succeeded")
     except Exception as e:
         print(f"   ❌ Unexpected failure: {e}")
@@ -558,7 +574,7 @@ async def demonstrate_error_handling():
     # Test failure scenario
     print("\n   🔴 Failure scenario:")
     try:
-        await orchestrator.run(graph, {"should_fail": True})
+        await orchestrator.run(graph, {"should_fail": True}, additional_ports=ports)
         print("   ⚠️  Unexpected success")
     except Exception as e:
         print(f"   ✅ Correctly caught error: {type(e).__name__}")
@@ -608,10 +624,17 @@ async def demonstrate_performance_optimization():
     print(f"   • Parallel opportunities: {sum(1 for wave in waves if len(wave) > 1)}")
 
     # Execute and measure
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     start_time = time.time()
-    results = await orchestrator.run(graph, {"test": "data"})
+    results = await orchestrator.run(graph, {"test": "data"}, additional_ports=ports)
     end_time = time.time()
 
     total_time = end_time - start_time

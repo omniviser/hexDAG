@@ -14,7 +14,9 @@ Run: python examples/11_dag_visualization.py
 import asyncio
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 try:
@@ -239,6 +241,13 @@ async def demonstrate_execution_analysis():
     print("=" * 40)
 
     graph = create_complex_pipeline()
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     print("\n🚀 Executing pipeline for performance analysis...")
@@ -246,7 +255,9 @@ async def demonstrate_execution_analysis():
     import time
 
     start_time = time.time()
-    results = await orchestrator.run(graph, "sample machine learning input data")
+    results = await orchestrator.run(
+        graph, "sample machine learning input data", additional_ports=ports
+    )
     end_time = time.time()
 
     total_time = end_time - start_time

@@ -13,7 +13,9 @@ Run: python examples/13_yaml_pipelines.py
 
 import asyncio
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -227,6 +229,13 @@ async def demonstrate_pipeline_execution():
         print(f"   • Wave {i}: {wave}")
 
     # Execute
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     test_inputs = [
@@ -239,7 +248,7 @@ async def demonstrate_pipeline_execution():
         print(f"\n🧪 Test {i}: '{test_input[:30]}...'")
 
         try:
-            results = await orchestrator.run(graph, test_input)
+            results = await orchestrator.run(graph, test_input, additional_ports=ports)
 
             report = results.get("report_generator", {}).get("report", {})
             sentiment = report.get("sentiment_analysis", {})

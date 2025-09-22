@@ -12,9 +12,8 @@ from typing import Any
 
 import pytest
 
-from hexai.adapters.local.local_observer_manager import LocalObserverManager
+from hexai.adapters.local.local_observer_manager import ErrorHandler, LocalObserverManager
 from hexai.core.application.events.events import Event
-from hexai.core.application.events.models import ErrorHandler
 
 
 @dataclass

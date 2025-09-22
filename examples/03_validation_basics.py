@@ -16,7 +16,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -107,13 +109,20 @@ async def demonstrate_validation_success():
     graph.add(NodeSpec("process", process_user_data).after("validate"))
     graph.add(NodeSpec("format", format_output).after("process"))
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     # Valid dictionary input
     valid_input = {"name": "Alice Johnson", "age": 28, "email": "alice@example.com"}
 
     try:
-        results = await orchestrator.run(graph, valid_input)
+        results = await orchestrator.run(graph, valid_input, additional_ports=ports)
         print("   ✅ Validation successful!")
         print(f"   📊 Result: {results['format']['user_summary']}")
         print(f"   🏷️  Category: {results['format']['classification']}")
@@ -134,6 +143,13 @@ async def demonstrate_type_coercion():
     graph.add(NodeSpec("process", process_user_data).after("validate"))
     graph.add(NodeSpec("format", format_output).after("process"))
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     # Input with string age (will be coerced to int)
@@ -144,7 +160,7 @@ async def demonstrate_type_coercion():
     }
 
     try:
-        results = await orchestrator.run(graph, coercion_input)
+        results = await orchestrator.run(graph, coercion_input, additional_ports=ports)
         print("   ✅ Type coercion successful!")
         print(f"   📊 Age converted: '45' → {results['process'].age}")
         print(f"   🏷️  Category: {results['format']['classification']}")
@@ -162,6 +178,13 @@ async def demonstrate_validation_errors():
     graph.add(NodeSpec("validate", validate_user_input))
     graph.add(NodeSpec("process", process_user_data).after("validate"))
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator(strict_validation=True)
 
     # Invalid data that should fail validation
@@ -174,7 +197,7 @@ async def demonstrate_validation_errors():
     for i, invalid_input in enumerate(invalid_inputs, 1):
         print(f"\n   Test 3.{i}: {invalid_input}")
         try:
-            await orchestrator.run(graph, invalid_input)
+            await orchestrator.run(graph, invalid_input, additional_ports=ports)
             print("   ⚠️  Unexpectedly succeeded")
         except Exception as e:
             print(f"   ✅ Correctly caught error: {type(e).__name__}")
@@ -192,13 +215,20 @@ async def demonstrate_string_parsing():
     graph.add(NodeSpec("process", process_user_data).after("validate"))
     graph.add(NodeSpec("format", format_output).after("process"))
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     # String input that gets parsed
     string_input = "Carol Davis, 35, carol@email.com"
 
     try:
-        results = await orchestrator.run(graph, string_input)
+        results = await orchestrator.run(graph, string_input, additional_ports=ports)
         print("   ✅ String parsing successful!")
         print(f"   📊 Parsed: '{string_input}'")
         print(f"   👤 Name: {results['process'].name}")

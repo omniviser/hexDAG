@@ -12,8 +12,10 @@ This example demonstrates function nodes in hexAI:
 import asyncio
 import json
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.nodes.function_node import FunctionNode
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph
 
 
@@ -149,8 +151,15 @@ async def main():
     graph.add(text_processor_node)
 
     # Execute
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
-    result = await orchestrator.run(graph, "Hello World Function Node!")
+    result = await orchestrator.run(graph, "Hello World Function Node!", additional_ports=ports)
 
     print("   ✅ Function node executed successfully")
     print(f"   📊 Original text: {result['text_processor']['original']}")
@@ -171,7 +180,7 @@ async def main():
     # Execute with valid data
     valid_data = {"text_stats": {"characters": 10, "words": 2}, "processing_complete": True}
 
-    result = await orchestrator.run(graph, valid_data)
+    result = await orchestrator.run(graph, valid_data, additional_ports=ports)
     print("   ✅ Validation node executed successfully")
     print(f"   📊 Validation status: {result['data_validator']['status']}")
 
@@ -192,7 +201,7 @@ async def main():
     graph.add(calculator_node)
 
     # Execute
-    result = await orchestrator.run(graph, "Dependency test data")
+    result = await orchestrator.run(graph, "Dependency test data", additional_ports=ports)
     print("   ✅ Dependency chain executed successfully")
     print(f"   📊 Characters: {result['number_calculator']['text_stats']['characters']}")
     print(f"   📊 Words: {result['number_calculator']['text_stats']['words']}")
@@ -211,11 +220,14 @@ async def main():
     # Execute with ports
     test_data = {"text_stats": {"characters": 15, "words": 3}}
 
-    from hexai.core.application.ports_builder import PortsBuilder
-
-    orchestrator_with_ports = Orchestrator(
-        ports=PortsBuilder().with_defaults().with_custom_port("formatter", "json")
+    ports_with_formatter = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .with_custom_port("formatter", "json")
+        .build()
     )
+    orchestrator_with_ports = Orchestrator(ports=ports_with_formatter)
     result = await orchestrator_with_ports.run(graph, test_data)
 
     print("   ✅ Port-based function executed successfully")
@@ -249,7 +261,7 @@ async def main():
     graph.add(formatter_comp_node)
 
     # Execute composition
-    result = await orchestrator.run(graph, "Composition test data")
+    result = await orchestrator.run(graph, "Composition test data", additional_ports=ports)
     print("   ✅ Function composition executed successfully")
     print(f"   📊 Validation status: {result['data_validator']['status']}")
     print(f"   📊 Format: {result['data_formatter']['format']}")

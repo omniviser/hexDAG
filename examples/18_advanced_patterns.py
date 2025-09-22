@@ -12,7 +12,9 @@ This example demonstrates advanced patterns in hexAI:
 import asyncio
 from typing import Any
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.application.ports_builder import PortsBuilder
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -161,11 +163,18 @@ async def demonstrate_pipeline_composition():
         {"content": "error message", "condition": True},
     ]
 
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     for i, test_case in enumerate(test_cases):
         print(f"   🧪 Test case {i + 1}: {test_case['content']}")
-        result = await orchestrator.run(graph, test_case)
+        result = await orchestrator.run(graph, test_case, additional_ports=ports)
         print(f"   📋 Result: {result['composition_aggregator']['composed_results']}")
 
 
@@ -189,6 +198,13 @@ async def demonstrate_dynamic_routing():
     graph.add(error)
 
     # Execute with routing
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     test_messages = [
@@ -199,7 +215,7 @@ async def demonstrate_dynamic_routing():
 
     for message in test_messages:
         print(f"   🛣️ Routing: {message}")
-        result = await orchestrator.run(graph, {"content": message})
+        result = await orchestrator.run(graph, {"content": message}, additional_ports=ports)
         route = result.get("data_router", {}).get("route", "unknown")
         print(f"   📍 Route: {route}")
 
@@ -218,6 +234,13 @@ async def demonstrate_conditional_execution():
     graph.add(conditional)
 
     # Execute with conditions
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     test_cases = [
@@ -227,7 +250,7 @@ async def demonstrate_conditional_execution():
 
     for i, test_case in enumerate(test_cases):
         print(f"   🔀 Condition {i + 1}: {test_case['condition']}")
-        result = await orchestrator.run(graph, test_case)
+        result = await orchestrator.run(graph, test_case, additional_ports=ports)
         processed = result.get("conditional_processor", {}).get("processed_content", "")
         print(f"   📋 Result: {processed}")
 
@@ -246,6 +269,13 @@ async def demonstrate_meta_programming():
     graph.add(meta)
 
     # Execute with different operations
+    # Create ports with observer and policy managers
+    ports = (
+        PortsBuilder()
+        .with_observer_manager(LocalObserverManager())
+        .with_policy_manager(LocalPolicyManager())
+        .build()
+    )
     orchestrator = Orchestrator()
 
     operations = ["uppercase", "lowercase", "reverse", "length", "words"]
@@ -253,7 +283,9 @@ async def demonstrate_meta_programming():
 
     for operation in operations:
         print(f"   🔧 Operation: {operation}")
-        result = await orchestrator.run(graph, {"content": test_content, "operation": operation})
+        result = await orchestrator.run(
+            graph, {"content": test_content, "operation": operation}, additional_ports=ports
+        )
         processed = result.get("meta_processor", {}).get("processed_content", "")
         print(f"   📋 Result: {processed}")
 
