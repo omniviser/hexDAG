@@ -4,7 +4,8 @@ import warnings
 
 import pytest
 
-from hexai.core.registry import adapter, component, node, registry, tool
+from hexai.core.registry import adapter, component, node, port, registry, tool
+from hexai.core.registry.registry import ComponentRegistry
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
     ComponentNotFoundError,
@@ -170,7 +171,7 @@ class TestDecorators:
         class TestTool:
             pass
 
-        @adapter(namespace="test")
+        @adapter(implements_port="test_port", namespace="test")
         class TestAdapter:
             pass
 
@@ -473,3 +474,188 @@ class TestImprovedAPI:
         # Non-existent namespace
         with pytest.raises(ComponentNotFoundError):
             self.registry.get_metadata("nonexistent", namespace="bad_ns")
+
+
+class TestAdapterRegistration:
+    """Test adapter registration and validation in the registry."""
+
+    @pytest.fixture
+    def test_registry(self):
+        """Create a fresh registry for testing."""
+        reg = ComponentRegistry()
+        reg._ready = True
+        reg._dev_mode = True
+        return reg
+
+    @pytest.fixture
+    def setup_test_port(self, test_registry):
+        """Register a test port in the registry."""
+        from hexai.core.registry.models import ClassComponent, ComponentMetadata, PortMetadata
+
+        # Register a test port with required and optional methods
+        port_meta = ComponentMetadata(
+            name="llm_port",
+            component_type=ComponentType.PORT,
+            component=ClassComponent(value=type("LLMPort", (), {})),
+            namespace="core",
+            port_metadata=PortMetadata(
+                protocol_class=type("LLMProtocol", (), {}),
+                required_methods=["generate", "stream"],
+                optional_methods=["embed", "tokenize"],
+            ),
+        )
+        test_registry._components.setdefault("core", {})["llm_port"] = port_meta
+        return test_registry
+
+    def test_valid_adapter_registration(self, setup_test_port):
+        """Test registering a valid adapter that implements all required methods."""
+        reg = setup_test_port
+
+        @adapter(implements_port="llm_port")
+        class ValidAdapter:
+            def generate(self, prompt: str) -> str:
+                return "response"
+
+            def stream(self, prompt: str):
+                yield "response"
+
+        reg.register(
+            name="valid_adapter",
+            component=ValidAdapter,
+            component_type="adapter",
+            namespace="test",
+        )
+
+        assert "test" in reg._components
+        assert "valid_adapter" in reg._components["test"]
+
+    def test_adapter_missing_required_method(self, setup_test_port):
+        """Test that adapter missing required methods fails validation."""
+        reg = setup_test_port
+
+        @adapter(implements_port="llm_port")
+        class InvalidAdapter:
+            def generate(self, prompt: str) -> str:
+                return "response"
+
+        with pytest.raises(InvalidComponentError, match="does not implement required methods"):
+            reg.register(
+                name="invalid_adapter",
+                component=InvalidAdapter,
+                component_type="adapter",
+                namespace="test",
+            )
+
+    def test_adapter_with_nonexistent_port(self, test_registry):
+        """Test that adapter declaring nonexistent port fails validation."""
+        reg = test_registry
+
+        @adapter(implements_port="nonexistent_port")
+        class OrphanAdapter:
+            def some_method(self):
+                pass
+
+        with pytest.raises(InvalidComponentError, match="port 'nonexistent_port' does not exist"):
+            reg.register(
+                name="orphan_adapter",
+                component=OrphanAdapter,
+                component_type="adapter",
+                namespace="test",
+            )
+
+    def test_get_adapters_for_port(self, setup_test_port):
+        """Test getting all adapters that implement a specific port."""
+        reg = setup_test_port
+
+        @adapter(implements_port="llm_port")
+        class Adapter1:
+            def generate(self, prompt: str) -> str:
+                return "adapter1"
+
+            def stream(self, prompt: str):
+                yield "adapter1"
+
+        @adapter(implements_port="llm_port")
+        class Adapter2:
+            def generate(self, prompt: str) -> str:
+                return "adapter2"
+
+            def stream(self, prompt: str):
+                yield "adapter2"
+
+        reg.register("adapter1", Adapter1, "adapter", namespace="test")
+        reg.register("adapter2", Adapter2, "adapter", namespace="test")
+
+        adapters = reg.get_adapters_for_port("llm_port")
+        assert len(adapters) == 2
+        adapter_names = [a.name for a in adapters]
+        assert "adapter1" in adapter_names
+        assert "adapter2" in adapter_names
+
+    def test_two_phase_discovery(self, test_registry):
+        """Test that ports are registered before adapters in two-phase discovery."""
+        reg = test_registry
+
+        # First register a port
+        @port(
+            name="discovery_test_port",
+            namespace="test",
+            required_methods=["process"],
+            optional_methods=["validate"],
+        )
+        class DiscoveryTestPort:
+            def process(self, data: str) -> str: ...
+
+        # Register the port first (simulating phase A)
+        reg.register(
+            name="discovery_test_port",
+            component=DiscoveryTestPort,
+            component_type="port",
+            namespace="test",
+        )
+
+        # Now create and register an adapter that depends on it (simulating phase B)
+        @adapter(implements_port="discovery_test_port")
+        class DiscoveryTestAdapter:
+            def process(self, data: str) -> str:
+                return f"processed: {data}"
+
+        # This should succeed because port exists
+        reg.register(
+            name="discovery_test_adapter",
+            component=DiscoveryTestAdapter,
+            component_type="adapter",
+            namespace="test",
+        )
+
+        # Port should be available
+        port_info = reg.get_info("discovery_test_port", namespace="test")
+        assert port_info.component_type == ComponentType.PORT
+
+        # Adapter should be available and validated against port
+        adapter_info = reg.get_info("discovery_test_adapter", namespace="test")
+        assert adapter_info.component_type == ComponentType.ADAPTER
+
+        # Adapter should be listed for the port
+        adapters = reg.get_adapters_for_port("discovery_test_port")
+        assert len(adapters) == 1
+        assert adapters[0].name == "discovery_test_adapter"
+
+    def test_adapter_registration_before_port_fails(self, test_registry):
+        """Test that registering adapter before its port fails."""
+        reg = test_registry
+
+        # Create an adapter without registering its port first
+        @adapter(implements_port="not_yet_registered_port")
+        class EarlyAdapter:
+            def process(self, data: str) -> str:
+                return "data"
+
+        # This should fail because port doesn't exist yet
+        with pytest.raises(InvalidComponentError, match="does not exist in registry"):
+            reg.register(
+                name="early_adapter",
+                component=EarlyAdapter,
+                component_type="adapter",
+                namespace="test",
+            )

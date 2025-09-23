@@ -15,13 +15,13 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from hexai.core.registry.models import DecoratorMetadata
+    from hexai.core.registry.models import ComponentType, DecoratorMetadata
     from hexai.core.registry.registry import ComponentRegistry as RegistryProtocol
 else:
     # Runtime imports - needed for actual execution
     from collections.abc import Callable  # noqa: TC003
 
-    from hexai.core.registry.models import DecoratorMetadata  # noqa: TC001
+    from hexai.core.registry.models import ComponentType, DecoratorMetadata  # noqa: TC001
 
 
 class ComponentWithMetadata(Protocol):
@@ -120,16 +120,26 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
     components = discover_components(module)
     count = 0
 
+    # Two-phase registration: Phase A (ports first)
+    logger.debug("Phase A: Registering ports from %s", module_path)
+    ports_registered = []
+
     for _, component in components:
         # Type guard - we know from discover_components that these have metadata
         if not hasattr(component, "__hexdag_metadata__"):
             continue
         # Use getattr to access dynamic attribute (type checkers can't verify this)
         metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
+
+        # Skip non-ports in phase A
+        if metadata.type != ComponentType.PORT:
+            continue
+
         meta_name = metadata.name
         meta_type = metadata.type
         meta_subtype = metadata.subtype
         meta_description = metadata.description
+        meta_adapter = metadata.adapter_metadata
 
         # Namespace from manifest overrides decorator's declared_namespace
         actual_namespace = namespace
@@ -146,9 +156,63 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
                 privileged=privileged,
                 subtype=meta_subtype,
                 description=meta_description,
+                adapter_metadata=meta_adapter,
             )
             count += 1
-            logger.debug("Registered %s:%s from %s", actual_namespace, meta_name, module_path)
+            ports_registered.append(meta_name)
+            logger.debug("Registered port %s:%s from %s", actual_namespace, meta_name, module_path)
+        except Exception as e:
+            logger.error(
+                f"Failed to register port {actual_namespace}:{meta_name} from {module_path}: {e}"
+            )
+            raise
+
+    # Phase B: Register adapters (and everything else)
+    logger.debug("Phase B: Registering adapters and other components from %s", module_path)
+
+    for _, component in components:
+        # Type guard - we know from discover_components that these have metadata
+        if not hasattr(component, "__hexdag_metadata__"):
+            continue
+        # Use getattr to access dynamic attribute (type checkers can't verify this)
+        component_metadata: DecoratorMetadata = getattr(component, "__hexdag_metadata__")  # noqa: B009
+
+        # Skip ports (already registered in phase A)
+        if component_metadata.type == ComponentType.PORT:
+            continue
+
+        meta_name = component_metadata.name
+        meta_type = component_metadata.type
+        meta_subtype = component_metadata.subtype
+        meta_description = component_metadata.description
+        meta_adapter = component_metadata.adapter_metadata
+
+        # Namespace from manifest overrides decorator's declared_namespace
+        actual_namespace = namespace
+
+        # Determine if this needs privileged access
+        privileged = actual_namespace == "core"
+
+        try:
+            registry.register(
+                name=meta_name,
+                component=component,
+                component_type=meta_type,
+                namespace=actual_namespace,
+                privileged=privileged,
+                subtype=meta_subtype,
+                description=meta_description,
+                adapter_metadata=meta_adapter,
+            )
+            count += 1
+            component_type_str = meta_type if isinstance(meta_type, str) else "component"
+            logger.debug(
+                "Registered %s %s:%s from %s",
+                component_type_str,
+                actual_namespace,
+                meta_name,
+                module_path,
+            )
         except Exception as e:
             logger.error(
                 f"Failed to register {actual_namespace}:{meta_name} from {module_path}: {e}"

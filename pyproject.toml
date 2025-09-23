@@ -248,7 +248,7 @@ version_files = [
 [tool.vulture]
 min_confidence = 90
 paths = ["hexai"]
-exclude = ["tests/", "examples/"]
+exclude = ["tests/", "examples/", "hexai/core/ports/"]
 
 [tool.radon]
 exclude = "tests/*,examples/*"

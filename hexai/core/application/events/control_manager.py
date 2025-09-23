@@ -349,7 +349,7 @@ class FunctionControlHandler:
     ) -> None:
         """Initialize the function control handler."""
         self._func = func
-        self.metadata = metadata
+        self._metadata = metadata
         self.__name__ = getattr(func, "__name__", "anonymous_handler")
 
     async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:

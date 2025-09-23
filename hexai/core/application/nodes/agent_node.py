@@ -464,7 +464,7 @@ class ReActAgentNode(BaseNodeFactory):
         for tool_call in tool_calls:
             try:
                 # Execute tool
-                result = await tool_router.call_tool(tool_call.name, tool_call.params)
+                result = await tool_router.acall_tool(tool_call.name, tool_call.params)
 
                 # Store result
                 state.tool_results.append(f"{tool_call.name}: {result}")

@@ -1,16 +1,27 @@
 """Database port interface for accessing database schema information."""
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
+
+from hexai.core.registry.decorators import port
 
 
+@port(
+    name="database",
+    namespace="core",
+    required_methods=["aget_table_schemas", "aexecute_query"],
+    optional_methods=["aget_relationships", "aget_indexes", "aget_table_statistics"],
+)
+@runtime_checkable
 class DatabasePort(Protocol):
     """Port interface for accessing database schema and metadata.
 
     This port abstracts access to database systems, allowing the analytics engine to work with
-    different database backends.
+    different database backends. Implementations may use direct connections (psycopg2, SQLAlchemy)
+    or REST APIs for cloud databases (Snowflake, BigQuery, etc.).
     """
 
-    def get_table_schemas(self) -> dict[str, dict[str, Any]]:
+    # Required methods
+    async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables.
 
         Returns
@@ -27,7 +38,24 @@ class DatabasePort(Protocol):
         """
         ...
 
-    def get_relationships(self) -> list[dict[str, Any]]:
+    async def aexecute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Execute a SQL query and return results.
+
+        Args
+        ----
+            query: SQL query to execute
+            params: Optional query parameters for safe parameterized queries
+
+        Returns
+        -------
+            List of dictionaries representing query result rows
+        """
+        ...
+
+    # Optional methods for enhanced functionality
+    async def aget_relationships(self) -> list[dict[str, Any]]:
         """Get foreign key relationships between tables.
 
         Returns
@@ -43,7 +71,7 @@ class DatabasePort(Protocol):
         """
         ...
 
-    def get_indexes(self) -> list[dict[str, Any]]:
+    async def aget_indexes(self) -> list[dict[str, Any]]:
         """Get index information for performance optimization.
 
         Returns
@@ -59,7 +87,7 @@ class DatabasePort(Protocol):
         """
         ...
 
-    def get_table_statistics(self) -> dict[str, dict[str, Any]]:
+    async def aget_table_statistics(self) -> dict[str, dict[str, Any]]:
         """Get table statistics for query optimization.
 
         Returns
