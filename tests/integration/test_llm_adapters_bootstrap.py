@@ -38,7 +38,7 @@ class TestLLMAdaptersBootstrap:
 
         # Mock both API keys as available
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(
                 os.environ,
                 {"ANTHROPIC_API_KEY": "test-anthropic-key", "OPENAI_API_KEY": "test-openai-key"},
@@ -64,7 +64,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -92,7 +92,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -133,7 +133,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -179,7 +179,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -237,7 +237,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
             # First call bootstraps
@@ -265,7 +265,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -306,7 +306,7 @@ class TestLLMAdaptersBootstrap:
 
         # No API keys in environment
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {}, clear=True),
         ):
             bootstrap_registry()
@@ -325,7 +325,7 @@ class TestLLMAdaptersBootstrap:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -374,7 +374,7 @@ class TestLLMAdaptersBootstrap:
         fake_openai_key = "sk-fake-test-key-xxxxxxxxxxxxx"
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(
                 os.environ,
                 {"ANTHROPIC_API_KEY": fake_anthropic_key, "OPENAI_API_KEY": fake_openai_key},

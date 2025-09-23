@@ -53,7 +53,7 @@ class TestSystemBootstrap:
             plugins=[],
         )
 
-        with patch("hexai.core.config.load_config", return_value=config):
+        with patch("hexai.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         # Verify core components are loaded
@@ -83,7 +83,7 @@ class TestSystemBootstrap:
 
         # Mock OpenAI as available
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -100,7 +100,7 @@ class TestSystemBootstrap:
         """Test that ensure_bootstrapped can be called multiple times safely."""
         config = HexDAGConfig(modules=["hexai.core.ports"], plugins=["hexai.adapters.mock"])
 
-        with patch("hexai.core.config.load_config", return_value=config):
+        with patch("hexai.core.bootstrap.load_config", return_value=config):
             # First call bootstraps
             ensure_bootstrapped()
             first_count = len(global_registry.list_components())
@@ -132,7 +132,7 @@ class TestPluginSystemIntegration:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {}, clear=True),
         ):
             bootstrap_registry()
@@ -158,7 +158,7 @@ class TestPluginSystemIntegration:
 
         config = HexDAGConfig(modules=["hexai.core.ports"], plugins=["hexai.adapters.mock"])
 
-        with patch("hexai.core.config.load_config", return_value=config):
+        with patch("hexai.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         # Create multiple mock adapter instances
@@ -192,7 +192,7 @@ class TestPluginSystemIntegration:
             ],
         )
 
-        with patch("hexai.core.config.load_config", return_value=config):
+        with patch("hexai.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         components = global_registry.list_components()
@@ -222,7 +222,7 @@ class TestPluginSystemIntegration:
             ],
         )
 
-        with patch("hexai.core.config.load_config", return_value=config):
+        with patch("hexai.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         # Get SQLite adapter
