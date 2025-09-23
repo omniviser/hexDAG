@@ -971,8 +971,9 @@ class TestRegistryPluginScenarios:
         )
 
         # Bootstrap without OpenAI API key
+        # Note: patch load_config where it's imported, not where it's defined
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {}, clear=True),
         ):
             bootstrap_registry()
@@ -1042,7 +1043,7 @@ class TestRegistryPluginDiscovery:
         )
 
         with (
-            patch("hexai.core.config.loader.load_config", return_value=config),
+            patch("hexai.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, env_vars),
         ):
             bootstrap_registry()

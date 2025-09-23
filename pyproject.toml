@@ -307,6 +307,7 @@ min_confidence = 90
 paths = ["hexai"]
 exclude = ["tests/", "examples/", "hexai/core/ports/", "hexai_plugins/"]
 
+
 [tool.radon]
 exclude = "tests/*,examples/*,hexai_plugins/*"
 cc_min = "B"  # Minimum complexity grade (A, B, C, D, E, F)

@@ -1,7 +1,9 @@
 """Tests for the new bootstrap-based registry architecture."""
 
 import os
+import sys
 import tempfile
+import textwrap
 
 import pytest
 
@@ -153,11 +155,6 @@ class TestBootstrapArchitecture:
     def test_adapter_validation_during_bootstrap(self):
         """Test that adapter validation happens during bootstrap."""
         # Create a test file with an invalid adapter (missing required method)
-        import os
-        import sys
-        import tempfile
-        import textwrap
-
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a module with an invalid adapter
             module_path = os.path.join(tmpdir, "invalid_adapter.py")
