@@ -159,17 +159,41 @@ class MockDatabaseAdapter(DatabasePort):
         }
 
     def get_table_schemas(self) -> dict[str, dict[str, Any]]:
-        """Get schema information for all tables."""
+        """Get schema information for all tables.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Dictionary mapping table names to their schema information
+        """
         return self._table_schemas.copy()
 
     def get_relationships(self) -> list[dict[str, Any]]:
-        """Get foreign key relationships between tables."""
+        """Get foreign key relationships between tables.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of relationship information between tables
+        """
         return self._relationships.copy()
 
     def get_indexes(self) -> list[dict[str, Any]]:
-        """Get index information for performance optimization."""
+        """Get index information for performance optimization.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of index definitions with performance information
+        """
         return self._indexes.copy()
 
     def get_table_statistics(self) -> dict[str, dict[str, Any]]:
-        """Get table statistics for query optimization."""
+        """Get table statistics for query optimization.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Dictionary mapping table names to their statistics
+        """
         return self._table_statistics.copy()

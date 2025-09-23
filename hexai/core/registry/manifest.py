@@ -26,7 +26,13 @@ class ManifestEntry:
     module: str
 
     def __post_init__(self) -> None:
-        """Validate manifest entry."""
+        """Validate manifest entry.
+
+        Raises
+        ------
+        ValueError
+            If namespace or module is empty, or namespace contains ':'.
+        """
         if not self.namespace:
             raise ValueError("Namespace cannot be empty")
         if not self.module:
@@ -66,7 +72,12 @@ class ComponentManifest:
             self._namespace_to_modules[manifest_entry.namespace].append(manifest_entry.module)
 
     def get_modules_for_namespace(self, namespace: str) -> list[str]:
-        """Get all modules that should be registered under a namespace."""
+        """Get all modules that should be registered under a namespace.
+
+        Returns
+        -------
+            List of module paths for the given namespace.
+        """
         return self._namespace_to_modules.get(namespace, [])
 
     def validate(self) -> None:
@@ -101,6 +112,15 @@ def load_manifest_from_yaml(yaml_path: str | Path) -> ComponentManifest:
     ComponentManifest
         The loaded manifest.
 
+    Raises
+    ------
+    ImportError
+        If PyYAML is not installed.
+    FileNotFoundError
+        If the manifest file does not exist.
+    ValueError
+        If the manifest format is invalid.
+
     Examples
     --------
     >>> manifest = load_manifest_from_yaml("hexai/core/component_manifest.yaml")
@@ -116,7 +136,7 @@ def load_manifest_from_yaml(yaml_path: str | Path) -> ComponentManifest:
     if not yaml_path.exists():
         raise FileNotFoundError(f"Manifest file not found: {yaml_path}")
 
-    with open(yaml_path) as f:
+    with Path.open(yaml_path) as f:
         data = yaml.safe_load(f)
 
     if not data or "components" not in data:
@@ -126,9 +146,7 @@ def load_manifest_from_yaml(yaml_path: str | Path) -> ComponentManifest:
     components = data["components"]
 
     # Create manifest (structure only)
-    manifest = ComponentManifest(components)
-
-    return manifest
+    return ComponentManifest(components)
 
 
 def get_default_manifest() -> ComponentManifest:
@@ -146,10 +164,8 @@ def get_default_manifest() -> ComponentManifest:
 
     if not manifest_path.exists():
         # Fallback to a minimal manifest if file doesn't exist
-        return ComponentManifest(
-            [
-                {"namespace": "core", "module": "hexai.core.nodes"},
-            ]
-        )
+        return ComponentManifest([
+            {"namespace": "core", "module": "hexai.core.nodes"},
+        ])
 
     return load_manifest_from_yaml(manifest_path)

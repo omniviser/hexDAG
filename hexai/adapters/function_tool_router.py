@@ -195,7 +195,25 @@ class FunctionBasedToolRouter(ToolRouter):
         )
 
     async def aroute(self, tool_name: str, input_data: Any) -> Any:
-        """Route a tool call to the registered function (legacy interface)."""
+        """Route a tool call to the registered function (legacy interface).
+
+        Parameters
+        ----------
+        tool_name : str
+            Name of the tool to call
+        input_data : Any
+            Input data to pass to the tool
+
+        Returns
+        -------
+        Any
+            Result from the tool execution
+
+        Raises
+        ------
+        ValueError
+            If the tool name is not found in registered tools
+        """
         if tool_name not in self.tools:
             raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
 
@@ -238,29 +256,62 @@ class FunctionBasedToolRouter(ToolRouter):
             raise e
 
         # Log the call
-        self.call_history.append(
-            {
-                "tool_name": tool_name,
-                "input_data": input_data,
-                "result": result,
-            }
-        )
+        self.call_history.append({
+            "tool_name": tool_name,
+            "input_data": input_data,
+            "result": result,
+        })
 
         return result
 
     async def call_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Call a tool with parameters (main interface used by agents)."""
+        """Call a tool with parameters (main interface used by agents).
+
+        Parameters
+        ----------
+        tool_name : str
+            Name of the tool to call
+        params : dict[str, Any]
+            Parameters to pass to the tool
+
+        Returns
+        -------
+        Any
+            Result from the tool execution
+
+        Raises
+        ------
+        ValueError
+            If the tool name is not found in registered tools
+        """
         if tool_name not in self.tools:
             raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
 
         return await self.aroute(tool_name, params)
 
     def get_available_tools(self) -> list[str]:
-        """Get list of available tool names."""
+        """Get list of available tool names.
+
+        Returns
+        -------
+        list[str]
+            List of registered tool names
+        """
         return list(self.tools.keys())
 
     def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
-        """Get schema for a specific tool."""
+        """Get schema for a specific tool.
+
+        Parameters
+        ----------
+        tool_name : str
+            Name of the tool to get schema for
+
+        Returns
+        -------
+        dict[str, Any]
+            Tool schema with name, description, parameters, and examples
+        """
         if tool_name in self.tool_definitions:
             tool_def = self.tool_definitions[tool_name]
             return {
@@ -282,7 +333,13 @@ class FunctionBasedToolRouter(ToolRouter):
         return {}
 
     def get_all_tool_schemas(self) -> dict[str, dict[str, Any]]:
-        """Get schemas for all available tools."""
+        """Get schemas for all available tools.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Dictionary mapping tool names to their schemas
+        """
         return {name: self.get_tool_schema(name) for name in self.tools}
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
@@ -298,7 +355,13 @@ class FunctionBasedToolRouter(ToolRouter):
         return list(self.tool_definitions.values())
 
     def get_call_history(self) -> list[dict[str, Any]]:
-        """Get call history for debugging."""
+        """Get call history for debugging.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of call history records with tool_name, input_data, and result
+        """
         return self.call_history.copy()
 
     def reset(self) -> None:

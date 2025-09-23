@@ -23,15 +23,33 @@ class NullControlManager:
     """
 
     async def check(self, event: Any, context: ExecutionContext) -> ControlResponse:
-        """Return PROCEED to allow execution."""
+        """Return PROCEED to allow execution.
+
+        Returns
+        -------
+        ControlResponse
+            Response with PROCEED signal to allow execution
+        """
         return ControlResponse(signal=ControlSignal.PROCEED)
 
     def register(self, handler: Any, **kwargs: Any) -> str:
-        """No-op registration, returns dummy ID."""
+        """No-op registration, returns dummy ID.
+
+        Returns
+        -------
+        str
+            Dummy handler ID
+        """
         return "null-control-handler"
 
     def unregister(self, handler_id: str) -> bool:
-        """No-op unregistration, always returns False."""
+        """No-op unregistration, always returns False.
+
+        Returns
+        -------
+        bool
+            Always False for null implementation
+        """
         return False
 
     def clear(self) -> None:
@@ -39,7 +57,13 @@ class NullControlManager:
         pass
 
     def __len__(self) -> int:
-        """Return 0 for empty manager."""
+        """Return 0 for empty manager.
+
+        Returns
+        -------
+        int
+            Always 0 for empty null manager
+        """
         return 0
 
     async def close(self) -> None:
@@ -59,11 +83,23 @@ class NullObserverManager:
         pass
 
     def register(self, observer: Any, **kwargs: Any) -> str:
-        """No-op registration, returns dummy ID."""
+        """No-op registration, returns dummy ID.
+
+        Returns
+        -------
+        str
+            Dummy observer ID
+        """
         return "null-observer-id"
 
     def unregister(self, observer_id: str) -> bool:
-        """No-op unregistration, always returns False."""
+        """No-op unregistration, always returns False.
+
+        Returns
+        -------
+        bool
+            Always False for null implementation
+        """
         return False
 
     def clear(self) -> None:
@@ -71,7 +107,13 @@ class NullObserverManager:
         pass
 
     def __len__(self) -> int:
-        """Return 0 for empty manager."""
+        """Return 0 for empty manager.
+
+        Returns
+        -------
+        int
+            Always 0 for empty null manager
+        """
         return 0
 
     async def close(self) -> None:
@@ -95,6 +137,7 @@ def get_control_manager(ports: dict[str, Any]) -> Any:
 
     Returns
     -------
+    Any
         Control manager or null manager that always allows execution
     """
     return ports.get("control_manager", NULL_CONTROL_MANAGER)
@@ -111,6 +154,7 @@ def get_observer_manager(ports: dict[str, Any]) -> Any:
 
     Returns
     -------
+    Any
         Observer manager or null manager that silently ignores notifications
     """
     return ports.get("observer_manager", NULL_OBSERVER_MANAGER)

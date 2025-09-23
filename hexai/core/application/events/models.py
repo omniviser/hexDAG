@@ -31,7 +31,13 @@ class ExecutionContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def with_node(self, node_id: str, wave_index: int) -> "ExecutionContext":
-        """Create new context for a specific node execution."""
+        """Create new context for a specific node execution.
+
+        Returns
+        -------
+        ExecutionContext
+            New context with updated node and wave information
+        """
         return ExecutionContext(
             dag_id=self.dag_id,
             node_id=node_id,
@@ -41,7 +47,13 @@ class ExecutionContext:
         )
 
     def with_attempt(self, attempt: int) -> "ExecutionContext":
-        """Create new context with updated attempt number."""
+        """Create new context with updated attempt number.
+
+        Returns
+        -------
+        ExecutionContext
+            New context with updated attempt number
+        """
         return ExecutionContext(
             dag_id=self.dag_id,
             node_id=self.node_id,
@@ -74,7 +86,13 @@ class ControlResponse:
     data: Any = None  # Fallback value, error message, etc.
 
     def should_interrupt(self) -> bool:
-        """Check if this response should interrupt normal flow."""
+        """Check if this response should interrupt normal flow.
+
+        Returns
+        -------
+        bool
+            True if signal is not PROCEED, indicating flow interruption
+        """
         return self.signal != ControlSignal.PROCEED
 
 
@@ -140,6 +158,7 @@ class BaseEventManager(ABC):
 
         Returns
         -------
+        Any
             Registration identifier or None
         """
         ...
@@ -153,7 +172,8 @@ class BaseEventManager(ABC):
 
         Returns
         -------
-            bool: True if handler was found and removed, False otherwise
+        bool
+            True if handler was found and removed, False otherwise
         """
         if handler_id in self._handlers:
             del self._handlers[handler_id]
@@ -165,7 +185,13 @@ class BaseEventManager(ABC):
         self._handlers.clear()
 
     def __len__(self) -> int:
-        """Return number of registered handlers."""
+        """Return number of registered handlers.
+
+        Returns
+        -------
+        int
+            Total number of registered handlers
+        """
         # Count handlers from appropriate storage
         # Subclasses may override if they use different storage
         count = len(self._handlers)
@@ -221,6 +247,7 @@ class EventFilterMixin:
 
         Returns
         -------
+        bool
             True if event should be processed, False otherwise
         """
         # None means accept all events

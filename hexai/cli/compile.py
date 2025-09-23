@@ -15,61 +15,8 @@ import yaml
 
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.agent_factory.compiler import CompiledPipelineData, compile_pipeline
-from hexai.core.domain.dag import DirectedGraph
 
 logger = logging.getLogger(__name__)
-
-
-def check_pipeline_type_safety(graph: DirectedGraph, pipeline_name: str) -> tuple[bool, list[str]]:
-    """Stub function for type safety checking - Tier 2 functionality.
-
-    This is a simplified type check that always passes.
-    Real implementation would be in the Tier 2 compiler layer.
-    """
-    # Parameters will be used in future implementation
-    _ = (graph, pipeline_name)
-    return True, []
-
-
-def _format_long_string(s: str, max_length: int = 80) -> str:
-    """Format long strings using triple quotes and break up long lines.
-
-    Args
-    ----
-        s: String to format
-        max_length: Maximum line length
-
-    Returns
-    -------
-        Formatted string with triple quotes
-    """
-    if len(s) <= max_length:
-        return repr(s)
-
-    # Break up long lines within the content
-    lines = s.split("\n")
-    formatted_lines = []
-
-    for line in lines:
-        if len(line) > max_length:
-            # Simple word breaking for long lines
-            words = line.split(" ")
-            current_line = ""
-            for word in words:
-                if len(current_line + word) > max_length:
-                    if current_line:
-                        formatted_lines.append(current_line.rstrip())
-                        current_line = word + " "
-                    else:
-                        formatted_lines.append(word)
-                else:
-                    current_line += word + " "
-            if current_line:
-                formatted_lines.append(current_line.rstrip())
-        else:
-            formatted_lines.append(line)
-
-    return '"""' + "\n".join(formatted_lines) + '"""'
 
 
 def _generate_pipeline_python_file(
@@ -291,12 +238,19 @@ async def execute_{data.name.lower()}(
 '''
 
     # Write to file
-    with open(output_path, "w", encoding="utf-8") as f:
+    output_file = Path(output_path)
+    with output_file.open("w", encoding="utf-8") as f:
         f.write(template)
 
 
 def _format_config_dict(config: dict[str, Any], indent: int = 0) -> str:
-    """Format a config dictionary with proper indentation."""
+    """Format a config dictionary with proper indentation.
+
+    Returns
+    -------
+    str
+        Formatted dictionary as string with proper indentation
+    """
     lines = ["{"]
     base_indent = " " * indent
     item_indent = " " * (indent + 4)
@@ -332,11 +286,13 @@ def resolve_pipeline_path(name_or_path: str) -> Path:
 
     Returns
     -------
-    Path to the YAML file
+    Path
+        Path to the YAML file
 
     Raises
     ------
-    ValueError: If pipeline not found or path doesn't exist
+    ValueError
+        If pipeline not found or path doesn't exist
     """
     # If it looks like a file path, validate and return it
     if "/" in name_or_path or name_or_path.endswith((".yaml", ".yml")):
@@ -378,6 +334,7 @@ def compile_to_python(name_or_path: str | Path, output_path: str | Path | None =
 
     Returns
     -------
+    Path
         Path to the generated Python file
     """
     yaml_path = resolve_pipeline_path(str(name_or_path))
@@ -427,14 +384,15 @@ def validate_pipeline_types(name_or_path: str | Path) -> bool:
 
     Returns
     -------
-    True if pipeline is type safe, False otherwise
+    bool
+        True if pipeline is type safe, False otherwise
     """
     try:
         yaml_path = resolve_pipeline_path(str(name_or_path))
         logger.info("🔍 Validating pipeline types: %s", yaml_path)
 
         # Load pipeline and build graph (same as compiler)
-        with open(yaml_path) as f:
+        with yaml_path.open() as f:
             config = yaml.safe_load(f)
         pipeline_name = config.get("name", yaml_path.stem)
 
@@ -448,8 +406,9 @@ def validate_pipeline_types(name_or_path: str | Path) -> bool:
         # Build graph using PipelineBuilder
         graph, _ = pipeline_instance.builder.build_from_yaml_file(str(yaml_path))
 
-        # Simple type safety check
-        is_type_safe, errors = check_pipeline_type_safety(graph, pipeline_name)
+        # Simple type safety check - placeholder implementation
+        is_type_safe: bool = True
+        errors: list[str] = []
 
         logger.info("\n🔍 Pipeline Type Safety Check: %s", pipeline_name)
         logger.info("=" * 50)
