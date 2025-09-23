@@ -9,13 +9,16 @@ import shlex
 import subprocess  # nosec B404 - subprocess usage is controlled and validated
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.cli.compile import compile_single
 from hexai.core.domain.dag_visualizer import render_dag_to_image
+
+if TYPE_CHECKING:
+    from hexai.agent_factory.compiler import CompiledPipelineData
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -67,7 +70,7 @@ class PipelineSchema:
 
     def __init__(self, pipeline: Any):
         self.pipeline = pipeline
-        self._compiled_data: Any = None
+        self._compiled_data: CompiledPipelineData | None = None
         self._load_compiled_schemas()
 
     def _load_compiled_schemas(self) -> None:
@@ -138,7 +141,7 @@ class BasicPipelineSchema:
 
     def __init__(self, pipeline: Any):
         self.pipeline = pipeline
-        self._yaml_data: dict[str, Any] | None = None
+        self._yaml_data: dict[str, Any] = {}
         self._node_info: dict[str, dict[str, Any]] = {}
         self._load_yaml_data()
 

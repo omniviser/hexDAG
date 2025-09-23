@@ -6,12 +6,27 @@ import logging
 import os
 import re
 import tomllib  # Python 3.11+
+from contextlib import suppress
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from hexai.core.config.models import HexDAGConfig, ManifestEntry
 
+# Type alias for configuration data that can be recursively substituted
+type ConfigData = str | dict[str, "ConfigData"] | list["ConfigData"] | int | float | bool | None
+
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=32)
+def _load_and_parse_cached(path_str: str, mtime: float) -> HexDAGConfig:
+    """Cached configuration loader.
+
+    The mtime parameter ensures cache invalidation when file changes.
+    """
+    loader = ConfigLoader()
+    return loader._load_and_parse(Path(path_str))
 
 
 class ConfigLoader:
@@ -48,6 +63,12 @@ class ConfigLoader:
         """
         # Find config file
         config_path = self._find_config_file(path)
+
+        # Use cached loader with file path and mtime as cache key
+        return _load_and_parse_cached(str(config_path.absolute()), config_path.stat().st_mtime)
+
+    def _load_and_parse(self, config_path: Path) -> HexDAGConfig:
+        """Load and parse configuration file."""
         logger.info("Loading configuration from %s", config_path)
 
         # Load TOML
@@ -193,6 +214,34 @@ class ConfigLoader:
         return config
 
 
+@lru_cache(maxsize=32)
+def _cached_load_config(path_str: str | None, mtime: float | None) -> HexDAGConfig:
+    """Internal cached configuration loader.
+
+    Parameters
+    ----------
+    path_str : str | None
+        String representation of path for caching
+    mtime : float | None
+        File modification time for cache invalidation
+
+    Returns
+    -------
+    HexDAGConfig
+        Loaded configuration
+    """
+    try:
+        loader = ConfigLoader()
+        # Handle special auto-discovery cache key
+        if path_str and path_str.startswith("__auto__"):
+            return loader.load_from_toml(None)
+        else:
+            return loader.load_from_toml(Path(path_str) if path_str else None)
+    except FileNotFoundError:
+        logger.info("No configuration file found, using defaults")
+        return get_default_config()
+
+
 def load_config(path: str | Path | None = None) -> HexDAGConfig:
     """Load configuration from TOML file or return defaults.
 
@@ -206,12 +255,28 @@ def load_config(path: str | Path | None = None) -> HexDAGConfig:
     HexDAGConfig
         Loaded configuration or defaults if no file found
     """
-    try:
-        loader = ConfigLoader()
-        return loader.load_from_toml(path)
-    except FileNotFoundError:
-        logger.info("No configuration file found, using defaults")
-        return get_default_config()
+    # Convert path to string for caching and get mtime if file exists
+    if path:
+        path_str = str(path)
+        mtime = None
+        with suppress(FileNotFoundError, OSError):
+            mtime = Path(path_str).stat().st_mtime
+    else:
+        # When path is None, include cwd in cache key to handle directory changes
+        path_str = f"__auto__{os.getcwd()}"
+        mtime = 0.0  # Use a constant for auto-discovery
+
+    return _cached_load_config(path_str, mtime)
+
+
+def clear_config_cache() -> None:
+    """Clear all configuration caches.
+
+    Useful for testing or when configuration files have been modified
+    and you need to force a reload.
+    """
+    _cached_load_config.cache_clear()
+    _load_and_parse_cached.cache_clear()
 
 
 def get_default_config() -> HexDAGConfig:
