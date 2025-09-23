@@ -16,7 +16,11 @@ from hexai.core.registry.exceptions import (
     InvalidComponentError,
     NamespacePermissionError,
 )
-from hexai.core.registry.models import ComponentType  # Internal for tests
+from hexai.core.registry.models import (
+    ClassComponent,
+    ComponentMetadata,
+    ComponentType,  # Internal for tests
+)
 from hexai.core.registry.registry import ComponentRegistry
 
 
@@ -494,9 +498,6 @@ class TestAdapterRegistration:
     @pytest.fixture
     def setup_test_port(self, test_registry):
         """Register a test port in the registry."""
-        from abc import abstractmethod
-
-        from hexai.core.registry.models import ClassComponent, ComponentMetadata
 
         # Create a proper Protocol class with required methods
         @runtime_checkable
@@ -612,9 +613,6 @@ class TestAdapterRegistration:
     def test_two_phase_discovery(self, test_registry):
         """Test that ports are registered before adapters in two-phase discovery."""
         reg = test_registry
-
-        # First register a port
-        from abc import abstractmethod
 
         @port(
             name="discovery_test_port",

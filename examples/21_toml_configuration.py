@@ -232,6 +232,7 @@ experimental_features = ["async_validation", "parallel_bootstrap"]
             print(f"   • Format: {log_format[:30]}...")
         else:
             print("   • Format: (default)")
+
         print()
 
         print("⚡ Performance:")

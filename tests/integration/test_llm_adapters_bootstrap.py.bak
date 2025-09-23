@@ -107,16 +107,12 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter info from registry
             try:
-                global_registry.get_info("anthropic", namespace="core")
-                global_registry.get_info("openai", namespace="core")
+                anthropic_info = global_registry.get_info("anthropic", namespace="core")
+                openai_info = global_registry.get_info("openai", namespace="core")
 
                 # Instantiate adapters
-                anthropic_adapter = global_registry.get(
-                    "anthropic", namespace="core", init_params={"api_key": "test-key"}
-                )
-                openai_adapter = global_registry.get(
-                    "openai", namespace="core", init_params={"api_key": "test-key"}
-                )
+                anthropic_adapter = anthropic_info.get_instance(api_key="test-key")
+                openai_adapter = openai_info.get_instance(api_key="test-key")
 
                 # Verify instances
                 assert anthropic_adapter.__class__.__name__ == "AnthropicAdapter"
@@ -154,10 +150,8 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter from registry
             try:
-                global_registry.get_info("anthropic", namespace="core")
-                adapter = global_registry.get(
-                    "anthropic", namespace="core", init_params={"api_key": "test-key"}
-                )
+                adapter_info = global_registry.get_info("anthropic", namespace="core")
+                adapter = adapter_info.get_instance(api_key="test-key")
 
                 # Test functionality
                 messages: MessageList = [Message(role="user", content="Hello")]
@@ -215,15 +209,11 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get both adapters
             try:
-                global_registry.get_info("anthropic", namespace="core")
-                global_registry.get_info("openai", namespace="core")
+                anthropic_info = global_registry.get_info("anthropic", namespace="core")
+                openai_info = global_registry.get_info("openai", namespace="core")
 
-                anthropic_adapter = global_registry.get(
-                    "anthropic", namespace="core", init_params={"api_key": "test-key"}
-                )
-                openai_adapter = global_registry.get(
-                    "openai", namespace="core", init_params={"api_key": "test-key"}
-                )
+                anthropic_adapter = anthropic_info.get_instance(api_key="test-key")
+                openai_adapter = openai_info.get_instance(api_key="test-key")
 
                 # Test both adapters
                 messages: MessageList = [Message(role="user", content="Test")]
@@ -290,10 +280,8 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter from registry
             try:
-                global_registry.get_info("openai", namespace="core")
-                adapter = global_registry.get(
-                    "openai", namespace="core", init_params={"api_key": "invalid-key"}
-                )
+                adapter_info = global_registry.get_info("openai", namespace="core")
+                adapter = adapter_info.get_instance(api_key="invalid-key")
 
                 # Test error handling
                 messages: MessageList = [Message(role="user", content="Test")]
@@ -347,26 +335,14 @@ class TestLLMAdaptersBootstrap:
 
             # Try to get adapter info
             try:
-                global_registry.get_info("anthropic", namespace="core")
+                adapter_info = global_registry.get_info("anthropic", namespace="core")
 
                 # Create instances with different configurations
-                adapter1 = global_registry.get(
-                    "anthropic",
-                    namespace="core",
-                    init_params={
-                        "api_key": "key1",
-                        "model": "claude-3-opus-20240229",
-                        "temperature": 0.5,
-                    },
+                adapter1 = adapter_info.get_instance(
+                    api_key="key1", model="claude-3-opus-20240229", temperature=0.5
                 )
-                adapter2 = global_registry.get(
-                    "anthropic",
-                    namespace="core",
-                    init_params={
-                        "api_key": "key2",
-                        "model": "claude-3-5-sonnet-20241022",
-                        "temperature": 0.9,
-                    },
+                adapter2 = adapter_info.get_instance(
+                    api_key="key2", model="claude-3-5-sonnet-20241022", temperature=0.9
                 )
 
                 # Verify different configurations
@@ -408,16 +384,12 @@ class TestLLMAdaptersBootstrap:
 
         try:
             # Get adapters from registry
-            global_registry.get_info("anthropic", namespace="core")
-            global_registry.get_info("openai", namespace="core")
+            anthropic_info = global_registry.get_info("anthropic", namespace="core")
+            openai_info = global_registry.get_info("openai", namespace="core")
 
             # Create adapter instances with fake keys - NO MOCKING, real API calls
-            anthropic_adapter = global_registry.get(
-                "anthropic", namespace="core", init_params={"api_key": fake_anthropic_key}
-            )
-            openai_adapter = global_registry.get(
-                "openai", namespace="core", init_params={"api_key": fake_openai_key}
-            )
+            anthropic_adapter = anthropic_info.get_instance(api_key=fake_anthropic_key)
+            openai_adapter = openai_info.get_instance(api_key=fake_openai_key)
 
             # Test message
             messages: MessageList = [
@@ -437,12 +409,8 @@ class TestLLMAdaptersBootstrap:
             assert results[1] is None, "OpenAI should return None for auth error"
 
             # Test with empty API keys
-            empty_anthropic = global_registry.get(
-                "anthropic", namespace="core", init_params={"api_key": ""}
-            )
-            empty_openai = global_registry.get(
-                "openai", namespace="core", init_params={"api_key": ""}
-            )
+            empty_anthropic = anthropic_info.get_instance(api_key="")
+            empty_openai = openai_info.get_instance(api_key="")
 
             empty_results = await asyncio.gather(
                 empty_anthropic.aresponse(messages),
@@ -454,12 +422,8 @@ class TestLLMAdaptersBootstrap:
             assert empty_results[1] is None, "OpenAI should fail with empty key"
 
             # Test with invalid format keys
-            invalid_anthropic = global_registry.get(
-                "anthropic", namespace="core", init_params={"api_key": "not-a-valid-key-format"}
-            )
-            invalid_openai = global_registry.get(
-                "openai", namespace="core", init_params={"api_key": "invalid-openai-key"}
-            )
+            invalid_anthropic = anthropic_info.get_instance(api_key="not-a-valid-key-format")
+            invalid_openai = openai_info.get_instance(api_key="invalid-openai-key")
 
             invalid_results = await asyncio.gather(
                 invalid_anthropic.aresponse(messages),

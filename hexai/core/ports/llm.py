@@ -26,6 +26,7 @@ MessageList = list[Message]
 class LLM(Protocol):
     """Port interface for Large Language Models (LLMs).
 
+
     LLMs provide natural language generation capabilities. Implementations
     may use various backends (OpenAI, Anthropic, local models, etc.) but
     must provide the aresponse method for generating text from messages.

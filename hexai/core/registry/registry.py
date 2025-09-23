@@ -545,19 +545,13 @@ class ComponentRegistry:
         self, name: str, component: ClassComponent | FunctionComponent | InstanceComponent
     ) -> None:
         """Validate component name and value."""
-        if not name or not isinstance(name, str):
+        if not name:
             raise InvalidComponentError(
                 name or "<empty>", "Component name must be a non-empty string"
             )
 
         if not re.match(r"^[a-zA-Z0-9_]+$", name):
             raise InvalidComponentError(name, f"Component name must be alphanumeric, got '{name}'")
-
-        # Component is already wrapped, so we just check it's one of our wrapper types
-        if not isinstance(component, (ClassComponent, FunctionComponent, InstanceComponent)):
-            raise InvalidComponentError(
-                name, f"Component must be wrapped type, got {type(component)}"
-            )
 
     def _get_metadata_internal(self, name: str, namespace: str) -> ComponentMetadata | None:
         """Get metadata for a specific component from namespace."""
@@ -621,10 +615,6 @@ class ComponentRegistry:
         InvalidComponentError
             If adapter doesn't properly implement its declared port
         """
-        import inspect
-        import logging
-
-        logger = logging.getLogger(__name__)
 
         # Get adapter metadata from _hexdag_implements_port attribute
         implements_port = None
@@ -684,7 +674,6 @@ class ComponentRegistry:
                     f"but port '{implements_port}' does not exist in registry. "
                     f"Available ports: {', '.join(self._get_available_ports())}",
                 )
-
             # Validate required methods using introspection
             # Get the port Protocol class
             port_class = port_meta.raw_component if port_meta else None
@@ -692,6 +681,7 @@ class ComponentRegistry:
                 from hexai.core.registry.introspection import validate_adapter_implementation
 
                 # Get the actual adapter class to check
+
                 if inspect.isclass(adapter_component):
                     adapter_class = adapter_component
                 else:
@@ -729,12 +719,14 @@ class ComponentRegistry:
         Returns
         -------
         list[ComponentMetadata]
+
             List of adapter components that implement the port
         """
         with self._lock.read():
             adapters = []
 
             # Search all namespaces for adapters
+
             for components in self._components.values():
                 for metadata in components.values():
                     # Check if it's an adapter

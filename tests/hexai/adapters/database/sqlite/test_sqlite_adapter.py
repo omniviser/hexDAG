@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hexai.adapters.database.sqlite import SQLiteAdapter
+from hexai.adapters.database.sqlite.sqlite_adapter import SQLiteAdapter
 
 
 class TestSQLiteAdapter:

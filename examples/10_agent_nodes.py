@@ -273,6 +273,7 @@ async def main() -> None:
     diagnosis = await decorator_router.acall_tool(
         "quick_diagnosis", {"symptoms": "fever, headache"}
     )
+
     interactions = await decorator_router.acall_tool(
         "check_drug_interactions", {"medications": "aspirin,ibuprofen"}
     )

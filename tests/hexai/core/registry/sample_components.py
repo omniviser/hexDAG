@@ -1,9 +1,11 @@
 """Sample components for testing the bootstrap system."""
 
+import sys
 from abc import abstractmethod
 from typing import Protocol, runtime_checkable
 
 from hexai.core.registry.decorators import adapter, node, tool
+from hexai.core.registry.discovery import discover_components
 from hexai.core.registry.models import (
     ClassComponent,
     ComponentMetadata,
@@ -49,9 +51,6 @@ class SampleAdapter:
 
 def register_components(registry, namespace):
     """Custom registration hook to register the test port first."""
-    import sys
-
-    from hexai.core.registry.discovery import discover_components
 
     # Register the test port that our adapter implements
     port_meta = ComponentMetadata(

@@ -224,6 +224,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
     components = unique_components
 
     logger.debug("Phase A: Registering ports from %s", module_path)
+
     for _, component in components:
         if not hasattr(component, "_hexdag_type"):
             continue

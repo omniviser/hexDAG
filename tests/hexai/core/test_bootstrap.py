@@ -1,7 +1,9 @@
 """Tests for the new bootstrap-based registry architecture."""
 
 import os
+import sys
 import tempfile
+import textwrap
 
 import pytest
 
@@ -155,10 +157,6 @@ class TestBootstrapArchitecture:
     def test_adapter_validation_during_bootstrap(self):
         """Test that adapter validation happens during bootstrap."""
         # Create a test file with an invalid adapter (missing required method)
-        import os
-        import sys
-        import tempfile
-        import textwrap
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a module with an invalid adapter
@@ -166,60 +164,60 @@ class TestBootstrapArchitecture:
             with open(module_path, "w") as f:
                 f.write(
                     textwrap.dedent("""
-                    from hexai.core.registry.decorators import adapter
-                    from hexai.core.registry.models import (
-                        ClassComponent, ComponentMetadata, ComponentType
-                    )
-                    from typing import Protocol, runtime_checkable
-                    from abc import abstractmethod
+from hexai.core.registry.decorators import adapter
+from hexai.core.registry.models import (
+    ClassComponent, ComponentMetadata, ComponentType
+)
+from typing import Protocol, runtime_checkable
+from abc import abstractmethod
 
-                    # Define a port using Protocol
-                    @runtime_checkable
-                    class TestPort(Protocol):
-                        @abstractmethod
-                        def required_method(self): pass
+# Define a port using Protocol
+@runtime_checkable
+class TestPort(Protocol):
+    @abstractmethod
+    def required_method(self): pass
 
-                    # Invalid adapter - missing required_method
-                    @adapter(implements_port="test_port", name="invalid_adapter")
-                    class InvalidAdapter:
-                        pass  # Missing required_method!
+# Invalid adapter - missing required_method
+@adapter(implements_port="test_port", name="invalid_adapter")
+class InvalidAdapter:
+    pass  # Missing required_method!
 
-                    def register_components(registry, namespace):
-                        # Register the port first
-                        port_meta = ComponentMetadata(
-                            name="test_port",
-                            component_type=ComponentType.PORT,
-                            component=ClassComponent(value=TestPort),
-                            namespace=namespace,
-                        )
-                        if namespace not in registry._components:
-                            registry._components[namespace] = {}
-                        registry._components[namespace]["test_port"] = port_meta
+def register_components(registry, namespace):
+    # Register the port first
+    port_meta = ComponentMetadata(
+        name="test_port",
+        component_type=ComponentType.PORT,
+        component=ClassComponent(value=TestPort),
+        namespace=namespace,
+    )
+    if namespace not in registry._components:
+        registry._components[namespace] = {}
+    registry._components[namespace]["test_port"] = port_meta
 
-                        # Try to register the invalid adapter
-                        from hexai.core.registry.discovery import discover_components
-                        import sys
-                        module = sys.modules[__name__]
-                        components = discover_components(module)
+    # Try to register the invalid adapter
+    from hexai.core.registry.discovery import discover_components
+    import sys
+    module = sys.modules[__name__]
+    components = discover_components(module)
 
-                        for _, component in components:
-                            if hasattr(component, "_hexdag_type"):
-                                component_name = getattr(component, "_hexdag_name")
-                                component_type = getattr(component, "_hexdag_type")
-                                component_subtype = getattr(component, "_hexdag_subtype", None)
-                                component_description = getattr(
-                                    component, "_hexdag_description", ""
-                                )
-                                registry.register(
-                                    name=component_name,
-                                    component=component,
-                                    component_type=component_type,
-                                    namespace=namespace,
-                                    subtype=component_subtype,
-                                    description=component_description,
-                                )
-                        return 1
-                """)
+    for _, component in components:
+        if hasattr(component, "_hexdag_type"):
+            component_name = getattr(component, "_hexdag_name")
+            component_type = getattr(component, "_hexdag_type")
+            component_subtype = getattr(component, "_hexdag_subtype", None)
+            component_description = getattr(
+                component, "_hexdag_description", ""
+            )
+            registry.register(
+                name=component_name,
+                component=component,
+                component_type=component_type,
+                namespace=namespace,
+                subtype=component_subtype,
+                description=component_description,
+            )
+    return 1
+                """).strip()
                 )
 
             # Add tmpdir to sys.path

@@ -24,7 +24,7 @@ class APICall(Protocol):
     Implementations can use requests, httpx, aiohttp, or any HTTP client.
     """
 
-    # Required methods
+    # Required
     @abstractmethod
     async def aget(
         self,

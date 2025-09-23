@@ -6,10 +6,7 @@ from typing import Any, Protocol, runtime_checkable
 from hexai.core.registry.decorators import port
 
 
-@port(
-    name="database",
-    namespace="core",
-)
+@port(name="database", namespace="core")
 @runtime_checkable
 class DatabasePort(Protocol):
     """Port interface for accessing database schema and metadata.
