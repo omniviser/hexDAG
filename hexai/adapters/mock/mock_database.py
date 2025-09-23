@@ -158,18 +158,37 @@ class MockDatabaseAdapter(DatabasePort):
             },
         }
 
-    def get_table_schemas(self) -> dict[str, dict[str, Any]]:
+    # Required methods from DatabasePort
+    async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables."""
         return self._table_schemas.copy()
 
-    def get_relationships(self) -> list[dict[str, Any]]:
+    async def aexecute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Execute a SQL query and return results."""
+        # Mock implementation - returns sample data based on query keywords
+        if "customers" in query.lower():
+            return [
+                {"id": 1, "customer_name": "John Doe", "segment": "Premium"},
+                {"id": 2, "customer_name": "Jane Smith", "segment": "Standard"},
+            ]
+        elif "orders" in query.lower():
+            return [
+                {"id": 101, "customer_id": 1, "order_value": 299.99},
+                {"id": 102, "customer_id": 2, "order_value": 149.50},
+            ]
+        return []
+
+    # Optional methods from DatabasePort
+    async def aget_relationships(self) -> list[dict[str, Any]]:
         """Get foreign key relationships between tables."""
         return self._relationships.copy()
 
-    def get_indexes(self) -> list[dict[str, Any]]:
+    async def aget_indexes(self) -> list[dict[str, Any]]:
         """Get index information for performance optimization."""
         return self._indexes.copy()
 
-    def get_table_statistics(self) -> dict[str, dict[str, Any]]:
+    async def aget_table_statistics(self) -> dict[str, dict[str, Any]]:
         """Get table statistics for query optimization."""
         return self._table_statistics.copy()

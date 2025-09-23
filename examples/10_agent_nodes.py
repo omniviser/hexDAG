@@ -220,8 +220,8 @@ async def main() -> None:
     print(f"🔧 Registered tools via decorator: {decorator_router.get_available_tools()}")
 
     # Test tool directly
-    diagnosis = await decorator_router.call_tool("quick_diagnosis", {"symptoms": "fever, headache"})
-    interactions = await decorator_router.call_tool(
+    diagnosis = await decorator_router.acall_tool("quick_diagnosis", {"symptoms": "fever, headache"})
+    interactions = await decorator_router.acall_tool(
         "check_drug_interactions", {"medications": "aspirin,ibuprofen"}
     )
 
@@ -238,7 +238,7 @@ async def main() -> None:
 
     # Test demo tools (only basic tools are available)
     try:
-        search_result = await demo_router.call_tool("search", {"query": "AI healthcare"})
+        search_result = await demo_router.acall_tool("search", {"query": "AI healthcare"})
         print(f"   🔍 Search result: {search_result}")
     except ValueError as e:
         print(f"   ⚠️  Expected: {e}")

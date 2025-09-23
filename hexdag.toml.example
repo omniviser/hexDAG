@@ -1,0 +1,21 @@
+# HexDAG Configuration Example
+# This file demonstrates the TOML configuration format for HexDAG
+
+# Core modules to load
+modules = [
+    "hexai.core.application.nodes",
+    "hexai.adapters.mock",
+]
+
+# Plugin modules (third-party or custom)
+plugins = [
+    # "my_plugin.components",
+    # "external_llm.adapters",
+]
+
+# Development mode (allows post-bootstrap registration)
+dev_mode = false
+
+[settings]
+log_level = "INFO"
+enable_metrics = true

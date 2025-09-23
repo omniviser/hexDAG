@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .events import Event
-
 from .models import (
     AsyncObserverFunc,
     BaseEventManager,
@@ -22,6 +21,11 @@ from .models import (
     Observer,
     ObserverFunc,
 )
+
+# Type aliases for clarity
+type EventType = type["Event"]
+type ObserverId = str
+type EventFilter = set[EventType] | None
 
 
 class ObserverManager(BaseEventManager, EventFilterMixin):
@@ -67,14 +71,11 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         self._executor = ThreadPoolExecutor(max_workers=max_sync_workers)
         self._executor_shutdown = False
 
-        # Track which event types each observer wants
-        self._event_filters: dict[str, set[type] | None] = {}
-
-        # Use WeakValueDictionary for automatic cleanup if enabled
-        # Store strong references only for wrapped functions that need to be kept alive
+        # Track which event types each observer wants (for quick filtering)
+        self._event_filters: dict[ObserverId, EventFilter] = {}
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-            self._strong_refs: dict[str, Any] = {}  # Keep functions alive
+            self._strong_refs: dict[ObserverId, Observer] = {}  # Keep functions alive
 
     def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
         """Register an observer with optional event type filtering.
@@ -94,21 +95,28 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         """
         observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
         event_types = kwargs.get("event_types")
+        keep_alive = kwargs.get("keep_alive", False)
 
-        # Wrap function if needed
+        # Check if it has handle method (implements Observer protocol)
         if hasattr(handler, "handle"):
             # Already implements Observer protocol
-            observer = handler
-            keep_alive = kwargs.get("keep_alive", False)
+            observer: Observer = handler  # pyright: ignore[reportAssignmentType]
         elif callable(handler):
             # Wrap function to implement the protocol
-            observer = FunctionObserver(handler, self._executor)
+            observer = FunctionObserver(handler, self._executor)  # pyright: ignore[reportArgumentType]
             # Functions need to be kept alive since they're wrapped
             keep_alive = True
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
+
+        # Create event filter
+        # Note: empty list means "no events", None means "all events"
+        event_filter: EventFilter = set(event_types) if event_types is not None else None
+
+        # Store event filter (doesn't hold strong ref to observer)
+        self._event_filters[observer_id] = event_filter
 
         # Store the observer with appropriate reference type
         if self._use_weak_refs:
@@ -126,14 +134,6 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         else:
             # Normal strong reference when weak refs disabled
             self._handlers[observer_id] = observer
-
-        # Store event type filter
-        if event_types is not None:
-            # Convert to set for O(1) lookup
-            self._event_filters[observer_id] = set(event_types)
-        else:
-            # None means accept all events
-            self._event_filters[observer_id] = None
 
         return str(observer_id)
 

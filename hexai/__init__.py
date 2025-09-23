@@ -4,9 +4,7 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
-# Adapter exports for testing and development
-from hexai.adapters import InMemoryMemory
-from hexai.adapters.mock import MockDatabaseAdapter, MockEmbeddingSelectorPort, MockLLM
+from typing import Any
 
 # Agent Factory system exports
 from hexai.agent_factory import (
@@ -34,8 +32,8 @@ from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.application.prompt import FewShotPromptTemplate, PromptTemplate
 from hexai.core.domain import DirectedGraph, NodeSpec
 
-# Port interfaces xd
-from hexai.core.ports import LLM, DatabasePort, LongTermMemory, OntologyPort, ToolRouter
+# Port interfaces
+from hexai.core.ports import LLM, APICall, DatabasePort, ToolRouter
 
 # Initialize the component registry early so it's available for all imports
 # This ensures core components are loaded and plugins are discovered
@@ -47,6 +45,25 @@ registry._core_loading = True  # type: ignore  # Allow core namespace registrati
 import hexai.core.application.nodes  # noqa: F401, E402 - triggers decorator registration
 
 registry._core_loading = False  # type: ignore  # Block core namespace registration
+
+
+# Lazy loading for adapters to avoid circular imports
+def __getattr__(name: str) -> Any:
+    """Lazy import for adapters."""
+    if name == "InMemoryMemory":
+        from hexai.adapters.in_memory_memory import InMemoryMemory
+
+        return InMemoryMemory
+    elif name == "MockLLM":
+        from hexai.adapters.mock import MockLLM
+
+        return MockLLM
+    elif name == "MockDatabaseAdapter":
+        from hexai.adapters.mock import MockDatabaseAdapter
+
+        return MockDatabaseAdapter
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
@@ -69,10 +86,9 @@ __all__ = [
     "FewShotPromptTemplate",
     # Port Interfaces
     "LLM",
-    "LongTermMemory",
+    "APICall",
     "ToolRouter",
     "DatabasePort",
-    "OntologyPort",
     # Testing and Development Adapters
     "InMemoryMemory",
     "MockLLM",

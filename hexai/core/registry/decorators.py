@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, TypeVar
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from hexai.core.registry.models import ComponentType, DecoratorMetadata, NodeSubtype
+from hexai.core.registry.models import (
+    AdapterMetadata,
+    ComponentType,
+    DecoratorMetadata,
+    NodeSubtype,
+    PortMetadata,
+)
 
 T = TypeVar("T")
 
@@ -152,10 +158,110 @@ def make_component_decorator(
     return wrapper
 
 
+# Port decorator - accepts explicit required/optional methods
+def port(
+    name: str | None = None,
+    *,
+    namespace: str = "core",
+    description: str | None = None,
+    required_methods: list[str] | None = None,
+    optional_methods: list[str] | None = None,
+) -> Callable[[type[T]], type[T]]:
+    """Create a decorator for Protocol ports with explicit method requirements.
+
+    Parameters
+    ----------
+    name : str | None
+        Port name. If None, uses class name in snake_case.
+    namespace : str
+        Port namespace. Defaults to 'core'.
+    description : str | None
+        Port description. If None, uses class docstring.
+    required_methods : list[str] | None
+        List of method names that adapters MUST implement.
+    optional_methods : list[str] | None
+        List of method names that adapters MAY implement.
+    """
+
+    def decorator(cls: type[T]) -> type[T]:
+        # Apply base component decorator
+        base_decorator = component(
+            ComponentType.PORT, name, namespace=namespace, description=description
+        )
+        cls = base_decorator(cls)
+
+        # Update metadata with port-specific information
+        if hasattr(cls, "__hexdag_metadata__"):
+            old_meta = cls.__hexdag_metadata__  # type: ignore[attr-defined]
+
+            # Create port metadata
+            port_meta = PortMetadata(
+                protocol_class=cls,
+                required_methods=required_methods or [],
+                optional_methods=optional_methods or [],
+            )
+
+            # Replace metadata with one that includes port_metadata
+            new_meta = DecoratorMetadata(
+                type=old_meta.type,
+                name=old_meta.name,
+                declared_namespace=old_meta.declared_namespace,
+                subtype=old_meta.subtype,
+                description=old_meta.description,
+                port_metadata=port_meta,
+            )
+            cls.__hexdag_metadata__ = new_meta  # type: ignore[attr-defined]
+
+        return cls
+
+    return decorator
+
+
+def adapter(
+    implements_port: str | None = None,
+    name: str | None = None,
+    *,
+    namespace: str = "user",
+    description: str | None = None,
+    capabilities: list[str] | None = None,
+) -> Callable[[type[T]], type[T]]:
+    """Create an adapter decorator with minimal extra logic for port implementation tracking."""
+    base_decorator = make_component_decorator(ComponentType.ADAPTER)
+
+    def decorator(cls: type[T]) -> type[T]:
+        # Apply base decorator
+        cls = base_decorator(name=name, namespace=namespace, description=description)(cls)
+
+        # If implements_port is specified, add adapter metadata
+        if implements_port and hasattr(cls, "__hexdag_metadata__"):
+            old_meta = cls.__hexdag_metadata__  # type: ignore[attr-defined]
+
+            # Create adapter metadata
+            adapter_meta = AdapterMetadata(
+                implements_port=implements_port,
+                capabilities=capabilities or [],
+                singleton=True,
+            )
+
+            # Replace metadata with one that includes adapter_metadata
+            new_meta = DecoratorMetadata(
+                type=old_meta.type,
+                name=old_meta.name,
+                declared_namespace=old_meta.declared_namespace,
+                subtype=old_meta.subtype,
+                description=old_meta.description,
+                adapter_metadata=adapter_meta,
+            )
+            cls.__hexdag_metadata__ = new_meta  # type: ignore[attr-defined]
+
+        return cls
+
+    return decorator
+
+
 # Generate base type decorators using the factory
 node = make_component_decorator(ComponentType.NODE)
 tool = make_component_decorator(ComponentType.TOOL)
-adapter = make_component_decorator(ComponentType.ADAPTER)
 policy = make_component_decorator(ComponentType.POLICY)
 memory = make_component_decorator(ComponentType.MEMORY)
 observer = make_component_decorator(ComponentType.OBSERVER)

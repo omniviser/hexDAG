@@ -194,66 +194,51 @@ class FunctionBasedToolRouter(ToolRouter):
             examples=[example],
         )
 
-    async def aroute(self, tool_name: str, input_data: Any) -> Any:
-        """Route a tool call to the registered function (legacy interface)."""
+    async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
+        """Call a tool with parameters."""
         if tool_name not in self.tools:
             raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
 
         try:
             tool_func = self.tools[tool_name]
 
-            # Handle different input formats
-            if isinstance(input_data, dict):
-                # Extract parameters from dict
-                sig = inspect.signature(tool_func)
+            # Extract parameters from dict
+            sig = inspect.signature(tool_func)
 
-                # Check if function accepts **kwargs
-                has_var_keyword = any(
-                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
-                )
+            # Check if function accepts **kwargs
+            has_var_keyword = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            )
 
-                if has_var_keyword:
-                    # For **kwargs functions, pass all input data
-                    kwargs = input_data
-                else:
-                    # For regular functions, match parameters
-                    kwargs = {}
-                    for param_name in sig.parameters:
-                        if param_name in input_data:
-                            kwargs[param_name] = input_data[param_name]
-
-                if asyncio.iscoroutinefunction(tool_func):
-                    result = await tool_func(**kwargs)
-                else:
-                    result = tool_func(**kwargs)
+            if has_var_keyword:
+                # For **kwargs functions, pass all input data
+                kwargs = params
             else:
-                # Single parameter case
-                if asyncio.iscoroutinefunction(tool_func):
-                    result = await tool_func(input_data)
-                else:
-                    result = tool_func(input_data)
+                # For regular functions, match parameters
+                kwargs = {}
+                for param_name in sig.parameters:
+                    if param_name in params:
+                        kwargs[param_name] = params[param_name]
+
+            if asyncio.iscoroutinefunction(tool_func):
+                result = await tool_func(**kwargs)
+            else:
+                result = tool_func(**kwargs)
 
         except Exception as e:
-            # Re-raise the exception instead of returning error string
+            # Re-raise the exception
             raise e
 
         # Log the call
         self.call_history.append(
             {
                 "tool_name": tool_name,
-                "input_data": input_data,
+                "input_data": params,
                 "result": result,
             }
         )
 
         return result
-
-    async def call_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Call a tool with parameters (main interface used by agents)."""
-        if tool_name not in self.tools:
-            raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
-
-        return await self.aroute(tool_name, params)
 
     def get_available_tools(self) -> list[str]:
         """Get list of available tool names."""

@@ -1,8 +1,10 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
+
+from hexai.core.registry.decorators import port
 
 
 class Message(BaseModel):
@@ -15,8 +17,20 @@ class Message(BaseModel):
 MessageList = list[Message]
 
 
+@port(
+    name="llm",
+    namespace="core",
+    required_methods=["aresponse"],
+    optional_methods=[],
+)
+@runtime_checkable
 class LLM(Protocol):
-    """Port interface for Large Language Models (LLMs)."""
+    """Port interface for Large Language Models (LLMs).
+
+    LLMs provide natural language generation capabilities. Implementations
+    may use various backends (OpenAI, Anthropic, local models, etc.) but
+    must provide the aresponse method for generating text from messages.
+    """
 
     async def aresponse(self, messages: MessageList) -> str | None:
         """Generate a response from a list of messages (async).
