@@ -33,7 +33,8 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
     async def connect(self) -> None:
         """Establish database connection."""
         self.engine = create_async_engine(self.dsn)
-        async with self.engine.begin() as conn:
+        async with self.engine.connect() as conn:
+            # Force reflection after any schema changes
             await conn.run_sync(self._metadata.reflect)
 
     async def disconnect(self) -> None:
@@ -118,35 +119,43 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
             async with self.engine.connect() as conn:
                 result = await conn.stream(query)
                 async for row in result:
-                    yield dict(row)
+                    # Convert SQLAlchemy Row to dict using _mapping
+                    yield {key: value for key, value in row._mapping.items()}
 
         return generate_rows()
 
     def query_raw(
         self, sql: str, params: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
-        """
-        Execute a raw SQL query.
-
-        Args:
-            sql: SQL query string
-            params: Optional query parameters
-
-        Yields:
-            dict[str, Any]: Each row as a dictionary
-        """
+        """Execute a raw SQL query."""
         if not self.engine:
             raise RuntimeError("Not connected to database")
 
         async def generate_rows() -> AsyncIterator[dict[str, Any]]:
-            if not self.engine:  # Recheck engine in case it was closed
+            if not self.engine:
                 raise RuntimeError("Database connection lost")
             async with self.engine.connect() as conn:
                 result = await conn.stream(text(sql), params or {})
                 async for row in result:
-                    yield dict(row)
+                    # Convert SQLAlchemy Row to dict properly
+                    yield {key: value for key, value in row._mapping.items()}
 
         return generate_rows()
+
+    async def execute_raw(self, sql: str, params: dict[str, Any] | None = None) -> None:
+        """
+        Execute a raw SQL statement without returning results.
+
+        Args:
+            sql: SQL statement to execute
+            params: Optional parameters for the SQL statement
+        """
+        if not self.engine:
+            raise RuntimeError("Not connected to database")
+
+        async with self.engine.connect() as conn:
+            await conn.execute(text(sql), params or {})
+            await conn.commit()
 
     async def get_indexes(self, table: str) -> list[str]:
         """
