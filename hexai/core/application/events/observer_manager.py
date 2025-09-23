@@ -10,6 +10,8 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from .events import Event
 from .models import (
     AsyncObserverFunc,
     BaseEventManager,
@@ -19,9 +21,6 @@ from .models import (
     Observer,
     ObserverFunc,
 )
-
-if TYPE_CHECKING:
-    from .events import Event
 
 # Type aliases for clarity
 type EventType = type["Event"]
@@ -74,9 +73,6 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         # Track which event types each observer wants (for quick filtering)
         self._event_filters: dict[ObserverId, EventFilter] = {}
-
-        # Use WeakValueDictionary for automatic cleanup if enabled
-        # Store strong references only for wrapped functions that need to be kept alive
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
             self._strong_refs: dict[ObserverId, Observer] = {}  # Keep functions alive
