@@ -5,7 +5,7 @@ import pytest
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.registry import registry
-
+from hexai.core.application.nodes.loop_node import LoopConfig
 # Ensure registry is bootstrapped for tests
 ensure_bootstrapped()
 
@@ -23,14 +23,15 @@ class MockEventManager:
 
 
 class TestLoopNode:
-    """Test cases for LoopNode functionality (enhanced)."""
+    """Test cases for LoopNode functionality."""
 
     def test_loop_node_creation(self):
         """LoopNode returns a valid NodeSpec with callable fn."""
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
-        node_spec = loop_node("test_loop_create", max_iterations=3)
+        cfg = LoopConfig(while_condition=lambda d, s: False)
+        node_spec = loop_node("test_loop_create", config=cfg)
 
         assert isinstance(node_spec, NodeSpec)
         assert node_spec.name == "test_loop_create"
@@ -41,27 +42,31 @@ class TestLoopNode:
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
-            loop_node("bad_loop_max0", max_iterations=0)
+        cfg = LoopConfig(while_condition=lambda d, s: True)
 
         with pytest.raises(ValueError, match="max_iterations must be positive"):
-            loop_node("bad_loop_maxneg", max_iterations=-5)
+            loop_node("bad_loop_max0", max_iterations=0, config=cfg)
+
+        with pytest.raises(ValueError, match="max_iterations must be positive"):
+            loop_node("bad_loop_maxneg", max_iterations=-5, config=cfg)
 
     def test_loop_node_invalid_collect_mode(self):
         """LoopNode validates collect_mode."""
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
+        cfg = LoopConfig(while_condition=lambda d, s: True, collect_mode="unknown")  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="collect_mode must be one of"):
-            loop_node("bad_collect_mode", collect_mode="unknown")
+            loop_node("bad_collect_mode", config=cfg)
 
     def test_loop_node_reduce_requires_reducer(self):
         """Reducer must be provided when collect_mode='reduce'."""
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
+        cfg = LoopConfig(while_condition=lambda d, s: True, collect_mode="reduce", reducer=None)
         with pytest.raises(ValueError, match="reducer is required"):
-            loop_node("reduce_without_reducer", collect_mode="reduce")
+            loop_node("reduce_without_reducer", config=cfg)
 
     @pytest.mark.asyncio
     async def test_loop_condition_last_output(self):
@@ -70,7 +75,7 @@ class TestLoopNode:
         loop_node = registry.get("loop_node", namespace="core")
 
         # Condition: run while state['i'] < 3
-        def condition(data, state):
+        def while_condition(data, state):
             return state.get("i", 0) < 3
 
         # Body: return current 'i'
@@ -83,23 +88,21 @@ class TestLoopNode:
             new_state["i"] = state.get("i", 0) + 1
             return new_state
 
-        node_spec = loop_node(
-            "loop_last",
-            condition=condition,
+        cfg = LoopConfig(
+            while_condition=while_condition,
             body_fn=body_fn,
             on_iteration_end=on_iteration_end,
             init_state={"i": 0},
             collect_mode="last",
-            max_iterations=10,
         )
+        node_spec = loop_node("loop_last", config=cfg, max_iterations=10)
 
         result = await node_spec.fn({"payload": "x"})
         # Expect last output to be 2 (i: 0,1,2 -> stop when trying 3)
-        assert result["output"] == 2
-        assert result["loop"]["iterations_completed"] == 3
-        assert result["loop"]["state"]["i"] == 3
-        # In now-legacy mapping we don't expose stopped_by_condition; only stopped_by_limit
-        assert result["loop"]["stopped_by_limit"] is False
+        assert result["result"] == 2
+        assert result["metadata"]["iterations"] == 3
+        assert result["metadata"]["state"]["i"] == 3
+        assert result["metadata"]["stopped_by"] == "condition"
 
     @pytest.mark.asyncio
     async def test_loop_collect_list_outputs(self):
@@ -107,7 +110,7 @@ class TestLoopNode:
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
-        def condition(data, state):
+        def while_condition(data, state):
             return state.get("cnt", 0) < 4
 
         def body_fn(data, state):
@@ -116,21 +119,20 @@ class TestLoopNode:
         def on_iteration_end(state, out):
             return {"cnt": state.get("cnt", 0) + 1}
 
-        node_spec = loop_node(
-            "loop_list",
-            condition=condition,
+        cfg = LoopConfig(
+            while_condition=while_condition,
             body_fn=body_fn,
             on_iteration_end=on_iteration_end,
             init_state={"cnt": 0},
             collect_mode="list",
-            max_iterations=10,
         )
+        node_spec = loop_node("loop_list", config=cfg, max_iterations=10)
 
         result = await node_spec.fn({"foo": "bar"})
-        assert result["outputs"] == ["val-0", "val-1", "val-2", "val-3"]
-        assert result["loop"]["iterations_completed"] == 4
-        assert result["loop"]["state"]["cnt"] == 4
-        assert result["foo"] == "bar"  # original data preserved
+        assert result["result"] == ["val-0", "val-1", "val-2", "val-3"]
+        assert result["metadata"]["iterations"] == 4
+        assert result["metadata"]["state"]["cnt"] == 4
+        # Input is not echoed back in the result (functional-only return)
 
     @pytest.mark.asyncio
     async def test_loop_reduce_outputs(self):
@@ -138,7 +140,7 @@ class TestLoopNode:
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
-        def condition(data, state):
+        def while_condition(data, state):
             return state.get("n", 0) < 5
 
         def body_fn(data, state):
@@ -151,31 +153,31 @@ class TestLoopNode:
         def reducer(acc, out):
             return (acc or 0) + (out or 0)
 
-        node_spec = loop_node(
-            "loop_reduce",
-            condition=condition,
+        cfg = LoopConfig(
+            while_condition=while_condition,
             body_fn=body_fn,
             on_iteration_end=on_iteration_end,
             init_state={"n": 0},
             collect_mode="reduce",
             reducer=reducer,
-            max_iterations=10,
         )
+        node_spec = loop_node("loop_reduce", config=cfg, max_iterations=10)
 
         result = await node_spec.fn({"a": 1})
         # 0 + 1 + 2 + 3 + 4 = 10
-        assert result["reduced"] == 10
-        assert result["loop"]["iterations_completed"] == 5
-        assert result["loop"]["state"]["n"] == 5
+        assert result["result"] == 10
+        assert result["metadata"]["iterations"] == 5
+        assert result["metadata"]["state"]["n"] == 5
+        assert result["metadata"]["stopped_by"] == "condition"
 
     @pytest.mark.asyncio
     async def test_loop_break_and_continue_guards(self):
-        """Breaks and continues based on predicates (dotted path and callable)."""
+        """Breaks and continues based on callable predicates."""
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
         # condition always True; rely on break/continue and max_iterations
-        def condition(data, state):
+        def while_condition(data, state):
             return True
 
         def body_fn(data, state):
@@ -185,30 +187,28 @@ class TestLoopNode:
         def on_iteration_end(state, out):
             return {"i": state.get("i", 0) + 1}
 
-        # continue when "flags.skip" is True (dotted path)
-        continue_if = ["flags.skip"]
-        # break when callable returns True for i >= 3
-        break_if = [lambda d, s: s.get("i", 0) >= 3]
+        # continue when data.flags.skip is True (callable, no string predicates)
+        cont = [lambda d, s: bool(d.get("flags", {}).get("skip"))]
+        # break when i >= 3
+        brk = [lambda d, s: s.get("i", 0) >= 3]
 
-        node_spec = loop_node(
-            "loop_break_continue",
-            condition=condition,
+        cfg = LoopConfig(
+            while_condition=while_condition,
             body_fn=body_fn,
             on_iteration_end=on_iteration_end,
             init_state={"i": 0},
-            continue_if=continue_if,
-            break_if=break_if,
+            continue_if=cont,
+            break_if=brk,
             collect_mode="list",
-            iteration_key="iter",
-            max_iterations=10,
         )
+        node_spec = loop_node("loop_break_continue", config=cfg, iteration_key="iter", max_iterations=10)
 
         result = await node_spec.fn({"flags": {"skip": False}})
         # Iterations 0,1,2 produce outputs; on i=3 breaks (no output)
-        assert result["outputs"] == [0, 1, 2]
-        assert result["loop"]["iterations_completed"] == 3
-        assert result["loop"]["state"]["i"] == 3
-        assert result["loop"]["stopped_by_limit"] is False
+        assert result["result"] == [0, 1, 2]
+        assert result["metadata"]["iterations"] == 3
+        assert result["metadata"]["state"]["i"] == 3
+        assert result["metadata"]["stopped_by"] == "break_guard"
 
     @pytest.mark.asyncio
     async def test_loop_max_iterations_safety(self):
@@ -216,7 +216,7 @@ class TestLoopNode:
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
-        def condition(data, state):
+        def while_condition(data, state):
             return True
 
         def body_fn(data, state):
@@ -226,44 +226,23 @@ class TestLoopNode:
             c = state.get("c", 0) + 1
             return {"c": c}
 
-        node_spec = loop_node(
-            "loop_safety_cap",
-            condition=condition,
+        cfg = LoopConfig(
+            while_condition=while_condition,
             body_fn=body_fn,
             on_iteration_end=on_iteration_end,
             init_state={"c": 0},
             collect_mode="list",
-            max_iterations=2,
         )
+        node_spec = loop_node("loop_safety_cap", config=cfg, max_iterations=2)
 
         result = await node_spec.fn({"k": "v"})
-        assert result["outputs"] == ["x", "x"]
-        assert result["loop"]["stopped_by_limit"] is True
-        assert result["loop"]["iterations_completed"] == 2
-
-    @pytest.mark.asyncio
-    async def test_loop_legacy_success_and_should_continue(self):
-        """Validates legacy fields success and should_continue when using success_condition."""
-        ensure_bootstrapped()
-        loop_node = registry.get("loop_node", namespace="core")
-
-        def success_condition(data):
-            return data.get("score", 0) > 0.8
-
-        node_spec = loop_node("loop_legacy", max_iterations=5, success_condition=success_condition)
-
-        # success => True; loop should end quickly (no guarantee of iterations without body)
-        result = await node_spec.fn({"score": 0.9})
-        assert result["success"] is True
-        assert result["should_continue"] is False
-
-        result = await node_spec.fn({"score": 0.1})
-        assert result["success"] is False
-        assert isinstance(result["should_continue"], bool)
+        assert result["result"] == ["x", "x"]
+        assert result["metadata"]["stopped_by"] == "limit"
+        assert result["metadata"]["iterations"] == 2
 
 
 class TestConditionalNode:
-    """Test cases for ConditionalNode functionality (enhanced)."""
+    """Test cases for ConditionalNode functionality (functional-only)."""
 
     def test_conditional_node_creation(self):
         """ConditionalNode returns a valid NodeSpec."""
@@ -271,9 +250,7 @@ class TestConditionalNode:
         conditional_node = registry.get("conditional_node", namespace="core")
         node_spec = conditional_node(
             "test_conditional_create",
-            condition_key="should_continue",
-            true_action="retry",
-            false_action="proceed",
+            branches=[{"pred": lambda d, s: True, "action": "ok"}],
         )
 
         assert isinstance(node_spec, NodeSpec)
@@ -281,45 +258,8 @@ class TestConditionalNode:
         assert callable(node_spec.fn)
 
     @pytest.mark.asyncio
-    async def test_conditional_true_branch_via_legacy_sugar(self):
-        """Legacy sugar: condition_key + true_action/false_action."""
-        ensure_bootstrapped()
-        conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "cond_true",
-            condition_key="should_continue",
-            true_action="retry",
-            false_action="proceed",
-        )
-
-        result = await node_spec.fn({"should_continue": True, "confidence": "low", "extra_data": "test"})
-        # Structure and values
-        assert result["action"] == "retry"
-        assert result["routing"] == "retry"
-        assert "routing_evals" in result
-        assert "routing_expl" in result
-        # Original data preserved
-        assert result["confidence"] == "low"
-        assert result["extra_data"] == "test"
-
-    @pytest.mark.asyncio
-    async def test_conditional_false_branch_via_legacy_sugar(self):
-        ensure_bootstrapped()
-        conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "cond_false",
-            condition_key="should_continue",
-            true_action="retry",
-            false_action="proceed",
-        )
-
-        result = await node_spec.fn({"should_continue": False})
-        assert result["action"] == "proceed"
-        assert result["routing"] == "proceed"
-
-    @pytest.mark.asyncio
     async def test_conditional_callable_predicates(self):
-        """Enhanced branches: callable predicates."""
+        """Branches with callable predicates; picks first true."""
         ensure_bootstrapped()
         conditional_node = registry.get("conditional_node", namespace="core")
 
@@ -333,28 +273,9 @@ class TestConditionalNode:
         )
 
         result = await node_spec.fn({"score": 0.75})
-        assert result["routing"] == "review"
-        assert result["routing_evals"] == [False, True]
-        assert "branch[" in result["routing_expl"]
-
-    @pytest.mark.asyncio
-    async def test_conditional_dotted_path_predicates(self):
-        """Enhanced branches: dotted-path predicates."""
-        ensure_bootstrapped()
-        conditional_node = registry.get("conditional_node", namespace="core")
-
-        node_spec = conditional_node(
-            "cond_dotted",
-            branches=[
-                {"pred": "meta.ready", "action": "go"},
-                {"pred": "flags.approve", "action": "approve"},
-            ],
-            else_action="hold",
-        )
-
-        result = await node_spec.fn({"meta": {"ready": True}, "flags": {"approve": False}})
-        assert result["routing"] == "go"
-        assert result["routing_evals"][0] is True
+        assert result["result"] == "review"
+        assert result["metadata"]["evaluations"] == [False, True]
+        assert result["metadata"]["matched_branch"] == 1
 
     @pytest.mark.asyncio
     async def test_conditional_else_action(self):
@@ -366,14 +287,14 @@ class TestConditionalNode:
             "cond_else",
             branches=[
                 {"pred": lambda d, s: False, "action": "a"},
-                {"pred": "x.y", "action": "b"},
+                {"pred": lambda d, s: False, "action": "b"},
             ],
             else_action="fallback",
         )
 
         result = await node_spec.fn({"x": {}})
-        assert result["routing"] == "fallback"
-        assert "else selected" in result["routing_expl"]
+        assert result["result"] == "fallback"
+        assert result["metadata"]["has_else"] is True
 
     @pytest.mark.asyncio
     async def test_conditional_state_pass_through(self):
@@ -391,7 +312,7 @@ class TestConditionalNode:
         )
 
         result = await node_spec.fn({"v": 0}, state={"flag": True})
-        assert result["routing"] == "use_state"
+        assert result["result"] == "use_state"
 
     def test_conditional_node_deps_mapping(self):
         """deps passed via kwargs should map to NodeSpec.deps."""
