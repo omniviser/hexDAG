@@ -5,7 +5,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from hexai.core.application.events import NodeStarted, ObserverManager, PipelineStarted
+from hexai.core.application.events import (
+    NodeFailed,
+    NodeStarted,
+    ObserverManager,
+    PipelineStarted,
+)
+from hexai.core.application.events.batching import (
+    BatchFlushReason,
+    BatchingConfig,
+    OverloadPolicy,
+)
 
 
 class TestObserverManager:
@@ -14,7 +24,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_register_and_notify(self):
         """Test registering observers and notifying them of events."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Create mock observer
         mock_observer = MagicMock()
@@ -34,7 +44,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_multiple_observers_receive_events(self):
         """Test that multiple observers all receive the same event."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Create multiple observers
         observers = []
@@ -57,7 +67,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_observer_error_isolation(self):
         """Test that errors in one observer don't affect others."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Create failing observer
         failing_observer = MagicMock()
@@ -81,7 +91,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_async_function_as_observer(self):
         """Test that async functions can be used as observers."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Track calls
         calls = []
@@ -102,7 +112,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_sync_function_as_observer(self):
         """Test that sync functions can be used as observers."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Track calls
         calls = []
@@ -125,7 +135,7 @@ class TestObserverManager:
 
     def test_unregister_observer(self):
         """Test removing observers."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         obs1 = MagicMock()
         obs2 = MagicMock()
@@ -147,7 +157,7 @@ class TestObserverManager:
 
     def test_clear_all_observers(self):
         """Test clearing all observers."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Add multiple observers (keep references to prevent GC)
         observers = []
@@ -165,7 +175,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_empty_manager_does_nothing(self):
         """Test that notifying with no observers doesn't error."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Should not raise
         await manager.notify(NodeStarted(name="test", wave_index=1))
@@ -173,7 +183,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_concurrent_notifications(self):
         """Test that concurrent notifications work correctly."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Track all calls
         calls = []
@@ -197,7 +207,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_observer_receives_only_registered_events(self):
         """Test that observers only receive events they registered for."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         # Create mock observers
         node_observer = AsyncMock()
@@ -230,7 +240,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_observer_no_filter_receives_all(self):
         """Test that observer without filter receives all events."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         observer = AsyncMock()
         manager.register(observer)  # No event_types specified
@@ -247,7 +257,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_observer_empty_filter_list(self):
         """Test that empty event_types list means no events."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         observer = AsyncMock()
         manager.register(observer, event_types=[])  # Empty list
@@ -262,7 +272,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_filtering_improves_performance(self):
         """Test that filtering reduces unnecessary invocations."""
-        manager = ObserverManager()
+        manager = ObserverManager(batching_enabled=False)
 
         from hexai.core.application.events import ToolCalled
 
@@ -292,7 +302,7 @@ class TestObserverManager:
         import gc
         import weakref
 
-        manager = ObserverManager(use_weak_refs=True)
+        manager = ObserverManager(use_weak_refs=True, batching_enabled=False)
 
         # Create an observer object
         class TestObserver:
@@ -328,7 +338,7 @@ class TestObserverManager:
         """Test that wrapped functions are kept alive."""
         import gc
 
-        manager = ObserverManager(use_weak_refs=True)
+        manager = ObserverManager(use_weak_refs=True, batching_enabled=False)
 
         called = []
 
@@ -357,7 +367,7 @@ class TestObserverManager:
         import gc
         import weakref
 
-        manager = ObserverManager(use_weak_refs=True)
+        manager = ObserverManager(use_weak_refs=True, batching_enabled=False)
 
         class TestObserver:
             async def handle(self, event):
@@ -384,7 +394,7 @@ class TestObserverManager:
 
     def test_no_weak_refs_mode(self):
         """Test that manager works without weak refs."""
-        obs_manager = ObserverManager(use_weak_refs=False)
+        obs_manager = ObserverManager(use_weak_refs=False, batching_enabled=False)
 
         class TestObserver:
             async def handle(self, event):
@@ -400,7 +410,7 @@ class TestObserverManager:
     @pytest.mark.asyncio
     async def test_bound_method_fallback(self):
         """Test that bound methods fall back to strong refs."""
-        manager = ObserverManager(use_weak_refs=True)
+        manager = ObserverManager(use_weak_refs=True, batching_enabled=False)
 
         class TestClass:
             def __init__(self):
@@ -426,7 +436,7 @@ class TestObserverManager:
         import gc
         import weakref
 
-        manager = ObserverManager(use_weak_refs=True)
+        manager = ObserverManager(use_weak_refs=True, batching_enabled=False)
 
         # Track memory usage
         observers = []
@@ -458,3 +468,170 @@ class TestObserverManager:
         # Most weak refs should be dead (allowing for 1-2 due to Python GC quirks)
         alive_count = sum(1 for ref in refs if ref() is not None)
         assert alive_count <= 2  # Allow for minor GC delays
+
+
+class BatchObserver:
+    """Test helper that records incoming batch envelopes."""
+
+    def __init__(self) -> None:
+        self.envelopes: list = []
+        self.events: list = []
+
+    async def handle(self, event):
+        self.events.append(event)
+
+    async def handle_batch(self, envelope):
+        self.envelopes.append(envelope)
+
+
+class TestObserverManagerBatching:
+    """Tests that focus on the batching integration in ObserverManager."""
+
+    @pytest.mark.asyncio
+    async def test_size_based_flush_with_batch_handler(self):
+        config = BatchingConfig(max_batch_size=2, max_batch_window_ms=1000, max_buffer_events=10)
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        observer = BatchObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="first", wave_index=1))
+        await manager.notify(NodeStarted(name="second", wave_index=1))
+
+        assert len(observer.envelopes) == 1
+        envelope = observer.envelopes[0]
+        assert envelope.flush_reason is BatchFlushReason.SIZE
+        assert [event.name for event in envelope.events] == ["first", "second"]
+
+    @pytest.mark.asyncio
+    async def test_time_window_flushes_batches(self):
+        config = BatchingConfig(max_batch_size=10, max_batch_window_ms=10, max_buffer_events=10)
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        observer = BatchObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="timed", wave_index=1))
+        await asyncio.sleep(0.05)
+
+        assert len(observer.envelopes) == 1
+        assert observer.envelopes[0].flush_reason is BatchFlushReason.TIME
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_single_event_for_legacy_observers(self):
+        config = BatchingConfig(max_batch_size=5, max_batch_window_ms=1000, max_buffer_events=10)
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        received = []
+
+        class LegacyObserver:
+            async def handle(self, event):
+                received.append(event)
+
+        observer = LegacyObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="legacy1", wave_index=0))
+        await manager.notify(NodeStarted(name="legacy2", wave_index=0))
+        await manager.flush()
+
+        assert len(received) == 2
+
+    @pytest.mark.asyncio
+    async def test_priority_event_triggers_immediate_flush(self):
+        config = BatchingConfig(max_batch_size=10, max_batch_window_ms=1000, max_buffer_events=10)
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        observer = BatchObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="normal", wave_index=1))
+        await manager.notify(NodeFailed(name="critical", wave_index=1, error=RuntimeError("boom")))
+
+        assert len(observer.envelopes) == 1
+        envelope = observer.envelopes[0]
+        assert envelope.flush_reason is BatchFlushReason.PRIORITY
+        assert [event.name for event in envelope.events] == ["normal", "critical"]
+
+    @pytest.mark.asyncio
+    async def test_degrade_to_unbatched_overload_policy(self):
+        config = BatchingConfig(
+            max_batch_size=10,
+            max_batch_window_ms=1000,
+            max_buffer_events=1,
+            overload_policy=OverloadPolicy.DEGRADE_TO_UNBATCHED,
+        )
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        observer = BatchObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="first", wave_index=1))
+        await manager.notify(NodeStarted(name="second", wave_index=1))
+
+        assert [env.flush_reason for env in observer.envelopes] == [
+            BatchFlushReason.OVERLOAD,
+            BatchFlushReason.MANUAL,
+        ]
+        assert [event.name for event in observer.envelopes[0].events] == ["first"]
+        assert [event.name for event in observer.envelopes[1].events] == ["second"]
+        assert manager.batching_metrics.events_unbatched_total == 1
+
+    @pytest.mark.asyncio
+    async def test_drop_oldest_preserves_priority_events(self):
+        config = BatchingConfig(
+            max_batch_size=10,
+            max_batch_window_ms=1000,
+            max_buffer_events=2,
+            overload_policy=OverloadPolicy.DROP_OLDEST,
+        )
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        observer = BatchObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="first", wave_index=1))
+        await manager.notify(NodeStarted(name="second", wave_index=1))
+        await manager.notify(NodeStarted(name="third", wave_index=1))
+
+        await manager.flush()
+
+        assert len(observer.envelopes) == 1
+        events = [event.name for event in observer.envelopes[0].events]
+        assert events == ["second", "third"]
+        assert manager.batching_metrics.events_dropped_total == 1
+
+    @pytest.mark.asyncio
+    async def test_shutdown_flushes_pending_events(self):
+        config = BatchingConfig(max_batch_size=10, max_batch_window_ms=1000, max_buffer_events=10)
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        observer = BatchObserver()
+        manager.register(observer)
+
+        await manager.notify(NodeStarted(name="pending", wave_index=1))
+        await manager.close()
+
+        assert len(observer.envelopes) == 1
+        assert observer.envelopes[0].flush_reason is BatchFlushReason.SHUTDOWN
+
+    @pytest.mark.asyncio
+    async def test_handle_batch_respects_event_filters(self):
+        config = BatchingConfig(max_batch_size=10, max_batch_window_ms=1000, max_buffer_events=10)
+        manager = ObserverManager(batching_config=config, batching_enabled=True)
+
+        node_observer = BatchObserver()
+        pipeline_observer = BatchObserver()
+
+        manager.register(node_observer, event_types=[NodeStarted])
+        manager.register(pipeline_observer, event_types=[PipelineStarted])
+
+        await manager.notify(NodeStarted(name="node", wave_index=1))
+        await manager.notify(PipelineStarted(name="pipe", total_waves=1, total_nodes=1))
+        await manager.flush()
+
+        assert len(node_observer.envelopes) == 1
+        assert [type(event) for event in node_observer.envelopes[0].events] == [NodeStarted]
+
+        assert len(pipeline_observer.envelopes) == 1
+        assert [type(event) for event in pipeline_observer.envelopes[0].events] == [PipelineStarted]
