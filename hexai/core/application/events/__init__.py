@@ -8,6 +8,15 @@ Clean, simplified event system with clear separation of concerns:
 - config.py: Configuration and null implementations
 """
 
+# Batching helpers
+from .batching import (
+    BatchFlushReason,
+    BatchingConfig,
+    EventBatchEnvelope,
+    EventBatcher,
+    OverloadPolicy,
+)
+
 # Configuration and helpers
 from .config import (
     NULL_CONTROL_MANAGER,
@@ -74,6 +83,12 @@ __all__ = [
     # Managers
     "ObserverManager",
     "ControlManager",
+    # Batching
+    "BatchingConfig",
+    "BatchFlushReason",
+    "EventBatchEnvelope",
+    "EventBatcher",
+    "OverloadPolicy",
     # Config
     "NullObserverManager",
     "NullControlManager",
