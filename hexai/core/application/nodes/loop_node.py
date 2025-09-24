@@ -1,18 +1,16 @@
 """LoopNode for creating loop control nodes with conditional execution.
 
 This module provides:
-- LoopNode: iterative control with a single while_condition, functional guards,
+- LoopNode: iterative control with a single while_condition,
 state preservation, and result collection by convention.
 - ConditionalNode: multi-branch router with callable predicates.
 
 Single-style (functional) API:
-- All conditions and guards are callables.
 - No string predicates are supported.
 
 Conventions:
 - Prefer while_condition for loop control.
 - Result collection:
-  - If reducer provided and collect_mode not set → defaults to "reduce".
   - If iterating over a collection and you want all outputs → set collect_mode="list".
   - Otherwise → defaults to "last".
 """
@@ -20,7 +18,8 @@ Conventions:
 import asyncio
 import logging
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Literal
 
 from ...domain.dag import NodeSpec
@@ -28,7 +27,20 @@ from ...registry import node
 from ...registry.models import NodeSubtype
 from .base_node_factory import BaseNodeFactory
 
+logger = logging.getLogger("hexai.app.application.nodes")
+
 CollectMode = Literal["list", "last", "reduce"]
+TieBreak = Literal["first_true"]
+
+
+class StopReason(str, Enum):
+    """Reasons for loop termination in metadata of LoopNode"""
+
+    CONDITION = "condition"  # while_condition returned False
+    LIMIT = "limit"  # max_iterations reached
+    CONDITION_ERROR = "condition_error"  # while_condition raised an exception
+    BREAK_GUARD = "break_guard"  # break_if predicate triggered
+    NONE = "none"  # loop did not run or ended unexpectedly
 
 
 @dataclass
@@ -38,24 +50,88 @@ class LoopConfig:
     - body_fn: Callable[[dict, dict], Any] — per-iteration body (sync or async).
     - on_iteration_end: Callable[[dict, Any], dict] — hook to update state after each iteration.
     - init_state: dict — initial mutable state dict shared across iterations.
-    - break_if / continue_if: Iterable[Callable[[dict, dict], bool]] — guard predicates.
     - collect_mode: Literal["list", "last", "reduce"] — optional override for result collection.
     - reducer: Callable[[Any, Any], Any] — required when using "reduce".
-    - logger_name: str — logger to use for debug/info.
+    - break_if: Iterable[Callable[[dict, dict], bool]] = If returns True after an iteration's body
+    the loop termianted with StopReason.BREAK_GUARD.
     """
 
-    while_condition: Callable[[dict, dict], bool] | None = None
-    body_fn: Callable[[dict, dict], Any] | None = None
-    on_iteration_end: Callable[[dict, Any], dict] | None = None
-    init_state: dict | None = None
+    # REQUIRED: no default
+    while_condition: Callable[[dict, dict], bool]
 
-    # Guards (functional only)
-    break_if: Iterable[Callable[[dict, dict], bool]] | None = None
-    continue_if: Iterable[Callable[[dict, dict], bool]] | None = None
+    # Sensible defaults
+    body_fn: Callable[[dict, dict], Any] = lambda data, state: None
+    on_iteration_end: Callable[[dict, Any], dict] = lambda state, out: state
+    init_state: dict = field(default_factory=dict)
 
-    collect_mode: CollectMode | None = None
+    collect_mode: CollectMode = "last"
     reducer: Callable[[Any, Any], Any] | None = None
-    logger_name: str = "hexai.app.application.nodes.loop_node"
+
+    max_iterations: int = 1
+    iteration_key: str = "loop_iteration"
+
+    break_if: Iterable[Callable[[dict, dict], bool]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.max_iterations <= 0:
+            raise ValueError("max_iterations must be positive")
+        if self.collect_mode not in ("list", "last", "reduce"):
+            raise ValueError("collect_mode must be one of: list | last | reduce")
+        if self.collect_mode == "reduce" and self.reducer is None:
+            raise ValueError("reducer is required when collect_mode='reduce'")
+
+
+@dataclass
+class ConditionalConfig:
+    branches: list[dict]
+    else_action: str | None = None
+    tie_break: TieBreak = "first_true"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.branches, list) or len(self.branches) == 0:
+            raise ValueError("branches must be a non-empty list")
+
+        if self.tie_break != "first_true":
+            raise ValueError("tie_break must be 'first_true'")
+
+
+def _normalize_input_data(input_data: Any) -> Any:
+    """Normalize input data for loop and conditional nodes."""
+    if hasattr(input_data, "model_dump"):
+        data = input_data.model_dump()
+    elif isinstance(input_data, dict):
+        data = dict(input_data)
+    else:
+        data = {"input": input_data}
+
+    return data
+
+
+def _eval_break_guards(
+    guards: Iterable[Callable[[dict, dict], bool]], data: dict, state: dict
+) -> bool:
+    """OR-semantics: return True if any guard signals to break; guard errors are ignored."""
+    for idx, g in enumerate(guards):
+        try:
+            if g(data, state):
+                return True
+        except Exception as e:
+            logger.debug("break_if[%d] raised; ignoring error: %s", idx, e)
+    return False
+
+
+def _apply_on_iteration_end(
+    on_end: Callable[[dict, Any], dict] | None, state: dict, out: Any
+) -> dict:
+    """Run on_iteration_end; ignore errors; return possibly updated state."""
+    if on_end is None:
+        return state
+    try:
+        new_state = on_end(state, out)
+        return new_state if isinstance(new_state, dict) else state
+    except Exception as e:
+        logger.debug("on_iteration_end failed: %s", e)
+        return state
 
 
 @node(name="loop_node", subtype=NodeSubtype.LOOP, namespace="core")
@@ -63,7 +139,6 @@ class LoopNode(BaseNodeFactory):
     """Advanced loop control node (functional-only).
     Key points:
     - Single controlling predicate: while_condition(data, state) -> bool (required).
-    - Guards: break_if / continue_if as callables returning bool.
     - State is preserved across iterations via the state dict (updated per iteration).
     - Result shape: {
                     "result": <list|last|reduced>,
@@ -73,10 +148,9 @@ class LoopNode(BaseNodeFactory):
                     }
     - No string predicates, no eval-based resolution.
     Result collection:
-    - If collect_mode is None:
-      - If reducer is provided -> "reduce"
-      - Otherwise -> "last"
-    - To collect all iteration outputs, set collect_mode="list".
+    - To collect all outputs, set collect_mode="list".
+    - To reduce across iterations, set collect_mode="reduce" and provide a reducer.
+    - Otherwise defaults to "last".
     """
 
     def __init__(self) -> None:
@@ -86,8 +160,6 @@ class LoopNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
-        max_iterations: int = 3,
-        iteration_key: str = "loop_iteration",
         config: LoopConfig | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
@@ -99,34 +171,21 @@ class LoopNode(BaseNodeFactory):
             - config: LoopConfig with while_condition and optional behaviors.
             - **kwargs: Passed through to NodeSpec (e.g., in_model, out_model, deps).
         """
-        if config is None or not callable(config.while_condition):
+        if not isinstance(config, LoopConfig):
+            raise TypeError("LoopNode requires 'config' argument of type LoopConfig")
+
+        if not callable(config.while_condition):
             raise ValueError("LoopNode requires a callable while_condition in config")
 
         while_condition = config.while_condition
         body_fn = config.body_fn
         on_iteration_end = config.on_iteration_end
         init_state = config.init_state
-        break_if = config.break_if
-        continue_if = config.continue_if
         collect_mode = config.collect_mode
         reducer = config.reducer
-        logger_name = config.logger_name
-
-        logger = logging.getLogger(logger_name)
-
-        if collect_mode is None:
-            collect_mode = "reduce" if reducer is not None else "last"
-
-        # Validate configuration
-        if max_iterations <= 0:
-            raise ValueError("max_iterations must be positive")
-        if collect_mode not in {"list", "last", "reduce"}:
-            raise ValueError("collect_mode must be one of: list | last | reduce")
-        if collect_mode == "reduce" and reducer is None:
-            raise ValueError("reducer is required when collect_mode='reduce'")
-
-        break_preds = [p for p in (break_if or ()) if p is not None]
-        continue_predicates = [p for p in (continue_if or ()) if p is not None]
+        max_iterations = config.max_iterations
+        iteration_key = config.iteration_key
+        break_if = config.break_if
 
         async def loop_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """
@@ -134,9 +193,8 @@ class LoopNode(BaseNodeFactory):
 
             Steps per iteration:
             1) Check safety cap (max_iterations) and main condition.
-            2) Evaluate continue/break guards.
-            3) Run body_fn (sync/async) and collect result according to collect_mode.
-            4) Update state via on_iteration_end(state, out).
+            2) Run body_fn (sync/async) and collect result according to collect_mode.
+            3) Update state via on_iteration_end(state, out).
 
             Returns a dict with:
             - Original input fields (normalized to dict).
@@ -145,12 +203,7 @@ class LoopNode(BaseNodeFactory):
             """
 
             # Normalize input to dict without external helpers
-            if hasattr(input_data, "model_dump"):
-                data = input_data.model_dump()
-            elif isinstance(input_data, dict):
-                data = dict(input_data)
-            else:
-                data = {"input": input_data}
+            data = _normalize_input_data(input_data)
 
             # Local loop state
             state = dict(init_state or {})
@@ -175,56 +228,29 @@ class LoopNode(BaseNodeFactory):
                 raise ValueError("collect_mode must be one of: list | last | reduce")
 
             iteration_count = 0
-            stopped_by: str | None = None
+            stopped_by: StopReason = StopReason.NONE
 
             while True:
                 # Safety cap
                 if iteration_count >= max_iterations:
-                    stopped_by = "limit"
+                    stopped_by = StopReason.LIMIT
                     break
 
                 # Main condition
-                while_cond: Callable[[dict, dict], bool] = while_condition
                 try:
-                    if not while_cond(data, state):
-                        stopped_by = "condition"
+                    if not while_condition(data, state):
+                        stopped_by = StopReason.CONDITION
                         break
                 except Exception as e:
                     # Defensive: stop if condition raises
                     logger.debug("main condition raised; stopping loop: %s", e)
-                    stopped_by = "condition_error"
+                    stopped_by = StopReason.CONDITION_ERROR
                     break
 
-                # Continue guards (skip current iteration)
-                try:
-                    if any(p(data, state) for p in continue_predicates):
-                        iteration_count += 1
-                        state[iteration_key] = iteration_count
-                        continue
-                except Exception as e:
-                    logger.debug("continue guards evaluation failed: %s", e)
-
-                # Break guards
-                try:
-                    if any(p(data, state) for p in break_preds):
-                        stopped_by = "break_guard"
-                        break
-                except Exception as e:
-                    logger.debug("break guards evaluation failed: %s", e)
-
                 # Body execution (supports async)
-                out = None
-                if body_fn is not None:
-                    fn: Callable[[dict, dict], Any] = body_fn
-                    try:
-                        out = fn(data, state)
-                        if asyncio.iscoroutine(out):
-                            out = await out
-                    except Exception as e:
-                        logger.debug("body_fn raised; output set to None %s", e)
-                        out = None
-                else:
-                    logger.debug("body_fn is not callable")
+                out = body_fn(data, state)
+                if asyncio.iscoroutine(out):
+                    out = await out
 
                 # Collect results
                 if mode == "list":
@@ -235,19 +261,14 @@ class LoopNode(BaseNodeFactory):
                     reduced = out if reduced is None else _reducer(reduced, out)
 
                 # State update after each iteration
-                if on_iteration_end is not None:
-                    try:
-                        it_end: Callable[[dict, Any], dict] = on_iteration_end
-                        new_state = it_end(state, out)
-                        if isinstance(new_state, dict):
-                            state = new_state
-                    except Exception as e:  # nosec B110
-                        logger.debug("on_iteration_end failed: %s", e)
-                else:
-                    logger.debug(
-                        "on_iteration_end is not callable; on_iteration_end returned: %s",
-                        on_iteration_end,
-                    )
+                state = _apply_on_iteration_end(on_iteration_end, state, out)
+
+                # Break guard
+                if _eval_break_guards(break_if, data, state):
+                    stopped_by = StopReason.BREAK_GUARD
+                    iteration_count += 1
+                    state[iteration_key] = iteration_count
+                    break
 
                 iteration_count += 1
                 state[iteration_key] = iteration_count
@@ -311,10 +332,7 @@ class ConditionalNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
-        branches: list[dict] | None = None,
-        else_action: str | None = None,
-        tie_break: str = "first_true",
-        logger_name: str = "hexai.app.application.nodes.conditional_node",
+        config: ConditionalConfig | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Builds a ConditionalNode NodeSpec (functional-only).
@@ -327,26 +345,14 @@ class ConditionalNode(BaseNodeFactory):
                 - "action": non-empty str
         - else_action: Optional fallback action when no branch matches.
         - tie_break: Branch selection strategy; only "first_true" supported.
-        - logger_name: Logger to use.
         - **kwargs: Passed through to NodeSpec (e.g., in_model, out_model, deps).
         """
-        if not branches or not isinstance(branches, list):
-            raise ValueError("branches must be a non-empty list of dicts")
+        if not isinstance(config, ConditionalConfig):
+            raise TypeError("ConditionalNode requires 'config' argument of type ConditionalConfig")
 
-        if not all(
-            isinstance(b, dict)
-            and callable(b.get("pred"))
-            and isinstance(b.get("action"), str)
-            and b.get("action")
-            for b in branches
-        ):
-            raise ValueError(
-                "branch must be {'pred': Callable[[dict, dict], bool], 'action': non-empty str}"
-            )
-        if tie_break != "first_true":
-            raise ValueError("tie_break must be 'first_true'")
-
-        logger = logging.getLogger(logger_name)
+        branches = config.branches
+        else_action = config.else_action
+        tie_break = config.tie_break
 
         async def conditional_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """
@@ -357,12 +363,7 @@ class ConditionalNode(BaseNodeFactory):
             """
 
             # Normalizes input to dict
-            if hasattr(input_data, "model_dump"):
-                data = input_data.model_dump()
-            elif isinstance(input_data, dict):
-                data = dict(input_data)
-            else:
-                data = {"input": input_data}
+            data = _normalize_input_data(input_data)
 
             state = ports.get("state", {}) if isinstance(ports.get("state", {}), dict) else {}
 
@@ -395,7 +396,7 @@ class ConditionalNode(BaseNodeFactory):
                 },
             }
 
-            logger.info("MultiConditional '%s' -> routing: %s", name, chosen)
+            logger.info("Conditional '%s' -> routing: %s", name, chosen)
             return result
 
         # Map DirectedGraph-related arguments to NodeSpec fields
