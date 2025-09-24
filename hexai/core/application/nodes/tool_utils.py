@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ...validation.secure_json import loads as secure_json_loads
+from hexai.core.validation.secure_json import SafeJSON
 
 
 class ToolCallFormat(Enum):
@@ -128,7 +128,7 @@ class ToolParser:
         for match in cls.INVOKE_TOOL_JSON_PATTERN.finditer(text):
             try:
                 json_str = match.group(1)
-                data = secure_json_loads(json_str)
+                data = SafeJSON().loads(json_str)
 
                 # Check if it's a tool call
                 if isinstance(data, dict) and "tool" in data:
@@ -157,8 +157,10 @@ class ToolParser:
             value = match.group(2) or match.group(3) or match.group(4)
 
             # Try to parse as JSON for complex types
-            parsed = secure_json_loads(value)
-            params[key] = parsed if parsed is not None else value
+            try:
+                params[key] = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                params[key] = value
 
         return params
 

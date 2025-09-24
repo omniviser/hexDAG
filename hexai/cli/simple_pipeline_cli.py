@@ -16,7 +16,7 @@ from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.cli.compile import compile_single
 from hexai.core.domain.dag_visualizer import render_dag_to_image
-from hexai.core.validation.secure_json import loads as secure_json_loads
+from hexai.core.validation.secure_json import SafeJSON
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -538,9 +538,11 @@ class PipelineCLI:
         logger.info("=" * 50)
 
         try:
-            input_data = secure_json_loads(input_json)
-            if input_data is None:
+            sj = SafeJSON()
+            parse_result = sj.loads(input_json)
+            if not parse_result.ok:
                 raise json.JSONDecodeError("Invalid JSON input", input_json, 0)
+            input_data = parse_result.data
             logger.info(f"📥 Input: {json.dumps(input_data, indent=2)}")
 
             pipeline = self.catalog.get_pipeline(pipeline_name)

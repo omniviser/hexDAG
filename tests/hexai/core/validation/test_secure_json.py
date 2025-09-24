@@ -5,12 +5,8 @@ from __future__ import annotations
 import json
 
 import pytest
-from hexai.core.validation.secure_json import (
-    DEFAULT_MAX_DEPTH,
-    extract_json_from_text,
-    loads,
-    loads_from_llm_output,
-)
+from hexai.core.validation.secure_json import SafeJSON
+from pydantic import BaseModel
 
 
 def test_extract_json_from_markdown_fenced_block():
@@ -21,7 +17,7 @@ def test_extract_json_from_markdown_fenced_block():
     {"a": 1, "b": 2}
     ```
     """
-    extracted = extract_json_from_text(text)
+    extracted = SafeJSON._extract_json(text)
     assert extracted is not None
     assert json.loads(extracted) == {"a": 1, "b": 2}
 
@@ -33,51 +29,61 @@ def test_extract_json_from_any_fenced_block():
     {"x": [1,2,3]}
     ```
     """
-    extracted = extract_json_from_text(text)
+    extracted = SafeJSON._extract_json(text)
     assert extracted is not None
     assert json.loads(extracted) == {"x": [1, 2, 3]}
 
 
 def test_extract_json_by_bracket_matching():
     text = 'Some text before {\n  "k": "v"\n} and after'
-    extracted = extract_json_from_text(text)
+    extracted = SafeJSON._extract_json(text)
     assert extracted is not None
     assert json.loads(extracted) == {"k": "v"}
 
 
 def test_secure_loads_fast_path_valid():
-    data = loads('{"a": 1}')
-    assert data == {"a": 1}
+    result = SafeJSON().loads('{"a": 1}')
+    assert result.ok
+    assert result.data == {"a": 1}
 
 
 def test_secure_loads_rejects_large_input():
     # Use a small limit to avoid allocating very large strings in tests
     large_value = "a" * 2000
     large_str = '{"x": "' + large_value + '"}'
-    assert loads(large_str, max_size_bytes=1000) is None
+    result = SafeJSON(max_size_bytes=1000).loads(large_str)
+    assert not result.ok
+    assert result.error == "too_large"
 
 
 def test_secure_loads_rejects_too_deep_nesting():
     # Construct text with depth DEFAULT_MAX_DEPTH + 5
-    depth = DEFAULT_MAX_DEPTH + 5
+    sj = SafeJSON()
+    depth = sj.max_depth + 5
     nested = "[" * depth + "]" * depth
-    assert loads(nested) is None
+    result = sj.loads(nested)
+    assert not result.ok
+    assert result.error == "too_deep"
 
 
 def test_secure_loads_cleans_trailing_commas_and_single_quotes():
     dirty = """{ "a": 1, "b": [1,2,], 'c': 'val', }"""  # noqa: E501
-    data = loads(dirty)
-    assert data == {"a": 1, "b": [1, 2], "c": "val"}
+    result = SafeJSON().loads(dirty)
+    assert result.ok
+    assert result.data == {"a": 1, "b": [1, 2], "c": "val"}
 
 
 def test_secure_loads_strips_inline_comments():
     dirty = '{"a": 1, // comment\n "b": 2 # another\n }'
-    data = loads(dirty)
-    assert data == {"a": 1, "b": 2}
+    result = SafeJSON().loads(dirty)
+    assert result.ok
+    assert result.data == {"a": 1, "b": 2}
 
 
 def test_secure_loads_returns_none_on_unrecoverable():
-    assert loads('{"a"') is None
+    result = SafeJSON().loads('{"a"')
+    assert not result.ok
+    assert result.error == "invalid_syntax"
 
 
 def test_loads_from_llm_output_end_to_end():
@@ -88,29 +94,30 @@ def test_loads_from_llm_output_end_to_end():
 }
 ```
 """
-    parsed = loads_from_llm_output(text)
-    assert parsed == {"ok": True}
+    result = SafeJSON().loads_from_text(text)
+    assert result.ok
+    assert result.data == {"ok": True}
 
 
 def test_secure_loader_handles_invalid_json_returns_none():
-    from pydantic import BaseModel
-
     class M(BaseModel):
         a: int
 
-    # secure loader should return None for unrecoverable JSON
-    assert loads('{"a": not_a_number}') is None
+    # secure loader should report invalid syntax for unrecoverable JSON
+    result = SafeJSON().loads('{"a": not_a_number}')
+    assert not result.ok
+    assert result.error == "invalid_syntax"
 
 
 def test_secure_loader_handles_minor_llm_formatting_and_pydantic_validation():
-    from pydantic import BaseModel
-
     class M(BaseModel):
         a: int
         b: list[int]
 
     dirty = """{ 'a': 1, 'b': [1,2,], }"""
-    data = loads(dirty)
+    res = SafeJSON().loads(dirty)
+    assert res.ok
+    data = res.data
     assert data == {"a": 1, "b": [1, 2]}
 
     # Validate via Pydantic directly
