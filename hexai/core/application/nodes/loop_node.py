@@ -157,6 +157,50 @@ class LoopNode(BaseNodeFactory):
         """Initialize LoopNode factory."""
         super().__init__()
 
+    @staticmethod
+    def _init_collector(
+        mode: CollectMode, reducer: Callable[[Any, Any], Any] | None
+    ) -> tuple[Any, Callable[[Any, Any], Any]]:
+        """Initialize collector node."""
+        if mode == "list":
+            acc: Any = []
+
+            def collect_list(a: Any, x: Any) -> Any:
+                a.append(x)
+                return a
+
+            return acc, collect_list
+        if mode == "last":
+            acc = None
+
+            def collect_last(_a: Any, x: Any) -> Any:
+                return x
+
+            return acc, collect_last
+        if mode == "reduce":
+            acc = None
+            red = reducer or (lambda _a, b: b)
+
+            def collect_reduce(a: Any, x: Any) -> Any:
+                return x if a is None else red(a, x)
+
+            return acc, collect_reduce
+        raise ValueError("collect_mode must be one of: list | last | reduce")
+
+    @staticmethod
+    def _should_continue(
+        while_condition: Callable[[dict, dict], bool], data: dict, state: dict
+    ) -> tuple[bool, StopReason | None]:
+        """Return whether condition should continue."""
+        try:
+            ok = bool(while_condition(data, state))
+            if not ok:
+                return False, StopReason.CONDITION
+            return True, None
+        except Exception as e:
+            logger.debug("main condition raised; stop loop: %s", e)
+            return False, StopReason.CONDITION_ERROR
+
     def __call__(
         self,
         name: str,
@@ -207,25 +251,8 @@ class LoopNode(BaseNodeFactory):
 
             # Local loop state
             state = dict(init_state or {})
-            mode = collect_mode
 
-            def _noop_reducer(_: Any, b: Any) -> Any:
-                return b
-
-            outputs: list[Any] | None = None
-            last_value: Any | None = None
-            reduced: Any | None = None
-            _reducer: Callable[[Any, Any], Any] = _noop_reducer  # always callable
-
-            if mode == "list":
-                outputs = []
-            elif mode == "last":
-                last_value = None
-            elif mode == "reduce":
-                _reducer = reducer or _noop_reducer
-                reduced = None
-            else:
-                raise ValueError("collect_mode must be one of: list | last | reduce")
+            acc, collect_fn = self._init_collector(collect_mode, reducer)
 
             iteration_count = 0
             stopped_by: StopReason = StopReason.NONE
@@ -237,14 +264,9 @@ class LoopNode(BaseNodeFactory):
                     break
 
                 # Main condition
-                try:
-                    if not while_condition(data, state):
-                        stopped_by = StopReason.CONDITION
-                        break
-                except Exception as e:
-                    # Defensive: stop if condition raises
-                    logger.debug("main condition raised; stopping loop: %s", e)
-                    stopped_by = StopReason.CONDITION_ERROR
+                ok, reason = self._should_continue(while_condition, data, state)
+                if not ok:
+                    stopped_by = reason or StopReason.CONDITION
                     break
 
                 # Body execution (supports async)
@@ -253,12 +275,7 @@ class LoopNode(BaseNodeFactory):
                     out = await out
 
                 # Collect results
-                if mode == "list":
-                    outputs.append(out)  # type: ignore[union-attr]
-                elif mode == "last":
-                    last_value = out
-                elif mode == "reduce":
-                    reduced = out if reduced is None else _reducer(reduced, out)
+                acc = collect_fn(acc, out)
 
                 # State update after each iteration
                 state = _apply_on_iteration_end(on_iteration_end, state, out)
@@ -273,16 +290,9 @@ class LoopNode(BaseNodeFactory):
                 iteration_count += 1
                 state[iteration_key] = iteration_count
 
-            if mode == "list":
-                payload = outputs
-            elif mode == "last":
-                payload = last_value
-            else:
-                payload = reduced
-
             # Build final result payload
             return {
-                "result": payload,
+                "result": acc,
                 "metadata": {
                     "iterations": iteration_count,
                     "stopped_by": stopped_by,
