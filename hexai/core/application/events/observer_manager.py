@@ -7,11 +7,13 @@ to observe pipeline execution without affecting it.
 import asyncio
 import uuid
 import weakref
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .events import Event
+from .decorators import EventDecoratorMetadata
 from .models import (
     AsyncObserverFunc,
     BaseEventManager,
@@ -26,6 +28,37 @@ from .models import (
 type EventType = type["Event"]
 type ObserverId = str
 type EventFilter = set[EventType] | None
+
+
+def _get_observer_metadata(handler: Any) -> EventDecoratorMetadata | None:
+    """Return observer metadata if present."""
+    metadata = getattr(handler, "__hexdag_event_metadata__", None)
+    if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "observer":
+        return metadata
+    return None
+
+
+def _coerce_event_types(event_types: Any) -> EventFilter:
+    """Normalize event type collections into a set."""
+    if event_types is None:
+        return None
+
+    if isinstance(event_types, type):
+        return {event_types}
+
+    if isinstance(event_types, Iterable):
+        normalized: set[type] = set()
+        for event_type in event_types:
+            if not isinstance(event_type, type):
+                raise TypeError(
+                    f"event_types must contain Event subclasses; got {type(event_type)!r}"
+                )
+            normalized.add(event_type)
+        return normalized
+
+    raise TypeError(
+        f"event_types must be None, a type, or an iterable of types; got {type(event_types)!r}"
+    )
 
 
 class ObserverManager(BaseEventManager, EventFilterMixin):
@@ -73,28 +106,41 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         # Track which event types each observer wants (for quick filtering)
         self._event_filters: dict[ObserverId, EventFilter] = {}
+        self._observer_timeouts: dict[ObserverId, float | None] = {}
+        self._observer_semaphores: dict[ObserverId, asyncio.Semaphore] = {}
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-            self._strong_refs: dict[ObserverId, Observer] = {}  # Keep functions alive
+            self._strong_refs: dict[ObserverId, Observer] = {}
 
     def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
-        """Register an observer with optional event type filtering.
+        """Register an observer with optional event type filtering."""
+        metadata = _get_observer_metadata(handler)
 
-        Args
-        ----
-            handler: Either an Observer protocol implementation or
-                    a function (sync/async) that takes an event
-            **kwargs: Can include:
-                - 'observer_id': Optional ID for the observer
-                - 'event_types': List of event types to observe (None = all events)
-                - 'keep_alive': Whether to keep strong reference (for weak-referenceable objects)
+        observer_id = kwargs.get("observer_id")
+        if observer_id is None and metadata and metadata.id:
+            observer_id = metadata.id
+        observer_id = observer_id or str(uuid.uuid4())
 
-        Returns
-        -------
-            str: The ID of the registered observer
-        """
-        observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
-        event_types = kwargs.get("event_types")
+        if observer_id in self._event_filters:
+            raise ValueError(f"Observer '{observer_id}' already registered")
+
+        event_types_param = kwargs.get("event_types")
+        if event_types_param is None and metadata:
+            event_types_param = metadata.event_types
+        event_filter = _coerce_event_types(event_types_param)
+
+        timeout = kwargs.get("timeout")
+        if timeout is None and metadata:
+            timeout = metadata.timeout
+        if timeout is not None and timeout <= 0:
+            raise ValueError("timeout must be positive when provided")
+
+        max_concurrency = kwargs.get("max_concurrency")
+        if max_concurrency is None and metadata:
+            max_concurrency = metadata.max_concurrency
+        if max_concurrency is not None and max_concurrency < 1:
+            raise ValueError("max_concurrency must be positive when provided")
+
         keep_alive = kwargs.get("keep_alive", False)
 
         # Check if it has handle method (implements Observer protocol)
@@ -111,14 +157,18 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
                 f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
 
-        # Create event filter
-        # Note: empty list means "no events", None means "all events"
-        event_filter: EventFilter = set(event_types) if event_types is not None else None
-
-        # Store event filter (doesn't hold strong ref to observer)
         self._event_filters[observer_id] = event_filter
 
-        # Store the observer with appropriate reference type
+        if timeout is not None:
+            self._observer_timeouts[observer_id] = timeout
+        elif observer_id in self._observer_timeouts:
+            del self._observer_timeouts[observer_id]
+
+        if max_concurrency is not None:
+            self._observer_semaphores[observer_id] = asyncio.Semaphore(max_concurrency)
+        elif observer_id in self._observer_semaphores:
+            del self._observer_semaphores[observer_id]
+
         if self._use_weak_refs:
             try:
                 # Try to create weak reference
@@ -143,18 +193,24 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         return self._should_process_event(event_filter, event)
 
     async def notify(self, event: "Event") -> None:
-        """Notify all interested observers of an event.
+        """Notify observers interested in ``event``.
 
-        Only observers registered for this event type will be notified.
-        Errors are logged but don't affect execution.
+        Args
+        ----
+            event: Event instance to broadcast to observers.
+
+        Observers are pulled from both strong and weak-reference stores,
+        filtered by event type, and executed with the configured concurrency
+        and timeout limits. Errors are logged and do not affect pipeline flow.
         """
-        # Check both strong and weak handlers
-        if not self._handlers and (not self._use_weak_refs or not self._weak_handlers):
+        # Check both strong and weak handlers; exit early when nothing is registered
+        if not self._handlers and (
+            not self._use_weak_refs or not getattr(self, "_weak_handlers", None)
+        ):
             return
 
-        # Filter observers based on event type
-        # Collect from both weak and strong references
-        all_observers = {}
+        # Gather handlers from both storage collections
+        all_observers: dict[str, Observer] = {}
 
         if self._use_weak_refs:
             # Get observers from weak references (auto-cleaned)
@@ -166,20 +222,20 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         # Add strong references
         all_observers.update(self._handlers)
 
-        interested_observers = [
-            observer
+        # Filter by event type before scheduling work
+        interested = [
+            (obs_id, observer)
             for obs_id, observer in all_observers.items()
             if self._should_notify(obs_id, event)
         ]
 
-        if not interested_observers:
+        if not interested:
             return
 
-        # Fire only interested observers with limited concurrency
-        tasks = [self._limited_invoke(observer, event) for observer in interested_observers]
+        # Schedule interested observers with per-manager/per-observer concurrency limits
+        tasks = [self._limited_invoke(obs_id, observer, event) for obs_id, observer in interested]
 
-        # Wait for all with simplified timeout
-        # Total timeout = base timeout + buffer for concurrency
+        # Total timeout = base timeout + small buffer for concurrency
         total_timeout = self._timeout + (len(tasks) * 0.1)
 
         try:
@@ -193,19 +249,24 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
                 {"event_type": type(event).__name__, "handler_name": "ObserverManager"},
             )
 
-    async def _limited_invoke(self, observer: Observer, event: "Event") -> None:
-        """Invoke observer with concurrency limit."""
-        async with self._semaphore:
-            await self._safe_invoke(observer, event)
+    async def _limited_invoke(self, observer_id: str, observer: Observer, event: "Event") -> None:
+        """Invoke an observer respecting global and per-observer limits."""
+        per_observer = self._observer_semaphores.get(observer_id)
+        if per_observer is None:
+            async with self._semaphore:
+                await self._safe_invoke(observer_id, observer, event)
+        else:
+            async with self._semaphore, per_observer:
+                await self._safe_invoke(observer_id, observer, event)
 
-    async def _safe_invoke(self, observer: Observer, event: "Event") -> None:
-        """Safely invoke an observer with timeout."""
+    async def _safe_invoke(self, observer_id: str, observer: Observer, event: "Event") -> None:
+        """Safely invoke an observer while enforcing configured timeouts."""
+        timeout = self._observer_timeouts.get(observer_id, self._timeout)
         try:
-            # Apply timeout to individual observer
-            await asyncio.wait_for(
-                observer.handle(event),
-                timeout=self._timeout,
-            )
+            if timeout is None:
+                await observer.handle(event)
+            else:
+                await asyncio.wait_for(observer.handle(event), timeout=timeout)
         except TimeoutError as e:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(
@@ -259,12 +320,20 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         if handler_id in self._event_filters:
             del self._event_filters[handler_id]
 
+        if handler_id in self._observer_timeouts:
+            del self._observer_timeouts[handler_id]
+
+        if handler_id in self._observer_semaphores:
+            del self._observer_semaphores[handler_id]
+
         return found
 
     def clear(self) -> None:
-        """Remove all registered observers."""
+        """Remove all registered observers and reset runtime caches."""
         super().clear()
         self._event_filters.clear()
+        self._observer_timeouts.clear()
+        self._observer_semaphores.clear()
         if self._use_weak_refs:
             self._weak_handlers.clear()
             self._strong_refs.clear()

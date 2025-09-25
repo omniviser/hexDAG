@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from hexai.core.application.events import NodeStarted, ObserverManager, PipelineStarted
+from hexai.core.application.events import NodeStarted, ObserverManager, PipelineStarted, observer
 
 
 class TestObserverManager:
@@ -458,3 +458,49 @@ class TestObserverManager:
         # Most weak refs should be dead (allowing for 1-2 due to Python GC quirks)
         alive_count = sum(1 for ref in refs if ref() is not None)
         assert alive_count <= 2  # Allow for minor GC delays
+
+
+@pytest.mark.asyncio
+async def test_observer_decorator_applies_metadata():
+    """Decorated observers should use metadata for registration."""
+    manager = ObserverManager()
+    calls: list[NodeStarted] = []
+
+    @observer(event_types=[NodeStarted], timeout=0.2, max_concurrency=1, id="logger")
+    async def decorated(event):
+        calls.append(event)
+
+    observer_id = manager.register(decorated)
+    assert observer_id == "logger"
+    assert manager._event_filters[observer_id] == {NodeStarted}
+    assert manager._observer_timeouts[observer_id] == 0.2
+    assert observer_id in manager._observer_semaphores
+
+    await manager.notify(NodeStarted(name="node", wave_index=1))
+    await manager.notify(PipelineStarted(name="pipe", total_nodes=1, total_waves=1))
+
+    assert len(calls) == 1
+    assert isinstance(manager._observer_semaphores[observer_id], asyncio.Semaphore)
+
+def test_observer_metadata_overrides():
+    """Explicit kwargs should override decorator defaults for observers."""
+    manager = ObserverManager()
+
+    @observer(event_types=[NodeStarted], timeout=2.0, id="decorated")
+    def decorated(event):
+        return None
+
+    observer_id = manager.register(
+        decorated,
+        observer_id="override",
+        timeout=0.5,
+        event_types=[PipelineStarted],
+        max_concurrency=2,
+    )
+
+    assert observer_id == "override"
+    assert manager._event_filters[observer_id] == {PipelineStarted}
+    assert manager._observer_timeouts[observer_id] == 0.5
+    semaphore = manager._observer_semaphores[observer_id]
+    assert isinstance(semaphore, asyncio.Semaphore)
+    assert getattr(semaphore, "_value", None) == 2

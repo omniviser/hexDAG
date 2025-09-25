@@ -7,9 +7,11 @@ the execution flow of the pipeline through control handlers.
 import asyncio
 import heapq
 import weakref
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, cast
 
+from .decorators import EventDecoratorMetadata
 from .events import Event
 from .models import (
     AsyncControlHandlerFunc,
@@ -27,6 +29,59 @@ from .models import (
 
 # Priority threshold for critical handlers
 CRITICAL_HANDLER_PRIORITY = 50
+DEFAULT_PRIORITY = 100
+
+
+def _get_control_metadata(
+    handler: Any,
+) -> EventDecoratorMetadata | None:
+    """Return control metadata if the handler is decorated."""
+    metadata = getattr(handler, "__hexdag_event_metadata__", None)
+    if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "control_handler":
+        return metadata
+    return None
+
+
+def _coerce_event_types(event_types: Any) -> set[type] | None:
+    """Normalize event type collections into a set."""
+    if event_types is None:
+        return None
+
+    if isinstance(event_types, type):
+        return {event_types}
+
+    if isinstance(event_types, Iterable):
+        normalized: set[type] = set()
+        for event_type in event_types:
+            if not isinstance(event_type, type):
+                raise TypeError(
+                    f"event_types must contain Event subclasses; got {type(event_type)!r}"
+                )
+            normalized.add(event_type)
+        return normalized
+
+    raise TypeError(
+        f"event_types must be None, a type, or an iterable of types; got {type(event_types)!r}"
+    )
+
+
+def _ensure_control_response_return_type(func: Callable[..., Any]) -> None:
+    """Ensure the function declares ControlResponse as its return type."""
+    func_name = getattr(func, "__name__", repr(func))
+
+    annotations = getattr(func, "__annotations__", {}) or {}
+    return_type = annotations.get("return")
+
+    if return_type is None:
+        raise TypeError(f"Control handler {func_name} must declare ControlResponse as return type")
+
+    if return_type is ControlResponse:
+        return
+
+    if isinstance(return_type, str) and return_type == ControlResponse.__name__:
+        return
+
+    raise TypeError(f"Control handler {func_name} must return ControlResponse, got {return_type}")
 
 
 @dataclass
@@ -82,37 +137,42 @@ class ControlManager(BaseEventManager, EventFilterMixin):
     def register(
         self, handler: ControlHandler | ControlHandlerFunc | AsyncControlHandlerFunc, **kwargs: Any
     ) -> str:
-        """Register a control handler with optional priority and event filtering.
+        """Register a control handler with optional priority and event filtering."""
+        metadata = _get_control_metadata(handler)
 
-        Args
-        ----
-            handler: Either a ControlHandler protocol implementation or
-                    a function (sync/async) that takes (event, context) -> ControlResponse
-            **kwargs: Can include:
-                - 'priority': Handler priority (lower = higher priority)
-                - 'name': Handler name
-                - 'description': Handler description
-                - 'event_types': List of event types to handle (None = all events)
+        priority = kwargs.get("priority")
+        if priority is None:
+            priority = (
+                metadata.priority
+                if metadata and metadata.priority is not None
+                else DEFAULT_PRIORITY
+            )
+        if not isinstance(priority, int):
+            raise TypeError("priority must be an integer")
 
-        Returns
-        -------
-            str: The ID/name of the registered handler
-        """
-        # Extract metadata from kwargs
-        priority = kwargs.get("priority", 100)
-        name = kwargs.get("name", "")
-        description = kwargs.get("description", "")
-        event_types = kwargs.get("event_types")
-
-        # Generate handler ID
-        if not name:
+        provided_name = kwargs.get("name")
+        if provided_name:
+            name = provided_name
+        elif metadata and metadata.name:
+            name = metadata.name
+        else:
             name = getattr(handler, "__name__", f"handler_{id(handler)}")
 
-        # Check for duplicate
+        description = kwargs.get("description")
+        if description is None and metadata:
+            description = metadata.description
+        if description is None:
+            description = ""
+
+        event_types_param = kwargs.get("event_types")
+        if event_types_param is None and metadata:
+            event_types_param = metadata.event_types
+        event_filter = _coerce_event_types(event_types_param)
+
         if name in self._handler_index:
             raise ValueError(f"Handler '{name}' already registered")
 
-        metadata = HandlerMetadata(priority=priority, name=name, description=description)
+        metadata_model = HandlerMetadata(priority=priority, name=name, description=description)
 
         # Wrap function if needed
         keep_alive = kwargs.get("keep_alive", False)
@@ -122,25 +182,22 @@ class ControlManager(BaseEventManager, EventFilterMixin):
             wrapped_handler = cast("ControlHandler", handler)
         elif callable(handler):
             # Wrap function to implement the protocol
-            wrapped_handler = FunctionControlHandler(handler, metadata)
+            _ensure_control_response_return_type(handler)
+            wrapped_handler = FunctionControlHandler(handler, metadata_model)
             # Wrapped functions need to be kept alive
             keep_alive = True
         else:
             raise TypeError(
-                f"Handler must be callable or implement ControlHandler protocol, "
+                "Handler must be callable or implement ControlHandler protocol, "
                 f"got {type(handler)}"
             )
 
-        # Convert event types to set if provided
-        event_filter = set(event_types) if event_types is not None else None
-
-        # Create consolidated entry
         entry = HandlerEntry(
             priority=priority,
             name=name,
             handler=wrapped_handler,
             event_types=event_filter,
-            metadata=metadata,
+            metadata=metadata_model,
             deleted=False,
         )
 
@@ -216,7 +273,7 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         self._deletion_count = 0
 
     def clear(self) -> None:
-        """Remove all registered handlers."""
+        """Remove all registered handlers and reset internal state."""
         super().clear()
         self._handler_heap.clear()
         self._handler_index.clear()
@@ -224,22 +281,35 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         self._deletion_count = 0
 
     async def check(self, event: Event, context: ExecutionContext) -> ControlResponse:
-        """Check event against all control handlers.
+        """Check event against registered control handlers.
 
-        Only handlers registered for this event type will be consulted.
+        Args
+        ----
+            event: Event instance to evaluate.
+            context: Execution context associated with the current pipeline state.
+
+        Handlers are evaluated in priority order until one interrupts execution.
+        Only handlers whose event filters match the incoming event are invoked.
 
         Returns
         -------
-            ControlResponse with signal and optional data.
+            ControlResponse
+                Response from the first handler that interrupts execution or
+                the default proceed response when no handler intervenes.
+
+        Raises
+        ------
+            TypeError
+                If a handler returns a value other than ``ControlResponse``.
         """
         # No handlers means proceed
         if not self._handler_heap:
             return ControlResponse()
 
-        # Process handlers in priority order directly from heap
-        # No sorting needed - heap is already ordered
+        # Process handlers in priority order directly from the heap
+        # (heap is already ordered so no extra sorting is required)
         for entry in self._handler_heap:
-            # Skip if handler doesn't care about this event type
+            # Skip handlers that do not match this event type
             if not self._should_handle(entry, event):
                 continue
 
@@ -278,7 +348,9 @@ class ControlManager(BaseEventManager, EventFilterMixin):
                     },
                 )
 
-                # For critical handlers, return ERROR signal
+                if isinstance(e, TypeError):
+                    raise
+
                 if is_critical:
                     return ControlResponse(
                         signal=ControlSignal.ERROR,
@@ -290,23 +362,14 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         return ControlResponse()
 
     def _validate_response(self, response: Any, handler_name: str) -> ControlResponse:
-        """Validate and normalize handler response."""
+        """Validate a handler response and enforce ``ControlResponse`` contract."""
         if response is None:
-            self._error_handler.handle_error(
-                ValueError(f"Handler {handler_name} returned None, assuming PROCEED"),
-                {"handler_name": handler_name, "is_critical": False},
-            )
-            return ControlResponse()
+            raise TypeError(f"Handler {handler_name} returned None, ControlResponse required")
 
         if not isinstance(response, ControlResponse):
-            self._error_handler.handle_error(
-                TypeError(
-                    f"Handler {handler_name} returned {type(response).__name__}, "
-                    f"not ControlResponse. Assuming PROCEED"
-                ),
-                {"handler_name": handler_name, "is_critical": False},
+            raise TypeError(
+                f"Handler {handler_name} returned {type(response).__name__}, not ControlResponse"
             )
-            return ControlResponse()
 
         return response
 

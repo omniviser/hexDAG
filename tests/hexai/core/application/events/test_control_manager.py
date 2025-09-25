@@ -12,6 +12,7 @@ from hexai.core.application.events import (
     NodeFailed,
     NodeStarted,
     PipelineStarted,
+    control_handler,
 )
 
 
@@ -49,7 +50,7 @@ class TestControlManager:
         control_manager = ControlManager()
 
         # Handler that vetoes nodes with specific names
-        async def veto_forbidden_nodes(event, context):
+        async def veto_forbidden_nodes(event, context) -> ControlResponse:
             if isinstance(event, NodeStarted) and event.name == "forbidden":
                 return ControlResponse(signal=ControlSignal.SKIP)
             return ControlResponse()
@@ -81,17 +82,17 @@ class TestControlManager:
         control_manager = ControlManager()
 
         # First handler - allows everything
-        async def allow_all(event, context):
+        async def allow_all(event, context) -> ControlResponse:
             return ControlResponse()
 
         # Second handler - vetoes failures
-        async def veto_failures(event, context):
+        async def veto_failures(event, context) -> ControlResponse:
             if isinstance(event, NodeFailed):
                 return ControlResponse(signal=ControlSignal.SKIP)
             return ControlResponse()
 
         # Third handler - limits node names
-        async def limit_node_names(event, context):
+        async def limit_node_names(event, context) -> ControlResponse:
             if hasattr(event, "name") and event.name.startswith("test_"):
                 return ControlResponse()
             if hasattr(event, "name"):
@@ -130,7 +131,7 @@ class TestControlManager:
                 self.max_events = max_events
                 self.event_count = 0
 
-            async def handle(self, event, context):
+            async def handle(self, event, context) -> ControlResponse:
                 self.event_count += 1
                 if self.event_count > self.max_events:
                     return ControlResponse(signal=ControlSignal.SKIP)  # Rate limit exceeded
@@ -168,7 +169,7 @@ class TestControlManager:
                 self.failure_count = 0
                 self.is_open = False
 
-            async def handle(self, event, context):
+            async def handle(self, event, context) -> ControlResponse:
                 if self.is_open:
                     return ControlResponse(
                         signal=ControlSignal.FAIL
@@ -213,7 +214,7 @@ class TestControlManager:
         control_manager = ControlManager()
 
         # Handler that crashes
-        async def broken_handler(event, context):
+        async def broken_handler(event, context) -> ControlResponse:
             raise RuntimeError("Handler error")
 
         control_manager.register(broken_handler)
@@ -230,7 +231,7 @@ class TestControlManager:
         control_manager = ControlManager()
 
         # Handler that vetoes everything
-        async def veto_all(event, context):
+        async def veto_all(event, context) -> ControlResponse:
             return ControlResponse(signal=ControlSignal.SKIP)
 
         control_manager.register(veto_all)
@@ -262,10 +263,10 @@ class TestControlManager:
         )
 
         # Create handlers with different filters
-        async def node_handler(event, ctx):
+        async def node_handler(event, ctx) -> ControlResponse:
             return ControlResponse(signal=ControlSignal.RETRY)
 
-        async def tool_handler(event, ctx):
+        async def tool_handler(event, ctx) -> ControlResponse:
             return ControlResponse(signal=ControlSignal.SKIP)
 
         manager.register(node_handler, name="node_policy", event_types=[NodeStarted, NodeCompleted])
@@ -297,7 +298,7 @@ class TestControlManager:
 
         call_count = 0
 
-        async def universal_handler(event, ctx):
+        async def universal_handler(event, ctx) -> ControlResponse:
             nonlocal call_count
             call_count += 1
             return ControlResponse()
@@ -320,11 +321,11 @@ class TestControlManager:
         from hexai.core.application.events import ToolCalled
 
         # High priority handler for nodes only
-        async def high_priority_node_handler(event, ctx):
+        async def high_priority_node_handler(event, ctx) -> ControlResponse:
             return ControlResponse(signal=ControlSignal.SKIP)
 
         # Low priority universal handler
-        async def low_priority_handler(event, ctx):
+        async def low_priority_handler(event, ctx) -> ControlResponse:
             return ControlResponse(signal=ControlSignal.RETRY)
 
         manager.register(
@@ -356,7 +357,7 @@ class TestControlManager:
 
         from hexai.core.application.events import PipelineCompleted
 
-        async def never_handler(event, ctx):
+        async def never_handler(event, ctx) -> ControlResponse:
             return ControlResponse(signal=ControlSignal.FAIL)
 
         manager.register(never_handler, event_types=[])  # Empty list
@@ -376,14 +377,14 @@ class TestControlManager:
         control_manager = ControlManager()
 
         # Business policy: no processing on weekends
-        async def weekday_only_policy(event, context):
+        async def weekday_only_policy(event, context) -> ControlResponse:
             # For demo, just check if node name contains "weekend"
             if hasattr(event, "name") and "weekend" in event.name:
                 return ControlResponse(signal=ControlSignal.SKIP)
             return ControlResponse()
 
         # Security policy: certain nodes require approval
-        async def security_policy(event, context):
+        async def security_policy(event, context) -> ControlResponse:
             if hasattr(event, "name") and event.name.startswith("sensitive_"):
                 # In real scenario, might check for approval
                 return ControlResponse(signal=ControlSignal.SKIP)  # Block sensitive operations
@@ -415,7 +416,7 @@ class TestControlManager:
 
         # Create a handler object
         class TestHandler:
-            async def handle(self, event, context):
+            async def handle(self, event, context) -> ControlResponse:
                 return ControlResponse()
 
         handler = TestHandler()
@@ -453,7 +454,7 @@ class TestControlManager:
         called = []
 
         # Register a function (will be wrapped)
-        def control_func(event, context):
+        def control_func(event, context) -> ControlResponse:
             called.append(event)
             return ControlResponse()
 
@@ -479,7 +480,7 @@ class TestControlManager:
         ctrl_manager = ControlManager(use_weak_refs=False)
 
         class TestHandler:
-            async def handle(self, event, context):
+            async def handle(self, event, context) -> ControlResponse:
                 return ControlResponse()
 
         handler = TestHandler()
@@ -488,3 +489,95 @@ class TestControlManager:
         # Should be in normal handlers dict
         assert "test" in ctrl_manager._handlers
         assert isinstance(ctrl_manager._handlers["test"], TestHandler)
+
+
+@pytest.mark.asyncio
+async def test_control_handler_decorator_applies_metadata():
+    """Decorated control handlers should populate metadata defaults."""
+    manager = ControlManager()
+    calls: list[NodeFailed] = []
+
+    @control_handler(
+        "retry_on_failure",
+        priority=5,
+        event_types=[NodeFailed],
+        description="Retry failing nodes",
+    )
+    async def retry_on_failure(event, context) -> ControlResponse:
+        calls.append(event)
+        return ControlResponse(signal=ControlSignal.RETRY)
+
+    manager.register(retry_on_failure)
+
+    ctx = ExecutionContext(dag_id="decorated")
+    failed_event = NodeFailed(name="node", wave_index=1, error=RuntimeError("boom"))
+    other_event = NodeStarted(name="node", wave_index=1)
+
+    response = await manager.check(failed_event, ctx)
+    assert response.signal == ControlSignal.RETRY
+    assert calls == [failed_event]
+
+    response = await manager.check(other_event, ctx)
+    assert response.signal == ControlSignal.PROCEED
+
+    entry = manager._handler_index["retry_on_failure"]
+    assert entry.priority == 5
+    assert entry.event_types == {NodeFailed}
+    assert entry.metadata.description == "Retry failing nodes"
+
+@pytest.mark.asyncio
+async def test_control_handler_metadata_overrides():
+    """Explicit kwargs should override decorator metadata."""
+    manager = ControlManager()
+
+    @control_handler("decorated_handler", priority=30, event_types=[NodeFailed])
+    async def decorated_handler(event, context) -> ControlResponse:
+        return ControlResponse(signal=ControlSignal.FAIL)
+
+    manager.register(
+        decorated_handler,
+        name="override_name",
+        priority=15,
+        event_types=[NodeStarted],
+        description="overridden",
+    )
+
+    entry = manager._handler_index["override_name"]
+    assert entry.priority == 15
+    assert entry.event_types == {NodeStarted}
+    assert entry.metadata.description == "overridden"
+
+def test_control_handler_missing_annotation_raises():
+    """Handlers must declare ControlResponse return type."""
+    manager = ControlManager()
+
+    async def missing_annotation(event, context):
+        return ControlResponse()
+
+    with pytest.raises(TypeError):
+        manager.register(missing_annotation)
+
+def test_control_handler_wrong_annotation_raises():
+    """Return annotations other than ControlResponse are rejected."""
+    manager = ControlManager()
+
+    async def wrong_return(event, context) -> str:
+        return "nope"
+
+    with pytest.raises(TypeError):
+        manager.register(wrong_return)
+
+@pytest.mark.asyncio
+async def test_control_handler_runtime_wrong_type_raises():
+    """Handlers that return the wrong type at runtime should raise."""
+    manager = ControlManager()
+
+    @control_handler("bad_runtime")
+    async def bad_runtime(event, context) -> ControlResponse:  # type: ignore[return-value]
+        return "oops"  # type: ignore[return-value]
+
+    manager.register(bad_runtime)
+
+    ctx = ExecutionContext(dag_id="runtime")
+    with pytest.raises(TypeError):
+        await manager.check(NodeStarted(name="node", wave_index=0), ctx)

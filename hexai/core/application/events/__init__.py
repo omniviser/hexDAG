@@ -21,6 +21,9 @@ from .config import (
 # Managers
 from .control_manager import ControlManager
 
+# Decorators
+from .decorators import EventDecoratorMetadata, control_handler, observer
+
 # Event classes
 from .events import (
     Event,
@@ -74,6 +77,10 @@ __all__ = [
     # Managers
     "ObserverManager",
     "ControlManager",
+    # Decorators
+    "EventDecoratorMetadata",
+    "control_handler",
+    "observer",
     # Config
     "NullObserverManager",
     "NullControlManager",
