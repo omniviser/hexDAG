@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .events import Event
-from .decorators import EventDecoratorMetadata
+from .decorators import EVENT_METADATA_ATTR, EventDecoratorMetadata
 from .models import (
     AsyncObserverFunc,
     BaseEventManager,
@@ -32,7 +32,7 @@ type EventFilter = set[EventType] | None
 
 def _get_observer_metadata(handler: Any) -> EventDecoratorMetadata | None:
     """Return observer metadata if present."""
-    metadata = getattr(handler, "__hexdag_event_metadata__", None)
+    metadata = getattr(handler, EVENT_METADATA_ATTR, None)
     if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "observer":
         return metadata
     return None

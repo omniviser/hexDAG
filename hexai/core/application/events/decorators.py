@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 if TYPE_CHECKING:
     from .events import Event
 
+EVENT_METADATA_ATTR = "__hexdag_event_metadata__"
+
 ControlHandlerKind = Literal["control_handler"]
 ObserverKind = Literal["observer"]
 DecoratorKind = ControlHandlerKind | ObserverKind
@@ -96,7 +98,7 @@ def control_handler(
             event_types=normalized_events,
             description=description,
         )
-        func.__hexdag_event_metadata__ = metadata  # type: ignore[attr-defined]
+        func.__dict__[EVENT_METADATA_ATTR] = metadata
         return func
 
     return decorator
@@ -142,13 +144,14 @@ def observer(
             max_concurrency=max_concurrency,
             id=id,
         )
-        func.__hexdag_event_metadata__ = metadata  # type: ignore[attr-defined]
+        func.__dict__[EVENT_METADATA_ATTR] = metadata
         return func
 
     return decorator
 
 
 __all__ = [
+    "EVENT_METADATA_ATTR",
     "EventDecoratorMetadata",
     "control_handler",
     "observer",

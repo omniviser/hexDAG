@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, cast
 
-from .decorators import EventDecoratorMetadata
+from .decorators import EVENT_METADATA_ATTR, EventDecoratorMetadata
 from .events import Event
 from .models import (
     AsyncControlHandlerFunc,
@@ -36,7 +36,7 @@ def _get_control_metadata(
     handler: Any,
 ) -> EventDecoratorMetadata | None:
     """Return control metadata if the handler is decorated."""
-    metadata = getattr(handler, "__hexdag_event_metadata__", None)
+    metadata = getattr(handler, EVENT_METADATA_ATTR, None)
     if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "control_handler":
         return metadata
     return None
