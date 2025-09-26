@@ -215,3 +215,38 @@ jobs:
           # Radon configuration is read from pyproject.toml
           uv run radon cc hexai/ --min B --show-complexity
         displayName: "Run radon - code complexity analysis"
+
+  - job: Documentation
+    dependsOn: CodeQuality
+    displayName: "Build & Validate Documentation"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: self
+      persistCredentials: true
+      clean: true
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: "3.12"
+
+    - script: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        uv sync --all-extras --dev
+      displayName: "Install dependencies with uv"
+
+    - script: |
+        uv run pydocstyle src/
+        uv run doc8 docs/
+      displayName: "Check docstrings & docs formatting"
+
+    - script: |
+        uv run docs-build
+      displayName: "Build documentation"
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: "docs/_build/html"
+        artifactName: "docs"
+      displayName: "Publish documentation artifact"
