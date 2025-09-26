@@ -269,5 +269,77 @@ class TestSQLiteAdapter:
     def test_sqlite_adapter_repr(self):
         """Test string representation of adapter."""
         adapter = SQLiteAdapter(db_path="test.db")
-        assert repr(adapter) == "SQLiteAdapter(db_path='test.db')"
+        assert repr(adapter) == "SQLiteAdapter(db_path='test.db', mode='read-write')"
         adapter.close()
+
+        # Test with read-only mode
+        adapter_ro = SQLiteAdapter(db_path="test.db", read_only=True)
+        assert repr(adapter_ro) == "SQLiteAdapter(db_path='test.db', mode='read-only')"
+        adapter_ro.close()
+
+    @pytest.mark.asyncio
+    async def test_sqlite_adapter_read_only_mode(self):
+        """Test read-only mode prevents modifications."""
+        import os
+        import tempfile
+
+        # Create a database with data
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        try:
+            # First, create database and add data in read-write mode
+            adapter_rw = SQLiteAdapter(db_path=db_path, read_only=False)
+
+            # Create table and insert data
+            await adapter_rw.aexecute_query("""
+                CREATE TABLE test_data (
+                    id INTEGER PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+
+            await adapter_rw.aexecute_query(
+                "INSERT INTO test_data (value) VALUES (:value)", {"value": "test_value"}
+            )
+
+            adapter_rw.close()
+
+            # Now open in read-only mode
+            adapter_ro = SQLiteAdapter(db_path=db_path, read_only=True)
+
+            # SELECT should work
+            results = await adapter_ro.aexecute_query("SELECT * FROM test_data")
+            assert len(results) == 1
+            assert results[0]["value"] == "test_value"
+
+            # INSERT should fail
+            with pytest.raises(sqlite3.OperationalError) as exc_info:
+                await adapter_ro.aexecute_query(
+                    "INSERT INTO test_data (value) VALUES (:value)", {"value": "should_fail"}
+                )
+            # SQLite returns "attempt to write a readonly database"
+            assert "readonly" in str(exc_info.value).lower()
+
+            # UPDATE should fail
+            with pytest.raises(sqlite3.OperationalError) as exc_info:
+                await adapter_ro.aexecute_query(
+                    "UPDATE test_data SET value = :value WHERE id = 1", {"value": "should_fail"}
+                )
+            assert "readonly" in str(exc_info.value).lower()
+
+            # DELETE should fail
+            with pytest.raises(sqlite3.OperationalError) as exc_info:
+                await adapter_ro.aexecute_query("DELETE FROM test_data WHERE id = 1")
+            assert "readonly" in str(exc_info.value).lower()
+
+            # CREATE TABLE should fail
+            with pytest.raises(sqlite3.OperationalError) as exc_info:
+                await adapter_ro.aexecute_query("CREATE TABLE new_table (id INTEGER)")
+            assert "readonly" in str(exc_info.value).lower()
+
+            adapter_ro.close()
+
+        finally:
+            # Clean up
+            os.unlink(db_path)

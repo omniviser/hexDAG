@@ -5,7 +5,10 @@ import inspect
 import logging
 from typing import Any
 
+from pydantic import BaseModel
+
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
+from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.registry import registry  # Use the direct module-level singleton
 from hexai.core.registry.decorators import adapter
@@ -17,7 +20,7 @@ __all__ = ["UnifiedToolRouter"]
 
 
 @adapter(implements_port="tool_router")
-class UnifiedToolRouter(ToolRouter):
+class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
     """ToolRouter adapter that uses the global registry singleton.
 
     This adapter is a thin wrapper around the global ComponentRegistry that:
@@ -37,10 +40,36 @@ class UnifiedToolRouter(ToolRouter):
         tool_defs = router.get_tool_definitions()
     """
 
-    def __init__(self) -> None:
-        """Initialize the router - uses the global registry singleton."""
-        # No initialization needed - we use get_registry() when needed
+    # Configuration schema for TOML generation
+    class Config(BaseModel):
+        """Configuration schema for Unified Tool Router."""
+
+        # No configuration needed for this adapter as it uses the global registry
         pass
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Return configuration schema."""
+        return cls.Config
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize the router - uses the global registry singleton.
+
+        Args
+        ----
+            **kwargs: Configuration options (none needed for this adapter)
+        """
+        # Create config from kwargs using the Config schema
+        config_data = {}
+        for field_name in self.Config.model_fields:
+            if field_name in kwargs:
+                config_data[field_name] = kwargs[field_name]
+
+        # Create and validate config (empty for this adapter)
+        config = self.Config(**config_data)
+        self.config = config
+
+        # No other initialization needed - we use get_registry() when needed
 
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
         """Call a tool with parameters from the registry.

@@ -4,7 +4,7 @@ import ast
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -20,6 +20,33 @@ from .llm_node import LLMNode
 from .tool_utils import ToolCallFormat, ToolParser
 
 
+class PhaseContext(TypedDict):
+    """Context structure for phase transitions in agents.
+
+    Attributes
+    ----------
+    previous_phase : str, optional
+        The phase the agent is transitioning from
+    reason : str, optional
+        Explanation for why the phase change is occurring
+    carried_data : dict[str, Any], optional
+        Data to carry forward from the previous phase
+    target_output : str, optional
+        Expected output format or goal for the new phase
+    iteration : int, optional
+        Current iteration number if in a loop or retry scenario
+    metadata : dict[str, Any], optional
+        Additional metadata about the phase transition
+    """
+
+    previous_phase: NotRequired[str]
+    reason: NotRequired[str]
+    carried_data: NotRequired[dict[str, Any]]
+    target_output: NotRequired[str]
+    iteration: NotRequired[int]
+    metadata: NotRequired[dict[str, Any]]
+
+
 class AgentState(BaseModel):
     """Pydantic model for agent state - provides type safety and validation."""
 
@@ -32,6 +59,7 @@ class AgentState(BaseModel):
     tools_used: list[str] = []
     current_phase: str = "main"
     phase_history: list[str] = ["main"]
+    phase_contexts: dict[str, PhaseContext] = {}  # Store typed context for each phase
     step: int = 0
     response: str = ""
 
@@ -292,7 +320,8 @@ class ReActAgentNode(BaseNodeFactory):
         if format_style == ToolCallFormat.FUNCTION_CALL:
             return """- Call ONE tool at a time: INVOKE_TOOL: tool_name(param='value')
 - For final answer and structured output: INVOKE_TOOL: tool_end(field1='value1', field2='value2')
-- For phase change: INVOKE_TOOL: change_phase(phase='new_phase')"""
+- For phase change: INVOKE_TOOL: change_phase(phase='new_phase', reason='why changing',
+carried_data={'key': 'value'})"""
 
         elif format_style == ToolCallFormat.JSON:
             return (
@@ -301,7 +330,8 @@ class ReActAgentNode(BaseNodeFactory):
                 """- For final answer and structured output: INVOKE_TOOL: """
                 """{"tool": "tool_end", "params": {"field1": "value1", "field2": "value2"}}\n"""
                 """- For phase change: INVOKE_TOOL: """
-                """{"tool": "change_phase", "params": {"phase": "new_phase"}}"""
+                """{"tool": "change_phase", "params": {"phase": "new_phase", "reason": "why",
+                "carried_data": {"key": "val"}}}"""
             )
 
         elif format_style == ToolCallFormat.MIXED:
@@ -312,8 +342,10 @@ class ReActAgentNode(BaseNodeFactory):
   - Function: INVOKE_TOOL: tool_end(field1='value1', field2='value2')
   - JSON: INVOKE_TOOL: {"tool": "tool_end", "params": {"field1": "value1", "field2": "value2"}}
 - For phase change:
-  - Function: INVOKE_TOOL: change_phase(phase='new_phase')
-  - JSON: INVOKE_TOOL: {"tool": "change_phase", "params": {"phase": "new_phase"}}"""
+  - Function: INVOKE_TOOL: change_phase(phase='new_phase', reason='why',
+  carried_data={'key': 'val'})
+  - JSON: INVOKE_TOOL: {"tool": "change_phase", "params": {"phase": "new_phase",
+  "reason": "why", "carried_data": {"key": "val"}}}"""
 
     async def _get_llm_response(
         self, prompt: PromptInput, llm_input: dict[str, Any], ports: dict[str, Any], node_name: str
@@ -355,10 +387,17 @@ class ReActAgentNode(BaseNodeFactory):
 
         # Get LLM response - convert state to dict for template rendering
         state_dict = state.model_dump()
+
+        # Get current phase context if available
+        current_phase_context = state.phase_contexts.get(state.current_phase, {})
+
         llm_input = {
             **state_dict,
             **state_dict.get("input_data", {}),
             "reasoning_so_far": "\n".join(state.reasoning_steps) or "Starting reasoning...",
+            "phase_context": current_phase_context,
+            "phase_reason": current_phase_context.get("reason", ""),
+            "phase_target": current_phase_context.get("target_output", ""),
         }
 
         # Get LLM response
@@ -408,9 +447,23 @@ class ReActAgentNode(BaseNodeFactory):
                 # Handle special tools
                 if tool_call.name == "change_phase" and isinstance(result, dict):
                     new_phase = result.get("new_phase")
+                    context = result.get("context", {})
+
                     if new_phase and new_phase in continuation_prompts:
+                        # Store the previous phase in context if not already provided
+                        if "previous_phase" not in context:
+                            context["previous_phase"] = state.current_phase
+
+                        # Store context for this phase transition
+                        state.phase_contexts[new_phase] = context
+
+                        # Update current phase
                         state.current_phase = new_phase
                         state.phase_history.append(new_phase)
+
+                        # If there's carried_data, merge it into state.input_data
+                        if "carried_data" in context and isinstance(context["carried_data"], dict):
+                            state.input_data.update(context["carried_data"])
 
             except Exception as e:
                 error_msg = f"{tool_call.name}: Error - {e}"

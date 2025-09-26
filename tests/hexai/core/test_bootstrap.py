@@ -240,13 +240,14 @@ def register_components(registry, namespace):
                     del sys.modules["invalid_adapter"]
 
     def test_import_error_rollback(self):
-        """Failed imports should rollback bootstrap."""
+        """Failed imports should rollback bootstrap for core modules."""
         registry = ComponentRegistry()
 
-        # Create entries with non-existent module
-        entries = [ManifestEntry(namespace="test", module="non_existent_module_xyz")]
+        # Create entries with non-existent core module
+        # Core modules must exist and cause failure if missing
+        entries = [ManifestEntry(namespace="core", module="hexai.core.non_existent_module")]
 
-        # Bootstrap should fail and rollback
+        # Bootstrap should fail and rollback for core modules
         with pytest.raises(ImportError):
             registry.bootstrap(entries)
 

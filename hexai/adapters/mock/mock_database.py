@@ -3,25 +3,51 @@
 import asyncio
 from typing import Any
 
-from hexai.adapters.configs import MockDatabaseConfig
+from pydantic import BaseModel, Field
+
+from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.database import DatabasePort
 from hexai.core.registry import adapter
 
 
 @adapter(name="mock_database", implements_port="database", namespace="plugin")
-class MockDatabaseAdapter(DatabasePort):
+class MockDatabaseAdapter(DatabasePort, ConfigurableComponent):
     """Mock implementation of DatabasePort for testing and demos."""
 
-    def __init__(self, config: MockDatabaseConfig | None = None) -> None:
+    # Configuration schema for TOML generation
+    class Config(BaseModel):
+        """Configuration schema for Mock Database adapter."""
+
+        enable_sample_data: bool = Field(
+            default=True, description="Whether to initialize with sample database schema"
+        )
+        delay_seconds: float = Field(
+            default=0.0, ge=0.0, description="Artificial delay to simulate database query latency"
+        )
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Return configuration schema."""
+        return cls.Config
+
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize with configuration.
 
         Args
         ----
-            config: Configuration for the mock database
+            **kwargs: Configuration options (enable_sample_data, delay_seconds)
         """
-        if config is None:
-            config = MockDatabaseConfig()
+        # Create config from kwargs using the Config schema
+        config_data = {}
+        for field_name in self.Config.model_fields:
+            if field_name in kwargs:
+                config_data[field_name] = kwargs[field_name]
 
+        # Create and validate config
+        config = self.Config(**config_data)
+
+        # Store configuration
+        self.config = config
         self.delay_seconds = config.delay_seconds
         self.enable_sample_data = config.enable_sample_data
 

@@ -19,13 +19,10 @@ await memory.aset("key", {"data": "value"})
 data = await memory.aget("key")
 
 # With configuration
-from hexai.adapters.configs import InMemoryMemoryConfig
-
-config = InMemoryMemoryConfig(
+memory = InMemoryMemory(
     max_size=100,  # Limit to 100 items
     delay_seconds=0.0  # No artificial delay
 )
-memory = InMemoryMemory(config)
 ```
 
 #### Features
@@ -38,9 +35,7 @@ memory = InMemoryMemory(config)
 #### Configuration
 
 ```python
-from hexai.adapters.configs import InMemoryMemoryConfig
-
-config = InMemoryMemoryConfig(
+memory = InMemoryMemory(
     max_size=1000,      # Maximum items (None for unlimited)
     delay_seconds=0.0   # Artificial delay for testing
 )

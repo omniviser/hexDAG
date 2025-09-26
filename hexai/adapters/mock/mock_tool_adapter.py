@@ -2,6 +2,9 @@
 
 from typing import Any
 
+from pydantic import BaseModel, Field
+
+from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.registry import adapter
 
@@ -12,7 +15,7 @@ from hexai.core.registry import adapter
     namespace="plugin",
     description="Simple mock tool adapter with predefined responses",
 )
-class MockToolAdapter(ToolRouter):
+class MockToolAdapter(ToolRouter, ConfigurableComponent):
     """Mock tool adapter that returns predefined responses.
 
     This is a simpler alternative to MockToolRouter, designed for
@@ -31,26 +34,46 @@ class MockToolAdapter(ToolRouter):
         [{"id": 1, "name": "Alice"}]
     """
 
+    # Configuration schema for TOML generation
+    class Config(BaseModel):
+        """Configuration schema for Mock Tool Adapter."""
+
+        default_response: Any = Field(
+            default=None, description="Default response for unmapped tools"
+        )
+        raise_on_unknown: bool = Field(default=False, description="Raise error for unknown tools")
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Return configuration schema."""
+        return cls.Config
+
     def __init__(
         self,
         mock_responses: dict[str, Any] | None = None,
-        default_response: Any = None,
-        raise_on_unknown: bool = False,
+        **kwargs: Any,
     ) -> None:
         """Initialize the mock tool adapter.
 
         Args
         ----
             mock_responses: Dictionary mapping tool names to their predefined responses.
-                           The response can be any JSON-serializable value.
-            default_response: Default response for tools not in mock_responses.
-                            If None, returns {"status": "success", "tool": tool_name}
-            raise_on_unknown: If True, raise ValueError for unknown tools.
-                            If False, return default_response.
+            **kwargs: Configuration options (default_response, raise_on_unknown)
         """
+        # Create config from kwargs using the Config schema
+        config_data = {}
+        for field_name in self.Config.model_fields:
+            if field_name in kwargs:
+                config_data[field_name] = kwargs[field_name]
+
+        # Create and validate config
+        config = self.Config(**config_data)
+        self.config = config
+
+        # Store configuration
         self.mock_responses = mock_responses or {}
-        self.default_response = default_response
-        self.raise_on_unknown = raise_on_unknown
+        self.default_response = config.default_response
+        self.raise_on_unknown = config.raise_on_unknown
 
         # Track call history for testing
         self.call_history: list[dict[str, Any]] = []

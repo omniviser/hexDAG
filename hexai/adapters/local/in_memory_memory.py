@@ -3,7 +3,9 @@
 import asyncio
 from typing import Any
 
-from hexai.adapters.configs import InMemoryMemoryConfig
+from pydantic import BaseModel, Field
+
+from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.memory import Memory
 from hexai.core.registry import adapter
 
@@ -11,7 +13,7 @@ __all__ = ["InMemoryMemory"]
 
 
 @adapter(name="in_memory_memory", implements_port="memory")
-class InMemoryMemory(Memory):
+class InMemoryMemory(Memory, ConfigurableComponent):
     """In-memory implementation of Memory for testing.
 
     Features:
@@ -22,16 +24,40 @@ class InMemoryMemory(Memory):
     - Reset functionality
     """
 
-    def __init__(self, config: InMemoryMemoryConfig | None = None) -> None:
+    # Configuration schema for TOML generation
+    class Config(BaseModel):
+        """Configuration schema for In-Memory adapter."""
+
+        delay_seconds: float = Field(
+            default=0.0, ge=0.0, description="Artificial delay to simulate storage access latency"
+        )
+        max_size: int | None = Field(
+            default=None, gt=0, description="Maximum number of items to store (None for unlimited)"
+        )
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Return configuration schema."""
+        return cls.Config
+
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize the in-memory storage.
 
         Args
         ----
-            config: Configuration for the memory adapter
+            **kwargs: Configuration options
         """
-        if config is None:
-            config = InMemoryMemoryConfig()
+        # Create config from kwargs using the Config schema
+        config_data = {}
+        for field_name in self.Config.model_fields:
+            if field_name in kwargs:
+                config_data[field_name] = kwargs[field_name]
 
+        # Create and validate config
+        config = self.Config(**config_data)
+
+        # Store configuration
+        self.config = config
         self.storage: dict[str, Any] = {}
         self.delay_seconds = config.delay_seconds
         self.max_size = config.max_size

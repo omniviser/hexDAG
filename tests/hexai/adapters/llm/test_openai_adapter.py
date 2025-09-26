@@ -17,19 +17,30 @@ class TestOpenAIAdapter:
             adapter = OpenAIAdapter(api_key="test-key")
             assert adapter.model == "gpt-4o-mini"
             assert adapter.temperature == 0.7
-            assert adapter.max_tokens == 1000
-            mock_client.assert_called_once_with(api_key="test-key")
+            assert adapter.max_tokens is None  # Default is now None for model default
+            assert adapter.response_format == "text"  # New field
+            # Note: seed is not in the Config schema anymore
+            mock_client.assert_called_once_with(api_key="test-key", timeout=60.0, max_retries=2)
 
     def test_initialization_with_env_variable(self):
         """Test adapter initialization with API key from environment."""
-        with patch("os.getenv", return_value="env-key"):
+        with patch(
+            "hexai.adapters.llm.openai_adapter.Secret.retrieve_secret_from_env"
+        ) as mock_secret:
+            mock_secret_obj = MagicMock()
+            mock_secret_obj.get.return_value = "env-key"
+            mock_secret.return_value = mock_secret_obj
+
             with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client:
                 OpenAIAdapter()
-                mock_client.assert_called_once_with(api_key="env-key")
+                mock_client.assert_called_once_with(api_key="env-key", timeout=60.0, max_retries=2)
 
     def test_initialization_without_api_key_raises_error(self):
         """Test that initialization without API key raises ValueError."""
-        with patch("os.getenv", return_value=None):
+        with patch(
+            "hexai.adapters.llm.openai_adapter.Secret.retrieve_secret_from_env"
+        ) as mock_secret:
+            mock_secret.side_effect = KeyError("Secret 'OPENAI_API_KEY' not found")
             with pytest.raises(ValueError, match="OpenAI API key must be provided"):
                 OpenAIAdapter()
 
@@ -46,7 +57,7 @@ class TestOpenAIAdapter:
             assert adapter.model == "gpt-4o"
             assert adapter.temperature == 0.5
             assert adapter.max_tokens == 2000
-            mock_client.assert_called_once_with(api_key="test-key", timeout=30.0)
+            mock_client.assert_called_once_with(api_key="test-key", timeout=30.0, max_retries=2)
 
     @pytest.mark.asyncio
     async def test_aresponse_with_user_message(self):
@@ -69,11 +80,15 @@ class TestOpenAIAdapter:
             result = await adapter.aresponse(messages)
 
             assert result == "Hello! How can I help you?"
+            # max_tokens is not passed when None (uses model default)
+            # Now includes top_p, frequency_penalty, presence_penalty defaults
             mock_client.chat.completions.create.assert_called_once_with(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "Hello"}],
                 temperature=0.7,
-                max_tokens=1000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
             )
 
     @pytest.mark.asyncio
@@ -107,7 +122,9 @@ class TestOpenAIAdapter:
                     {"role": "user", "content": "Who are you?"},
                 ],
                 temperature=0.7,
-                max_tokens=1000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
             )
 
     @pytest.mark.asyncio
@@ -143,7 +160,9 @@ class TestOpenAIAdapter:
                     {"role": "user", "content": "Can you help me?"},
                 ],
                 temperature=0.7,
-                max_tokens=1000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
             )
 
     @pytest.mark.asyncio
@@ -180,7 +199,9 @@ class TestOpenAIAdapter:
                     {"role": "user", "content": "Hello"},
                 ],
                 temperature=0.7,
-                max_tokens=1000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
             )
 
     @pytest.mark.asyncio
@@ -237,11 +258,11 @@ class TestOpenAIAdapter:
             adapter = OpenAIAdapter(api_key="test-key")
             messages: MessageList = [Message(role="user", content="Hello")]
 
-            with patch("builtins.print") as mock_print:
+            with patch("hexai.adapters.llm.openai_adapter.logging.error") as mock_log:
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            mock_print.assert_called_once_with("OpenAI API error: API Error")
+            mock_log.assert_called_once_with("OpenAI API error: API Error")
 
     @pytest.mark.asyncio
     async def test_different_model_configurations(self):
@@ -277,5 +298,8 @@ class TestOpenAIAdapter:
                     model=model,
                     messages=[{"role": "user", "content": "Test"}],
                     temperature=temp,
+                    top_p=1.0,
+                    frequency_penalty=0.0,
+                    presence_penalty=0.0,
                     max_tokens=tokens,
                 )

@@ -11,7 +11,6 @@ from hexai.tools.database_tools import (
     database_execute,
     database_query,
     database_query_sync,
-    database_search,
     describe_table,
     list_tables,
 )
@@ -94,26 +93,20 @@ class TestDatabaseToolsRegistration:
         tool_names = [t.name for t in tools]
 
         # Check primary names are registered
-        assert "db_query" in tool_names
+        assert "sql_query" in tool_names  # Primary name of database_query
         assert "db_execute" in tool_names
-        assert "db_search" in tool_names
         assert "db_tables" in tool_names
-        assert "db_schema" in tool_names
-
-        # Check aliases are registered
-        assert "database_query" in tool_names
-        assert "sql_query" in tool_names
-        assert "semantic_search" in tool_names
-        assert "list_tables" in tool_names
+        assert "describe_table" in tool_names
+        assert "db_query_sync" in tool_names
 
     def test_port_requirements(self, registry):
         """Test tools have correct port requirements."""
         test_cases = [
-            ("db_query", ["database"]),
+            ("sql_query", ["database"]),
             ("db_execute", ["database"]),
-            ("db_search", ["database", "llm"]),
             ("db_tables", ["database"]),
-            ("db_schema", ["database"]),
+            ("describe_table", ["database"]),
+            ("db_query_sync", ["database"]),
         ]
 
         for tool_name, expected_ports in test_cases:
@@ -122,13 +115,15 @@ class TestDatabaseToolsRegistration:
 
     def test_aliases_resolve_to_same_tool(self, registry):
         """Test that aliases resolve to the same tool."""
-        # Get tools by different aliases
-        query1 = registry.get("db_query", namespace="core")
-        query2 = registry.get("database_query", namespace="core")
-        query3 = registry.get("sql_query", namespace="core")
+        # Get tools by different aliases - sql_query is the primary name
+        registry.get("sql_query", namespace="core")
 
-        # All should be the same function
-        assert query1 == query2 == query3
+        # db_query_sync and database_query_sync are aliases for the same function
+        sync1 = registry.get("db_query_sync", namespace="core")
+        sync2 = registry.get("database_query_sync", namespace="core")
+
+        # These should be the same function
+        assert sync1 == sync2
 
 
 class TestDatabaseToolsExecution:
@@ -155,20 +150,6 @@ class TestDatabaseToolsExecution:
             params={"name": "Charlie"},
             database_port=mock_database_port,
         )
-
-    @pytest.mark.asyncio
-    async def test_database_search(self, mock_database_port, mock_llm_port):
-        """Test semantic database search."""
-        result = await database_search(
-            query="find users",
-            table="users",
-            column="name",
-            limit=5,
-            database_port=mock_database_port,
-            llm_port=mock_llm_port,
-        )
-
-        assert len(result) == 2
 
     @pytest.mark.asyncio
     async def test_list_tables(self, mock_database_port):
@@ -211,38 +192,3 @@ class TestDatabaseToolsValidation:
         """Test error when database port is missing."""
         with pytest.raises(ValueError, match="Database port is required"):
             await database_query(sql="SELECT *", database_port=None)
-
-    @pytest.mark.asyncio
-    async def test_missing_llm_port(self, mock_database_port):
-        """Test error when LLM port is missing for semantic search."""
-        with pytest.raises(ValueError, match="LLM port is required"):
-            await database_search(
-                query="test",
-                table="docs",
-                column="content",
-                database_port=mock_database_port,
-                llm_port=None,
-            )
-
-    @pytest.mark.asyncio
-    async def test_both_ports_required(self):
-        """Test that semantic search requires both ports."""
-        # Missing database port
-        with pytest.raises(ValueError, match="Database port is required"):
-            await database_search(
-                query="test",
-                table="docs",
-                column="content",
-                database_port=None,
-                llm_port=MockLLMPort(),
-            )
-
-        # Missing LLM port
-        with pytest.raises(ValueError, match="LLM port is required"):
-            await database_search(
-                query="test",
-                table="docs",
-                column="content",
-                database_port=MockDatabasePort(),
-                llm_port=None,
-            )

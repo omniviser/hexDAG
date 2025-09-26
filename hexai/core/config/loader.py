@@ -114,6 +114,15 @@ class ConfigLoader:
                 raise FileNotFoundError(f"Configuration file not found: {config_path}")
             return config_path
 
+        # Check environment variable first
+        env_path = os.getenv("HEXDAG_CONFIG_PATH")
+        if env_path:
+            config_path = Path(env_path)
+            if config_path.exists():
+                logger.debug(f"Using config from HEXDAG_CONFIG_PATH: {config_path}")
+                return config_path
+            logger.warning(f"HEXDAG_CONFIG_PATH set but file not found: {config_path}")
+
         # Search for config files in order of preference
         search_paths = [
             Path("hexdag.toml"),

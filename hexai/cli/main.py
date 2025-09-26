@@ -13,7 +13,7 @@ except ImportError:
     print("  uv pip install hexdag[cli]")
     sys.exit(1)
 
-from hexai.cli.commands import init_cmd, plugin_dev_cmd, plugins_cmd, registry_cmd
+from hexai.cli.commands import config_cmd, init_cmd, plugin_dev_cmd, plugins_cmd, registry_cmd
 
 # Create the main Typer app
 app = typer.Typer(
@@ -29,6 +29,7 @@ console = Console()
 
 # Add subcommands
 app.add_typer(init_cmd.app, name="init", help="Initialize a new HexDAG project")
+app.add_typer(config_cmd.app, name="config", help="Configuration management")
 app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters")
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
 app.add_typer(registry_cmd.app, name="registry", help="Inspect the component registry")

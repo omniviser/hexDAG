@@ -5,25 +5,54 @@ import asyncio
 import operator
 from typing import Any
 
-from hexai.adapters.configs import MockToolRouterConfig
+from pydantic import BaseModel, Field
+
+from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.registry import adapter
 
 
 @adapter(name="mock_tool_router", implements_port="tool_router", namespace="plugin")
-class MockToolRouter(ToolRouter):
+class MockToolRouter(ToolRouter, ConfigurableComponent):
     """Mock implementation of ToolRouter for testing."""
 
-    def __init__(self, config: MockToolRouterConfig | None = None) -> None:
+    # Configuration schema for TOML generation
+    class Config(BaseModel):
+        """Configuration schema for Mock Tool Router."""
+
+        available_tools: list[str] = Field(
+            default_factory=list, description="List of available tool names"
+        )
+        delay_seconds: float = Field(
+            default=0.0, ge=0.0, description="Artificial delay to simulate tool execution"
+        )
+        raise_on_unknown_tool: bool = Field(
+            default=True, description="Whether to raise an error for unknown tools"
+        )
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Return configuration schema."""
+        return cls.Config
+
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize mock tool router.
 
         Args
         ----
-            config: Configuration for the mock tool router
+            **kwargs: Configuration options
         """
-        if config is None:
-            config = MockToolRouterConfig()
+        # Create config from kwargs using the Config schema
+        config_data = {}
+        for field_name in self.Config.model_fields:
+            if field_name in kwargs:
+                config_data[field_name] = kwargs[field_name]
 
+        # Create and validate config
+        config = self.Config(**config_data)
+
+        # Store configuration
+        self.config = config
         self.delay_seconds = config.delay_seconds
         self.raise_on_unknown_tool = config.raise_on_unknown_tool
 
@@ -53,7 +82,7 @@ class MockToolRouter(ToolRouter):
         }
 
         # Add configured tools
-        for tool_name in config.available_tools:
+        for tool_name in self.config.available_tools:
             if tool_name not in self.tools:
                 self.tools[tool_name] = {
                     "name": tool_name,

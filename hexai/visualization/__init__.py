@@ -33,10 +33,7 @@ def __getattr__(name: str) -> Any:
             import graphviz  # noqa: F401
         except ImportError as e:
             raise ImportError(
-                "Graphviz is not installed. Please install with:\n"
-                "  pip install hexdag[viz]\n"
-                "  or\n"
-                "  uv pip install hexdag[viz]"
+                "Graphviz is not installed. Please install with:\n  uv pip install hexdag[viz]"
             ) from e
 
         from hexai.visualization.dag_visualizer import DAGVisualizer
@@ -48,10 +45,7 @@ def __getattr__(name: str) -> Any:
             import graphviz  # noqa: F401
         except ImportError as e:
             raise ImportError(
-                "Graphviz is not installed. Please install with:\n"
-                "  pip install hexdag[viz]\n"
-                "  or\n"
-                "  uv pip install hexdag[viz]"
+                "Graphviz is not installed. Please install with:\n  uv pip install hexdag[viz]"
             ) from e
 
         from hexai.visualization.dag_visualizer import render_dag_to_image
@@ -63,10 +57,7 @@ def __getattr__(name: str) -> Any:
             import graphviz  # noqa: F401
         except ImportError as e:
             raise ImportError(
-                "Graphviz is not installed. Please install with:\n"
-                "  pip install hexdag[viz]\n"
-                "  or\n"
-                "  uv pip install hexdag[viz]"
+                "Graphviz is not installed. Please install with:\n  uv pip install hexdag[viz]"
             ) from e
 
         from hexai.visualization.dag_visualizer import export_dag_to_dot

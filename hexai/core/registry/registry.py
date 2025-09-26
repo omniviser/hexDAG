@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from hexai.core.registry.discovery import register_components as default_register_components
 from hexai.core.registry.exceptions import (
@@ -65,6 +66,9 @@ class ComponentRegistry:
         self._components: dict[str, dict[str, ComponentMetadata]] = {}
         self._protected_components: set[str] = set()
 
+        # Track configurable components
+        self._configurable_components: dict[str, dict[str, Any]] = {}
+
         # Search priority is an implementation detail
         self._search_priority = _search_priority or self.DEFAULT_SEARCH_PRIORITY
 
@@ -80,9 +84,21 @@ class ComponentRegistry:
         """Clean up registry state on bootstrap failure."""
         self._components.clear()
         self._protected_components.clear()
+        self._configurable_components.clear()
         self._ready = False
         self._manifest = None
         self._bootstrap_context = False
+
+    def get_configurable_components(self) -> dict[str, dict[str, Any]]:
+        """Get all registered configurable components.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Dictionary mapping config namespaces to component info
+        """
+        with self._lock.read():
+            return self._configurable_components.copy()
 
     def bootstrap(
         self,
@@ -161,11 +177,22 @@ class ComponentRegistry:
         total_registered = 0
 
         for entry in manifest:
-            # Check if this is a plugin that requires special dependencies
-            skip_reason = self._check_plugin_requirements(entry.module)
-            if skip_reason:
-                logger.info(f"Skipping plugin {entry.module}: {skip_reason}")
-                continue
+            # Determine if this is a core module that must load successfully
+            # Core modules are either:
+            # 1. In the 'core' namespace (explicitly marked as core)
+            # 2. Part of the framework (hexai.core.* or hexai.tools.builtin_tools)
+            is_core_module = (
+                entry.namespace == "core"
+                or entry.module.startswith("hexai.core.")
+                or entry.module == "hexai.tools.builtin_tools"
+            )
+
+            # For non-core modules, check if they exist before trying to load
+            if not is_core_module:
+                skip_reason = self._check_plugin_requirements(entry.module)
+                if skip_reason:
+                    logger.info(f"Skipping optional module {entry.module}: {skip_reason}")
+                    continue
 
             try:
                 count = default_register_components(
@@ -179,12 +206,12 @@ class ComponentRegistry:
                     f"into namespace '{entry.namespace}'"
                 )
             except ImportError as e:
-                # For plugins, just log a warning and continue
-                if entry.namespace == "plugin":
-                    logger.warning(f"Plugin {entry.module} not available: {e}")
+                # For non-core modules, just log a warning and continue
+                if not is_core_module:
+                    logger.warning(f"Optional module {entry.module} not available: {e}")
                 else:
                     # For core modules, fail
-                    logger.error("Failed to import module %s: %s", entry.module, e)
+                    logger.error("Failed to import core module %s: %s", entry.module, e)
                     self._cleanup_state()
                     raise
             except (
@@ -199,7 +226,11 @@ class ComponentRegistry:
         return total_registered
 
     def _check_plugin_requirements(self, module_path: str) -> str | None:
-        """Check if a plugin's requirements are met.
+        """Check if a plugin module exists and can be imported.
+
+        This only checks if the module exists, not if it can be instantiated.
+        Adapters should handle runtime requirements (like API keys) in their
+        __init__ method, not at import time.
 
         Parameters
         ----------
@@ -209,44 +240,16 @@ class ComponentRegistry:
         Returns
         -------
         str | None
-            Reason for skipping, or None if requirements are met
+            Reason for skipping, or None if module exists
         """
-        import importlib.util
-        import os
-
-        # Define plugin requirements
-        plugin_requirements = {
-            "hexai.adapters.llm.openai_adapter": {
-                "package": "openai",
-                "env_var": "OPENAI_API_KEY",
-                "name": "OpenAI",
-            },
-            "hexai.adapters.llm.anthropic_adapter": {
-                "package": "anthropic",
-                "env_var": "ANTHROPIC_API_KEY",
-                "name": "Anthropic",
-            },
-        }
-
-        # Check if this module has requirements
-        if module_path not in plugin_requirements:
-            return None  # Not a plugin with special requirements
-
-        requirements = plugin_requirements[module_path]
-        name = requirements["name"]
-
-        # Check if required package is installed
-        if requirements.get("package"):
-            spec = importlib.util.find_spec(requirements["package"])
+        # Only check if the module exists
+        try:
+            spec = importlib.util.find_spec(module_path)
             if spec is None:
-                return (
-                    f"Missing package '{requirements['package']}'. "
-                    f"Install with: pip install hexdag[{name.lower()}]"
-                )
-
-        # Check if required environment variable is set
-        if requirements.get("env_var") and not os.getenv(requirements["env_var"]):
-            return f"Missing environment variable {requirements['env_var']}"
+                return f"Module {module_path} not found"
+        except (ModuleNotFoundError, ValueError) as e:
+            # Module or its parent doesn't exist
+            return f"Module {module_path} not found: {e}"
 
         return None
 
@@ -350,6 +353,27 @@ class ComponentRegistry:
 
             if namespace_str in self.PROTECTED_NAMESPACES:
                 self._protected_components.add(f"{namespace_str}:{name}")
+
+            # Check if component implements the ConfigurableComponent protocol
+            if hasattr(component, "get_config_class"):
+                try:
+                    # Get the method and call it using getattr to avoid type issues
+                    get_config_method = getattr(component, "get_config_class")  # noqa: B009
+                    config_class = get_config_method()
+                    # Use the component's registered name as the config namespace
+                    self._configurable_components[name] = {
+                        "component_class": component,
+                        "config_class": config_class,
+                        "namespace": namespace_str,
+                        "name": name,
+                        "type": component_type_enum,
+                        "port": implements_port_str,
+                    }
+                    logger.debug("Registered configurable component: %s", name)
+                except Exception as e:
+                    logger.debug(
+                        "Component %s does not implement ConfigurableComponent: %s", name, e
+                    )
 
             logger.debug("Registered %s", metadata.qualified_name)
             return metadata
@@ -615,7 +639,6 @@ class ComponentRegistry:
         InvalidComponentError
             If adapter doesn't properly implement its declared port
         """
-
         # Get adapter metadata from _hexdag_implements_port attribute
         implements_port = None
 

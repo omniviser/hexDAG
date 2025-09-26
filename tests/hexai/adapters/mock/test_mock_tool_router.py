@@ -2,7 +2,6 @@
 
 import pytest
 
-from hexai.adapters.configs import MockToolRouterConfig
 from hexai.adapters.mock import MockToolRouter
 
 
@@ -52,8 +51,7 @@ class TestMockToolRouter:
     @pytest.mark.asyncio
     async def test_custom_tools_from_config(self):
         """Test adding custom tools via configuration."""
-        config = MockToolRouterConfig(available_tools=["custom_tool1", "custom_tool2"])
-        router = MockToolRouter(config)
+        router = MockToolRouter(available_tools=["custom_tool1", "custom_tool2"])
 
         tools = router.get_available_tools()
         assert "custom_tool1" in tools
@@ -67,8 +65,7 @@ class TestMockToolRouter:
     @pytest.mark.asyncio
     async def test_unknown_tool_raises_error(self):
         """Test that unknown tools raise an error when configured to do so."""
-        config = MockToolRouterConfig(raise_on_unknown_tool=True)
-        router = MockToolRouter(config)
+        router = MockToolRouter(raise_on_unknown_tool=True)
 
         with pytest.raises(ValueError, match="Unknown tool: nonexistent"):
             await router.acall_tool("nonexistent", {})
@@ -76,8 +73,7 @@ class TestMockToolRouter:
     @pytest.mark.asyncio
     async def test_unknown_tool_returns_error(self):
         """Test that unknown tools return an error when configured not to raise."""
-        config = MockToolRouterConfig(raise_on_unknown_tool=False)
-        router = MockToolRouter(config)
+        router = MockToolRouter(raise_on_unknown_tool=False)
 
         result = await router.acall_tool("nonexistent", {})
         assert "error" in result
@@ -88,8 +84,7 @@ class TestMockToolRouter:
         """Test that delay simulation works."""
         import time
 
-        config = MockToolRouterConfig(delay_seconds=0.1)
-        router = MockToolRouter(config)
+        router = MockToolRouter(delay_seconds=0.1)
 
         start_time = time.time()
         await router.acall_tool("search", {"query": "test"})

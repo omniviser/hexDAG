@@ -39,14 +39,15 @@ class TestUnifiedToolRouter:
         from hexai.core.registry import registry
 
         # Bootstrap registry if it hasn't been bootstrapped yet
-        try:
+        if not registry.ready:
             registry.bootstrap(
                 manifest=[ManifestEntry(namespace="core", module="hexai.tools.builtin_tools")],
                 dev_mode=True,
             )
-        except Exception:
-            # Already bootstrapped, that's fine
-            pass
+        elif not registry.dev_mode:
+            # Registry is bootstrapped but not in dev_mode
+            # We need to manually enable dev mode for testing
+            registry._dev_mode = True
 
         yield
 

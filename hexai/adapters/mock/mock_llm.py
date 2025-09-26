@@ -1,45 +1,68 @@
 """Mock LLM implementation for testing purposes."""
 
 import asyncio
+from typing import Any
 
-from hexai.adapters.configs import MockLLMConfig
+from pydantic import BaseModel, Field
+
+from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import LLM, MessageList
 from hexai.core.registry import adapter
 
 
 @adapter(implements_port="llm")
-class MockLLM(LLM):
+class MockLLM(LLM, ConfigurableComponent):
     """Mock implementation of the LLM interface for testing.
 
     The LLM port interface is stateless, but this mock provides testing utilities like response
     sequencing and call inspection without violating the port contract.
     """
 
-    def __init__(
-        self, config: MockLLMConfig | None = None, responses: list[str] | str | None = None
-    ) -> None:
+    # Configuration schema for TOML generation
+    class Config(BaseModel):
+        """Configuration schema for Mock LLM adapter."""
+
+        responses: list[str] | str | None = Field(
+            default=None,
+            description="Single response string, list of responses, or None for default",
+        )
+        delay_seconds: float = Field(
+            default=0.0, ge=0.0, description="Artificial delay to simulate API latency"
+        )
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Return configuration schema."""
+        return cls.Config
+
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize with configuration.
 
         Args
         ----
-            config: Configuration for the mock LLM
-            responses: Optional responses to override config
+            **kwargs: Configuration options (responses, delay_seconds)
         """
-        if config is None:
-            config = MockLLMConfig()
+        # Create config from kwargs using the Config schema
+        config_data = {}
+        for field_name in self.Config.model_fields:
+            if field_name in kwargs:
+                config_data[field_name] = kwargs[field_name]
 
-        # Use provided responses or fall back to config
+        # Create and validate config
+        config = self.Config(**config_data)
+
+        # Store configuration
+        self.config = config
+
+        # Process responses
+        responses = kwargs.get("responses", config.responses)
         if responses is not None:
             if isinstance(responses, str):
                 self.responses = [responses]
             else:
                 self.responses = responses
-        elif config.responses is None:
-            self.responses = ['{"result": "Mock response"}']
-        elif isinstance(config.responses, str):
-            self.responses = [config.responses]
         else:
-            self.responses = config.responses
+            self.responses = ['{"result": "Mock response"}']
 
         self.delay_seconds = config.delay_seconds
         self.call_count = 0
