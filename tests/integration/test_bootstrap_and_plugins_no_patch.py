@@ -168,8 +168,10 @@ plugins = [
                 if c.component_type.value == "adapter"
             ]
             assert "mock_llm" in adapters
-            assert "openai" not in adapters
-            assert "anthropic" not in adapters
+            # Adapters are registered regardless of API keys
+            # Validation happens at instantiation time
+            assert "openai" in adapters
+            assert "anthropic" in adapters
 
             # Test 2: With OpenAI key
             os.environ["OPENAI_API_KEY"] = "test-key"
@@ -182,8 +184,8 @@ plugins = [
                 if c.component_type.value == "adapter"
             ]
             assert "mock_llm" in adapters
-            assert "openai" in adapters  # Now available
-            assert "anthropic" not in adapters
+            assert "openai" in adapters  # Always registered
+            assert "anthropic" in adapters  # Always registered
 
             # Restore environment
             os.environ.clear()
