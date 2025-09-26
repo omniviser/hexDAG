@@ -1,5 +1,6 @@
 """Integration tests for LLM adapters with fake and real API scenarios."""
 
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,7 +29,7 @@ class TestLLMAdaptersIntegration:
 
     @pytest.mark.asyncio
     async def test_anthropic_adapter_with_fake_key_handles_auth_error(
-        self, fake_api_key, test_messages
+        self, fake_api_key, test_messages, caplog
     ):
         """Test that Anthropic adapter handles authentication errors gracefully."""
         # Mock the Anthropic client to simulate authentication error
@@ -41,18 +42,18 @@ class TestLLMAdaptersIntegration:
 
             adapter = AnthropicAdapter(api_key=fake_api_key)
 
-            with patch("builtins.print") as mock_print:
+            with caplog.at_level(logging.ERROR):
                 result = await adapter.aresponse(test_messages)
 
             assert result is None
-            mock_print.assert_called_once()
-            printed_message = mock_print.call_args[0][0]
-            assert "401: Invalid API key" in printed_message
-            assert "fake-api-key-for-testing" in printed_message
+            assert len(caplog.records) == 1
+            assert "Anthropic API error" in caplog.records[0].message
+            assert "401: Invalid API key" in caplog.records[0].message
+            assert "fake-api-key-for-testing" in caplog.records[0].message
 
     @pytest.mark.asyncio
     async def test_openai_adapter_with_fake_key_handles_auth_error(
-        self, fake_api_key, test_messages
+        self, fake_api_key, test_messages, caplog
     ):
         """Test that OpenAI adapter handles authentication errors gracefully."""
         # Mock the OpenAI client to simulate authentication error
@@ -65,14 +66,14 @@ class TestLLMAdaptersIntegration:
 
             adapter = OpenAIAdapter(api_key=fake_api_key)
 
-            with patch("builtins.print") as mock_print:
+            with caplog.at_level(logging.ERROR):
                 result = await adapter.aresponse(test_messages)
 
             assert result is None
-            mock_print.assert_called_once()
-            printed_message = mock_print.call_args[0][0]
-            assert "401: Incorrect API key" in printed_message
-            assert "fake-api-key-for-testing" in printed_message
+            assert len(caplog.records) == 1
+            assert "OpenAI API error" in caplog.records[0].message
+            assert "401: Incorrect API key" in caplog.records[0].message
+            assert "fake-api-key-for-testing" in caplog.records[0].message
 
     @pytest.mark.asyncio
     async def test_anthropic_adapter_successful_response_simulation(
@@ -133,7 +134,7 @@ class TestLLMAdaptersIntegration:
             assert call_kwargs["messages"][1]["role"] == "user"
 
     @pytest.mark.asyncio
-    async def test_adapters_handle_rate_limit_errors(self):
+    async def test_adapters_handle_rate_limit_errors(self, caplog):
         """Test that adapters handle rate limit errors appropriately."""
         fake_key = "rate-limit-test-key"
 
@@ -148,11 +149,11 @@ class TestLLMAdaptersIntegration:
             adapter = AnthropicAdapter(api_key=fake_key)
             messages: MessageList = [Message(role="user", content="Test")]
 
-            with patch("builtins.print") as mock_print:
+            with caplog.at_level(logging.ERROR):
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            assert "429: Rate limit exceeded" in mock_print.call_args[0][0]
+            assert any("429: Rate limit exceeded" in record.message for record in caplog.records)
 
         # Test OpenAI rate limit
         with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
@@ -164,14 +165,14 @@ class TestLLMAdaptersIntegration:
 
             adapter = OpenAIAdapter(api_key=fake_key)
 
-            with patch("builtins.print") as mock_print:
+            with caplog.at_level(logging.ERROR):
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            assert "429: Too many requests" in mock_print.call_args[0][0]
+            assert any("429: Too many requests" in record.message for record in caplog.records)
 
     @pytest.mark.asyncio
-    async def test_adapters_handle_network_errors(self):
+    async def test_adapters_handle_network_errors(self, caplog):
         """Test that adapters handle network errors appropriately."""
         fake_key = "network-test-key"
 
@@ -184,11 +185,11 @@ class TestLLMAdaptersIntegration:
             adapter = AnthropicAdapter(api_key=fake_key)
             messages: MessageList = [Message(role="user", content="Test")]
 
-            with patch("builtins.print") as mock_print:
+            with caplog.at_level(logging.ERROR):
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            assert "Connection timeout" in mock_print.call_args[0][0]
+            assert any("Connection timeout" in record.message for record in caplog.records)
 
         # Test OpenAI network error
         with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
@@ -200,11 +201,11 @@ class TestLLMAdaptersIntegration:
 
             adapter = OpenAIAdapter(api_key=fake_key)
 
-            with patch("builtins.print") as mock_print:
+            with caplog.at_level(logging.ERROR):
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            assert "Network unreachable" in mock_print.call_args[0][0]
+            assert any("Network unreachable" in record.message for record in caplog.records)
 
     @pytest.mark.asyncio
     async def test_adapters_with_environment_variables(self):
@@ -226,7 +227,11 @@ class TestLLMAdaptersIntegration:
                 result = await adapter.aresponse(messages)
 
                 assert result == "Response from env key"
-                mock_anthropic.assert_called_once_with(api_key="env-anthropic-key")
+                # Check that the client was created with the env API key
+                # The adapter also passes timeout and max_retries parameters
+                mock_anthropic.assert_called_once()
+                call_kwargs = mock_anthropic.call_args[1]
+                assert call_kwargs["api_key"] == "env-anthropic-key"
 
         # Test OpenAI with env var
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-openai-key"}):
@@ -245,7 +250,11 @@ class TestLLMAdaptersIntegration:
                 result = await adapter.aresponse(messages)
 
                 assert result == "Response from env key"
-                mock_openai.assert_called_once_with(api_key="env-openai-key")
+                # Check that the client was created with the env API key
+                # The adapter also passes timeout and max_retries parameters
+                mock_openai.assert_called_once()
+                call_kwargs = mock_openai.call_args[1]
+                assert call_kwargs["api_key"] == "env-openai-key"
 
     @pytest.mark.asyncio
     async def test_adapters_model_switching(self):
