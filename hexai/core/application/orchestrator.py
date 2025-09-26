@@ -81,7 +81,18 @@ class Orchestrator:
         validate: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Execute a DAG with concurrent processing and resource limits."""
+        """Execute a DAG with concurrent processing and resource limits.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary mapping node names to their execution results
+
+        Raises
+        ------
+        OrchestratorError
+            If DAG validation fails or pipeline/wave execution is blocked
+        """
         # Merge orchestrator ports with additional execution-specific ports
         all_ports = {**self.ports}
         if additional_ports:
@@ -176,7 +187,18 @@ class Orchestrator:
         validate: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Execute all nodes in a wave with concurrency limiting."""
+        """Execute all nodes in a wave with concurrency limiting.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary mapping node names to their execution results for this wave
+
+        Raises
+        ------
+        NodeExecutionError
+            If any node in the wave fails to execute
+        """
 
         async def execute_with_semaphore(node_name: str) -> tuple[str, Any]:
             async with self._semaphore:
@@ -229,6 +251,19 @@ class Orchestrator:
         The orchestrator provides the MECHANISM for retries through the RETRY signal,
         but the retry POLICY (when to retry, how many times, delays) is determined
         by control handlers registered with the EventBus.
+
+        Returns
+        -------
+            Output of the node
+
+        Raises
+        ------
+        NodeExecutionError
+            If the node fails to execute
+        OrchestratorError
+            If the node is blocked
+        ValidationError
+            If the node input is invalid
         """
         node_start_time = time.time()
         # Create node context early so it's available in exception handler
@@ -245,9 +280,8 @@ class Orchestrator:
                 except ValidationError as e:
                     if self.strict_validation:
                         raise
-                    else:
-                        logger.debug("Input validation failed for node '%s': %s", node_name, e)
-                        validated_input = node_input
+                    logger.debug("Input validation failed for node '%s': %s", node_name, e)
+                    validated_input = node_input
             else:
                 validated_input = node_input
 
@@ -264,9 +298,9 @@ class Orchestrator:
             if start_response.signal == ControlSignal.SKIP:
                 # Skip this node and return fallback value if provided
                 return start_response.data
-            elif start_response.signal == ControlSignal.FAIL:
+            if start_response.signal == ControlSignal.FAIL:
                 raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
-            elif start_response.signal != ControlSignal.PROCEED:
+            if start_response.signal != ControlSignal.PROCEED:
                 # For now, treat other signals as errors
                 raise OrchestratorError(
                     f"Node '{node_name}' blocked: {start_response.signal.value}"
@@ -288,9 +322,8 @@ class Orchestrator:
                 except ValidationError as e:
                     if self.strict_validation:
                         raise
-                    else:
-                        logger.debug("Output validation failed for node '%s': %s", node_name, e)
-                        validated_output = raw_output
+                    logger.debug("Output validation failed for node '%s': %s", node_name, e)
+                    validated_output = raw_output
             else:
                 validated_output = raw_output
 
@@ -319,7 +352,7 @@ class Orchestrator:
             if fail_response.signal == ControlSignal.FALLBACK:
                 # Return fallback value instead of failing
                 return fail_response.data
-            elif fail_response.signal == ControlSignal.RETRY:
+            if fail_response.signal == ControlSignal.RETRY:
                 # RETRY signal indicates the policy wants to retry
                 # The orchestrator enables this by re-executing the node
                 # The retry policy (attempts, delays) is managed by the handler
@@ -344,9 +377,8 @@ class Orchestrator:
                     validate=validate,
                     **kwargs,
                 )
-            else:
-                # Default: propagate the error
-                raise NodeExecutionError(node_name, e) from e
+            # Default: propagate the error
+            raise NodeExecutionError(node_name, e) from e
 
     def _prepare_node_input(
         self, node_spec: NodeSpec, node_results: dict[str, Any], initial_input: Any
@@ -372,13 +404,12 @@ class Orchestrator:
             dep_name = next(iter(node_spec.deps))
             return node_results.get(dep_name, initial_input)
 
-        else:
-            # Multiple dependencies - preserve namespace structure
-            aggregated_data = {}
+        # Multiple dependencies - preserve namespace structure
+        aggregated_data = {}
 
-            # Keep dependency results with their node names as keys
-            for dep_name in node_spec.deps:
-                if dep_name in node_results:
-                    aggregated_data[dep_name] = node_results[dep_name]
+        # Keep dependency results with their node names as keys
+        for dep_name in node_spec.deps:
+            if dep_name in node_results:
+                aggregated_data[dep_name] = node_results[dep_name]
 
-            return aggregated_data
+        return aggregated_data

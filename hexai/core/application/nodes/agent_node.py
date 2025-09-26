@@ -8,13 +8,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from ....adapters.function_tool_router import FunctionBasedToolRouter
-from ...domain.dag import NodeSpec
-from ...ports.tool_router import ToolRouter
-from ...registry import node
-from ...registry.models import NodeSubtype
-from ..prompt import PromptInput
-from ..prompt.template import PromptTemplate
+from hexai.adapters.function_tool_router import FunctionBasedToolRouter
+from hexai.core.application.prompt import PromptInput
+from hexai.core.application.prompt.template import PromptTemplate
+from hexai.core.domain.dag import NodeSpec
+from hexai.core.ports.tool_router import ToolRouter
+from hexai.core.registry import node
+from hexai.core.registry.models import NodeSubtype
+
 from .base_node_factory import BaseNodeFactory
 from .llm_node import LLMNode
 from .tool_utils import ToolCallFormat, ToolParser
@@ -93,6 +94,11 @@ class ReActAgentNode(BaseNodeFactory):
             config: Agent configuration
             deps: Dependencies
             **kwargs: Additional parameters
+
+        Returns
+        -------
+        NodeSpec
+            A configured node specification for the agent
         """
         config = config or AgentConfig()
 
@@ -123,13 +129,19 @@ class ReActAgentNode(BaseNodeFactory):
         )
 
     def _infer_input_schema(self, prompt: PromptInput) -> dict[str, Any]:
-        """Infer input schema from prompt template."""
+        """Infer input schema from prompt template.
+
+        Returns
+        -------
+        dict[str, Any]
+            Inferred input schema mapping
+        """
         if isinstance(prompt, str):
             prompt = PromptTemplate(prompt)
 
         if hasattr(prompt, "input_vars"):
             user_vars = set(prompt.input_vars)
-            return {var: str for var in user_vars} if user_vars else {"input": str}
+            return dict.fromkeys(user_vars, str) if user_vars else {"input": str}
 
         return {"input": str}
 
@@ -139,7 +151,13 @@ class ReActAgentNode(BaseNodeFactory):
         continuation_prompts: dict[str, PromptInput],
         current_phase: str,
     ) -> PromptInput:
-        """Get the appropriate prompt for the current phase."""
+        """Get the appropriate prompt for the current phase.
+
+        Returns
+        -------
+        PromptInput
+            The prompt to use for the current phase
+        """
         if current_phase != "main" and current_phase in continuation_prompts:
             return continuation_prompts[current_phase]
         return main_prompt
@@ -152,7 +170,13 @@ class ReActAgentNode(BaseNodeFactory):
         output_model: type[BaseModel],
         config: AgentConfig,
     ) -> Callable[..., Any]:
-        """Create agent function with internal loop composition for multi-step iteration."""
+        """Create agent function with internal loop composition for multi-step iteration.
+
+        Returns
+        -------
+        Callable[..., Any]
+            Agent function with internal loop control
+        """
 
         async def single_step_executor(input_data: Any, **ports: Any) -> Any:
             """Execute single reasoning step - designed for internal loop orchestration."""
@@ -224,7 +248,13 @@ class ReActAgentNode(BaseNodeFactory):
         return agent_with_internal_loop
 
     def _initialize_or_update_state(self, input_data: Any) -> AgentState:
-        """Initialize new state or update existing state from loop iteration."""
+        """Initialize new state or update existing state from loop iteration.
+
+        Returns
+        -------
+        AgentState
+            Initialized or updated agent state
+        """
         # Case 1: Continuing from previous iteration (loop passes AgentState dict)
         if isinstance(input_data, dict) and "reasoning_steps" in input_data:
             return AgentState.model_validate(input_data)
@@ -247,7 +277,13 @@ class ReActAgentNode(BaseNodeFactory):
     def _enhance_prompt_with_tools(
         self, prompt: PromptInput, tool_router: ToolRouter | None, config: AgentConfig
     ) -> PromptInput:
-        """Add tool instructions to the prompt."""
+        """Add tool instructions to the prompt.
+
+        Returns
+        -------
+        PromptInput
+            Enhanced prompt with tool instructions
+        """
         if not tool_router:
             return prompt
 
@@ -262,7 +298,13 @@ class ReActAgentNode(BaseNodeFactory):
         return prompt + tool_instructions
 
     def _build_tool_instructions(self, tool_router: ToolRouter, config: AgentConfig) -> str:
-        """Build tool usage instructions based on the configured format."""
+        """Build tool usage instructions based on the configured format.
+
+        Returns
+        -------
+        str
+            Tool usage instructions text
+        """
         tool_schemas = tool_router.get_all_tool_schemas()
         if not tool_schemas:
             return "\n## No tools available"
@@ -287,13 +329,19 @@ class ReActAgentNode(BaseNodeFactory):
 """
 
     def _get_format_specific_guidelines(self, format_style: ToolCallFormat) -> str:
-        """Generate format-specific tool calling guidelines."""
+        """Generate format-specific tool calling guidelines.
+
+        Returns
+        -------
+        str
+            Format-specific guidelines text
+        """
         if format_style == ToolCallFormat.FUNCTION_CALL:
             return """- Call ONE tool at a time: INVOKE_TOOL: tool_name(param='value')
 - For final answer and structured output: INVOKE_TOOL: tool_end(field1='value1', field2='value2')
 - For phase change: INVOKE_TOOL: change_phase(phase='new_phase')"""
 
-        elif format_style == ToolCallFormat.JSON:
+        if format_style == ToolCallFormat.JSON:
             return (
                 """- Call ONE tool at a time: INVOKE_TOOL: """
                 """{"tool": "tool_name", "params": {"param": "value"}}\n"""
@@ -303,8 +351,8 @@ class ReActAgentNode(BaseNodeFactory):
                 """{"tool": "change_phase", "params": {"phase": "new_phase"}}"""
             )
 
-        elif format_style == ToolCallFormat.MIXED:
-            return """- Call ONE tool at a time using either format:
+        # ToolCallFormat.MIXED
+        return """- Call ONE tool at a time using either format:
   - Function style: INVOKE_TOOL: tool_name(param='value')
   - JSON style: INVOKE_TOOL: {"tool": "tool_name", "params": {"param": "value"}}
 - For final answer and structured output:
@@ -317,7 +365,13 @@ class ReActAgentNode(BaseNodeFactory):
     async def _get_llm_response(
         self, prompt: PromptInput, llm_input: dict[str, Any], ports: dict[str, Any], node_name: str
     ) -> str:
-        """Get response from LLM."""
+        """Get response from LLM.
+
+        Returns
+        -------
+        str
+            LLM response text
+        """
         # Ensure we have a proper template (not string)
         if isinstance(prompt, str):
             prompt = PromptTemplate(prompt)
@@ -337,7 +391,13 @@ class ReActAgentNode(BaseNodeFactory):
         config: AgentConfig,
         ports: dict[str, Any],
     ) -> AgentState:
-        """Execute a single reasoning step."""
+        """Execute a single reasoning step.
+
+        Returns
+        -------
+        AgentState
+            Updated agent state after step execution
+        """
         event_manager = ports.get("event_manager")
         tool_router = ports.get("tool_router", FunctionBasedToolRouter())
 
@@ -376,7 +436,13 @@ class ReActAgentNode(BaseNodeFactory):
         return state
 
     def _should_terminate(self, response: str) -> bool:
-        """Check if agent should terminate."""
+        """Check if agent should terminate.
+
+        Returns
+        -------
+        bool
+            True if agent should terminate execution
+        """
         return "tool_end" in response.lower() or "Tool_END" in response
 
     async def _process_tools_and_phases(
@@ -476,7 +542,13 @@ class ReActAgentNode(BaseNodeFactory):
         output_model: type[BaseModel],
         event_manager: Any,
     ) -> Any | None:
-        """Check if we have a final output from tool_end calls."""
+        """Check if we have a final output from tool_end calls.
+
+        Returns
+        -------
+        Any | None
+            Final output model instance or None if not found
+        """
         # Check for tool_end calls with structured output
         for tool_result in reversed(state.tool_results):
             parsed_data = self._parse_tool_end_result(tool_result)

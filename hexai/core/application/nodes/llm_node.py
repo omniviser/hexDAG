@@ -4,10 +4,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from ...domain.dag import NodeSpec
-from ...registry import node
-from ...registry.models import NodeSubtype
-from ..prompt import PromptInput
+from hexai.core.application.prompt import PromptInput
+from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import node
+from hexai.core.registry.models import NodeSubtype
+
 from .base_llm_node import BaseLLMNode
 
 
@@ -36,6 +37,16 @@ class LLMNode(BaseLLMNode):
             output_schema: Output schema for validation
             deps: List of dependency node names
             **kwargs: Additional parameters
+
+        Returns
+        -------
+        NodeSpec
+            Complete node specification ready for execution
+
+        Raises
+        ------
+        ValueError
+            If output_schema is provided for string templates
         """
         # String templates don't support rich features (structured output)
         if isinstance(template, str) and output_schema is not None:
@@ -67,7 +78,13 @@ class LLMNode(BaseLLMNode):
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Create a NodeSpec with rich template features and auto-inferred input schema."""
+        """Create a NodeSpec with rich template features and auto-inferred input schema.
+
+        Returns
+        -------
+        NodeSpec
+            Complete node specification ready for execution
+        """
         return cls()(
             name=name,
             template=template,

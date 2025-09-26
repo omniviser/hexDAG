@@ -4,12 +4,13 @@
 import asyncio
 import json
 import logging
-import os
 import shlex
 import subprocess  # nosec B404 - subprocess usage is controlled and validated
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from hexai import InMemoryMemory, MockDatabaseAdapter, MockLLM
 from hexai.adapters.function_tool_router import FunctionBasedToolRouter
@@ -40,7 +41,13 @@ def run_command(cmd: list[str], cwd: Path | None = None) -> int:
 
     Returns
     -------
+    int
         Exit code from command execution
+
+    Raises
+    ------
+    ValueError
+        If the command is not a non-empty list or all arguments are not strings
     """
     # Security: Validate command arguments
     if not cmd or not isinstance(cmd, list):
@@ -88,7 +95,13 @@ class PipelineSchema:
             self._compiled_data = None
 
     def get_input_schema(self) -> dict[str, Any]:
-        """Get normalized input schema for any pipeline."""
+        """Get normalized input schema for any pipeline.
+
+        Returns
+        -------
+        dict[str, Any]
+            Normalized input schema for the pipeline
+        """
         try:
             primitives = self.pipeline.get_input_primitives()
             if primitives:
@@ -99,7 +112,13 @@ class PipelineSchema:
             return {}
 
     def get_output_schema(self) -> dict[str, Any]:
-        """Get normalized output schema for any pipeline."""
+        """Get normalized output schema for any pipeline.
+
+        Returns
+        -------
+        dict[str, Any]
+            Normalized output schema for the pipeline
+        """
         # Find the output schema of the last node(s) in the pipeline
         # For simplicity, assume the last node in execution_waves is the primary output
         if self._compiled_data and self._compiled_data.execution_waves:
@@ -119,7 +138,13 @@ class PipelineSchema:
             return {}
 
     def _normalize_type(self, type_obj: Any) -> dict[str, Any]:
-        """Normalize any type to a displayable dict format."""
+        """Normalize any type to a displayable dict format.
+
+        Returns
+        -------
+        dict[str, Any]
+            Normalized type representation as displayable dictionary
+        """
         if type_obj is None:
             return {}
 
@@ -148,9 +173,7 @@ class BasicPipelineSchema:
     def _load_yaml_data(self) -> None:
         """Load and parse YAML data to extract basic node information."""
         try:
-            import yaml
-
-            with open(self.pipeline._yaml_path) as f:
+            with Path.open(self.pipeline._yaml_path) as f:
                 self._yaml_data = yaml.safe_load(f)
 
             # Extract node information from YAML
@@ -170,11 +193,23 @@ class BasicPipelineSchema:
             self._node_info = {}
 
     def get_node_types(self) -> dict[str, str]:
-        """Get node types directly from YAML."""
+        """Get node types directly from YAML.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of node IDs to their types
+        """
         return {node_id: info["type"] for node_id, info in self._node_info.items()}
 
     def get_node_basic_schemas(self) -> dict[str, dict[str, Any]]:
-        """Get any explicitly defined schemas from YAML."""
+        """Get any explicitly defined schemas from YAML.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Mapping of node IDs to their schema information
+        """
         schemas = {}
         for node_id, info in self._node_info.items():
             params = info.get("params", {})
@@ -196,7 +231,13 @@ class BasicPipelineSchema:
         return schemas
 
     def get_input_schema(self) -> dict[str, Any]:
-        """Get basic input schema without compilation."""
+        """Get basic input schema without compilation.
+
+        Returns
+        -------
+        dict[str, Any]
+            Basic input schema for the pipeline
+        """
         try:
             # Try input primitives first
             primitives = self.pipeline.get_input_primitives()
@@ -210,7 +251,13 @@ class BasicPipelineSchema:
             return {}
 
     def get_output_schema(self) -> dict[str, Any]:
-        """Get basic output schema without compilation."""
+        """Get basic output schema without compilation.
+
+        Returns
+        -------
+        dict[str, Any]
+            Basic output schema for the pipeline
+        """
         try:
             output_type = self.pipeline.get_output_type()
             return self._normalize_type(output_type)
@@ -218,7 +265,13 @@ class BasicPipelineSchema:
             return {}
 
     def _normalize_type(self, type_obj: Any) -> dict[str, Any]:
-        """Normalize any type to a displayable dict format."""
+        """Normalize any type to a displayable dict format.
+
+        Returns
+        -------
+        dict[str, Any]
+            Normalized type representation as displayable dictionary
+        """
         if type_obj is None:
             return {}
 
@@ -355,7 +408,8 @@ class PipelineVisualizer:
                 output_file = f"{pipeline_name}_dag.{format_type}"
 
             dag = self.pipeline.builder.build_from_yaml_file(self.pipeline._yaml_path)
-            output_path = os.path.splitext(output_file)[0]
+            output_file_path = Path(output_file)
+            output_path = str(output_file_path.with_suffix(""))
 
             # Enhanced visualization settings
             # Show node types by default, schemas only when explicitly requested

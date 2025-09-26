@@ -21,7 +21,18 @@ __all__ = list(_LAZY_MAP.keys())
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy import for adapters."""
+    """Lazy import for adapters.
+
+    Returns
+    -------
+    Any
+        The imported adapter class or module.
+
+    Raises
+    ------
+    AttributeError
+        If the requested name is not found in the lazy import map.
+    """
     if name in _LAZY_MAP:
         module_name, attr = _LAZY_MAP[name]
         module = importlib.import_module(module_name)

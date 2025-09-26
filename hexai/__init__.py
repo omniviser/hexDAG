@@ -4,7 +4,7 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # Agent Factory system exports
 from hexai.agent_factory import (
@@ -46,19 +46,31 @@ import hexai.core.application.nodes  # noqa: F401, E402 - triggers decorator reg
 
 registry._core_loading = False  # type: ignore  # Block core namespace registration
 
+# Define placeholders for lazy-loaded adapters to satisfy __all__ checking
+# These will be replaced by __getattr__ when accessed
+if TYPE_CHECKING:
+    from hexai.adapters.in_memory_memory import InMemoryMemory
+    from hexai.adapters.mock import MockDatabaseAdapter, MockLLM
+
 
 # Lazy loading for adapters to avoid circular imports
 def __getattr__(name: str) -> Any:
-    """Lazy import for adapters."""
+    """Lazy import for adapters.
+
+    Raises
+    ------
+    AttributeError
+        If the requested attribute doesn't exist
+    """
     if name == "InMemoryMemory":
         from hexai.adapters.in_memory_memory import InMemoryMemory
 
         return InMemoryMemory
-    elif name == "MockLLM":
+    if name == "MockLLM":
         from hexai.adapters.mock import MockLLM
 
         return MockLLM
-    elif name == "MockDatabaseAdapter":
+    if name == "MockDatabaseAdapter":
         from hexai.adapters.mock import MockDatabaseAdapter
 
         return MockDatabaseAdapter
@@ -93,7 +105,6 @@ __all__ = [
     "InMemoryMemory",
     "MockLLM",
     "MockDatabaseAdapter",
-    "MockEmbeddingSelectorPort",
     # Agent Factory System
     "PipelineDefinition",
     "PipelineCatalog",

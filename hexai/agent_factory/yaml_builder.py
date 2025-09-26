@@ -4,6 +4,7 @@ Simple pipeline builder that focuses on basic YAML processing with simple data m
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -46,9 +47,26 @@ class YamlPipelineBuilder:
         self.registered_functions[name] = func
 
     def build_from_yaml_file(self, yaml_file_path: str) -> tuple[DirectedGraph, dict[str, Any]]:
-        """Build DirectedGraph from YAML file."""
+        """Build DirectedGraph from YAML file.
+
+        Parameters
+        ----------
+        yaml_file_path : str
+            Path to the YAML file to build from
+
+        Returns
+        -------
+        tuple[DirectedGraph, dict[str, Any]]
+            Tuple of (DirectedGraph, pipeline_metadata)
+
+        Raises
+        ------
+        YamlPipelineBuilderError
+            If the YAML file cannot be loaded or parsed
+        """
         try:
-            with open(yaml_file_path, encoding="utf-8") as file:
+            yaml_path = Path(yaml_file_path)
+            with yaml_path.open(encoding="utf-8") as file:
                 yaml_content = file.read()
             return self.build_from_yaml_string(yaml_content)
         except OSError as e:
@@ -63,9 +81,22 @@ class YamlPipelineBuilder:
         Supports input_mapping for explicit field mapping between nodes.
         Automatically converts incompatible LLM configurations to compatible formats.
 
+        Parameters
+        ----------
+        yaml_content : str
+            YAML content string to parse
+
         Returns
         -------
-            tuple: (DirectedGraph, pipeline_metadata)
+        tuple[DirectedGraph, dict[str, Any]]
+            Tuple of (DirectedGraph, pipeline_metadata)
+
+        Raises
+        ------
+        YamlPipelineBuilderError
+            If YAML validation fails
+        TypeError
+            If the node factory is not callable
         """
         try:
             config = yaml.safe_load(yaml_content)
@@ -237,7 +268,15 @@ class YamlPipelineBuilder:
     def validate_data_mapping(self, config: dict[str, Any]) -> list[str]:
         """Validate field mappings in YAML configuration.
 
-        Returns a list of validation warnings (not errors).
+        Parameters
+        ----------
+        config : dict[str, Any]
+            YAML configuration to validate
+
+        Returns
+        -------
+        list[str]
+            List of validation warnings (not errors)
         """
         warnings = []
 
@@ -300,7 +339,26 @@ class YamlPipelineBuilder:
         dependencies: set[str],
         mapping_type: str,
     ) -> list[str]:
-        """Validate mapping references and return warnings."""
+        """Validate mapping references and return warnings.
+
+        Parameters
+        ----------
+        node_id : str
+            ID of the node being validated
+        mapping : dict[str, Any]
+            Mapping dictionary to validate
+        node_names : set[str]
+            Set of all node names in the pipeline
+        dependencies : set[str]
+            Set of dependencies for the current node
+        mapping_type : str
+            Type of mapping being validated
+
+        Returns
+        -------
+        list[str]
+            List of validation warnings
+        """
         warnings = []
 
         for source_path in mapping.values():

@@ -195,7 +195,13 @@ class FunctionBasedToolRouter(ToolRouter):
         )
 
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Call a tool with parameters."""
+        """Call a tool with parameters.
+
+        Raises
+        ------
+        ValueError
+            If the tool is not found
+        """
         if tool_name not in self.tools:
             raise ValueError(f"Tool '{tool_name}' not found. Available: {list(self.tools.keys())}")
 
@@ -230,22 +236,37 @@ class FunctionBasedToolRouter(ToolRouter):
             raise e
 
         # Log the call
-        self.call_history.append(
-            {
-                "tool_name": tool_name,
-                "input_data": params,
-                "result": result,
-            }
-        )
+        self.call_history.append({
+            "tool_name": tool_name,
+            "input_data": params,
+            "result": result,
+        })
 
         return result
 
     def get_available_tools(self) -> list[str]:
-        """Get list of available tool names."""
+        """Get list of available tool names.
+
+        Returns
+        -------
+        list[str]
+            List of registered tool names
+        """
         return list(self.tools.keys())
 
     def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
-        """Get schema for a specific tool."""
+        """Get schema for a specific tool.
+
+        Parameters
+        ----------
+        tool_name : str
+            Name of the tool to get schema for
+
+        Returns
+        -------
+        dict[str, Any]
+            Tool schema with name, description, parameters, and examples
+        """
         if tool_name in self.tool_definitions:
             tool_def = self.tool_definitions[tool_name]
             return {
@@ -267,7 +288,13 @@ class FunctionBasedToolRouter(ToolRouter):
         return {}
 
     def get_all_tool_schemas(self) -> dict[str, dict[str, Any]]:
-        """Get schemas for all available tools."""
+        """Get schemas for all available tools.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            Dictionary mapping tool names to their schemas
+        """
         return {name: self.get_tool_schema(name) for name in self.tools}
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
@@ -283,7 +310,13 @@ class FunctionBasedToolRouter(ToolRouter):
         return list(self.tool_definitions.values())
 
     def get_call_history(self) -> list[dict[str, Any]]:
-        """Get call history for debugging."""
+        """Get call history for debugging.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of call history records with tool_name, input_data, and result
+        """
         return self.call_history.copy()
 
     def reset(self) -> None:

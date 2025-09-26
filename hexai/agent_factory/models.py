@@ -10,7 +10,7 @@ Optimized with Pydantic v2 best practices:
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -39,7 +39,7 @@ OPTIMIZED_CONFIG = ConfigDict(
 # Ontology Analytics Domain Models - Aligned with Database Schema
 
 
-class RelationshipType(str, Enum):
+class RelationshipType(StrEnum):
     """Basic relationship types."""
 
     ONE_TO_ONE = "one_to_one"
