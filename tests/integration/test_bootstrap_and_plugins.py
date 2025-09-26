@@ -137,11 +137,11 @@ class TestPluginSystemIntegration:
         ):
             bootstrap_registry()
 
-        # Only mock should be available
+        # Both adapters should be registered (registration happens regardless of API keys)
         adapters = global_registry.list_components()
         adapter_names = [a.name for a in adapters if a.component_type.value == "adapter"]
         assert "mock_llm" in adapter_names
-        assert "openai" not in adapter_names
+        assert "openai" in adapter_names  # OpenAI adapter is registered but may fail at instantiation
 
         # Get adapter and test it works
         mock_adapter = global_registry.get("mock_llm", namespace="plugin")
