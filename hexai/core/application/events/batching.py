@@ -16,7 +16,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import cast
 
 from .events import Event
@@ -33,7 +33,7 @@ class BatchFlushReason(str, Enum):
     SHUTDOWN = "shutdown"
 
 
-class OverloadPolicy(str, Enum):
+class OverloadPolicy(StrEnum):
     """Strategy to apply when the in-memory buffer exceeds its capacity."""
 
     DROP_OLDEST = "drop-oldest"
@@ -69,11 +69,11 @@ class EventBatchEnvelope:
     """Metadata-rich container for a batch of events.
 
     NOTE: Once the event taxonomy work lands, convert this envelope to the
-    canonical shape defined there.  The TODO marker keeps the linkage visible
-    for the future refactor.
+    canonical shape defined there. The marker keeps the linkage visible for a
+    future refactor.
     """
 
-    # TODO(event-taxonomy): align fields with the canonical envelope schema.
+    # NOTE(event-taxonomy): align fields with the canonical envelope schema.
     batch_id: str
     sequence_no: int
     created_at: datetime
@@ -250,7 +250,7 @@ class EventBatcher[EventT: Event]:
     def _serialize_event(self, event: EventT) -> dict[str, object]:
         """Best-effort JSON serialization for spill files."""
 
-        # TODO(event-taxonomy): once canonical envelope exists, reuse its serializer.
+        # NOTE(event-taxonomy): once canonical envelope exists, reuse its serializer.
         data = event.__dict__.copy()
         data["__event_type__"] = type(event).__name__
         return data
