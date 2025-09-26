@@ -7,7 +7,7 @@ import re
 import uuid
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
@@ -32,7 +32,7 @@ APPROVED_ACTIONS: dict[str, set[str]] = {
 }
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """Severity levels used in the event envelope."""
 
     info = "info"
@@ -85,7 +85,13 @@ def _coerce(value: Any) -> Any:
 
 
 def _ensure_json_serializable(payload: Any) -> None:
-    """Verify payload can be encoded as JSON using stdlib encoder."""
+    """Verify payload can be encoded as JSON using stdlib encoder.
+
+    Raises
+    ------
+    TypeError
+        If ``payload`` cannot be JSON-encoded using the standard library ``json`` module.
+    """
     try:
         json.dumps(payload)
     except TypeError as exc:  # pragma: no cover - surfaced as ValueError via caller
