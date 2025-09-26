@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+
 from .events import EVENT_REGISTRY, Event, EventSpec
 
 # Canonical namespace/action definitions
@@ -68,11 +70,9 @@ def _now_rfc3339_ms() -> str:
 
 def _coerce(value: Any) -> Any:
     """Convert common non-JSON types into serializable representations."""
-    from enum import Enum as _Enum
-
     if isinstance(value, Exception):
         return str(value)
-    if isinstance(value, _Enum):
+    if isinstance(value, Enum):
         return value.value
     if isinstance(value, (bytes, bytearray)):
         return value.decode("utf-8", errors="replace")
@@ -90,6 +90,44 @@ def _ensure_json_serializable(payload: Any) -> None:
         json.dumps(payload)
     except TypeError as exc:  # pragma: no cover - surfaced as ValueError via caller
         raise TypeError(f"attrs not JSON-serializable: {exc}") from exc
+
+
+class EventEnvelope(BaseModel):
+    """Pydantic model describing the canonical event envelope."""
+
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    event_type: str
+    event_id: str
+    timestamp: str
+    pipeline: str
+    pipeline_run_id: str
+    severity: Severity
+    attrs: dict[str, Any]
+    node: str | None = None
+    wave: int | None = None
+    tenant: str | None = None
+    project: str | None = None
+    environment: str | None = None
+    correlation_id: str | None = None
+
+    @field_validator("event_type")
+    @classmethod
+    def _validate_event_type_field(cls, value: str) -> str:
+        validate_event_type(value)
+        return value
+
+    @field_validator("timestamp")
+    @classmethod
+    def _validate_timestamp_field(cls, value: str) -> str:
+        _validate_timestamp(value)
+        return value
+
+    @field_validator("attrs")
+    @classmethod
+    def _validate_attrs_field(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _ensure_json_serializable(value)
+        return value
 
 
 def _infer_severity(event_type: str) -> Severity:
@@ -115,14 +153,20 @@ def _resolve_attr_fields(event: Event, spec: EventSpec) -> tuple[str, ...]:
 
 
 def build_envelope(event: Event, context: EventContext) -> dict[str, Any]:
-    """Convert an internal event object into a canonical envelope dict."""
+    """Convert an internal event object into a canonical envelope dict.
+
+    Raises
+    ------
+    KeyError
+        If the event class is not registered in ``EVENT_REGISTRY``.
+    """
     class_name = type(event).__name__
     try:
         spec = EVENT_REGISTRY[class_name]
     except KeyError as exc:
         raise KeyError(f"unmapped event class: {class_name}") from exc
 
-    envelope: dict[str, Any] = {
+    payload: dict[str, Any] = {
         "event_type": spec.event_type,
         "event_id": generate_event_id(getattr(event, "event_id", None)),
         "timestamp": _now_rfc3339_ms(),
@@ -136,7 +180,7 @@ def build_envelope(event: Event, context: EventContext) -> dict[str, Any]:
     for field in ("tenant", "project", "environment", "correlation_id"):
         value = getattr(context, field)
         if value:
-            envelope[field] = value
+            payload[field] = value
 
     # Populate mapped top-level fields from the event data
     for target, attr_name in spec.envelope_fields.items():
@@ -145,20 +189,31 @@ def build_envelope(event: Event, context: EventContext) -> dict[str, Any]:
                 f"Event '{class_name}' missing attribute '{attr_name}' required for '{target}'"
             )
         value = getattr(event, attr_name)
-        envelope[target] = _coerce(value)
+        payload[target] = _coerce(value)
 
     # Build attrs from declared event fields
     for attr_name in _resolve_attr_fields(event, spec):
         if not hasattr(event, attr_name):
             continue
-        envelope["attrs"][attr_name] = _coerce(getattr(event, attr_name))
+        payload["attrs"][attr_name] = _coerce(getattr(event, attr_name))
 
-    validate_envelope(envelope)
-    return envelope
+    try:
+        envelope_model = EventEnvelope.model_validate(payload)
+    except ValidationError as exc:  # pragma: no cover - handled via ValueError for callers
+        raise ValueError(str(exc)) from exc
+
+    return envelope_model.model_dump(exclude_none=True)
 
 
 def validate_event_type(event_type: str) -> None:
-    """Ensure event_type follows namespace:action pattern and is approved."""
+    """Ensure event_type follows namespace:action pattern and is approved.
+
+    Raises
+    ------
+    ValueError
+        If the provided event type does not match the canonical pattern or
+        is not part of the approved namespace/action sets.
+    """
     if not EVENT_TYPE_RE.match(event_type):
         raise ValueError(f"event_type not matching ^[a-z]+:[a-z]+$: {event_type}")
     namespace, action = event_type.split(":", 1)
@@ -186,11 +241,18 @@ REQUIRED_FIELDS = (
 
 
 def validate_envelope(envelope: dict[str, Any]) -> None:
-    """Validate a complete event envelope against required fields and rules."""
+    """Validate a complete event envelope against required fields and rules.
+
+    Raises
+    ------
+    ValueError
+        If mandatory fields are missing or the payload fails schema validation.
+    """
     for field_name in REQUIRED_FIELDS:
         if field_name not in envelope:
             raise ValueError(f"missing field: {field_name}")
 
-    validate_event_type(envelope["event_type"])
-    _validate_timestamp(envelope["timestamp"])
-    _ensure_json_serializable(envelope["attrs"])
+    try:
+        EventEnvelope.model_validate(envelope)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
