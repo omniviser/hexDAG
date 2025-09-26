@@ -1,6 +1,8 @@
 """Unit tests for SQLite adapter."""
 
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -11,25 +13,21 @@ from hexai.adapters.database.sqlite.sqlite_adapter import SQLiteAdapter
 class TestSQLiteAdapter:
     """Test SQLite adapter functionality."""
 
-    @pytest.fixture(autouse=True)
-    def cleanup(self):
-        """Clean up test database."""
-        # Clean up any test database files
-        test_db = Path("test_hexdag.db")
-        if test_db.exists():
-            test_db.unlink()
-
-        yield
-
+    @pytest.fixture
+    def temp_db_path(self):
+        """Provide a temporary database path that gets cleaned up."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        yield db_path
         # Clean up after test
-        if test_db.exists():
-            test_db.unlink()
+        if os.path.exists(db_path):
+            os.unlink(db_path)
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_query_execution(self):
+    async def test_sqlite_adapter_query_execution(self, temp_db_path):
         """Test SQL query execution with SQLite adapter."""
         # Create adapter instance
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Create a test table
         await adapter.aexecute_query("""
@@ -70,9 +68,9 @@ class TestSQLiteAdapter:
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_schema_introspection(self):
+    async def test_sqlite_adapter_schema_introspection(self, temp_db_path):
         """Test schema introspection capabilities."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Create tables with relationships
         await adapter.aexecute_query("""
@@ -115,9 +113,9 @@ class TestSQLiteAdapter:
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_relationships(self):
+    async def test_sqlite_adapter_relationships(self, temp_db_path):
         """Test foreign key relationship detection."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Create tables with FK relationship
         await adapter.aexecute_query("""
@@ -154,9 +152,9 @@ class TestSQLiteAdapter:
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_indexes(self):
+    async def test_sqlite_adapter_indexes(self, temp_db_path):
         """Test index information retrieval."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Create table
         await adapter.aexecute_query("""
@@ -188,9 +186,9 @@ class TestSQLiteAdapter:
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_statistics(self):
+    async def test_sqlite_adapter_statistics(self, temp_db_path):
         """Test table statistics retrieval."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Create table and insert data
         await adapter.aexecute_query("""
@@ -226,9 +224,9 @@ class TestSQLiteAdapter:
         assert "SQLite database adapter" in SQLiteAdapter._hexdag_description
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_error_handling(self):
+    async def test_sqlite_adapter_error_handling(self, temp_db_path):
         """Test error handling in SQLite adapter."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Test query on non-existent table
         with pytest.raises(sqlite3.OperationalError):
@@ -241,9 +239,9 @@ class TestSQLiteAdapter:
         adapter.close()
 
     @pytest.mark.asyncio
-    async def test_sqlite_adapter_parameterized_queries(self):
+    async def test_sqlite_adapter_parameterized_queries(self, temp_db_path):
         """Test parameterized query support for SQL injection prevention."""
-        adapter = SQLiteAdapter(db_path="test_hexdag.db")
+        adapter = SQLiteAdapter(db_path=temp_db_path)
 
         # Create table
         await adapter.aexecute_query("""
@@ -266,15 +264,19 @@ class TestSQLiteAdapter:
 
         adapter.close()
 
-    def test_sqlite_adapter_repr(self):
+    def test_sqlite_adapter_repr(self, temp_db_path):
         """Test string representation of adapter."""
-        adapter = SQLiteAdapter(db_path="test.db")
-        assert repr(adapter) == "SQLiteAdapter(db_path='test.db', mode='read-write')"
+        adapter = SQLiteAdapter(db_path=temp_db_path)
+        assert "SQLiteAdapter" in repr(adapter)
+        assert temp_db_path in repr(adapter)
+        assert "mode='read-write'" in repr(adapter)
         adapter.close()
 
         # Test with read-only mode
-        adapter_ro = SQLiteAdapter(db_path="test.db", read_only=True)
-        assert repr(adapter_ro) == "SQLiteAdapter(db_path='test.db', mode='read-only')"
+        adapter_ro = SQLiteAdapter(db_path=temp_db_path, read_only=True)
+        assert "SQLiteAdapter" in repr(adapter_ro)
+        assert temp_db_path in repr(adapter_ro)
+        assert "mode='read-only'" in repr(adapter_ro)
         adapter_ro.close()
 
     @pytest.mark.asyncio
