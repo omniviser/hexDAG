@@ -159,6 +159,11 @@ def build_envelope(event: Event, context: EventContext) -> dict[str, Any]:
     ------
     KeyError
         If the event class is not registered in ``EVENT_REGISTRY``.
+    AttributeError
+        If the event instance is missing an attribute required by the
+        registry mapping.
+    ValueError
+        If the generated payload fails envelope validation.
     """
     class_name = type(event).__name__
     try:
