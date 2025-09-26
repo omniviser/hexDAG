@@ -16,13 +16,13 @@ from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import cast
 
 from .events import Event
 
 
-class BatchFlushReason(str, Enum):
+class BatchFlushReason(StrEnum):
     """Reason codes for why a batch was flushed."""
 
     SIZE = "size"
