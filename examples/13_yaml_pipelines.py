@@ -90,7 +90,7 @@ async def report_generator(text_data: dict, sentiment_data: dict) -> dict:
 def create_yaml_pipeline_definition() -> str:
     """Create a YAML pipeline definition."""
 
-    yaml_content = """
+    return """
 name: text_analysis_pipeline
 version: "1.0.0"
 description: "Analyze text sentiment and generate reports"
@@ -142,13 +142,11 @@ config:
   timeout_seconds: 300
 """
 
-    return yaml_content
-
 
 def create_simple_yaml_pipeline() -> str:
     """Create a simpler YAML pipeline for demonstration."""
 
-    yaml_content = """
+    return """
 name: simple_text_pipeline
 version: "1.0.0"
 description: "Simple text processing pipeline"
@@ -168,8 +166,6 @@ nodes:
 config:
   validation_strategy: "coerce"
 """
-
-    return yaml_content
 
 
 async def demonstrate_yaml_parsing():

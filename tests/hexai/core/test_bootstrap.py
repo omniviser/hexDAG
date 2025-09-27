@@ -1,6 +1,6 @@
 """Tests for the new bootstrap-based registry architecture."""
 
-import os
+import pathlib
 import sys
 import tempfile
 import textwrap
@@ -37,10 +37,11 @@ class TestBootstrapArchitecture:
 
         # Decorator should add attributes
         assert hasattr(TestNode, "_hexdag_type")
+        assert hasattr(TestNode, "_hexdag_name")
         assert TestNode._hexdag_name == "test_node"
-        from hexai.core.registry.models import ComponentType as CT
+        from hexai.core.registry.models import ComponentType
 
-        assert TestNode._hexdag_type == CT.NODE
+        assert TestNode._hexdag_type == ComponentType.NODE
 
         # But should NOT register in registry
         assert len(registry.list_components()) == 0
@@ -63,6 +64,7 @@ class TestBootstrapArchitecture:
 
         # Registry should now be ready
         assert registry.ready
+        assert registry.manifest is not None
         assert len(registry.manifest) == 1
 
         # Components should be registered (3 decorated + 1 port = 4 total)
@@ -160,8 +162,8 @@ class TestBootstrapArchitecture:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a module with an invalid adapter
-            module_path = os.path.join(tmpdir, "invalid_adapter.py")
-            with open(module_path, "w") as f:
+            module_path = pathlib.Path(tmpdir) / "invalid_adapter.py"
+            with module_path.open("w") as f:
                 f.write(
                     textwrap.dedent("""
 from hexai.core.registry.decorators import adapter
@@ -299,7 +301,7 @@ llm = "mock_llm"
             components = registry.list_components()
             assert len(components) > 0
         finally:
-            os.unlink(config_path)
+            pathlib.Path(config_path).unlink()
             # Clean up registry
             registry._components.clear()
             registry._protected_components.clear()
@@ -324,7 +326,7 @@ dev_mode = true
             # Should pick up dev_mode from config
             assert registry.dev_mode is True
         finally:
-            os.unlink(config_path)
+            pathlib.Path(config_path).unlink()
             # Clean up registry
             registry._components.clear()
             registry._protected_components.clear()
@@ -349,7 +351,7 @@ dev_mode = false
             # Parameter should override config
             assert registry.dev_mode is True
         finally:
-            os.unlink(config_path)
+            pathlib.Path(config_path).unlink()
             # Clean up registry
             registry._components.clear()
             registry._protected_components.clear()

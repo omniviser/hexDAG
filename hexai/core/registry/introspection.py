@@ -182,8 +182,4 @@ def infer_adapter_capabilities(
     """
     _, optional_methods = extract_port_methods(port_class)
 
-    capabilities = [
-        f"supports_{method}" for method in optional_methods if hasattr(adapter_class, method)
-    ]
-
-    return capabilities
+    return [f"supports_{method}" for method in optional_methods if hasattr(adapter_class, method)]

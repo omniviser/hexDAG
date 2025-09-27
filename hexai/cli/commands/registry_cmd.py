@@ -1,7 +1,7 @@
 """Registry inspection command for HexDAG CLI."""
 
 import contextlib
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any
 
 import typer
@@ -11,13 +11,13 @@ from rich.tree import Tree
 
 from hexai.core.bootstrap import bootstrap_registry
 from hexai.core.registry import registry
-from hexai.core.registry.models import ComponentMetadata, ComponentType
+from hexai.core.registry.models import ComponentInfo, ComponentType
 
 app = typer.Typer()
 console = Console()
 
 
-class ComponentFilter(str, Enum):
+class ComponentFilter(StrEnum):
     """Component type filter options."""
 
     ALL = "all"
@@ -146,7 +146,13 @@ def show_component(
         help="Component namespace (searches all if not specified)",
     ),
 ) -> None:
-    """Show detailed information about a specific component."""
+    """Show detailed information about a specific component.
+
+    Raises
+    ------
+    typer.Exit
+        If component not found
+    """
     # Bootstrap if not already done
     with contextlib.suppress(Exception):
         # Registry may already be bootstrapped or other initialization issue
@@ -166,7 +172,7 @@ def show_component(
             # Show available components
             _show_suggestions(component_name, all_components)
             raise typer.Exit(1)
-        elif len(matches) == 1:
+        if len(matches) == 1:
             # Single match - use it
             namespace = matches[0].namespace
         else:
@@ -198,8 +204,8 @@ def show_component(
         console.print(f"[dim]Namespace: {component_info.namespace}[/dim]")
 
         # Show metadata based on type
-        if component_info.description:
-            console.print(f"[dim]Description: {component_info.description}[/dim]")
+        if component_info.metadata.description:
+            console.print(f"[dim]Description: {component_info.metadata.description}[/dim]")
 
         # Show methods for ports
         if component_info.component_type == ComponentType.PORT:
@@ -252,8 +258,8 @@ def show_component(
 
         # Show implemented port for adapters
         elif component_info.component_type == ComponentType.ADAPTER:
-            if component_info.implements_port:
-                port_name = component_info.implements_port
+            if component_info.metadata.implements_port:
+                port_name = component_info.metadata.implements_port
                 console.print(f"\n[bold]Implements Port:[/bold] {port_name}")
 
                 # Show methods if we have the component
@@ -299,7 +305,7 @@ def show_tree() -> None:
     tree = Tree("[bold]Component Registry[/bold]")
 
     # Group by namespace
-    namespaces: dict[str, list[ComponentMetadata]] = {}
+    namespaces: dict[str, list[ComponentInfo]] = {}
     for comp in components:
         if comp.namespace not in namespaces:
             namespaces[comp.namespace] = []
@@ -310,7 +316,7 @@ def show_tree() -> None:
         ns_branch = tree.add(f"[yellow]{ns_name}[/yellow]")
 
         # Group by type within namespace
-        by_type: dict[str, list[ComponentMetadata]] = {}
+        by_type: dict[str, list[ComponentInfo]] = {}
         for comp in ns_components:
             type_name = comp.component_type.value
             if type_name not in by_type:
@@ -322,8 +328,8 @@ def show_tree() -> None:
             type_branch = ns_branch.add(f"[green]{type_name}[/green]")
             for comp in type_components:
                 metadata_str = ""
-                if comp.implements_port:
-                    metadata_str = f" [dim]→ {comp.implements_port}[/dim]"
+                if comp.metadata.implements_port:
+                    metadata_str = f" [dim]→ {comp.metadata.implements_port}[/dim]"
                 type_branch.add(f"[cyan]{comp.name}[/cyan]{metadata_str}")
 
     console.print(tree)

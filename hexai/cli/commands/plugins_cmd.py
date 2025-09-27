@@ -1,7 +1,7 @@
 """Plugins management command for HexDAG CLI."""
 
 import contextlib
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any
 
 import typer
@@ -12,7 +12,7 @@ app = typer.Typer()
 console = Console()
 
 
-class OutputFormat(str, Enum):
+class OutputFormat(StrEnum):
     """Output format options."""
 
     TABLE = "table"
@@ -117,7 +117,13 @@ def install_plugin(
         help="Install in editable/development mode",
     ),
 ) -> None:
-    """Install a plugin or adapter (wrapper around package manager)."""
+    """Install a plugin or adapter (wrapper around package manager).
+
+    Raises
+    ------
+    typer.Exit
+        If installation fails or plugin not found
+    """
     # Map plugin names to extras
     plugin_map = {
         "openai": "adapters-openai",
@@ -231,9 +237,9 @@ def _get_available_plugins() -> list[dict[str, Any]]:
     adapters = [c for c in components if c.component_type == ComponentType.ADAPTER]
 
     # Group adapters by their namespace
-    from hexai.core.registry.models import ComponentMetadata
+    from hexai.core.registry.models import ComponentInfo
 
-    by_namespace: dict[str, list[ComponentMetadata]] = {}
+    by_namespace: dict[str, list[ComponentInfo]] = {}
     for adapter in adapters:
         ns = adapter.namespace
         if ns not in by_namespace:
@@ -245,8 +251,8 @@ def _get_available_plugins() -> list[dict[str, Any]]:
         # Get unique capabilities from all adapters
         capabilities = set()
         for adapter in ns_adapters:
-            if adapter.implements_port:
-                port = adapter.implements_port
+            if adapter.metadata.implements_port:
+                port = adapter.metadata.implements_port
                 # Map port names to capabilities
                 capability_map = {
                     "llm": "LLM",
@@ -261,7 +267,7 @@ def _get_available_plugins() -> list[dict[str, Any]]:
         # Create a plugin entry for each namespace group
         if ns == "plugin" and ns_adapters:
             # Group adapters by their prefix (e.g., "mock" from "mock_llm", "mock_database")
-            prefix_groups: dict[str, list[ComponentMetadata]] = {}
+            prefix_groups: dict[str, list[ComponentInfo]] = {}
             for adapter in ns_adapters:
                 # Special case for in_memory_memory -> local
                 if adapter.name == "in_memory_memory":
@@ -281,8 +287,8 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                 # Collect capabilities from all adapters in this group
                 group_capabilities = set()
                 for adapter in group_adapters:
-                    if adapter.implements_port:
-                        port = adapter.implements_port
+                    if adapter.metadata.implements_port:
+                        port = adapter.metadata.implements_port
                         # Map port names to capabilities
                         capability_map = {
                             "llm": "LLM",
@@ -295,14 +301,12 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                         group_capabilities.add(cap)
 
                 caps = sorted(group_capabilities) if group_capabilities else ["Adapter"]
-                plugins.append(
-                    {
-                        "name": prefix,
-                        "namespace": ns,
-                        "installed": True,  # If in registry, it's installed
-                        "capabilities": caps,
-                    }
-                )
+                plugins.append({
+                    "name": prefix,
+                    "namespace": ns,
+                    "installed": True,  # If in registry, it's installed
+                    "capabilities": caps,
+                })
 
     # Check for known optional dependencies that may not be loaded
     known_extras = {
@@ -333,14 +337,12 @@ def _get_available_plugins() -> list[dict[str, Any]]:
             except ImportError:
                 pass
 
-            plugins.append(
-                {
-                    "name": name,
-                    "namespace": "plugin",
-                    "installed": installed,
-                    "capabilities": info["capabilities"],
-                }
-            )
+            plugins.append({
+                "name": name,
+                "namespace": "plugin",
+                "installed": installed,
+                "capabilities": info["capabilities"],
+            })
 
     # Special check for visualization
     try:
@@ -399,13 +401,11 @@ def _check_dependencies() -> list[dict]:
             if info["extra"]:
                 hint = f"{prefix} hexdag[{info['extra']}]"
 
-            checks.append(
-                {
-                    "name": info["name"],
-                    "status": status,
-                    "install_hint": hint,
-                }
-            )
+            checks.append({
+                "name": info["name"],
+                "status": status,
+                "install_hint": hint,
+            })
 
     # Check optional adapter packages dynamically
     adapter_packages: dict[str, Any] = {
@@ -444,20 +444,16 @@ def _check_dependencies() -> list[dict]:
         if sdk_ok and adapter_ok:
             checks.append({"name": f"{info['display']} (SDK + Adapter)", "status": "ok"})
         elif sdk_ok:
-            checks.append(
-                {
-                    "name": f"{info['display']} (SDK only, adapter missing)",
-                    "status": "optional",
-                    "install_hint": f"{prefix} hexdag[{info['extra']}]",
-                }
-            )
+            checks.append({
+                "name": f"{info['display']} (SDK only, adapter missing)",
+                "status": "optional",
+                "install_hint": f"{prefix} hexdag[{info['extra']}]",
+            })
         else:
-            checks.append(
-                {
-                    "name": f"{info['display']} (not installed)",
-                    "status": "optional",
-                    "install_hint": f"{prefix} hexdag[{info['extra']}]",
-                }
-            )
+            checks.append({
+                "name": f"{info['display']} (not installed)",
+                "status": "optional",
+                "install_hint": f"{prefix} hexdag[{info['extra']}]",
+            })
 
     return checks

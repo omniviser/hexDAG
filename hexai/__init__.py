@@ -4,7 +4,7 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # Agent Factory system exports
 from hexai.agent_factory import (
@@ -40,26 +40,40 @@ import hexai.core.application.nodes  # noqa: F401, E402 - triggers decorator reg
 
 registry._core_loading = False  # type: ignore  # Block core namespace registration
 
+# Define placeholders for lazy-loaded adapters to satisfy __all__ checking
+# These will be replaced by __getattr__ when accessed
+if TYPE_CHECKING:
+    from hexai.adapters.local.in_memory_memory import InMemoryMemory
+    from hexai.adapters.mock import MockDatabaseAdapter, MockLLM
+
 
 # Lazy loading for adapters and optional modules to avoid circular imports
 def __getattr__(name: str) -> Any:
-    """Lazy import for adapters and optional components."""
+    """Lazy import for adapters and optional components.
+
+    Raises
+    ------
+    ImportError
+        If visualization module is not available
+    AttributeError
+        If the requested attribute does not exist
+    """
     # Mock adapters
     if name == "MockLLM":
         from hexai.adapters.mock import MockLLM as _MockLLM
 
         return _MockLLM
-    elif name == "MockDatabaseAdapter":
+    if name == "MockDatabaseAdapter":
         from hexai.adapters.mock import MockDatabaseAdapter as _MockDatabaseAdapter
 
         return _MockDatabaseAdapter
-    elif name == "MockToolRouter":
+    if name == "MockToolRouter":
         from hexai.adapters.mock import MockToolRouter as _MockToolRouter
 
         return _MockToolRouter
 
     # Visualization components (optional)
-    elif name == "DAGVisualizer":
+    if name == "DAGVisualizer":
         try:
             from hexai.visualization import DAGVisualizer as _DAGVisualizer
 
@@ -98,6 +112,10 @@ __all__ = [
     "APICall",
     "ToolRouter",
     "DatabasePort",
+    # Testing and Development Adapters
+    "InMemoryMemory",
+    "MockLLM",
+    "MockDatabaseAdapter",
     # Agent Factory System
     "PipelineDefinition",
     "PipelineCatalog",

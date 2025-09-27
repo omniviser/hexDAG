@@ -30,6 +30,11 @@ async def database_query(
     Returns
     -------
         List of dictionaries representing query results
+
+    Raises
+    ------
+    ValueError
+        If database port is not provided
     """
     if database_port is None:
         raise ValueError("Database port is required but not provided")
@@ -56,6 +61,11 @@ async def database_execute(
         sql: SQL command to execute
         params: Optional parameters for parameterized queries
         database_port: Injected database port (provided by framework)
+
+    Raises
+    ------
+    ValueError
+        If database port is not provided
     """
     if database_port is None:
         raise ValueError("Database port is required but not provided")
@@ -80,6 +90,11 @@ async def list_tables(database_port: DatabasePort | None = None) -> list[str]:
     Returns
     -------
         List of table names
+
+    Raises
+    ------
+    ValueError
+        If database port is not provided
     """
     if database_port is None:
         raise ValueError("Database port is required but not provided")
@@ -114,6 +129,11 @@ async def describe_table(
     Returns
     -------
         List of column information
+
+    Raises
+    ------
+    ValueError
+        If database port is not provided
     """
     if database_port is None:
         raise ValueError("Database port is required but not provided")
@@ -153,11 +173,15 @@ def database_query_sync(
     Returns
     -------
         Query results
+
+    Raises
+    ------
+    ValueError
+        If database port is not provided
     """
     if database_port is None:
         raise ValueError("Database port is required but not provided")
-    result = asyncio.run(database_port.aexecute_query(sql, params or {}))
-    return result
+    return asyncio.run(database_port.aexecute_query(sql, params or {}))
 
 
 # Export key tools

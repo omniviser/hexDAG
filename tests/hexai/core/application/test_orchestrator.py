@@ -44,7 +44,13 @@ async def async_combine(inputs: dict, **ports) -> int:
 
 
 def failing_function(x: int, **ports) -> int:
-    """Raise an exception."""
+    """Raise an exception.
+
+    Raises
+    ------
+    ValueError
+        Always raises a test failure
+    """
     raise ValueError("Intentional test failure")
 
 
@@ -104,8 +110,7 @@ class TestOrchestrator:
         """Create mock observer manager for testing."""
         from hexai.core.application.events import ObserverManager
 
-        mock = AsyncMock(spec=ObserverManager)
-        return mock
+        return AsyncMock(spec=ObserverManager)
 
     @pytest.mark.asyncio
     async def test_simple_sequential_execution(self, orchestrator, observers):
@@ -283,14 +288,13 @@ class TestOrchestrator:
                     return sum(x.values()) + 1
 
                 return wrapped_dict
-            else:
 
-                async def wrapped_int(x: int, **ports) -> int:
-                    execution_order.append(name)
-                    await asyncio.sleep(0.01)
-                    return x + 1
+            async def wrapped_int(x: int, **ports) -> int:
+                execution_order.append(name)
+                await asyncio.sleep(0.01)
+                return x + 1
 
-                return wrapped_int
+            return wrapped_int
 
         # Create DAG where wave 1 = [a], wave 2 = [b, c], wave 3 = [d]
         graph = DirectedGraph()

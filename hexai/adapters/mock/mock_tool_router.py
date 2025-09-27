@@ -107,20 +107,19 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
 
         Raises
         ------
-            ValueError: If tool not found and raise_on_unknown_tool is True
+        ValueError
+            If tool not found and raise_on_unknown_tool is True
         """
         # Simulate delay
         if self.delay_seconds > 0:
             await asyncio.sleep(self.delay_seconds)
 
         # Record the call
-        self.call_history.append(
-            {
-                "tool": tool_name,
-                "params": params,
-                "timestamp": asyncio.get_event_loop().time(),
-            }
-        )
+        self.call_history.append({
+            "tool": tool_name,
+            "params": params,
+            "timestamp": asyncio.get_event_loop().time(),
+        })
 
         # Check if tool exists
         if tool_name not in self.tools:
@@ -137,7 +136,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
                     {"title": f"Result 2 for {query}", "url": "http://example.com/2"},
                 ]
             }
-        elif tool_name == "calculate":
+        if tool_name == "calculate":
             expression = params.get("expression", "0")
             try:
                 # Safe evaluation using ast for simple math expressions
@@ -161,7 +160,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
                         if not isinstance(val, (int, float)):
                             raise ValueError(f"Only numeric constants are allowed, got {type(val)}")
                         return val
-                    elif isinstance(node, ast.BinOp):
+                    if isinstance(node, ast.BinOp):
                         left = safe_eval(node.left)
                         right = safe_eval(node.right)
                         op_func = ops.get(type(node.op))
@@ -171,7 +170,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
                         if not isinstance(result, (int, float)):
                             raise ValueError("Operation resulted in non-numeric value")
                         return result
-                    elif isinstance(node, ast.UnaryOp):
+                    if isinstance(node, ast.UnaryOp):
                         operand = safe_eval(node.operand)
                         op_func = ops.get(type(node.op))
                         if op_func is None:
@@ -180,8 +179,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
                         if not isinstance(result, (int, float)):
                             raise ValueError("Operation resulted in non-numeric value")
                         return result
-                    else:
-                        raise ValueError(f"Unsupported operation: {ast.dump(node)}")
+                    raise ValueError(f"Unsupported operation: {ast.dump(node)}")
 
                 tree = ast.parse(expression, mode="eval")
                 result = safe_eval(tree.body)
@@ -226,7 +224,8 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
 
         Raises
         ------
-            KeyError: If tool not found
+        KeyError
+            If tool not found
         """
         if tool_name not in self.tools:
             raise KeyError(f"Tool not found: {tool_name}")

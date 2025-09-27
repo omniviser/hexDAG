@@ -85,7 +85,8 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
 
         Raises
         ------
-            ValueError: If tool not found in registry
+        ValueError
+            If tool not found in registry
         """
         try:
             # Validate tool exists and is correct type
@@ -100,23 +101,27 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
         return await self._execute_tool(tool, params)
 
     async def _execute_tool(self, tool: Any, params: dict[str, Any]) -> Any:
-        """Execute any tool (function, class, or instance) with parameters."""
+        """Execute any tool (function, class, or instance) with parameters.
+
+        Raises
+        ------
+        ValueError
+            If tool is not executable
+        """
         try:
             # Handle different tool types
             if inspect.iscoroutinefunction(tool):
                 return await self._call_with_params(tool, params, is_async=True)
-            elif hasattr(tool, "execute"):
+            if hasattr(tool, "execute"):
                 # Class with execute method
                 execute_method = tool.execute
                 if asyncio.iscoroutinefunction(execute_method):
                     return await self._call_with_params(execute_method, params, is_async=True)
-                else:
-                    return self._call_with_params(execute_method, params, is_async=False)
-            elif callable(tool):
+                return self._call_with_params(execute_method, params, is_async=False)
+            if callable(tool):
                 # Regular function
                 return self._call_with_params(tool, params, is_async=False)
-            else:
-                raise ValueError(f"Tool {tool} is not executable")
+            raise ValueError(f"Tool {tool} is not executable")
 
         except Exception as e:
             raise e
@@ -152,8 +157,7 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
 
         if is_async:
             return func(**kwargs)  # Return coroutine, caller will await
-        else:
-            return func(**kwargs)
+        return func(**kwargs)
 
     def get_available_tools(self) -> list[str]:
         """Get list of available tool names from registry."""
@@ -225,17 +229,19 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
             logger.debug("Could not get tool definitions from registry: %s", e)
         return definitions
 
-    def _get_tool_definition_from_component(self, metadata: Any) -> ToolDefinition:
+    def _get_tool_definition_from_component(self, component_info: Any) -> ToolDefinition:
         """Generate ToolDefinition from registry component.
 
         Args
         ----
-            metadata: ComponentMetadata from registry
+            component_info: ComponentInfo from registry
 
         Returns
         -------
             ToolDefinition for the component
         """
+        # Access metadata from ComponentInfo
+        metadata = component_info.metadata
         component = metadata.component
 
         # Try to extract from function or class
@@ -246,16 +252,15 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
             target_func = component.value.execute
 
         if target_func:
-            return self._generate_tool_definition_from_function(target_func, metadata.name)
-        else:
-            # Return minimal definition for other cases
-            return ToolDefinition(
-                name=metadata.name,
-                simplified_description=metadata.description or f"Tool {metadata.name}",
-                detailed_description=metadata.description or f"Tool {metadata.name}",
-                parameters=[],
-                examples=[f"{metadata.name}()"],
-            )
+            return self._generate_tool_definition_from_function(target_func, component_info.name)
+        # Return minimal definition for other cases
+        return ToolDefinition(
+            name=component_info.name,
+            simplified_description=metadata.description or f"Tool {component_info.name}",
+            detailed_description=metadata.description or f"Tool {component_info.name}",
+            parameters=[],
+            examples=[f"{component_info.name}()"],
+        )
 
     def _generate_tool_definition_from_function(self, func: Any, tool_name: str) -> ToolDefinition:
         """Generate ToolDefinition from a function's signature and docstring.

@@ -81,14 +81,12 @@ class InMemoryMemory(Memory, ConfigurableComponent):
         result = self.storage.get(key)
 
         # Log the access
-        self.access_history.append(
-            {
-                "operation": "get",
-                "key": key,
-                "found": key in self.storage,
-                "timestamp": asyncio.get_event_loop().time(),
-            }
-        )
+        self.access_history.append({
+            "operation": "get",
+            "key": key,
+            "found": key in self.storage,
+            "timestamp": asyncio.get_event_loop().time(),
+        })
 
         return result
 
@@ -102,7 +100,8 @@ class InMemoryMemory(Memory, ConfigurableComponent):
 
         Raises
         ------
-            MemoryError: If max_size is exceeded
+        MemoryError
+            If max_size is exceeded
         """
         # Simulate access delay
         if self.delay_seconds > 0:
@@ -119,14 +118,12 @@ class InMemoryMemory(Memory, ConfigurableComponent):
         self.storage[key] = value
 
         # Log the access
-        self.access_history.append(
-            {
-                "operation": "set",
-                "key": key,
-                "value_type": type(value).__name__,
-                "timestamp": asyncio.get_event_loop().time(),
-            }
-        )
+        self.access_history.append({
+            "operation": "set",
+            "key": key,
+            "value_type": type(value).__name__,
+            "timestamp": asyncio.get_event_loop().time(),
+        })
 
     def clear(self) -> None:
         """Clear all stored data."""
@@ -138,17 +135,46 @@ class InMemoryMemory(Memory, ConfigurableComponent):
         self.access_history.clear()
 
     def get_access_history(self) -> list[dict[str, Any]]:
-        """Get the history of all memory access operations."""
+        """Get the history of all memory access operations.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of access history records with operation, key, and timestamp
+        """
         return self.access_history.copy()
 
     def get_stored_keys(self) -> list[str]:
-        """Get list of all stored keys."""
+        """Get list of all stored keys.
+
+        Returns
+        -------
+        list[str]
+            List of all keys currently stored in memory
+        """
         return list(self.storage.keys())
 
     def has_key(self, key: str) -> bool:
-        """Check if a key exists in storage."""
+        """Check if a key exists in storage.
+
+        Parameters
+        ----------
+        key : str
+            The key to check for existence
+
+        Returns
+        -------
+        bool
+            True if the key exists, False otherwise
+        """
         return key in self.storage
 
     def size(self) -> int:
-        """Get the number of stored items."""
+        """Get the number of stored items.
+
+        Returns
+        -------
+        int
+            Number of items currently stored in memory
+        """
         return len(self.storage)

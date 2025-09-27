@@ -25,6 +25,10 @@ T = TypeVar("T")
 def _snake_case(name: str) -> str:
     """Convert CamelCase/PascalCase to snake_case, handling acronyms properly.
 
+    Returns
+    -------
+        The snake_case version of the input name.
+
     Examples
     --------
     XMLHttpRequest -> xml_http_request

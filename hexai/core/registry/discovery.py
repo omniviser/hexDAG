@@ -92,11 +92,10 @@ def _get_component_names(component: object) -> list[str]:
     if hasattr(component, "_hexdag_names"):
         names = getattr(component, "_hexdag_names")  # noqa: B009
         return names if isinstance(names, list) else [names]
-    elif hasattr(component, "_hexdag_name"):
+    if hasattr(component, "_hexdag_name"):
         name = getattr(component, "_hexdag_name")  # noqa: B009
         return [name] if isinstance(name, str) else []
-    else:
-        return []
+    return []
 
 
 def _register_component_direct(

@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel, create_model
 
-from ...domain.dag import NodeSpec
+from hexai.core.domain.dag import NodeSpec
 
 
 class BaseNodeFactory(ABC):
@@ -17,7 +17,13 @@ class BaseNodeFactory(ABC):
     def create_pydantic_model(
         self, name: str, schema: dict[str, Any] | type[BaseModel] | type[Any] | None
     ) -> type[BaseModel] | None:
-        """Create a Pydantic model from a schema."""
+        """Create a Pydantic model from a schema.
+
+        Raises
+        ------
+        ValueError
+            If schema type is not supported
+        """
         if schema is None:
             return None
 

@@ -40,11 +40,23 @@ class ToolDefinition(BaseModel):
     examples: list[str] = Field(default_factory=list, description="Usage examples")
 
     def to_simplified_string(self) -> str:
-        """Convert to simplified string format."""
+        """Convert to simplified string format.
+
+        Returns
+        -------
+        str
+            Simplified string representation of the tool
+        """
         return f"{self.name}: {self.simplified_description}"
 
     def to_detailed_string(self) -> str:
-        """Convert to detailed string format."""
+        """Convert to detailed string format.
+
+        Returns
+        -------
+        str
+            Detailed string representation of the tool with parameters and examples
+        """
         lines = [f"Tool: {self.name}", f"Description: {self.detailed_description}", "Parameters:"]
 
         for param in self.parameters:
@@ -86,7 +98,13 @@ class ToolParser:
     def parse_tool_calls(
         cls, text: str, format: ToolCallFormat = ToolCallFormat.MIXED
     ) -> list[ToolCall]:
-        """Extract all tool calls from text using INVOKE_TOOL: prefix."""
+        """Extract all tool calls from text using INVOKE_TOOL: prefix.
+
+        Returns
+        -------
+        list[ToolCall]
+            List of parsed tool calls found in the text
+        """
         calls = []
 
         if format in (ToolCallFormat.FUNCTION_CALL, ToolCallFormat.MIXED):
@@ -99,7 +117,13 @@ class ToolParser:
 
     @classmethod
     def _parse_function_calls(cls, text: str) -> list[ToolCall]:
-        """Parse function calls with INVOKE_TOOL: prefix."""
+        """Parse function calls with INVOKE_TOOL: prefix.
+
+        Returns
+        -------
+        list[ToolCall]
+            List of parsed function-style tool calls
+        """
         calls = []
 
         for match in cls.INVOKE_TOOL_PATTERN.finditer(text):
@@ -120,7 +144,13 @@ class ToolParser:
 
     @classmethod
     def _parse_json_calls(cls, text: str) -> list[ToolCall]:
-        """Parse JSON calls with INVOKE_TOOL: prefix."""
+        """Parse JSON calls with INVOKE_TOOL: prefix.
+
+        Returns
+        -------
+        list[ToolCall]
+            List of parsed JSON-style tool calls
+        """
         calls = []
 
         for match in cls.INVOKE_TOOL_JSON_PATTERN.finditer(text):
@@ -146,7 +176,13 @@ class ToolParser:
 
     @classmethod
     def _parse_parameters(cls, args_str: str) -> dict[str, Any]:
-        """Parse function parameters from argument string."""
+        """Parse function parameters from argument string.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary of parsed parameter names and values
+        """
         params = {}
 
         for match in cls.PARAM_PATTERN.finditer(args_str):
@@ -171,16 +207,34 @@ class ToolDescriptionManager:
         self.tools: dict[str, ToolDefinition] = {}
 
     def register_tool(self, tool_def: ToolDefinition) -> None:
-        """Register a tool definition."""
+        """Register a tool definition.
+
+        Parameters
+        ----------
+        tool_def : ToolDefinition
+            The tool definition to register
+        """
         self.tools[tool_def.name] = tool_def
 
     def register_tools(self, tool_defs: list[ToolDefinition]) -> None:
-        """Register multiple tool definitions."""
+        """Register multiple tool definitions.
+
+        Parameters
+        ----------
+        tool_defs : list[ToolDefinition]
+            List of tool definitions to register
+        """
         for tool_def in tool_defs:
             self.register_tool(tool_def)
 
     def get_simplified_descriptions(self) -> str:
-        """Get simplified tool descriptions for prompt."""
+        """Get simplified tool descriptions for prompt.
+
+        Returns
+        -------
+        str
+            Formatted string with simplified tool descriptions
+        """
         lines = ["Available tools:"]
 
         lines.extend(f"- {tool.to_simplified_string()}" for tool in self.tools.values())
@@ -188,7 +242,13 @@ class ToolDescriptionManager:
         return "\n".join(lines)
 
     def get_detailed_descriptions(self) -> str:
-        """Get detailed tool descriptions for prompt."""
+        """Get detailed tool descriptions for prompt.
+
+        Returns
+        -------
+        str
+            Formatted string with detailed tool descriptions
+        """
         lines = ["Available tools (detailed):"]
 
         for tool in self.tools.values():
@@ -198,7 +258,13 @@ class ToolDescriptionManager:
         return "\n".join(lines)
 
     def get_detailed_description(self, tool_name: str) -> str:
-        """Get detailed description for a specific tool."""
+        """Get detailed description for a specific tool.
+
+        Returns
+        -------
+        str
+            Detailed description of the specified tool
+        """
         tool = self.tools.get(tool_name)
         if not tool:
             return f"No description available for tool: {tool_name}"
@@ -206,7 +272,13 @@ class ToolDescriptionManager:
         return tool.to_detailed_string()
 
     def create_tool_check_function(self) -> Any:
-        """Create a function that returns detailed tool descriptions."""
+        """Create a function that returns detailed tool descriptions.
+
+        Returns
+        -------
+        Callable[[str], str]
+            Async function that takes a tool name and returns its detailed description
+        """
 
         async def check_tool_description(tool_name: str) -> str:
             """Get detailed description for a tool."""

@@ -118,6 +118,18 @@ class SQLiteAdapter(ConfigurableComponent):
         """Context manager for database cursor.
 
         Ensures proper cursor cleanup and error handling.
+
+        Yields
+        ------
+        Cursor
+            SQLite database cursor
+
+        Raises
+        ------
+        RuntimeError
+            If database connection is not established
+        sqlite3.Error
+            If database error occurs during operation
         """
         if self.connection is None:
             raise RuntimeError("Database connection not established")
@@ -234,6 +246,13 @@ class SQLiteAdapter(ConfigurableComponent):
         - SELECT/PRAGMA/WITH queries return result rows
         - INSERT/UPDATE/DELETE queries are committed automatically and return []
         - Use parameters to prevent SQL injection with :name placeholders
+
+        Raises
+        ------
+        ValueError
+            If a required parameter is missing
+        sqlite3.Error
+            If query execution fails
         """
         try:
             with self._get_cursor() as cursor:
@@ -266,17 +285,16 @@ class SQLiteAdapter(ConfigurableComponent):
                     rows = cursor.fetchall()
                     # Convert sqlite3.Row objects to dicts
                     return [dict(row) for row in rows]
-                else:
-                    # For INSERT/UPDATE/DELETE operations
-                    # Note: If database is opened in read-only mode, SQLite will
-                    # automatically raise an OperationalError for write operations
-                    affected_rows = cursor.rowcount
-                    if self.connection is not None:
-                        self.connection.commit()
+                # For INSERT/UPDATE/DELETE operations
+                # Note: If database is opened in read-only mode, SQLite will
+                # automatically raise an OperationalError for write operations
+                affected_rows = cursor.rowcount
+                if self.connection is not None:
+                    self.connection.commit()
 
-                    # Log the operation
-                    logger.info(f"Executed {query_type} query, affected rows: {affected_rows}")
-                    return []
+                # Log the operation
+                logger.info(f"Executed {query_type} query, affected rows: {affected_rows}")
+                return []
         except sqlite3.Error as e:
             logger.error(f"Query execution failed: {e}")
             logger.error(f"Query: {query[:100]}...")  # Log first 100 chars of query
@@ -353,15 +371,13 @@ class SQLiteAdapter(ConfigurableComponent):
                         is_unique = bool(idx[2])
                         break
 
-                indexes.append(
-                    {
-                        "index_name": index_name,
-                        "table_name": table_name,
-                        "columns": columns,
-                        "index_type": "btree",  # SQLite primarily uses B-tree
-                        "is_unique": is_unique,
-                    }
-                )
+                indexes.append({
+                    "index_name": index_name,
+                    "table_name": table_name,
+                    "columns": columns,
+                    "index_type": "btree",  # SQLite primarily uses B-tree
+                    "is_unique": is_unique,
+                })
 
         return indexes
 

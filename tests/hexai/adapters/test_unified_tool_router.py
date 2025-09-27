@@ -139,7 +139,13 @@ class TestUnifiedToolRouter:
         """Test tool execution that raises an error."""
 
         def divide(x: float, y: float) -> float:
-            """Divide x by y."""
+            """Divide x by y.
+
+            Raises
+            ------
+            ValueError
+                If y is zero
+            """
             if y == 0:
                 raise ValueError("Cannot divide by zero")
             return x / y
@@ -405,7 +411,13 @@ class TestUnifiedToolRouter:
         """Test that exceptions are properly propagated."""
 
         def failing_tool(value: int) -> int:
-            """Tool that always fails."""
+            """Tool that always fails.
+
+            Raises
+            ------
+            RuntimeError
+                Always raises this error
+            """
             raise RuntimeError("Tool failed!")
 
         self.register_tool(failing_tool)
@@ -441,7 +453,7 @@ class TestUnifiedToolRouterWithPorts:
             def get_adapter(self, port_type: str):
                 if port_type == "database":
                     return MockDatabasePort()
-                elif port_type == "llm":
+                if port_type == "llm":
                     return MockLLMPort()
                 raise ValueError(f"Unknown port type: {port_type}")
 

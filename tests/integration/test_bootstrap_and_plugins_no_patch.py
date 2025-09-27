@@ -72,11 +72,11 @@ log_level = "DEBUG"
 enable_metrics = false
 """
 
-            with open(pyproject_path, "w") as f:
+            with pyproject_path.open("w") as f:
                 f.write(config_content)
 
             # Change to the temp directory and bootstrap
-            original_cwd = os.getcwd()
+            original_cwd = Path.cwd()
             try:
                 os.chdir(tmpdir)
                 bootstrap_registry()  # Should auto-discover pyproject.toml

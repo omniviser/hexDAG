@@ -70,7 +70,23 @@ class MockLLM(LLM, ConfigurableComponent):
         self.should_raise = False
 
     async def aresponse(self, messages: MessageList) -> str | None:
-        """Return a response based on the configured responses."""
+        """Return a response based on the configured responses.
+
+        Parameters
+        ----------
+        messages : MessageList
+            List of messages to process
+
+        Returns
+        -------
+        str | None
+            Mock response string or None
+
+        Raises
+        ------
+        Exception
+            When should_raise is True for testing error conditions
+        """
         self.last_messages = messages
 
         # Simulate delay if configured

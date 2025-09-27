@@ -1,6 +1,6 @@
 """Unit tests for SQLite adapter."""
 
-import os
+import pathlib
 import sqlite3
 import tempfile
 
@@ -14,13 +14,19 @@ class TestSQLiteAdapter:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Provide a temporary database path that gets cleaned up."""
+        """Provide a temporary database path that gets cleaned up.
+
+        Yields
+        ------
+        str
+            Path to a temporary database file
+        """
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         yield db_path
         # Clean up after test
-        if os.path.exists(db_path):
-            os.unlink(db_path)
+        if pathlib.Path(db_path).exists():
+            pathlib.Path(db_path).unlink()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_query_execution(self, temp_db_path):
@@ -281,7 +287,6 @@ class TestSQLiteAdapter:
     @pytest.mark.asyncio
     async def test_sqlite_adapter_read_only_mode(self):
         """Test read-only mode prevents modifications."""
-        import os
         import tempfile
 
         # Create a database with data
@@ -343,4 +348,4 @@ class TestSQLiteAdapter:
 
         finally:
             # Clean up
-            os.unlink(db_path)
+            pathlib.Path(db_path).unlink()

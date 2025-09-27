@@ -23,7 +23,7 @@ from .models import (
 )
 
 # Type aliases for clarity
-type EventType = type["Event"]
+type EventType = type[Event]
 type ObserverId = str
 type EventFilter = set[EventType] | None
 
@@ -91,7 +91,13 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         Returns
         -------
-            str: The ID of the registered observer
+        str
+            The ID of the registered observer
+
+        Raises
+        ------
+        TypeError
+            If the observer is not callable or implements the Observer protocol
         """
         observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
         event_types = kwargs.get("event_types")
@@ -138,7 +144,13 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         return str(observer_id)
 
     def _should_notify(self, observer_id: str, event: "Event") -> bool:
-        """Check if observer should be notified of this event type."""
+        """Check if observer should be notified of this event type.
+
+        Returns
+        -------
+        bool
+            True if observer should be notified of this event
+        """
         event_filter = self._event_filters.get(observer_id)
         return self._should_process_event(event_filter, event)
 
@@ -237,7 +249,8 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         Returns
         -------
-            bool: True if observer was found and removed, False otherwise
+        bool
+            True if observer was found and removed, False otherwise
         """
         found = False
 
@@ -277,7 +290,13 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             self._executor_shutdown = True
 
     def __enter__(self) -> "ObserverManager":
-        """Context manager entry."""
+        """Context manager entry.
+
+        Returns
+        -------
+        ObserverManager
+            This manager instance
+        """
         return self
 
     def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
@@ -287,7 +306,13 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             self._executor_shutdown = True
 
     async def __aenter__(self) -> "ObserverManager":
-        """Async context manager entry."""
+        """Async context manager entry.
+
+        Returns
+        -------
+        ObserverManager
+            This manager instance
+        """
         return self
 
     async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:

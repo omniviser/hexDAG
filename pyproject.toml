@@ -158,41 +158,6 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod"
 ]
 
-[tool.black]
-line-length = 100
-target-version = ['py312']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-line_length = 100
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-skip = [
-    ".venv",
-    "build",
-    "dist",
-    ".git",
-    ".mypy_cache",
-    ".tox",
-    ".eggs",
-]
 
 [tool.mypy]
 python_version = "3.12"
@@ -269,6 +234,7 @@ exclude = [
     "build",
     "dist",
 ]
+preview = true
 
 [tool.ruff.lint]
 select = [
@@ -281,7 +247,19 @@ select = [
     "I",      # isort
     "TCH",    # flake8-type-checking
     "FA",     # flake8-future-annotations
-    "PERF",   # perflint - performance-focused best practices
+    "PERF",   # perflint - performance-focused best practices,
+    "DOC",    # pydocstyle - documentation style
+    "C4",       # Catch incorrect use of comprehensions, dict, list, etc
+    "FA",       # Enforce from __future__ import annotations
+    "ISC",      # Good use of string concatenation
+    "ICN",      # Use common import conventions
+    "RET",      # Good return practices
+    "SIM",      # Common simplification rules
+    "TID",      # Some good import practices
+    "TC",       # Enforce importing certain types in a TYPE_CHECKING block
+    "PTH",      # Use pathlib instead of os.path
+    "TD",       # Be diligent with TODO comments
+    "NPY",      # Some numpy-specific things
 ]
 # Specifically enforce modern type hints
 extend-select = [
@@ -292,7 +270,15 @@ extend-select = [
     "UP040",  # Use `type` alias syntax instead of `TypeAlias`
 ]
 
-ignore = []
+ignore = [
+"D417", # Missing argument descriptions in docstring
+"DOC201", # Don't require "Returns" section
+"DOC202", # (Optional) Don't require "Yields" section
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["UP", "SIM117", "SIM102", "SIM105", "PERF401"]

@@ -13,10 +13,19 @@ class SchemaUtils:
 
     @staticmethod
     def prepare_template_variables(input_data: Any) -> dict[str, Any]:
-        """Prepare template variables from input data (Pydantic models only)."""
+        """Prepare template variables from input data (Pydantic models only).
+
+        Returns
+        -------
+            Dictionary of template variables.
+
+        Raises
+        ------
+        TypeError
+            If input data is not a dict or Pydantic BaseModel instance.
+        """
         if isinstance(input_data, dict):
             return input_data.copy()
-        elif isinstance(input_data, BaseModel):
+        if isinstance(input_data, BaseModel):
             return input_data.model_dump()
-        else:
-            raise TypeError("Input data must be a dict or Pydantic BaseModel instance.")
+        raise TypeError("Input data must be a dict or Pydantic BaseModel instance.")

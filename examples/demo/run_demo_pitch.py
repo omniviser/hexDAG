@@ -443,7 +443,7 @@ class CustomerSupportAnalyzer:
         self.console.print(
             Panel.fit(
                 "[bold cyan]hexDAG Demo[/bold cyan]\n"
-                + "[yellow]'Because 80% of LLM workflows just need to work'[/yellow]",
+                "[yellow]'Because 80% of LLM workflows just need to work'[/yellow]",
                 border_style="bold",
             )
         )

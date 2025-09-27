@@ -6,13 +6,14 @@ visualization and debugging purposes.
 
 import contextlib
 import logging
-import os
+import pathlib
 import platform
 import shutil
 import subprocess  # nosec B404
 import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 try:
@@ -338,7 +339,7 @@ class DAGVisualizer:
                     schema[field_name] = field_type
                 return schema
 
-            elif hasattr(type_obj, "__annotations__"):
+            if hasattr(type_obj, "__annotations__"):
                 schema = {}
                 for field_name, field_type in type_obj.__annotations__.items():
                     type_name = getattr(field_type, "__name__", str(field_type))
@@ -346,7 +347,7 @@ class DAGVisualizer:
                 return schema
 
             # Handle dict types
-            elif isinstance(type_obj, dict):
+            if isinstance(type_obj, dict):
                 return type_obj
 
         except Exception:
@@ -493,19 +494,28 @@ class DAGVisualizer:
         return "\\n\\n".join(label_parts)
 
     def _format_node_label(self, node_name: str, node_spec: Any) -> str:
-        """Format a standard node label without schemas."""
+        """Format a standard node label without schemas.
+
+        Returns
+        -------
+            Formatted node label string.
+        """
         node_type = getattr(node_spec, "type", "unknown")
 
         # Add function name if it's a function node
         if hasattr(node_spec, "fn") and hasattr(node_spec.fn, "__name__"):
             return f"📦 {node_name}\\n({node_type}: {node_spec.fn.__name__})"
-        else:
-            return f"📦 {node_name}\\n({node_type})"
+        return f"📦 {node_name}\\n({node_type})"
 
     def _get_node_style(
         self, node_spec: Any, compiled_node_type: str | None = None
     ) -> dict[str, str]:
-        """Get visual style for a node based on its type."""
+        """Get visual style for a node based on its type.
+
+        Returns
+        -------
+            Dictionary of style attributes.
+        """
         node_type = str(compiled_node_type or getattr(node_spec, "type", "unknown"))
 
         node_styles = {
@@ -610,14 +620,14 @@ class DAGVisualizer:
             return f"{label}\\n{schema.__name__}\\n{field_str}"
 
         # Handle Pydantic model classes by name
-        elif hasattr(schema, "__name__"):
+        if hasattr(schema, "__name__"):
             return f"{label}\\n({schema.__name__})"
-        elif hasattr(schema, "model_fields"):
+        if hasattr(schema, "model_fields"):
             # Pydantic model instance
             fields = list(schema.model_fields.keys())
             field_str = ", ".join(fields) if len(fields) <= 3 else f"{', '.join(fields[:3])}..."
             return f"{label}\\n({field_str})"
-        elif isinstance(schema, dict):
+        if isinstance(schema, dict):
             # Dict schema - format as field: type pairs for input primitives
             field_lines = []
             for key, value in schema.items():
@@ -633,18 +643,22 @@ class DAGVisualizer:
             else:
                 field_str = "\\n".join(field_lines[:4]) + "\\n..."
             return f"{label}\\n{field_str}"
-        elif isinstance(schema, type):
+        if isinstance(schema, type):
             # Type annotation
             return f"{label}\\n({schema.__name__})"
-        else:
-            # String representation
-            schema_str = str(schema)
-            if len(schema_str) > 30:
-                schema_str = schema_str[:27] + "..."
-            return f"{label}\\n({schema_str})"
+        # String representation
+        schema_str = str(schema)
+        if len(schema_str) > 30:
+            schema_str = schema_str[:27] + "..."
+        return f"{label}\\n({schema_str})"
 
     def _try_load_generated_schemas(self, pipeline_name: str, pipeline_dir: str) -> dict[str, Any]:
-        """Try to load auto-generated schema file for enhanced visualization."""
+        """Try to load auto-generated schema file for enhanced visualization.
+
+        Returns
+        -------
+            Dictionary of loaded schemas, empty dict if loading fails.
+        """
         try:
             import importlib.util
             from pathlib import Path
@@ -758,7 +772,12 @@ class DAGVisualizer:
         custom_attributes: dict[str, dict[str, Any]] | None = None,
         generated_schemas: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Get attributes for a node with enhanced schema information."""
+        """Get attributes for a node with enhanced schema information.
+
+        Returns
+        -------
+            Dictionary of node attributes.
+        """
         node_spec = self.graph.nodes[node_name]
         generated_schemas = generated_schemas or {}
 
@@ -818,7 +837,12 @@ class DAGVisualizer:
         edge: tuple[str, str],
         custom_attributes: dict[tuple[str, str], dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Get attributes for an edge."""
+        """Get attributes for an edge.
+
+        Returns
+        -------
+            Dictionary of edge attributes.
+        """
         attrs = {"fontname": "Arial", "fontsize": "8"}
 
         # Add custom attributes if provided
@@ -828,7 +852,12 @@ class DAGVisualizer:
         return attrs
 
     def _format_attributes(self, attrs: dict[str, Any]) -> str:
-        """Format attributes for DOT notation."""
+        """Format attributes for DOT notation.
+
+        Returns
+        -------
+            Formatted attribute string.
+        """
         if not attrs:
             return ""
 
@@ -861,8 +890,10 @@ class DAGVisualizer:
 
         Raises
         ------
-            ImportError: If graphviz is not installed
-            Exception: If rendering fails
+        ImportError
+            If graphviz is not installed.
+        RuntimeError
+            If rendering fails.
         """
         dot_string = self.to_dot(title=title, **kwargs)
 
@@ -885,7 +916,7 @@ class DAGVisualizer:
 
             # Clean up temporary file
             with contextlib.suppress(OSError):
-                os.unlink(temp_dot_path)
+                pathlib.Path(temp_dot_path).unlink()
 
             return output_file
         except subprocess.CalledProcessError as e:
@@ -907,7 +938,8 @@ class DAGVisualizer:
 
         Raises
         ------
-            ImportError: If graphviz is not installed
+        RuntimeError
+            If showing graph fails.
         """
         dot_string = self.to_dot(title=title, **kwargs)
 
@@ -952,8 +984,8 @@ class DAGVisualizer:
             def cleanup_files() -> None:
                 time.sleep(2)  # Wait for viewer to open
                 try:
-                    os.unlink(temp_dot_path)
-                    os.unlink(temp_image_path)
+                    pathlib.Path(temp_dot_path).unlink()
+                    pathlib.Path(temp_image_path).unlink()
                 except OSError:
                     pass
 
@@ -997,7 +1029,8 @@ def export_dag_to_dot(
     )
 
     if output_file:
-        with open(output_file, "w", encoding="utf-8") as f:
+        output_path = Path(output_file)
+        with output_path.open("w", encoding="utf-8") as f:
             f.write(dot_string)
 
     return dot_string
@@ -1060,6 +1093,4 @@ def render_dag_to_image(
 
     # Create Graphviz source and render
     dot = graphviz.Source(dot_content)
-    rendered_path = dot.render(output_path, format=format, cleanup=True)
-
-    return rendered_path  # type: ignore[no-any-return]
+    return str(dot.render(output_path, format=format, cleanup=True))

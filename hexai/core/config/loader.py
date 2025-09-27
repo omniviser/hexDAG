@@ -13,7 +13,7 @@ from typing import Any
 from hexai.core.config.models import HexDAGConfig, ManifestEntry
 
 # Type alias for configuration data that can be recursively substituted
-type ConfigData = str | dict[str, "ConfigData"] | list["ConfigData"] | int | float | bool | None
+type ConfigData = str | dict[str, ConfigData] | list[ConfigData] | int | float | bool | None
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,13 @@ class ConfigLoader:
     ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
     def __init__(self) -> None:
-        """Initialize the config loader."""
+        """Initialize the config loader.
+
+        Raises
+        ------
+        ImportError
+            If tomllib is not available
+        """
         if tomllib is None:
             raise ImportError(
                 "TOML support requires 'tomli' for Python < 3.11. Install with: pip install tomli"
@@ -50,12 +56,6 @@ class ConfigLoader:
         HexDAGConfig
             Parsed configuration with environment variables substituted
 
-        Raises
-        ------
-        FileNotFoundError
-            If no configuration file is found
-        ValueError
-            If configuration is invalid
         """
         # Find config file
         config_path = self._find_config_file(path)
@@ -68,7 +68,7 @@ class ConfigLoader:
         logger.info("Loading configuration from %s", config_path)
 
         # Load TOML
-        with open(config_path, "rb") as f:
+        with config_path.open("rb") as f:
             data = tomllib.load(f)
 
         # Extract hexdag configuration
@@ -86,9 +86,7 @@ class ConfigLoader:
         hexdag_data = self._substitute_env_vars(hexdag_data)
 
         # Parse configuration sections
-        config = self._parse_config(hexdag_data)
-
-        return config
+        return self._parse_config(hexdag_data)
 
     def _find_config_file(self, path: str | Path | None) -> Path:
         """Find configuration file.
@@ -139,7 +137,7 @@ class ConfigLoader:
         while current != current.parent:
             pyproject = current / "pyproject.toml"
             if pyproject.exists():
-                with open(pyproject, "rb") as f:
+                with pyproject.open("rb") as f:
                     data = tomllib.load(f)
                     if "tool" in data and "hexdag" in data["tool"]:
                         return pyproject
@@ -178,14 +176,13 @@ class ConfigLoader:
 
             return self.ENV_VAR_PATTERN.sub(replacer, data)
 
-        elif isinstance(data, dict):
+        if isinstance(data, dict):
             return {key: self._substitute_env_vars(value) for key, value in data.items()}
 
-        elif isinstance(data, list):
+        if isinstance(data, list):
             return [self._substitute_env_vars(item) for item in data]
 
-        else:
-            return data
+        return data
 
     def _parse_config(self, data: dict[str, Any]) -> HexDAGConfig:
         """Parse configuration data into HexDAGConfig.
@@ -241,8 +238,7 @@ def _cached_load_config(path_str: str | None) -> HexDAGConfig:
         # Handle special auto-discovery cache key
         if path_str and path_str.startswith("__auto__"):
             return loader.load_from_toml(None)
-        else:
-            return loader.load_from_toml(Path(path_str) if path_str else None)
+        return loader.load_from_toml(Path(path_str) if path_str else None)
     except FileNotFoundError:
         logger.info("No configuration file found, using defaults")
         return get_default_config()

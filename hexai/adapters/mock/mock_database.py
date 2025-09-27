@@ -226,7 +226,7 @@ class MockDatabaseAdapter(DatabasePort, ConfigurableComponent):
                 {"id": 1, "customer_name": "John Doe", "segment": "Premium"},
                 {"id": 2, "customer_name": "Jane Smith", "segment": "Standard"},
             ]
-        elif "orders" in query.lower():
+        if "orders" in query.lower():
             return [
                 {"id": 101, "customer_id": 1, "order_value": 299.99},
                 {"id": 102, "customer_id": 2, "order_value": 149.50},

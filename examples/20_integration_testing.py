@@ -28,7 +28,13 @@ class MockEmailAdapter:
         from_address: str = "noreply@example.com",
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Send a mock email."""
+        """Send a mock email.
+
+        Raises
+        ------
+        Exception
+            If mock service is temporarily unavailable
+        """
         await asyncio.sleep(0.1)  # Simulate network delay
 
         # Simulate failure based on fail_rate
@@ -100,7 +106,13 @@ class MockDatabaseAdapter:
         self.fail_rate = 0.0
 
     async def save_data(self, key: str, value: Any) -> dict[str, Any]:
-        """Save data to mock database."""
+        """Save data to mock database.
+
+        Raises
+        ------
+        Exception
+            If mock database is temporarily unavailable
+        """
         await asyncio.sleep(0.05)  # Simulate database write
 
         if asyncio.get_event_loop().time() % 10 < self.fail_rate * 10:
@@ -110,7 +122,13 @@ class MockDatabaseAdapter:
         return {"status": "saved", "key": key}
 
     async def get_data(self, key: str) -> dict[str, Any]:
-        """Get data from mock database."""
+        """Get data from mock database.
+
+        Raises
+        ------
+        Exception
+            If mock database is temporarily unavailable
+        """
         await asyncio.sleep(0.02)  # Simulate database read
 
         if asyncio.get_event_loop().time() % 10 < self.fail_rate * 10:
@@ -275,6 +293,7 @@ async def test_error_handling():
                 if attempt == max_retries - 1:
                     return {"status": "failed", "error": str(e), "attempts": max_retries}
                 await asyncio.sleep(0.1)  # Brief delay before retry
+        return None
 
     # Create workflow
     graph = DirectedGraph()

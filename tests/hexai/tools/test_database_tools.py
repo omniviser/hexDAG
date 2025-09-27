@@ -23,7 +23,7 @@ class MockDatabasePort:
         """Mock aexecute_query method - matches the DatabasePort interface."""
         if "information_schema.tables" in sql:
             return [{"table_name": "users"}, {"table_name": "products"}]
-        elif "information_schema.columns" in sql:
+        if "information_schema.columns" in sql:
             return [
                 {"column_name": "id", "data_type": "integer", "is_nullable": "NO"},
                 {"column_name": "name", "data_type": "varchar", "is_nullable": "YES"},

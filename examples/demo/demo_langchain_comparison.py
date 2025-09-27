@@ -55,19 +55,19 @@ class TicketAnalyzerCallback(AsyncCallbackHandler):
 
     async def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs):
         # Hope you like unstructured logs
-        self.events.append(
-            {
-                "type": "llm_start",
-                "time": datetime.now().isoformat(),
-                "prompts": prompts[:100],  # Truncate because why not
-            }
-        )
+        self.events.append({
+            "type": "llm_start",
+            "time": datetime.now().isoformat(),
+            "prompts": prompts[:100],  # Truncate because why not
+        })
 
     async def on_llm_error(self, error: Exception, **kwargs):
         # Error handling: catch it, log it, pray it doesn't happen in prod
-        self.errors.append(
-            {"type": "llm_error", "error": str(error), "traceback": traceback.format_exc()}
-        )
+        self.errors.append({
+            "type": "llm_error",
+            "error": str(error),
+            "traceback": traceback.format_exc(),
+        })
 
     async def on_chain_error(self, error: Exception, **kwargs):
         # Chain errors are special, they get their own handler
@@ -162,8 +162,7 @@ Return as JSON with keys: issue_type, technical_details, customer_emotion
         """Step 2: Conditional routing (if-else with extra steps)"""
         if customer_tier == "enterprise":
             return await self.analyze_enterprise(parsed_ticket)
-        else:
-            return await self.analyze_standard(parsed_ticket)
+        return await self.analyze_standard(parsed_ticket)
 
     async def analyze_enterprise(self, parsed_ticket: dict[str, Any]) -> dict[str, Any]:
         """Step 3A: Enterprise analysis (expensive and slow)"""
@@ -304,7 +303,13 @@ Assign priority and suggest response template.
         return True, "Valid"
 
     async def process_ticket(self, ticket_text: str, customer_tier: str) -> dict[str, Any]:
-        """Main orchestration function (where dreams come to die)"""
+        """Main orchestration function (where dreams come to die).
+
+        Raises
+        ------
+        ValueError
+            If input validation fails
+        """
         start_time = datetime.now()
 
         # Input validation

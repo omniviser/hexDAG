@@ -76,6 +76,7 @@ class PromptTemplate:
 
         Returns
         -------
+        list[str]
             List of unique root variable names found in template
         """
         # Extract variables from {{ variable }} patterns
@@ -101,11 +102,8 @@ class PromptTemplate:
 
         Returns
         -------
+        Any
             The value at the specified path
-
-        Raises
-        ------
-            KeyError: If any part of the path doesn't exist
         """
         parts = key.split(".")
         value = data
@@ -114,7 +112,7 @@ class PromptTemplate:
         return value
 
     def render(self, **kwargs: Any) -> str:
-        r"""Render the template with provided variables.
+        """Render the template with provided variables.
 
         Args
         ----
@@ -122,11 +120,13 @@ class PromptTemplate:
 
         Returns
         -------
+        str
             Rendered template string
 
         Raises
         ------
-            MissingVariableError: If required variables are missing
+        MissingVariableError
+            If required variables are missing
 
         Examples
         --------
@@ -161,8 +161,7 @@ class PromptTemplate:
             except (KeyError, AttributeError) as e:
                 raise MissingVariableError(f"Cannot access variable '{var_path}': {e}") from e
 
-        result = re.sub(pattern, replace_var, result)
-        return result
+        return re.sub(pattern, replace_var, result)
 
     def parse_output(self, output: str) -> str:
         r"""Parse and post-process rendered template output.
@@ -176,6 +175,7 @@ class PromptTemplate:
 
         Returns
         -------
+        str
             Processed output string (by default, unchanged)
 
         Examples
@@ -201,6 +201,7 @@ class PromptTemplate:
 
         Returns
         -------
+        str
             Rendered and parsed template string
 
         Examples
@@ -221,6 +222,7 @@ class PromptTemplate:
 
         Returns
         -------
+        list[dict[str, str]]
             List of message dictionaries with 'role' and 'content' keys
 
         Examples
@@ -254,11 +256,23 @@ class PromptTemplate:
         return messages
 
     def __str__(self) -> str:
-        """Return string representation showing template and variables."""
+        """Return string representation showing template and variables.
+
+        Returns
+        -------
+        str
+            String representation of the template
+        """
         return f"PromptTemplate(vars={self.input_vars})"
 
     def __repr__(self) -> str:
-        """Return detailed representation for debugging."""
+        """Return detailed representation for debugging.
+
+        Returns
+        -------
+        str
+            Detailed string representation for debugging
+        """
         return f"PromptTemplate(template='{self.template[:50]}...', input_vars={self.input_vars})"
 
     def __add__(self, other: str) -> "PromptTemplate":
@@ -270,6 +284,7 @@ class PromptTemplate:
 
         Returns
         -------
+        PromptTemplate
             New PromptTemplate instance with enhanced content
         """
         enhanced_template = self.template + other
@@ -284,6 +299,7 @@ class PromptTemplate:
 
         Returns
         -------
+        PromptTemplate
             New PromptTemplate instance with enhanced content
         """
         return self + text
@@ -342,7 +358,13 @@ class FewShotPromptTemplate(PromptTemplate):
         super().__init__(full_template, **kwargs)
 
     def _build_template(self) -> str:
-        """Build the complete template with examples prepended."""
+        """Build the complete template with examples prepended.
+
+        Returns
+        -------
+        str
+            Complete template string with examples and base template
+        """
         if not self.examples:
             return self.base_template
 
@@ -368,7 +390,13 @@ class FewShotPromptTemplate(PromptTemplate):
         self.input_vars = self._extract_variables(self.template)
 
     def __add__(self, other: str) -> "FewShotPromptTemplate":
-        """Add text to template using + operator."""
+        """Add text to template using + operator.
+
+        Returns
+        -------
+        FewShotPromptTemplate
+            New FewShotPromptTemplate instance with enhanced content
+        """
         enhanced_base_template = self.base_template + other
         return FewShotPromptTemplate(
             enhanced_base_template,
@@ -378,7 +406,13 @@ class FewShotPromptTemplate(PromptTemplate):
         )
 
     def add(self, text: str) -> "FewShotPromptTemplate":
-        """Add text to template (alias for + operator)."""
+        """Add text to template (alias for + operator).
+
+        Returns
+        -------
+        FewShotPromptTemplate
+            New FewShotPromptTemplate instance with enhanced content
+        """
         return self + text
 
 
@@ -466,6 +500,7 @@ class ChatPromptTemplate(PromptTemplate):
 
         Returns
         -------
+        list[dict[str, str]]
             List of message dictionaries ready for LLM
         """
         messages = []
@@ -496,7 +531,13 @@ class ChatPromptTemplate(PromptTemplate):
         return messages
 
     def _render_template(self, template: str, **kwargs: Any) -> str:
-        """Render a single template string with variables."""
+        """Render a single template string with variables.
+
+        Returns
+        -------
+        str
+            Rendered template string with variables substituted
+        """
         # Use the parent class variable substitution logic
         pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
 
@@ -520,12 +561,19 @@ class ChatPromptTemplate(PromptTemplate):
 
         Returns
         -------
+        ChatPromptTemplate
             ChatPromptTemplate instance
         """
         return cls(messages=messages)
 
     def __add__(self, other: str) -> "ChatPromptTemplate":
-        """Add text to system message using + operator."""
+        """Add text to system message using + operator.
+
+        Returns
+        -------
+        ChatPromptTemplate
+            New ChatPromptTemplate instance with enhanced system message
+        """
         enhanced_system = (self.system_message or "") + other
         return ChatPromptTemplate(
             messages=self.message_templates,
@@ -534,7 +582,13 @@ class ChatPromptTemplate(PromptTemplate):
         )
 
     def add(self, text: str) -> "ChatPromptTemplate":
-        """Add text to system message (alias for + operator)."""
+        """Add text to system message (alias for + operator).
+
+        Returns
+        -------
+        ChatPromptTemplate
+            New ChatPromptTemplate instance with enhanced system message
+        """
         return self + text
 
 
@@ -636,6 +690,7 @@ class ChatFewShotTemplate(ChatPromptTemplate):
 
         Returns
         -------
+        list[dict[str, str]]
             List of message dictionaries with examples, system message, history, and current input
         """
         messages = []
@@ -676,7 +731,13 @@ class ChatFewShotTemplate(ChatPromptTemplate):
         return messages
 
     def __str__(self) -> str:
-        """Return string representation of the template."""
+        """Return string representation of the template.
+
+        Returns
+        -------
+        str
+            String representation showing template details
+        """
         system_preview = f"{self.system_message[:50]}..." if self.system_message else "None"
         human_preview = f"{self.human_message[:50]}..." if self.human_message else "None"
         return (
@@ -686,7 +747,13 @@ class ChatFewShotTemplate(ChatPromptTemplate):
         )
 
     def __add__(self, other: str) -> "ChatFewShotTemplate":
-        """Add text to original system message using + operator."""
+        """Add text to original system message using + operator.
+
+        Returns
+        -------
+        ChatFewShotTemplate
+            New ChatFewShotTemplate instance with enhanced system message
+        """
         enhanced_original_system = (self._original_system_message or "") + other
         return ChatFewShotTemplate(
             messages=self.message_templates,
@@ -698,5 +765,11 @@ class ChatFewShotTemplate(ChatPromptTemplate):
         )
 
     def add(self, text: str) -> "ChatFewShotTemplate":
-        """Add text to original system message (alias for + operator)."""
+        """Add text to original system message (alias for + operator).
+
+        Returns
+        -------
+        ChatFewShotTemplate
+            New ChatFewShotTemplate instance with enhanced system message
+        """
         return self + text
