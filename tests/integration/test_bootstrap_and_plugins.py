@@ -141,7 +141,7 @@ class TestPluginSystemIntegration:
         adapters = global_registry.list_components()
         adapter_names = [a.name for a in adapters if a.component_type.value == "adapter"]
         assert "mock_llm" in adapter_names
-        assert "openai" in adapter_names  # OpenAI adapter is registered but may fail at instantiation
+        assert "openai" in adapter_names
 
         # Get adapter and test it works
         mock_adapter = global_registry.get("mock_llm", namespace="plugin")

@@ -67,4 +67,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["DAGVisualizer", "render_dag_to_image", "export_dag_to_dot", "GRAPHVIZ_AVAILABLE"]
+__all__ = ["DAGVisualizer", "GRAPHVIZ_AVAILABLE"]
