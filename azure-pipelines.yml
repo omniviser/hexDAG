@@ -53,7 +53,7 @@ stages:
           displayName: 'Install dependencies'
 
         - script: |
-            uv run ruff check . --output-format=github
+            uv run ruff check . --config=pyproject.toml --output-format=github
             uv run ruff format . --check
             uv run mypy hexai/
             uv run bandit -r hexai/ -f json -o bandit-output.json || true
