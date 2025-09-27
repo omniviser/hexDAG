@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import tomllib  # Python 3.11+
-from contextlib import suppress
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -20,11 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=32)
-def _load_and_parse_cached(path_str: str, mtime: float) -> HexDAGConfig:
-    """Cached configuration loader.
-
-    The mtime parameter ensures cache invalidation when file changes.
-    """
+def _load_and_parse_cached(path_str: str) -> HexDAGConfig:
+    """Cached configuration loader."""
     loader = ConfigLoader()
     return loader._load_and_parse(Path(path_str))
 
@@ -64,8 +60,8 @@ class ConfigLoader:
         # Find config file
         config_path = self._find_config_file(path)
 
-        # Use cached loader with file path and mtime as cache key
-        return _load_and_parse_cached(str(config_path.absolute()), config_path.stat().st_mtime)
+        # Use cached loader with file path
+        return _load_and_parse_cached(str(config_path.absolute()))
 
     def _load_and_parse(self, config_path: Path) -> HexDAGConfig:
         """Load and parse configuration file."""
@@ -116,6 +112,15 @@ class ConfigLoader:
                 raise FileNotFoundError(f"Configuration file not found: {config_path}")
             return config_path
 
+        # Check environment variable first
+        env_path = os.getenv("HEXDAG_CONFIG_PATH")
+        if env_path:
+            config_path = Path(env_path)
+            if config_path.exists():
+                logger.debug(f"Using config from HEXDAG_CONFIG_PATH: {config_path}")
+                return config_path
+            logger.warning(f"HEXDAG_CONFIG_PATH set but file not found: {config_path}")
+
         # Search for config files in order of preference
         search_paths = [
             Path("hexdag.toml"),
@@ -161,8 +166,12 @@ class ConfigLoader:
                 var_name = match.group(1)
                 value = os.environ.get(var_name)
                 if value is None:
-                    logger.warning(f"Environment variable ${{{var_name}}} not found")
-                    return match.group(0)  # Keep original
+                    # Only log at debug level to avoid cluttering CLI output
+                    logger.debug(
+                        f"Environment variable ${{{var_name}}} not found, keeping placeholder"
+                    )
+                    return match.group(0)  # Keep original placeholder
+
                 return value
 
             return self.ENV_VAR_PATTERN.sub(replacer, data)
@@ -212,16 +221,13 @@ class ConfigLoader:
 
 
 @lru_cache(maxsize=32)
-def _cached_load_config(path_str: str | None, mtime: float | None) -> HexDAGConfig:
+def _cached_load_config(path_str: str | None) -> HexDAGConfig:
     """Internal cached configuration loader.
 
     Parameters
     ----------
     path_str : str | None
         String representation of path for caching
-    mtime : float | None
-        File modification time for cache invalidation
-
     Returns
     -------
     HexDAGConfig
@@ -251,18 +257,13 @@ def load_config(path: str | Path | None = None) -> HexDAGConfig:
     HexDAGConfig
         Loaded configuration or defaults if no file found
     """
-    # Convert path to string for caching and get mtime if file exists
-    if path:
-        path_str = str(path)
-        mtime = None
-        with suppress(FileNotFoundError, OSError):
-            mtime = Path(path_str).stat().st_mtime
-    else:
-        # When path is None, include cwd in cache key to handle directory changes
-        path_str = f"__auto__{Path.cwd()}"
-        mtime = 0.0  # Use a constant for auto-discovery
 
-    return _cached_load_config(path_str, mtime)
+    try:
+        loader = ConfigLoader()
+        return loader.load_from_toml(path)
+    except FileNotFoundError:
+        logger.info("No configuration file found, using defaults")
+        return get_default_config()
 
 
 def clear_config_cache() -> None:
@@ -287,6 +288,7 @@ def get_default_config() -> HexDAGConfig:
         modules=[
             "hexai.core.application.nodes",
             "hexai.adapters.mock",
+            "hexai.tools.builtin_tools",  # Essential built-in tools
         ],
         settings={
             "log_level": "INFO",
@@ -308,10 +310,13 @@ def config_to_manifest_entries(config: HexDAGConfig) -> list[ManifestEntry]:
     list[ManifestEntry]
         List of manifest entries for registry bootstrap
     """
-    # Core modules go to 'core' namespace, others to 'user'
+    # Core modules and built-in tools go to 'core' namespace, others to 'user'
     module_entries = [
         ManifestEntry(
-            namespace="core" if module.startswith("hexai.core") else "user", module=module
+            namespace="core"
+            if (module.startswith("hexai.core") or module.startswith("hexai.tools.builtin_tools"))
+            else "user",
+            module=module,
         )
         for module in config.modules
     ]

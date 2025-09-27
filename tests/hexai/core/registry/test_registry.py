@@ -1,18 +1,29 @@
 """Tests for the simplified component registry."""
 
+import asyncio
+import os
 import warnings
+from abc import abstractmethod
+from typing import Protocol, runtime_checkable
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import BaseModel, Field
 
+from hexai.core.config.models import ManifestEntry
 from hexai.core.registry import adapter, component, node, port, registry, tool
-from hexai.core.registry.registry import ComponentRegistry
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
     ComponentNotFoundError,
     InvalidComponentError,
     NamespacePermissionError,
 )
-from hexai.core.registry.models import ComponentType  # Internal for tests
+from hexai.core.registry.models import (
+    ClassComponent,
+    ComponentMetadata,
+    ComponentType,  # Internal for tests
+)
+from hexai.core.registry.registry import ComponentRegistry
 
 
 class TestComponentRegistry:
@@ -152,13 +163,12 @@ class TestDecorators:
 
             pass
 
-        # Decorator should add metadata to the class
-        assert hasattr(TestNode, "__hexdag_metadata__")
-        metadata = TestNode.__hexdag_metadata__
-        assert metadata.type == ComponentType.NODE
-        assert metadata.name == "test_node"
-        assert metadata.declared_namespace == "test"
-        assert metadata.description == "A test node."
+        # Decorator should add attributes to the class
+        assert hasattr(TestNode, "_hexdag_type")
+        assert TestNode._hexdag_type == ComponentType.NODE
+        assert TestNode._hexdag_name == "test_node"
+        assert TestNode._hexdag_namespace == "test"
+        assert TestNode._hexdag_description == "A test node."
 
     def test_type_specific_decorators_add_metadata(self):
         """Test that type-specific decorators add correct metadata."""
@@ -175,10 +185,10 @@ class TestDecorators:
         class TestAdapter:
             pass
 
-        # All should have metadata with correct types
-        assert TestNode.__hexdag_metadata__.type == ComponentType.NODE
-        assert TestTool.__hexdag_metadata__.type == ComponentType.TOOL
-        assert TestAdapter.__hexdag_metadata__.type == ComponentType.ADAPTER
+        # All should have attributes with correct types
+        assert TestNode._hexdag_type == ComponentType.NODE
+        assert TestTool._hexdag_type == ComponentType.TOOL
+        assert TestAdapter._hexdag_type == ComponentType.ADAPTER
 
     def test_decorator_with_custom_name(self):
         """Test decorator with custom name."""
@@ -187,8 +197,8 @@ class TestDecorators:
         class SomeClass:
             pass
 
-        # Should use custom name in metadata
-        assert SomeClass.__hexdag_metadata__.name == "custom_name"
+        # Should use custom name in attribute
+        assert SomeClass._hexdag_name == "custom_name"
 
     def test_decorator_with_subtype(self):
         """Test decorator with subtype."""
@@ -198,8 +208,8 @@ class TestDecorators:
         class LLMNode:
             pass
 
-        # Should have subtype in metadata
-        assert LLMNode.__hexdag_metadata__.subtype == NodeSubtype.LLM
+        # Should have subtype in attribute
+        assert LLMNode._hexdag_subtype == NodeSubtype.LLM
 
 
 class TestValidation:
@@ -490,19 +500,29 @@ class TestAdapterRegistration:
     @pytest.fixture
     def setup_test_port(self, test_registry):
         """Register a test port in the registry."""
-        from hexai.core.registry.models import ClassComponent, ComponentMetadata, PortMetadata
 
-        # Register a test port with required and optional methods
+        # Create a proper Protocol class with required methods
+        @runtime_checkable
+        class LLMPort(Protocol):
+            @abstractmethod
+            def generate(self, prompt: str) -> str: ...
+
+            @abstractmethod
+            def stream(self, prompt: str): ...
+
+            # Optional methods (with default implementations)
+            def embed(self, text: str) -> list[float]:
+                return []
+
+            def tokenize(self, text: str) -> list[str]:
+                return text.split()
+
+        # Register the port
         port_meta = ComponentMetadata(
             name="llm_port",
             component_type=ComponentType.PORT,
-            component=ClassComponent(value=type("LLMPort", (), {})),
+            component=ClassComponent(value=LLMPort),
             namespace="core",
-            port_metadata=PortMetadata(
-                protocol_class=type("LLMProtocol", (), {}),
-                required_methods=["generate", "stream"],
-                optional_methods=["embed", "tokenize"],
-            ),
         )
         test_registry._components.setdefault("core", {})["llm_port"] = port_meta
         return test_registry
@@ -596,15 +616,18 @@ class TestAdapterRegistration:
         """Test that ports are registered before adapters in two-phase discovery."""
         reg = test_registry
 
-        # First register a port
         @port(
             name="discovery_test_port",
             namespace="test",
-            required_methods=["process"],
-            optional_methods=["validate"],
         )
-        class DiscoveryTestPort:
+        @runtime_checkable
+        class DiscoveryTestPort(Protocol):
+            @abstractmethod
             def process(self, data: str) -> str: ...
+
+            # Optional method with default implementation
+            def validate(self, data: str) -> bool:
+                return True
 
         # Register the port first (simulating phase A)
         reg.register(
@@ -659,3 +682,562 @@ class TestAdapterRegistration:
                 component_type="adapter",
                 namespace="test",
             )
+
+
+# ============================================================================
+# Plugin System Tests
+# ============================================================================
+
+
+class TestRegistryPluginRequirements:
+    """Tests for ComponentRegistry._check_plugin_requirements() method."""
+
+    def test_check_plugin_requirements_no_requirements(self):
+        """Test checking a module without special requirements."""
+        registry = ComponentRegistry()
+
+        # Module without requirements should return None (no skip reason)
+        result = registry._check_plugin_requirements("hexai.adapters.mock.mock_llm")
+        assert result is None
+
+    def test_check_plugin_requirements_missing_package(self):
+        """Test checking when required package is not installed."""
+        registry = ComponentRegistry()
+
+        with patch("importlib.util.find_spec", return_value=None):
+            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
+
+        assert result is not None
+        assert "Module hexai.adapters.llm.openai_adapter not found" in result
+
+    def test_check_plugin_requirements_missing_env_var(self):
+        """Test checking when module exists (no longer checks env vars)."""
+        registry = ComponentRegistry()
+
+        # Mock package installed - env vars are not checked at import time
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
+
+        # Should return None since module exists (env vars checked at runtime)
+        assert result is None
+
+    def test_check_plugin_requirements_all_met(self):
+        """Test when all requirements are met."""
+        registry = ComponentRegistry()
+
+        # Mock both package and env var present
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+        ):
+            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
+
+        assert result is None  # No reason to skip
+
+    @pytest.mark.parametrize(
+        "module_path,package,env_var",
+        [
+            ("hexai.adapters.llm.openai_adapter", "openai", "OPENAI_API_KEY"),
+            ("hexai.adapters.llm.anthropic_adapter", "anthropic", "ANTHROPIC_API_KEY"),
+        ],
+    )
+    def test_check_plugin_requirements_parametrized(self, module_path, package, env_var):
+        """Test requirement checking for different adapters (simplified)."""
+        registry = ComponentRegistry()
+
+        # Test missing module
+        with patch("importlib.util.find_spec", return_value=None):
+            result = registry._check_plugin_requirements(module_path)
+            assert f"Module {module_path} not found" in result
+
+        # Test module exists (env vars not checked at import time)
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            result = registry._check_plugin_requirements(module_path)
+            assert result is None  # Module exists, env vars checked at runtime
+
+        # Test all requirements met
+        with (
+            patch("importlib.util.find_spec", return_value=MagicMock()),
+            patch.dict(os.environ, {env_var: "test-key"}),
+        ):
+            result = registry._check_plugin_requirements(module_path)
+            assert result is None
+
+
+class TestRegistryManifestLoading:
+    """Tests for ComponentRegistry._load_manifest_modules() method."""
+
+    @pytest.fixture
+    def clean_registry(self):
+        """Provide a clean registry for each test."""
+        registry = ComponentRegistry()
+        yield registry
+        # Cleanup
+        registry._cleanup_state()
+
+    def test_load_manifest_with_plugins_all_available(self, clean_registry):
+        """Test loading manifest when all plugins are available."""
+        from hexai.core.config.models import ManifestEntry
+
+        manifest = [
+            ManifestEntry(module="hexai.core.ports", namespace="core"),
+            ManifestEntry(module="hexai.adapters.mock.mock_llm", namespace="plugin"),
+        ]
+
+        # Mock the register function to avoid actual imports
+        # The function is imported as default_register_components in registry module
+        with patch("hexai.core.registry.registry.default_register_components") as mock_register:
+            mock_register.return_value = 1  # Simulate 1 component registered
+
+            total = clean_registry._load_manifest_modules(manifest)
+
+        assert total == 2  # Both modules loaded
+        assert mock_register.call_count == 2
+
+    def test_load_manifest_skip_unavailable_plugin(self, clean_registry):
+        """Test that unavailable plugins are skipped gracefully."""
+        from hexai.core.config.models import ManifestEntry
+
+        manifest = [
+            ManifestEntry(module="hexai.core.ports", namespace="core"),
+            ManifestEntry(module="hexai.adapters.llm.openai_adapter", namespace="plugin"),
+        ]
+
+        with (
+            patch("hexai.core.registry.registry.default_register_components") as mock_register,
+            patch.object(clean_registry, "_check_plugin_requirements") as mock_check,
+        ):
+            # Only the second module (plugin) gets checked, and it's missing env var
+            mock_check.return_value = "Missing environment variable"
+            mock_register.return_value = 5  # Core ports registers 5 components
+
+            total = clean_registry._load_manifest_modules(manifest)
+
+        assert total == 5  # Only core module loaded
+        assert mock_register.call_count == 1  # Plugin was skipped
+        assert mock_check.call_count == 1  # Only checked for the non-core module
+
+    def test_load_manifest_core_module_failure(self, clean_registry):
+        """Test that core module failures raise exceptions."""
+        from hexai.core.config.models import ManifestEntry
+
+        manifest = [
+            ManifestEntry(module="nonexistent.module", namespace="core"),
+        ]
+
+        with patch("hexai.core.registry.registry.default_register_components") as mock_register:
+            mock_register.side_effect = ImportError("Module not found")
+
+            with pytest.raises(ImportError):
+                clean_registry._load_manifest_modules(manifest)
+
+    def test_load_manifest_plugin_module_failure_continues(self, clean_registry):
+        """Test that plugin module failures don't stop loading."""
+        from hexai.core.config.models import ManifestEntry
+
+        manifest = [
+            ManifestEntry(module="hexai.core.ports", namespace="core"),
+            ManifestEntry(module="broken.plugin", namespace="plugin"),
+            ManifestEntry(module="hexai.adapters.mock", namespace="plugin"),
+        ]
+
+        with patch("hexai.core.registry.registry.default_register_components") as mock_register:
+            # First succeeds, broken.plugin is skipped by _check_plugin_requirements, third succeeds
+            mock_register.side_effect = [5, 3]  # Only called for valid modules
+
+            total = clean_registry._load_manifest_modules(manifest)
+
+        assert total == 8  # 5 from core + 3 from mock
+        assert mock_register.call_count == 2  # Only called for existing modules
+
+
+class TestRegistryPluginBootstrap:
+    """Integration tests for plugin-related bootstrap functionality."""
+
+    @pytest.fixture
+    def temp_config(self, tmp_path):
+        """Create a temporary configuration file."""
+        config_file = tmp_path / "hexdag.toml"
+        config_content = """
+# Test configuration
+modules = [
+    "hexai.core.ports",
+]
+
+plugins = [
+    "hexai.adapters.llm.openai_adapter",
+    "hexai.adapters.llm.anthropic_adapter",
+    "hexai.adapters.mock",
+]
+"""
+        config_file.write_text(config_content)
+        return config_file
+
+    def test_bootstrap_with_missing_plugins(self, temp_config):
+        """Test bootstrap loads adapters even without environment variables.
+
+        Adapters are loaded at bootstrap time if the module exists.
+        Missing API keys are handled at runtime when the adapter is instantiated.
+        """
+        from hexai.core.bootstrap import bootstrap_registry
+        from hexai.core.registry import registry as global_registry
+
+        # Clear any existing registry
+        if global_registry.ready:
+            global_registry._cleanup_state()
+
+        # Bootstrap without API keys
+        with patch.dict(os.environ, {}, clear=True):
+            bootstrap_registry(config_path=temp_config)
+
+        # Check that core components are loaded
+        components = global_registry.list_components()
+        assert any(c.name == "llm" and c.namespace == "core" for c in components)
+
+        # Check that mock adapter is loaded (no requirements)
+        assert any(c.name == "mock_llm" and c.namespace == "plugin" for c in components)
+
+        # Check that OpenAI/Anthropic ARE loaded (modules exist, env vars checked at runtime)
+        assert any(c.name == "openai" for c in components)
+        assert any(c.name == "anthropic" for c in components)
+
+        # Cleanup
+        global_registry._cleanup_state()
+
+    def test_bootstrap_with_all_plugins_available(self, temp_config):
+        """Test bootstrap when all plugin requirements are met."""
+        from hexai.core.bootstrap import bootstrap_registry
+        from hexai.core.registry import registry as global_registry
+
+        # Clear any existing registry
+        if global_registry.ready:
+            global_registry._cleanup_state()
+
+        # Bootstrap with API keys set
+        with patch.dict(
+            os.environ, {"OPENAI_API_KEY": "test-key", "ANTHROPIC_API_KEY": "test-key"}
+        ):
+            bootstrap_registry(config_path=temp_config)
+
+        # Check all adapters are loaded
+        components = global_registry.list_components()
+        adapter_names = [c.name for c in components if c.component_type.value == "adapter"]
+
+        assert "mock_llm" in adapter_names
+        assert "openai" in adapter_names
+        assert "anthropic" in adapter_names
+
+        # Cleanup
+        global_registry._cleanup_state()
+
+
+class TestRegistryPluginScenarios:
+    """End-to-end tests for plugin registration scenarios."""
+
+    @pytest.mark.asyncio
+    async def test_use_mock_adapter_always_available(self):
+        """Test that mock adapters work without any setup."""
+        from hexai.adapters.mock.mock_llm import MockLLM
+        from hexai.core.ports.llm import Message
+
+        mock_llm = MockLLM()
+        response = await mock_llm.aresponse([Message(role="user", content="Test")])
+
+        assert response is not None
+        assert "Mock response" in response
+
+    @pytest.mark.asyncio
+    async def test_use_real_adapter_with_requirements(self):
+        """Test using real adapter when requirements are met."""
+        # This test will be skipped if openai is not installed
+        pytest.importorskip("openai")
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            from hexai.adapters.llm.openai_adapter import OpenAIAdapter
+            from hexai.core.ports.llm import Message
+
+            # Create adapter
+            adapter = OpenAIAdapter(model="gpt-4o-mini", max_tokens=10)
+
+            # Mock the actual API call using AsyncMock
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = "Test response"
+
+            adapter.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+            response = await adapter.aresponse([Message(role="user", content="Test")])
+
+            assert response == "Test response"
+
+    def test_registry_list_shows_available_plugins(self):
+        """Test that registry list only shows available plugins."""
+        from hexai.core.bootstrap import bootstrap_registry
+        from hexai.core.config.models import HexDAGConfig
+        from hexai.core.registry import registry as global_registry
+
+        # Clear registry
+        if global_registry.ready:
+            global_registry._cleanup_state()
+
+        # Create minimal config
+        config = HexDAGConfig(
+            modules=["hexai.core.ports"],
+            plugins=[
+                "hexai.adapters.llm.openai_adapter",
+                "hexai.adapters.mock",
+            ],
+        )
+
+        # Bootstrap without OpenAI API key
+        with (
+            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            bootstrap_registry()
+
+        # List adapters
+        components = global_registry.list_components()
+        adapters = [c for c in components if c.component_type.value == "adapter"]
+
+        # Mock should be present, OpenAI should not
+        adapter_names = [a.name for a in adapters]
+        assert "mock_llm" in adapter_names
+        assert "openai" in adapter_names
+
+        # Cleanup
+        global_registry._cleanup_state()
+
+
+# ============================================================================
+# Convention Over Configuration Tests
+# Moved from test_registry_convention.py
+# ============================================================================
+
+
+class TestConventionIntegration:
+    """Integration tests showing the full convention over configuration flow."""
+
+    @pytest.fixture
+    def registry(self):
+        """Create a test registry."""
+        reg = ComponentRegistry()
+        reg.bootstrap(manifest=[], dev_mode=True)
+        return reg
+
+    def test_complete_port_adapter_workflow(self, registry):
+        """Test complete workflow: define port -> create adapters -> validate."""
+        from hexai.core.registry.introspection import (
+            extract_port_methods,
+            infer_adapter_capabilities,
+            validate_adapter_implementation,
+        )
+
+        # Define a port using Protocol
+        @port(name="messaging", namespace="test")
+        @runtime_checkable
+        class MessagingPort(Protocol):
+            """Messaging port with required and optional methods."""
+
+            @abstractmethod
+            async def send_message(self, to: str, message: str) -> bool:
+                """Required: Send a message."""
+                ...
+
+            @abstractmethod
+            async def receive_message(self, from_user: str) -> str | None:
+                """Required: Receive a message."""
+                ...
+
+            def get_status(self) -> dict:
+                """Optional: Get messaging status."""
+                return {"status": "unknown"}
+
+            def set_priority(self, level: int) -> None:
+                """Optional: Set message priority."""
+                pass
+
+        # Extract methods automatically
+        required, optional = extract_port_methods(MessagingPort)
+        assert set(required) == {"send_message", "receive_message"}
+        assert set(optional) == {"get_status", "set_priority"}
+
+        # Register the port
+        registry.register(
+            name="messaging",
+            component=MessagingPort,
+            component_type="port",
+            namespace="test",
+            privileged=True,
+        )
+
+        # Create a full adapter with all features
+        @adapter(implements_port="messaging", name="full_messenger")
+        class FullMessenger:
+            """Adapter with all optional methods."""
+
+            async def send_message(self, to: str, message: str) -> bool:
+                await asyncio.sleep(0.01)
+                return True
+
+            async def receive_message(self, from_user: str) -> str | None:
+                await asyncio.sleep(0.01)
+                return f"Hello from {from_user}"
+
+            def get_status(self) -> dict:
+                return {"status": "online", "queue": 5}
+
+            def set_priority(self, level: int) -> None:
+                self.priority = level
+
+        # Validate it implements the port correctly
+        is_valid, missing = validate_adapter_implementation(FullMessenger, MessagingPort)
+        assert is_valid is True
+        assert missing == []
+
+        # Check capabilities
+        capabilities = infer_adapter_capabilities(FullMessenger, MessagingPort)
+        assert set(capabilities) == {"supports_get_status", "supports_set_priority"}
+
+        # Register the adapter
+        registry.register(
+            name="full_messenger",
+            component=FullMessenger,
+            component_type="adapter",
+            namespace="test",
+            privileged=True,
+        )
+
+        # Get adapters for the port
+        adapters = registry.get_adapters_for_port("messaging")
+        assert len(adapters) == 1
+        assert adapters[0].name == "full_messenger"
+
+
+"""Tests for registry tracking of configurable components."""
+
+
+class TestConfigurableRegistry:
+    """Test the registry's ability to track configurable components."""
+
+    def setup_method(self):
+        """Reset registry before each test."""
+        if registry.ready:
+            registry._cleanup_state()
+
+    def test_configurable_component_registration(self):
+        """Test that configurable components are tracked by the registry."""
+
+        # Create a test module with a configurable component
+        import sys
+        import types
+
+        # Create a mock module with proper spec
+        test_module = types.ModuleType("test_configurable_module")
+        test_module.__spec__ = types.SimpleNamespace(
+            name="test_configurable_module",
+            loader=None,
+            origin=None,
+            submodule_search_locations=None,
+        )
+
+        # Create a configurable adapter class
+        class TestConfig(BaseModel):
+            """Test configuration."""
+
+            api_key: str = Field(default="test-key", description="API key")
+            timeout: int = Field(default=30, description="Timeout")
+
+        class TestConfigurableAdapter:
+            """Test adapter with configuration."""
+
+            _hexdag_type = ComponentType.ADAPTER
+            _hexdag_name = "test_configurable"
+            # Don't declare a port to avoid validation issues
+            # _hexdag_implements_port = "llm"
+
+            @classmethod
+            def get_config_class(cls) -> type[BaseModel]:
+                return TestConfig
+
+            async def aresponse(self, messages):
+                return "test response"
+
+        # Fix the __module__ attribute to match our mock module
+        TestConfigurableAdapter.__module__ = "test_configurable_module"
+
+        # Add the adapter to the module
+        test_module.TestConfigurableAdapter = TestConfigurableAdapter
+        sys.modules["test_configurable_module"] = test_module
+
+        # Bootstrap with the test module
+        entries = [ManifestEntry(namespace="test", module="test_configurable_module")]
+
+        registry.bootstrap(entries, dev_mode=True)
+
+        # Check that the configurable component was tracked
+        configurable = registry.get_configurable_components()
+        assert "test_configurable" in configurable
+
+        # Check the configuration class is accessible
+        info = configurable["test_configurable"]
+        assert info["config_class"] == TestConfig
+        assert info["name"] == "test_configurable"
+        assert info["namespace"] == "test"
+
+        # Clean up
+        del sys.modules["test_configurable_module"]
+
+    def test_non_configurable_component_not_tracked(self):
+        """Test that non-configurable components are not in configurable list."""
+
+        # Create a test module with a non-configurable component
+        import sys
+        import types
+
+        test_module = types.ModuleType("test_non_configurable_module")
+        test_module.__spec__ = types.SimpleNamespace(
+            name="test_non_configurable_module",
+            loader=None,
+            origin=None,
+            submodule_search_locations=None,
+        )
+
+        class TestAdapter:
+            """Test adapter without configuration."""
+
+            _hexdag_type = ComponentType.ADAPTER
+            _hexdag_name = "test_non_configurable"
+            # Don't declare a port to avoid validation issues
+            # _hexdag_implements_port = "llm"
+
+            async def aresponse(self, messages):
+                return "test response"
+
+        # Fix the __module__ attribute to match our mock module
+        TestAdapter.__module__ = "test_non_configurable_module"
+
+        test_module.TestAdapter = TestAdapter
+        sys.modules["test_non_configurable_module"] = test_module
+
+        # Bootstrap with the test module
+        entries = [ManifestEntry(namespace="test", module="test_non_configurable_module")]
+
+        registry.bootstrap(entries, dev_mode=True)
+
+        # Check that the non-configurable component is registered but not tracked
+        components = registry.list_components()
+        assert any(c.name == "test_non_configurable" for c in components)
+
+        # But not in configurable components
+        configurable = registry.get_configurable_components()
+        assert "test_non_configurable" not in configurable
+
+        # Clean up
+        del sys.modules["test_non_configurable_module"]

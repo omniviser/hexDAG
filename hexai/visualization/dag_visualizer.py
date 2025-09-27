@@ -16,7 +16,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-import graphviz
+try:
+    import graphviz
+except ImportError as e:
+    raise ImportError(
+        "Graphviz is not installed. Please install with:\n"
+        "  pip install hexdag[viz]\n"
+        "  or\n"
+        "  uv pip install hexdag[viz]"
+    ) from e
 
 from hexai.core.domain.dag import DirectedGraph
 

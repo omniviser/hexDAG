@@ -44,7 +44,13 @@ async def async_combine(inputs: dict, **ports) -> int:
 
 
 def failing_function(x: int, **ports) -> int:
-    """Raise an exception."""
+    """Raise an exception.
+
+    Raises
+    ------
+    ValueError
+        Always raises a test failure
+    """
     raise ValueError("Intentional test failure")
 
 
@@ -104,8 +110,7 @@ class TestOrchestrator:
         """Create mock observer manager for testing."""
         from hexai.core.application.events import ObserverManager
 
-        mock = AsyncMock(spec=ObserverManager)
-        return mock
+        return AsyncMock(spec=ObserverManager)
 
     @pytest.mark.asyncio
     async def test_simple_sequential_execution(self, orchestrator, observers):
@@ -283,14 +288,13 @@ class TestOrchestrator:
                     return sum(x.values()) + 1
 
                 return wrapped_dict
-            else:
 
-                async def wrapped_int(x: int, **ports) -> int:
-                    execution_order.append(name)
-                    await asyncio.sleep(0.01)
-                    return x + 1
+            async def wrapped_int(x: int, **ports) -> int:
+                execution_order.append(name)
+                await asyncio.sleep(0.01)
+                return x + 1
 
-                return wrapped_int
+            return wrapped_int
 
         # Create DAG where wave 1 = [a], wave 2 = [b, c], wave 3 = [d]
         graph = DirectedGraph()
@@ -338,8 +342,8 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_ports_with_mocks(self, orchestrator, observers):
         """Test orchestrator with mock LLM and ToolRouter ports."""
-        from hexai.adapters.function_tool_router import FunctionBasedToolRouter
         from hexai.adapters.mock.mock_llm import MockLLM
+        from hexai.adapters.unified_tool_router import UnifiedToolRouter
 
         async def async_dummy_node_with_ports(input_data, llm=None, tool_router=None, **ports):
             """Async dummy node that uses ports."""
@@ -361,15 +365,25 @@ class TestOrchestrator:
         graph = DirectedGraph()
         graph.add(NodeSpec("async_node", async_dummy_node_with_ports))
 
-        # Create mock ports - use FunctionBasedToolRouter with a simple mock function
+        # Create mock ports - use UnifiedToolRouter with a simple mock function
         mock_llm = MockLLM(responses=["Test LLM response"])
-        mock_tool_router = FunctionBasedToolRouter()
+        mock_tool_router = UnifiedToolRouter()
 
-        # Add a simple mock tool
+        # Add a simple mock tool by registering it with the global registry
+        from hexai.core.registry import registry, tool
+        from hexai.core.registry.models import ComponentType
+
+        @tool(name="test_tool", namespace="test")
         def mock_test_tool(input_data):
             return f"Mock tool result for: {input_data}"
 
-        mock_tool_router.register_function(mock_test_tool, "test_tool")
+        # Register the tool with the global registry
+        registry.register(
+            name="test_tool",
+            component=mock_test_tool,
+            component_type=ComponentType.TOOL,
+            namespace="test",
+        )
         ports = {"llm": mock_llm, "tool_router": mock_tool_router, "observers": observers}
 
         # Execute the DAG
@@ -606,6 +620,7 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_graph_level_schema_validation(self, orchestrator, observers):
         """Test that graph validates schema compatibility at construction time."""
+
         class OutputSchemaA(BaseModel):
             data: str
 
@@ -630,7 +645,7 @@ class TestOrchestrator:
         error_str = str(exc_info.value)
         assert "consumer" in error_str
         # The error occurs when trying to access a field that doesn't exist
-        assert ("has no attribute" in error_str or "validation failed" in error_str.lower())
+        assert "has no attribute" in error_str or "validation failed" in error_str.lower()
 
     @pytest.mark.asyncio
     async def test_graph_level_compatible_schemas(self, orchestrator, observers):

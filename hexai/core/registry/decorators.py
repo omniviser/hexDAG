@@ -7,18 +7,17 @@ components. Registration happens during bootstrap via the manifest.
 from __future__ import annotations
 
 import re
+from functools import partial
 from typing import TYPE_CHECKING, TypeVar
+
+from hexai.core.registry.models import (
+    ComponentType,
+    NodeSubtype,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from hexai.core.registry.models import (
-    AdapterMetadata,
-    ComponentType,
-    DecoratorMetadata,
-    NodeSubtype,
-    PortMetadata,
-)
 
 T = TypeVar("T")
 
@@ -46,12 +45,13 @@ def _snake_case(name: str) -> str:
 
 def component(
     component_type: ComponentType | str,
-    name: str | None = None,
+    name: str | list[str] | None = None,
     *,
     namespace: str = "user",
     subtype: NodeSubtype | str | None = None,
     description: str | None = None,
-) -> Callable[[type[T]], type[T]]:
+    required_ports: list[str] | None = None,
+) -> Callable[[T], T]:
     """Add metadata to components without registering them.
 
     This decorator ONLY attaches metadata. It does NOT register the component.
@@ -61,19 +61,21 @@ def component(
     ----------
     component_type: ComponentType | str
         Component type (required). Can be enum or string like "node", "tool", etc.
-    name: str | None
-        Component name. If None, uses class name in snake_case.
+    name: str | list[str] | None
+        Component name or list of names for aliases. If None, uses class/function name.
     namespace: str
         Component namespace. Defaults to 'user'.
     subtype: NodeSubtype | str | None
         Optional subtype (mainly for nodes).
     description: str | None
-        Component description. If None, uses class docstring.
+        Component description. If None, uses class/function docstring.
+    required_ports: list[str] | None
+        Simple list of required port names like ["llm", "database"].
 
     Returns
     -------
-    Callable[[type[T]], type[T]]
-        Decorator function that adds metadata to the class.
+    Callable[[T], T]
+        Decorator function that adds metadata to the class or function.
 
     Examples
     --------
@@ -82,96 +84,85 @@ def component(
     ...     '''Passes data through unchanged.'''
     ...     pass
     >>>
-    >>> # After decoration, the class has metadata:
-    >>> assert hasattr(PassthroughNode, '__hexdag_metadata__')
-    >>> assert PassthroughNode.__hexdag_metadata__.type == 'node'
+    >>> @component('tool', name=['search', 'find'])
+    >>> def search_tool(query: str) -> list:
+    ...     '''Search for items.'''
+    ...     return []
+    >>>
+    >>> # After decoration, they have attributes:
+    >>> assert hasattr(PassthroughNode, '_hexdag_type')
+    >>> assert hasattr(search_tool, '_hexdag_type')
+    >>> assert PassthroughNode._hexdag_name == 'passthrough'
+    >>> assert search_tool._hexdag_names == ['search', 'find']
     """
 
-    def decorator(cls: type[T]) -> type[T]:
-        # Infer name from class name if not provided
-        component_name = name or _snake_case(cls.__name__)
+    def decorator(cls: T) -> T:
+        # Simplify name handling with convention over configuration
+        if isinstance(name, list):
+            # Multiple names provided - first is primary, rest are aliases
+            if not name:  # Validate list is not empty
+                raise ValueError("If providing a list of names, it cannot be empty")
+            all_names = name
+            primary_name = name[0]
+        elif name:
+            # Single name provided
+            all_names = [name]
+            primary_name = name
+        else:
+            # No name provided - infer from class/function name
+            # Use getattr to safely get __name__ from either class or function
+            obj_name = getattr(cls, "__name__", "unknown")
+            primary_name = _snake_case(obj_name)
+            all_names = [primary_name]
 
         # Use class docstring as description if not provided
         component_description = description or (cls.__doc__ or "").strip()
 
-        # Validate component type if it's a string
-        if isinstance(component_type, str):
+        # Validate component type - handle both enum and string
+        validated_type: ComponentType
+        if isinstance(component_type, ComponentType):
+            # Already a ComponentType enum, use it directly
+            validated_type = component_type
+        elif isinstance(component_type, str):
+            # It's a string, convert to enum
             try:
-                validated_type: ComponentType | str = ComponentType(component_type)
+                validated_type = ComponentType(component_type)
             except ValueError:
-                # Invalid type - fail fast
                 raise ValueError(
                     f"Invalid component type '{component_type}'. "
                     f"Must be one of: {', '.join(ComponentType)}"
                 ) from None
         else:
-            validated_type = component_type  # type: ignore[unreachable]
+            raise TypeError(
+                f"component_type must be ComponentType or str, not {type(component_type).__name__}"
+            )
 
-        metadata = DecoratorMetadata(
-            type=validated_type,
-            name=component_name,
-            declared_namespace=namespace,
-            subtype=subtype,
-            description=component_description,
-        )
-
-        # Attach metadata to the class
-        cls.__hexdag_metadata__ = metadata  # type: ignore[attr-defined]
+        # Store everything as attributes (no metadata object)
+        cls._hexdag_type = validated_type  # type: ignore[attr-defined]
+        cls._hexdag_name = primary_name  # type: ignore[attr-defined]
+        cls._hexdag_names = all_names  # type: ignore[attr-defined]
+        cls._hexdag_namespace = namespace  # type: ignore[attr-defined]
+        cls._hexdag_subtype = subtype  # type: ignore[attr-defined]
+        cls._hexdag_description = component_description  # type: ignore[attr-defined]
+        cls._hexdag_required_ports = required_ports or []  # type: ignore[attr-defined]
 
         return cls
 
     return decorator
 
 
-def make_component_decorator(
-    component_type: ComponentType | str,
-    subtype: NodeSubtype | str | None = None,
-) -> Callable[..., Callable[[type[T]], type[T]]]:
-    """Create specialized component decorators.
-
-    Parameters
-    ----------
-    component_type : ComponentType | str
-        The type of component this decorator creates.
-    subtype : NodeSubtype | str | None
-        Optional subtype to set automatically.
-
-    Returns
-    -------
-    Callable
-        A decorator function with the type/subtype pre-configured.
-    """
-
-    def wrapper(
-        name: str | None = None,
-        *,
-        namespace: str = "user",
-        description: str | None = None,
-        **kwargs: str | None,  # Allows subtype override when needed
-    ) -> Callable[[type[T]], type[T]]:
-        # If subtype is provided via factory, it takes precedence
-        actual_subtype = subtype or kwargs.get("subtype")
-        return component(
-            component_type,
-            name,
-            namespace=namespace,
-            subtype=actual_subtype,
-            description=description,
-        )
-
-    return wrapper
-
-
-# Port decorator - accepts explicit required/optional methods
+# Port decorator - no manual method lists needed!
 def port(
     name: str | None = None,
     *,
     namespace: str = "core",
     description: str | None = None,
-    required_methods: list[str] | None = None,
-    optional_methods: list[str] | None = None,
-) -> Callable[[type[T]], type[T]]:
-    """Create a decorator for Protocol ports with explicit method requirements.
+) -> Callable[[T], T]:
+    """Port decorator using convention over configuration.
+
+    Methods are extracted automatically from the Protocol:
+    - Abstract methods (@abstractmethod) are required
+    - Concrete methods are optional
 
     Parameters
     ----------
@@ -181,96 +172,98 @@ def port(
         Port namespace. Defaults to 'core'.
     description : str | None
         Port description. If None, uses class docstring.
-    required_methods : list[str] | None
-        List of method names that adapters MUST implement.
-    optional_methods : list[str] | None
-        List of method names that adapters MAY implement.
     """
-
-    def decorator(cls: type[T]) -> type[T]:
-        # Apply base component decorator
-        base_decorator = component(
-            ComponentType.PORT, name, namespace=namespace, description=description
-        )
-        cls = base_decorator(cls)
-
-        # Update metadata with port-specific information
-        if hasattr(cls, "__hexdag_metadata__"):
-            old_meta = cls.__hexdag_metadata__  # type: ignore[attr-defined]
-
-            # Create port metadata
-            port_meta = PortMetadata(
-                protocol_class=cls,
-                required_methods=required_methods or [],
-                optional_methods=optional_methods or [],
-            )
-
-            # Replace metadata with one that includes port_metadata
-            new_meta = DecoratorMetadata(
-                type=old_meta.type,
-                name=old_meta.name,
-                declared_namespace=old_meta.declared_namespace,
-                subtype=old_meta.subtype,
-                description=old_meta.description,
-                port_metadata=port_meta,
-            )
-            cls.__hexdag_metadata__ = new_meta  # type: ignore[attr-defined]
-
-        return cls
-
-    return decorator
+    # Just use the base component decorator
+    # Method extraction happens at runtime via inspect
+    return component(ComponentType.PORT, name, namespace=namespace, description=description)
 
 
 def adapter(
-    implements_port: str | None = None,
+    implements_port: str,
     name: str | None = None,
     *,
     namespace: str = "user",
     description: str | None = None,
-    capabilities: list[str] | None = None,
-) -> Callable[[type[T]], type[T]]:
-    """Create an adapter decorator with minimal extra logic for port implementation tracking."""
-    base_decorator = make_component_decorator(ComponentType.ADAPTER)
+) -> Callable[[T], T]:
+    """Adapter decorator with convention over configuration.
 
-    def decorator(cls: type[T]) -> type[T]:
-        # Apply base decorator
-        cls = base_decorator(name=name, namespace=namespace, description=description)(cls)
+    Parameters
+    ----------
+    implements_port : str
+        The port this adapter implements (required).
+    name : str | None
+        Adapter name. If None, inferred from class name.
+    namespace : str
+        Defaults to 'user' for adapters.
+    description : str | None
+        If None, uses class docstring.
 
-        # If implements_port is specified, add adapter metadata
-        if implements_port and hasattr(cls, "__hexdag_metadata__"):
-            old_meta = cls.__hexdag_metadata__  # type: ignore[attr-defined]
+    Examples
+    --------
+    >>> @adapter("database")
+    >>> class SQLiteAdapter:  # Name becomes 'sqlite_adapter'
+    ...     '''SQLite database implementation.'''
+    ...
+    >>> @adapter("llm", name="gpt4")  # Explicit name
+    >>> class OpenAIAdapter:
+    ...     pass
+    """
 
-            # Create adapter metadata
-            adapter_meta = AdapterMetadata(
-                implements_port=implements_port,
-                capabilities=capabilities or [],
-                singleton=True,
-            )
+    def decorator(cls: T) -> T:
+        # Apply base component decorator
+        cls = component(ComponentType.ADAPTER, name, namespace=namespace, description=description)(
+            cls
+        )
 
-            # Replace metadata with one that includes adapter_metadata
-            new_meta = DecoratorMetadata(
-                type=old_meta.type,
-                name=old_meta.name,
-                declared_namespace=old_meta.declared_namespace,
-                subtype=old_meta.subtype,
-                description=old_meta.description,
-                adapter_metadata=adapter_meta,
-            )
-            cls.__hexdag_metadata__ = new_meta  # type: ignore[attr-defined]
+        # Store the implemented port
+        cls._hexdag_implements_port = implements_port  # type: ignore[attr-defined]
 
         return cls
 
     return decorator
 
 
-# Generate base type decorators using the factory
-node = make_component_decorator(ComponentType.NODE)
-tool = make_component_decorator(ComponentType.TOOL)
-policy = make_component_decorator(ComponentType.POLICY)
-memory = make_component_decorator(ComponentType.MEMORY)
-observer = make_component_decorator(ComponentType.OBSERVER)
+tool = partial(component, ComponentType.TOOL)
+node = partial(component, ComponentType.NODE)
+policy = partial(component, ComponentType.POLICY)
+memory = partial(component, ComponentType.MEMORY)
+observer = partial(component, ComponentType.OBSERVER)
 
-# Generate node subtype decorators
-function_node = make_component_decorator(ComponentType.NODE, subtype=NodeSubtype.FUNCTION)
-llm_node = make_component_decorator(ComponentType.NODE, subtype=NodeSubtype.LLM)
-agent_node = make_component_decorator(ComponentType.NODE, subtype=NodeSubtype.AGENT)
+
+def function_node(
+    name: str | None = None, *, namespace: str = "core", description: str | None = None
+) -> Callable[[T], T]:
+    """Decorator for function nodes."""
+    return component(
+        ComponentType.NODE,
+        name,
+        namespace=namespace,
+        subtype=NodeSubtype.FUNCTION,
+        description=description,
+    )
+
+
+def llm_node(
+    name: str | None = None, *, namespace: str = "core", description: str | None = None
+) -> Callable[[T], T]:
+    """Decorator for LLM nodes."""
+    return component(
+        ComponentType.NODE,
+        name,
+        namespace=namespace,
+        subtype=NodeSubtype.LLM,
+        description=description,
+    )
+
+
+def agent_node(
+    name: str | None = None, *, namespace: str = "core", description: str | None = None
+) -> Callable[[T], T]:
+    """Decorator for agent nodes."""
+    return component(
+        ComponentType.NODE,
+        name,
+        namespace=namespace,
+        subtype=NodeSubtype.AGENT,
+        description=description,
+    )

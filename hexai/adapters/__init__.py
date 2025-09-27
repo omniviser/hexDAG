@@ -6,14 +6,17 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .function_tool_router import FunctionBasedToolRouter  # noqa: F401
-    from .in_memory_memory import InMemoryMemory  # noqa: F401
+    from .unified_tool_router import UnifiedToolRouter  # noqa: F401
 
 _LAZY_MAP: dict[str, tuple[str, str]] = {
-    "InMemoryMemory": ("hexai.adapters.in_memory_memory", "InMemoryMemory"),
+    "UnifiedToolRouter": (
+        "hexai.adapters.unified_tool_router",
+        "UnifiedToolRouter",
+    ),
+    # Backward compatibility alias
     "FunctionBasedToolRouter": (
-        "hexai.adapters.function_tool_router",
-        "FunctionBasedToolRouter",
+        "hexai.adapters.unified_tool_router",
+        "UnifiedToolRouter",
     ),
 }
 

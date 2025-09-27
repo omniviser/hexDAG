@@ -498,5 +498,6 @@ class AutoMappedInput(BaseModel):
         if isinstance(data, dict):
             return data
         if isinstance(data, BaseModel):
-            return data.model_dump()
+            result: dict[str, Any] = data.model_dump()
+            return result
         return {}

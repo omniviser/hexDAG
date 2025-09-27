@@ -74,7 +74,7 @@ async def simple_aggregator(input_data: Any, **kwargs) -> dict:
     aggregated_data = {}
     total_sources = 0
 
-    for node_name, result in results.items():
+    for result in results.values():
         if isinstance(result, dict) and "source" in result:
             source_name = result["source"]
             aggregated_data[source_name] = {
@@ -99,16 +99,14 @@ async def priority_aggregator(input_data: Any, **kwargs) -> dict:
     # Collect all data with priorities
     priority_data = {"high": [], "medium": [], "low": []}
 
-    for node_name, result in results.items():
+    for result in results.values():
         if isinstance(result, dict) and "priority" in result:
             priority = result["priority"]
-            priority_data[priority].append(
-                {
-                    "source": result["source"],
-                    "data": result["data"],
-                    "timestamp": result["timestamp"],
-                }
-            )
+            priority_data[priority].append({
+                "source": result["source"],
+                "data": result["data"],
+                "timestamp": result["timestamp"],
+            })
 
     # Order by priority (high -> medium -> low)
     ordered_data = []
@@ -133,16 +131,16 @@ async def timestamp_aggregator(input_data: Any, **kwargs) -> dict:
     # Collect all data with timestamps
     timestamp_data = []
 
-    for node_name, result in results.items():
-        if isinstance(result, dict) and "timestamp" in result:
-            timestamp_data.append(
-                {
-                    "source": result["source"],
-                    "data": result["data"],
-                    "timestamp": result["timestamp"],
-                    "priority": result["priority"],
-                }
-            )
+    timestamp_data = [
+        {
+            "source": result["source"],
+            "data": result["data"],
+            "timestamp": result["timestamp"],
+            "priority": result["priority"],
+        }
+        for result in results.values()
+        if isinstance(result, dict) and "timestamp" in result
+    ]
 
     # Sort by timestamp
     timestamp_data.sort(key=lambda x: x["timestamp"])
@@ -165,7 +163,7 @@ async def statistical_aggregator(input_data: Any, **kwargs) -> dict:
     all_data = []
     priority_counts = {"high": 0, "medium": 0, "low": 0}
 
-    for node_name, result in results.items():
+    for result in results.values():
         if isinstance(result, dict) and "source" in result:
             all_data.append(result["data"])
             priority_counts[result["priority"]] += 1
@@ -389,9 +387,8 @@ async def demonstrate_complex_aggregation():
 
     print("   ✅ Complex aggregation completed")
     print(f"   📊 Final aggregation type: {result['statistical_aggregator']['aggregation_type']}")
-    print(
-        f"   📊 Total sources in final: {result['statistical_aggregator']['statistical_summary']['total_sources']}"
-    )
+    total_sources = result["statistical_aggregator"]["statistical_summary"]["total_sources"]
+    print(f"   📊 Total sources in final: {total_sources}")
 
 
 async def main():

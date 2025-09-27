@@ -99,11 +99,10 @@ def run_example(example_path: str, quiet: bool = False) -> bool:
         if result.returncode == 0:
             print(f"✅ {example_path} completed successfully")
             return True
-        else:
-            print(f"❌ {example_path} failed with return code {result.returncode}")
-            if quiet and result.stderr:
-                print(f"Error: {result.stderr}")
-            return False
+        print(f"❌ {example_path} failed with return code {result.returncode}")
+        if quiet and result.stderr:
+            print(f"Error: {result.stderr}")
+        return False
 
     except subprocess.TimeoutExpired:
         print(f"⏰ {example_path} timed out after 60 seconds")
