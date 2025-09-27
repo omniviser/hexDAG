@@ -95,12 +95,10 @@ class MockToolAdapter(ToolRouter, ConfigurableComponent):
             ValueError: If tool not found and raise_on_unknown is True
         """
         # Record the call for testing/debugging
-        self.call_history.append(
-            {
-                "tool": tool_name,
-                "params": params,
-            }
-        )
+        self.call_history.append({
+            "tool": tool_name,
+            "params": params,
+        })
 
         # Return predefined response if available
         if tool_name in self.mock_responses:

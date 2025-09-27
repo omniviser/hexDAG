@@ -107,56 +107,48 @@ def _generate_config(adapters: list[str]) -> str:
     if "anthropic" in adapters:
         lines.append('    # "hexai.adapters.anthropic",  # Anthropic adapter (requires api key)')
 
-    lines.extend(
-        [
-            "]",
-            "",
-            "# Development mode",
-            "dev_mode = true",
-            "",
-            "[settings]",
-            'log_level = "INFO"',
-            "enable_metrics = true",
-        ]
-    )
+    lines.extend([
+        "]",
+        "",
+        "# Development mode",
+        "dev_mode = true",
+        "",
+        "[settings]",
+        'log_level = "INFO"',
+        "enable_metrics = true",
+    ])
 
     # Add adapter-specific configurations
     if "openai" in adapters:
-        lines.extend(
-            [
-                "",
-                "[adapters.openai]",
-                "# Set via environment variable or directly",
-                'api_key = "${OPENAI_API_KEY}"',
-                'model = "gpt-4"',
-                "temperature = 0.7",
-                "max_tokens = 2000",
-            ]
-        )
+        lines.extend([
+            "",
+            "[adapters.openai]",
+            "# Set via environment variable or directly",
+            'api_key = "${OPENAI_API_KEY}"',
+            'model = "gpt-4"',
+            "temperature = 0.7",
+            "max_tokens = 2000",
+        ])
 
     if "anthropic" in adapters:
-        lines.extend(
-            [
-                "",
-                "[adapters.anthropic]",
-                "# Set via environment variable or directly",
-                'api_key = "${ANTHROPIC_API_KEY}"',
-                'model = "claude-3-opus-20240229"',
-                "temperature = 0.7",
-                "max_tokens = 2000",
-            ]
-        )
+        lines.extend([
+            "",
+            "[adapters.anthropic]",
+            "# Set via environment variable or directly",
+            'api_key = "${ANTHROPIC_API_KEY}"',
+            'model = "claude-3-opus-20240229"',
+            "temperature = 0.7",
+            "max_tokens = 2000",
+        ])
 
     if "local" in adapters or not adapters:
-        lines.extend(
-            [
-                "",
-                "[adapters.local]",
-                "# Local adapter settings",
-                "memory_max_size = 1000",
-                "cache_ttl = 3600",
-            ]
-        )
+        lines.extend([
+            "",
+            "[adapters.local]",
+            "# Local adapter settings",
+            "memory_max_size = 1000",
+            "cache_ttl = 3600",
+        ])
 
     return "\n".join(lines) + "\n"
 

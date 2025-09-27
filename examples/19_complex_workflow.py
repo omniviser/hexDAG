@@ -250,35 +250,29 @@ async def generate_product_recommendations(input_data: Any, **kwargs) -> dict:
 
     # Generate recommendations based on customer value and preferences
     if value_tier == "high":
-        recommendations.append(
-            {
-                "product_id": "PROD001",
-                "reason": "Premium customer - high-value electronics",
-                "confidence": 0.9,
-                "estimated_value": 999.99,
-            }
-        )
+        recommendations.append({
+            "product_id": "PROD001",
+            "reason": "Premium customer - high-value electronics",
+            "confidence": 0.9,
+            "estimated_value": 999.99,
+        })
 
     if "PROD" in preferred_categories:
-        recommendations.append(
-            {
-                "product_id": "PROD002",
-                "reason": "Matches customer preferences",
-                "confidence": 0.7,
-                "estimated_value": 89.99,
-            }
-        )
+        recommendations.append({
+            "product_id": "PROD002",
+            "reason": "Matches customer preferences",
+            "confidence": 0.7,
+            "estimated_value": 89.99,
+        })
 
     # Add complementary products
     if product and product.category == "Electronics":
-        recommendations.append(
-            {
-                "product_id": "PROD003",
-                "reason": "Complementary to electronics purchase",
-                "confidence": 0.6,
-                "estimated_value": 129.99,
-            }
-        )
+        recommendations.append({
+            "product_id": "PROD003",
+            "reason": "Complementary to electronics purchase",
+            "confidence": 0.6,
+            "estimated_value": 129.99,
+        })
 
     return {
         "recommendations": recommendations,

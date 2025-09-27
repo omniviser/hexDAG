@@ -102,13 +102,11 @@ async def priority_aggregator(input_data: Any, **kwargs) -> dict:
     for result in results.values():
         if isinstance(result, dict) and "priority" in result:
             priority = result["priority"]
-            priority_data[priority].append(
-                {
-                    "source": result["source"],
-                    "data": result["data"],
-                    "timestamp": result["timestamp"],
-                }
-            )
+            priority_data[priority].append({
+                "source": result["source"],
+                "data": result["data"],
+                "timestamp": result["timestamp"],
+            })
 
     # Order by priority (high -> medium -> low)
     ordered_data = []

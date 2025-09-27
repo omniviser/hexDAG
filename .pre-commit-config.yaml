@@ -12,7 +12,7 @@ repos:
         exclude: ^hexai_plugins/
       # Run the formatter with auto-formatting (main code)
       - id: ruff-format
-        args: [--line-length=100]
+        args: [--config=pyproject.toml]
         exclude: ^hexai_plugins/
 
   # Pyupgrade - Automatically upgrade Python syntax

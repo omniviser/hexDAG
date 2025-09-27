@@ -171,18 +171,16 @@ class OpenAIAdapter(ConfigurableComponent):
                     and len(message.tool_calls) > 0
                 ):
                     # Return tool call information as JSON string
-                    return json.dumps(
-                        [
-                            {
-                                "id": tc.id,
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                            for tc in message.tool_calls
-                        ]
-                    )
+                    return json.dumps([
+                        {
+                            "id": tc.id,
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in message.tool_calls
+                    ])
 
             return None
 
