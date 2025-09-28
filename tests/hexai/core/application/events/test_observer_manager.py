@@ -482,6 +482,7 @@ async def test_observer_decorator_applies_metadata():
     assert len(calls) == 1
     assert isinstance(manager._observer_semaphores[observer_id], asyncio.Semaphore)
 
+
 def test_observer_metadata_overrides():
     """Explicit kwargs should override decorator defaults for observers."""
     manager = ObserverManager()

@@ -121,21 +121,15 @@ def component(
         # Validate component type - handle both enum and string
         validated_type: ComponentType
         if isinstance(component_type, ComponentType):
-            # Already a ComponentType enum, use it directly
             validated_type = component_type
-        elif isinstance(component_type, str):
-            # It's a string, convert to enum
+        else:
             try:
                 validated_type = ComponentType(component_type)
-            except ValueError:
+            except ValueError as exc:
                 raise ValueError(
                     f"Invalid component type '{component_type}'. "
                     f"Must be one of: {', '.join(ComponentType)}"
-                ) from None
-        else:
-            raise TypeError(
-                f"component_type must be ComponentType or str, not {type(component_type).__name__}"
-            )
+                ) from exc
 
         # Store everything as attributes (no metadata object)
         cls._hexdag_type = validated_type  # type: ignore[attr-defined]

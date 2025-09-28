@@ -38,10 +38,6 @@ class ConfigLoader:
         ImportError
             If tomllib is not available
         """
-        if tomllib is None:
-            raise ImportError(
-                "TOML support requires 'tomli' for Python < 3.11. Install with: pip install tomli"
-            )
 
     def load_from_toml(self, path: str | Path | None = None) -> HexDAGConfig:
         """Load configuration from TOML file.

@@ -32,13 +32,13 @@ def has_hexdag_attrs(obj: object) -> bool:
 logger = logging.getLogger(__name__)
 
 
-def discover_components(module: ModuleType) -> list[tuple[str, type | Callable | object]]:
+def discover_components(module: object) -> list[tuple[str, type | Callable | object]]:
     """Discover all components with _hexdag_type in a module.
 
     Parameters
     ----------
-    module : ModuleType
-        The module to scan for components.
+    module : object
+        Value to scan for components.
 
     Returns
     -------
@@ -48,15 +48,16 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
     Raises
     ------
     TypeError
-        If module is not a ModuleType instance.
+        If ``module`` is not a :class:`types.ModuleType` instance.
     """
+
     if not isinstance(module, ModuleType):
         raise TypeError(
             f"Expected ModuleType, got {type(module).__name__}. "
             "Pass a module object, not a string or path."
         )
 
-    components = []
+    components: list[tuple[str, type | Callable | object]] = []
 
     for name in dir(module):
         if name.startswith("_"):

@@ -100,7 +100,7 @@ def install_plugin(
         ...,
         help="Plugin name or extra to install (e.g., 'openai', 'viz')",
     ),
-    use_uv: bool = typer.Option(
+    use_uv: bool | None = typer.Option(
         None,
         "--uv/--pip",
         help="Force use of uv or pip (auto-detects by default)",

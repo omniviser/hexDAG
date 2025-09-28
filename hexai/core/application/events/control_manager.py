@@ -156,30 +156,17 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         if not isinstance(priority, int):
             raise TypeError("priority must be an integer")
 
-        Returns
-        -------
-        str
-            The ID/name of the registered handler
-
-        Raises
-        ------
-        ValueError
-            If the handler is already registered
-        TypeError
-            If the handler is not callable or implements the ControlHandler protocol
-        """
-        # Extract metadata from kwargs
-        priority = kwargs.get("priority", 100)
-        name = kwargs.get("name", "")
-        description = kwargs.get("description", "")
-        event_types = kwargs.get("event_types")
-
-        # Generate handler ID
-        if not name:
-            name = getattr(handler, "__name__", f"handler_{id(handler)}")
+        name_arg = kwargs.get("name")
+        if isinstance(name_arg, str) and name_arg:
+            name: str = name_arg
+        elif metadata and isinstance(metadata.name, str) and metadata.name:
+            name = metadata.name
+        else:
+            fallback = getattr(handler, "__name__", f"handler_{id(handler)}")
+            name = fallback if isinstance(fallback, str) else str(fallback)
 
         description = kwargs.get("description")
-        if description is None and metadata:
+        if description is None and metadata and metadata.description:
             description = metadata.description
         if description is None:
             description = ""
@@ -189,22 +176,18 @@ class ControlManager(BaseEventManager, EventFilterMixin):
             event_types_param = metadata.event_types
         event_filter = _coerce_event_types(event_types_param)
 
+        keep_alive = bool(kwargs.get("keep_alive", False))
+
         if name in self._handler_index:
             raise ValueError(f"Handler '{name}' already registered")
 
         metadata_model = HandlerMetadata(priority=priority, name=name, description=description)
 
-        # Wrap function if needed
-        keep_alive = kwargs.get("keep_alive", False)
-        wrapped_handler: ControlHandler | FunctionControlHandler
         if hasattr(handler, "handle"):
-            # Already implements ControlHandler protocol
             wrapped_handler = cast("ControlHandler", handler)
         elif callable(handler):
-            # Wrap function to implement the protocol
             _ensure_control_response_return_type(handler)
             wrapped_handler = FunctionControlHandler(handler, metadata_model)
-            # Wrapped functions need to be kept alive
             keep_alive = True
         else:
             raise TypeError(
@@ -221,27 +204,22 @@ class ControlManager(BaseEventManager, EventFilterMixin):
             deleted=False,
         )
 
-        # Store in both structures
         heapq.heappush(self._handler_heap, entry)
         self._handler_index[name] = entry
 
-        # Store handler with appropriate reference type
         if self._use_weak_refs and not keep_alive:
             try:
-                # Try to store as weak reference in base class dict
                 weak_ref = weakref.ref(wrapped_handler)
                 self._handlers[name] = weak_ref
             except TypeError:
-                # Can't create weak ref, use strong ref
                 self._handlers[name] = wrapped_handler
                 self._strong_refs[name] = wrapped_handler
         else:
-            # Use strong reference
             self._handlers[name] = wrapped_handler
             if keep_alive:
                 self._strong_refs[name] = wrapped_handler
 
-        return str(name)
+        return name
 
     def _should_handle(self, entry: HandlerEntry, event: Any) -> bool:
         """Check if handler should process this event type.

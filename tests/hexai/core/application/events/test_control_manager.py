@@ -525,6 +525,7 @@ async def test_control_handler_decorator_applies_metadata():
     assert entry.event_types == {NodeFailed}
     assert entry.metadata.description == "Retry failing nodes"
 
+
 @pytest.mark.asyncio
 async def test_control_handler_metadata_overrides():
     """Explicit kwargs should override decorator metadata."""
@@ -547,6 +548,7 @@ async def test_control_handler_metadata_overrides():
     assert entry.event_types == {NodeStarted}
     assert entry.metadata.description == "overridden"
 
+
 def test_control_handler_missing_annotation_raises():
     """Handlers must declare ControlResponse return type."""
     manager = ControlManager()
@@ -557,6 +559,7 @@ def test_control_handler_missing_annotation_raises():
     with pytest.raises(TypeError):
         manager.register(missing_annotation)
 
+
 def test_control_handler_wrong_annotation_raises():
     """Return annotations other than ControlResponse are rejected."""
     manager = ControlManager()
@@ -566,6 +569,7 @@ def test_control_handler_wrong_annotation_raises():
 
     with pytest.raises(TypeError):
         manager.register(wrong_return)
+
 
 @pytest.mark.asyncio
 async def test_control_handler_runtime_wrong_type_raises():

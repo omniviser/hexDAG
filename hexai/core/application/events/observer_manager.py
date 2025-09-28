@@ -9,11 +9,10 @@ import uuid
 import weakref
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from .events import Event
 from .decorators import EVENT_METADATA_ATTR, EventDecoratorMetadata
+from .events import Event
 from .models import (
     AsyncObserverFunc,
     BaseEventManager,
@@ -141,28 +140,12 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         if max_concurrency is not None and max_concurrency < 1:
             raise ValueError("max_concurrency must be positive when provided")
 
-        Returns
-        -------
-        str
-            The ID of the registered observer
-
-        Raises
-        ------
-        TypeError
-            If the observer is not callable or implements the Observer protocol
-        """
-        observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
-        event_types = kwargs.get("event_types")
         keep_alive = kwargs.get("keep_alive", False)
 
-        # Check if it has handle method (implements Observer protocol)
         if hasattr(handler, "handle"):
-            # Already implements Observer protocol
             observer: Observer = handler  # pyright: ignore[reportAssignmentType]
         elif callable(handler):
-            # Wrap function to implement the protocol
             observer = FunctionObserver(handler, self._executor)  # pyright: ignore[reportArgumentType]
-            # Functions need to be kept alive since they're wrapped
             keep_alive = True
         else:
             raise TypeError(
@@ -183,18 +166,13 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
 
         if self._use_weak_refs:
             try:
-                # Try to create weak reference
                 self._weak_handlers[observer_id] = observer
-                # Keep strong ref if requested or for wrapped functions
                 if keep_alive:
                     self._strong_refs[observer_id] = observer
             except TypeError:
-                # Some objects can't be weakly referenced (e.g., bound methods)
-                # Fall back to strong reference
                 self._handlers[observer_id] = observer
                 self._strong_refs[observer_id] = observer
         else:
-            # Normal strong reference when weak refs disabled
             self._handlers[observer_id] = observer
 
         return str(observer_id)

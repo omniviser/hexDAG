@@ -158,6 +158,55 @@ The context system provides shared state across nodes while maintaining isolatio
 The framework emphasizes strong typing throughout to catch errors at development time rather than runtime.
 
 **Pydantic Integration:**
+
+
+## Policies & Observers as Functions
+
+### 1. Policies as Functions
+
+You can implement control handlers as plain functions decorated with `@control_handler`.
+
+```python
+from hexai.core.application.events import ControlManager, ControlResponse, ControlSignal
+from hexai.core.application.events.decorators import control_handler
+from hexai.core.application.events import NodeFailed
+
+manager = ControlManager()
+
+@control_handler(
+    "retry_on_fail",
+    priority=10,
+    event_types=[NodeFailed],
+)
+async def retry_on_fail(event, context) -> ControlResponse:
+    if getattr(context, "attempt", 0) < 3:
+        return ControlResponse(signal=ControlSignal.RETRY)
+    return ControlResponse()
+
+manager.register(retry_on_fail)
+```
+
+The decorator only attaches metadata. You still register the function with `ControlManager.register`, and the function must be annotated to return `ControlResponse`.
+
+### 2. Observers as Functions
+
+Observers also gain decorators that capture metadata:
+
+```python
+from hexai.core.application.events import ObserverManager, NodeStarted
+from hexai.core.application.events.decorators import observer
+
+manager = ObserverManager()
+
+@observer(event_types=[NodeStarted], timeout=2.0, id="startup_logger")
+async def log_node_started(event):
+    print(f"node started: {event.name}")
+
+manager.register(log_node_started)
+```
+
+The `observer` decorator does not auto-register the function. Use `ObserverManager.register`, and opt in to filtering with `event_types`, timeouts with `timeout=None` for no limit, or set per-observer concurrency via `max_concurrency`.
+
 The framework integrates deeply with Pydantic for automatic validation, schema inference, and type safety.
 
 **Essential Type Safety Example:**
