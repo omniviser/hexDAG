@@ -163,7 +163,8 @@ version = "1.0.0"
 
     try:
         config = load_config(pyproject_path)
-        print(f"✓ Loaded config from pyproject.toml")
+        print("✓ Loaded config from pyproject.toml")
+
         print(f"✓ Modules: {config.modules}")
         print(f"✓ Plugins: {config.plugins}")
         print(f"✓ Default LLM binding: {config.bindings.get('llm', {}).adapter}")

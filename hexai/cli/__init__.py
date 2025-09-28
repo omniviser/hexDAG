@@ -1,10 +1,15 @@
-"""Command-line interface for hexAI pipelines and development tools."""
+"""Command-line interface for HexDAG.
+
+Note: The CLI requires the 'cli' extra to be installed:
+    pip install hexdag[cli]
+    or
+    uv pip install hexdag[cli]
+"""
 
 
-# Avoid module-level imports to prevent warnings when using python -m
 def main() -> None:
-    """Entry point for CLI."""
-    from hexai.cli.simple_pipeline_cli import main as cli_main
+    """Entry point for HexDAG CLI."""
+    from hexai.cli.main import main as cli_main
 
     return cli_main()
 

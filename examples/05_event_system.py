@@ -18,22 +18,20 @@ from hexai.core.application.events import (
 # Example control handler that skips test nodes
 async def skip_test_nodes(event: Event, context: ExecutionContext) -> ControlResponse:
     """Skip nodes with 'test' in the name."""
-    if isinstance(event, NodeStarted):
-        if "test" in event.name.lower():
-            print(f"  Control: Skipping test node '{event.name}'")
-            return ControlResponse(signal=ControlSignal.SKIP, data={"skipped": True})
+    if isinstance(event, NodeStarted) and "test" in event.name.lower():
+        print(f"  Control: Skipping test node '{event.name}'")
+        return ControlResponse(signal=ControlSignal.SKIP, data={"skipped": True})
     return ControlResponse()  # Default: proceed
 
 
 # Example control handler for fallback on errors
 async def fallback_on_error(event: Event, context: ExecutionContext) -> ControlResponse:
     """Provide fallback value for failed API nodes."""
-    if isinstance(event, NodeFailed):
-        if "api" in event.name.lower():
-            print(f"  Control: Providing fallback for '{event.name}'")
-            return ControlResponse(
-                signal=ControlSignal.FALLBACK, data={"status": "offline", "data": []}
-            )
+    if isinstance(event, NodeFailed) and "api" in event.name.lower():
+        print(f"  Control: Providing fallback for '{event.name}'")
+        return ControlResponse(
+            signal=ControlSignal.FALLBACK, data={"status": "offline", "data": []}
+        )
     return ControlResponse()
 
 

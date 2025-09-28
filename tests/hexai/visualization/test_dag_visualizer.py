@@ -4,10 +4,16 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 from pydantic import BaseModel
 
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.domain.dag_visualizer import DAGVisualizer, export_dag_to_dot, render_dag_to_image
+
+# Skip tests if visualization is not available
+pytest.importorskip("graphviz")
+
+from hexai.visualization import DAGVisualizer
+from hexai.visualization.dag_visualizer import export_dag_to_dot, render_dag_to_image
 
 
 class TestInput(BaseModel):
@@ -320,7 +326,7 @@ class TestDAGVisualizer:
         assert "color=" in formatted
         assert "shape=" in formatted
 
-    @patch("hexai.core.domain.dag_visualizer.subprocess.run")
+    @patch("hexai.visualization.dag_visualizer.subprocess.run")
     def test_render_to_file(self, mock_subprocess):
         """Test rendering to file."""
         # Mock the subprocess call

@@ -6,9 +6,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from ...domain.dag import NodeSpec
-from ..prompt import PromptInput, TemplateType
-from ..prompt.template import PromptTemplate
+from hexai.core.application.prompt import PromptInput, TemplateType
+from hexai.core.application.prompt.template import PromptTemplate
+from hexai.core.domain.dag import NodeSpec
+
 from .base_node_factory import BaseNodeFactory
 
 
@@ -27,14 +28,26 @@ class BaseLLMNode(BaseNodeFactory):
     # Template Processing Methods
     @staticmethod
     def prepare_template(template: PromptInput) -> TemplateType:
-        """Convert string input to PromptTemplate if needed."""
+        """Convert string input to PromptTemplate if needed.
+
+        Returns
+        -------
+        TemplateType
+            The prepared template (either the original or a new PromptTemplate)
+        """
         if isinstance(template, str):
             return PromptTemplate(template)
         return template
 
     @staticmethod
     def infer_input_schema_from_template(template: TemplateType) -> dict[str, Any]:
-        """Infer input schema from template variables."""
+        """Infer input schema from template variables.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary mapping variable names to their types
+        """
         variables = getattr(template, "input_vars", [])
 
         # Filter out special parameters that are not template variables
@@ -56,7 +69,13 @@ class BaseLLMNode(BaseNodeFactory):
     def enhance_template_with_schema(
         self, template: TemplateType, output_model: type[BaseModel]
     ) -> TemplateType:
-        """Add schema instructions to template for structured output."""
+        """Add schema instructions to template for structured output.
+
+        Returns
+        -------
+        TemplateType
+            The enhanced template with schema instructions
+        """
         schema_instruction = self._create_schema_instruction(output_model)
         return template + schema_instruction
 
@@ -68,10 +87,22 @@ class BaseLLMNode(BaseNodeFactory):
         output_model: type[BaseModel] | None,
         rich_features: bool = True,
     ) -> Callable[..., Any]:
-        """Create an LLM wrapper function with event emission."""
+        """Create an LLM wrapper function with event emission.
+
+        Returns
+        -------
+        Callable[..., Any]
+            Async wrapper function for LLM execution
+        """
 
         async def llm_wrapper(validated_input: dict[str, Any], **ports: Any) -> Any:
-            """Execute LLM call with proper event emission."""
+            """Execute LLM call with proper event emission.
+
+            Raises
+            ------
+            ValueError
+                If LLM port is not provided
+            """
             llm = ports.get("llm")
 
             if not llm:
@@ -107,7 +138,13 @@ class BaseLLMNode(BaseNodeFactory):
     def _generate_messages(
         self, template: TemplateType, validated_input: dict[str, Any]
     ) -> tuple[list[dict[str, str]], dict[str, Any]]:
-        """Generate messages from template and extract variables."""
+        """Generate messages from template and extract variables.
+
+        Returns
+        -------
+        tuple[list[dict[str, str]], dict[str, Any]]
+            Tuple containing (messages, template_variables)
+        """
         messages = template.to_messages(**validated_input)
         return messages, validated_input
 
@@ -115,7 +152,13 @@ class BaseLLMNode(BaseNodeFactory):
     # All templates support to_messages() method
 
     def _create_schema_instruction(self, output_model: type[BaseModel]) -> str:
-        """Create schema instruction for structured output."""
+        """Create schema instruction for structured output.
+
+        Returns
+        -------
+        str
+            Formatted schema instruction text
+        """
         # Get the JSON schema
         schema = output_model.model_json_schema()
 
@@ -153,7 +196,13 @@ Example: {example_json}
         rich_features: bool = True,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Build a standard LLM NodeSpec with consistent patterns."""
+        """Build a standard LLM NodeSpec with consistent patterns.
+
+        Returns
+        -------
+        NodeSpec
+            Complete node specification ready for execution
+        """
         # Prepare template
         prepared_template = self.prepare_template(template)
 
@@ -184,7 +233,13 @@ Example: {example_json}
         )
 
     def _parse_structured_response(self, response: str, output_model: type[BaseModel]) -> Any:
-        """Parse response into structured output."""
+        """Parse response into structured output.
+
+        Returns
+        -------
+        Any
+            Parsed response as output_model instance or raw response if parsing fails
+        """
         try:
             # Try to parse as JSON first
             if response.strip().startswith("{"):

@@ -10,9 +10,8 @@ class TestReadWriteLock:
         """Multiple readers can acquire lock simultaneously."""
         lock = ReadWriteLock()
 
-        with ReaderContext(lock):
-            with ReaderContext(lock):  # Nested read works
-                assert True
+        with ReaderContext(lock), ReaderContext(lock):  # Nested read works
+            assert True
 
     def test_writer_blocks_readers(self):
         """Writer blocks new readers until released."""
@@ -46,14 +45,12 @@ class TestReadWriteLock:
         """The same thread can re-enter read lock (RLock semantics)."""
         lock = ReadWriteLock()
 
-        with ReaderContext(lock):
-            with ReaderContext(lock):  # Should not deadlock
-                assert True
+        with ReaderContext(lock), ReaderContext(lock):  # Should not deadlock
+            assert True
 
     def test_reentrant_write(self):
         """The same thread can re-enter write lock (RLock semantics)."""
         lock = ReadWriteLock()
 
-        with WriterContext(lock):
-            with WriterContext(lock):  # Should not deadlock
-                assert True
+        with WriterContext(lock), WriterContext(lock):  # Should not deadlock
+            assert True

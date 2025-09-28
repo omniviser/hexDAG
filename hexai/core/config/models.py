@@ -14,7 +14,13 @@ class ManifestEntry:
     module: str
 
     def __post_init__(self) -> None:
-        """Validate manifest entry."""
+        """Validate manifest entry.
+
+        Raises
+        ------
+        ValueError
+            If namespace or module is empty or namespace contains ':'
+        """
         if not self.namespace:
             raise ValueError("Namespace cannot be empty")
         if not self.module:

@@ -25,6 +25,7 @@ class Event:
 
         Returns
         -------
+        str
             A formatted string suitable for logging
         """
         _ = log_level  # Mark as intentionally unused in base class
@@ -41,7 +42,13 @@ class NodeStarted(Event):
     dependencies: list[str] = field(default_factory=list)
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for node start event."""
+        """Format log message for node start event.
+
+        Returns
+        -------
+        str
+            Formatted log message for node start
+        """
         _ = log_level  # Unused but kept for interface consistency
         deps = f" (deps: {', '.join(self.dependencies)})" if self.dependencies else ""
         return f"🚀 Node '{self.name}' started in wave {self.wave_index}{deps}"
@@ -57,7 +64,13 @@ class NodeCompleted(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for node completion event."""
+        """Format log message for node completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for node completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Node '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
@@ -71,7 +84,13 @@ class NodeFailed(Event):
     error: Exception
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for node failure event."""
+        """Format log message for node failure event.
+
+        Returns
+        -------
+        str
+            Formatted log message for node failure
+        """
         _ = log_level  # This event always uses ERROR level
         return f"❌ Node '{self.name}' failed: {self.error}"
 
@@ -85,7 +104,13 @@ class WaveStarted(Event):
     nodes: list[str]
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for wave start event."""
+        """Format log message for wave start event.
+
+        Returns
+        -------
+        str
+            Formatted log message for wave start
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🌊 Wave {self.wave_index} started with {len(self.nodes)} nodes"
 
@@ -98,7 +123,13 @@ class WaveCompleted(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for wave completion event."""
+        """Format log message for wave completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for wave completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Wave {self.wave_index} completed in {self.duration_ms / 1000:.2f}s"
 
@@ -113,7 +144,13 @@ class PipelineStarted(Event):
     total_nodes: int
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for pipeline start event."""
+        """Format log message for pipeline start event.
+
+        Returns
+        -------
+        str
+            Formatted log message for pipeline start
+        """
         _ = log_level  # Unused but kept for interface consistency
         return (
             f"🎬 Pipeline '{self.name}' started "
@@ -130,7 +167,13 @@ class PipelineCompleted(Event):
     node_results: dict[str, Any] = field(default_factory=dict)
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for pipeline completion event."""
+        """Format log message for pipeline completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for pipeline completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
@@ -144,7 +187,13 @@ class LLMPromptSent(Event):
     messages: list[dict[str, str]]
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for LLM prompt event."""
+        """Format log message for LLM prompt event.
+
+        Returns
+        -------
+        str
+            Formatted log message for LLM prompt
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"💭 LLM prompt sent from '{self.node_name}' ({len(self.messages)} messages)"
 
@@ -158,7 +207,13 @@ class LLMResponseReceived(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for LLM response event."""
+        """Format log message for LLM response event.
+
+        Returns
+        -------
+        str
+            Formatted log message for LLM response
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🤖 LLM response for '{self.node_name}' in {self.duration_ms / 1000:.2f}s"
 
@@ -173,7 +228,13 @@ class ToolCalled(Event):
     params: dict[str, Any]
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for tool call event."""
+        """Format log message for tool call event.
+
+        Returns
+        -------
+        str
+            Formatted log message for tool call
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🔧 Tool '{self.tool_name}' called from '{self.node_name}'"
 
@@ -188,6 +249,12 @@ class ToolCompleted(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for tool completion event."""
+        """Format log message for tool completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for tool completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Tool '{self.tool_name}' completed in {self.duration_ms / 1000:.2f}s"

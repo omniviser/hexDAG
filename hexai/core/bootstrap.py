@@ -43,10 +43,7 @@ def bootstrap_registry(
     >>> # Force dev mode
     >>> bootstrap_registry(dev_mode=True)
 
-    Raises
-    ------
-    RegistryAlreadyBootstrappedError
-        If the registry has already been bootstrapped.
+
     """
     # Check if already bootstrapped
     if registry.ready:

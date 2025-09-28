@@ -1,14 +1,16 @@
 """Tests for the new bootstrap-based registry architecture."""
 
-import os
+import pathlib
+import sys
 import tempfile
+import textwrap
 
 import pytest
 
 from hexai.core.bootstrap import bootstrap_registry
+from hexai.core.config import ManifestEntry
 from hexai.core.registry.decorators import node
 from hexai.core.registry.exceptions import RegistryAlreadyBootstrappedError, RegistryImmutableError
-from hexai.core.config import ManifestEntry
 from hexai.core.registry.models import ComponentType
 from hexai.core.registry.registry import ComponentRegistry
 
@@ -33,10 +35,13 @@ class TestBootstrapArchitecture:
 
             pass
 
-        # Decorator should add metadata
-        assert hasattr(TestNode, "__hexdag_metadata__")
-        assert TestNode.__hexdag_metadata__.name == "test_node"
-        assert TestNode.__hexdag_metadata__.type == "node"
+        # Decorator should add attributes
+        assert hasattr(TestNode, "_hexdag_type")
+        assert hasattr(TestNode, "_hexdag_name")
+        assert TestNode._hexdag_name == "test_node"
+        from hexai.core.registry.models import ComponentType
+
+        assert TestNode._hexdag_type == ComponentType.NODE
 
         # But should NOT register in registry
         assert len(registry.list_components()) == 0
@@ -50,13 +55,16 @@ class TestBootstrapArchitecture:
         registry = ComponentRegistry()
 
         # Create entries pointing to our sample module
-        entries = [ManifestEntry(namespace="test", module="tests.hexai.core.registry.sample_components")]
+        entries = [
+            ManifestEntry(namespace="test", module="tests.hexai.core.registry.sample_components")
+        ]
 
         # Bootstrap
         registry.bootstrap(entries, dev_mode=True)
 
         # Registry should now be ready
         assert registry.ready
+        assert registry.manifest is not None
         assert len(registry.manifest) == 1
 
         # Components should be registered (3 decorated + 1 port = 4 total)
@@ -151,66 +159,67 @@ class TestBootstrapArchitecture:
     def test_adapter_validation_during_bootstrap(self):
         """Test that adapter validation happens during bootstrap."""
         # Create a test file with an invalid adapter (missing required method)
-        import tempfile
-        import textwrap
-        import sys
-        import os
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a module with an invalid adapter
-            module_path = os.path.join(tmpdir, "invalid_adapter.py")
-            with open(module_path, "w") as f:
+            module_path = pathlib.Path(tmpdir) / "invalid_adapter.py"
+            with module_path.open("w") as f:
                 f.write(
                     textwrap.dedent("""
-                    from hexai.core.registry.decorators import adapter
-                    from hexai.core.registry.models import (
-                        ClassComponent, ComponentMetadata, ComponentType, PortMetadata
-                    )
+from hexai.core.registry.decorators import adapter
+from hexai.core.registry.models import (
+    ClassComponent, ComponentMetadata, ComponentType
+)
+from typing import Protocol, runtime_checkable
+from abc import abstractmethod
 
-                    # Define a port
-                    class TestPort:
-                        def required_method(self): pass
+# Define a port using Protocol
+@runtime_checkable
+class TestPort(Protocol):
+    @abstractmethod
+    def required_method(self): pass
 
-                    # Invalid adapter - missing required_method
-                    @adapter(implements_port="test_port", name="invalid_adapter")
-                    class InvalidAdapter:
-                        pass  # Missing required_method!
+# Invalid adapter - missing required_method
+@adapter(implements_port="test_port", name="invalid_adapter")
+class InvalidAdapter:
+    pass  # Missing required_method!
 
-                    def register_components(registry, namespace):
-                        # Register the port first
-                        port_meta = ComponentMetadata(
-                            name="test_port",
-                            component_type=ComponentType.PORT,
-                            component=ClassComponent(value=TestPort),
-                            namespace=namespace,
-                            port_metadata=PortMetadata(
-                                protocol_class=TestPort,
-                                required_methods=["required_method"],
-                                optional_methods=[],
-                            ),
-                        )
-                        if namespace not in registry._components:
-                            registry._components[namespace] = {}
-                        registry._components[namespace]["test_port"] = port_meta
+def register_components(registry, namespace):
+    # Register the port first
+    port_meta = ComponentMetadata(
+        name="test_port",
+        component_type=ComponentType.PORT,
+        component=ClassComponent(value=TestPort),
+        namespace=namespace,
+    )
+    if namespace not in registry._components:
+        registry._components[namespace] = {}
+    registry._components[namespace]["test_port"] = port_meta
 
-                        # Try to register the invalid adapter
-                        from hexai.core.registry.discovery import discover_components
-                        import sys
-                        module = sys.modules[__name__]
-                        components = discover_components(module)
+    # Try to register the invalid adapter
+    from hexai.core.registry.discovery import discover_components
+    import sys
+    module = sys.modules[__name__]
+    components = discover_components(module)
 
-                        for _, component in components:
-                            if hasattr(component, "__hexdag_metadata__"):
-                                metadata = getattr(component, "__hexdag_metadata__")
-                                registry.register(
-                                    name=metadata.name,
-                                    component=component,
-                                    component_type=metadata.type,
-                                    namespace=namespace,
-                                    adapter_metadata=getattr(metadata, "adapter_metadata", None),
-                                )
-                        return 1
-                """)
+    for _, component in components:
+        if hasattr(component, "_hexdag_type"):
+            component_name = getattr(component, "_hexdag_name")
+            component_type = getattr(component, "_hexdag_type")
+            component_subtype = getattr(component, "_hexdag_subtype", None)
+            component_description = getattr(
+                component, "_hexdag_description", ""
+            )
+            registry.register(
+                name=component_name,
+                component=component,
+                component_type=component_type,
+                namespace=namespace,
+                subtype=component_subtype,
+                description=component_description,
+            )
+    return 1
+                """).strip()
                 )
 
             # Add tmpdir to sys.path
@@ -233,13 +242,14 @@ class TestBootstrapArchitecture:
                     del sys.modules["invalid_adapter"]
 
     def test_import_error_rollback(self):
-        """Failed imports should rollback bootstrap."""
+        """Failed imports should rollback bootstrap for core modules."""
         registry = ComponentRegistry()
 
-        # Create entries with non-existent module
-        entries = [ManifestEntry(namespace="test", module="non_existent_module_xyz")]
+        # Create entries with non-existent core module
+        # Core modules must exist and cause failure if missing
+        entries = [ManifestEntry(namespace="core", module="hexai.core.non_existent_module")]
 
-        # Bootstrap should fail and rollback
+        # Bootstrap should fail and rollback for core modules
         with pytest.raises(ImportError):
             registry.bootstrap(entries)
 
@@ -291,7 +301,7 @@ llm = "mock_llm"
             components = registry.list_components()
             assert len(components) > 0
         finally:
-            os.unlink(config_path)
+            pathlib.Path(config_path).unlink()
             # Clean up registry
             registry._components.clear()
             registry._protected_components.clear()
@@ -316,7 +326,7 @@ dev_mode = true
             # Should pick up dev_mode from config
             assert registry.dev_mode is True
         finally:
-            os.unlink(config_path)
+            pathlib.Path(config_path).unlink()
             # Clean up registry
             registry._components.clear()
             registry._protected_components.clear()
@@ -341,7 +351,7 @@ dev_mode = false
             # Parameter should override config
             assert registry.dev_mode is True
         finally:
-            os.unlink(config_path)
+            pathlib.Path(config_path).unlink()
             # Clean up registry
             registry._components.clear()
             registry._protected_components.clear()

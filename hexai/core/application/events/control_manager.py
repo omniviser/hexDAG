@@ -96,7 +96,13 @@ class HandlerEntry:
     deleted: bool = False
 
     def __lt__(self, other: "HandlerEntry") -> bool:
-        """Compare by priority for heap ordering."""
+        """Compare by priority for heap ordering.
+
+        Returns
+        -------
+        bool
+            True if this entry has higher priority (lower number)
+        """
         return self.priority < other.priority
 
 
@@ -150,12 +156,26 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         if not isinstance(priority, int):
             raise TypeError("priority must be an integer")
 
-        provided_name = kwargs.get("name")
-        if provided_name:
-            name = provided_name
-        elif metadata and metadata.name:
-            name = metadata.name
-        else:
+        Returns
+        -------
+        str
+            The ID/name of the registered handler
+
+        Raises
+        ------
+        ValueError
+            If the handler is already registered
+        TypeError
+            If the handler is not callable or implements the ControlHandler protocol
+        """
+        # Extract metadata from kwargs
+        priority = kwargs.get("priority", 100)
+        name = kwargs.get("name", "")
+        description = kwargs.get("description", "")
+        event_types = kwargs.get("event_types")
+
+        # Generate handler ID
+        if not name:
             name = getattr(handler, "__name__", f"handler_{id(handler)}")
 
         description = kwargs.get("description")
@@ -224,7 +244,13 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         return str(name)
 
     def _should_handle(self, entry: HandlerEntry, event: Any) -> bool:
-        """Check if handler should process this event type."""
+        """Check if handler should process this event type.
+
+        Returns
+        -------
+        bool
+            True if handler should process this event
+        """
         # Skip deleted entries
         if entry.deleted:
             return False
@@ -240,7 +266,8 @@ class ControlManager(BaseEventManager, EventFilterMixin):
 
         Returns
         -------
-            bool: True if handler was found and removed, False otherwise
+        bool
+            True if handler was found and removed, False otherwise
         """
         if handler_id not in self._handler_index:
             return False
@@ -293,14 +320,8 @@ class ControlManager(BaseEventManager, EventFilterMixin):
 
         Returns
         -------
-            ControlResponse
-                Response from the first handler that interrupts execution or
-                the default proceed response when no handler intervenes.
-
-        Raises
-        ------
-            TypeError
-                If a handler returns a value other than ``ControlResponse``.
+        ControlResponse
+            Response with signal and optional data
         """
         # No handlers means proceed
         if not self._handler_heap:
@@ -362,7 +383,13 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         return ControlResponse()
 
     def _validate_response(self, response: Any, handler_name: str) -> ControlResponse:
-        """Validate a handler response and enforce ``ControlResponse`` contract."""
+        """Validate and normalize handler response.
+
+        Returns
+        -------
+        ControlResponse
+            Validated and normalized control response
+        """
         if response is None:
             raise TypeError(f"Handler {handler_name} returned None, ControlResponse required")
 
@@ -388,7 +415,23 @@ class FunctionControlHandler:
         self.__name__ = getattr(func, "__name__", "anonymous_handler")
 
     async def handle(self, event: Any, context: ExecutionContext) -> ControlResponse:
-        """Handle the event by calling the wrapped function."""
+        """Handle the event by calling the wrapped function.
+
+        Args
+        ----
+            event: The event to handle
+            context: The execution context
+
+        Returns
+        -------
+        ControlResponse
+            Response from the wrapped handler function
+
+        Raises
+        ------
+        TypeError
+            If the handler must return ControlResponse, got {type(result)}
+        """
         if asyncio.iscoroutinefunction(self._func):
             result = await self._func(event, context)
         else:
