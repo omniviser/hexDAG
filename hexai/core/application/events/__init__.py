@@ -1,52 +1,47 @@
-"""Pipeline event system."""
+"""Event system for the Hex-DAG framework.
 
-from .base import EventType, Observer, PipelineEvent, SyncObserver
-from .events import (  # Node events; Wave events; Pipeline events; LLM events; Tool events
-    LLMPromptGeneratedEvent,
-    LLMResponseReceivedEvent,
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineBuildEvent,
-    PipelineCompletedEvent,
-    PipelineStartedEvent,
-    ToolCalledEvent,
-    ToolCompletedEvent,
-    ValidationWarningEvent,
-    WaveCompletedEvent,
-    WaveStartedEvent,
-)
-from .manager import PipelineEventManager
-from .observers import (
-    FileObserver,
-    LoggingObserver,
-    MetricsObserver,
-    NodeObserver,
-    WebSocketObserver,
+Clean, simplified event system with clear separation of concerns:
+- events.py: Event data classes (just data, no behavior)
+"""
+
+# Event classes
+from .events import (
+    Event,
+    LLMPromptSent,
+    LLMResponseReceived,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
+    PipelineCompleted,
+    PipelineStarted,
+    PolicyEvaluated,
+    PolicyFallback,
+    PolicyRetry,
+    PolicySkipped,
+    PolicyTriggered,
+    ToolCalled,
+    ToolCompleted,
+    WaveCompleted,
+    WaveStarted,
 )
 
 __all__ = [
-    "EventType",
-    "Observer",
-    "PipelineEvent",
-    "SyncObserver",
-    "PipelineEventManager",
-    "NodeStartedEvent",
-    "NodeCompletedEvent",
-    "NodeFailedEvent",
-    "WaveStartedEvent",
-    "WaveCompletedEvent",
-    "PipelineStartedEvent",
-    "PipelineCompletedEvent",
-    "PipelineBuildEvent",
-    "ValidationWarningEvent",
-    "LLMPromptGeneratedEvent",
-    "LLMResponseReceivedEvent",
-    "ToolCalledEvent",
-    "ToolCompletedEvent",
-    "LoggingObserver",
-    "MetricsObserver",
-    "NodeObserver",
-    "WebSocketObserver",
-    "FileObserver",
+    # Events
+    "Event",
+    "NodeStarted",
+    "NodeCompleted",
+    "NodeFailed",
+    "WaveStarted",
+    "WaveCompleted",
+    "PipelineStarted",
+    "PipelineCompleted",
+    "LLMPromptSent",
+    "LLMResponseReceived",
+    "ToolCalled",
+    "ToolCompleted",
+    "PolicyEvaluated",
+    "PolicyTriggered",
+    "PolicySkipped",
+    "PolicyFallback",
+    "PolicyRetry",
 ]

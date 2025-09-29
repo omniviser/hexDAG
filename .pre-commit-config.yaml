@@ -6,12 +6,14 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.13.0
     hooks:
-      # Run the linter with auto-fix
+      # Run the linter with auto-fix (main code)
       - id: ruff-check
         args: [--config=pyproject.toml]
-      # Run the formatter with auto-formatting
+        exclude: ^hexai_plugins/
+      # Run the formatter with auto-formatting (main code)
       - id: ruff-format
-        args: [--line-length=100]
+        args: [--config=pyproject.toml]
+        exclude: ^hexai_plugins/
 
   # Pyupgrade - Automatically upgrade Python syntax
   - repo: https://github.com/asottile/pyupgrade
@@ -59,7 +61,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
-        exclude: ^(tests/|examples/)
+        exclude: ^(tests/|examples/|hexai_plugins/)
 
   - repo: local
     hooks:
@@ -68,16 +70,50 @@ repos:
         entry: uv run pyright
         language: system
         types: [python]
-        exclude: ^(tests/|examples/)
+        exclude: ^(tests/|examples/|hexai_plugins/)
         pass_filenames: false
 
+
+  # ============================================================================
+  # Plugin-specific hooks (only run on hexai_plugins/ files)
+  # ============================================================================
+
+  # Plugin linting - uses each plugin's own pyproject.toml
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff
+        name: ruff-plugins
+        args: [--fix]  # Will use plugin's own pyproject.toml
+        files: ^hexai_plugins/
+        exclude: ^hexai_plugins/.*\.venv/
+      - id: ruff-format
+        name: ruff-format-plugins
+        files: ^hexai_plugins/
+        exclude: ^hexai_plugins/.*\.venv/
+
+  # Plugin type checking - with plugin dependencies
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.1
+    hooks:
+      - id: mypy
+        name: mypy-plugins
+        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]  # Add plugin deps here
+        args: [--ignore-missing-imports, --python-version=3.12, hexai_plugins/]
+        files: ^hexai_plugins/.*\.py$
+        exclude: ^hexai_plugins/.*\.venv/
+        pass_filenames: false
+
+  # ============================================================================
+  # Main code hooks (exclude plugins)
+  # ============================================================================
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.6
     hooks:
       - id: bandit
         args: [-r, hexai]
-        exclude: ^tests/
+        exclude: ^(tests/|hexai_plugins/)
 
   # Security - Dependency vulnerabilities
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
@@ -127,6 +163,14 @@ repos:
         language: system
         types: [python]
         stages: [pre-commit]
+        pass_filenames: false
+
+      - id: pytest-integration
+        name: Run integration tests
+        entry: uv run pytest tests/integration/ -x --tb=short
+        language: system
+        types: [python]
+        stages: [pre-push]
         pass_filenames: false
 
 

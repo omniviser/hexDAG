@@ -474,7 +474,7 @@ class ProductionPipelineRunner:
         self.graph = build_compiled_dag()
 
         # Set up orchestrator with monitoring
-        event_manager = PipelineEventManager()
+        event_manager = ObserverManager()
         event_manager.subscribe(LoggingObserver())
         event_manager.subscribe(MetricsObserver())
 
@@ -971,11 +971,11 @@ results = await pipeline.execute(input_data, ports=production_ports)
 
 **Event Observers:**
 ```python
-from hexai.core.application.events import PipelineEventManager
+from hexai.core.application.events import ObserverManager
 from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
 
 # Production monitoring
-event_manager = PipelineEventManager()
+event_manager = ObserverManager()
 event_manager.subscribe(LoggingObserver(log_level=logging.INFO))
 event_manager.subscribe(MetricsObserver())
 

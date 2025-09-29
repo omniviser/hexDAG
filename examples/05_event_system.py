@@ -1,321 +1,161 @@
-#!/usr/bin/env python3
-"""
-📊 Example 05: Event System and Monitoring.
-
-This example teaches:
-- Event observers and monitoring
-- Custom event handlers
-- Pipeline metrics collection
-- Real-time execution tracking
-
-Run: python examples/05_event_system.py
-"""
+"""Example demonstrating the simplified event system."""
 
 import asyncio
-import time
-from typing import Any
 
-from hexai.core.application.events.base import Observer, PipelineEvent
-from hexai.core.application.events.events import (
-    NodeCompletedEvent,
-    NodeFailedEvent,
-    NodeStartedEvent,
-    PipelineStartedEvent,
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexai.core.application.context import ExecutionContext
+from hexai.core.application.events import (
+    Event,
+    NodeCompleted,
+    NodeFailed,
+    NodeStarted,
 )
-from hexai.core.application.events.manager import PipelineEventManager
-from hexai.core.application.events.observers import LoggingObserver
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexai.core.application.policies.models import (
+    PolicyContext,
+    PolicyResponse,
+    PolicySignal,
+)
 
 
-class CustomMetricsObserver(Observer):
-    """Custom observer that collects detailed execution metrics."""
-
-    def __init__(self):
-        """Initialize metrics collection."""
-        self.metrics = {
-            "nodes_started": 0,
-            "nodes_completed": 0,
-            "nodes_failed": 0,
-            "total_execution_time": 0,
-            "node_timings": {},
-            "events_received": [],
-        }
-        self.node_start_times = {}
-
-    async def handle(self, event: PipelineEvent) -> None:
-        """Handle pipeline events."""
-        if isinstance(event, NodeStartedEvent):
-            self.metrics["nodes_started"] += 1
-            self.node_start_times[event.node_name] = time.time()
-            self.metrics["events_received"].append(f"STARTED: {event.node_name}")
-            print(f"   📊 Metrics: {event.node_name} started")
-
-        elif isinstance(event, NodeCompletedEvent):
-            self.metrics["nodes_completed"] += 1
-
-            # Calculate execution time
-            if event.node_name in self.node_start_times:
-                start_time = self.node_start_times[event.node_name]
-                execution_time = time.time() - start_time
-                self.metrics["node_timings"][event.node_name] = execution_time
-                self.metrics["total_execution_time"] += execution_time
-
-            self.metrics["events_received"].append(f"COMPLETED: {event.node_name}")
-            print(f"   📊 Metrics: {event.node_name} completed in {event.execution_time:.3f}s")
-
-        elif isinstance(event, NodeFailedEvent):
-            self.metrics["nodes_failed"] += 1
-            self.metrics["events_received"].append(f"FAILED: {event.node_name}")
-            print(f"   📊 Metrics: {event.node_name} failed")
-
-    def get_summary(self) -> dict:
-        """Get metrics summary."""
-        return {
-            "execution_summary": {
-                "total_nodes": self.metrics["nodes_started"],
-                "successful_nodes": self.metrics["nodes_completed"],
-                "failed_nodes": self.metrics["nodes_failed"],
-                "success_rate": self.metrics["nodes_completed"]
-                / max(1, self.metrics["nodes_started"]),
-            },
-            "performance": {
-                "total_time": round(self.metrics["total_execution_time"], 3),
-                "average_node_time": round(
-                    self.metrics["total_execution_time"] / max(1, self.metrics["nodes_completed"]),
-                    3,
-                ),
-                "fastest_node": (
-                    min(self.metrics["node_timings"].items(), key=lambda x: x[1])
-                    if self.metrics["node_timings"]
-                    else None
-                ),
-                "slowest_node": (
-                    max(self.metrics["node_timings"].items(), key=lambda x: x[1])
-                    if self.metrics["node_timings"]
-                    else None
-                ),
-            },
-            "detailed_timings": self.metrics["node_timings"],
-        }
+# Example policy that skips test nodes
+async def skip_test_nodes(context: PolicyContext) -> PolicyResponse:
+    """Skip nodes with 'test' in the name."""
+    if isinstance(context.event, NodeStarted) and "test" in context.event.name.lower():
+        print(f"  Policy: Skipping test node '{context.event.name}'")
+        return PolicyResponse(signal=PolicySignal.SKIP, data={"skipped": True})
+    return PolicyResponse(signal=PolicySignal.PROCEED)  # Default: proceed
 
 
-class ProgressTracker(Observer):
-    """Observer that tracks overall progress."""
-
-    def __init__(self, total_nodes: int):
-        """Initialize progress tracking."""
-        self.total_nodes = total_nodes
-        self.completed_nodes = 0
-        self.start_time = None
-
-    async def handle(self, event: PipelineEvent) -> None:
-        """Handle pipeline events."""
-        if isinstance(event, PipelineStartedEvent):
-            self.start_time = time.time()
-            print(f"   🚀 Progress: Pipeline started with {self.total_nodes} nodes")
-
-        elif isinstance(event, NodeCompletedEvent):
-            self.completed_nodes += 1
-            progress_percent = (self.completed_nodes / self.total_nodes) * 100
-
-            elapsed = time.time() - (self.start_time or time.time())
-            estimated_total = (
-                elapsed * (self.total_nodes / self.completed_nodes)
-                if self.completed_nodes > 0
-                else 0
-            )
-            remaining = max(0, estimated_total - elapsed)
-
-            print(
-                f"   🔄 Progress: {progress_percent:.1f}% ({self.completed_nodes}/{self.total_nodes}) - ETA: {remaining:.1f}s"
-            )
+# Example policy for fallback on errors
+async def fallback_on_error(context: PolicyContext) -> PolicyResponse:
+    """Provide fallback value for failed API nodes."""
+    if isinstance(context.event, NodeFailed) and "api" in context.event.name.lower():
+        print(f"  Policy: Providing fallback for '{context.event.name}'")
+        return PolicyResponse(signal=PolicySignal.FALLBACK, data={"status": "offline", "data": []})
+    return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class ErrorLogger(Observer):
-    """Observer that logs errors and warnings."""
+# Example observer for logging
+async def log_observer(event: Event) -> None:
+    """Simple logging observer."""
+    if isinstance(event, NodeStarted):
+        print(f"  Observer: Node '{event.name}' started")
+    elif isinstance(event, NodeCompleted):
+        print(f"  Observer: Node '{event.name}' completed in {event.duration_ms}ms")
+    elif isinstance(event, NodeFailed):
+        print(f"  Observer: Node '{event.name}' failed with {event.error}")
+
+
+# Example observer for metrics
+class MetricsObserver:
+    """Observer that collects metrics."""
 
     def __init__(self):
-        """Initialize error logging."""
-        self.errors = []
-        self.warnings = []
+        self.node_count = 0
+        self.total_duration = 0.0
 
-    async def handle(self, event: PipelineEvent) -> None:
-        """Handle pipeline events."""
-        if isinstance(event, NodeFailedEvent):
-            error_info = {
-                "node": event.node_name,
-                "timestamp": time.time(),
-                "error": str(event.error),
-            }
-            self.errors.append(error_info)
-            print(f"   ❌ Error: {event.node_name} failed - {error_info['error']}")
-
-    def get_error_summary(self) -> dict:
-        """Get error summary."""
-        return {
-            "total_errors": len(self.errors),
-            "total_warnings": len(self.warnings),
-            "errors": self.errors,
-            "warnings": self.warnings,
-        }
-
-
-# Sample processing functions with different execution times
-async def fast_task(input_data: Any, **kwargs) -> dict:
-    """Quick processing task."""
-    await asyncio.sleep(0.1)
-    return {"data": input_data, "processing_time": "fast", "result": "processed_quickly"}
-
-
-async def medium_task(input_data: dict, **kwargs) -> dict:
-    """Medium duration task."""
-    await asyncio.sleep(0.3)
-    original = input_data.get("data", "")
-    return {"data": f"medium_{original}", "processing_time": "medium", "details": input_data}
-
-
-async def slow_task(input_data: dict, **kwargs) -> dict:
-    """Slower processing task."""
-    await asyncio.sleep(0.5)
-    return {
-        "data": "slow_processing_complete",
-        "processing_time": "slow",
-        "input_summary": input_data,
-    }
-
-
-async def aggregator_task(input_data: Any, **kwargs) -> dict:
-    """Combine results from multiple nodes."""
-    await asyncio.sleep(0.1)
-    return {
-        "aggregated_data": {
-            "fast": input_data.get("fast_node", {}).get("data"),
-            "medium": input_data.get("medium_node", {}).get("data"),
-            "slow": input_data.get("slow_node", {}).get("data"),
-        },
-        "total_inputs": 3,
-        "aggregation_complete": True,
-    }
-
-
-async def demonstrate_event_monitoring():
-    """Demonstrate comprehensive event monitoring."""
-
-    print("\n📊 Event System Demo: Multi-Observer Monitoring")
-    print("=" * 55)
-
-    # Create DAG
-    graph = DirectedGraph()
-
-    # Add nodes with different execution times
-    graph.add(NodeSpec("fast_node", fast_task))
-    graph.add(NodeSpec("medium_node", medium_task).after("fast_node"))
-    graph.add(NodeSpec("slow_node", slow_task).after("fast_node"))
-    graph.add(
-        NodeSpec("aggregator", aggregator_task).after("medium_node", "slow_node", "fast_node")
-    )
-
-    total_nodes = len(graph.nodes)
-    print(f"\n📋 Pipeline has {total_nodes} nodes with complex dependencies")
-
-    # Create observers
-    metrics = CustomMetricsObserver()
-    progress = ProgressTracker(total_nodes)
-    error_logger = ErrorLogger()
-    logging_observer = LoggingObserver()
-
-    # Create event manager
-    event_manager = PipelineEventManager()
-    event_manager.subscribe(metrics)
-    event_manager.subscribe(progress)
-    event_manager.subscribe(error_logger)
-    event_manager.subscribe(logging_observer)
-
-    # Create orchestrator
-    orchestrator = Orchestrator()
-
-    print("\n🔍 Observers attached:")
-    print("   • CustomMetricsObserver - Performance tracking")
-    print("   • ProgressTracker - Execution progress")
-    print("   • ErrorLogger - Error and warning capture")
-    print("   • LoggingObserver - Built-in logging")
-    print("   • PipelineEventManager - Event management")
-
-    # Execute pipeline
-    print("\n🚀 Executing pipeline with real-time monitoring...")
-    print("-" * 50)
-
-    start_time = time.time()
-    results = await orchestrator.run(
-        graph, "sample_input_data", additional_ports={"event_manager": event_manager}
-    )
-    end_time = time.time()
-
-    print("-" * 50)
-    print(f"✅ Pipeline completed in {end_time - start_time:.3f} seconds")
-
-    # Display comprehensive metrics
-    print("\n📊 Detailed Metrics Report:")
-    metrics_summary = metrics.get_summary()
-
-    print("\n   Execution Summary:")
-    exec_summary = metrics_summary["execution_summary"]
-    print(f"   • Total nodes: {exec_summary['total_nodes']}")
-    print(f"   • Successful: {exec_summary['successful_nodes']}")
-    print(f"   • Failed: {exec_summary['failed_nodes']}")
-    print(f"   • Success rate: {exec_summary['success_rate']:.2%}")
-
-    print("\n   Performance Analysis:")
-    perf = metrics_summary["performance"]
-    print(f"   • Total execution time: {perf['total_time']}s")
-    print(f"   • Average node time: {perf['average_node_time']}s")
-    if perf["fastest_node"]:
-        print(f"   • Fastest node: {perf['fastest_node'][0]} ({perf['fastest_node'][1]:.3f}s)")
-    if perf["slowest_node"]:
-        print(f"   • Slowest node: {perf['slowest_node'][0]} ({perf['slowest_node'][1]:.3f}s)")
-
-    print("\n   Node Timings:")
-    for node_name, timing in metrics_summary["detailed_timings"].items():
-        print(f"   • {node_name}: {timing:.3f}s")
-
-    # Error summary
-    error_summary = error_logger.get_error_summary()
-    print("\n   Error Summary:")
-    print(f"   • Errors: {error_summary['total_errors']}")
-    print(f"   • Warnings: {error_summary['total_warnings']}")
-
-    # Final results
-    print("\n📋 Final Results:")
-    print(f"   • Aggregated data keys: {list(results['aggregator']['aggregated_data'].keys())}")
-    print(f"   • Pipeline success: {results['aggregator']['aggregation_complete']}")
-
-    return results, metrics_summary
+    async def handle(self, event: Event) -> None:
+        """Handle events for metrics collection."""
+        if isinstance(event, NodeStarted):
+            self.node_count += 1
+        elif isinstance(event, NodeCompleted):
+            self.total_duration += event.duration_ms
 
 
 async def main():
-    """Demonstrate event system capabilities."""
+    """Demonstrate the simplified event system."""
+    print("Simplified Event System Demo\n" + "=" * 50)
 
-    print("📊 Example 05: Event System and Monitoring")
-    print("=" * 50)
+    # Create PolicyManager for execution control and ObserverManager for observability
+    policy_manager = LocalPolicyManager()
+    observer_manager = LocalObserverManager()
 
-    print("\n🎯 This example demonstrates:")
-    print("   • Custom event observers")
-    print("   • Real-time metrics collection")
-    print("   • Progress tracking")
-    print("   • Error logging and monitoring")
-    print("   • Performance analysis")
+    # Register policies
+    # Create simple policy objects
+    from hexai.core.application.policies.models import SubscriberType
 
-    results, metrics = await demonstrate_event_monitoring()
+    class SkipTestPolicy:
+        priority = 0
 
-    print("\n🎯 Key Concepts Learned:")
-    print("   ✅ Event Observers - Monitor pipeline execution")
-    print("   ✅ Metrics Collection - Track performance and timing")
-    print("   ✅ Progress Tracking - Real-time execution progress")
-    print("   ✅ Error Handling - Capture and log failures")
-    print("   ✅ Performance Analysis - Identify bottlenecks")
+        async def evaluate(self, context):
+            return await skip_test_nodes(context)
 
-    print("\n🔗 Next: Run example 06 to learn about ports and adapters!")
+    class FallbackPolicy:
+        priority = 1
+
+        async def evaluate(self, context):
+            return await fallback_on_error(context)
+
+    # Keep strong references to policies
+    skip_policy = SkipTestPolicy()
+    fallback_policy = FallbackPolicy()
+
+    # Subscribe as CORE to ensure they stay in memory
+    policy_manager.subscribe(skip_policy, SubscriberType.CORE)
+    policy_manager.subscribe(fallback_policy, SubscriberType.CORE)
+
+    # Register observers
+    observer_manager.register(log_observer)
+    metrics = MetricsObserver()
+    observer_manager.register(metrics.handle)
+
+    # Create execution context (removed as we create policy context directly now)
+    _ = ExecutionContext(dag_id="demo_pipeline")  # Not used but shown for clarity
+
+    # Simulate normal node execution
+    print("\n1. Normal Node Execution:")
+    event1 = NodeStarted(name="process_data", wave_index=1, dependencies=[])
+    await observer_manager.notify(event1)
+    policy_context1 = PolicyContext(
+        event=event1, dag_id="demo_pipeline", node_id="process_data", wave_index=1, attempt=1
+    )
+    response1 = await policy_manager.evaluate(policy_context1)
+    print(f"   Policy decision: {response1.signal.value}")
+
+    # Simulate node completion
+    event1_complete = NodeCompleted(
+        name="process_data", wave_index=1, result={"data": 123}, duration_ms=150.5
+    )
+    await observer_manager.notify(event1_complete)
+
+    # Simulate test node (will be skipped by control)
+    print("\n2. Test Node (should be skipped):")
+    event2 = NodeStarted(name="test_validation", wave_index=1, dependencies=[])
+    await observer_manager.notify(event2)
+    policy_context2 = PolicyContext(
+        event=event2, dag_id="demo_pipeline", node_id="test_validation", wave_index=1, attempt=1
+    )
+    response2 = await policy_manager.evaluate(policy_context2)
+    print(f"   Policy decision: {response2.signal.value}")
+    if response2.data:
+        print(f"   Control data: {response2.data}")
+
+    # Simulate API failure (will get fallback)
+    print("\n3. API Node Failure (should get fallback):")
+    event3 = NodeFailed(name="api_call", wave_index=1, error=Exception("Connection timeout"))
+    await observer_manager.notify(event3)
+    policy_context3 = PolicyContext(
+        event=event3, dag_id="demo_pipeline", node_id="api_call", wave_index=1, attempt=1
+    )
+    response3 = await policy_manager.evaluate(policy_context3)
+    print(f"   Policy decision: {response3.signal.value}")
+    if response3.data:
+        print(f"   Fallback data: {response3.data}")
+
+    # Simulate regular failure (no special handling)
+    print("\n4. Regular Node Failure:")
+    event4 = NodeFailed(name="compute", wave_index=1, error=Exception("Out of memory"))
+    await observer_manager.notify(event4)
+    policy_context4 = PolicyContext(
+        event=event4, dag_id="demo_pipeline", node_id="compute", wave_index=1, attempt=1
+    )
+    response4 = await policy_manager.evaluate(policy_context4)
+    print(f"   Policy decision: {response4.signal.value}")
+
+    # Show metrics
+    print("\n" + "=" * 50)
+    print(f"Metrics: {metrics.node_count} nodes started, {metrics.total_duration}ms total duration")
+    print("Demo complete!")
 
 
 if __name__ == "__main__":

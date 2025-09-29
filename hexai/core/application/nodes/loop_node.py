@@ -24,10 +24,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ...domain.dag import NodeSpec
-from ...registry import node
-from ...registry.models import NodeSubtype
-from .base_node_factory import BaseNodeFactory
+from hexai.core.application.nodes.base_node_factory import BaseNodeFactory
+from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import node
+from hexai.core.registry.models import NodeSubtype
 
 logger = logging.getLogger("hexai.app.application.nodes")
 

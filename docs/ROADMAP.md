@@ -56,7 +56,7 @@ graph TD
 - [ ] **Fix Agent Built-in Tools Architecture**
   - Move `tool_end` and `change_phase` from adapter layer to core domain
   - Implement CoreAgentTools to maintain hexagonal architecture
-  - Remove direct FunctionBasedToolRouter dependency from agent_node.py
+  - Remove direct UnifiedToolRouter dependency from agent_node.py
 
 - [ ] **Create Event Emission Decorators**
   ```python
