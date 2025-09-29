@@ -179,7 +179,7 @@ def port(
 
 
 def adapter(
-    implements_port: str,
+    implements_port: str | type,
     name: str | None = None,
     *,
     namespace: str = "user",
@@ -189,8 +189,9 @@ def adapter(
 
     Parameters
     ----------
-    implements_port : str
-        The port this adapter implements (required).
+    implements_port : str | type
+        The port this adapter implements (required). Can be a string port name
+        or the Protocol class itself.
     name : str | None
         Adapter name. If None, inferred from class name.
     namespace : str
@@ -215,8 +216,23 @@ def adapter(
             cls
         )
 
-        # Store the implemented port
-        cls._hexdag_implements_port = implements_port  # type: ignore[attr-defined]
+        # Normalize the port reference to a string
+        port_name = implements_port
+        if not isinstance(implements_port, str):
+            # It's a Protocol class - extract its name
+            if hasattr(implements_port, "__name__"):
+                # Convert class name like 'PolicyManagerPort' to 'policy_manager'
+                class_name = implements_port.__name__
+                # Remove 'Port' suffix if present
+                if class_name.endswith("Port"):
+                    class_name = class_name[:-4]
+                # Use existing snake_case function
+                port_name = _snake_case(class_name)
+            else:
+                port_name = str(implements_port)
+
+        # Store the normalized port name
+        cls._hexdag_implements_port = port_name  # type: ignore[attr-defined]
 
         return cls
 

@@ -258,3 +258,93 @@ class ToolCompleted(Event):
         """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Tool '{self.tool_name}' completed in {self.duration_ms / 1000:.2f}s"
+
+
+# Policy-related events for tracking policy evaluations and decisions
+@dataclass
+class PolicyEvaluated(Event):
+    """Event emitted after a policy has been evaluated."""
+
+    policy_name: str
+    signal: str  # The signal returned by the policy
+    duration_ms: float
+    context_node: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy evaluation."""
+        _ = log_level
+        return (
+            f"📋 Policy '{self.policy_name}' evaluated -> {self.signal} ({self.duration_ms:.1f}ms)"
+        )
+
+
+@dataclass
+class PolicyTriggered(Event):
+    """Event emitted when a policy's condition is triggered."""
+
+    policy_name: str
+    trigger_reason: str
+    context_node: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy trigger."""
+        _ = log_level
+        node_info = f" for node '{self.context_node}'" if self.context_node else ""
+        return f"🎯 Policy '{self.policy_name}' triggered{node_info}: {self.trigger_reason}"
+
+
+@dataclass
+class PolicySkipped(Event):
+    """Event emitted when a policy causes a node to be skipped."""
+
+    policy_name: str
+    node_name: str
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy skip."""
+        _ = log_level
+        reason_info = f": {self.reason}" if self.reason else ""
+        return f"⏭️ Policy '{self.policy_name}' skipped node '{self.node_name}'{reason_info}"
+
+
+@dataclass
+class PolicyFallback(Event):
+    """Event emitted when a policy provides a fallback value."""
+
+    policy_name: str
+    node_name: str
+    fallback_value: Any
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy fallback."""
+        _ = log_level
+        reason_info = f": {self.reason}" if self.reason else ""
+        return (
+            f"🔄 Policy '{self.policy_name}' provided fallback for '{self.node_name}'{reason_info}"
+        )
+
+
+@dataclass
+class PolicyRetry(Event):
+    """Event emitted when a policy triggers a retry."""
+
+    policy_name: str
+    node_name: str
+    attempt: int
+    delay_ms: float | None = None
+    max_attempts: int | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy retry."""
+        _ = log_level
+        attempt_info = f" (attempt {self.attempt}"
+        if self.max_attempts:
+            attempt_info += f"/{self.max_attempts}"
+        attempt_info += ")"
+        delay_info = f" with {self.delay_ms:.0f}ms delay" if self.delay_ms else ""
+        return (
+            f"🔁 Policy '{self.policy_name}' retrying node "
+            f"'{self.node_name}'{attempt_info}{delay_info}"
+        )
