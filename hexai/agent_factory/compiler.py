@@ -93,11 +93,27 @@ class PipelineCompiler:
     """
 
     def compile_from_yaml(self, yaml_path: str | Path) -> CompiledPipelineData:
-        """Compile pipeline - PipelineBuilder does uncompiled work, compiler adds optimizations."""
+        """Compile pipeline - PipelineBuilder does uncompiled work, compiler adds optimizations.
+
+        Parameters
+        ----------
+        yaml_path : str | Path
+            Path to the YAML pipeline file to compile
+
+        Returns
+        -------
+        CompiledPipelineData
+            Compiled pipeline data with optimizations
+
+        Raises
+        ------
+        ValueError
+            If the pipeline is not found in the catalog
+        """
         yaml_path = Path(yaml_path)
 
         # Step 1: Load YAML config first
-        with open(yaml_path) as f:
+        with yaml_path.open() as f:
             config = yaml.safe_load(f)
         pipeline_name = config.get("name", yaml_path.stem)
 
@@ -152,7 +168,18 @@ class PipelineCompiler:
         )
 
     def _validate_schema_types(self, schema: dict[str, Any]) -> bool:
-        """Validate that schema contains proper types, not Union, Any, etc."""
+        """Validate that schema contains proper types, not Union, Any, etc.
+
+        Parameters
+        ----------
+        schema : dict[str, Any]
+            Schema dictionary to validate
+
+        Returns
+        -------
+        bool
+            True if schema contains valid types, False otherwise
+        """
         if not schema:
             return False
 
@@ -169,7 +196,22 @@ class PipelineCompiler:
     def _validate_type_safety(
         self, node_configs: list[dict[str, Any]], pipeline_name: str, graph: DirectedGraph
     ) -> tuple[int, int]:
-        """Validate type safety for compilation."""
+        """Validate type safety for compilation.
+
+        Parameters
+        ----------
+        node_configs : list[dict[str, Any]]
+            List of node configurations
+        pipeline_name : str
+            Name of the pipeline
+        graph : DirectedGraph
+            The pipeline graph
+
+        Returns
+        -------
+        tuple[int, int]
+            Tuple of (typed_count, total_count)
+        """
         # Validate using simple type checker - will raise error if not safe
         validate_pipeline_compilation(graph, pipeline_name)
 
@@ -187,7 +229,22 @@ class PipelineCompiler:
     def _extract_from_built_graph(
         self, graph: DirectedGraph, yaml_config: dict[str, Any], builder: Any
     ) -> list[dict[str, Any]]:
-        """Extract node configurations from PipelineBuilder's BUILT graph + registry access."""
+        """Extract node configurations from PipelineBuilder's BUILT graph + registry access.
+
+        Parameters
+        ----------
+        graph : DirectedGraph
+            The built graph from PipelineBuilder
+        yaml_config : dict[str, Any]
+            Original YAML configuration
+        builder : Any
+            The pipeline builder instance
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of extracted node configurations
+        """
         node_configs = []
         yaml_nodes = {n.get("id"): n for n in yaml_config.get("nodes", [])}
 
@@ -206,14 +263,42 @@ class PipelineCompiler:
         return node_configs
 
     def _infer_node_type(self, node_spec: Any, yaml_node: dict[str, Any]) -> str:
-        """Infer node type from YAML (PipelineBuilder should have this info)."""
+        """Infer node type from YAML (PipelineBuilder should have this info).
+
+        Parameters
+        ----------
+        node_spec : Any
+            The node specification
+        yaml_node : dict[str, Any]
+            YAML node configuration
+
+        Returns
+        -------
+        str
+            The inferred node type
+        """
         # Get type from YAML since PipelineBuilder parsed it
         return yaml_node.get("type", "unknown")  # type: ignore[no-any-return]
 
     def _extract_node_params(
         self, node_spec: Any, yaml_node: dict[str, Any], builder: Any
     ) -> dict[str, Any]:
-        """Extract parameters combining built node_spec, YAML config, and function registry."""
+        """Extract parameters combining built node_spec, YAML config, and function registry.
+
+        Parameters
+        ----------
+        node_spec : Any
+            The built node specification
+        yaml_node : dict[str, Any]
+            YAML node configuration
+        builder : Any
+            The pipeline builder instance
+
+        Returns
+        -------
+        dict[str, Any]
+            Extracted node parameters
+        """
         params = yaml_node.get("params", {}).copy()
         node_type = yaml_node.get("type", "unknown")
 
@@ -247,7 +332,18 @@ class PipelineCompiler:
     def _infer_function_schemas(
         self, func: Any
     ) -> tuple[dict[str, str] | None, dict[str, str] | None]:
-        """Compiler optimization: infer function schemas from type hints."""
+        """Compiler optimization: infer function schemas from type hints.
+
+        Parameters
+        ----------
+        func : Any
+            Function to analyze for type hints
+
+        Returns
+        -------
+        tuple[dict[str, str] | None, dict[str, str] | None]
+            Tuple of (input_schema, output_schema) or (None, None) if inference fails
+        """
         try:
             hints = get_type_hints(func)
             sig = inspect.signature(func)
@@ -270,22 +366,44 @@ class PipelineCompiler:
             return None, None
 
     def _type_to_schema_dict(self, type_obj: Any) -> dict[str, str] | None:
-        """Convert type to schema dict - same logic as before."""
+        """Convert type to schema dict - same logic as before.
+
+        Parameters
+        ----------
+        type_obj : Any
+            Type object to convert to schema
+
+        Returns
+        -------
+        dict[str, str] | None
+            Schema dictionary or None if conversion fails
+        """
         if hasattr(type_obj, "__annotations__"):  # TypedDict
             return {k: getattr(v, "__name__", str(v)) for k, v in type_obj.__annotations__.items()}
-        elif hasattr(type_obj, "model_fields"):  # Pydantic
+        if hasattr(type_obj, "model_fields"):  # Pydantic
             return {
                 k: getattr(v.annotation, "__name__", str(v.annotation))
                 for k, v in type_obj.model_fields.items()
             }
-        elif hasattr(type_obj, "__name__"):
+        if hasattr(type_obj, "__name__"):
             return {"result": type_obj.__name__}
         return None
 
     def _extract_output_schemas(
         self, node_configs: list[dict[str, Any]]
     ) -> dict[str, dict[str, str]]:
-        """Extract output schemas for dependency chain inference."""
+        """Extract output schemas for dependency chain inference.
+
+        Parameters
+        ----------
+        node_configs : list[dict[str, Any]]
+            List of node configurations
+
+        Returns
+        -------
+        dict[str, dict[str, str]]
+            Dictionary mapping node IDs to their output schemas
+        """
         output_schemas = {}
         for config in node_configs:
             if "output_schema" in config.get("params", {}):
@@ -319,7 +437,20 @@ class PipelineCompiler:
     def _extract_pipeline_input_schema(
         self, pipeline_instance: Any, node_configs: list[dict[str, Any]]
     ) -> dict[str, str] | None:
-        """Extract pipeline input schema from pipeline instance."""
+        """Extract pipeline input schema from pipeline instance.
+
+        Parameters
+        ----------
+        pipeline_instance : Any
+            The pipeline instance
+        node_configs : list[dict[str, Any]]
+            List of node configurations
+
+        Returns
+        -------
+        dict[str, str] | None
+            Pipeline input schema or None if not found
+        """
         # Try to get from pipeline's input type method
         if hasattr(pipeline_instance, "get_input_type"):
             try:
@@ -341,5 +472,16 @@ _compiler = PipelineCompiler()
 
 
 def compile_pipeline(yaml_path: str | Path) -> CompiledPipelineData:
-    """Compile a pipeline using framework components."""
+    """Compile a pipeline using framework components.
+
+    Parameters
+    ----------
+    yaml_path : str | Path
+        Path to the YAML pipeline file to compile
+
+    Returns
+    -------
+    CompiledPipelineData
+        Compiled pipeline data with optimizations
+    """
     return _compiler.compile_from_yaml(yaml_path)

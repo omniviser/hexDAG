@@ -35,7 +35,7 @@ EXAMPLE_CATEGORIES = {
         "17_performance_optimization.py",
         "18_advanced_patterns.py",
     ],
-    "advanced": ["19_complex_workflow.py", "20_integration_testing.py"],
+    "advanced": ["19_complex_workflow.py", "20_integration_testing.py", "21_toml_configuration.py"],
 }
 
 # All examples in learning order
@@ -60,6 +60,7 @@ ALL_EXAMPLES = [
     "18_advanced_patterns.py",
     "19_complex_workflow.py",
     "20_integration_testing.py",
+    "21_toml_configuration.py",
 ]
 
 
@@ -98,11 +99,10 @@ def run_example(example_path: str, quiet: bool = False) -> bool:
         if result.returncode == 0:
             print(f"✅ {example_path} completed successfully")
             return True
-        else:
-            print(f"❌ {example_path} failed with return code {result.returncode}")
-            if quiet and result.stderr:
-                print(f"Error: {result.stderr}")
-            return False
+        print(f"❌ {example_path} failed with return code {result.returncode}")
+        if quiet and result.stderr:
+            print(f"Error: {result.stderr}")
+        return False
 
     except subprocess.TimeoutExpired:
         print(f"⏰ {example_path} timed out after 60 seconds")

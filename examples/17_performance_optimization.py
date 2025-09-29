@@ -201,9 +201,8 @@ async def demonstrate_resource_management():
 
     execution_time = time.time() - start_time
     print(f"   🔧 Resource execution time: {execution_time:.2f}s")
-    print(
-        f"   📊 Total processing time: {result['resource_aggregator']['total_processing_time']:.2f}s"
-    )
+    total_time = result["resource_aggregator"]["total_processing_time"]
+    print(f"   📊 Total processing time: {total_time:.2f}s")
 
 
 async def demonstrate_performance_monitoring():

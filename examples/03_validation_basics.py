@@ -40,18 +40,20 @@ class ProcessedUser(BaseModel):
 
 
 async def validate_user_input(input_data: Any) -> UserInput:
-    """Validate and convert raw input to UserInput model."""
+    """Validate and convert raw input to UserInput model.
+
+    Raises
+    ------
+    ValueError
+        If input format is invalid
+    """
     if isinstance(input_data, dict):
         return UserInput(**input_data)
-    else:
-        # Handle string input by parsing
-        parts = str(input_data).split(",")
-        if len(parts) >= 3:
-            return UserInput(
-                name=parts[0].strip(), age=int(parts[1].strip()), email=parts[2].strip()
-            )
-        else:
-            raise ValueError(f"Invalid input format: {input_data}")
+    # Handle string input by parsing
+    parts = str(input_data).split(",")
+    if len(parts) >= 3:
+        return UserInput(name=parts[0].strip(), age=int(parts[1].strip()), email=parts[2].strip())
+    raise ValueError(f"Invalid input format: {input_data}")
 
 
 async def process_user_data(user_input: UserInput) -> ProcessedUser:

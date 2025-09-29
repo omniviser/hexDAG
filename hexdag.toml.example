@@ -1,0 +1,115 @@
+# HexDAG Configuration Example
+# This file demonstrates plugin-based configuration
+
+# Core modules to load - these are the essential framework components
+modules = [
+    "hexai.core.ports",               # Core port definitions (must load before adapters)
+    "hexai.core.application.nodes",  # Core node factories
+]
+
+# Plugin modules - each plugin manages its own configuration
+plugins = [
+    "hexai.adapters.llm.openai_adapter",      # OpenAI GPT plugin
+    "hexai.adapters.llm.anthropic_adapter",   # Anthropic Claude plugin
+    "hexai.adapters.database.sqlite",         # SQLite database plugin
+    # "hexai.adapters.mock",                  # Mock implementations (for testing)
+]
+
+# Development mode - allows post-bootstrap registration for testing
+dev_mode = false
+
+# Global settings
+[settings]
+log_level = "INFO"
+enable_metrics = true
+
+# ============================================================================
+# PLUGIN CONFIGURATIONS
+# Each plugin can define its own configuration schema
+# ============================================================================
+
+# OpenAI Plugin Configuration
+[settings.plugin.openai]
+# Default settings for all OpenAI components
+default_model = "gpt-4o-mini"     # Default model for all OpenAI adapters
+api_key_env = "OPENAI_API_KEY"    # Environment variable for API key
+timeout = 60.0                     # Request timeout in seconds
+
+# Component-specific configuration
+[settings.plugin.openai.components.llm]
+# These settings override the plugin defaults for the LLM adapter
+temperature = 0.7                  # 0.0 (deterministic) to 2.0 (creative)
+max_tokens = null                  # null for model default
+response_format = "text"           # "text" or "json_object"
+seed = null                        # For deterministic sampling
+
+# You can have multiple components in a plugin
+# [settings.plugin.openai.components.embeddings]
+# model = "text-embedding-3-small"
+# dimensions = 1536
+
+# ----------------------------------------------------------------------------
+
+# Anthropic Plugin Configuration
+[settings.plugin.anthropic]
+# Default settings for all Anthropic components
+default_model = "claude-3-5-sonnet-20241022"
+api_key_env = "ANTHROPIC_API_KEY"
+timeout = 60.0
+
+[settings.plugin.anthropic.components.llm]
+temperature = 0.7                  # 0.0 to 1.0
+max_tokens = 4096                  # Maximum response length
+# Available models:
+# - claude-3-5-sonnet-20241022 (most capable)
+# - claude-3-opus-20240229 (powerful reasoning)
+# - claude-3-haiku-20240307 (fast and efficient)
+
+# ----------------------------------------------------------------------------
+
+# Database Plugin Configurations
+[settings.plugin.sqlite]
+default_path = "data/hexdag.db"
+enable_wal = true                  # Write-Ahead Logging for better concurrency
+cache_size = 10000                 # Cache size in pages
+
+[settings.plugin.sqlite.components.database]
+# Component-specific overrides
+path = "data/app.db"              # Override default path for this component
+
+# ----------------------------------------------------------------------------
+
+# Mock Plugin Configuration (for testing/development)
+[settings.plugin.mock]
+# Global settings for all mock adapters
+default_delay = 0.1                # Simulate latency
+
+[settings.plugin.mock.components.llm]
+responses = [
+    "I understand your request.",
+    "Let me help you with that.",
+    "Here's what I found.",
+]
+delay_seconds = 0.1
+
+[settings.plugin.mock.components.database]
+enable_sample_data = true
+delay_seconds = 0.05
+
+[settings.plugin.mock.components.memory]
+max_size = 1000
+delay_seconds = 0.0
+
+# ============================================================================
+# APPLICATION-SPECIFIC SETTINGS
+# ============================================================================
+
+[settings.app]
+max_retries = 3
+retry_delay = 1.0
+cache_enabled = true
+cache_ttl = 3600  # 1 hour in seconds
+
+# You can also define custom settings for your own plugins
+# [settings.plugin.my_custom_plugin]
+# custom_setting = "value"
