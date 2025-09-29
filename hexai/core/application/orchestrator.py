@@ -7,25 +7,34 @@ concurrently where possible using asyncio.gather().
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from hexai.core.ports.observer_manager import ObserverManagerPort
+    from hexai.core.ports.policy_manager import PolicyManagerPort
+else:
+    ObserverManagerPort = Any
+    PolicyManagerPort = Any
 
 from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
 
+from .context import ExecutionContext
 from .events import (
-    ControlManager,
-    ControlSignal,
-    ExecutionContext,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
-    ObserverManager,
     PipelineCompleted,
     PipelineStarted,
     WaveCompleted,
     WaveStarted,
 )
+from .policies.models import PolicyContext, PolicyResponse, PolicySignal
+from .ports_builder import PortsBuilder
 
 logger = logging.getLogger(__name__)
+
+# Default configuration constants
+DEFAULT_MAX_CONCURRENT_NODES = 10
 
 
 class OrchestratorError(Exception):
@@ -56,7 +65,7 @@ class Orchestrator:
 
     def __init__(
         self,
-        max_concurrent_nodes: int = 10,
+        max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
         ports: dict[str, Any] | None = None,
         strict_validation: bool = False,
     ) -> None:
@@ -73,15 +82,102 @@ class Orchestrator:
         self.ports = ports or {}
         self.strict_validation = strict_validation
 
+    async def _notify_observer(
+        self, observer_manager: ObserverManagerPort | None, event: Any
+    ) -> None:
+        """Notify observer if it exists."""
+        if observer_manager:
+            await observer_manager.notify(event)
+
+    async def _evaluate_policy(
+        self,
+        policy_manager: PolicyManagerPort | None,
+        event: Any,
+        context: ExecutionContext,
+        node_id: str | None = None,
+        wave_index: int | None = None,
+        attempt: int = 1,
+    ) -> PolicyResponse:
+        """Evaluate policy and create context."""
+        policy_context = PolicyContext(
+            event=event,
+            dag_id=context.dag_id,
+            node_id=node_id or context.node_id,
+            wave_index=wave_index or context.wave_index,
+            attempt=attempt or context.attempt,
+        )
+
+        if policy_manager:
+            return await policy_manager.evaluate(policy_context)
+        return PolicyResponse()  # Default: proceed
+
+    def _check_policy_signal(self, response: PolicyResponse, context: str) -> None:
+        """Check policy signal and raise error if not PROCEED."""
+        if response.signal != PolicySignal.PROCEED:
+            raise OrchestratorError(f"{context} blocked: {response.signal.value}")
+
+    @classmethod
+    def from_builder(
+        cls,
+        builder: PortsBuilder,
+        max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
+        strict_validation: bool = False,
+    ) -> "Orchestrator":
+        """Create an Orchestrator using a PortsBuilder.
+
+        This provides a more intuitive way to configure the orchestrator
+        with type-safe port configuration.
+
+        Args
+        ----
+            builder: Configured PortsBuilder instance
+            max_concurrent_nodes: Maximum number of nodes to execute concurrently
+            strict_validation: If True, raise errors on validation failure
+
+        Returns
+        -------
+            Orchestrator
+                New orchestrator instance with configured ports
+
+        Example
+        -------
+            ```python
+            orchestrator = Orchestrator.from_builder(
+                PortsBuilder()
+                .with_llm(OpenAIAdapter())
+                .with_database(PostgresAdapter())
+                .with_observer_manager(LocalObserverManager())
+                .with_policy_manager(LocalPolicyManager())
+            )
+            ```
+        """
+        return cls(
+            max_concurrent_nodes=max_concurrent_nodes,
+            ports=builder.build(),
+            strict_validation=strict_validation,
+        )
+
     async def run(
         self,
         graph: DirectedGraph,
         initial_input: Any,
-        additional_ports: dict[str, Any] | None = None,
+        additional_ports: dict[str, Any] | PortsBuilder | None = None,
         validate: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute a DAG with concurrent processing and resource limits.
+
+        Supports both traditional dictionary-based ports and the new PortsBuilder
+        for additional_ports parameter. When using PortsBuilder, it will be
+        automatically converted to a dictionary before merging with base ports.
+
+        Args
+        ----
+            graph: The DirectedGraph to execute
+            initial_input: Initial input data for the graph
+            additional_ports: Either a dictionary of ports or a PortsBuilder instance
+            validate: Whether to validate the graph before execution
+            **kwargs: Additional keyword arguments
 
         Returns
         -------
@@ -92,11 +188,33 @@ class Orchestrator:
         ------
         OrchestratorError
             If DAG validation fails or pipeline/wave execution is blocked
+
+        Examples
+        --------
+        Using dictionary for additional ports (traditional approach):
+
+        >>> results = await orchestrator.run(
+        ...     graph,
+        ...     input_data,
+        ...     additional_ports={"llm": MockLLM()}
+        ... )
+
+        Using PortsBuilder for additional ports (new approach):
+
+        >>> results = await orchestrator.run(
+        ...     graph,
+        ...     input_data,
+        ...     additional_ports=PortsBuilder().with_llm(MockLLM())
+        ... )
         """
         # Merge orchestrator ports with additional execution-specific ports
         all_ports = {**self.ports}
         if additional_ports:
-            all_ports.update(additional_ports)
+            # Handle both dictionary and PortsBuilder
+            if isinstance(additional_ports, PortsBuilder):
+                all_ports.update(additional_ports.build())
+            else:
+                all_ports.update(additional_ports)
         if validate:
             try:
                 # By default, skip type checking for backward compatibility
@@ -110,8 +228,9 @@ class Orchestrator:
         pipeline_start_time = time.time()
 
         # Get observer manager and control manager from ports
-        observer_manager: ObserverManager = all_ports.get("observer_manager", ObserverManager())
-        control_manager: ControlManager = all_ports.get("control_manager", ControlManager())
+        # Get policy and observer managers from ports - expecting port interfaces
+        observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
+        policy_manager: PolicyManagerPort | None = all_ports.get("policy_manager")
 
         # Create execution context for this DAG run
         pipeline_name = getattr(graph, "name", "unnamed")
@@ -123,10 +242,11 @@ class Orchestrator:
             total_waves=len(waves),
             total_nodes=len(graph.nodes),
         )
-        await observer_manager.notify(event)
-        control_response = await control_manager.check(event, context)
-        if control_response.signal != ControlSignal.PROCEED:
-            raise OrchestratorError(f"Pipeline start blocked: {control_response.signal.value}")
+        await self._notify_observer(observer_manager, event)
+
+        # Evaluate policy for pipeline start
+        policy_response = await self._evaluate_policy(policy_manager, event, context)
+        self._check_policy_signal(policy_response, "Pipeline start")
 
         for wave_idx, wave in enumerate(waves, 1):
             wave_start_time = time.time()
@@ -136,10 +256,13 @@ class Orchestrator:
                 wave_index=wave_idx,
                 nodes=wave,
             )
-            await observer_manager.notify(wave_event)
-            wave_response = await control_manager.check(wave_event, context)
-            if wave_response.signal != ControlSignal.PROCEED:
-                raise OrchestratorError(f"Wave {wave_idx} blocked: {wave_response.signal.value}")
+            await self._notify_observer(observer_manager, wave_event)
+
+            # Evaluate policy for wave
+            wave_response = await self._evaluate_policy(
+                policy_manager, wave_event, context, wave_index=wave_idx
+            )
+            self._check_policy_signal(wave_response, f"Wave {wave_idx}")
 
             wave_results = await self._execute_wave(
                 wave,
@@ -149,7 +272,7 @@ class Orchestrator:
                 all_ports,
                 context=context,
                 observer_manager=observer_manager,
-                control_manager=control_manager,
+                policy_manager=policy_manager,
                 wave_index=wave_idx,
                 validate=validate,
                 **kwargs,
@@ -161,7 +284,7 @@ class Orchestrator:
                 wave_index=wave_idx,
                 duration_ms=(time.time() - wave_start_time) * 1000,
             )
-            await observer_manager.notify(wave_completed)
+            await self._notify_observer(observer_manager, wave_completed)
 
         # Fire pipeline completed event (observation only)
         pipeline_completed = PipelineCompleted(
@@ -169,7 +292,7 @@ class Orchestrator:
             duration_ms=(time.time() - pipeline_start_time) * 1000,
             node_results=node_results,
         )
-        await observer_manager.notify(pipeline_completed)
+        await self._notify_observer(observer_manager, pipeline_completed)
 
         return node_results
 
@@ -181,8 +304,8 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observer_manager: ObserverManager,
-        control_manager: ControlManager,
+        observer_manager: ObserverManagerPort | None,
+        policy_manager: PolicyManagerPort | None,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -210,7 +333,7 @@ class Orchestrator:
                     ports,
                     context=context,
                     observer_manager=observer_manager,
-                    control_manager=control_manager,
+                    policy_manager=policy_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,
@@ -240,8 +363,8 @@ class Orchestrator:
         initial_input: Any,
         ports: dict[str, Any],
         context: ExecutionContext,
-        observer_manager: ObserverManager,
-        control_manager: ControlManager,
+        observer_manager: ObserverManagerPort | None,
+        policy_manager: PolicyManagerPort | None,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
@@ -267,7 +390,7 @@ class Orchestrator:
         """
         node_start_time = time.time()
         # Create node context early so it's available in exception handler
-        node_context = context.with_node(node_name, wave_index)
+        _ = context.with_node(node_name, wave_index)  # For future use
 
         try:
             node_spec = graph.nodes[node_name]
@@ -291,16 +414,20 @@ class Orchestrator:
                 wave_index=wave_index,
                 dependencies=list(node_spec.deps),
             )
-            await observer_manager.notify(start_event)
-            start_response = await control_manager.check(start_event, node_context)
+            await self._notify_observer(observer_manager, start_event)
+
+            # Evaluate policy for node start
+            start_response = await self._evaluate_policy(
+                policy_manager, start_event, context, node_id=node_name, wave_index=wave_index
+            )
 
             # Handle control signals
-            if start_response.signal == ControlSignal.SKIP:
+            if start_response.signal == PolicySignal.SKIP:
                 # Skip this node and return fallback value if provided
                 return start_response.data
-            if start_response.signal == ControlSignal.FAIL:
+            if start_response.signal == PolicySignal.FAIL:
                 raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
-            if start_response.signal != ControlSignal.PROCEED:
+            if start_response.signal != PolicySignal.PROCEED:
                 # For now, treat other signals as errors
                 raise OrchestratorError(
                     f"Node '{node_name}' blocked: {start_response.signal.value}"
@@ -334,7 +461,7 @@ class Orchestrator:
                 result=validated_output,
                 duration_ms=(time.time() - node_start_time) * 1000,
             )
-            await observer_manager.notify(complete_event)
+            await self._notify_observer(observer_manager, complete_event)
 
             return validated_output
 
@@ -345,14 +472,18 @@ class Orchestrator:
                 wave_index=wave_index,
                 error=e,
             )
-            await observer_manager.notify(fail_event)
-            fail_response = await control_manager.check(fail_event, node_context)
+            await self._notify_observer(observer_manager, fail_event)
+
+            # Evaluate policy for node failure
+            fail_response = await self._evaluate_policy(
+                policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
+            )
 
             # Handle control signals
-            if fail_response.signal == ControlSignal.FALLBACK:
+            if fail_response.signal == PolicySignal.FALLBACK:
                 # Return fallback value instead of failing
                 return fail_response.data
-            if fail_response.signal == ControlSignal.RETRY:
+            if fail_response.signal == PolicySignal.RETRY:
                 # RETRY signal indicates the policy wants to retry
                 # The orchestrator enables this by re-executing the node
                 # The retry policy (attempts, delays) is managed by the handler
@@ -372,7 +503,7 @@ class Orchestrator:
                     ports=ports,
                     context=context.with_attempt(context.attempt + 1),
                     observer_manager=observer_manager,
-                    control_manager=control_manager,
+                    policy_manager=policy_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,

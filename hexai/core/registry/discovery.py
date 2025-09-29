@@ -51,7 +51,7 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
         If ``module`` is not a :class:`types.ModuleType` instance.
     """
 
-    if not isinstance(module, ModuleType):
+    if not isinstance(module, ModuleType):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(
             f"Expected ModuleType, got {type(module).__name__}. "
             "Pass a module object, not a string or path."

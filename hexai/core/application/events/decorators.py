@@ -44,14 +44,14 @@ def normalize_event_types(event_types: EventTypesInput) -> set[EventType] | None
     if event_types is None:
         return None
 
-    if isinstance(event_types, type):
+    if isinstance(event_types, type):  # pyright: ignore[reportUnnecessaryIsInstance]
         _ensure_event_subclass(event_types)
         return {event_types}
 
-    if isinstance(event_types, Iterable):
+    if isinstance(event_types, Iterable):  # pyright: ignore[reportUnnecessaryIsInstance]
         normalized: set[EventType] = set()
         for item in event_types:
-            if not isinstance(item, type):
+            if not isinstance(item, type):  # pyright: ignore[reportUnnecessaryIsInstance]
                 raise TypeError(
                     "event_types must contain Event subclasses; "
                     f"got instance of {type(item).__name__}"
@@ -67,7 +67,7 @@ def normalize_event_types(event_types: EventTypesInput) -> set[EventType] | None
 
 def _ensure_event_subclass(event_type: EventType) -> None:
     """Ensure ``event_type`` is a subclass of :class:`Event`."""
-    if not issubclass(event_type, Event):
+    if not issubclass(event_type, Event):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(f"event_types must contain Event subclasses; got {event_type!r}")
 
 

@@ -808,6 +808,9 @@ class ComponentRegistry:
             # No port declared, skip validation
             return
 
+        # The decorator should have normalized this to a string already
+        port_name = implements_port
+
         # Try to find the port in registry - ports should be registered by now (Phase A)
         try:
             # Look for port with various namespace combinations
@@ -815,7 +818,7 @@ class ComponentRegistry:
             search_attempts = []
 
             # Handle both qualified and unqualified port names
-            if ":" in implements_port:
+            if ":" in port_name:
                 # Qualified name provided
                 search_attempts.append(implements_port)
             else:
