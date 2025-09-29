@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
+
+
+class ColumnType(Enum):
+    TEXT = "text"
+    INT = "int"
+    FLOAT = "float"
 
 
 @dataclass
@@ -14,7 +21,7 @@ class ColumnSchema:
     """Schema information for a database column."""
 
     name: str
-    type: str
+    type: ColumnType
     nullable: bool = True
     primary_key: bool = False
     foreign_key: str | None = None  # Format: "table.column"

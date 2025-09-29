@@ -1,59 +1,139 @@
-"""CSV file adapter implementation for hexDAG."""
-
 import csv
-from collections.abc import AsyncIterator, Sequence
+import logging
+import re
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from hexai.ports.database import ColumnSchema, DatabasePort, TableSchema
+from hexai.ports.database import ColumnSchema, ColumnType, DatabasePort, TableSchema
+
+logging.basicConfig(level=logging.INFO)
 
 
 class CsvAdapter(DatabasePort):
-    """Adapter for reading CSV files from a directory as database tables."""
+    """
+    Adapter class for reading CSV files from a specified directory as database tables.
+
+    Provides schema inference for CSV files and querying capabilities, supporting
+    filters, column selection, and row limits.
+    """
 
     def __init__(self, directory: str | Path) -> None:
         """
-        Initialize CSV adapter with directory path.
+        Initialize the CSV adapter with a directory containing CSV files.
 
         Args:
-            directory: Path to directory containing CSV files
+            directory (str | Path): Path to the directory holding CSV files.
+
+        Raises:
+            ValueError: If the directory does not exist.
         """
-        self.directory = Path(directory)
-        if not self.directory.exists():
+        self.__directory = Path(directory)
+        if not self.__directory.exists():
             raise ValueError(f"Directory not found: {directory}")
 
-    async def get_table_schemas(self) -> Sequence[TableSchema]:
+    @property
+    def directory(self) -> Path:
+        """Return the base directory as a pathlib.Path object."""
+        return self.__directory
+
+    def _infer_type(self, values: list[str]) -> str:
         """
-        Get schema information for all CSV files in directory.
+        Infer column data type from a sample list of string values.
+
+        Checks for integers, floats, booleans ('true'/'false'), else defaults to 'text'.
+
+        Args:
+            values (list[str]): List of sample values from a CSV column.
 
         Returns:
-            Sequence[TableSchema]: List of table schemas
+            str: Inferred data type ('int', 'float', 'text').
+        """
+        for v in values:
+            if v == "":
+                continue
+            try:
+                int(v)
+                continue
+            except ValueError:
+                pass
+            try:
+                float(v)
+                continue
+            except ValueError:
+                pass
+            if v.lower() in ("true", "false"):
+                continue
+            return "text"
+        if all(v.isdigit() or v == "" for v in values):
+            return "int"
+        return "float"
+
+    async def get_table_schemas(self) -> list[TableSchema]:
+        """
+        Generate table schemas for all CSV files in the adapter's directory.
+
+        Reads each CSV file to infer column types and builds corresponding
+        TableSchema and ColumnSchema objects.
+
+        Returns:
+            Sequence[TableSchema]: List of inferred table schemas, one per CSV file.
         """
         schemas = []
         for file_path in self.directory.glob("*.csv"):
             with open(file_path, newline="") as f:
                 reader = csv.DictReader(f)
                 if not reader.fieldnames:
+                    logging.warning(f"No headers found in CSV file {file_path}, skipping.")
                     continue
-
-                columns = [
-                    ColumnSchema(
-                        name=name,
-                        type="text",  # Simple type inference
-                        nullable=True,
-                        primary_key=False,
+                data = list(reader)
+                columns = []
+                for name in reader.fieldnames:
+                    col_values = [row.get(name, "") for row in data]
+                    col_type = self._infer_type(col_values)
+                    columns.append(
+                        ColumnSchema(
+                            name=name,
+                            type=ColumnType[col_type.upper()],
+                            nullable=True,
+                            primary_key=False,
+                        )
                     )
-                    for name in reader.fieldnames
-                ]
-
                 schemas.append(
                     TableSchema(
-                        name=file_path.stem,  # Use filename without extension
+                        name=file_path.stem,
                         columns=columns,
                     )
                 )
-
         return schemas
+
+    def _get_safe_file_path(self, table: str) -> Path:
+        """
+        Safely resolve the file path for a given table name within the base directory.
+
+        Ensures the resolved path does not escape the base directory to prevent
+        path traversal attacks.
+
+        Args:
+            table (str): Table name (CSV file name without extension).
+
+        Raises:
+            ValueError: If the resolved path is outside the base directory or file doesn't exist.
+
+        Returns:
+            Path: Resolved safe file path for the CSV.
+        """
+        file_path = self.directory / f"{table}.csv"
+        resolved_path = file_path.resolve()
+        base_dir_resolved = self.directory.resolve()
+
+        if not str(resolved_path).startswith(str(base_dir_resolved)):
+            raise ValueError(f"Attempted access outside base directory: {table}")
+
+        if not resolved_path.exists():
+            raise ValueError(f"Table (CSV file) not found: {table}")
+
+        return resolved_path
 
     async def query(
         self,
@@ -63,23 +143,21 @@ class CsvAdapter(DatabasePort):
         limit: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
-        Query rows from a CSV file with optional filtering and column selection.
+        Query rows from a CSV file with optional filtering, column selection, and row limit.
 
         Args:
-            table: Name of the CSV file (without .csv extension)
-            filters: Optional column-value pairs to filter by
-            columns: Optional list of columns to return (None = all)
-            limit: Optional maximum number of rows to return
+            table (str): Name of the table (CSV file without '.csv').
+            filters (dict[str, Any] | None): Optional column-value filters to apply.
+            columns (list[str] | None): Optional list of columns to include in results.
+            limit (int | None): Optional maximum number of rows to yield.
 
         Yields:
-            dict[str, Any]: Each row as a dictionary
+            dict[str, Any]: Rows matching filters with requested columns.
 
         Raises:
-            ValueError: If table (CSV file) doesn't exist
+            ValueError: If the table file does not exist or path is unsafe.
         """
-        file_path = self.directory / f"{table}.csv"
-        if not file_path.exists():
-            raise ValueError(f"Table (CSV file) not found: {table}")
+        file_path = self._get_safe_file_path(table)
 
         count = 0
         with open(file_path, newline="") as f:
@@ -87,19 +165,17 @@ class CsvAdapter(DatabasePort):
             if not reader.fieldnames:
                 return
 
-            # Filter columns if specified
-            field_names = columns if columns else reader.fieldnames
+            field_names = columns or reader.fieldnames
 
             for row in reader:
-                # Apply filters
-                if filters and not all(str(row.get(k)) == str(v) for k, v in filters.items()):
+                if filters and any(
+                    (isinstance(v, re.Pattern) and not v.search(str(row.get(k, ""))))
+                    or (not isinstance(v, re.Pattern) and str(row.get(k, "")) != str(v))
+                    for k, v in filters.items()
+                ):
                     continue
 
-                # Return only requested columns
-                filtered_row = {k: row[k] for k in field_names if k in row}
-
-                yield filtered_row
-
+                yield {k: row[k] for k in field_names if k in row}
                 count += 1
                 if limit and count >= limit:
                     break

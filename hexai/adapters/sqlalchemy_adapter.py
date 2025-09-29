@@ -1,3 +1,4 @@
+# type: ignore
 """SQLAlchemy adapter implementation for hexDAG."""
 
 from collections.abc import AsyncIterator, Sequence
@@ -62,14 +63,13 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
                     fk = next(iter(col.foreign_keys))
                     foreign_key = f"{fk.column.table.name}.{fk.column.name}"
 
-                # Fix nullable type by ensuring it's always bool
                 nullable = bool(col.nullable) if col.nullable is not None else False
 
                 columns.append(
                     ColumnSchema(
                         name=col.name,
-                        type=str(col.type),
-                        nullable=nullable,  # Now always bool
+                        type=col.type.value,
+                        nullable=nullable,
                         primary_key=col.primary_key,
                         foreign_key=foreign_key,
                     )
@@ -191,5 +191,5 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
 
         async with self.engine.connect() as conn:
             result = await conn.execute(text(f"SELECT COUNT(*) as count FROM {table}"))  # nosec
-            row = result.fetchone()  # Remove await as fetchone is not async
+            row = await result.fetchone()  # type: ignore # type: ignore
             return {"row_count": int(row[0]) if row else 0}

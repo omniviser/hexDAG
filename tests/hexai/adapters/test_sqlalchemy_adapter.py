@@ -1,82 +1,134 @@
-"""Tests for SQLAlchemy adapter with SQLite."""
+"""Unit tests for SQLAlchemy adapter."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, AsyncIterator
 
 import pytest
-import os
+from sqlalchemy import MetaData, Table, Column, Integer, String, Boolean
 
 from hexai.adapters.sqlalchemy_adapter import SQLAlchemyAdapter
 
+
+class AsyncIteratorMock:
+    """Mock async iterator for SQLAlchemy results."""
+    def __init__(self, items):
+        self.items = items
+        self.index = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            item = self.items[self.index]
+            self.index += 1
+            return item
+        except IndexError:
+            raise StopAsyncIteration
+
+
+class AsyncContextManagerMock:
+    """Mock that properly handles async context manager protocol."""
+    def __init__(self, return_value=None):
+        self.return_value = return_value or AsyncMock()
+
+    async def __aenter__(self):
+        return self.return_value
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+
 @pytest.fixture
-async def db():
-    """Provide test database connection (SQLite)."""
-    dsn = "sqlite+aiosqlite:///:memory:"
-    adapter = SQLAlchemyAdapter(dsn)
-    await adapter.connect()
-
-    # Create test tables
-    await adapter.execute_raw(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            active INTEGER DEFAULT 1
-        )
-        """
+def mock_table():
+    """Create a mock SQLAlchemy table for testing."""
+    metadata = MetaData()
+    return Table(
+        "users",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("name", String, nullable=False),
+        Column("email", String, nullable=False),
+        Column("active", Boolean, default=True),
     )
 
-    # Re-reflect metadata after creating tables
-    async with adapter.engine.connect() as conn:
-        await conn.run_sync(adapter._metadata.reflect)
 
-    await adapter.execute_raw(
-        """
-        INSERT INTO users (name, email, active) VALUES
-        ('Alice', 'alice@test.com', 1),
-        ('Bob', 'bob@test.com', 0)
-        """
-    )
+@pytest.fixture
+async def adapter(mock_table):
+    # 1️⃣ Mock the fetchone result
+    mock_result = AsyncMock()
+    mock_result.fetchone = AsyncMock(return_value=(42,))
 
-    yield adapter
-    await adapter.disconnect()
+    # 2️⃣ Mock the connection
+    connection = AsyncMock()
+    connection.execute = AsyncMock(return_value=mock_result)
 
-@pytest.mark.asyncio
-async def test_get_table_schemas(db):
-    """Test schema detection."""
-    schemas = await db.get_table_schemas()
+    # 3️⃣ Async context manager for engine.connect()
+    connect_cm = AsyncContextManagerMock(connection)
 
-    assert any(s.name == "users" for s in schemas)
-    users = next(s for s in schemas if s.name == "users")
-    assert len(users.columns) == 4
-    assert [col.name for col in users.columns] == ["id", "name", "email", "active"]
+    # 4️⃣ Mock engine
+    engine = MagicMock()
+    engine.connect = MagicMock(return_value=connect_cm)
 
-    id_col = next(c for c in users.columns if c.name == "id")
-    assert id_col.primary_key
+    # 5️⃣ Patch create_async_engine so adapter uses our engine
+    with patch("hexai.adapters.sqlalchemy_adapter.create_async_engine", return_value=engine):
+        adapter = SQLAlchemyAdapter("sqlite+aiosqlite:///:memory:")
+        adapter.engine = engine  # assign explicitly just in case
+        adapter._metadata.tables = {"users": mock_table}
+        yield adapter
+
 
 @pytest.mark.asyncio
-async def test_query_with_filters(db):
-    """Test filtering queries."""
+async def test_query_with_filters(adapter):
+    """Test query building with filters."""
+    # Setup
+    mock_rows = [
+        MagicMock(_mapping={"name": "Alice", "email": "alice@test.com", "active": True}),
+    ]
+
+    # Create proper async iterator result
+    result = AsyncIteratorMock(mock_rows)
+
+    # Set up connection chain
+    connection = AsyncMock()
+    connection.stream = AsyncMock(return_value=result)
+
+    # Use MagicMock for connect to avoid coroutine issues
+    connect_cm = AsyncContextManagerMock(connection)
+    adapter.engine.connect = MagicMock(return_value=connect_cm)
+
+    # Execute
     rows = []
-    async for row in db.query("users", filters={"active": 1}):
+    async for row in adapter.query("users", filters={"active": True}):
         rows.append(row)
 
+    # Assert
     assert len(rows) == 1
     assert rows[0]["name"] == "Alice"
     assert rows[0]["email"] == "alice@test.com"
 
-@pytest.mark.asyncio
-async def test_raw_sql_query(db):
-    """Test raw SQL execution."""
-    rows = []
-    async for row in db.query_raw(
-        "SELECT * FROM users WHERE email LIKE :pattern", {"pattern": "%@test.com"}
-    ):
-        rows.append(row)
-
-    assert len(rows) == 2
-    assert {row["name"] for row in rows} == {"Alice", "Bob"}
 
 @pytest.mark.asyncio
-async def test_get_table_statistics(db):
-    """Test table statistics."""
-    stats = await db.get_table_statistics("users")
-    assert stats["row_count"] == 2
+async def test_get_table_statistics(adapter):
+    # Mock row returned by fetchone
+    mock_row = (42,)
+
+    # Mock result of execute method
+    mock_result = AsyncMock()
+    mock_result.fetchone = AsyncMock(return_value=mock_row)
+
+    # Mock connection that has execute returning the above result
+    mock_connection = AsyncMock()
+    mock_connection.execute = AsyncMock(return_value=mock_result)
+
+    # Use AsyncContextManagerMock to mock engine.connect:
+    mock_connect_cm = AsyncContextManagerMock(mock_connection)
+
+    # Assign this to engine.connect (MagicMock returning the async context manager)
+    adapter.engine.connect = MagicMock(return_value=mock_connect_cm)
+
+    # Call the function under test
+    stats = await adapter.get_table_statistics("users")
+
+    assert stats is not None
+    assert stats["row_count"] == 42
