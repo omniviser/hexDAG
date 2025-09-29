@@ -8,7 +8,6 @@ import shutil
 import subprocess  # nosec B404
 import tempfile
 import threading
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -287,18 +286,23 @@ class FileExporter:
             )
             logger.error(help_msg)
 
-    def _schedule_cleanup(self, files: list[str], delay: int = 2) -> None:
+    def _schedule_cleanup(self, files: list[str], delay: float = 2.0) -> None:
         """Schedule cleanup of temporary files after a delay.
+
+        Uses threading.Timer for non-blocking delayed execution.
 
         Args:
             files: List of file paths to clean up
-            delay: Delay in seconds before cleanup
+            delay: Delay in seconds before cleanup (default: 2.0)
         """
 
         def cleanup_files() -> None:
-            time.sleep(delay)
+            """Remove temporary files, suppressing any OS errors."""
             for file_path in files:
                 with contextlib.suppress(OSError):
                     pathlib.Path(file_path).unlink()
 
-        threading.Thread(target=cleanup_files, daemon=True).start()
+        # Use Timer for non-blocking delayed execution
+        timer = threading.Timer(delay, cleanup_files)
+        timer.daemon = True
+        timer.start()

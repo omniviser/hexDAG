@@ -251,7 +251,7 @@ class TestDAGVisualizer:
 
         # This should not raise
         with patch("subprocess.run"):
-            with patch("threading.Thread"):
+            with patch("threading.Timer"):
                 visualizer.show(title="Test Display")
 
     def test_export_dag_to_dot(self):
@@ -384,6 +384,7 @@ class TestDAGVisualizer:
 
         def complex_func(x, context, **kwargs):
             return {"result": str(kwargs)}
+
         node = NodeSpec("complex", complex_func, params={"option1": "value1", "option2": 42})
         graph.add(node)
 
@@ -508,9 +509,9 @@ class TestDAGVisualizer:
         # The mock data should be loaded and used
         assert "processor" in dot_string
 
-    @patch("threading.Thread")
+    @patch("threading.Timer")
     @patch("subprocess.run")
-    def test_show_with_refactored_exporter(self, mock_run, mock_thread):
+    def test_show_with_refactored_exporter(self, mock_run, mock_timer):
         """Test show method using the refactored FileExporter."""
         graph = DirectedGraph()
         node = NodeSpec("test", create_test_function())
@@ -527,5 +528,7 @@ class TestDAGVisualizer:
         # Verify subprocess was called (dot command)
         assert mock_run.called
 
-        # Verify cleanup thread was started
-        assert mock_thread.called
+        # Verify cleanup timer was started
+        assert mock_timer.called
+        # Verify that Timer.start() was called
+        mock_timer.return_value.start.assert_called_once()

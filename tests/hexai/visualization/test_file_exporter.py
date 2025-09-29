@@ -87,9 +87,9 @@ class TestFileExporter:
                     args = mock_run.call_args[0][0]
                     assert f"-T{fmt}" in args
 
-    @patch("hexai.visualization.file_exporter.threading.Thread")
+    @patch("hexai.visualization.file_exporter.threading.Timer")
     @patch("subprocess.run")
-    def test_show_success(self, mock_run, mock_thread, exporter, dot_content):
+    def test_show_success(self, mock_run, mock_timer, exporter, dot_content):
         """Test successful show operation."""
         mock_run.return_value = Mock(returncode=0)
 
@@ -102,9 +102,9 @@ class TestFileExporter:
                 # Check dot was called to create PNG
                 assert mock_run.call_count == 2  # Once for PNG, once for open
 
-                # Check cleanup thread was started
-                mock_thread.assert_called_once()
-                assert mock_thread.call_args[1]["daemon"] is True
+                # Check cleanup timer was started
+                mock_timer.assert_called_once()
+                mock_timer.return_value.start.assert_called_once()
 
     @patch("subprocess.run")
     def test_show_no_viewer(self, mock_run, exporter, dot_content):
@@ -230,17 +230,18 @@ class TestFileExporter:
         mock_logger.error.assert_called_once()
         assert "No default image viewer found" in mock_logger.error.call_args[0][0]
 
-    @patch("hexai.visualization.file_exporter.time.sleep")
-    @patch("hexai.visualization.file_exporter.threading.Thread")
-    def test_schedule_cleanup(self, mock_thread, mock_sleep, exporter):
+    @patch("hexai.visualization.file_exporter.threading.Timer")
+    def test_schedule_cleanup(self, mock_timer, exporter):
         """Test scheduling cleanup of temporary files."""
         files = ["/tmp/test1.txt", "/tmp/test2.txt"]
 
         exporter._schedule_cleanup(files, delay=5)
 
-        mock_thread.assert_called_once()
-        thread_kwargs = mock_thread.call_args[1]
-        assert thread_kwargs["daemon"] is True
+        # Check Timer was created with correct delay
+        mock_timer.assert_called_once()
+        assert mock_timer.call_args[0][0] == 5  # delay argument
+        # Check timer was started
+        mock_timer.return_value.start.assert_called_once()
 
     def test_render_to_file_cleanup(self, exporter, dot_content):
         """Test that temporary DOT file is cleaned up after rendering."""
