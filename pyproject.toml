@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "pydantic~=2.0",
+    "orjson>=3.10.0",
 ]
 
 [project.optional-dependencies]
@@ -182,7 +183,7 @@ module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["openai", "anthropic", "graphviz"]
+module = ["openai", "anthropic", "graphviz", "orjson"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
