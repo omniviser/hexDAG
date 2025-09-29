@@ -53,6 +53,21 @@ class PortsBuilder:
         """Initialize an empty ports builder."""
         self._ports: dict[str, Any] = {}
 
+    def _add_port(self, key: str, port: Any) -> Self:
+        """Add a port to the internal registry.
+
+        Args
+        ----
+            key: Port identifier
+            port: Port implementation
+
+        Returns
+        -------
+            Self for method chaining
+        """
+        self._ports[key] = port
+        return self
+
     # Core AI Capabilities
     # --------------------
 
@@ -67,8 +82,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["llm"] = llm
-        return self
+        return self._add_port("llm", llm)
 
     def with_tool_router(self, router: "ToolRouter") -> Self:
         """Add a tool router for function calling.
@@ -81,8 +95,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["tool_router"] = router
-        return self
+        return self._add_port("tool_router", router)
 
     # Storage & Persistence
     # ---------------------
@@ -98,8 +111,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["database"] = database
-        return self
+        return self._add_port("database", database)
 
     def with_memory(self, memory: "Memory") -> Self:
         """Add a memory system for agents.
@@ -112,8 +124,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["memory"] = memory
-        return self
+        return self._add_port("memory", memory)
 
     # Event & Control Systems
     # -----------------------
@@ -129,8 +140,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["observer_manager"] = manager
-        return self
+        return self._add_port("observer_manager", manager)
 
     def with_policy_manager(self, manager: "PolicyManagerPort") -> Self:
         """Add a policy manager for execution control.
@@ -143,8 +153,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["policy_manager"] = manager
-        return self
+        return self._add_port("policy_manager", manager)
 
     # External Integrations
     # ---------------------
@@ -160,8 +169,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports["api_call"] = api_call
-        return self
+        return self._add_port("api_call", api_call)
 
     # Convenience Methods
     # ------------------
@@ -220,8 +228,7 @@ class PortsBuilder:
         -------
             Self for method chaining
         """
-        self._ports[key] = port
-        return self
+        return self._add_port(key, port)
 
     def update(self, ports: dict[str, Any]) -> Self:
         """Update multiple ports at once from a dictionary.

@@ -70,6 +70,13 @@ class FunctionObserver:
             await loop.run_in_executor(self._executor, self._func, event)
 
 
+# Default configuration constants
+DEFAULT_MAX_CONCURRENT_OBSERVERS = 10
+DEFAULT_OBSERVER_TIMEOUT = 5.0
+DEFAULT_MAX_SYNC_WORKERS = 4
+DEFAULT_CLEANUP_INTERVAL = 0.1
+
+
 @adapter(implements_port=ObserverManagerPort, namespace="core")
 class LocalObserverManager:
     """Local standalone implementation of observer manager.
@@ -85,9 +92,9 @@ class LocalObserverManager:
 
     def __init__(
         self,
-        max_concurrent_observers: int = 10,
-        observer_timeout: float = 5.0,
-        max_sync_workers: int = 4,
+        max_concurrent_observers: int = DEFAULT_MAX_CONCURRENT_OBSERVERS,
+        observer_timeout: float = DEFAULT_OBSERVER_TIMEOUT,
+        max_sync_workers: int = DEFAULT_MAX_SYNC_WORKERS,
         error_handler: ErrorHandler | None = None,
         use_weak_refs: bool = True,
     ) -> None:
@@ -123,6 +130,23 @@ class LocalObserverManager:
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
             self._strong_refs: dict[str, Any] = {}  # Keep alive certain observers
+
+    def _store_observer(self, observer_id: str, observer: Any, keep_alive: bool) -> None:
+        """Store observer with appropriate reference type."""
+        if self._use_weak_refs:
+            try:
+                # Try to create weak reference
+                self._weak_handlers[observer_id] = observer
+                # Keep strong ref if requested
+                if keep_alive:
+                    self._strong_refs[observer_id] = observer
+            except TypeError:
+                # Some objects can't be weakly referenced - fall back to strong ref
+                self._handlers[observer_id] = observer
+                self._strong_refs[observer_id] = observer
+        else:
+            # Normal strong reference when weak refs disabled
+            self._handlers[observer_id] = observer
 
     def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
         """Register an observer with optional event type filtering.
@@ -163,20 +187,7 @@ class LocalObserverManager:
             )
 
         # Store the observer with appropriate reference type
-        if self._use_weak_refs:
-            try:
-                # Try to create weak reference
-                self._weak_handlers[observer_id] = observer
-                # Keep strong ref if requested or for wrapped functions
-                if keep_alive:
-                    self._strong_refs[observer_id] = observer
-            except TypeError:
-                # Some objects can't be weakly referenced
-                self._handlers[observer_id] = observer
-                self._strong_refs[observer_id] = observer
-        else:
-            # Normal strong reference when weak refs disabled
-            self._handlers[observer_id] = observer
+        self._store_observer(observer_id, observer, keep_alive)
 
         # Store event type filter
         if event_types is not None:
@@ -263,7 +274,7 @@ class LocalObserverManager:
         tasks = [self._limited_invoke(observer, event) for observer in interested_observers]
 
         # Wait for all with timeout
-        total_timeout = self._timeout + (len(tasks) * 0.1)
+        total_timeout = self._timeout + (len(tasks) * DEFAULT_CLEANUP_INTERVAL)
 
         try:
             await asyncio.wait_for(

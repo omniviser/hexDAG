@@ -33,6 +33,9 @@ from .ports_builder import PortsBuilder
 
 logger = logging.getLogger(__name__)
 
+# Default configuration constants
+DEFAULT_MAX_CONCURRENT_NODES = 10
+
 
 class OrchestratorError(Exception):
     """Base exception for orchestrator errors."""
@@ -62,7 +65,7 @@ class Orchestrator:
 
     def __init__(
         self,
-        max_concurrent_nodes: int = 10,
+        max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
         ports: dict[str, Any] | None = None,
         strict_validation: bool = False,
     ) -> None:
@@ -79,11 +82,45 @@ class Orchestrator:
         self.ports = ports or {}
         self.strict_validation = strict_validation
 
+    async def _notify_observer(
+        self, observer_manager: ObserverManagerPort | None, event: Any
+    ) -> None:
+        """Notify observer if it exists."""
+        if observer_manager:
+            await observer_manager.notify(event)
+
+    async def _evaluate_policy(
+        self,
+        policy_manager: PolicyManagerPort | None,
+        event: Any,
+        context: ExecutionContext,
+        node_id: str | None = None,
+        wave_index: int | None = None,
+        attempt: int = 1,
+    ) -> PolicyResponse:
+        """Evaluate policy and create context."""
+        policy_context = PolicyContext(
+            event=event,
+            dag_id=context.dag_id,
+            node_id=node_id or context.node_id,
+            wave_index=wave_index or context.wave_index,
+            attempt=attempt or context.attempt,
+        )
+
+        if policy_manager:
+            return await policy_manager.evaluate(policy_context)
+        return PolicyResponse()  # Default: proceed
+
+    def _check_policy_signal(self, response: PolicyResponse, context: str) -> None:
+        """Check policy signal and raise error if not PROCEED."""
+        if response.signal != PolicySignal.PROCEED:
+            raise OrchestratorError(f"{context} blocked: {response.signal.value}")
+
     @classmethod
     def from_builder(
         cls,
         builder: PortsBuilder,
-        max_concurrent_nodes: int = 10,
+        max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
         strict_validation: bool = False,
     ) -> "Orchestrator":
         """Create an Orchestrator using a PortsBuilder.
@@ -205,24 +242,11 @@ class Orchestrator:
             total_waves=len(waves),
             total_nodes=len(graph.nodes),
         )
-        if observer_manager:
-            await observer_manager.notify(event)
+        await self._notify_observer(observer_manager, event)
 
-        # Create policy context and evaluate
-        policy_context = PolicyContext(
-            event=event,
-            dag_id=context.dag_id,
-            node_id=context.node_id,
-            wave_index=context.wave_index,
-            attempt=context.attempt,
-        )
-
-        if policy_manager:
-            policy_response = await policy_manager.evaluate(policy_context)
-        else:
-            policy_response = PolicyResponse()  # Default: proceed
-        if policy_response.signal != PolicySignal.PROCEED:
-            raise OrchestratorError(f"Pipeline start blocked: {policy_response.signal.value}")
+        # Evaluate policy for pipeline start
+        policy_response = await self._evaluate_policy(policy_manager, event, context)
+        self._check_policy_signal(policy_response, "Pipeline start")
 
         for wave_idx, wave in enumerate(waves, 1):
             wave_start_time = time.time()
@@ -232,25 +256,13 @@ class Orchestrator:
                 wave_index=wave_idx,
                 nodes=wave,
             )
-            if observer_manager:
-                await observer_manager.notify(wave_event)
+            await self._notify_observer(observer_manager, wave_event)
 
-            # Create policy context for wave
-            wave_policy_context = PolicyContext(
-                event=wave_event,
-                dag_id=context.dag_id,
-                node_id=None,
-                wave_index=wave_idx,
-                attempt=1,
+            # Evaluate policy for wave
+            wave_response = await self._evaluate_policy(
+                policy_manager, wave_event, context, wave_index=wave_idx
             )
-
-            if policy_manager:
-                wave_response = await policy_manager.evaluate(wave_policy_context)
-            else:
-                wave_response = PolicyResponse()  # Default: proceed
-
-            if wave_response.signal != PolicySignal.PROCEED:
-                raise OrchestratorError(f"Wave {wave_idx} blocked: {wave_response.signal.value}")
+            self._check_policy_signal(wave_response, f"Wave {wave_idx}")
 
             wave_results = await self._execute_wave(
                 wave,
@@ -272,8 +284,7 @@ class Orchestrator:
                 wave_index=wave_idx,
                 duration_ms=(time.time() - wave_start_time) * 1000,
             )
-            if observer_manager:
-                await observer_manager.notify(wave_completed)
+            await self._notify_observer(observer_manager, wave_completed)
 
         # Fire pipeline completed event (observation only)
         pipeline_completed = PipelineCompleted(
@@ -281,8 +292,7 @@ class Orchestrator:
             duration_ms=(time.time() - pipeline_start_time) * 1000,
             node_results=node_results,
         )
-        if observer_manager:
-            await observer_manager.notify(pipeline_completed)
+        await self._notify_observer(observer_manager, pipeline_completed)
 
         return node_results
 
@@ -404,22 +414,12 @@ class Orchestrator:
                 wave_index=wave_index,
                 dependencies=list(node_spec.deps),
             )
-            if observer_manager:
-                await observer_manager.notify(start_event)
+            await self._notify_observer(observer_manager, start_event)
 
-            # Create policy context for node start
-            start_policy_context = PolicyContext(
-                event=start_event,
-                dag_id=context.dag_id,
-                node_id=node_name,
-                wave_index=wave_index,
-                attempt=context.attempt,
+            # Evaluate policy for node start
+            start_response = await self._evaluate_policy(
+                policy_manager, start_event, context, node_id=node_name, wave_index=wave_index
             )
-
-            if policy_manager:
-                start_response = await policy_manager.evaluate(start_policy_context)
-            else:
-                start_response = PolicyResponse()  # Default: proceed
 
             # Handle control signals
             if start_response.signal == PolicySignal.SKIP:
@@ -461,8 +461,7 @@ class Orchestrator:
                 result=validated_output,
                 duration_ms=(time.time() - node_start_time) * 1000,
             )
-            if observer_manager:
-                await observer_manager.notify(complete_event)
+            await self._notify_observer(observer_manager, complete_event)
 
             return validated_output
 
@@ -473,22 +472,12 @@ class Orchestrator:
                 wave_index=wave_index,
                 error=e,
             )
-            if observer_manager:
-                await observer_manager.notify(fail_event)
+            await self._notify_observer(observer_manager, fail_event)
 
-            # Create policy context for node failure
-            fail_policy_context = PolicyContext(
-                event=fail_event,
-                dag_id=context.dag_id,
-                node_id=node_name,
-                wave_index=wave_index,
-                attempt=context.attempt,
+            # Evaluate policy for node failure
+            fail_response = await self._evaluate_policy(
+                policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
             )
-
-            if policy_manager:
-                fail_response = await policy_manager.evaluate(fail_policy_context)
-            else:
-                fail_response = PolicyResponse()  # Default: fail
 
             # Handle control signals
             if fail_response.signal == PolicySignal.FALLBACK:
