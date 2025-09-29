@@ -24,8 +24,26 @@ classifiers = [
 ]
 dependencies = [
     "pydantic~=2.0",
-    "graphviz>=0.20.0,<0.21",
-    "pyyaml~=6.0",
+]
+
+[project.optional-dependencies]
+yaml = [
+    "pyyaml~=6.0",  # For YAML pipeline support
+]
+viz = [
+    "graphviz>=0.20.0,<0.21",  # For DAG visualization
+]
+openai = [
+    "openai>=1.0.0",  # OpenAI LLM adapter
+]
+anthropic = [
+    "anthropic>=0.25.0",  # Anthropic Claude LLM adapter
+]
+all = [
+    "pyyaml~=6.0",  # YAML support
+    "graphviz>=0.20.0,<0.21",  # Visualization
+    "openai>=1.0.0",  # OpenAI adapter
+    "anthropic>=0.25.0",  # Anthropic adapter
 ]
 
 [project.urls]
@@ -46,11 +64,17 @@ run-check-tests = "scripts.check_test_structure:main"
 
 [dependency-groups]
 dev = [
-    "deptry>=0.23.1",
+    # Include all optional dependencies for development
+    "hexdag[all]",
+
+    # Testing dependencies
     "pytest>=8.0.0,<9",
     "pytest-asyncio>=0.21.0,<0.22",
     "pytest-cov>=5.0.0,<6",
     "pytest-mock>=3.14.0,<4",
+
+    # Code quality tools
+    "deptry>=0.23.1",
     "black==24.10.0",
     "isort==5.13.2",
     "ruff>=0.13.0",
@@ -67,9 +91,13 @@ dev = [
     "pre-commit==3.8.0",
     "commitizen==4.8.3",
     "watchdog==6.0.0",
+
+    # Documentation
     "mkdocs==1.6.1",
     "mkdocs-material==9.6.16",
     "mkdocs-mermaid2-plugin==1.2.1",
+
+    # Types and tools
     "types-pyyaml==6.0.12",
     "safety>=3.0.0",
     "yamllint>=1.35.0",
@@ -93,6 +121,22 @@ include = ["hexai"]
 [tool.hatch.build.targets.wheel]
 include = ["hexai"]
 
+[tool.hexdag]
+# Core modules to load - these are the essential framework components
+modules = [
+    "hexai.core.ports",               # Core port definitions (must load before adapters)
+    "hexai.core.application.nodes",  # Core node factories
+    "hexai.tools.builtin_tools",     # Built-in tools (tool_end, change_phase)
+]
+
+# Default plugins - mock and local adapters for testing and development
+plugins = [
+    "hexai.adapters.local",  # Local in-process implementations
+]
+
+# Development mode enabled by default
+dev_mode = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -112,7 +156,8 @@ omit = [
     "*/test_*",
     "*/conftest.py",
     "*/__pycache__/*",
-    "*/examples/*"
+    "*/examples/*",
+    "*_plugins/*"
 ]
 
 [tool.coverage.report]
@@ -128,41 +173,6 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod"
 ]
 
-[tool.black]
-line-length = 100
-target-version = ['py312']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-line_length = 100
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-skip = [
-    ".venv",
-    "build",
-    "dist",
-    ".git",
-    ".mypy_cache",
-    ".tox",
-    ".eggs",
-]
 
 [tool.mypy]
 python_version = "3.12"
@@ -179,6 +189,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
+exclude = ["tests/", "examples/"]
 disable_error_code = ["import-untyped"]
 exclude = [
     "tests/",
@@ -188,13 +199,21 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = "tests.*"
+module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["openai", "anthropic", "graphviz"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["hexai.cli.*"]
+disallow_untyped_decorators = false
 
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-exclude = ["tests/**", "examples/**", ".venv", "build", "dist", "**/test_*.py"]
+exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist"]
 include = ["hexai"]
 
 # Type checking settings
@@ -223,7 +242,7 @@ reportUndefinedVariable = true
 reportIncompatibleMethodOverride = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples", "docs", "scripts"]
+exclude_dirs = ["tests", "examples", "docs", "scripts", "hexai_plugins"]
 skips = ["B101", "B601"]
 
 [tool.ruff]
@@ -235,9 +254,8 @@ exclude = [
     "__pycache__",
     "build",
     "dist",
-    "tests",
-    "examples",
 ]
+preview = true
 
 [tool.ruff.lint]
 select = [
@@ -250,7 +268,19 @@ select = [
     "I",      # isort
     "TCH",    # flake8-type-checking
     "FA",     # flake8-future-annotations
-    "PERF",   # perflint - performance-focused best practices
+    "PERF",   # perflint - performance-focused best practices,
+    "DOC",    # pydocstyle - documentation style
+    "C4",       # Catch incorrect use of comprehensions, dict, list, etc
+    "FA",       # Enforce from __future__ import annotations
+    "ISC",      # Good use of string concatenation
+    "ICN",      # Use common import conventions
+    "RET",      # Good return practices
+    "SIM",      # Common simplification rules
+    "TID",      # Some good import practices
+    "TC",       # Enforce importing certain types in a TYPE_CHECKING block
+    "PTH",      # Use pathlib instead of os.path
+    "TD",       # Be diligent with TODO comments
+    "NPY",      # Some numpy-specific things
 ]
 # Specifically enforce modern type hints
 extend-select = [
@@ -261,13 +291,26 @@ extend-select = [
     "UP040",  # Use `type` alias syntax instead of `TypeAlias`
 ]
 
-ignore = []
+ignore = [
+"D417", # Missing argument descriptions in docstring
+"DOC201", # Don't require "Returns" section
+"DOC202", # (Optional) Don't require "Yields" section
+"DOC501", # Don't require documenting raised exceptions in docstrings
+"DOC402", # Don't require documenting yields in docstrings
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["UP"]  # Don't enforce modern types in tests
-"examples/*" = ["UP"]  # Don't enforce modern types in examples
-"hexai/core/application/events/observers.py" = ["SIM115"]  # FileObserver manages file handle with close()
-"hexai/core/registry/discovery.py" = ["TC003", "TC001"]  # Runtime imports needed, not just for type checking
+"tests/*" = ["UP", "SIM117", "SIM102", "SIM105", "PERF401"]
+"examples/*" = ["UP", "E501"]
+"examples/demo/*" = ["E501"]
+"hexai_plugins/*" = ["UP", "TCH", "FA"]
+"hexai/core/application/events/observers.py" = ["SIM115"]
+"hexai/core/registry/discovery.py" = ["TC003", "TC001"]
+"hexai/cli/*" = ["DOC501", "PTH123"]  # CLI uses typer.Exit which shouldn't be documented
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexai"]
@@ -279,3 +322,43 @@ tag_format = "v$version"
 version_files = [
     "pyproject.toml:version"
 ]
+
+[tool.vulture]
+min_confidence = 90
+paths = ["hexai"]
+exclude = ["tests/", "examples/", "hexai/core/ports/", "hexai_plugins/"]
+
+
+[tool.radon]
+exclude = "tests/*,examples/*,hexai_plugins/*"
+cc_min = "B"  # Minimum complexity grade (A, B, C, D, E, F)
+show_complexity = true
+
+
+[tool.safety]
+# Ignore specific vulnerability IDs if needed
+# ignore = ["12345"]
+audit-and-monitor = true
+
+[tool.deptry]
+# Ignore checks for optional dependencies
+ignore = [
+    "DEP002",  # Dependencies defined but not used
+    "DEP003",  # Transitive dependencies (typer, rich are pulled by other deps)
+    "DEP004",  # Dev dependencies used in tests
+]
+
+# Exclude paths from scanning
+exclude = [
+    ".venv",  # Virtual environment
+    "venv",  # Alternative virtual environment name
+    "examples/demo",  # Demo files with mock langchain imports
+    "tests",  # Test files use dev dependencies
+    "hexai_plugins",  # External plugin directories
+]
+
+# Per-rule ignores for specific packages
+per_rule_ignores = { DEP002 = ["openai", "anthropic"] }
+
+# Package name mappings
+package_module_name_map = { openai = "openai", anthropic = "anthropic" }

@@ -51,6 +51,7 @@ from hexai.core.registry.decorators import (
     node,
     observer,
     policy,
+    port,
     tool,
 )
 from hexai.core.registry.registry import registry
@@ -69,6 +70,7 @@ __all__ = [
     "policy",
     "memory",
     "observer",
+    "port",
     # Node subtype decorators
     "function_node",
     "llm_node",

@@ -10,7 +10,7 @@ This example demonstrates pipeline catalog management in hexAI:
 """
 
 import asyncio
-from typing import Any, Dict
+from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
@@ -54,7 +54,7 @@ class MockPipelineCatalog:
         self.pipelines = {}
         self.metadata = {}
 
-    def register_pipeline(self, name: str, graph: DirectedGraph, metadata: Dict[str, Any] = None):
+    def register_pipeline(self, name: str, graph: DirectedGraph, metadata: dict[str, Any] = None):
         """Register a pipeline in the catalog."""
         self.pipelines[name] = graph
         self.metadata[name] = metadata or {}
@@ -68,7 +68,7 @@ class MockPipelineCatalog:
         """List all pipelines in the catalog."""
         return list(self.pipelines.keys())
 
-    def get_metadata(self, name: str) -> Dict[str, Any]:
+    def get_metadata(self, name: str) -> dict[str, Any]:
         """Get metadata for a pipeline."""
         return self.metadata.get(name, {})
 

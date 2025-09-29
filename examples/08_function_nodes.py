@@ -51,7 +51,7 @@ async def data_formatter(input_data: dict, **kwargs) -> dict:
             "format": "json",
             "size": len(json.dumps(input_data)),
         }
-    elif formatter == "csv":
+    if formatter == "csv":
         # Simple CSV formatting
         lines = []
         for key, value in input_data.items():
@@ -63,8 +63,7 @@ async def data_formatter(input_data: dict, **kwargs) -> dict:
 
         csv_data = "\n".join(lines)
         return {"formatted_data": csv_data, "format": "csv", "size": len(csv_data)}
-    else:
-        return {"formatted_data": str(input_data), "format": "text", "size": len(str(input_data))}
+    return {"formatted_data": str(input_data), "format": "text", "size": len(str(input_data))}
 
 
 async def data_validator(input_data: dict, **kwargs) -> dict:
@@ -88,8 +87,7 @@ async def data_validator(input_data: dict, **kwargs) -> dict:
 
     if errors:
         return {"valid": False, "errors": errors, "status": "validation_failed"}
-    else:
-        return {"valid": True, "status": "validation_passed", "data": input_data}
+    return {"valid": True, "status": "validation_passed", "data": input_data}
 
 
 async def report_generator(input_data: dict, **kwargs) -> dict:

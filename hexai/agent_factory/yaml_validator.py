@@ -16,7 +16,13 @@ class ValidationReport:
 
     @property
     def is_valid(self) -> bool:
-        """Check if validation passed (no errors)."""
+        """Check if validation passed (no errors).
+
+        Returns
+        -------
+        bool
+            True if no errors are present, False otherwise
+        """
         return len(self._errors) == 0
 
     def add_error(self, message: str) -> None:
@@ -33,17 +39,35 @@ class ValidationReport:
 
     @property
     def errors(self) -> list[str]:
-        """Get all error messages."""
+        """Get all error messages.
+
+        Returns
+        -------
+        list[str]
+            List of error messages
+        """
         return self._errors
 
     @property
     def warnings(self) -> list[str]:
-        """Get all warning messages."""
+        """Get all warning messages.
+
+        Returns
+        -------
+        list[str]
+            List of warning messages
+        """
         return self._warnings
 
     @property
     def suggestions(self) -> list[str]:
-        """Get all suggestion messages."""
+        """Get all suggestion messages.
+
+        Returns
+        -------
+        list[str]
+            List of suggestion messages
+        """
         return self._suggestions
 
 
@@ -76,8 +100,8 @@ class YamlValidator:
 
         Returns
         -------
+        ValidationReport
             ValidationReport with errors, warnings, and suggestions
-
         """
         result = ValidationReport()
 
@@ -121,6 +145,7 @@ class YamlValidator:
 
         Returns
         -------
+        set[str]
             Set of valid node IDs for caching and reuse in dependency validation
         """
         node_ids = set()
@@ -214,10 +239,15 @@ class YamlValidator:
         - 0 (WHITE): Not visited
         - 1 (GRAY): Currently being processed (in recursion stack)
         - 2 (BLACK): Completely processed
+
+        Returns
+        -------
+        bool
+            True if a cycle is detected, False otherwise
         """
         # Use integers for colors (more efficient than set operations)
         white, gray, black = 0, 1, 2
-        colors = {node: white for node in graph}
+        colors = dict.fromkeys(graph, white)
 
         def visit(node: str) -> bool:
             if colors[node] == gray:

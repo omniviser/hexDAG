@@ -1,8 +1,9 @@
 """Unified pipeline management system with base class and catalog functionality."""
 
-import os
+import pathlib
 import traceback
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -52,7 +53,8 @@ class PipelineDefinition(ABC):
     def _load_yaml(self, yaml_path: str) -> None:
         """Load YAML configuration from the specified path."""
         self._yaml_path = yaml_path
-        with open(yaml_path) as f:
+        yaml_file = Path(yaml_path)
+        with yaml_file.open() as f:
             self._config = yaml.safe_load(f.read())
 
     async def execute(
@@ -70,6 +72,11 @@ class PipelineDefinition(ABC):
         Returns
         -------
             Execution results dictionary with 'status', 'results', and 'trace'
+
+        Raises
+        ------
+        ValueError
+            If no pipeline YAML is found
         """
         if input_data is None:
             input_data = {}
@@ -100,7 +107,13 @@ class PipelineDefinition(ABC):
             }
 
     def get_config(self) -> dict[str, Any] | None:
-        """Get the loaded pipeline configuration."""
+        """Get the loaded pipeline configuration.
+
+        Returns
+        -------
+        dict[str, Any] | None
+            The loaded YAML configuration or None if not loaded
+        """
         return self._config
 
     def validate(self) -> dict[str, Any]:
@@ -168,7 +181,7 @@ class PipelineDefinition(ABC):
             if hasattr(first_node, "in_model") and first_node.in_model is not None:
                 return first_node.in_model
             # Fallback to params.input_schema
-            elif hasattr(first_node, "params") and first_node.params:
+            if hasattr(first_node, "params") and first_node.params:
                 return first_node.params.get("input_schema")
 
             return None
@@ -218,7 +231,7 @@ class PipelineDefinition(ABC):
             if hasattr(node, "out_model") and node.out_model:
                 return node.out_model
             # Fallback to params.output_schema
-            elif hasattr(node, "params") and node.params:
+            if hasattr(node, "params") and node.params:
                 return node.params.get("output_schema")
 
             return None
@@ -255,7 +268,18 @@ class PipelineDefinition(ABC):
             return {}
 
     def build_graph(self) -> DirectedGraph:
-        """Build and return the pipeline's DirectedGraph for visualization."""
+        """Build and return the pipeline's DirectedGraph for visualization.
+
+        Returns
+        -------
+        DirectedGraph
+            The built DirectedGraph instance
+
+        Raises
+        ------
+        ValueError
+            If no YAML file is found for the pipeline
+        """
         if not self._yaml_path:
             raise ValueError(f"No YAML file found for pipeline {self.name}")
         graph, metadata = self.builder.build_from_yaml_file(self._yaml_path)
@@ -267,6 +291,11 @@ class PipelineDefinition(ABC):
         Returns
         -------
             DirectedGraph instance
+
+        Raises
+        ------
+        ValueError
+            If no pipeline YAML is found
         """
         if not self._yaml_path:
             raise ValueError(f"No pipeline YAML found for {self.name}")
@@ -307,16 +336,15 @@ class PipelineDefinition(ABC):
                 return primitives
 
             # Handle basic types
-            elif hasattr(input_type, "__name__"):
+            if hasattr(input_type, "__name__"):
                 return {"input": input_type.__name__}
 
             # Handle dict types with annotations
-            elif isinstance(input_type, dict):
+            if isinstance(input_type, dict):
                 return input_type
 
             # Fallback
-            else:
-                return {"input": str(input_type)}
+            return {"input": str(input_type)}
 
         except Exception:
             return {}
@@ -328,11 +356,12 @@ class PipelineDefinition(ABC):
         -------
             Dictionary mapping parameter names to their types with optional indicators
         """
-        if not self._yaml_path or not os.path.exists(self._yaml_path):
+        if not self._yaml_path or not pathlib.Path(self._yaml_path).exists():
             return {}
 
         try:
-            with open(self._yaml_path, encoding="utf-8") as f:
+            yaml_file = Path(self._yaml_path)
+            with yaml_file.open(encoding="utf-8") as f:
                 content = f.read()
 
             # Parse YAML
@@ -405,7 +434,13 @@ class PipelineCatalog:
         self._pipelines[instance.name] = pipeline_class
 
     def list_pipelines(self) -> list[dict[str, str]]:
-        """List all available pipelines."""
+        """List all available pipelines.
+
+        Returns
+        -------
+        list[dict[str, str]]
+            List of pipeline information with name, description, and module
+        """
         return [
             {
                 "name": name,
@@ -416,7 +451,18 @@ class PipelineCatalog:
         ]
 
     def get_pipeline(self, name: str) -> PipelineDefinition | None:
-        """Get a pipeline instance by name."""
+        """Get a pipeline instance by name.
+
+        Parameters
+        ----------
+        name : str
+            Name of the pipeline to retrieve
+
+        Returns
+        -------
+        PipelineDefinition | None
+            Pipeline instance or None if not found
+        """
         pipeline_class = self._pipelines.get(name)
         return pipeline_class() if pipeline_class else None
 
@@ -426,14 +472,34 @@ class PipelineCatalog:
         input_data: Any | None = None,
         ports: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Execute a pipeline by name."""
+        """Execute a pipeline by name.
+
+        Parameters
+        ----------
+        name : str
+            Name of the pipeline to execute
+        input_data : Any | None
+            Input data for the pipeline
+        ports : dict[str, Any] | None
+            Port implementations for the pipeline
+
+        Returns
+        -------
+        dict[str, Any]
+            Execution results with status and results or error
+        """
         pipeline = self.get_pipeline(name)
         if pipeline:
             return await pipeline.execute(input_data, ports)
-        else:
-            return {"status": "error", "error": f"Pipeline '{name}' not found"}
+        return {"status": "error", "error": f"Pipeline '{name}' not found"}
 
 
 def get_catalog() -> PipelineCatalog:
-    """Get the global pipeline catalog instance."""
+    """Get the global pipeline catalog instance.
+
+    Returns
+    -------
+    PipelineCatalog
+        Global pipeline catalog instance
+    """
     return PipelineCatalog()
