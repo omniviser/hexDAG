@@ -268,9 +268,7 @@ class TestSchemaExtractor:
     @patch("hexai.visualization.schema_extractor.logger")
     def test_load_compiled_schemas_import_error(self, mock_logger, extractor):
         """Test handling import error when loading schemas."""
-        with patch(
-            "hexai.agent_factory.compiler.compile_pipeline", side_effect=ImportError
-        ):
+        with patch("hexai.agent_factory.compiler.compile_pipeline", side_effect=ImportError):
             schemas, input_schema = extractor.load_compiled_schemas("test_pipeline")
 
             assert schemas == {}

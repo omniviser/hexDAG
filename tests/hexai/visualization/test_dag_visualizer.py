@@ -381,7 +381,9 @@ class TestDAGVisualizer:
     def test_node_with_complex_params(self):
         """Test node with complex parameters."""
         graph = DirectedGraph()
-        complex_func = lambda x, context, **kwargs: {"result": str(kwargs)}
+
+        def complex_func(x, context, **kwargs):
+            return {"result": str(kwargs)}
         node = NodeSpec("complex", complex_func, params={"option1": "value1", "option2": 42})
         graph.add(node)
 
@@ -410,7 +412,7 @@ class TestDAGVisualizer:
             if i == 0:
                 node = NodeSpec(f"node_{i}", create_test_function())
             else:
-                node = NodeSpec(f"node_{i}", create_test_function()).after(f"node_{i-1}")
+                node = NodeSpec(f"node_{i}", create_test_function()).after(f"node_{i - 1}")
             graph.add(node)
 
         visualizer = DAGVisualizer(graph)
