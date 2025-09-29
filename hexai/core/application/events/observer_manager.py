@@ -4,15 +4,23 @@ This is a hexagonal architecture PORT that allows external systems
 to observe pipeline execution without affecting it.
 """
 
+from __future__ import annotations
+
 import asyncio
 import uuid
 import weakref
-from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .decorators import EVENT_METADATA_ATTR, EventDecoratorMetadata
-from .events import Event
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .decorators import (
+    EVENT_METADATA_ATTR,
+    EventDecoratorMetadata,
+    EventType,
+    EventTypesInput,
+    normalize_event_types,
+)
 from .models import (
     AsyncObserverFunc,
     BaseEventManager,
@@ -23,41 +31,29 @@ from .models import (
     ObserverFunc,
 )
 
-# Type aliases for clarity
-type EventType = type[Event]
+if TYPE_CHECKING:
+    from .events import Event
+
+
 type ObserverId = str
 type EventFilter = set[EventType] | None
 
 
-def _get_observer_metadata(handler: Any) -> EventDecoratorMetadata | None:
-    """Return observer metadata if present."""
-    metadata = getattr(handler, EVENT_METADATA_ATTR, None)
-    if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "observer":
-        return metadata
-    return None
+class ObserverRegistrationConfig(BaseModel):
+    """Validated configuration for observer registration."""
 
+    model_config = ConfigDict(extra="forbid")
 
-def _coerce_event_types(event_types: Any) -> EventFilter:
-    """Normalize event type collections into a set."""
-    if event_types is None:
-        return None
+    observer_id: str | None = None
+    event_types: set[EventType] | None = None
+    timeout: float | None = Field(None, gt=0)
+    max_concurrency: int | None = Field(None, ge=1)
+    keep_alive: bool = False
 
-    if isinstance(event_types, type):
-        return {event_types}
-
-    if isinstance(event_types, Iterable):
-        normalized: set[type] = set()
-        for event_type in event_types:
-            if not isinstance(event_type, type):
-                raise TypeError(
-                    f"event_types must contain Event subclasses; got {type(event_type)!r}"
-                )
-            normalized.add(event_type)
-        return normalized
-
-    raise TypeError(
-        f"event_types must be None, a type, or an iterable of types; got {type(event_types)!r}"
-    )
+    @field_validator("event_types", mode="before")
+    @classmethod
+    def validate_event_types(cls, value: EventTypesInput) -> set[EventType] | None:
+        return normalize_event_types(value)
 
 
 class ObserverManager(BaseEventManager, EventFilterMixin):
@@ -71,6 +67,14 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
     - Event type filtering for efficiency
     - Sync functions run in thread pool to avoid blocking
     """
+
+    @staticmethod
+    def _get_observer_metadata(handler: Any) -> EventDecoratorMetadata | None:
+        """Return observer metadata if present."""
+        metadata = getattr(handler, EVENT_METADATA_ATTR, None)
+        if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "observer":
+            return metadata
+        return None
 
     def __init__(
         self,
@@ -111,73 +115,98 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
             self._strong_refs: dict[ObserverId, Observer] = {}
 
-    def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
+    def register(
+        self,
+        handler: Observer | ObserverFunc | AsyncObserverFunc,
+        *,
+        observer_id: str | None = None,
+        event_types: EventTypesInput = None,
+        timeout: float | None = None,
+        max_concurrency: int | None = None,
+        keep_alive: bool = False,
+        **extra: Any,
+    ) -> str:
         """Register an observer with optional event type filtering."""
-        metadata = _get_observer_metadata(handler)
+        if extra:
+            unexpected = ", ".join(sorted(extra))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
 
-        observer_id = kwargs.get("observer_id")
-        if observer_id is None and metadata and metadata.id:
-            observer_id = metadata.id
-        observer_id = observer_id or str(uuid.uuid4())
+        metadata = self._get_observer_metadata(handler)
 
-        if observer_id in self._event_filters:
-            raise ValueError(f"Observer '{observer_id}' already registered")
+        resolved_observer_id = (
+            observer_id
+            if observer_id is not None
+            else (metadata.id if metadata and metadata.id else None)
+        )
+        raw_event_types: EventTypesInput = (
+            event_types if event_types is not None else (metadata.event_types if metadata else None)
+        )
+        normalized_event_types = (
+            normalize_event_types(raw_event_types) if raw_event_types is not None else None
+        )
+        resolved_timeout = (
+            timeout if timeout is not None else (metadata.timeout if metadata else None)
+        )
+        resolved_concurrency = (
+            max_concurrency
+            if max_concurrency is not None
+            else (metadata.max_concurrency if metadata else None)
+        )
 
-        event_types_param = kwargs.get("event_types")
-        if event_types_param is None and metadata:
-            event_types_param = metadata.event_types
-        event_filter = _coerce_event_types(event_types_param)
+        config = ObserverRegistrationConfig(
+            observer_id=resolved_observer_id,
+            event_types=normalized_event_types,
+            timeout=resolved_timeout,
+            max_concurrency=resolved_concurrency,
+            keep_alive=keep_alive,
+        )
 
-        timeout = kwargs.get("timeout")
-        if timeout is None and metadata:
-            timeout = metadata.timeout
-        if timeout is not None and timeout <= 0:
-            raise ValueError("timeout must be positive when provided")
+        resolved_id = config.observer_id or str(uuid.uuid4())
 
-        max_concurrency = kwargs.get("max_concurrency")
-        if max_concurrency is None and metadata:
-            max_concurrency = metadata.max_concurrency
-        if max_concurrency is not None and max_concurrency < 1:
-            raise ValueError("max_concurrency must be positive when provided")
+        if resolved_id in self._event_filters:
+            raise ValueError(f"Observer '{resolved_id}' already registered")
 
-        keep_alive = kwargs.get("keep_alive", False)
+        event_filter = config.event_types
+        timeout_value = config.timeout
+        per_observer_concurrency = config.max_concurrency
+        keep_alive_flag = config.keep_alive
 
         if hasattr(handler, "handle"):
             observer: Observer = handler  # pyright: ignore[reportAssignmentType]
         elif callable(handler):
             observer = FunctionObserver(handler, self._executor)  # pyright: ignore[reportArgumentType]
-            keep_alive = True
+            keep_alive_flag = True
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
 
-        self._event_filters[observer_id] = event_filter
+        self._event_filters[resolved_id] = event_filter
 
-        if timeout is not None:
-            self._observer_timeouts[observer_id] = timeout
-        elif observer_id in self._observer_timeouts:
-            del self._observer_timeouts[observer_id]
+        if timeout_value is not None:
+            self._observer_timeouts[resolved_id] = timeout_value
+        elif resolved_id in self._observer_timeouts:
+            del self._observer_timeouts[resolved_id]
 
-        if max_concurrency is not None:
-            self._observer_semaphores[observer_id] = asyncio.Semaphore(max_concurrency)
-        elif observer_id in self._observer_semaphores:
-            del self._observer_semaphores[observer_id]
+        if per_observer_concurrency is not None:
+            self._observer_semaphores[resolved_id] = asyncio.Semaphore(per_observer_concurrency)
+        elif resolved_id in self._observer_semaphores:
+            del self._observer_semaphores[resolved_id]
 
         if self._use_weak_refs:
             try:
-                self._weak_handlers[observer_id] = observer
-                if keep_alive:
-                    self._strong_refs[observer_id] = observer
+                self._weak_handlers[resolved_id] = observer
+                if keep_alive_flag:
+                    self._strong_refs[resolved_id] = observer
             except TypeError:
-                self._handlers[observer_id] = observer
-                self._strong_refs[observer_id] = observer
+                self._handlers[resolved_id] = observer
+                self._strong_refs[resolved_id] = observer
         else:
-            self._handlers[observer_id] = observer
+            self._handlers[resolved_id] = observer
 
-        return str(observer_id)
+        return str(resolved_id)
 
-    def _should_notify(self, observer_id: str, event: "Event") -> bool:
+    def _should_notify(self, observer_id: str, event: Event) -> bool:
         """Check if observer should be notified of this event type.
 
         Returns
@@ -188,7 +217,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
         event_filter = self._event_filters.get(observer_id)
         return self._should_process_event(event_filter, event)
 
-    async def notify(self, event: "Event") -> None:
+    async def notify(self, event: Event) -> None:
         """Notify observers interested in ``event``.
 
         Args
@@ -245,7 +274,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
                 {"event_type": type(event).__name__, "handler_name": "ObserverManager"},
             )
 
-    async def _limited_invoke(self, observer_id: str, observer: Observer, event: "Event") -> None:
+    async def _limited_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
         """Invoke an observer respecting global and per-observer limits."""
         per_observer = self._observer_semaphores.get(observer_id)
         if per_observer is None:
@@ -255,7 +284,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             async with self._semaphore, per_observer:
                 await self._safe_invoke(observer_id, observer, event)
 
-    async def _safe_invoke(self, observer_id: str, observer: Observer, event: "Event") -> None:
+    async def _safe_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
         """Safely invoke an observer while enforcing configured timeouts."""
         timeout = self._observer_timeouts.get(observer_id, self._timeout)
         try:
@@ -342,7 +371,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             self._executor.shutdown(wait=False)
             self._executor_shutdown = True
 
-    def __enter__(self) -> "ObserverManager":
+    def __enter__(self) -> ObserverManager:
         """Context manager entry.
 
         Returns
@@ -358,7 +387,7 @@ class ObserverManager(BaseEventManager, EventFilterMixin):
             self._executor.shutdown(wait=True)
             self._executor_shutdown = True
 
-    async def __aenter__(self) -> "ObserverManager":
+    async def __aenter__(self) -> ObserverManager:
         """Async context manager entry.
 
         Returns
@@ -381,7 +410,7 @@ class FunctionObserver:
         self._executor = executor
         self.__name__ = getattr(func, "__name__", "anonymous_observer")
 
-    async def handle(self, event: "Event") -> None:
+    async def handle(self, event: Event) -> None:
         """Handle the event by calling the wrapped function."""
         if asyncio.iscoroutinefunction(self._func):
             await self._func(event)

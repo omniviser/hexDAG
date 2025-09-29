@@ -237,7 +237,9 @@ class EventFilterMixin:
     and ControlManager to avoid code duplication.
     """
 
-    def _should_process_event(self, event_filter: set[type] | None, event: "Event") -> bool:
+    def _should_process_event(
+        self, event_filter: set[type["Event"]] | None, event: "Event"
+    ) -> bool:
         """Check if an event should be processed based on type filter.
 
         Args

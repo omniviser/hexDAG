@@ -4,15 +4,24 @@ This is a hexagonal architecture PORT that allows policies to control
 the execution flow of the pipeline through control handlers.
 """
 
+from __future__ import annotations
+
 import asyncio
 import heapq
 import weakref
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast, get_args, get_origin
 
-from .decorators import EVENT_METADATA_ATTR, EventDecoratorMetadata
-from .events import Event
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from .decorators import (
+    EVENT_METADATA_ATTR,
+    EventDecoratorMetadata,
+    EventType,
+    EventTypesInput,
+    normalize_event_types,
+)
 from .models import (
     AsyncControlHandlerFunc,
     BaseEventManager,
@@ -26,6 +35,9 @@ from .models import (
     HandlerMetadata,
     LoggingErrorHandler,
 )
+
+if TYPE_CHECKING:
+    from .events import Event
 
 # Priority threshold for critical handlers
 CRITICAL_HANDLER_PRIORITY = 50
@@ -42,27 +54,21 @@ def _get_control_metadata(
     return None
 
 
-def _coerce_event_types(event_types: Any) -> set[type] | None:
-    """Normalize event type collections into a set."""
-    if event_types is None:
-        return None
+class ControlRegistrationConfig(BaseModel):
+    """Validated configuration for control handler registration."""
 
-    if isinstance(event_types, type):
-        return {event_types}
+    model_config = ConfigDict(extra="forbid")
 
-    if isinstance(event_types, Iterable):
-        normalized: set[type] = set()
-        for event_type in event_types:
-            if not isinstance(event_type, type):
-                raise TypeError(
-                    f"event_types must contain Event subclasses; got {type(event_type)!r}"
-                )
-            normalized.add(event_type)
-        return normalized
+    priority: int = DEFAULT_PRIORITY
+    name: str | None = None
+    description: str = ""
+    event_types: set[EventType] | None = None
+    keep_alive: bool = False
 
-    raise TypeError(
-        f"event_types must be None, a type, or an iterable of types; got {type(event_types)!r}"
-    )
+    @field_validator("event_types", mode="before")
+    @classmethod
+    def validate_event_types(cls, value: EventTypesInput) -> set[EventType] | None:
+        return normalize_event_types(value)
 
 
 def _ensure_control_response_return_type(func: Callable[..., Any]) -> None:
@@ -75,13 +81,47 @@ def _ensure_control_response_return_type(func: Callable[..., Any]) -> None:
     if return_type is None:
         raise TypeError(f"Control handler {func_name} must declare ControlResponse as return type")
 
-    if return_type is ControlResponse:
-        return
-
-    if isinstance(return_type, str) and return_type == ControlResponse.__name__:
+    if _is_control_response_annotation(return_type):
         return
 
     raise TypeError(f"Control handler {func_name} must return ControlResponse, got {return_type}")
+
+
+def _is_control_response_annotation(annotation: Any) -> bool:
+    """Check whether ``annotation`` represents a ControlResponse result."""
+    if annotation is ControlResponse:
+        return True
+
+    if isinstance(annotation, str):
+        normalized = annotation.replace(" ", "")
+        valid = {
+            ControlResponse.__name__,
+            f"Awaitable[{ControlResponse.__name__}]",
+            f"Coroutine[Any,Any,{ControlResponse.__name__}]",
+        }
+        return normalized in valid
+
+    origin = get_origin(annotation)
+    if origin is None:
+        return False
+
+    if origin is Annotated:
+        args = get_args(annotation)
+        return bool(args) and _is_control_response_annotation(args[0])
+
+    if origin is Coroutine:
+        args = get_args(annotation)
+        if len(args) == 3:
+            return _is_control_response_annotation(args[2])
+        return False
+
+    if origin in {Awaitable, asyncio.Future}:
+        args = get_args(annotation)
+        if not args:
+            return False
+        return _is_control_response_annotation(args[0])
+
+    return False
 
 
 @dataclass
@@ -90,12 +130,12 @@ class HandlerEntry:
 
     priority: int
     name: str
-    handler: "ControlHandler | FunctionControlHandler"
-    event_types: set[type] | None
+    handler: ControlHandler | FunctionControlHandler
+    event_types: set[EventType] | None
     metadata: HandlerMetadata
     deleted: bool = False
 
-    def __lt__(self, other: "HandlerEntry") -> bool:
+    def __lt__(self, other: HandlerEntry) -> bool:
         """Compare by priority for heap ordering.
 
         Returns
@@ -141,54 +181,73 @@ class ControlManager(BaseEventManager, EventFilterMixin):
         self._strong_refs: dict[str, Any] = {}
 
     def register(
-        self, handler: ControlHandler | ControlHandlerFunc | AsyncControlHandlerFunc, **kwargs: Any
+        self,
+        handler: ControlHandler | ControlHandlerFunc | AsyncControlHandlerFunc,
+        *,
+        priority: int | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        event_types: EventTypesInput = None,
+        keep_alive: bool = False,
+        **extra: Any,
     ) -> str:
         """Register a control handler with optional priority and event filtering."""
+        if extra:
+            unexpected = ", ".join(sorted(extra))
+            raise TypeError(f"Unexpected keyword arguments: {unexpected}")
+
         metadata = _get_control_metadata(handler)
 
-        priority = kwargs.get("priority")
-        if priority is None:
-            priority = (
+        resolved_priority = (
+            priority
+            if priority is not None
+            else (
                 metadata.priority
                 if metadata and metadata.priority is not None
                 else DEFAULT_PRIORITY
             )
-        if not isinstance(priority, int):
-            raise TypeError("priority must be an integer")
+        )
+        candidate_name = name if name is not None else (metadata.name if metadata else None)
+        resolved_description = (
+            description
+            if description is not None
+            else (metadata.description if metadata and metadata.description else "")
+        )
+        raw_event_types: EventTypesInput = (
+            event_types if event_types is not None else (metadata.event_types if metadata else None)
+        )
+        normalized_event_types = (
+            normalize_event_types(raw_event_types) if raw_event_types is not None else None
+        )
 
-        name_arg = kwargs.get("name")
-        if isinstance(name_arg, str) and name_arg:
-            name: str = name_arg
-        elif metadata and isinstance(metadata.name, str) and metadata.name:
-            name = metadata.name
-        else:
+        config = ControlRegistrationConfig(
+            priority=resolved_priority,
+            name=candidate_name,
+            description=resolved_description,
+            event_types=normalized_event_types,
+            keep_alive=keep_alive,
+        )
+
+        resolved_name = config.name
+        if not resolved_name:
             fallback = getattr(handler, "__name__", f"handler_{id(handler)}")
-            name = fallback if isinstance(fallback, str) else str(fallback)
+            resolved_name = fallback if isinstance(fallback, str) else str(fallback)
 
-        description = kwargs.get("description")
-        if description is None and metadata and metadata.description:
-            description = metadata.description
-        if description is None:
-            description = ""
+        if resolved_name in self._handler_index:
+            raise ValueError(f"Handler '{resolved_name}' already registered")
 
-        event_types_param = kwargs.get("event_types")
-        if event_types_param is None and metadata:
-            event_types_param = metadata.event_types
-        event_filter = _coerce_event_types(event_types_param)
+        metadata_model = HandlerMetadata(
+            priority=config.priority, name=resolved_name, description=config.description
+        )
 
-        keep_alive = bool(kwargs.get("keep_alive", False))
-
-        if name in self._handler_index:
-            raise ValueError(f"Handler '{name}' already registered")
-
-        metadata_model = HandlerMetadata(priority=priority, name=name, description=description)
+        keep_alive_flag = config.keep_alive
 
         if hasattr(handler, "handle"):
             wrapped_handler = cast("ControlHandler", handler)
         elif callable(handler):
             _ensure_control_response_return_type(handler)
             wrapped_handler = FunctionControlHandler(handler, metadata_model)
-            keep_alive = True
+            keep_alive_flag = True
         else:
             raise TypeError(
                 "Handler must be callable or implement ControlHandler protocol, "
@@ -196,30 +255,30 @@ class ControlManager(BaseEventManager, EventFilterMixin):
             )
 
         entry = HandlerEntry(
-            priority=priority,
-            name=name,
+            priority=config.priority,
+            name=resolved_name,
             handler=wrapped_handler,
-            event_types=event_filter,
+            event_types=config.event_types,
             metadata=metadata_model,
             deleted=False,
         )
 
         heapq.heappush(self._handler_heap, entry)
-        self._handler_index[name] = entry
+        self._handler_index[resolved_name] = entry
 
-        if self._use_weak_refs and not keep_alive:
+        if self._use_weak_refs and not keep_alive_flag:
             try:
                 weak_ref = weakref.ref(wrapped_handler)
-                self._handlers[name] = weak_ref
+                self._handlers[resolved_name] = weak_ref
             except TypeError:
-                self._handlers[name] = wrapped_handler
-                self._strong_refs[name] = wrapped_handler
+                self._handlers[resolved_name] = wrapped_handler
+                self._strong_refs[resolved_name] = wrapped_handler
         else:
-            self._handlers[name] = wrapped_handler
-            if keep_alive:
-                self._strong_refs[name] = wrapped_handler
+            self._handlers[resolved_name] = wrapped_handler
+            if keep_alive_flag:
+                self._strong_refs[resolved_name] = wrapped_handler
 
-        return name
+        return resolved_name
 
     def _should_handle(self, entry: HandlerEntry, event: Any) -> bool:
         """Check if handler should process this event type.

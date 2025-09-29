@@ -32,13 +32,13 @@ def has_hexdag_attrs(obj: object) -> bool:
 logger = logging.getLogger(__name__)
 
 
-def discover_components(module: object) -> list[tuple[str, type | Callable | object]]:
+def discover_components(module: ModuleType) -> list[tuple[str, type | Callable | object]]:
     """Discover all components with _hexdag_type in a module.
 
     Parameters
     ----------
-    module : object
-        Value to scan for components.
+    module : ModuleType
+        Module object to scan for components.
 
     Returns
     -------
