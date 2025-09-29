@@ -108,9 +108,9 @@ class TestOrchestrator:
     @pytest.fixture
     def observers(self):
         """Create mock observer manager for testing."""
-        from hexai.core.application.events import ObserverManager
-
-        return AsyncMock(spec=ObserverManager)
+        mock = AsyncMock()
+        mock.notify = AsyncMock(return_value=None)
+        return mock
 
     @pytest.mark.asyncio
     async def test_simple_sequential_execution(self, orchestrator, observers):
