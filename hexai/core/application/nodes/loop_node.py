@@ -17,10 +17,12 @@ Conventions:
 
 import asyncio
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ...domain.dag import NodeSpec
 from ...registry import node
@@ -43,6 +45,11 @@ class StopReason(str, Enum):
     NONE = "none"  # loop did not run or ended unexpectedly
 
 
+@dataclass(frozen=True)
+class ReduceConfig:
+    reducer: Callable[[Any, Any], Any]
+
+
 @dataclass
 class LoopConfig:
     """Configuration for LoopNode (functional-only).
@@ -51,7 +58,7 @@ class LoopConfig:
     - on_iteration_end: Callable[[dict, Any], dict] — hook to update state after each iteration.
     - init_state: dict — initial mutable state dict shared across iterations.
     - collect_mode: Literal["list", "last", "reduce"] — optional override for result collection.
-    - reducer: Callable[[Any, Any], Any] — required when using "reduce".
+    - reduce_config: ReduceConfig — required when using "reduce".
     - break_if: Iterable[Callable[[dict, dict], bool]] = If returns True after an iteration's body
     the loop termianted with StopReason.BREAK_GUARD.
     """
@@ -65,7 +72,7 @@ class LoopConfig:
     init_state: dict = field(default_factory=dict)
 
     collect_mode: CollectMode = "last"
-    reducer: Callable[[Any, Any], Any] | None = None
+    reduce_config: ReduceConfig | None = None
 
     max_iterations: int = 1
     iteration_key: str = "loop_iteration"
@@ -77,8 +84,10 @@ class LoopConfig:
             raise ValueError("max_iterations must be positive")
         if self.collect_mode not in ("list", "last", "reduce"):
             raise ValueError("collect_mode must be one of: list | last | reduce")
-        if self.collect_mode == "reduce" and self.reducer is None:
-            raise ValueError("reducer is required when collect_mode='reduce'")
+        if self.collect_mode == "reduce" and (
+            self.reduce_config is None or self.reduce_config.reducer is None
+        ):
+            raise ValueError("ReduceConfig with a reducer is required when collect_mode='reduce'")
 
 
 @dataclass
@@ -88,11 +97,29 @@ class ConditionalConfig:
     tie_break: TieBreak = "first_true"
 
     def __post_init__(self) -> None:
-        if not isinstance(self.branches, list) or len(self.branches) == 0:
-            raise ValueError("branches must be a non-empty list")
+        if (not self.branches) and (self.else_action is None):
+            raise ValueError("branches must be a non-empty list or else_action must be provided")
 
         if self.tie_break != "first_true":
             raise ValueError("tie_break must be 'first_true'")
+
+
+class NodeParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    in_model: Any | None = None
+    out_model: Any | None = None
+    deps: set[str] = Field(default_factory=set)
+
+    @field_validator("deps", mode="before")
+    @classmethod
+    def _coerce_deps(cls, v: str | Collection[str] | None) -> set[str]:
+        if v is None:
+            return set()
+        if isinstance(v, (list, tuple, set)):
+            return set(v)
+        if isinstance(v, str):
+            return {v}
+        raise ValueError("deps must be a collection of strings or a single string")
 
 
 def _normalize_input_data(input_data: Any) -> Any:
@@ -116,7 +143,7 @@ def _eval_break_guards(
             if g(data, state):
                 return True
         except Exception as e:
-            logger.debug("break_if[%d] raised; ignoring error: %s", idx, e)
+            logger.warning("break_if[%d] raised; ignoring error: %s", idx, e)
     return False
 
 
@@ -128,9 +155,16 @@ def _apply_on_iteration_end(
         return state
     try:
         new_state = on_end(state, out)
-        return new_state if isinstance(new_state, dict) else state
     except Exception as e:
-        logger.debug("on_iteration_end failed: %s", e)
+        logger.warning("on_iteration_end failed: %s", e)
+        return state
+    if new_state is state:
+        return dict(state)
+
+    try:
+        return dict(new_state)
+    except Exception as e:
+        logger.warning("on_iteration_end failed: %s", e)
         return state
 
 
@@ -153,13 +187,119 @@ class LoopNode(BaseNodeFactory):
     - Otherwise defaults to "last".
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, name: str | None = None, condition: Callable[[dict, dict], bool] | None = None
+    ) -> None:
         """Initialize LoopNode factory."""
         super().__init__()
 
+        self._name: str | None = name
+        self._while: Callable[[dict, dict], bool] | None = condition
+        self._body: Callable[[dict, dict], Any] = lambda d, s: None
+        self._on_end: Callable[[dict, Any], dict] = lambda s, _: s
+        self._init_state: dict = {}
+        self._collect_mode: CollectMode = "last"
+        self._reduce_cfg: ReduceConfig | None = None
+        self._max_iter: int = 1
+        self._iter_key: str = "loop_iteration"
+        self._break_if: list[Callable[[dict, dict], bool]] = []
+
+        self._deps: set[str] = set()
+        self._in_model: Any | None = None
+        self._out_model: Any | None = None
+
+    def name(self, n: str) -> "LoopNode":
+        self._name = n
+        return self
+
+    def condition(self, fn: Callable[[dict, dict], bool]) -> "LoopNode":
+        self._while = fn
+        return self
+
+    def do(self, fn: Callable[[dict, dict], Any]) -> "LoopNode":
+        self._body = fn
+        return self
+
+    def on_iteration_end(self, fn: Callable[[dict, Any], dict]) -> "LoopNode":
+        self._on_end = fn
+        return self
+
+    def init_state(self, state: dict) -> "LoopNode":
+        self._init_state = dict(state or {})
+        return self
+
+    def collect_last(self) -> "LoopNode":
+        self._collect_mode = "last"
+        self._reduce_cfg = None
+        return self
+
+    def collect_list(self) -> "LoopNode":
+        self._collect_mode = "list"
+        self._reduce_cfg = None
+        return self
+
+    def collect_reduce(self, reducer: Callable[[Any, Any], Any]) -> "LoopNode":
+        self._collect_mode = "reduce"
+        self._reduce_cfg = ReduceConfig(reducer=reducer)
+        return self
+
+    def max_iterations(self, n: int) -> "LoopNode":
+        self._max_iter = n
+        return self
+
+    def iteration_key(self, key: str) -> "LoopNode":
+        self._iter_key = key
+        return self
+
+    def break_if(self, *preds: Callable[[dict, dict], bool]) -> "LoopNode":
+        self._break_if.extend(preds)
+        return self
+
+    def deps(self, deps: Iterable[str]) -> "LoopNode":
+        self._deps = set(deps or [])
+        return self
+
+    def in_model(self, model: Any) -> "LoopNode":
+        self._in_model = model
+        return self
+
+    def out_model(self, model: Any) -> "LoopNode":
+        self._out_model = model
+        return self
+
+    def build(self) -> NodeSpec:
+        """Build NodeSpec from fluent builder state."""
+        if not self._name:
+            raise ValueError("LoopNode name is required")
+        if self._while is None:
+            raise ValueError("condition(...) is required")
+        if self._max_iter <= 0:
+            raise ValueError("max_iterations must be positive")
+        if self._collect_mode == "reduce" and self._reduce_cfg is None:
+            raise ValueError("ReduceConfig is required when collect_mode='reduce'")
+
+        cfg = LoopConfig(
+            while_condition=self._while,
+            body_fn=self._body,
+            on_iteration_end=self._on_end,
+            init_state=self._init_state,
+            collect_mode=self._collect_mode,
+            reduce_config=self._reduce_cfg,
+            max_iterations=self._max_iter,
+            iteration_key=self._iter_key,
+            break_if=self._break_if,
+        )
+        return self.__call__(
+            name=self._name,
+            config=cfg,
+            deps=self._deps,
+            in_model=self._in_model,
+            out_model=self._out_model,
+        )
+
     @staticmethod
     def _init_collector(
-        mode: CollectMode, reducer: Callable[[Any, Any], Any] | None
+        mode: CollectMode, reduce_cfg: ReduceConfig | None
     ) -> tuple[Any, Callable[[Any, Any], Any]]:
         """Initialize collector node."""
         if mode == "list":
@@ -178,11 +318,13 @@ class LoopNode(BaseNodeFactory):
 
             return acc, collect_last
         if mode == "reduce":
+            if reduce_cfg is None:
+                raise ValueError("ReduceConfig is required when collect_mode ='reduce'")
+            reducer = reduce_cfg.reducer
             acc = None
-            red = reducer or (lambda _a, b: b)
 
             def collect_reduce(a: Any, x: Any) -> Any:
-                return x if a is None else red(a, x)
+                return x if a is None else reducer(a, x)
 
             return acc, collect_reduce
         raise ValueError("collect_mode must be one of: list | last | reduce")
@@ -198,7 +340,7 @@ class LoopNode(BaseNodeFactory):
                 return False, StopReason.CONDITION
             return True, None
         except Exception as e:
-            logger.debug("main condition raised; stop loop: %s", e)
+            logger.warning("main condition raised; stop loop: %s", e)
             return False, StopReason.CONDITION_ERROR
 
     def __call__(
@@ -226,7 +368,7 @@ class LoopNode(BaseNodeFactory):
         on_iteration_end = config.on_iteration_end
         init_state = config.init_state
         collect_mode = config.collect_mode
-        reducer = config.reducer
+        reducer_cfg = config.reduce_config
         max_iterations = config.max_iterations
         iteration_key = config.iteration_key
         break_if = config.break_if
@@ -252,7 +394,7 @@ class LoopNode(BaseNodeFactory):
             # Local loop state
             state = dict(init_state or {})
 
-            acc, collect_fn = self._init_collector(collect_mode, reducer)
+            acc, collect_fn = self._init_collector(collect_mode, reducer_cfg)
 
             iteration_count = 0
             stopped_by: StopReason = StopReason.NONE
@@ -302,18 +444,18 @@ class LoopNode(BaseNodeFactory):
             }
 
         # Map DirectedGraph-related arguments to NodeSpec fields
-        deps = set(kwargs.pop("deps", []) or [])
-        in_model = kwargs.pop("in_model", None)
-        out_model = kwargs.pop("out_model", None)
-        params = kwargs  # any remaining kwargs go into NodeSpec.params
+        try:
+            params_model = NodeParams(**kwargs)
+        except Exception as e:
+            raise ValueError(f"Invalid node params: {e}") from e
 
         return NodeSpec(
             name=name,
             fn=loop_fn,
-            in_model=in_model,
-            out_model=out_model,
-            deps=deps,
-            params=params,
+            in_model=params_model.in_model,
+            out_model=params_model.out_model,
+            deps=params_model.deps,
+            params=params_model.model_dump(exclude_none=True),
         )
 
 
@@ -338,6 +480,73 @@ class ConditionalNode(BaseNodeFactory):
     - Functional-only predicates (no strings, no eval).
     - Input is normalized to dict internally; original input is not echoed back.
     """
+
+    def __init__(self, name: str | None = None) -> None:
+        super().__init__()
+        # builder state
+        self._name: str | None = name
+        self._branches: list[dict[str, Any]] = []
+        self._else_action: str | None = None
+
+        # NodeSpec params
+        self._deps: set[str] = set()
+        self._in_model: Any | None = None
+        self._out_model: Any | None = None
+
+    def name(self, n: str) -> "ConditionalNode":
+        self._name = n
+        return self
+
+    def when(
+        self,
+        pred: Callable[[dict, dict], bool],
+        action: str,
+    ) -> "ConditionalNode":
+        if not callable(pred):
+            raise ValueError("when(): pred must be callable")
+        if not isinstance(action, str) or not action:
+            raise ValueError("when(): action must be a non-empty string")
+        self._branches.append({"pred": pred, "action": action})
+        return self
+
+    def otherwise(self, action: str) -> "ConditionalNode":
+        if not isinstance(action, str) or not action:
+            raise ValueError("otherwise(): action must be a non-empty string")
+        self._else_action = action
+        return self
+
+    def deps(self, deps: Iterable[str]) -> "ConditionalNode":
+        self._deps = set(deps or [])
+        return self
+
+    def in_model(self, model: Any) -> "ConditionalNode":
+        self._in_model = model
+        return self
+
+    def out_model(self, model: Any) -> "ConditionalNode":
+        self._out_model = model
+        return self
+
+    def build(self) -> NodeSpec:
+        """Build NodeSpec from fluent builder state."""
+
+        if not self._name:
+            raise ValueError("ConditionalNode name is required")
+        if not self._branches and self._else_action is None:
+            raise ValueError("At least one branch (when) or otherwise(...) action is required")
+
+        cfg = ConditionalConfig(
+            branches=self._branches,
+            else_action=self._else_action,
+            tie_break="first_true",
+        )
+        return self.__call__(
+            name=self._name,
+            config=cfg,
+            deps=self._deps,
+            in_model=self._in_model,
+            out_model=self._out_model,
+        )
 
     def __call__(
         self,
@@ -386,7 +595,7 @@ class ConditionalNode(BaseNodeFactory):
                 try:
                     ok = bool(br["pred"](data, state))
                 except Exception as e:
-                    logger.debug("predicate[%d] raised; treated as False: %s", idx, e)
+                    logger.warning("predicate[%d] raised; treated as False: %s", idx, e)
                 evaluations.append(ok)
                 if ok and chosen is None:
                     chosen = br["action"]
@@ -409,17 +618,16 @@ class ConditionalNode(BaseNodeFactory):
             logger.info("Conditional '%s' -> routing: %s", name, chosen)
             return result
 
-        # Map DirectedGraph-related arguments to NodeSpec fields
-        deps = set(kwargs.pop("deps", []) or [])
-        in_model = kwargs.pop("in_model", None)
-        out_model = kwargs.pop("out_model", None)
-        params = kwargs  # any remaining kwargs go into NodeSpec.params
+        try:
+            params_model = NodeParams(**kwargs)
+        except Exception as e:
+            raise ValueError(f"Invalid node parameters: {e}") from e
 
         return NodeSpec(
             name=name,
             fn=conditional_fn,
-            in_model=in_model,
-            out_model=out_model,
-            deps=deps,
-            params=params,
+            in_model=params_model.in_model,
+            out_model=params_model.out_model,
+            deps=params_model.deps,
+            params=params_model.model_dump(exclude_none=True),
         )
