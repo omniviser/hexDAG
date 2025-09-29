@@ -18,8 +18,8 @@ else:
 
 from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
 
+from .context import ExecutionContext
 from .events import (
-    ExecutionContext,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
@@ -29,6 +29,7 @@ from .events import (
     WaveStarted,
 )
 from .policies.models import PolicyContext, PolicyResponse, PolicySignal
+from .ports_builder import PortsBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -78,15 +79,68 @@ class Orchestrator:
         self.ports = ports or {}
         self.strict_validation = strict_validation
 
+    @classmethod
+    def from_builder(
+        cls,
+        builder: PortsBuilder,
+        max_concurrent_nodes: int = 10,
+        strict_validation: bool = False,
+    ) -> "Orchestrator":
+        """Create an Orchestrator using a PortsBuilder.
+
+        This provides a more intuitive way to configure the orchestrator
+        with type-safe port configuration.
+
+        Args
+        ----
+            builder: Configured PortsBuilder instance
+            max_concurrent_nodes: Maximum number of nodes to execute concurrently
+            strict_validation: If True, raise errors on validation failure
+
+        Returns
+        -------
+            Orchestrator
+                New orchestrator instance with configured ports
+
+        Example
+        -------
+            ```python
+            orchestrator = Orchestrator.from_builder(
+                PortsBuilder()
+                .with_llm(OpenAIAdapter())
+                .with_database(PostgresAdapter())
+                .with_observer_manager(LocalObserverManager())
+                .with_policy_manager(LocalPolicyManager())
+            )
+            ```
+        """
+        return cls(
+            max_concurrent_nodes=max_concurrent_nodes,
+            ports=builder.build(),
+            strict_validation=strict_validation,
+        )
+
     async def run(
         self,
         graph: DirectedGraph,
         initial_input: Any,
-        additional_ports: dict[str, Any] | None = None,
+        additional_ports: dict[str, Any] | PortsBuilder | None = None,
         validate: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute a DAG with concurrent processing and resource limits.
+
+        Supports both traditional dictionary-based ports and the new PortsBuilder
+        for additional_ports parameter. When using PortsBuilder, it will be
+        automatically converted to a dictionary before merging with base ports.
+
+        Args
+        ----
+            graph: The DirectedGraph to execute
+            initial_input: Initial input data for the graph
+            additional_ports: Either a dictionary of ports or a PortsBuilder instance
+            validate: Whether to validate the graph before execution
+            **kwargs: Additional keyword arguments
 
         Returns
         -------
@@ -97,11 +151,33 @@ class Orchestrator:
         ------
         OrchestratorError
             If DAG validation fails or pipeline/wave execution is blocked
+
+        Examples
+        --------
+        Using dictionary for additional ports (traditional approach):
+
+        >>> results = await orchestrator.run(
+        ...     graph,
+        ...     input_data,
+        ...     additional_ports={"llm": MockLLM()}
+        ... )
+
+        Using PortsBuilder for additional ports (new approach):
+
+        >>> results = await orchestrator.run(
+        ...     graph,
+        ...     input_data,
+        ...     additional_ports=PortsBuilder().with_llm(MockLLM())
+        ... )
         """
         # Merge orchestrator ports with additional execution-specific ports
         all_ports = {**self.ports}
         if additional_ports:
-            all_ports.update(additional_ports)
+            # Handle both dictionary and PortsBuilder
+            if isinstance(additional_ports, PortsBuilder):
+                all_ports.update(additional_ports.build())
+            else:
+                all_ports.update(additional_ports)
         if validate:
             try:
                 # By default, skip type checking for backward compatibility

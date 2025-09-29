@@ -7,55 +7,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-# Execution Context
-# -----------------
-
-
-@dataclass
-class ExecutionContext:
-    """Context that flows through node and event execution.
-
-    Carries metadata through the execution pipeline.
-    """
-
-    dag_id: str
-    node_id: str | None = None
-    wave_index: int = 0
-    attempt: int = 1
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def with_node(self, node_id: str, wave_index: int) -> ExecutionContext:
-        """Create new context for a specific node execution.
-
-        Returns
-        -------
-        ExecutionContext
-            New context with updated node and wave information
-        """
-        return ExecutionContext(
-            dag_id=self.dag_id,
-            node_id=node_id,
-            wave_index=wave_index,
-            attempt=self.attempt,
-            metadata=self.metadata.copy(),
-        )
-
-    def with_attempt(self, attempt: int) -> ExecutionContext:
-        """Create new context with updated attempt number.
-
-        Returns
-        -------
-        ExecutionContext
-            New context with updated attempt number
-        """
-        return ExecutionContext(
-            dag_id=self.dag_id,
-            node_id=self.node_id,
-            wave_index=self.wave_index,
-            attempt=attempt,
-            metadata=self.metadata.copy(),
-        )
-
 
 @dataclass
 class Event:

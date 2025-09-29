@@ -3,9 +3,9 @@
 import asyncio
 
 from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexai.core.application.context import ExecutionContext
 from hexai.core.application.events import (
     Event,
-    ExecutionContext,
     NodeCompleted,
     NodeFailed,
     NodeStarted,

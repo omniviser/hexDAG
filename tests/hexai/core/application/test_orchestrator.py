@@ -1,7 +1,7 @@
 """Tests for the Orchestrator DAG execution engine."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from pydantic import BaseModel
@@ -956,3 +956,116 @@ class TestOrchestrator:
 
         expected = "final: processed_test (en) - valid"
         assert result["final"] == expected
+
+    # PortsBuilder Integration Tests
+    # -------------------------------
+
+    @pytest.mark.asyncio
+    async def test_from_builder(self):
+        """Test creating Orchestrator from PortsBuilder."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        mock_llm = Mock()
+        mock_observer = AsyncMock()
+        mock_observer.notify = AsyncMock()
+
+        # Create orchestrator using builder
+        orchestrator = Orchestrator.from_builder(
+            PortsBuilder().with_llm(mock_llm).with_observer_manager(mock_observer),
+            max_concurrent_nodes=5,
+        )
+
+        assert orchestrator.max_concurrent_nodes == 5
+        assert orchestrator.ports["llm"] is mock_llm
+        assert orchestrator.ports["observer_manager"] is mock_observer
+
+    @pytest.mark.asyncio
+    async def test_run_with_builder_additional_ports(self):
+        """Test running orchestrator with PortsBuilder as additional_ports."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        # Create simple DAG
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Create orchestrator with base ports
+        base_observer = AsyncMock()
+        base_observer.notify = AsyncMock()
+        orchestrator = Orchestrator(ports={"observer_manager": base_observer})
+
+        # Create additional ports using builder
+        additional_llm = Mock()
+        additional_ports = PortsBuilder().with_llm(additional_llm)
+
+        # Run with builder as additional_ports
+        results = await orchestrator.run(
+            graph,
+            initial_input=1,
+            additional_ports=additional_ports,
+        )
+
+        assert results["node1"] == 2  # 1 + 1
+        # Observer should have been notified (from base ports)
+        assert base_observer.notify.called
+
+    @pytest.mark.asyncio
+    async def test_builder_overrides_base_ports(self):
+        """Test that additional_ports builder overrides base ports."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Create orchestrator with base observer
+        base_observer = AsyncMock()
+        base_observer.notify = AsyncMock()
+        orchestrator = Orchestrator(ports={"observer_manager": base_observer})
+
+        # Create different observer in additional ports
+        override_observer = AsyncMock()
+        override_observer.notify = AsyncMock()
+        additional_ports = PortsBuilder().with_observer_manager(override_observer)
+
+        # Run with builder - should use override observer
+        results = await orchestrator.run(
+            graph,
+            initial_input=1,
+            additional_ports=additional_ports,
+        )
+
+        assert results["node1"] == 2
+        # Override observer should be used
+        assert override_observer.notify.called
+
+    @pytest.mark.asyncio
+    async def test_fluent_builder_with_orchestrator(self):
+        """Test complete fluent usage pattern."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Fluent pattern: create and configure in one chain
+        results = await Orchestrator.from_builder(
+            PortsBuilder()
+            .with_llm(Mock())
+            .with_observer_manager(AsyncMock(notify=AsyncMock()))
+            .with_custom("feature_flag", True)
+        ).run(graph, 1)
+
+        assert results["node1"] == 2
+
+    @pytest.mark.asyncio
+    async def test_with_defaults_integration(self):
+        """Test using with_defaults in orchestrator context."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Use with_defaults to get standard implementations
+        orchestrator = Orchestrator.from_builder(PortsBuilder().with_defaults())
+
+        # Should work even with default implementations
+        results = await orchestrator.run(graph, 1)
+        assert results["node1"] == 2

@@ -7,7 +7,6 @@ Clean, simplified event system with clear separation of concerns:
 # Event classes
 from .events import (
     Event,
-    ExecutionContext,
     LLMPromptSent,
     LLMResponseReceived,
     NodeCompleted,
@@ -45,6 +44,4 @@ __all__ = [
     "PolicySkipped",
     "PolicyFallback",
     "PolicyRetry",
-    # Models
-    "ExecutionContext",
 ]
