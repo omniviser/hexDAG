@@ -8,13 +8,17 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from .template_utils import (
+    MissingVariableError,
+    TemplateError,
+    extract_variables,
+    get_nested_value,
+    render_template,
+    validate_template_syntax,
+)
 
-class PromptTemplateError(Exception):
-    """Base exception for prompt template errors."""
-
-
-class MissingVariableError(PromptTemplateError):
-    """Raised when required template variables are missing."""
+# Re-export for backward compatibility
+PromptTemplateError = TemplateError
 
 
 # ---------------------------------------------------------------------------
@@ -62,54 +66,31 @@ class PromptTemplate:
         """
         self.template = template
 
+        # Validate template syntax
+        is_valid, error_msg = validate_template_syntax(template)
+        if not is_valid:
+            raise PromptTemplateError(f"Invalid template syntax: {error_msg}")
+
         if input_vars is not None:
             self.input_vars = list(input_vars)
         else:
-            self.input_vars = self._extract_variables(template)
+            self.input_vars = extract_variables(template)
 
     def _extract_variables(self, template: str) -> list[str]:
         """Extract variable names from template.
 
-        Args
-        ----
-            template: Template string to analyze
-
-        Returns
-        -------
-        list[str]
-            List of unique root variable names found in template
+        Deprecated: Use extract_variables from template_utils instead.
+        Kept for backward compatibility.
         """
-        # Extract variables from {{ variable }} patterns
-        pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
-        matches = re.findall(pattern, template)
-
-        # Extract root variable names (before any dots) and deduplicate
-        root_vars = []
-        for match in matches:
-            root_var = match.split(".")[0]
-            if root_var not in root_vars:
-                root_vars.append(root_var)
-
-        return root_vars
+        return extract_variables(template)
 
     def _get_nested_value(self, data: dict[str, Any], key: str) -> Any:
         """Get value from nested dictionary using dot notation.
 
-        Args
-        ----
-            data: Dictionary to extract value from
-            key: Key path (e.g., "user.name" -> data["user"]["name"])
-
-        Returns
-        -------
-        Any
-            The value at the specified path
+        Deprecated: Use get_nested_value from template_utils instead.
+        Kept for backward compatibility.
         """
-        parts = key.split(".")
-        value = data
-        for part in parts:
-            value = value[part] if isinstance(value, dict) else getattr(value, part)
-        return value
+        return get_nested_value(data, key)
 
     def render(self, **kwargs: Any) -> str:
         """Render the template with provided variables.
@@ -137,9 +118,8 @@ class PromptTemplate:
             template = PromptTemplate("User: {{user.name}}")
             result = template.render(user={"name": "Bob"})  # "User: Bob"
         """
-        # Check for missing required variables
+        # Check for missing required variables (including manually specified ones)
         missing_vars = [var for var in self.input_vars if var not in kwargs]
-
         if missing_vars:
             raise MissingVariableError(
                 f"Missing required template variables: {missing_vars}. "
@@ -147,21 +127,8 @@ class PromptTemplate:
                 f"Provided variables: {list(kwargs.keys())}"
             )
 
-        # Perform variable substitution
-        result = self.template
-
-        # Find all variable references in the template
-        pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
-
-        def replace_var(match: Any) -> str:
-            var_path = match.group(1).strip()
-            try:
-                value = self._get_nested_value(kwargs, var_path)
-                return str(value)
-            except (KeyError, AttributeError) as e:
-                raise MissingVariableError(f"Cannot access variable '{var_path}': {e}") from e
-
-        return re.sub(pattern, replace_var, result)
+        # Use the utility function for rendering (without validation since we did it above)
+        return render_template(self.template, kwargs, validate_vars=False)
 
     def parse_output(self, output: str) -> str:
         r"""Parse and post-process rendered template output.
@@ -288,7 +255,12 @@ class PromptTemplate:
             New PromptTemplate instance with enhanced content
         """
         enhanced_template = self.template + other
-        return PromptTemplate(enhanced_template, self.input_vars)
+        # When adding raw text, preserve existing variables without re-validation
+        # This allows adding text with braces that aren't template variables
+        result = PromptTemplate.__new__(PromptTemplate)
+        result.template = enhanced_template
+        result.input_vars = self.input_vars.copy()
+        return result
 
     def add(self, text: str) -> "PromptTemplate":
         """Add text to template (alias for + operator).
@@ -398,12 +370,14 @@ class FewShotPromptTemplate(PromptTemplate):
             New FewShotPromptTemplate instance with enhanced content
         """
         enhanced_base_template = self.base_template + other
-        return FewShotPromptTemplate(
-            enhanced_base_template,
-            self.examples,
-            format_example=self.format_example,
-            example_separator=self.example_separator,
-        )
+        result = FewShotPromptTemplate.__new__(FewShotPromptTemplate)
+        result.base_template = enhanced_base_template
+        result.examples = self.examples.copy()
+        result.example_separator = self.example_separator
+        result.format_example = self.format_example
+        result.template = result.base_template  # Will be rebuilt if needed
+        result.input_vars = self.input_vars.copy()
+        return result
 
     def add(self, text: str) -> "FewShotPromptTemplate":
         """Add text to template (alias for + operator).
