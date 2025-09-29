@@ -20,13 +20,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SafeJSONResult:
-    ok: bool
     data: Any | None = None
     error: ErrorCode | None = None
     message: str | None = None
     line: int | None = None
     col: int | None = None
     preview: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
 
 
 class SafeJSON:
@@ -42,14 +45,14 @@ class SafeJSON:
         )
 
         if len(text.encode("utf-8")) > self.max_size_bytes:
-            return SafeJSONResult(False, error="too_large", message="JSON exceeds size limit")
+            return SafeJSONResult(error="too_large", message="JSON exceeds size limit")
 
         if self._estimate_depth(text) > self.max_depth:
-            return SafeJSONResult(False, error="too_deep", message="JSON exceeds depth limit")
+            return SafeJSONResult(error="too_deep", message="JSON exceeds depth limit")
 
         # Step 1: try orjson
         try:
-            return SafeJSONResult(True, data=orjson.loads(text))
+            return SafeJSONResult(data=orjson.loads(text))
         except Exception as exc:
             logger.debug("orjson initial parse failed; attempting cleanup fallback: %s", exc)
 
@@ -60,7 +63,7 @@ class SafeJSON:
             and self._estimate_depth(cleaned) <= self.max_depth
         ):
             try:
-                return SafeJSONResult(True, data=orjson.loads(cleaned))
+                return SafeJSONResult(data=orjson.loads(cleaned))
             except Exception as exc:  # noqa: BLE001 - we deliberately log and fall back
                 logger.debug(
                     "orjson cleaned parse failed; falling back to stdlib for diagnostics: %s", exc
@@ -68,11 +71,10 @@ class SafeJSON:
 
         # Step 3: stdlib json for diagnostics
         try:
-            return SafeJSONResult(True, data=json.loads(cleaned, parse_constant=lambda _: None))
+            return SafeJSONResult(data=json.loads(cleaned, parse_constant=lambda _: None))
         except json.JSONDecodeError as e:
             preview = self._format_error_line(cleaned, e.lineno, e.colno)
             return SafeJSONResult(
-                False,
                 error="invalid_syntax",
                 message=e.msg,
                 line=e.lineno,
@@ -80,12 +82,12 @@ class SafeJSON:
                 preview=preview,
             )
         except Exception:
-            return SafeJSONResult(False, error="unrecoverable", message="Unrecoverable JSON")
+            return SafeJSONResult(error="unrecoverable", message="Unrecoverable JSON")
 
     def loads_from_text(self, text: str) -> SafeJSONResult:
         candidate = self._extract_json(text)
         if not candidate:
-            return SafeJSONResult(False, error="no_json_found", message="No JSON found in text")
+            return SafeJSONResult(error="no_json_found", message="No JSON found in text")
         return self.loads(candidate)
 
     # ------------------------------------------------------------------
@@ -96,8 +98,7 @@ class SafeJSON:
     def _cleanup(text: str) -> str:
         text = re.sub(r"(?m)\s*(//|#).*?$", "", text)
         text = re.sub(r",\s*([}\]])", r"\1", text)
-        text = re.sub(r"(?<!\\)'([^']*?)'(?!\\)", r'"\1"', text)
-        return text
+        return re.sub(r"(?<!\\)'([^']*?)'(?!\\)", r'"\1"', text)
 
     @staticmethod
     def _extract_json(text: str) -> str | None:

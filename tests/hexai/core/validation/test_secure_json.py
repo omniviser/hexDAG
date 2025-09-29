@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-import pytest
-from hexai.core.validation.secure_json import SafeJSON
 from pydantic import BaseModel
+
+from hexai.core.validation.secure_json import SafeJSON
 
 
 def test_extract_json_from_markdown_fenced_block():
@@ -43,7 +43,7 @@ def test_extract_json_by_bracket_matching():
 
 def test_secure_loads_fast_path_valid():
     result = SafeJSON().loads('{"a": 1}')
-    assert result.ok
+    assert result.error is None
     assert result.data == {"a": 1}
 
 
@@ -52,7 +52,7 @@ def test_secure_loads_rejects_large_input():
     large_value = "a" * 2000
     large_str = '{"x": "' + large_value + '"}'
     result = SafeJSON(max_size_bytes=1000).loads(large_str)
-    assert not result.ok
+    assert result.error is not None
     assert result.error == "too_large"
 
 
@@ -62,27 +62,27 @@ def test_secure_loads_rejects_too_deep_nesting():
     depth = sj.max_depth + 5
     nested = "[" * depth + "]" * depth
     result = sj.loads(nested)
-    assert not result.ok
+    assert result.error is not None
     assert result.error == "too_deep"
 
 
 def test_secure_loads_cleans_trailing_commas_and_single_quotes():
     dirty = """{ "a": 1, "b": [1,2,], 'c': 'val', }"""  # noqa: E501
     result = SafeJSON().loads(dirty)
-    assert result.ok
+    assert result.error is None
     assert result.data == {"a": 1, "b": [1, 2], "c": "val"}
 
 
 def test_secure_loads_strips_inline_comments():
     dirty = '{"a": 1, // comment\n "b": 2 # another\n }'
     result = SafeJSON().loads(dirty)
-    assert result.ok
+    assert result.error is None
     assert result.data == {"a": 1, "b": 2}
 
 
 def test_secure_loads_returns_none_on_unrecoverable():
     result = SafeJSON().loads('{"a"')
-    assert not result.ok
+    assert result.error is not None
     assert result.error == "invalid_syntax"
 
 
@@ -95,7 +95,7 @@ def test_loads_from_llm_output_end_to_end():
 ```
 """
     result = SafeJSON().loads_from_text(text)
-    assert result.ok
+    assert result.error is None
     assert result.data == {"ok": True}
 
 
@@ -105,7 +105,7 @@ def test_secure_loader_handles_invalid_json_returns_none():
 
     # secure loader should report invalid syntax for unrecoverable JSON
     result = SafeJSON().loads('{"a": not_a_number}')
-    assert not result.ok
+    assert result.error is not None
     assert result.error == "invalid_syntax"
 
 
@@ -116,7 +116,7 @@ def test_secure_loader_handles_minor_llm_formatting_and_pydantic_validation():
 
     dirty = """{ 'a': 1, 'b': [1,2,], }"""
     res = SafeJSON().loads(dirty)
-    assert res.ok
+    assert res.error is None
     data = res.data
     assert data == {"a": 1, "b": [1, 2]}
 
