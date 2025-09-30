@@ -17,10 +17,10 @@ class TestBootstrapWithRealConfig:
     def cleanup_registry(self):
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
         yield
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
     def test_bootstrap_with_config_file(self):
         """Test bootstrap using a real TOML config file."""
@@ -159,7 +159,7 @@ plugins = [
             os.environ.pop("ANTHROPIC_API_KEY", None)
 
             if global_registry.ready:
-                global_registry._cleanup_state()
+                global_registry._reset_for_testing()
 
             bootstrap_registry(config_path)
             adapters = [
@@ -175,7 +175,7 @@ plugins = [
 
             # Test 2: With OpenAI key
             os.environ["OPENAI_API_KEY"] = "test-key"
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
             bootstrap_registry(config_path)
             adapters = [

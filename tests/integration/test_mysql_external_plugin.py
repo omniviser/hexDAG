@@ -40,10 +40,10 @@ class TestMySQLExternalPlugin:
     def cleanup_registry(self):
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
         yield
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
     def test_mysql_external_plugin_discovery(self):
         """Test that MySQL adapter can be discovered as an external plugin."""

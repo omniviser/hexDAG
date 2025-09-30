@@ -38,10 +38,10 @@ class TestSystemBootstrap:
     def cleanup_registry(self):
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
         yield
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
     def test_bootstrap_loads_core_components(self):
         """Test that bootstrap loads all core components."""
@@ -121,7 +121,7 @@ class TestPluginSystemIntegration:
         """Test that correct adapter is selected based on availability."""
         # Test with no API keys - should use mock
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
         config = HexDAGConfig(
             modules=["hexai.core.ports"],
@@ -154,7 +154,7 @@ class TestPluginSystemIntegration:
     async def test_multiple_adapters_concurrent(self):
         """Test multiple adapters working concurrently."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
         config = HexDAGConfig(modules=["hexai.core.ports"], plugins=["hexai.adapters.mock"])
 
@@ -181,7 +181,7 @@ class TestPluginSystemIntegration:
     def test_database_adapters_registration(self):
         """Test that database adapters (SQLite and MySQL) are properly registered."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
         # Import MySQL adapter if available
         config = HexDAGConfig(
             modules=[
@@ -211,7 +211,7 @@ class TestPluginSystemIntegration:
     async def test_sqlite_adapter_functionality(self):
         """Test SQLite adapter basic functionality."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
         config = HexDAGConfig(
             modules=[

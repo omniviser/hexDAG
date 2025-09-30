@@ -20,11 +20,11 @@ class TestLLMAdaptersBootstrap:
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
             # Check if _cleanup_state method exists
-            if hasattr(global_registry, "_cleanup_state"):
-                global_registry._cleanup_state()
+            if hasattr(global_registry, "_reset_for_testing"):
+                global_registry._reset_for_testing()
         yield
-        if global_registry.ready and hasattr(global_registry, "_cleanup_state"):
-            global_registry._cleanup_state()
+        if global_registry.ready and hasattr(global_registry, "_reset_for_testing"):
+            global_registry._reset_for_testing()
 
     def test_bootstrap_loads_llm_adapters(self):
         """Test that bootstrap loads LLM adapter plugins."""
