@@ -7,9 +7,10 @@ from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
-from ...domain.dag import NodeSpec
-from ...registry import node
-from ...registry.models import NodeSubtype
+from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import node
+from hexai.core.registry.models import NodeSubtype
+
 from .base_node_factory import BaseNodeFactory
 from .mapped_input import MappedInput
 
@@ -39,6 +40,11 @@ class FunctionNode(BaseNodeFactory):
             deps: List of dependency node names
             input_mapping: Optional field mapping dict {target_field: "source.path"}
             **kwargs: Additional parameters
+
+        Returns
+        -------
+        NodeSpec
+            Complete node specification ready for execution
         """
         # Validate function can be used properly
         self._validate_function(fn)
@@ -110,7 +116,13 @@ class FunctionNode(BaseNodeFactory):
         input_model: type[BaseModel] | type | None,
         output_model: type[BaseModel] | type | None,
     ) -> Callable[..., Any]:
-        """Create a simple wrapped function with explicit port handling."""
+        """Create a simple wrapped function with explicit port handling.
+
+        Returns
+        -------
+        Callable[..., Any]
+            Wrapped function that handles orchestrator integration
+        """
         # Analyze function signature once
         sig = inspect.signature(fn)
         accepts_kwargs = any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values())
@@ -152,7 +164,8 @@ class FunctionNode(BaseNodeFactory):
 
         Raises
         ------
-            ValueError: If function cannot be used
+        ValueError
+            If function cannot be used
         """
         sig = inspect.signature(fn)
         params = list(sig.parameters.values())
@@ -177,6 +190,7 @@ class FunctionNode(BaseNodeFactory):
 
         Returns
         -------
+        tuple[type[BaseModel] | None, type[BaseModel] | None]
             Tuple of (input_schema, output_schema) where each can be None if not inferrable
         """
         try:
@@ -224,6 +238,7 @@ class FunctionNode(BaseNodeFactory):
 
         Returns
         -------
+        dict[str, str]
             Mapping dict {field: field} for each field
         """
         return {field: field for field in fields}
@@ -238,6 +253,7 @@ class FunctionNode(BaseNodeFactory):
 
         Returns
         -------
+        dict[str, str]
             The mapping dict as-is (for consistency with other methods)
         """
         return mapping
@@ -254,6 +270,7 @@ class FunctionNode(BaseNodeFactory):
 
         Returns
         -------
+        dict[str, str]
             Mapping dict {prefix_field: source_node.field}
         """
         return {f"{prefix}{field}": f"{source_node}.{field}" for field in fields}
@@ -268,6 +285,7 @@ class FunctionNode(BaseNodeFactory):
 
         Returns
         -------
+        NodeSpec
             New NodeSpec with the input mapping applied
         """
         # Create new params with the input_mapping

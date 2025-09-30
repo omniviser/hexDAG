@@ -1,5 +1,6 @@
 """Port interface for Tool Routers."""
 
+from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
 from hexai.core.registry.decorators import port
@@ -8,14 +9,13 @@ from hexai.core.registry.decorators import port
 @port(
     name="tool_router",
     namespace="core",
-    required_methods=["acall_tool", "get_available_tools"],
-    optional_methods=["get_tool_schema", "get_all_tool_schemas"],
 )
 @runtime_checkable
 class ToolRouter(Protocol):
     """Protocol for routing tool calls."""
 
     # Required methods
+    @abstractmethod
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
         """Call a tool with parameters.
 
@@ -30,6 +30,7 @@ class ToolRouter(Protocol):
         """
         ...
 
+    @abstractmethod
     def get_available_tools(self) -> list[str]:
         """Get list of available tool names.
 

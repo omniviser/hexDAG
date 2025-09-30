@@ -1,7 +1,7 @@
 """Tests for the Orchestrator DAG execution engine."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from pydantic import BaseModel
@@ -44,7 +44,13 @@ async def async_combine(inputs: dict, **ports) -> int:
 
 
 def failing_function(x: int, **ports) -> int:
-    """Raise an exception."""
+    """Raise an exception.
+
+    Raises
+    ------
+    ValueError
+        Always raises a test failure
+    """
     raise ValueError("Intentional test failure")
 
 
@@ -102,9 +108,8 @@ class TestOrchestrator:
     @pytest.fixture
     def observers(self):
         """Create mock observer manager for testing."""
-        from hexai.core.application.events import ObserverManager
-
-        mock = AsyncMock(spec=ObserverManager)
+        mock = AsyncMock()
+        mock.notify = AsyncMock(return_value=None)
         return mock
 
     @pytest.mark.asyncio
@@ -283,14 +288,13 @@ class TestOrchestrator:
                     return sum(x.values()) + 1
 
                 return wrapped_dict
-            else:
 
-                async def wrapped_int(x: int, **ports) -> int:
-                    execution_order.append(name)
-                    await asyncio.sleep(0.01)
-                    return x + 1
+            async def wrapped_int(x: int, **ports) -> int:
+                execution_order.append(name)
+                await asyncio.sleep(0.01)
+                return x + 1
 
-                return wrapped_int
+            return wrapped_int
 
         # Create DAG where wave 1 = [a], wave 2 = [b, c], wave 3 = [d]
         graph = DirectedGraph()
@@ -338,8 +342,8 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_ports_with_mocks(self, orchestrator, observers):
         """Test orchestrator with mock LLM and ToolRouter ports."""
-        from hexai.adapters.function_tool_router import FunctionBasedToolRouter
         from hexai.adapters.mock.mock_llm import MockLLM
+        from hexai.adapters.unified_tool_router import UnifiedToolRouter
 
         async def async_dummy_node_with_ports(input_data, llm=None, tool_router=None, **ports):
             """Async dummy node that uses ports."""
@@ -361,15 +365,25 @@ class TestOrchestrator:
         graph = DirectedGraph()
         graph.add(NodeSpec("async_node", async_dummy_node_with_ports))
 
-        # Create mock ports - use FunctionBasedToolRouter with a simple mock function
+        # Create mock ports - use UnifiedToolRouter with a simple mock function
         mock_llm = MockLLM(responses=["Test LLM response"])
-        mock_tool_router = FunctionBasedToolRouter()
+        mock_tool_router = UnifiedToolRouter()
 
-        # Add a simple mock tool
+        # Add a simple mock tool by registering it with the global registry
+        from hexai.core.registry import registry, tool
+        from hexai.core.registry.models import ComponentType
+
+        @tool(name="test_tool", namespace="test")
         def mock_test_tool(input_data):
             return f"Mock tool result for: {input_data}"
 
-        mock_tool_router.register_function(mock_test_tool, "test_tool")
+        # Register the tool with the global registry
+        registry.register(
+            name="test_tool",
+            component=mock_test_tool,
+            component_type=ComponentType.TOOL,
+            namespace="test",
+        )
         ports = {"llm": mock_llm, "tool_router": mock_tool_router, "observers": observers}
 
         # Execute the DAG
@@ -606,6 +620,7 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_graph_level_schema_validation(self, orchestrator, observers):
         """Test that graph validates schema compatibility at construction time."""
+
         class OutputSchemaA(BaseModel):
             data: str
 
@@ -630,7 +645,7 @@ class TestOrchestrator:
         error_str = str(exc_info.value)
         assert "consumer" in error_str
         # The error occurs when trying to access a field that doesn't exist
-        assert ("has no attribute" in error_str or "validation failed" in error_str.lower())
+        assert "has no attribute" in error_str or "validation failed" in error_str.lower()
 
     @pytest.mark.asyncio
     async def test_graph_level_compatible_schemas(self, orchestrator, observers):
@@ -941,3 +956,116 @@ class TestOrchestrator:
 
         expected = "final: processed_test (en) - valid"
         assert result["final"] == expected
+
+    # PortsBuilder Integration Tests
+    # -------------------------------
+
+    @pytest.mark.asyncio
+    async def test_from_builder(self):
+        """Test creating Orchestrator from PortsBuilder."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        mock_llm = Mock()
+        mock_observer = AsyncMock()
+        mock_observer.notify = AsyncMock()
+
+        # Create orchestrator using builder
+        orchestrator = Orchestrator.from_builder(
+            PortsBuilder().with_llm(mock_llm).with_observer_manager(mock_observer),
+            max_concurrent_nodes=5,
+        )
+
+        assert orchestrator.max_concurrent_nodes == 5
+        assert orchestrator.ports["llm"] is mock_llm
+        assert orchestrator.ports["observer_manager"] is mock_observer
+
+    @pytest.mark.asyncio
+    async def test_run_with_builder_additional_ports(self):
+        """Test running orchestrator with PortsBuilder as additional_ports."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        # Create simple DAG
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Create orchestrator with base ports
+        base_observer = AsyncMock()
+        base_observer.notify = AsyncMock()
+        orchestrator = Orchestrator(ports={"observer_manager": base_observer})
+
+        # Create additional ports using builder
+        additional_llm = Mock()
+        additional_ports = PortsBuilder().with_llm(additional_llm)
+
+        # Run with builder as additional_ports
+        results = await orchestrator.run(
+            graph,
+            initial_input=1,
+            additional_ports=additional_ports,
+        )
+
+        assert results["node1"] == 2  # 1 + 1
+        # Observer should have been notified (from base ports)
+        assert base_observer.notify.called
+
+    @pytest.mark.asyncio
+    async def test_builder_overrides_base_ports(self):
+        """Test that additional_ports builder overrides base ports."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Create orchestrator with base observer
+        base_observer = AsyncMock()
+        base_observer.notify = AsyncMock()
+        orchestrator = Orchestrator(ports={"observer_manager": base_observer})
+
+        # Create different observer in additional ports
+        override_observer = AsyncMock()
+        override_observer.notify = AsyncMock()
+        additional_ports = PortsBuilder().with_observer_manager(override_observer)
+
+        # Run with builder - should use override observer
+        results = await orchestrator.run(
+            graph,
+            initial_input=1,
+            additional_ports=additional_ports,
+        )
+
+        assert results["node1"] == 2
+        # Override observer should be used
+        assert override_observer.notify.called
+
+    @pytest.mark.asyncio
+    async def test_fluent_builder_with_orchestrator(self):
+        """Test complete fluent usage pattern."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Fluent pattern: create and configure in one chain
+        results = await Orchestrator.from_builder(
+            PortsBuilder()
+            .with_llm(Mock())
+            .with_observer_manager(AsyncMock(notify=AsyncMock()))
+            .with_custom("feature_flag", True)
+        ).run(graph, 1)
+
+        assert results["node1"] == 2
+
+    @pytest.mark.asyncio
+    async def test_with_defaults_integration(self):
+        """Test using with_defaults in orchestrator context."""
+        from hexai.core.application.ports_builder import PortsBuilder
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("node1", async_add_one))
+
+        # Use with_defaults to get standard implementations
+        orchestrator = Orchestrator.from_builder(PortsBuilder().with_defaults())
+
+        # Should work even with default implementations
+        results = await orchestrator.run(graph, 1)
+        assert results["node1"] == 2

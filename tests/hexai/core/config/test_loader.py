@@ -33,7 +33,7 @@ dev_mode = true
             assert "my_plugin.components" in config.plugins
             assert config.dev_mode is True
         finally:
-            os.unlink(config_path)
+            Path(config_path).unlink()
 
     def test_load_from_pyproject_toml(self):
         """Test loading configuration from pyproject.toml."""
@@ -78,7 +78,7 @@ modules = ["${TEST_MODULE}"]
 
             assert "hexai.core.test" in config.modules
         finally:
-            os.unlink(config_path)
+            Path(config_path).unlink()
             del os.environ["TEST_MODULE"]
 
     def test_manifest_entries_synthesis(self):
@@ -115,7 +115,7 @@ plugins = [
             plugin_modules = [e for e in entries if e.namespace == "plugin"]
             assert len(plugin_modules) == 2  # plugin1.components and plugin2.adapters
         finally:
-            os.unlink(config_path)
+            Path(config_path).unlink()
 
     def test_missing_config_file(self):
         """Test error when config file is not found."""
@@ -136,7 +136,7 @@ plugins = [
             assert len(config.plugins) == 0
             assert config.dev_mode is False
         finally:
-            os.unlink(config_path)
+            Path(config_path).unlink()
 
     def test_hexdag_toml_priority(self):
         """Test that hexdag.toml takes priority over pyproject.toml."""

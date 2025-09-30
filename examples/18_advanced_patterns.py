@@ -87,9 +87,8 @@ async def recursive_processor(input_data: dict, **kwargs) -> dict:
         # Simulate recursive call
         processed = f"Level {depth}: {content}"
         return {"processed_content": processed, "depth": depth + 1, "recursive": True}
-    else:
-        # Base case
-        return {"processed_content": f"Final: {content}", "depth": depth, "recursive": False}
+    # Base case
+    return {"processed_content": f"Final: {content}", "depth": depth, "recursive": False}
 
 
 async def meta_processor(input_data: dict, **kwargs) -> dict:

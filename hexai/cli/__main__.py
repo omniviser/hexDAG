@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Entry point for hexAI CLI tools."""
+"""Entry point for HexDAG CLI when run as python -m hexai.cli."""
 
 if __name__ == "__main__":
-    # Import only when run as main to avoid circular import warnings
-    from hexai.cli.simple_pipeline_cli import main
+    from hexai.cli.main import main
 
     main()

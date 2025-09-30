@@ -21,7 +21,12 @@ class ReaderContext:
         self._lock = lock
 
     def __enter__(self) -> ReaderContext:
-        """Enter the read lock context."""
+        """Enter the read lock context.
+
+        Returns
+        -------
+            The reader context manager.
+        """
         self._lock.acquire_read()
         return self
 
@@ -31,7 +36,12 @@ class ReaderContext:
         _exc_val: BaseException | None,
         _exc_tb: TracebackType | None,
     ) -> Literal[False]:
-        """Exit the read lock context."""
+        """Exit the read lock context.
+
+        Returns
+        -------
+            False to propagate exceptions.
+        """
         self._lock.release_read()
         return False
 
@@ -43,7 +53,12 @@ class WriterContext:
         self._lock = lock
 
     def __enter__(self) -> WriterContext:
-        """Enter the write lock context."""
+        """Enter the write lock context.
+
+        Returns
+        -------
+            The writer context manager.
+        """
         self._lock.acquire_write()
         return self
 
@@ -53,7 +68,12 @@ class WriterContext:
         _exc_val: BaseException | None,
         _exc_tb: TracebackType | None,
     ) -> Literal[False]:
-        """Exit the write lock context."""
+        """Exit the write lock context.
+
+        Returns
+        -------
+            False to propagate exceptions.
+        """
         self._lock.release_write()
         return False
 
@@ -83,7 +103,13 @@ class ReadWriteLock:
                 self._write_ready.acquire()
 
     def release_read(self) -> None:
-        """Release a read lock."""
+        """Release a read lock.
+
+        Raises
+        ------
+        RuntimeError
+            If called without a matching acquire_read.
+        """
         with self._read_ready:
             if self._readers == 0:
                 raise RuntimeError("release_read without matching acquire_read")
@@ -100,9 +126,19 @@ class ReadWriteLock:
         self._write_ready.release()
 
     def read(self) -> ReaderContext:
-        """Get a reader context manager."""
+        """Get a reader context manager.
+
+        Returns
+        -------
+            A context manager for read operations.
+        """
         return ReaderContext(self)
 
     def write(self) -> WriterContext:
-        """Get a writer context manager."""
+        """Get a writer context manager.
+
+        Returns
+        -------
+            A context manager for write operations.
+        """
         return WriterContext(self)

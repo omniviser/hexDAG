@@ -4,20 +4,48 @@ import ast
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
-from ....adapters.function_tool_router import FunctionBasedToolRouter
-from ...domain.dag import NodeSpec
-from ...ports.tool_router import ToolRouter
-from ...registry import node
-from ...registry.models import NodeSubtype
-from ..prompt import PromptInput
-from ..prompt.template import PromptTemplate
+from hexai.adapters.unified_tool_router import UnifiedToolRouter
+from hexai.core.application.prompt import PromptInput
+from hexai.core.application.prompt.template import PromptTemplate
+from hexai.core.domain.dag import NodeSpec
+from hexai.core.ports.tool_router import ToolRouter
+from hexai.core.registry import node
+from hexai.core.registry.models import NodeSubtype
+
 from .base_node_factory import BaseNodeFactory
 from .llm_node import LLMNode
 from .tool_utils import ToolCallFormat, ToolParser
+
+
+class PhaseContext(TypedDict):
+    """Context structure for phase transitions in agents.
+
+    Attributes
+    ----------
+    previous_phase : str, optional
+        The phase the agent is transitioning from
+    reason : str, optional
+        Explanation for why the phase change is occurring
+    carried_data : dict[str, Any], optional
+        Data to carry forward from the previous phase
+    target_output : str, optional
+        Expected output format or goal for the new phase
+    iteration : int, optional
+        Current iteration number if in a loop or retry scenario
+    metadata : dict[str, Any], optional
+        Additional metadata about the phase transition
+    """
+
+    previous_phase: NotRequired[str]
+    reason: NotRequired[str]
+    carried_data: NotRequired[dict[str, Any]]
+    target_output: NotRequired[str]
+    iteration: NotRequired[int]
+    metadata: NotRequired[dict[str, Any]]
 
 
 class AgentState(BaseModel):
@@ -32,6 +60,7 @@ class AgentState(BaseModel):
     tools_used: list[str] = []
     current_phase: str = "main"
     phase_history: list[str] = ["main"]
+    phase_contexts: dict[str, PhaseContext] = {}  # Store typed context for each phase
     step: int = 0
     response: str = ""
 
@@ -93,6 +122,11 @@ class ReActAgentNode(BaseNodeFactory):
             config: Agent configuration
             deps: Dependencies
             **kwargs: Additional parameters
+
+        Returns
+        -------
+        NodeSpec
+            A configured node specification for the agent
         """
         config = config or AgentConfig()
 
@@ -123,13 +157,19 @@ class ReActAgentNode(BaseNodeFactory):
         )
 
     def _infer_input_schema(self, prompt: PromptInput) -> dict[str, Any]:
-        """Infer input schema from prompt template."""
+        """Infer input schema from prompt template.
+
+        Returns
+        -------
+        dict[str, Any]
+            Inferred input schema mapping
+        """
         if isinstance(prompt, str):
             prompt = PromptTemplate(prompt)
 
         if hasattr(prompt, "input_vars"):
             user_vars = set(prompt.input_vars)
-            return {var: str for var in user_vars} if user_vars else {"input": str}
+            return dict.fromkeys(user_vars, str) if user_vars else {"input": str}
 
         return {"input": str}
 
@@ -139,7 +179,13 @@ class ReActAgentNode(BaseNodeFactory):
         continuation_prompts: dict[str, PromptInput],
         current_phase: str,
     ) -> PromptInput:
-        """Get the appropriate prompt for the current phase."""
+        """Get the appropriate prompt for the current phase.
+
+        Returns
+        -------
+        PromptInput
+            The prompt to use for the current phase
+        """
         if current_phase != "main" and current_phase in continuation_prompts:
             return continuation_prompts[current_phase]
         return main_prompt
@@ -152,7 +198,13 @@ class ReActAgentNode(BaseNodeFactory):
         output_model: type[BaseModel],
         config: AgentConfig,
     ) -> Callable[..., Any]:
-        """Create agent function with internal loop composition for multi-step iteration."""
+        """Create agent function with internal loop composition for multi-step iteration.
+
+        Returns
+        -------
+        Callable[..., Any]
+            Agent function with internal loop control
+        """
 
         async def single_step_executor(input_data: Any, **ports: Any) -> Any:
             """Execute single reasoning step - designed for internal loop orchestration."""
@@ -224,10 +276,17 @@ class ReActAgentNode(BaseNodeFactory):
         return agent_with_internal_loop
 
     def _initialize_or_update_state(self, input_data: Any) -> AgentState:
-        """Initialize new state or update existing state from loop iteration."""
+        """Initialize new state or update existing state from loop iteration.
+
+        Returns
+        -------
+        AgentState
+            Initialized or updated agent state
+        """
         # Case 1: Continuing from previous iteration (loop passes AgentState dict)
         if isinstance(input_data, dict) and "reasoning_steps" in input_data:
-            return AgentState.model_validate(input_data)
+            state: AgentState = AgentState.model_validate(input_data)
+            return state
 
         # Case 2: Fresh input (first iteration)
         # Handle both dict and Pydantic model inputs
@@ -247,7 +306,13 @@ class ReActAgentNode(BaseNodeFactory):
     def _enhance_prompt_with_tools(
         self, prompt: PromptInput, tool_router: ToolRouter | None, config: AgentConfig
     ) -> PromptInput:
-        """Add tool instructions to the prompt."""
+        """Add tool instructions to the prompt.
+
+        Returns
+        -------
+        PromptInput
+            Enhanced prompt with tool instructions
+        """
         if not tool_router:
             return prompt
 
@@ -262,7 +327,13 @@ class ReActAgentNode(BaseNodeFactory):
         return prompt + tool_instructions
 
     def _build_tool_instructions(self, tool_router: ToolRouter, config: AgentConfig) -> str:
-        """Build tool usage instructions based on the configured format."""
+        """Build tool usage instructions based on the configured format.
+
+        Returns
+        -------
+        str
+            Tool usage instructions text
+        """
         tool_schemas = tool_router.get_all_tool_schemas()
         if not tool_schemas:
             return "\n## No tools available"
@@ -287,37 +358,53 @@ class ReActAgentNode(BaseNodeFactory):
 """
 
     def _get_format_specific_guidelines(self, format_style: ToolCallFormat) -> str:
-        """Generate format-specific tool calling guidelines."""
+        """Generate format-specific tool calling guidelines.
+
+        Returns
+        -------
+        str
+            Format-specific guidelines text
+        """
         if format_style == ToolCallFormat.FUNCTION_CALL:
             return """- Call ONE tool at a time: INVOKE_TOOL: tool_name(param='value')
 - For final answer and structured output: INVOKE_TOOL: tool_end(field1='value1', field2='value2')
-- For phase change: INVOKE_TOOL: change_phase(phase='new_phase')"""
+- For phase change: INVOKE_TOOL: change_phase(phase='new_phase', reason='why changing',
+carried_data={'key': 'value'})"""
 
-        elif format_style == ToolCallFormat.JSON:
+        if format_style == ToolCallFormat.JSON:
             return (
                 """- Call ONE tool at a time: INVOKE_TOOL: """
                 """{"tool": "tool_name", "params": {"param": "value"}}\n"""
                 """- For final answer and structured output: INVOKE_TOOL: """
                 """{"tool": "tool_end", "params": {"field1": "value1", "field2": "value2"}}\n"""
                 """- For phase change: INVOKE_TOOL: """
-                """{"tool": "change_phase", "params": {"phase": "new_phase"}}"""
+                """{"tool": "change_phase", "params": {"phase": "new_phase", "reason": "why",
+                "carried_data": {"key": "val"}}}"""
             )
 
-        elif format_style == ToolCallFormat.MIXED:
-            return """- Call ONE tool at a time using either format:
+        # ToolCallFormat.MIXED
+        return """- Call ONE tool at a time using either format:
   - Function style: INVOKE_TOOL: tool_name(param='value')
   - JSON style: INVOKE_TOOL: {"tool": "tool_name", "params": {"param": "value"}}
 - For final answer and structured output:
   - Function: INVOKE_TOOL: tool_end(field1='value1', field2='value2')
   - JSON: INVOKE_TOOL: {"tool": "tool_end", "params": {"field1": "value1", "field2": "value2"}}
 - For phase change:
-  - Function: INVOKE_TOOL: change_phase(phase='new_phase')
-  - JSON: INVOKE_TOOL: {"tool": "change_phase", "params": {"phase": "new_phase"}}"""
+  - Function: INVOKE_TOOL: change_phase(phase='new_phase', reason='why',
+  carried_data={'key': 'val'})
+  - JSON: INVOKE_TOOL: {"tool": "change_phase", "params": {"phase": "new_phase",
+  "reason": "why", "carried_data": {"key": "val"}}}"""
 
     async def _get_llm_response(
         self, prompt: PromptInput, llm_input: dict[str, Any], ports: dict[str, Any], node_name: str
     ) -> str:
-        """Get response from LLM."""
+        """Get response from LLM.
+
+        Returns
+        -------
+        str
+            LLM response text
+        """
         # Ensure we have a proper template (not string)
         if isinstance(prompt, str):
             prompt = PromptTemplate(prompt)
@@ -337,9 +424,15 @@ class ReActAgentNode(BaseNodeFactory):
         config: AgentConfig,
         ports: dict[str, Any],
     ) -> AgentState:
-        """Execute a single reasoning step."""
+        """Execute a single reasoning step.
+
+        Returns
+        -------
+        AgentState
+            Updated agent state after step execution
+        """
         event_manager = ports.get("event_manager")
-        tool_router = ports.get("tool_router", FunctionBasedToolRouter())
+        tool_router = ports.get("tool_router", UnifiedToolRouter())
 
         # Get current step info
         current_step = max(state.loop_iteration, state.step) + 1
@@ -354,10 +447,17 @@ class ReActAgentNode(BaseNodeFactory):
 
         # Get LLM response - convert state to dict for template rendering
         state_dict = state.model_dump()
+
+        # Get current phase context if available
+        current_phase_context = state.phase_contexts.get(state.current_phase, {})
+
         llm_input = {
             **state_dict,
             **state_dict.get("input_data", {}),
             "reasoning_so_far": "\n".join(state.reasoning_steps) or "Starting reasoning...",
+            "phase_context": current_phase_context,
+            "phase_reason": current_phase_context.get("reason", ""),
+            "phase_target": current_phase_context.get("target_output", ""),
         }
 
         # Get LLM response
@@ -376,7 +476,13 @@ class ReActAgentNode(BaseNodeFactory):
         return state
 
     def _should_terminate(self, response: str) -> bool:
-        """Check if agent should terminate."""
+        """Check if agent should terminate.
+
+        Returns
+        -------
+        bool
+            True if agent should terminate execution
+        """
         return "tool_end" in response.lower() or "Tool_END" in response
 
     async def _process_tools_and_phases(
@@ -405,11 +511,25 @@ class ReActAgentNode(BaseNodeFactory):
                 state.tools_used.append(tool_call.name)
 
                 # Handle special tools
-                if tool_call.name in ["change_phase", "phase"] and isinstance(result, dict):
+                if tool_call.name == "change_phase" and isinstance(result, dict):
                     new_phase = result.get("new_phase")
+                    context = result.get("context", {})
+
                     if new_phase and new_phase in continuation_prompts:
+                        # Store the previous phase in context if not already provided
+                        if "previous_phase" not in context:
+                            context["previous_phase"] = state.current_phase
+
+                        # Store context for this phase transition
+                        state.phase_contexts[new_phase] = context
+
+                        # Update current phase
                         state.current_phase = new_phase
                         state.phase_history.append(new_phase)
+
+                        # If there's carried_data, merge it into state.input_data
+                        if "carried_data" in context and isinstance(context["carried_data"], dict):
+                            state.input_data.update(context["carried_data"])
 
             except Exception as e:
                 error_msg = f"{tool_call.name}: Error - {e}"
@@ -476,7 +596,13 @@ class ReActAgentNode(BaseNodeFactory):
         output_model: type[BaseModel],
         event_manager: Any,
     ) -> Any | None:
-        """Check if we have a final output from tool_end calls."""
+        """Check if we have a final output from tool_end calls.
+
+        Returns
+        -------
+        Any | None
+            Final output model instance or None if not found
+        """
         # Check for tool_end calls with structured output
         for tool_result in reversed(state.tool_results):
             parsed_data = self._parse_tool_end_result(tool_result)

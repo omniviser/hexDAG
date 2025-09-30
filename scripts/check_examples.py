@@ -53,30 +53,26 @@ def run_examples() -> tuple[bool, str]:
 
             if summary_line:
                 return True, f"All examples passed! {summary_line}"
-            else:
-                return True, "All examples completed successfully"
-        else:
-            # Extract error information
-            error_info = []
-            in_failed_section = False
+            return True, "All examples completed successfully"
+        # Extract error information
+        error_info = []
+        in_failed_section = False
 
-            for line in result.stdout.split("\n"):
-                if "failed with return code" in line.lower():
-                    in_failed_section = True
-                    error_info.append(line.strip())
-                elif in_failed_section and line.strip():
-                    error_info.append(line.strip())
-                elif "Overall Summary:" in line:
-                    in_failed_section = False
+        for line in result.stdout.split("\n"):
+            if "failed with return code" in line.lower():
+                in_failed_section = True
+                error_info.append(line.strip())
+            elif in_failed_section and line.strip():
+                error_info.append(line.strip())
+            elif "Overall Summary:" in line:
+                in_failed_section = False
 
-            if error_info:
-                return False, "Examples failed:\n" + "\n".join(error_info[:10])  # Limit output
-            else:
-                stderr_excerpt = result.stderr[:500]
-                return False, (
-                    f"Examples failed with return code {result.returncode}\n"
-                    f"Stderr: {stderr_excerpt}"
-                )
+        if error_info:
+            return False, "Examples failed:\n" + "\n".join(error_info[:10])  # Limit output
+        stderr_excerpt = result.stderr[:500]
+        return False, (
+            f"Examples failed with return code {result.returncode}\nStderr: {stderr_excerpt}"
+        )
 
     except subprocess.TimeoutExpired:
         return False, "Examples timed out after 5 minutes"
@@ -87,7 +83,12 @@ def run_examples() -> tuple[bool, str]:
 
 
 def main() -> int:
-    """Check examples and return exit code."""
+    """Check examples and return exit code.
+
+    Returns
+    -------
+        Exit code (0 for success, 1 for failure).
+    """
     print("🎓 Checking examples functionality...")
 
     success, message = run_examples()
@@ -95,18 +96,17 @@ def main() -> int:
     if success:
         print(f"✅ {message}")
         return 0
-    else:
-        print("❌ Examples check failed!")
-        print(f"   {message}")
-        print()
-        print("💡 To fix this:")
-        print("   1. Check the failing examples manually:")
-        print("      cd examples && uv run run_all.py --all")
-        print("   2. Fix any broken examples before committing")
-        print("   3. Ensure all dependencies are properly installed")
-        print()
-        print("🚫 Commit blocked - examples must pass before committing changes")
-        return 1
+    print("❌ Examples check failed!")
+    print(f"   {message}")
+    print()
+    print("💡 To fix this:")
+    print("   1. Check the failing examples manually:")
+    print("      cd examples && uv run run_all.py --all")
+    print("   2. Fix any broken examples before committing")
+    print("   3. Ensure all dependencies are properly installed")
+    print()
+    print("🚫 Commit blocked - examples must pass before committing changes")
+    return 1
 
 
 if __name__ == "__main__":

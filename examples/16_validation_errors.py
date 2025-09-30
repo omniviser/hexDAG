@@ -39,18 +39,23 @@ class FlexibleUserModel(BaseModel):
 
 
 async def strict_processor(input_data: Any) -> StrictUserModel:
-    """Process with strict validation."""
+    """Process with strict validation.
+
+    Raises
+    ------
+    ValueError
+        If input is not a dict
+    """
     if isinstance(input_data, dict):
         return StrictUserModel(**input_data)
-    else:
-        raise ValueError(f"Expected dict, got {type(input_data)}")
+    raise ValueError(f"Expected dict, got {type(input_data)}")
 
 
 async def flexible_processor(input_data: Any) -> FlexibleUserModel:
     """Process with flexible validation."""
     if isinstance(input_data, dict):
         return FlexibleUserModel(**input_data)
-    elif isinstance(input_data, str):
+    if isinstance(input_data, str):
         # Try to parse string input
         parts = input_data.split(",")
         if len(parts) >= 2:
@@ -64,10 +69,8 @@ async def flexible_processor(input_data: Any) -> FlexibleUserModel:
                     else 0.0
                 ),
             )
-        else:
-            return FlexibleUserModel(name=input_data)
-    else:
-        return FlexibleUserModel(name=str(input_data))
+        return FlexibleUserModel(name=input_data)
+    return FlexibleUserModel(name=str(input_data))
 
 
 async def display_user_info(user: StrictUserModel) -> dict:
