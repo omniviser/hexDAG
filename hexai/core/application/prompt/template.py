@@ -5,9 +5,11 @@ object access without the security risks of full template engines like Jinja2.
 """
 
 import re
+import warnings
 from collections.abc import Callable
 from typing import Any
 
+from .messages import Message, MessageRole, Messages
 from .template_utils import (
     MissingVariableError,
     TemplateError,
@@ -396,18 +398,20 @@ class FewShotPromptTemplate(PromptTemplate):
 
 
 class ChatPromptTemplate(PromptTemplate):
-    """Enhanced prompt template supporting multi-message conversations like LangChain.
+    """Enhanced prompt template supporting multi-message conversations.
 
+    Uses the Messages class internally for better structure and type safety.
     Supports:
     - System messages
-    - Conversation history from context
+    - Conversation history
     - Multi-message templates
     - Role-based message construction
+    - Messages builder pattern
     """
 
     def __init__(
         self,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, str]] | Messages | None = None,
         system_message: str | None = None,
         human_message: str | None = None,
         **kwargs: Any,
@@ -416,47 +420,146 @@ class ChatPromptTemplate(PromptTemplate):
 
         Args
         ----
-            messages: List of message templates with role and content
-            system_message: System message template (optional)
-            human_message: Human/user message template (optional)
+            messages: List of message dicts, Messages object, or None
+            system_message: System message template (deprecated, use messages)
+            human_message: Human/user message template (deprecated, use messages)
             **kwargs: Additional arguments passed to PromptTemplate
 
         Examples
         --------
-            # Simple system + user message
+            # Using Messages builder (recommended)
+            messages = Messages().add_system("You are helpful").add_human("Hello {{name}}")
+            template = ChatPromptTemplate(messages=messages)
+
+            # Using PromptBuilder (recommended)
+            from hexai.core.application.prompt.prompt_builder import prompt_builder
+            template = prompt_builder().system("You are helpful").human("Hello {{name}}").build()
+
+            # Legacy approach (still supported but deprecated)
             template = ChatPromptTemplate(
                 system_message="You are an expert {{domain}} analyst.",
                 human_message="Analyze this {{data_type}}: {{data}}"
             )
-
-            # Multi-message template
-            template = ChatPromptTemplate(messages=[
-                {"role": "system", "content": "You are an expert analyst."},
-                {"role": "user", "content": "Previous context: {{context}}"},
-                {"role": "assistant", "content": "I understand the context."},
-                {"role": "user", "content": "Now analyze: {{data}}"}
-            ])
         """
+        # Handle deprecated parameters
+        if system_message or human_message:
+            warnings.warn(
+                "system_message and human_message parameters are deprecated. "
+                "Use Messages or PromptBuilder instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # Store Messages internally
+        if isinstance(messages, Messages):
+            self._messages = messages
+        elif messages:
+            self._messages = Messages.from_list(messages)
+        else:
+            # Build from deprecated parameters
+            self._messages = Messages()
+            if system_message:
+                self._messages.add_system(system_message)
+            if human_message:
+                self._messages.add_human(human_message)
+
+        # Keep deprecated attributes for backward compatibility
         self.system_message = system_message
         self.human_message = human_message
-        self.message_templates = messages or []
+        self.message_templates = self._messages.to_list(use_aliases=True) if self._messages else []
 
         # Build combined template for variable extraction
-        if not self.message_templates:
-            # Build from system + human messages
-            if system_message and human_message:
-                combined_template = f"{system_message}\n{human_message}"
-            elif human_message:
-                combined_template = human_message
-            elif system_message:
-                combined_template = system_message
-            else:
-                combined_template = ""
-        else:
-            # Extract content from message templates
-            combined_template = "\n".join(msg.get("content", "") for msg in self.message_templates)
+        combined_template = self._build_combined_template()
 
         super().__init__(combined_template, **kwargs)
+
+    def _build_combined_template(self) -> str:
+        """Build combined template string from messages.
+
+        Returns
+        -------
+            Combined template string for variable extraction
+        """
+        if not self._messages:
+            return ""
+
+        parts = [msg.content for msg in self._messages]
+
+        return "\n".join(parts)
+
+    def format_messages(
+        self,
+        system_prompt: str | None = None,
+        context_history: list[dict[str, str]] | None = None,
+        **kwargs: Any,
+    ) -> list[dict[str, str]]:
+        """Format the template into a list of messages with optional overrides.
+
+        Args
+        ----
+            system_prompt: Optional system prompt to prepend (overrides template system message)
+            context_history: Optional conversation history to insert before template messages
+            **kwargs: Variables to substitute in the template
+
+        Returns
+        -------
+            List of formatted messages with role and content
+
+        Examples
+        --------
+            # Basic usage
+            messages = template.format_messages(
+                domain="financial",
+                data_type="report",
+                data="Q4 earnings"
+            )
+
+            # With system override
+            messages = template.format_messages(
+                system_prompt="You are a specialized analyst",
+                data="Q4 earnings"
+            )
+
+            # With conversation history
+            history = [{"role": "user", "content": "Previous question"}]
+            messages = template.format_messages(
+                context_history=history,
+                data="Q4 earnings"
+            )
+        """
+        result_messages = Messages()
+
+        # Add system message if provided explicitly (overrides template system message)
+        if system_prompt:
+            rendered_content = render_template(system_prompt, kwargs, validate_vars=False)
+            result_messages.add_system(rendered_content)
+
+        # Add conversation history if provided
+        if context_history:
+            for msg in context_history:
+                history_msg = Message.from_dict(msg)
+                result_messages.add(history_msg)
+
+        # Render and add all template messages
+        for msg in self._messages:
+            # Skip system message if we already added an override
+            if system_prompt and msg.role == MessageRole.SYSTEM:
+                continue
+
+            # Render the content with variables
+            rendered_content = render_template(msg.content, kwargs, validate_vars=False)
+
+            # Create new message with formatted content
+            formatted_msg = Message(
+                role=msg.role,
+                content=rendered_content,
+                metadata=msg.metadata.copy(),
+                name=msg.name,
+            )
+            result_messages.add(formatted_msg)
+
+        # Return as list of dicts for backward compatibility
+        return result_messages.to_list(use_aliases=True)
 
     def to_messages(
         self,
@@ -464,7 +567,9 @@ class ChatPromptTemplate(PromptTemplate):
         context_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> list[dict[str, str]]:
-        """Convert to role-based messages with conversation history support.
+        """Convert to role-based messages (alias for format_messages).
+
+        Deprecated: Use format_messages() instead. This method is kept for backward compatibility.
 
         Args
         ----
@@ -477,32 +582,63 @@ class ChatPromptTemplate(PromptTemplate):
         list[dict[str, str]]
             List of message dictionaries ready for LLM
         """
-        messages = []
+        warnings.warn(
+            "to_messages() is deprecated. Use format_messages() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.format_messages(
+            system_prompt=system_prompt, context_history=context_history, **kwargs
+        )
 
-        # Add system message if provided
-        if system_prompt:
-            system_content = self._render_template(system_prompt, **kwargs)
-            messages.append({"role": "system", "content": system_content})
-        elif self.system_message:
-            system_content = self._render_template(self.system_message, **kwargs)
-            messages.append({"role": "system", "content": system_content})
+    @classmethod
+    def from_messages(cls, messages: Messages) -> "ChatPromptTemplate":
+        """Create ChatPromptTemplate from Messages object.
 
-        # Add conversation history from context
-        if context_history:
-            messages.extend(context_history)
+        Args
+        ----
+            messages: Messages collection
 
-        # Add message templates or human message
-        if self.message_templates:
-            for msg_template in self.message_templates:
-                role = msg_template.get("role", "user")
-                content_template = msg_template.get("content", "")
-                rendered_content = self._render_template(content_template, **kwargs)
-                messages.append({"role": role, "content": rendered_content})
-        elif self.human_message:
-            human_content = self._render_template(self.human_message, **kwargs)
-            messages.append({"role": "user", "content": human_content})
+        Returns
+        -------
+            New ChatPromptTemplate instance
 
-        return messages
+        Examples
+        --------
+            messages = Messages().add_system("Be helpful").add_human("{{query}}")
+            template = ChatPromptTemplate.from_messages(messages)
+        """
+        return cls(messages=messages)
+
+    @classmethod
+    def from_builder(cls, builder: Any) -> "ChatPromptTemplate":
+        """Create ChatPromptTemplate from PromptBuilder.
+
+        Args
+        ----
+            builder: PromptBuilder instance
+
+        Returns
+        -------
+            New ChatPromptTemplate instance
+
+        Examples
+        --------
+            from hexai.core.application.prompt.prompt_builder import prompt_builder
+            builder = prompt_builder().system("Be helpful").human("{{query}}")
+            template = ChatPromptTemplate.from_builder(builder)
+        """
+        messages = builder.build_messages()
+        return cls(messages=messages)
+
+    def get_messages(self) -> Messages:
+        """Get the underlying Messages object.
+
+        Returns
+        -------
+            Messages collection
+        """
+        return self._messages
 
     def _render_template(self, template: str, **kwargs: Any) -> str:
         """Render a single template string with variables.
@@ -524,21 +660,6 @@ class ChatPromptTemplate(PromptTemplate):
                 return f"{{{{{var_path}}}}}"  # Keep unreplaced variables
 
         return re.sub(pattern, replace_var, template)
-
-    @classmethod
-    def from_messages(cls, messages: list[dict[str, str]]) -> "ChatPromptTemplate":
-        """Create ChatPromptTemplate from a list of message dictionaries.
-
-        Args
-        ----
-            messages: List of messages with 'role' and 'content' keys
-
-        Returns
-        -------
-        ChatPromptTemplate
-            ChatPromptTemplate instance
-        """
-        return cls(messages=messages)
 
     def __add__(self, other: str) -> "ChatPromptTemplate":
         """Add text to system message using + operator.

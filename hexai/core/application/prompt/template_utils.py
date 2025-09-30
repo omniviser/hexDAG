@@ -18,13 +18,16 @@ def extract_variables(template: str) -> list[str]:
     Finds all {{variable}} patterns and extracts the root variable names.
     Handles nested variables like {{user.name}} by extracting 'user'.
 
-    Args:
+    Args
+    ----
         template: Template string with {{variable}} placeholders
 
-    Returns:
+    Returns
+    -------
         List of unique root variable names found in template
 
-    Examples:
+    Examples
+    --------
         >>> extract_variables("Hello {{name}}, your score is {{score}}")
         ['name', 'score']
 
@@ -50,17 +53,21 @@ def get_nested_value(data: dict[str, Any], key: str) -> Any:
 
     Supports both dictionary access and object attribute access.
 
-    Args:
+    Args
+    ----
         data: Dictionary or object to extract value from
         key: Key path (e.g., "user.name" -> data["user"]["name"])
 
-    Returns:
+    Returns
+    -------
         The value at the specified path
 
-    Raises:
+    Raises
+    ------
         KeyError: If dictionary key doesn't exist
 
-    Examples:
+    Examples
+    --------
         >>> data = {"user": {"name": "Alice", "age": 30}}
         >>> get_nested_value(data, "user.name")
         'Alice'
@@ -81,18 +88,22 @@ def render_template(template: str, variables: dict[str, Any], validate_vars: boo
     Replaces all {{variable}} placeholders with their corresponding values.
     Supports nested variable access like {{user.name}}.
 
-    Args:
+    Args
+    ----
         template: Template string with {{variable}} placeholders
         variables: Dictionary of variable values
         validate_vars: If True, check that all variables are provided
 
-    Returns:
+    Returns
+    -------
         Rendered template string
 
-    Raises:
+    Raises
+    ------
         MissingVariableError: If required variables are missing and validate_vars is True
 
-    Examples:
+    Examples
+    --------
         >>> render_template("Hello {{name}}!", {"name": "Alice"})
         'Hello Alice!'
 
@@ -136,15 +147,18 @@ def validate_template_syntax(template: str) -> tuple[bool, str | None]:
     - Valid variable names
     - No nested templates
 
-    Args:
+    Args
+    ----
         template: Template string to validate
 
-    Returns:
+    Returns
+    -------
         Tuple of (is_valid, error_message)
         - is_valid: True if template syntax is valid
         - error_message: Description of error if invalid, None if valid
 
-    Examples:
+    Examples
+    --------
         >>> validate_template_syntax("Hello {{name}}!")
         (True, None)
 
@@ -187,14 +201,17 @@ def merge_template_variables(
 
     The override_vars take precedence over base_vars. Performs a shallow merge.
 
-    Args:
+    Args
+    ----
         base_vars: Base variable dictionary
         override_vars: Variables to override/add
 
-    Returns:
+    Returns
+    -------
         Merged dictionary with override_vars taking precedence
 
-    Examples:
+    Examples
+    --------
         >>> base = {"name": "Alice", "age": 30}
         >>> override = {"age": 31, "city": "NYC"}
         >>> merge_template_variables(base, override)
@@ -206,15 +223,18 @@ def merge_template_variables(
 def format_template_error(template: str, error: Exception, context_lines: int = 2) -> str:
     r"""Format a template error with context for better debugging.
 
-    Args:
+    Args
+    ----
         template: The template that caused the error
         error: The exception that occurred
         context_lines: Number of lines to show around the error
 
-    Returns:
+    Returns
+    -------
         Formatted error message with template context
 
-    Examples:
+    Examples
+    --------
         >>> template = "Line 1\\nLine 2 {{invalid}}\\nLine 3"
         >>> error = MissingVariableError("Variable 'invalid' not found")
         >>> print(format_template_error(template, error, context_lines=1))
