@@ -11,8 +11,8 @@ This example demonstrates integration with the existing tool architecture:
 import asyncio
 from typing import Any
 
+from hexai.adapters.local.unified_tool_router import UnifiedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.config.models import ManifestEntry

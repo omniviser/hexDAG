@@ -1,0 +1,90 @@
+# Enhanced YAML Pipeline with PromptBuilder Features
+# Demonstrates system messages and few-shot learning in YAML configs
+
+name: sentiment_classifier_enhanced
+description: Sentiment classification using few-shot learning via YAML
+
+input_schema:
+  type: object
+  properties:
+    text:
+      type: string
+      minLength: 1
+      maxLength: 1000
+  required: ["text"]
+
+nodes:
+  # LLM node with system message and few-shot examples
+  - type: llm
+    id: sentiment_classifier
+    params:
+      # System message sets the context
+      system_message: |
+        You are an expert sentiment analysis system.
+        Analyze text and classify sentiment accurately.
+        Be concise and consistent in your classifications.
+
+      # Few-shot examples teach the model the pattern
+      examples:
+        - input: "This product exceeded all my expectations! Amazing quality."
+          output: "positive"
+
+        - input: "Terrible experience. Would not recommend to anyone."
+          output: "negative"
+
+        - input: "It's okay, nothing special. Does what it says."
+          output: "neutral"
+
+        - input: "Absolutely love it! Best purchase this year!"
+          output: "positive"
+
+      # Main prompt template with variable
+      prompt_template: |
+        Classify the sentiment of this text: {{text}}
+
+      # Structured output
+      output_schema:
+        type: object
+        properties:
+          sentiment:
+            type: string
+            enum: ["positive", "negative", "neutral"]
+          confidence:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+          reasoning:
+            type: string
+        required: ["sentiment", "confidence", "reasoning"]
+
+      model: gpt-4o
+      temperature: 0.1
+
+    depends_on: []
+
+  # Follow-up analysis node
+  - type: llm
+    id: detailed_analysis
+    params:
+      system_message: "Provide detailed sentiment insights"
+
+      prompt_template: |
+        The sentiment was classified as: {{sentiment_classifier.sentiment}}
+        Confidence: {{sentiment_classifier.confidence}}
+        Reasoning: {{sentiment_classifier.reasoning}}
+
+        Provide additional insights about this sentiment classification.
+
+      output_schema:
+        type: object
+        properties:
+          key_phrases:
+            type: array
+            items:
+              type: string
+          emotional_tone:
+            type: string
+          actionable_insights:
+            type: string
+
+    depends_on: [sentiment_classifier]

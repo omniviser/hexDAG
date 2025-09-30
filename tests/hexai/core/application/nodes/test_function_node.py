@@ -11,7 +11,7 @@ from hexai.core.domain.dag import NodeSpec
 from hexai.core.registry import registry
 
 # Ensure registry is bootstrapped for tests
-ensure_bootstrapped()
+ensure_bootstrapped(use_defaults=True)
 
 
 class _UserInput(BaseModel):
@@ -30,7 +30,7 @@ class TestFunctionNode:
     @pytest.fixture
     def factory(self):
         """Get function node factory from registry."""
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         return registry.get("function_node", namespace="core")
 
     @pytest.fixture

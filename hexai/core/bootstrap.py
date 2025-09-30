@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from hexai.core.config import config_to_manifest_entries, load_config
+from hexai.core.config import config_to_manifest_entries, get_default_config, load_config
 from hexai.core.registry import registry
 
 if TYPE_CHECKING:
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 def bootstrap_registry(
     config_path: str | Path | None = None,
     dev_mode: bool | None = None,
+    use_defaults: bool = False,
 ) -> None:
     """Bootstrap the component registry from TOML configuration.
 
@@ -31,6 +32,9 @@ def bootstrap_registry(
     dev_mode : bool | None
         Whether to enable development mode (allows post-bootstrap registration).
         If None, uses the value from configuration.
+    use_defaults : bool
+        If True, use default configuration instead of loading from files.
+        Useful for tests to ensure consistent environment.
 
     Examples
     --------
@@ -43,6 +47,9 @@ def bootstrap_registry(
     >>> # Force dev mode
     >>> bootstrap_registry(dev_mode=True)
 
+    >>> # Use defaults (for tests)
+    >>> bootstrap_registry(use_defaults=True)
+
 
     """
     # Check if already bootstrapped
@@ -51,7 +58,7 @@ def bootstrap_registry(
         return
 
     # Load configuration
-    config = load_config(config_path)
+    config = get_default_config() if use_defaults else load_config(config_path)
 
     # Clear precedence: parameter > config > default(False)
     final_dev_mode = dev_mode if dev_mode is not None else config.dev_mode
@@ -63,7 +70,7 @@ def bootstrap_registry(
     logger.info("Registry initialized with %d components", len(registry.list_components()))
 
 
-def ensure_bootstrapped(config_path: str | Path | None = None) -> None:
+def ensure_bootstrapped(config_path: str | Path | None = None, use_defaults: bool = False) -> None:
     """Ensure the registry is bootstrapped, initializing if needed.
 
     This is a convenience function that can be called multiple times safely.
@@ -73,6 +80,9 @@ def ensure_bootstrapped(config_path: str | Path | None = None) -> None:
     ----------
     config_path : str | Path | None
         Path to TOML configuration file. If None, auto-discovers config.
+    use_defaults : bool
+        If True, use default configuration instead of loading from files.
+        Useful for tests to ensure consistent environment.
     """
     if not registry.ready:
-        bootstrap_registry(config_path)
+        bootstrap_registry(config_path, use_defaults=use_defaults)

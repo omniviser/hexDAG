@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from hexai.adapters.unified_tool_router import UnifiedToolRouter
+from hexai.adapters.local.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.tool_utils import ToolDefinition
 from hexai.core.registry.registry import ComponentRegistry
 

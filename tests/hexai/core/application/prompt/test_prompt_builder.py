@@ -1,17 +1,17 @@
 """Tests for PromptBuilder class.
 
 Tests cover:
-- Basic initialization and message handling
-- Variable tracking functionality
-- Few-shot example management
-- Custom example formatting
-- Building final Messages
-- Integration with ChatPromptTemplate
-- Clear operations
+- Basic initialization
+- Building from existing templates
+- Adding system/user/assistant messages
+- Adding few-shot examples
+- Building ChatPromptTemplate
+- Method chaining
 """
 
 from hexai.core.application.prompt.messages import Messages
 from hexai.core.application.prompt.prompt_builder import PromptBuilder
+from hexai.core.application.prompt.template import ChatPromptTemplate, PromptTemplate
 
 
 class TestPromptBuilderInit:
@@ -20,385 +20,301 @@ class TestPromptBuilderInit:
     def test_init_empty(self):
         """Test creating empty PromptBuilder."""
         builder = PromptBuilder()
-        assert isinstance(builder.messages, Messages)
-        assert len(builder.messages) == 0
-        assert builder.examples == []
-        assert builder.variables == set()
-        assert builder.example_formatter is None
+        assert isinstance(builder._messages, Messages)
+        assert len(builder._messages) == 0
 
-    def test_init_with_messages(self):
-        """Test creating PromptBuilder with existing Messages."""
-        messages = Messages().add_system("Hello").add_human("Hi")
-        builder = PromptBuilder(messages)
-        assert builder.messages is messages
-        assert len(builder.messages) == 2
+    def test_from_template_string(self):
+        """Test creating PromptBuilder from string."""
+        builder = PromptBuilder.from_template("Hello {{name}}")
+        messages = builder.get_messages()
+        assert len(messages) == 1
+        assert messages[0].content == "Hello {{name}}"
+        assert messages[0].role.value == "human"
+
+    def test_from_template_prompt_template(self):
+        """Test creating PromptBuilder from PromptTemplate."""
+        template = PromptTemplate("Analyze {{data}}")
+        builder = PromptBuilder.from_template(template)
+        messages = builder.get_messages()
+        assert len(messages) == 1
+        assert messages[0].content == "Analyze {{data}}"
+
+    def test_from_template_chat_template(self):
+        """Test creating PromptBuilder from ChatPromptTemplate."""
+        # Create a ChatPromptTemplate with messages
+        original_builder = PromptBuilder()
+        original_builder.add_system("You are helpful")
+        original_builder.add_user("{{query}}")
+        original_template = original_builder.build()
+
+        # Build from it
+        builder = PromptBuilder.from_template(original_template)
+        messages = builder.get_messages()
+        assert len(messages) == 2
+        assert messages[0].role.value == "system"
+        assert messages[1].role.value == "human"
 
 
-class TestPromptBuilderVariableTracking:
-    """Test variable tracking functionality."""
+class TestPromptBuilderAddMethods:
+    """Test adding messages to PromptBuilder."""
 
-    def test_track_variables_single_message(self):
-        """Test tracking variables from a single message."""
+    def test_add_system(self):
+        """Test adding system message."""
         builder = PromptBuilder()
-        builder.messages.add_system("You are a {{role}} assistant")
-        builder.track_variables()
+        builder.add_system("You are a helpful assistant")
+        messages = builder.get_messages()
+        assert len(messages) == 1
+        assert messages[0].role.value == "system"
+        assert messages[0].content == "You are a helpful assistant"
 
-        assert "role" in builder.variables
-        assert builder.get_variables() == ["role"]
-
-    def test_track_variables_multiple_messages(self):
-        """Test tracking variables from multiple messages."""
+    def test_add_user(self):
+        """Test adding user message."""
         builder = PromptBuilder()
-        builder.messages.add_system("You are a {{role}} assistant")
-        builder.messages.add_human("Analyze this {{data}}")
-        builder.track_variables()
+        builder.add_user("What is {{topic}}?")
+        messages = builder.get_messages()
+        assert len(messages) == 1
+        assert messages[0].role.value == "human"
+        assert messages[0].content == "What is {{topic}}?"
 
-        assert builder.variables == {"role", "data"}
-        assert builder.get_variables() == ["data", "role"]  # Sorted
-
-    def test_track_variables_no_variables(self):
-        """Test tracking when no variables present."""
+    def test_add_assistant(self):
+        """Test adding assistant message."""
         builder = PromptBuilder()
-        builder.messages.add_system("You are helpful")
-        builder.track_variables()
+        builder.add_assistant("I can help with that!")
+        messages = builder.get_messages()
+        assert len(messages) == 1
+        assert messages[0].role.value == "ai"
+        assert messages[0].content == "I can help with that!"
 
-        assert builder.variables == set()
-        assert builder.get_variables() == []
-
-    def test_track_variables_duplicate_variables(self):
-        """Test that duplicate variables are deduplicated."""
+    def test_add_multiple_messages(self):
+        """Test adding multiple messages."""
         builder = PromptBuilder()
-        builder.messages.add_system("{{name}} is {{name}}")
-        builder.track_variables()
-
-        assert builder.variables == {"name"}
-        assert builder.get_variables() == ["name"]
-
-    def test_track_variables_method_chaining(self):
-        """Test that track_variables returns self for chaining."""
-        builder = PromptBuilder()
-        builder.messages.add_system("{{x}}")
-        result = builder.track_variables()
-        assert result is builder
+        builder.add_system("System prompt")
+        builder.add_user("User question")
+        builder.add_assistant("Assistant response")
+        messages = builder.get_messages()
+        assert len(messages) == 3
 
 
 class TestPromptBuilderExamples:
-    """Test few-shot example management."""
+    """Test adding few-shot examples."""
 
-    def test_with_example_basic(self):
-        """Test adding a single example."""
-        builder = PromptBuilder()
-        builder.with_example("What's 2+2?", "4")
-
-        assert len(builder.examples) == 1
-        assert builder.examples[0] == ("What's 2+2?", "4")
-
-    def test_with_example_tracks_variables(self):
-        """Test that adding examples tracks their variables."""
-        builder = PromptBuilder()
-        builder.with_example("Input: {{x}}", "Output: {{y}}")
-
-        assert builder.variables == {"x", "y"}
-
-    def test_with_examples_list(self):
-        """Test adding multiple examples from list."""
+    def test_add_examples_standard_format(self):
+        """Test adding examples with standard user/assistant keys."""
         builder = PromptBuilder()
         examples = [
-            {"input": "What's 2+2?", "output": "4"},
-            {"input": "What's 3+3?", "output": "6"},
+            {"user": "What is 2+2?", "assistant": "4"},
+            {"user": "What is 3+3?", "assistant": "6"},
         ]
-        builder.with_examples(examples)
+        builder.add_examples(examples)
+        messages = builder.get_messages()
+        assert len(messages) == 4  # 2 examples × 2 messages each
+        assert messages[0].content == "What is 2+2?"
+        assert messages[0].role.value == "human"
+        assert messages[1].content == "4"
+        assert messages[1].role.value == "ai"
+        assert messages[2].content == "What is 3+3?"
+        assert messages[3].content == "6"
 
-        assert len(builder.examples) == 2
-        assert builder.examples[0] == ("What's 2+2?", "4")
-        assert builder.examples[1] == ("What's 3+3?", "6")
-
-    def test_with_example_method_chaining(self):
-        """Test that with_example returns self for chaining."""
+    def test_add_examples_custom_keys(self):
+        """Test adding examples with custom input/output keys."""
         builder = PromptBuilder()
-        result = builder.with_example("Q", "A")
+        examples = [{"input": "Hello", "output": "Hi there!"}]
+        builder.add_examples(examples, input_key="input", output_key="output")
+        messages = builder.get_messages()
+        assert len(messages) == 2
+        assert messages[0].content == "Hello"
+        assert messages[1].content == "Hi there!"
+
+    def test_add_examples_empty_values(self):
+        """Test that empty example values are skipped."""
+        builder = PromptBuilder()
+        examples = [
+            {"user": "Valid", "assistant": "Response"},
+            {"user": "", "assistant": ""},  # Should be skipped
+            {"user": "Another", "assistant": "One"},
+        ]
+        builder.add_examples(examples)
+        messages = builder.get_messages()
+        # Only 2 examples should be added (empty one skipped)
+        assert len(messages) == 4
+
+
+class TestPromptBuilderMethodChaining:
+    """Test method chaining functionality."""
+
+    def test_add_system_returns_self(self):
+        """Test that add_system returns self for chaining."""
+        builder = PromptBuilder()
+        result = builder.add_system("System")
         assert result is builder
 
-    def test_with_examples_method_chaining(self):
-        """Test that with_examples returns self for chaining."""
+    def test_add_user_returns_self(self):
+        """Test that add_user returns self for chaining."""
         builder = PromptBuilder()
-        result = builder.with_examples([{"input": "Q", "output": "A"}])
+        result = builder.add_user("User")
         assert result is builder
 
-
-class TestPromptBuilderFormatting:
-    """Test example formatting functionality."""
-
-    def test_set_example_formatter(self):
-        """Test setting a custom formatter."""
-
-        def formatter(inp: str, out: str) -> str:
-            return f"Q: {inp}\nA: {out}"
-
+    def test_add_assistant_returns_self(self):
+        """Test that add_assistant returns self for chaining."""
         builder = PromptBuilder()
-        builder.set_example_formatter(formatter)
-
-        assert builder.example_formatter is formatter
-
-    def test_set_example_formatter_method_chaining(self):
-        """Test that set_example_formatter returns self for chaining."""
-        builder = PromptBuilder()
-        result = builder.set_example_formatter(lambda i, o: f"{i}={o}")
+        result = builder.add_assistant("Assistant")
         assert result is builder
 
-    def test_custom_formatter_in_build(self):
-        """Test that custom formatter is used when building."""
-
-        def formatter(inp: str, out: str) -> str:
-            return f"Example: {inp} -> {out}"
-
+    def test_add_examples_returns_self(self):
+        """Test that add_examples returns self for chaining."""
         builder = PromptBuilder()
-        builder.set_example_formatter(formatter)
-        builder.with_example("2+2", "4")
+        result = builder.add_examples([{"user": "Q", "assistant": "A"}])
+        assert result is builder
 
-        result = builder.build()
-        assert len(result) == 1
-        assert result[0].content == "Example: 2+2 -> 4"
-        assert result[0].role.value == "human"
+    def test_fluent_api_chaining(self):
+        """Test full fluent API with method chaining."""
+        builder = (
+            PromptBuilder()
+            .add_system("You are helpful")
+            .add_examples([{"user": "Hi", "assistant": "Hello"}])
+            .add_user("{{query}}")
+        )
+        messages = builder.get_messages()
+        assert len(messages) == 4  # system + 2 example messages + user
 
 
 class TestPromptBuilderBuild:
-    """Test building final Messages."""
+    """Test building ChatPromptTemplate."""
 
     def test_build_empty(self):
-        """Test building with no messages or examples."""
+        """Test building with no messages."""
         builder = PromptBuilder()
-        result = builder.build()
+        template = builder.build()
+        assert isinstance(template, ChatPromptTemplate)
+        # Should have empty messages
+        assert len(template._messages) == 0
 
-        assert isinstance(result, Messages)
-        assert len(result) == 0
-
-    def test_build_only_messages(self):
-        """Test building with only messages."""
+    def test_build_with_messages(self):
+        """Test building with messages."""
         builder = PromptBuilder()
-        builder.messages.add_system("Hello")
-        builder.messages.add_human("Hi")
+        builder.add_system("System")
+        builder.add_user("User")
+        template = builder.build()
+        assert isinstance(template, ChatPromptTemplate)
+        assert len(template._messages) == 2
 
-        result = builder.build()
-        assert len(result) == 2
-        assert result[0].content == "Hello"
-        assert result[1].content == "Hi"
-
-    def test_build_only_examples(self):
-        """Test building with only examples."""
+    def test_build_with_examples(self):
+        """Test building with few-shot examples."""
         builder = PromptBuilder()
-        builder.with_example("Q1", "A1")
-        builder.with_example("Q2", "A2")
+        builder.add_system("Classify sentiment")
+        builder.add_examples([{"user": "I love this!", "assistant": "positive"}])
+        builder.add_user("Classify: {{text}}")
+        template = builder.build()
+        assert len(template._messages) == 4  # system + 2 example + user
 
-        result = builder.build()
-        assert len(result) == 4  # 2 examples × 2 messages each
-        assert result[0].content == "Q1"
-        assert result[0].role.value == "human"
-        assert result[1].content == "A1"
-        assert result[1].role.value == "ai"
-        assert result[2].content == "Q2"
-        assert result[3].content == "A2"
-
-    def test_build_examples_before_messages(self):
-        """Test that examples appear before regular messages."""
+    def test_build_multiple_times(self):
+        """Test that build can be called multiple times."""
         builder = PromptBuilder()
-        builder.messages.add_human("Main query")
-        builder.with_example("Example Q", "Example A")
-
-        result = builder.build()
-        assert len(result) == 3
-        assert result[0].content == "Example Q"  # Example first
-        assert result[1].content == "Example A"
-        assert result[2].content == "Main query"  # Then regular messages
-
-    def test_build_with_custom_formatter(self):
-        """Test building with custom example formatter."""
-
-        def formatter(inp: str, out: str) -> str:
-            return f"{inp} === {out}"
-
-        builder = PromptBuilder()
-        builder.set_example_formatter(formatter)
-        builder.with_example("Input", "Output")
-        builder.messages.add_human("Query")
-
-        result = builder.build()
-        assert len(result) == 2
-        assert result[0].content == "Input === Output"
-        assert result[0].role.value == "human"
-        assert result[1].content == "Query"
-
-    def test_build_does_not_modify_original(self):
-        """Test that building doesn't modify the builder's messages."""
-        builder = PromptBuilder()
-        builder.messages.add_human("Test")
-        builder.with_example("Q", "A")
-
-        original_count = len(builder.messages)
-        result = builder.build()
-
-        assert len(result) == 3  # 2 example messages + 1 regular
-        assert len(builder.messages) == original_count  # Original unchanged
-
-
-class TestPromptBuilderClear:
-    """Test clear operations."""
-
-    def test_clear_examples(self):
-        """Test clearing only examples."""
-        builder = PromptBuilder()
-        builder.messages.add_system("System")
-        builder.with_example("Q", "A")
-        builder.variables.add("test")
-
-        builder.clear_examples()
-
-        assert len(builder.examples) == 0
-        assert len(builder.messages) == 1  # Messages preserved
-        assert "test" in builder.variables  # Variables preserved
-
-    def test_clear_examples_method_chaining(self):
-        """Test that clear_examples returns self for chaining."""
-        builder = PromptBuilder()
-        result = builder.clear_examples()
-        assert result is builder
-
-    def test_clear_all(self):
-        """Test clearing everything."""
-        builder = PromptBuilder()
-        builder.messages.add_system("System")
-        builder.with_example("Q", "A")
-        builder.variables.add("test")
-
-        builder.clear_all()
-
-        assert len(builder.examples) == 0
-        assert len(builder.messages) == 0
-        assert len(builder.variables) == 0
-
-    def test_clear_all_method_chaining(self):
-        """Test that clear_all returns self for chaining."""
-        builder = PromptBuilder()
-        result = builder.clear_all()
-        assert result is builder
+        builder.add_user("Test")
+        template1 = builder.build()
+        template2 = builder.build()
+        # Should create different instances
+        assert template1 is not template2
+        # But with same content
+        assert len(template1._messages) == len(template2._messages)
 
 
 class TestPromptBuilderIntegration:
-    """Test integration with other components."""
+    """Test integration scenarios."""
 
-    def test_to_chat_template(self):
-        """Test conversion to ChatPromptTemplate."""
+    def test_sentiment_classification_example(self):
+        """Test real-world sentiment classification scenario."""
         builder = PromptBuilder()
-        builder.messages.add_system("You are helpful")
-        builder.with_example("Hi", "Hello")
+        builder.add_system("You are a sentiment classifier")
+        builder.add_examples([
+            {"user": "I love this!", "assistant": "positive"},
+            {"user": "I hate this", "assistant": "negative"},
+        ])
+        builder.add_user("Classify: {{text}}")
+        template = builder.build()
 
-        template = builder.to_chat_template()
+        # Format the template
+        messages = template.format_messages(text="This is great")
 
-        # Should have examples + messages
-        assert len(template._messages) == 3  # 2 example msgs + 1 system
+        # Should have proper ordering: system, examples, final user message
+        assert messages[0]["role"] == "system"
+        assert messages[1]["content"] == "I love this!"  # Example 1 user
+        assert messages[2]["content"] == "positive"  # Example 1 assistant
+        assert messages[3]["content"] == "I hate this"  # Example 2 user
+        assert messages[4]["content"] == "negative"  # Example 2 assistant
+        assert messages[5]["content"] == "Classify: This is great"  # Final user msg
 
-    def test_direct_message_access(self):
-        """Test that users can directly access and modify messages."""
+    def test_with_context_history(self):
+        """Test that examples come before context history."""
         builder = PromptBuilder()
-        builder.messages.add_system("Initial")
+        builder.add_system("You are helpful")
+        builder.add_examples([{"user": "Example", "assistant": "Response"}])
+        builder.add_user("{{query}}")
+        template = builder.build()
 
-        # Direct access to messages
-        assert len(builder.messages) == 1
-        builder.messages.add_human("Added directly")
-        assert len(builder.messages) == 2
+        # Add context history
+        context = [
+            {"role": "user", "content": "Previous question"},
+            {"role": "assistant", "content": "Previous answer"},
+        ]
+        messages = template.format_messages(context_history=context, query="Current question")
 
-        # Changes reflected in build
-        result = builder.build()
-        assert len(result) == 2
+        # Order should be: system, examples, context, current
+        assert messages[0]["role"] == "system"
+        assert messages[1]["content"] == "Example"  # Example user
+        assert messages[2]["content"] == "Response"  # Example assistant
+        assert messages[3]["content"] == "Previous question"  # Context history
+        assert messages[4]["content"] == "Previous answer"  # Context history
+        assert messages[5]["content"] == "Current question"  # Final query
 
-    def test_fluent_api_chaining(self):
-        """Test fluent API with method chaining."""
-        builder = (
-            PromptBuilder().with_example("Q1", "A1").with_example("Q2", "A2").track_variables()
-        )
-
-        builder.messages.add_system("System").add_human("Query")
-
-        result = builder.build()
-        assert len(result) == 6  # 4 example messages + 2 regular
-
-
-class TestPromptBuilderRepr:
-    """Test string representation."""
-
-    def test_repr_empty(self):
-        """Test repr of empty builder."""
+    def test_get_messages_access(self):
+        """Test direct access to underlying Messages object."""
         builder = PromptBuilder()
-        repr_str = repr(builder)
-
-        assert "PromptBuilder" in repr_str
-        assert "messages=0" in repr_str
-        assert "examples=0" in repr_str
-
-    def test_repr_with_content(self):
-        """Test repr with messages and examples."""
-        builder = PromptBuilder()
-        builder.messages.add_system("{{role}}")
-        builder.with_example("Q", "A")
-        builder.track_variables()
-
-        repr_str = repr(builder)
-
-        assert "messages=1" in repr_str
-        assert "examples=1" in repr_str
-        assert "role" in repr_str
+        builder.add_system("Test")
+        messages = builder.get_messages()
+        assert isinstance(messages, Messages)
+        assert len(messages) == 1
+        assert messages[0].content == "Test"
 
 
 class TestPromptBuilderEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_empty_example_strings(self):
-        """Test adding examples with empty strings."""
+    def test_add_empty_strings(self):
+        """Test adding empty string messages."""
         builder = PromptBuilder()
-        builder.with_example("", "")
+        builder.add_system("")
+        builder.add_user("")
+        messages = builder.get_messages()
+        assert len(messages) == 2
+        assert messages[0].content == ""
+        assert messages[1].content == ""
 
-        assert len(builder.examples) == 1
-        assert builder.examples[0] == ("", "")
-
-    def test_multiline_examples(self):
-        """Test examples with multiline strings."""
+    def test_multiline_content(self):
+        """Test messages with multiline content."""
         builder = PromptBuilder()
-        builder.with_example("Line 1\nLine 2", "Answer\nMultiline")
+        multiline = "Line 1\nLine 2\nLine 3"
+        builder.add_system(multiline)
+        messages = builder.get_messages()
+        assert messages[0].content == multiline
 
-        result = builder.build()
-        assert len(result) == 2
-        assert "\n" in result[0].content
-        assert "\n" in result[1].content
-
-    def test_special_characters_in_examples(self):
-        """Test examples with special characters."""
+    def test_special_characters(self):
+        """Test messages with special characters."""
         builder = PromptBuilder()
-        builder.with_example("What's {{x}}?", "{{x}} = 42")
+        special = "Test {{var}} with {braces} and $pecial ch@rs!"
+        builder.add_user(special)
+        messages = builder.get_messages()
+        assert messages[0].content == special
 
-        assert "x" in builder.variables
-
-        result = builder.build()
-        assert result[0].content == "What's {{x}}?"
-
-    def test_multiple_track_variables_calls(self):
-        """Test calling track_variables multiple times."""
+    def test_examples_missing_keys(self):
+        """Test examples with missing keys are skipped."""
         builder = PromptBuilder()
-        builder.messages.add_system("{{a}}")
-        builder.track_variables()
-
-        builder.messages.add_human("{{b}}")
-        builder.track_variables()
-
-        assert builder.variables == {"a", "b"}
-
-    def test_build_multiple_times(self):
-        """Test that build can be called multiple times."""
-        builder = PromptBuilder()
-        builder.messages.add_system("Test")
-
-        result1 = builder.build()
-        result2 = builder.build()
-
-        assert len(result1) == len(result2)
-        assert result1 is not result2  # Different instances
-        assert result1[0].content == result2[0].content
+        examples = [
+            {"user": "Valid", "assistant": "Response"},
+            {"user": "Missing output"},  # Missing assistant key
+            {"assistant": "Missing input"},  # Missing user key
+        ]
+        builder.add_examples(examples)
+        messages = builder.get_messages()
+        # Only the first valid example should be added
+        assert len(messages) == 2

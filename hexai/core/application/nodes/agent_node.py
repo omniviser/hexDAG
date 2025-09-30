@@ -8,8 +8,8 @@ from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
-from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.prompt import PromptInput
+from hexai.core.application.prompt.prompt_builder import PromptBuilder
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.ports.tool_router import ToolRouter
@@ -306,35 +306,55 @@ class ReActAgentNode(BaseNodeFactory):
     def _enhance_prompt_with_tools(
         self, prompt: PromptInput, tool_router: ToolRouter | None, config: AgentConfig
     ) -> PromptInput:
-        """Add tool instructions to the prompt.
+        """Add tool instructions and examples to the prompt using PromptBuilder.
+
+        Uses PromptBuilder to properly structure:
+        - Base user prompt with variables
+        - Tool documentation as system message
+        - Few-shot examples as proper message pairs
 
         Returns
         -------
         PromptInput
-            Enhanced prompt with tool instructions
+            Enhanced ChatPromptTemplate with proper message structure
         """
         if not tool_router:
             return prompt
 
-        # Convert to template if needed
-        if isinstance(prompt, str):
-            prompt = PromptTemplate(prompt)
+        # Start from existing prompt
+        builder = PromptBuilder.from_template(prompt)
 
-        # Get tool instructions
-        tool_instructions = self._build_tool_instructions(tool_router, config)
+        # Get tool schemas
+        tool_schemas = tool_router.get_all_tool_schemas()
+        if tool_schemas:
+            # Add tool documentation as system message
+            tool_docs = self._build_tool_documentation(tool_schemas, config.tool_call_style)
+            builder.add_system(tool_docs)
 
-        # Use the template's enhance method
-        return prompt + tool_instructions
+            # Add few-shot examples showing tool usage
+            tool_examples = self._build_tool_examples(tool_schemas, config.tool_call_style)
+            if tool_examples:
+                builder.add_examples(tool_examples)
 
-    def _build_tool_instructions(self, tool_router: ToolRouter, config: AgentConfig) -> str:
-        """Build tool usage instructions based on the configured format.
+        return builder.build()
+
+    def _build_tool_documentation(
+        self, tool_schemas: dict[str, Any], format_style: ToolCallFormat
+    ) -> str:
+        """Build tool usage documentation.
+
+        Parameters
+        ----------
+        tool_schemas : dict[str, Any]
+            Tool schemas from tool router
+        format_style : ToolCallFormat
+            Tool calling format style
 
         Returns
         -------
         str
-            Tool usage instructions text
+            Tool documentation text
         """
-        tool_schemas = tool_router.get_all_tool_schemas()
         if not tool_schemas:
             return "\n## No tools available"
 
@@ -347,7 +367,7 @@ class ReActAgentNode(BaseNodeFactory):
         tools_text = "\n".join(tool_list)
 
         # Generate format-specific usage guidelines
-        usage_guidelines = self._get_format_specific_guidelines(config.tool_call_style)
+        usage_guidelines = self._get_format_specific_guidelines(format_style)
 
         return f"""
 ## Available Tools
@@ -356,6 +376,82 @@ class ReActAgentNode(BaseNodeFactory):
 ## Usage Guidelines
 {usage_guidelines}
 """
+
+    def _build_tool_examples(
+        self, tool_schemas: dict[str, Any], format_style: ToolCallFormat
+    ) -> list[dict[str, str]]:
+        """Build few-shot examples showing tool usage.
+
+        Parameters
+        ----------
+        tool_schemas : dict[str, Any]
+            Tool schemas from tool router
+        format_style : ToolCallFormat
+            Tool calling format style
+
+        Returns
+        -------
+        list[dict[str, str]]
+            List of example dicts with 'user' and 'assistant' keys
+        """
+        if not tool_schemas:
+            return []
+
+        # Get first tool name for examples (excluding special tools)
+        example_tool_name = next(
+            (name for name in tool_schemas if name not in ("tool_end", "change_phase")),
+            None,
+        )
+
+        if not example_tool_name:
+            return []
+
+        # Get tool info for examples
+        tool_schema = tool_schemas[example_tool_name]
+        params = tool_schema.get("parameters", [])
+        example_param = params[0]["name"] if params else "param"
+
+        examples = []
+
+        # Add format-specific examples
+        if format_style == ToolCallFormat.FUNCTION_CALL:
+            examples.append({
+                "user": f"Use the {example_tool_name} tool",
+                "assistant": f"INVOKE_TOOL: {example_tool_name}({example_param}='value')",
+            })
+            examples.append({
+                "user": "Provide the final answer",
+                "assistant": "INVOKE_TOOL: tool_end(result='final result')",
+            })
+
+        elif format_style == ToolCallFormat.JSON:
+            examples.append({
+                "user": f"Use the {example_tool_name} tool",
+                "assistant": (
+                    f'INVOKE_TOOL: {{"tool": "{example_tool_name}", '
+                    f'"params": {{"{example_param}": "value"}}}}'
+                ),
+            })
+            examples.append({
+                "user": "Provide the final answer",
+                "assistant": 'INVOKE_TOOL: {"tool": "tool_end", \
+                "params": {"result": "final result"}}',
+            })
+
+        elif format_style == ToolCallFormat.MIXED:
+            examples.append({
+                "user": f"Use the {example_tool_name} tool",
+                "assistant": f"INVOKE_TOOL: {example_tool_name}({example_param}='value')",
+            })
+            examples.append({
+                "user": "Call tool with JSON",
+                "assistant": (
+                    f'INVOKE_TOOL: {{"tool": "{example_tool_name}", '
+                    f'"params": {{"{example_param}": "value"}}}}'
+                ),
+            })
+
+        return examples
 
     def _get_format_specific_guidelines(self, format_style: ToolCallFormat) -> str:
         """Generate format-specific tool calling guidelines.
@@ -432,7 +528,7 @@ carried_data={'key': 'value'})"""
             Updated agent state after step execution
         """
         event_manager = ports.get("event_manager")
-        tool_router = ports.get("tool_router", UnifiedToolRouter())
+        tool_router = ports.get("tool_router")
 
         # Get current step info
         current_step = max(state.loop_iteration, state.step) + 1

@@ -23,7 +23,7 @@ def test_core_functionality():
 
     # Create a simple DAG
     graph = DirectedGraph()
-    graph.add_node(NodeSpec(id="start", fn=lambda x: x))
+    graph.add(NodeSpec(name="start", fn=lambda x: x))
     print("✅ Can create DirectedGraph and NodeSpec")
 
     # Check registry
@@ -52,7 +52,7 @@ def test_visualization_lazy():
         from hexai import DirectedGraph, NodeSpec
 
         graph = DirectedGraph()
-        graph.add_node(NodeSpec(id="test", fn=lambda x: x))
+        graph.add(NodeSpec(name="test", fn=lambda x: x))
 
         DAGVisualizer(graph)
         print("✅ DAGVisualizer created successfully")

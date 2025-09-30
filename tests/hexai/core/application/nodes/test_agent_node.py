@@ -3,15 +3,15 @@
 import pytest
 from pydantic import BaseModel
 
+from hexai.adapters.local.unified_tool_router import UnifiedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.agent_node import AgentConfig
 from hexai.core.application.nodes.tool_utils import ToolCallFormat
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.registry import registry
 
-# Ensure registry is bootstrapped for tests
-ensure_bootstrapped()
+# Ensure registry is bootstrapped for tests with default config
+ensure_bootstrapped(use_defaults=True)
 
 
 class CustomOutput(BaseModel):
@@ -37,7 +37,7 @@ class TestReActAgentNode:
     @pytest.fixture
     def agent_node(self):
         """Get ReActAgentNode factory from registry."""
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         return registry.get("agent_node", namespace="core")
 
     def test_basic_agent_creation(self, agent_node):

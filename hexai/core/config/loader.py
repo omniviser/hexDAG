@@ -286,9 +286,11 @@ def get_default_config() -> HexDAGConfig:
     """
     return HexDAGConfig(
         modules=[
+            "hexai.core.ports",  # Port definitions must be loaded first
             "hexai.core.application.nodes",
             "hexai.adapters.mock",
             "hexai.tools.builtin_tools",  # Essential built-in tools
+            "hexai.tools.database_tools",  # Database tools
         ],
         settings={
             "log_level": "INFO",
@@ -310,11 +312,11 @@ def config_to_manifest_entries(config: HexDAGConfig) -> list[ManifestEntry]:
     list[ManifestEntry]
         List of manifest entries for registry bootstrap
     """
-    # Core modules and built-in tools go to 'core' namespace, others to 'user'
+    # Core modules and tools go to 'core' namespace, others to 'user'
     module_entries = [
         ManifestEntry(
             namespace="core"
-            if (module.startswith("hexai.core") or module.startswith("hexai.tools.builtin_tools"))
+            if (module.startswith("hexai.core") or module.startswith("hexai.tools"))
             else "user",
             module=module,
         )

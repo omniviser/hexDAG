@@ -9,7 +9,7 @@ from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.registry import registry
 
 # Ensure registry is bootstrapped for tests
-ensure_bootstrapped()
+ensure_bootstrapped(use_defaults=True)
 
 
 class OutputSchema(BaseModel):
@@ -25,7 +25,7 @@ class TestLLMNode:
     @pytest.fixture
     def llm_node(self):
         """Get LLMNode factory from registry."""
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         return registry.get("llm_node", namespace="core")
 
     @pytest.fixture

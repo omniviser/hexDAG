@@ -474,16 +474,25 @@ class ChatPromptTemplate(PromptTemplate):
         super().__init__(combined_template, **kwargs)
 
     def _build_combined_template(self) -> str:
-        """Build combined template string from messages.
+        """Build combined template string from messages for variable extraction.
+
+        Only includes USER/HUMAN messages in validation since system messages
+        may contain non-template text (like tool documentation with curly braces).
 
         Returns
         -------
-            Combined template string for variable extraction
+            Combined template string for variable extraction and validation
         """
         if not self._messages:
             return ""
 
-        parts = [msg.content for msg in self._messages]
+        # Only include HUMAN messages for template validation
+        # System messages may contain non-template text (tool docs, etc.)
+        parts = [msg.content for msg in self._messages if msg.role == MessageRole.HUMAN]
+
+        # If no user messages, return empty (all system messages)
+        if not parts:
+            return ""
 
         return "\n".join(parts)
 
@@ -495,10 +504,16 @@ class ChatPromptTemplate(PromptTemplate):
     ) -> list[dict[str, str]]:
         """Format the template into a list of messages with optional overrides.
 
+        Message ordering:
+        1. System messages (from template or override)
+        2. Few-shot examples (user/assistant pairs from template)
+        3. Context history (actual conversation)
+        4. Final user message (from template)
+
         Args
         ----
             system_prompt: Optional system prompt to prepend (overrides template system message)
-            context_history: Optional conversation history to insert before template messages
+            context_history: Optional conversation history to insert before final user message
             **kwargs: Variables to substitute in the template
 
         Returns
@@ -529,34 +544,68 @@ class ChatPromptTemplate(PromptTemplate):
         """
         result_messages = Messages()
 
-        # Add system message if provided explicitly (overrides template system message)
+        # Step 1: Add system messages
         if system_prompt:
+            # Override with explicit system prompt
             rendered_content = render_template(system_prompt, kwargs, validate_vars=False)
             result_messages.add_system(rendered_content)
+        else:
+            # Add system messages from template
+            for msg in self._messages:
+                if msg.role == MessageRole.SYSTEM:
+                    rendered_content = render_template(msg.content, kwargs, validate_vars=False)
+                    result_messages.add_system(rendered_content)
 
-        # Add conversation history if provided
-        if context_history:
-            for msg in context_history:
-                history_msg = Message.from_dict(msg)
-                result_messages.add(history_msg)
+        # Step 2: Separate few-shot examples from final user message
+        # Few-shot examples are user/assistant pairs (not variables, static examples)
+        # Final user message is the last HUMAN message (contains variables)
+        template_messages = [msg for msg in self._messages if msg.role != MessageRole.SYSTEM]
 
-        # Render and add all template messages
-        for msg in self._messages:
-            # Skip system message if we already added an override
-            if system_prompt and msg.role == MessageRole.SYSTEM:
-                continue
+        if template_messages:
+            # Find the last HUMAN message (this is the actual prompt with variables)
+            last_human_idx = None
+            for i in range(len(template_messages) - 1, -1, -1):
+                if template_messages[i].role == MessageRole.HUMAN:
+                    last_human_idx = i
+                    break
 
-            # Render the content with variables
-            rendered_content = render_template(msg.content, kwargs, validate_vars=False)
+            # Everything before the last human message is considered few-shot examples
+            if last_human_idx is not None:
+                few_shot_messages = template_messages[:last_human_idx]
+                final_message = template_messages[last_human_idx]
 
-            # Create new message with formatted content
-            formatted_msg = Message(
-                role=msg.role,
-                content=rendered_content,
-                metadata=msg.metadata.copy(),
-                name=msg.name,
-            )
-            result_messages.add(formatted_msg)
+                # Add few-shot examples (don't render variables, they're static)
+                for msg in few_shot_messages:
+                    formatted_msg = Message(
+                        role=msg.role,
+                        content=msg.content,  # No variable rendering for examples
+                        metadata=msg.metadata.copy(),
+                        name=msg.name,
+                    )
+                    result_messages.add(formatted_msg)
+
+                # Step 3: Add conversation history (after examples, before final message)
+                if context_history:
+                    for msg in context_history:
+                        history_msg = Message.from_dict(msg)
+                        result_messages.add(history_msg)
+
+                # Step 4: Add final user message (render variables)
+                rendered_content = render_template(
+                    final_message.content, kwargs, validate_vars=False
+                )
+                result_messages.add_human(rendered_content)
+            else:
+                # No human messages, just add all template messages
+                for msg in template_messages:
+                    rendered_content = render_template(msg.content, kwargs, validate_vars=False)
+                    formatted_msg = Message(
+                        role=msg.role,
+                        content=rendered_content,
+                        metadata=msg.metadata.copy(),
+                        name=msg.name,
+                    )
+                    result_messages.add(formatted_msg)
 
         # Return as list of dicts for backward compatibility
         return result_messages.to_list(use_aliases=True)

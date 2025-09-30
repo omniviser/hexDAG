@@ -6,16 +6,16 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .unified_tool_router import UnifiedToolRouter  # noqa: F401
+    from .local.unified_tool_router import UnifiedToolRouter  # noqa: F401
 
 _LAZY_MAP: dict[str, tuple[str, str]] = {
     "UnifiedToolRouter": (
-        "hexai.adapters.unified_tool_router",
+        "hexai.adapters.local.unified_tool_router",
         "UnifiedToolRouter",
     ),
     # Backward compatibility alias
     "FunctionBasedToolRouter": (
-        "hexai.adapters.unified_tool_router",
+        "hexai.adapters.local.unified_tool_router",
         "UnifiedToolRouter",
     ),
 }

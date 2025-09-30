@@ -342,8 +342,8 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_ports_with_mocks(self, orchestrator, observers):
         """Test orchestrator with mock LLM and ToolRouter ports."""
+        from hexai.adapters.local.unified_tool_router import UnifiedToolRouter
         from hexai.adapters.mock.mock_llm import MockLLM
-        from hexai.adapters.unified_tool_router import UnifiedToolRouter
 
         async def async_dummy_node_with_ports(input_data, llm=None, tool_router=None, **ports):
             """Async dummy node that uses ports."""
@@ -758,7 +758,7 @@ class TestOrchestrator:
             deps=set(),
         )
 
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         function_node = registry.get("function_node", namespace="core")
 
         consumer_node = function_node(
@@ -805,7 +805,7 @@ class TestOrchestrator:
         from hexai.core.bootstrap import ensure_bootstrapped
         from hexai.core.registry import registry
 
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         function_node = registry.get("function_node", namespace="core")
 
         consumer_node = function_node(
@@ -854,7 +854,7 @@ class TestOrchestrator:
 
         # Consumer using Pydantic model
 
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         function_node = registry.get("function_node", namespace="core")
 
         consumer_node = function_node(
@@ -927,7 +927,7 @@ class TestOrchestrator:
 
         # Node using Pydantic model for structured input
 
-        ensure_bootstrapped()
+        ensure_bootstrapped(use_defaults=True)
         function_node = registry.get("function_node", namespace="core")
 
         mapped_node = function_node(

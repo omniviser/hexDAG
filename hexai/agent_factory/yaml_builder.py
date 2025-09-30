@@ -13,6 +13,7 @@ from hexai.agent_factory.yaml_validator import YamlValidator
 
 # ObserverManager is now a port - passed as dependency
 from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
+from hexai.core.application.prompt.prompt_builder import PromptBuilder
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph
@@ -247,24 +248,112 @@ class YamlPipelineBuilder:
         has_parse_as_json = params.get("parse_as_json", False)
 
         if has_string_template and (has_output_schema or has_parse_as_json):
-            # Auto-convert string template to structured template
+            # Auto-convert string template to structured template using PromptBuilder
             original_template = params["prompt_template"]
 
             # Remove parse_as_json (incompatible with structured templates)
             if "parse_as_json" in params:
                 del params["parse_as_json"]
 
-            # Convert the string template to ChatPromptTemplate object
-            # Keep the prompt_template parameter name but change the value type
-            chat_template = ChatPromptTemplate(human_message=original_template)
-            params["prompt_template"] = chat_template
-
-            logger.info(
-                f"🔄 Auto-converted LLM node '{node_id}': "
-                f"prompt_template (string) + output_schema → prompt_template (ChatPromptTemplate)"
+            # Use PromptBuilder to create enhanced prompt with optional features
+            chat_template = self._build_prompt_with_features(
+                node_id=node_id,
+                prompt_template=original_template,
+                system_message=params.get("system_message"),
+                examples=params.get("examples"),
             )
 
+            # LLMNode expects 'template', not 'prompt_template'
+            params["template"] = chat_template
+            params.pop("prompt_template", None)
+
+            # Remove system_message and examples from params (now in template)
+            params.pop("system_message", None)
+            params.pop("examples", None)
+
+        # Map prompt_template to template for LLMNode compatibility
+        elif "prompt_template" in params:
+            params["template"] = params.pop("prompt_template")
+
         return params
+
+    def _build_prompt_with_features(
+        self,
+        node_id: str,
+        prompt_template: str,
+        system_message: str | None = None,
+        examples: list[dict[str, str]] | None = None,
+    ) -> ChatPromptTemplate:
+        """Build a ChatPromptTemplate using PromptBuilder with advanced features.
+
+        This method enables YAML configs to specify:
+        - system_message: System instructions for the LLM
+        - examples: Few-shot learning examples (automatically ordered before conversation history)
+        - Automatic variable tracking from prompt template
+
+        Parameters
+        ----------
+        node_id : str
+            Node identifier for logging
+        prompt_template : str
+            Main prompt template with variables
+        system_message : str | None
+            Optional system message
+        examples : list[dict[str, str]] | None
+            Optional few-shot examples with 'input' and 'output' keys
+
+        Returns
+        -------
+        ChatPromptTemplate
+            Complete chat template with proper message ordering:
+            1. System message
+            2. Few-shot examples
+            3. Context history (inserted at runtime)
+            4. User prompt
+
+        Examples
+        --------
+        YAML config with system message and examples:
+        ```yaml
+        nodes:
+          - type: llm
+            id: classifier
+            params:
+              system_message: "You are an expert classifier"
+              examples:
+                - input: "This is great!"
+                  output: "positive"
+                - input: "This is terrible"
+                  output: "negative"
+              prompt_template: "Classify: {{text}}"
+              output_schema: {...}
+        ```
+        """
+        builder = PromptBuilder()
+
+        # Add system message if provided
+        if system_message:
+            builder.add_system(system_message)
+            logger.debug(f"Node '{node_id}': Added system message")
+
+        # Add few-shot examples if provided (will be ordered before context history)
+        if examples:
+            builder.add_examples(examples, input_key="input", output_key="output")
+            logger.debug(f"Node '{node_id}': Added {len(examples)} few-shot examples")
+
+        # Add main prompt template (variables will be rendered at runtime)
+        builder.add_user(prompt_template)
+
+        # Log what we built
+        features = []
+        if system_message:
+            features.append("system message")
+        if examples:
+            features.append(f"{len(examples)} examples")
+
+        logger.info(f"🔄 Built ChatPromptTemplate for '{node_id}' with: {', '.join(features)}")
+
+        return builder.build()
 
     def validate_data_mapping(self, config: dict[str, Any]) -> list[str]:
         """Validate field mappings in YAML configuration.

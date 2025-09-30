@@ -197,11 +197,11 @@ class ComponentRegistry:
             # Determine if this is a core module that must load successfully
             # Core modules are either:
             # 1. In the 'core' namespace (explicitly marked as core)
-            # 2. Part of the framework (hexai.core.* or hexai.tools.builtin_tools)
+            # 2. Part of the framework (hexai.core.* or hexai.tools.*)
             is_core_module = (
                 entry.namespace == "core"
                 or entry.module.startswith("hexai.core.")
-                or entry.module == "hexai.tools.builtin_tools"
+                or entry.module.startswith("hexai.tools.")
             )
 
             # For non-core modules, check if they exist before trying to load

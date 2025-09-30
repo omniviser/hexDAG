@@ -35,7 +35,13 @@ EXAMPLE_CATEGORIES = {
         "17_performance_optimization.py",
         "18_advanced_patterns.py",
     ],
-    "advanced": ["19_complex_workflow.py", "20_integration_testing.py", "21_toml_configuration.py"],
+    "advanced": [
+        "19_complex_workflow.py",
+        "20_integration_testing.py",
+        "21_toml_configuration.py",
+        "22_mock_adapters_demo.py",
+        "23_lazy_loading_demo.py",
+    ],
 }
 
 # All examples in learning order
@@ -61,6 +67,8 @@ ALL_EXAMPLES = [
     "19_complex_workflow.py",
     "20_integration_testing.py",
     "21_toml_configuration.py",
+    "22_mock_adapters_demo.py",
+    "23_lazy_loading_demo.py",
 ]
 
 
