@@ -290,6 +290,198 @@ locks.py          - Thread safety
 exceptions.py     - Custom exceptions
 ```
 
+## Plugin Dependency Handling
+
+The registry handles plugin dependencies through **graceful degradation**, ensuring the core framework remains functional even when optional plugins have missing dependencies.
+
+### How It Works
+
+#### Module Classification
+
+Modules are classified into two categories during bootstrap:
+
+**Core Modules** (`hexai.core.*`, `hexai.tools.*`):
+- **MUST** load successfully
+- Import failure → Bootstrap **FAILS** with exception
+- Essential framework components
+
+**Plugin Modules** (everything else):
+- **OPTIONAL** - can fail gracefully
+- Import failure → Logged as WARNING and **SKIPPED**
+- Bootstrap continues successfully
+
+#### Loading Process
+
+```
+Config → Bootstrap → Import Module → Register Components
+                         ↓ (if fails)
+                   Log Warning & Skip (plugins only)
+```
+
+### Example: Plugin with Missing Dependencies
+
+```toml
+# hexdag.toml
+plugins = [
+    "hexai.adapters.mock",              # ✅ No external dependencies
+    "hexai_plugins.mysql_adapter",      # ⚠️  Requires pymysql
+    "hexai.adapters.llm.openai_adapter" # ⚠️  Requires openai
+]
+```
+
+**If pymysql is not installed:**
+```
+INFO: Registered 4 components from hexai.adapters.mock into namespace 'plugin'
+WARNING: Optional module hexai_plugins.mysql_adapter not available: No module named 'pymysql'
+INFO: Registered 1 component from hexai.adapters.llm.openai_adapter into namespace 'plugin'
+INFO: Bootstrap complete: 12 components registered
+```
+
+The framework continues working normally with the available plugins.
+
+### Installing Plugin Dependencies
+
+#### Option 1: Install Plugin Package
+```bash
+# Plugin package includes dependencies in pyproject.toml
+pip install hexdag-mysql-adapter  # Automatically installs pymysql
+```
+
+#### Option 2: Install with Extras
+```bash
+# If defined in hexdag's pyproject.toml
+pip install hexdag[mysql,openai]
+```
+
+#### Option 3: Manual Installation
+```bash
+pip install pymysql openai
+# Then plugins will be available
+```
+
+### For Plugin Developers
+
+#### 1. Declare Dependencies in pyproject.toml
+
+```toml
+[project]
+name = "hexdag-mysql-adapter"
+dependencies = [
+    "pymysql>=1.1.0",
+    "cryptography>=41.0.0"
+]
+
+[tool.hexdag.plugin]
+name = "mysql"
+module = "hexai_plugins.mysql_adapter"
+port = "database"
+description = "Production-ready MySQL adapter"
+requires_env = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD"]
+```
+
+#### 2. Handle Runtime Requirements Gracefully
+
+```python
+from hexai.core.registry import adapter
+
+@adapter(
+    name="mysql_database",
+    namespace="plugin",
+    port="database"
+)
+class MySQLAdapter:
+    """MySQL database adapter."""
+
+    def __init__(self, host: str, user: str, password: str):
+        """Initialize adapter.
+
+        Raises:
+            ValueError: If required credentials are missing
+        """
+        if not all([host, user, password]):
+            raise ValueError(
+                "MySQL adapter requires host, user, and password. "
+                "Set MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD environment variables."
+            )
+        self.connection = pymysql.connect(...)
+```
+
+#### 3. Provide Clear Documentation
+
+```markdown
+# hexdag-mysql-adapter
+
+## Installation
+
+```bash
+pip install hexdag-mysql-adapter
+```
+
+## Configuration
+
+```bash
+export MYSQL_HOST=localhost
+export MYSQL_USER=root
+export MYSQL_PASSWORD=secret
+export MYSQL_DATABASE=mydb
+```
+
+## Usage
+
+```toml
+# hexdag.toml
+plugins = ["hexai_plugins.mysql_adapter"]
+```
+```
+
+### Dependency Checking Behavior
+
+The registry's `_check_plugin_requirements()` method:
+
+1. **Checks if module exists** using `importlib.util.find_spec()`
+2. **Does NOT** install missing dependencies automatically
+3. **Does NOT** parse or validate `pyproject.toml` dependencies
+4. **Does NOT** check Python version compatibility
+5. **Allows** import to fail and handles the exception gracefully
+
+This is **by design** following Python packaging best practices:
+- Users explicitly control what gets installed
+- No automatic package installation (security concern)
+- Dependencies declared in package metadata
+- Framework degrades gracefully when components missing
+
+### Best Practices
+
+#### For Users
+
+1. **Check logs** for skipped plugins during bootstrap
+2. **Install required plugins** before running production code
+3. **Use virtual environments** to isolate dependencies
+4. **Document plugin requirements** in your project README
+
+#### For Plugin Developers
+
+1. **Declare all dependencies** in `pyproject.toml`
+2. **Document environment variables** and configuration
+3. **Handle missing config gracefully** with helpful error messages
+4. **Test plugin isolation** - ensure it doesn't break core framework
+5. **Use namespace="plugin"** for third-party plugins
+
+### Limitations
+
+Current implementation does **NOT**:
+- Automatically install missing dependencies
+- Parse `pyproject.toml` to check dependencies before import
+- Validate plugin metadata before loading
+- Resolve dependency conflicts
+- Check Python version compatibility
+
+These are intentional design decisions prioritizing:
+- User control over installations
+- Security (no automatic pip installs)
+- Simplicity
+- Standard Python packaging practices
+
 ## Testing
 
 ```bash

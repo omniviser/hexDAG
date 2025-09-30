@@ -1,4 +1,23 @@
-"""Bootstrap the HexDAG registry from TOML configuration."""
+"""Bootstrap the HexDAG registry from TOML configuration.
+
+Plugin Dependency Handling
+---------------------------
+The bootstrap system handles plugins with missing dependencies gracefully:
+
+- Core modules (hexai.core.*, hexai.tools.*): MUST load successfully or bootstrap fails
+- Plugin modules: Can fail gracefully - logged as WARNING and skipped
+- No automatic dependency installation (user must install plugin packages)
+- Framework continues working with available plugins
+
+Example:
+    If a plugin requires 'pymysql' but it's not installed:
+    - Plugin import fails with ImportError
+    - Bootstrap logs: "WARNING: Optional module <plugin> not available: No module named 'pymysql'"
+    - Bootstrap continues successfully with other plugins
+    - Core framework remains fully functional
+
+See hexai/core/registry/README.md for complete documentation.
+"""
 
 from __future__ import annotations
 
