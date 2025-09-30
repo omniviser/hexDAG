@@ -213,7 +213,10 @@ def show_component(
             # Get the port class from registry
             import inspect
 
-            port_class = registry._components[component_info.namespace][component_name]
+            port_metadata = registry.get_metadata(
+                component_name, namespace=component_info.namespace
+            )
+            port_class = port_metadata
 
             # Skip Pydantic/BaseModel methods
             skip_methods = {

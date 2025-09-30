@@ -13,6 +13,18 @@ T = TypeVar("T")
 TComponent = TypeVar("TComponent")
 TInstance = TypeVar("TInstance")
 
+# ============================================================================
+# Registry Constants
+# ============================================================================
+
+# Namespace separator for qualified names (e.g., "core:my_component")
+NAMESPACE_SEPARATOR = ":"
+
+# Component attribute names (set by decorators)
+IMPLEMENTS_PORT_ATTR = "_hexdag_implements_port"
+REQUIRED_PORTS_ATTR = "_hexdag_required_ports"
+COMPONENT_VALUE_ATTR = "value"
+
 
 # ============================================================================
 # Component Wrappers - Discriminated union for type-safe component storage

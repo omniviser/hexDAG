@@ -66,9 +66,7 @@ enable_metrics = true
         config_path.unlink()
         # Clean up registry for next example
         if registry.ready:
-            registry._components.clear()
-            registry._protected_components.clear()
-            registry._ready = False
+            registry._reset_for_testing()
 
     # Example 2: Module and Plugin Management
     print("📦 Test 2: Module and Plugin Management")

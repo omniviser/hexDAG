@@ -45,7 +45,7 @@ class TestBootstrapArchitecture:
 
         # But should NOT register in registry
         assert len(registry.list_components()) == 0
-        from hexai.core.registry.registry import ComponentNotFoundError
+        from hexai.core.registry.exceptions import ComponentNotFoundError
 
         with pytest.raises(ComponentNotFoundError):
             registry.get("test_node")
@@ -192,9 +192,9 @@ def register_components(registry, namespace):
         component=ClassComponent(value=TestPort),
         namespace=namespace,
     )
-    if namespace not in registry._components:
-        registry._components[namespace] = {}
-    registry._components[namespace]["test_port"] = port_meta
+    if namespace not in registry._store._components:
+        registry._store._components[namespace] = {}
+    registry._store._components[namespace]["test_port"] = port_meta
 
     # Try to register the invalid adapter
     from hexai.core.registry.discovery import discover_components
@@ -268,11 +268,7 @@ class TestTOMLBootstrap:
 
         # Clear registry if it's bootstrapped
         if registry.ready:
-            registry._components.clear()
-            registry._protected_components.clear()
-            registry._ready = False
-            registry._manifest = None
-            registry._bootstrap_context = False
+            registry._reset_for_testing()
 
     def test_bootstrap_from_toml(self):
         """Test bootstrapping from TOML configuration."""
@@ -303,9 +299,7 @@ llm = "mock_llm"
         finally:
             pathlib.Path(config_path).unlink()
             # Clean up registry
-            registry._components.clear()
-            registry._protected_components.clear()
-            registry._ready = False
+            registry._reset_for_testing()
 
     def test_bootstrap_dev_mode_from_config(self):
         """Test that dev_mode is read from TOML config."""
@@ -328,9 +322,7 @@ dev_mode = true
         finally:
             pathlib.Path(config_path).unlink()
             # Clean up registry
-            registry._components.clear()
-            registry._protected_components.clear()
-            registry._ready = False
+            registry._reset_for_testing()
 
     def test_bootstrap_dev_mode_override(self):
         """Test that parameter dev_mode overrides config."""
@@ -353,6 +345,4 @@ dev_mode = false
         finally:
             pathlib.Path(config_path).unlink()
             # Clean up registry
-            registry._components.clear()
-            registry._protected_components.clear()
-            registry._ready = False
+            registry._reset_for_testing()

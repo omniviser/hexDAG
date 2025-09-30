@@ -60,9 +60,7 @@ dev_mode = true
         config_path.unlink()
         # Clean up registry
         if registry.ready:
-            registry._components.clear()
-            registry._protected_components.clear()
-            registry._ready = False
+            registry._reset_for_testing()
 
     # Example 2: Configuration with bindings and environments
     print("2. CONFIGURATION WITH BINDINGS")

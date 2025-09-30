@@ -33,22 +33,12 @@ class TestComponentRegistry:
     def setup(self):
         """Clean registry before each test."""
         # Clear registry before each test
-        registry._components.clear()
-        registry._protected_components.clear()
-        registry._ready = False
-        registry._manifest = None
-        registry._dev_mode = False
-        registry._bootstrap_context = False
+        registry._reset_for_testing()
 
         yield
 
         # Clean up after test
-        registry._components.clear()
-        registry._protected_components.clear()
-        registry._ready = False
-        registry._manifest = None
-        registry._dev_mode = False
-        registry._bootstrap_context = False
+        registry._reset_for_testing()
 
     def test_register_and_get(self):
         """Test basic register and get functionality."""
@@ -148,7 +138,10 @@ class TestComponentRegistry:
 
         # Should work with privilege
         registry.register("my_node", MyNode, ComponentType.NODE, namespace="core", privileged=True)
-        assert "core:my_node" in registry._protected_components
+        # Verify it was registered in core namespace
+        info = registry.get_info("my_node", "core")
+        assert info.namespace == "core"
+        assert info.is_protected
 
 
 class TestDecorators:
@@ -218,11 +211,9 @@ class TestValidation:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Clean registry before each test."""
-        registry._components.clear()
-        registry._protected_components.clear()
+        registry._reset_for_testing()
         yield
-        registry._components.clear()
-        registry._protected_components.clear()
+        registry._reset_for_testing()
 
     def test_valid_names(self):
         """Test that valid namespace and component names are accepted."""
@@ -310,8 +301,7 @@ class TestPluginShadowing:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Clean registry and set up core component."""
-        registry._components.clear()
-        registry._protected_components.clear()
+        registry._reset_for_testing()
 
         # Register a core component
         class CoreNode:
@@ -323,8 +313,7 @@ class TestPluginShadowing:
 
         yield
 
-        registry._components.clear()
-        registry._protected_components.clear()
+        registry._reset_for_testing()
 
     def test_plugin_can_have_same_name_in_different_namespace(self):
         """Test that plugins can have same name in different namespace."""
@@ -380,14 +369,15 @@ class TestImprovedAPI:
 
     def test_ergonomic_locking_api(self):
         """Test the new ergonomic locking API."""
-        # Should be able to use with registry._lock.read() and write()
-        with self.registry._lock.read():
-            # Can read
-            assert self.registry._components is not None
-
+        # Test that locking works by registering and retrieving
         with self.registry._lock.write():
             # Can write
-            self.registry._components["test"] = {}
+            self.registry.register("test_lock", lambda: "locked", "tool")
+
+        with self.registry._lock.read():
+            # Can read
+            result = self.registry.get("test_lock")
+            assert result() == "locked"
 
     def test_separate_metadata_from_instantiation(self):
         """Test that get_metadata returns metadata without instantiation."""
@@ -432,19 +422,15 @@ class TestImprovedAPI:
         assert self.registry.get("important", namespace="plugin")() == "plugin"
 
     def test_find_namespace_respects_priority(self):
-        """Test that _find_namespace respects search priority."""
+        """Test that namespace search respects priority."""
         # Register same component in multiple namespaces
         self.registry.register("shared", lambda: "user", "tool", namespace="user")
         self.registry.register("shared", lambda: "plugin", "tool", namespace="plugin")
         self.registry.register("shared", lambda: "custom", "tool", namespace="custom_ns")
 
-        # _find_namespace should return based on priority
-        found_ns = self.registry._find_namespace("shared")
-        assert found_ns == "user"  # user has higher priority than plugin
-
-        # Verify search order
+        # Search should find user first (default priority: core, user, plugin)
         result = self.registry.get("shared")
-        assert result() == "user"
+        assert result() == "user"  # user has higher priority than plugin
 
     def test_custom_search_priority(self):
         """Test customizing search priority."""
@@ -517,14 +503,14 @@ class TestAdapterRegistration:
             def tokenize(self, text: str) -> list[str]:
                 return text.split()
 
-        # Register the port
+        # Register the port using the internal store
         port_meta = ComponentMetadata(
             name="llm_port",
             component_type=ComponentType.PORT,
             component=ClassComponent(value=LLMPort),
             namespace="core",
         )
-        test_registry._components.setdefault("core", {})["llm_port"] = port_meta
+        test_registry._store._components.setdefault("core", {})["llm_port"] = port_meta
         return test_registry
 
     def test_valid_adapter_registration(self, setup_test_port):
@@ -546,8 +532,8 @@ class TestAdapterRegistration:
             namespace="test",
         )
 
-        assert "test" in reg._components
-        assert "valid_adapter" in reg._components["test"]
+        assert "test" in reg._store._components
+        assert "valid_adapter" in reg._store._components["test"]
 
     def test_adapter_missing_required_method(self, setup_test_port):
         """Test that adapter missing required methods fails validation."""
@@ -697,7 +683,7 @@ class TestRegistryPluginRequirements:
         registry = ComponentRegistry()
 
         # Module without requirements should return None (no skip reason)
-        result = registry._check_plugin_requirements("hexai.adapters.mock.mock_llm")
+        result = registry._bootstrap._check_plugin_requirements("hexai.adapters.mock.mock_llm")
         assert result is None
 
     def test_check_plugin_requirements_missing_package(self):
@@ -705,7 +691,9 @@ class TestRegistryPluginRequirements:
         registry = ComponentRegistry()
 
         with patch("importlib.util.find_spec", return_value=None):
-            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
+            result = registry._bootstrap._check_plugin_requirements(
+                "hexai.adapters.llm.openai_adapter"
+            )
 
         assert result is not None
         assert "Module hexai.adapters.llm.openai_adapter not found" in result
@@ -719,7 +707,9 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {}, clear=True),
         ):
-            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
+            result = registry._bootstrap._check_plugin_requirements(
+                "hexai.adapters.llm.openai_adapter"
+            )
 
         # Should return None since module exists (env vars checked at runtime)
         assert result is None
@@ -733,7 +723,9 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
-            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
+            result = registry._bootstrap._check_plugin_requirements(
+                "hexai.adapters.llm.openai_adapter"
+            )
 
         assert result is None  # No reason to skip
 
@@ -750,7 +742,7 @@ class TestRegistryPluginRequirements:
 
         # Test missing module
         with patch("importlib.util.find_spec", return_value=None):
-            result = registry._check_plugin_requirements(module_path)
+            result = registry._bootstrap._check_plugin_requirements(module_path)
             assert f"Module {module_path} not found" in result
 
         # Test module exists (env vars not checked at import time)
@@ -758,7 +750,7 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {}, clear=True),
         ):
-            result = registry._check_plugin_requirements(module_path)
+            result = registry._bootstrap._check_plugin_requirements(module_path)
             assert result is None  # Module exists, env vars checked at runtime
 
         # Test all requirements met
@@ -766,7 +758,7 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {env_var: "test-key"}),
         ):
-            result = registry._check_plugin_requirements(module_path)
+            result = registry._bootstrap._check_plugin_requirements(module_path)
             assert result is None
 
 
@@ -779,7 +771,7 @@ class TestRegistryManifestLoading:
         registry = ComponentRegistry()
         yield registry
         # Cleanup
-        registry._cleanup_state()
+        registry._reset_for_testing()
 
     def test_load_manifest_with_plugins_all_available(self, clean_registry):
         """Test loading manifest when all plugins are available."""
@@ -795,7 +787,7 @@ class TestRegistryManifestLoading:
         with patch("hexai.core.registry.registry.default_register_components") as mock_register:
             mock_register.return_value = 1  # Simulate 1 component registered
 
-            total = clean_registry._load_manifest_modules(manifest)
+            total = clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
 
         assert total == 2  # Both modules loaded
         assert mock_register.call_count == 2
@@ -811,13 +803,13 @@ class TestRegistryManifestLoading:
 
         with (
             patch("hexai.core.registry.registry.default_register_components") as mock_register,
-            patch.object(clean_registry, "_check_plugin_requirements") as mock_check,
+            patch.object(clean_registry._bootstrap, "_check_plugin_requirements") as mock_check,
         ):
             # Only the second module (plugin) gets checked, and it's missing env var
             mock_check.return_value = "Missing environment variable"
             mock_register.return_value = 5  # Core ports registers 5 components
 
-            total = clean_registry._load_manifest_modules(manifest)
+            total = clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
 
         assert total == 5  # Only core module loaded
         assert mock_register.call_count == 1  # Plugin was skipped
@@ -835,7 +827,7 @@ class TestRegistryManifestLoading:
             mock_register.side_effect = ImportError("Module not found")
 
             with pytest.raises(ImportError):
-                clean_registry._load_manifest_modules(manifest)
+                clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
 
     def test_load_manifest_plugin_module_failure_continues(self, clean_registry):
         """Test that plugin module failures don't stop loading."""
@@ -851,7 +843,7 @@ class TestRegistryManifestLoading:
             # First succeeds, broken.plugin is skipped by _check_plugin_requirements, third succeeds
             mock_register.side_effect = [5, 3]  # Only called for valid modules
 
-            total = clean_registry._load_manifest_modules(manifest)
+            total = clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
 
         assert total == 8  # 5 from core + 3 from mock
         assert mock_register.call_count == 2  # Only called for existing modules
@@ -890,7 +882,7 @@ plugins = [
 
         # Clear any existing registry
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
         # Bootstrap without API keys
         with patch.dict(os.environ, {}, clear=True):
@@ -908,7 +900,7 @@ plugins = [
         assert any(c.name == "anthropic" for c in components)
 
         # Cleanup
-        global_registry._cleanup_state()
+        global_registry._reset_for_testing()
 
     def test_bootstrap_with_all_plugins_available(self, temp_config):
         """Test bootstrap when all plugin requirements are met."""
@@ -917,7 +909,7 @@ plugins = [
 
         # Clear any existing registry
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
         # Bootstrap with API keys set
         with patch.dict(
@@ -934,7 +926,7 @@ plugins = [
         assert "anthropic" in adapter_names
 
         # Cleanup
-        global_registry._cleanup_state()
+        global_registry._reset_for_testing()
 
 
 class TestRegistryPluginScenarios:
@@ -984,7 +976,7 @@ class TestRegistryPluginScenarios:
 
         # Clear registry
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
         # Create minimal config
         config = HexDAGConfig(
@@ -1012,7 +1004,7 @@ class TestRegistryPluginScenarios:
         assert "openai" in adapter_names
 
         # Cleanup
-        global_registry._cleanup_state()
+        global_registry._reset_for_testing()
 
 
 # ============================================================================
@@ -1129,7 +1121,7 @@ class TestConfigurableRegistry:
     def setup_method(self):
         """Reset registry before each test."""
         if registry.ready:
-            registry._cleanup_state()
+            registry._reset_for_testing()
 
     def test_configurable_component_registration(self):
         """Test that configurable components are tracked by the registry."""
