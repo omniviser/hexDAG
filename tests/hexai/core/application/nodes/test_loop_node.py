@@ -1,29 +1,26 @@
 """Tests for LoopNode and ConditionalNode (builder-first, using only registry objects)."""
 
 import asyncio
+
 import pytest
 
+from hexai.core.application.nodes.loop_node import (
+    StopReason,
+)
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.registry import registry
-from hexai.core.application.nodes.loop_node import (
-    LoopConfig,
-    ConditionalConfig,
-    ReduceConfig,
-    StopReason,
-)
 
 # Ensure registry is bootstrapped for tests
 ensure_bootstrapped()
 
 
-class TestLoopNode_Builder:
+class TestLoopNode:
     """LoopNode via fluent builder, using only the object fetched from registry."""
 
     @pytest.mark.asyncio
     async def test_collect_last(self):
         loop_node = registry.get("loop_node", namespace="core")
-        # zakładamy, że loop_node ma metody buildera (name/condition/do/.../build)
 
         i_key = "i"
 
@@ -34,8 +31,7 @@ class TestLoopNode_Builder:
             return {i_key: state.get(i_key, 0) + 1}
 
         spec: NodeSpec = (
-            loop_node
-            .name("retry")
+            loop_node.name("retry")
             .condition(lambda d, s: s.get(i_key, 0) < 3)
             .do(process)
             .on_iteration_end(on_end)
@@ -65,8 +61,7 @@ class TestLoopNode_Builder:
             return {"k": state.get("k", 0) + 1}
 
         spec = (
-            loop_node
-            .name("listy")
+            loop_node.name("listy")
             .condition(lambda d, s: s.get("k", 0) < 4)
             .do(body)
             .on_iteration_end(on_end)
@@ -96,8 +91,7 @@ class TestLoopNode_Builder:
             return (acc or 0) + (x or 0)
 
         spec = (
-            loop_node
-            .name("reducer")
+            loop_node.name("reducer")
             .condition(lambda d, s: s.get("n", 0) < 5)
             .do(body)
             .on_iteration_end(on_end)
@@ -127,8 +121,7 @@ class TestLoopNode_Builder:
             return {"i": state.get("i", 0) + 1}
 
         spec = (
-            loop_node
-            .name("breaker")
+            loop_node.name("breaker")
             .condition(lambda d, s: True)
             .do(body)
             .on_iteration_end(on_end)
@@ -160,8 +153,7 @@ class TestLoopNode_Builder:
             return {"c": state.get("c", 0) + 1}
 
         spec = (
-            loop_node
-            .name("safety")
+            loop_node.name("safety")
             .condition(lambda d, s: True)
             .do(body)
             .on_iteration_end(on_end)
@@ -180,55 +172,14 @@ class TestLoopNode_Builder:
         assert stopped == StopReason.LIMIT.value
 
 
-class TestLoopNode_Config:
-    """LoopNode explicit config usage (backward compatibility) via registry-only."""
-
-    def test_creation_via_config(self):
-        loop_node = registry.get("loop_node", namespace="core")
-
-        cfg = LoopConfig(while_condition=lambda d, s: False)
-        node_spec = loop_node("test_loop_create", config=cfg)
-
-        assert isinstance(node_spec, NodeSpec)
-        assert node_spec.name == "test_loop_create"
-        assert callable(node_spec.fn)
-
-    def test_invalid_max_iterations(self):
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
-            LoopConfig(while_condition=lambda d, s: True, max_iterations=0)
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
-            LoopConfig(while_condition=lambda d, s: True, max_iterations=-5)
-
-    def test_invalid_collect_mode(self):
-        with pytest.raises(ValueError, match="collect_mode must be one of"):
-            LoopConfig(while_condition=lambda d, s: True, collect_mode="unknown")  # type: ignore[arg-type]
-
-    def test_reduce_requires_reducer(self):
-        with pytest.raises(
-            ValueError,
-            match="ReduceConfig with a reducer is required when collect_mode='reduce'",
-        ):
-            LoopConfig(while_condition=lambda d, s: True, collect_mode="reduce", reduce_config=None)
-        with pytest.raises(
-            ValueError,
-            match="ReduceConfig with a reducer is required when collect_mode='reduce'",
-        ):
-            LoopConfig(  # type: ignore[arg-type]
-                while_condition=lambda d, s: True,
-                collect_mode="reduce",
-                reduce_config=ReduceConfig(reducer=None),  # type: ignore[arg-type]
-            )
-
-
-class TestConditionalNode_Builder:
+class TestConditionalNode:
     """ConditionalNode via fluent builder, using only the object fetched from registry."""
 
     def test_basic(self):
         conditional_node = registry.get("conditional_node", namespace="core")
 
         spec: NodeSpec = (
-            conditional_node
-            .name("router")
+            conditional_node.name("router")
             .when(lambda d, s: d.get("kind") == "A", "ACTION_A")
             .when(lambda d, s: d.get("kind") == "B", "ACTION_B")
             .otherwise("ACTION_DEFAULT")
@@ -251,8 +202,7 @@ class TestConditionalNode_Builder:
             pass
 
         spec: NodeSpec = (
-            conditional_node
-            .name("router2")
+            conditional_node.name("router2")
             .when(lambda d, s: True, "OK")
             .deps({"dep1", "dep2"})
             .in_model(InModel)
@@ -273,50 +223,3 @@ class TestConditionalNode_Builder:
         result = asyncio.get_event_loop().run_until_complete(spec.fn({"x": 1}))
         assert result["result"] == "DEFAULT"
         assert result["metadata"]["has_else"] is True
-
-
-class TestConditionalNode_Config:
-    """ConditionalNode explicit config usage (backward compatibility) via registry-only."""
-
-    def test_creation_via_config(self):
-        conditional_node = registry.get("conditional_node", namespace="core")
-        cfg = ConditionalConfig(branches=[{"pred": lambda d, s: True, "action": "ok"}])
-        node_spec = conditional_node("test_conditional_create", config=cfg)
-
-        assert isinstance(node_spec, NodeSpec)
-        assert node_spec.name == "test_conditional_create"
-        assert callable(node_spec.fn)
-
-    @pytest.mark.asyncio
-    async def test_callable_predicates_config(self):
-        conditional_node = registry.get("conditional_node", namespace="core")
-
-        cfg = ConditionalConfig(
-            branches=[
-                {"pred": lambda d, s: d.get("score", 0) >= 0.9, "action": "approve"},
-                {"pred": lambda d, s: d.get("score", 0) >= 0.6, "action": "review"},
-            ],
-            else_action="reject",
-        )
-        node_spec = conditional_node("cond_callable", config=cfg)
-
-        result = await node_spec.fn({"score": 0.75})
-        assert result["result"] == "review"
-        assert result["metadata"]["evaluations"] == [False, True]
-        assert result["metadata"]["matched_branch"] == 1
-
-    @pytest.mark.asyncio
-    async def test_state_pass_through_config(self):
-        conditional_node = registry.get("conditional_node", namespace="core")
-
-        cfg = ConditionalConfig(
-            branches=[
-                {"pred": lambda d, s: s.get("flag") is True, "action": "use_state"},
-                {"pred": lambda d, s: d.get("v") == 1, "action": "by_data"},
-            ],
-            else_action="none",
-        )
-        node_spec = conditional_node("cond_state", config=cfg)
-
-        result = await node_spec.fn({"v": 0}, state={"flag": True})
-        assert result["result"] == "use_state"

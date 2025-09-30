@@ -18,7 +18,7 @@ Conventions:
 import asyncio
 import logging
 from collections.abc import Callable, Collection, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
@@ -48,60 +48,6 @@ class StopReason(str, Enum):
 @dataclass(frozen=True)
 class ReduceConfig:
     reducer: Callable[[Any, Any], Any]
-
-
-@dataclass
-class LoopConfig:
-    """Configuration for LoopNode (functional-only).
-    - while_condition: Callable[[dict, dict], bool] — main loop predicate.
-    - body_fn: Callable[[dict, dict], Any] — per-iteration body (sync or async).
-    - on_iteration_end: Callable[[dict, Any], dict] — hook to update state after each iteration.
-    - init_state: dict — initial mutable state dict shared across iterations.
-    - collect_mode: Literal["list", "last", "reduce"] — optional override for result collection.
-    - reduce_config: ReduceConfig — required when using "reduce".
-    - break_if: Iterable[Callable[[dict, dict], bool]] = If returns True after an iteration's body
-    the loop termianted with StopReason.BREAK_GUARD.
-    """
-
-    # REQUIRED: no default
-    while_condition: Callable[[dict, dict], bool]
-
-    # Sensible defaults
-    body_fn: Callable[[dict, dict], Any] = lambda data, state: None
-    on_iteration_end: Callable[[dict, Any], dict] = lambda state, out: state
-    init_state: dict = field(default_factory=dict)
-
-    collect_mode: CollectMode = "last"
-    reduce_config: ReduceConfig | None = None
-
-    max_iterations: int = 1
-    iteration_key: str = "loop_iteration"
-
-    break_if: Iterable[Callable[[dict, dict], bool]] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if self.max_iterations <= 0:
-            raise ValueError("max_iterations must be positive")
-        if self.collect_mode not in ("list", "last", "reduce"):
-            raise ValueError("collect_mode must be one of: list | last | reduce")
-        if self.collect_mode == "reduce" and (
-            self.reduce_config is None or self.reduce_config.reducer is None
-        ):
-            raise ValueError("ReduceConfig with a reducer is required when collect_mode='reduce'")
-
-
-@dataclass
-class ConditionalConfig:
-    branches: list[dict]
-    else_action: str | None = None
-    tie_break: TieBreak = "first_true"
-
-    def __post_init__(self) -> None:
-        if (not self.branches) and (self.else_action is None):
-            raise ValueError("branches must be a non-empty list or else_action must be provided")
-
-        if self.tie_break != "first_true":
-            raise ValueError("tie_break must be 'first_true'")
 
 
 class NodeParams(BaseModel):
@@ -267,36 +213,6 @@ class LoopNode(BaseNodeFactory):
         self._out_model = model
         return self
 
-    def build(self) -> NodeSpec:
-        """Build NodeSpec from fluent builder state."""
-        if not self._name:
-            raise ValueError("LoopNode name is required")
-        if self._while is None:
-            raise ValueError("condition(...) is required")
-        if self._max_iter <= 0:
-            raise ValueError("max_iterations must be positive")
-        if self._collect_mode == "reduce" and self._reduce_cfg is None:
-            raise ValueError("ReduceConfig is required when collect_mode='reduce'")
-
-        cfg = LoopConfig(
-            while_condition=self._while,
-            body_fn=self._body,
-            on_iteration_end=self._on_end,
-            init_state=self._init_state,
-            collect_mode=self._collect_mode,
-            reduce_config=self._reduce_cfg,
-            max_iterations=self._max_iter,
-            iteration_key=self._iter_key,
-            break_if=self._break_if,
-        )
-        return self.__call__(
-            name=self._name,
-            config=cfg,
-            deps=self._deps,
-            in_model=self._in_model,
-            out_model=self._out_model,
-        )
-
     @staticmethod
     def _init_collector(
         mode: CollectMode, reduce_cfg: ReduceConfig | None
@@ -318,7 +234,7 @@ class LoopNode(BaseNodeFactory):
 
             return acc, collect_last
         if mode == "reduce":
-            if reduce_cfg is None:
+            if reduce_cfg is None or reduce_cfg.reducer is None:
                 raise ValueError("ReduceConfig is required when collect_mode ='reduce'")
             reducer = reduce_cfg.reducer
             acc = None
@@ -343,10 +259,31 @@ class LoopNode(BaseNodeFactory):
             logger.warning("main condition raised; stop loop: %s", e)
             return False, StopReason.CONDITION_ERROR
 
+    def build(self) -> NodeSpec:
+        # Validation moved here (instead of LoopConfig)
+        if not self._name:
+            raise ValueError("LoopNode name is required")
+        if self._while is None:
+            raise ValueError("condition(...) is required")
+        if self._max_iter <= 0:
+            raise ValueError("max_iterations must be positive")
+        if self._collect_mode not in ("list", "last", "reduce"):
+            raise ValueError("collect_mode must be one of: list | last | reduce")
+        if self._collect_mode == "reduce" and (
+            self._reduce_cfg is None or self._reduce_cfg.reducer is None
+        ):
+            raise ValueError("ReduceConfig with a reducer is required when collect_mode='reduce'")
+
+        return self(
+            name=self._name,
+            deps=self._deps,
+            in_model=self._in_model,
+            out_model=self._out_model,
+        )
+
     def __call__(
         self,
         name: str,
-        config: LoopConfig | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Builds a LoopNode NodeSpec.
@@ -354,24 +291,19 @@ class LoopNode(BaseNodeFactory):
             - name: Node name.
             - max_iterations: Safety cap to prevent infinite loops (must be > 0).
             - iteration_key: Key under which the current iteration is stored in state.
-            - config: LoopConfig with while_condition and optional behaviors.
             - **kwargs: Passed through to NodeSpec (e.g., in_model, out_model, deps).
         """
-        if not isinstance(config, LoopConfig):
-            raise TypeError("LoopNode requires 'config' argument of type LoopConfig")
-
-        if not callable(config.while_condition):
-            raise ValueError("LoopNode requires a callable while_condition in config")
-
-        while_condition = config.while_condition
-        body_fn = config.body_fn
-        on_iteration_end = config.on_iteration_end
-        init_state = config.init_state
-        collect_mode = config.collect_mode
-        reducer_cfg = config.reduce_config
-        max_iterations = config.max_iterations
-        iteration_key = config.iteration_key
-        break_if = config.break_if
+        while_condition = self._while
+        if while_condition is None:
+            raise ValueError("while_condition is required")
+        body_fn = self._body
+        on_iteration_end = self._on_end
+        init_state = dict(self._init_state or {})
+        collect_mode = self._collect_mode
+        reduce_cfg = self._reduce_cfg
+        max_iterations = self._max_iter
+        iteration_key = self._iter_key
+        break_if = list(self._break_if or [])
 
         async def loop_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """
@@ -394,7 +326,7 @@ class LoopNode(BaseNodeFactory):
             # Local loop state
             state = dict(init_state or {})
 
-            acc, collect_fn = self._init_collector(collect_mode, reducer_cfg)
+            acc, collect_fn = self._init_collector(collect_mode, reduce_cfg)
 
             iteration_count = 0
             stopped_by: StopReason = StopReason.NONE
@@ -528,21 +460,13 @@ class ConditionalNode(BaseNodeFactory):
         return self
 
     def build(self) -> NodeSpec:
-        """Build NodeSpec from fluent builder state."""
-
         if not self._name:
             raise ValueError("ConditionalNode name is required")
         if not self._branches and self._else_action is None:
             raise ValueError("At least one branch (when) or otherwise(...) action is required")
 
-        cfg = ConditionalConfig(
-            branches=self._branches,
-            else_action=self._else_action,
-            tie_break="first_true",
-        )
-        return self.__call__(
+        return self(
             name=self._name,
-            config=cfg,
             deps=self._deps,
             in_model=self._in_model,
             out_model=self._out_model,
@@ -551,7 +475,6 @@ class ConditionalNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
-        config: ConditionalConfig | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Builds a ConditionalNode NodeSpec (functional-only).
@@ -566,12 +489,10 @@ class ConditionalNode(BaseNodeFactory):
         - tie_break: Branch selection strategy; only "first_true" supported.
         - **kwargs: Passed through to NodeSpec (e.g., in_model, out_model, deps).
         """
-        if not isinstance(config, ConditionalConfig):
-            raise TypeError("ConditionalNode requires 'config' argument of type ConditionalConfig")
 
-        branches = config.branches
-        else_action = config.else_action
-        tie_break = config.tie_break
+        branches = list(self._branches or [])
+        else_action = self._else_action
+        tie_break: TieBreak = "first_true"
 
         async def conditional_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """
