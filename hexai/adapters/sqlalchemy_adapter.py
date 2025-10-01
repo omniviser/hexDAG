@@ -93,9 +93,8 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
             filters: Optional column-value pairs to filter by
             columns: Optional list of columns to return (None = all)
             limit: Optional maximum number of rows to return
-
-        Yields:
-            dict[str, Any]: Each row as a dictionary
+        Returns:
+            AsyncIterator[dict[str, Any]]: An async iterator over rows as dictionaries
         """
         if not self.engine:
             raise RuntimeError("Not connected to database")
@@ -119,8 +118,7 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
             async with self.engine.connect() as conn:
                 result = await conn.stream(query)
                 async for row in result:
-                    # Convert SQLAlchemy Row to dict using _mapping
-                    yield {key: value for key, value in row._mapping.items()}
+                    yield dict(row._mapping)
 
         return generate_rows()
 
@@ -137,8 +135,7 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
             async with self.engine.connect() as conn:
                 result = await conn.stream(text(sql), params or {})
                 async for row in result:
-                    # Convert SQLAlchemy Row to dict properly
-                    yield {key: value for key, value in row._mapping.items()}
+                    yield dict(row._mapping)
 
         return generate_rows()
 

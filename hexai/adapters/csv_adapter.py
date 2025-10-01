@@ -81,7 +81,7 @@ class CsvAdapter(DatabasePort):
         """
         schemas = []
         for file_path in self.directory.glob("*.csv"):
-            with open(file_path, newline="") as f:
+            with Path(file_path).open(newline="") as f:
                 reader = csv.DictReader(f)
                 if not reader.fieldnames:
                     logging.warning(f"No headers found in CSV file {file_path}, skipping.")
@@ -160,7 +160,7 @@ class CsvAdapter(DatabasePort):
         file_path = self._get_safe_file_path(table)
 
         count = 0
-        with open(file_path, newline="") as f:
+        with Path(file_path).open(newline="") as f:
             reader = csv.DictReader(f)
             if not reader.fieldnames:
                 return
