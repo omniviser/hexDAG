@@ -17,8 +17,8 @@ else:
     PolicyManagerPort = Any
 
 from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
+from hexai.core.orchestration import NodeExecutionContext
 
-from .context import ExecutionContext
 from .events import (
     NodeCancelled,
     NodeCompleted,
@@ -27,8 +27,6 @@ from .events import (
     PipelineCancelled,
     PipelineCompleted,
     PipelineStarted,
-    WaveCompleted,
-    WaveStarted,
 )
 from .policies.models import PolicyContext, PolicyResponse, PolicySignal
 from .ports_builder import PortsBuilder
@@ -52,6 +50,14 @@ class NodeExecutionError(OrchestratorError):
         self.node_name = node_name
         self.original_error = original_error
         super().__init__(f"Node '{node_name}' failed: {original_error}")
+
+
+class NodeTimeoutError(NodeExecutionError):
+    """Exception raised when a node exceeds its timeout."""
+
+    def __init__(self, node_name: str, timeout: float, original_error: TimeoutError) -> None:
+        self.timeout = timeout
+        super().__init__(node_name, original_error)
 
 
 class PolicyCoordinator:
@@ -79,7 +85,7 @@ class PolicyCoordinator:
         self,
         policy_manager: PolicyManagerPort | None,
         event: Any,
-        context: ExecutionContext,
+        context: NodeExecutionContext,
         node_id: str | None = None,
         wave_index: int | None = None,
         attempt: int = 1,
@@ -211,7 +217,7 @@ class NodeExecutor:
         node_spec: NodeSpec,
         node_input: Any,
         ports: dict[str, Any],
-        context: ExecutionContext,
+        context: NodeExecutionContext,
         policy_coordinator: PolicyCoordinator,
         observer_manager: ObserverManagerPort | None,
         policy_manager: PolicyManagerPort | None,
@@ -255,12 +261,12 @@ class NodeExecutor:
         ------
         NodeExecutionError
             If the node fails to execute
+        NodeTimeoutError
+            If node execution exceeds timeout
         OrchestratorError
             If the node is blocked
         ValidationError
             If the node input is invalid
-        TimeoutError
-            If node execution exceeds timeout
         """
         node_start_time = time.time()
 
@@ -314,7 +320,10 @@ class NodeExecutor:
                         node_spec, validated_input, ports, kwargs
                     )
             except TimeoutError as e:
-                raise TimeoutError(f"Node '{node_name}' exceeded timeout of {node_timeout}s") from e
+                # node_timeout is guaranteed to be set here because TimeoutError
+                # only occurs when timeout is set
+                timeout_value = node_timeout if node_timeout is not None else 0.0
+                raise NodeTimeoutError(node_name, timeout_value, e) from e
 
             # Output validation
             if validate:
@@ -339,8 +348,8 @@ class NodeExecutor:
 
             return validated_output
 
-        except TimeoutError:
-            # Node timed out - emit cancelled event
+        except NodeTimeoutError:
+            # Node timed out - emit cancelled event and re-raise
             cancel_event = NodeCancelled(
                 name=node_name,
                 wave_index=wave_index,
@@ -432,7 +441,6 @@ class Orchestrator:
             default_node_timeout: Default timeout in seconds for each node (None = no timeout)
         """
         self.max_concurrent_nodes = max_concurrent_nodes
-        self._semaphore = asyncio.Semaphore(max_concurrent_nodes)
         self.ports = ports or {}
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
@@ -445,6 +453,11 @@ class Orchestrator:
             default_node_timeout=default_node_timeout,
         )
 
+        # Import and initialize WaveExecutor
+        from hexai.core.orchestration.components import WaveExecutor
+
+        self._wave_executor = WaveExecutor(max_concurrent_nodes=max_concurrent_nodes)
+
     async def _notify_observer(
         self, observer_manager: ObserverManagerPort | None, event: Any
     ) -> None:
@@ -455,7 +468,7 @@ class Orchestrator:
         self,
         policy_manager: PolicyManagerPort | None,
         event: Any,
-        context: ExecutionContext,
+        context: NodeExecutionContext,
         node_id: str | None = None,
         wave_index: int | None = None,
         attempt: int = 1,
@@ -591,7 +604,7 @@ class Orchestrator:
 
         # Create execution context for this DAG run
         pipeline_name = getattr(graph, "name", "unnamed")
-        context = ExecutionContext(dag_id=pipeline_name)
+        context = NodeExecutionContext(dag_id=pipeline_name)
 
         # Fire pipeline started event and check control
         event = PipelineStarted(
@@ -653,14 +666,14 @@ class Orchestrator:
         node_results: dict[str, Any],
         initial_input: Any,
         all_ports: dict[str, Any],
-        context: ExecutionContext,
+        context: NodeExecutionContext,
         observer_manager: ObserverManagerPort | None,
         policy_manager: PolicyManagerPort | None,
         timeout: float | None,
         validate: bool,
         **kwargs: Any,
     ) -> bool:
-        """Execute all waves with optional timeout.
+        """Execute all waves with optional timeout (delegates to WaveExecutor).
 
         Args
         ----
@@ -681,109 +694,21 @@ class Orchestrator:
         bool
             True if execution was cancelled due to timeout, False otherwise
         """
-        try:
-            async with asyncio.timeout(timeout):
-                for wave_idx, wave in enumerate(waves, 1):
-                    wave_start_time = time.time()
-
-                    # Fire wave started event and check control
-                    wave_event = WaveStarted(
-                        wave_index=wave_idx,
-                        nodes=wave,
-                    )
-                    await self._notify_observer(observer_manager, wave_event)
-
-                    # Evaluate policy for wave
-                    wave_response = await self._evaluate_policy(
-                        policy_manager, wave_event, context, wave_index=wave_idx
-                    )
-                    self._check_policy_signal(wave_response, f"Wave {wave_idx}")
-
-                    wave_results = await self._execute_wave(
-                        wave,
-                        graph,
-                        node_results,
-                        initial_input,
-                        all_ports,
-                        context=context,
-                        observer_manager=observer_manager,
-                        policy_manager=policy_manager,
-                        wave_index=wave_idx,
-                        validate=validate,
-                        **kwargs,
-                    )
-                    node_results.update(wave_results)
-
-                    # Fire wave completed event (observation only)
-                    wave_completed = WaveCompleted(
-                        wave_index=wave_idx,
-                        duration_ms=(time.time() - wave_start_time) * 1000,
-                    )
-                    await self._notify_observer(observer_manager, wave_completed)
-
-            return False  # Completed successfully
-
-        except TimeoutError:
-            return True  # Cancelled due to timeout
-
-    async def _execute_wave(
-        self,
-        wave: list[str],
-        graph: DirectedGraph,
-        node_results: dict[str, Any],
-        initial_input: Any,
-        ports: dict[str, Any],
-        context: ExecutionContext,
-        observer_manager: ObserverManagerPort | None,
-        policy_manager: PolicyManagerPort | None,
-        wave_index: int = 0,
-        validate: bool = True,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Execute all nodes in a wave with concurrency limiting.
-
-        Returns
-        -------
-        dict[str, Any]
-            Dictionary mapping node names to their execution results for this wave
-
-        Raises
-        ------
-        NodeExecutionError
-            If any node in the wave fails to execute
-        """
-
-        async def execute_with_semaphore(node_name: str) -> tuple[str, Any]:
-            async with self._semaphore:
-                result = await self._execute_node(
-                    node_name,
-                    graph,
-                    node_results,
-                    initial_input,
-                    ports,
-                    context=context,
-                    observer_manager=observer_manager,
-                    policy_manager=policy_manager,
-                    wave_index=wave_index,
-                    validate=validate,
-                    **kwargs,
-                )
-                return node_name, result
-
-        tasks = [execute_with_semaphore(node_name) for node_name in wave]
-        wave_outputs = await asyncio.gather(*tasks, return_exceptions=True)
-
-        wave_results = {}
-        for output in wave_outputs:
-            if isinstance(output, BaseException):
-                if isinstance(output, NodeExecutionError):
-                    raise output
-                raise NodeExecutionError("unknown_node", Exception(str(output))) from output
-
-            node_name, result = output
-            wave_results[node_name] = result
-
-        return wave_results
+        return await self._wave_executor.execute_all_waves(
+            waves=waves,
+            node_executor_fn=self._execute_node,
+            graph=graph,
+            node_results=node_results,
+            initial_input=initial_input,
+            all_ports=all_ports,
+            context=context,
+            observer_manager=observer_manager,
+            policy_manager=policy_manager,
+            policy_coordinator=self._policy_coordinator,
+            timeout=timeout,
+            validate=validate,
+            **kwargs,
+        )
 
     async def _execute_node(
         self,
@@ -792,7 +717,7 @@ class Orchestrator:
         node_results: dict[str, Any],
         initial_input: Any,
         ports: dict[str, Any],
-        context: ExecutionContext,
+        context: NodeExecutionContext,
         observer_manager: ObserverManagerPort | None,
         policy_manager: PolicyManagerPort | None,
         wave_index: int = 0,

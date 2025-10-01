@@ -6,6 +6,8 @@ Clean, simplified event system with clear separation of concerns:
 
 # Event classes
 from .events import (
+    CheckpointRestored,
+    CheckpointSaved,
     Event,
     LLMPromptSent,
     LLMResponseReceived,
@@ -48,4 +50,6 @@ __all__ = [
     "PolicySkipped",
     "PolicyFallback",
     "PolicyRetry",
+    "CheckpointSaved",
+    "CheckpointRestored",
 ]

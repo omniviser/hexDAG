@@ -379,3 +379,68 @@ class PolicyRetry(Event):
             f"🔁 Policy '{self.policy_name}' retrying node "
             f"'{self.node_name}'{attempt_info}{delay_info}"
         )
+
+
+# Checkpoint events
+@dataclass
+class CheckpointSaved(Event):
+    """Emitted when a checkpoint is saved.
+
+    Attributes
+    ----------
+    run_id : str
+        The unique run identifier
+    dag_id : str
+        The DAG identifier
+    node_id : str
+        The node that triggered the checkpoint
+    checkpoint_type : str
+        Type of checkpoint ("node_completed", "wave_completed", "pipeline_paused")
+    data : dict[str, Any]
+        Additional checkpoint metadata
+    """
+
+    run_id: str
+    dag_id: str
+    node_id: str
+    checkpoint_type: str
+    data: dict[str, Any] = field(default_factory=dict)
+
+    def log_message(self) -> str:
+        """Format log message for checkpoint save event."""
+        return (
+            f"💾 Checkpoint saved for run '{self.run_id}' "
+            f"(node: {self.node_id}, type: {self.checkpoint_type})"
+        )
+
+
+@dataclass
+class CheckpointRestored(Event):
+    """Emitted when execution resumes from a checkpoint.
+
+    Attributes
+    ----------
+    run_id : str
+        The unique run identifier
+    dag_id : str
+        The DAG identifier
+    node_id : str
+        The node where execution is resuming
+    restored_nodes : list[str]
+        List of nodes already completed (skipped on resume)
+    restored_at : str
+        ISO timestamp of restore operation
+    """
+
+    run_id: str
+    dag_id: str
+    node_id: str
+    restored_nodes: list[str]
+    restored_at: str
+
+    def log_message(self) -> str:
+        """Format log message for checkpoint restore event."""
+        return (
+            f"🔄 Checkpoint restored for run '{self.run_id}' "
+            f"({len(self.restored_nodes)} nodes already completed)"
+        )

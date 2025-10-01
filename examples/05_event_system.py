@@ -3,7 +3,6 @@
 import asyncio
 
 from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
-from hexai.core.application.context import ExecutionContext
 from hexai.core.application.events import (
     Event,
     NodeCompleted,
@@ -98,9 +97,6 @@ async def main():
     observer_manager.register(log_observer)
     metrics = MetricsObserver()
     observer_manager.register(metrics.handle)
-
-    # Create execution context (removed as we create policy context directly now)
-    _ = ExecutionContext(dag_id="demo_pipeline")  # Not used but shown for clarity
 
     # Simulate normal node execution
     print("\n1. Normal Node Execution:")
