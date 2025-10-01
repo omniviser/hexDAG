@@ -99,7 +99,7 @@ jobs:
           set -e  # Exit immediately if a command exits with a non-zero status
           export PATH="$HOME/.local/bin:$PATH"
           echo "Installing dependencies with UV..."
-          uv sync
+          uv pip install -e ".[dev,docs]" 
           echo "Running Ruff linting..."
           # Ruff automatically reads configuration from pyproject.toml
           uv run ruff check ./hexai
@@ -233,7 +233,7 @@ jobs:
     - script: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         export PATH="$HOME/.local/bin:$PATH"
-        uv sync --all-extras --dev
+        uv pip install -e ".[dev,docs]" 
       displayName: "Install dependencies with uv"
 
     - script: |
