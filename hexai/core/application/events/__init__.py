@@ -45,4 +45,5 @@ __all__ = [
     "PolicySkipped",
     "PolicyFallback",
     "PolicyRetry",
+    "EVENT_REGISTRY",
 ]
