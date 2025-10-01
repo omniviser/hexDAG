@@ -1,9 +1,16 @@
 """Tests for the simplified decorators module."""
 
+from __future__ import annotations
+
+import asyncio
+
 import pytest
 
 from hexai.core.registry.decorators import (
+    _ASYNC_IO_WRAPPER_MARKER,
+    _create_async_io_wrapper,
     _snake_case,
+    _wrap_adapter_async_methods,
     adapter,
     agent_node,
     component,
@@ -19,6 +26,7 @@ from hexai.core.registry.models import (
     ComponentType,  # Internal for tests
     NodeSubtype,
 )
+from hexai.core.utils.async_warnings import _is_in_async_context
 
 
 class TestSnakeCase:
@@ -540,3 +548,367 @@ class TestStringUsage:
             @component("invalid", namespace="user")
             class InvalidComponent:
                 pass
+
+
+# ============================================================================
+# Async I/O Monitoring Tests
+# ============================================================================
+
+
+class TestAsyncIOWrapperMarker:
+    """Test the async I/O wrapper marker functionality."""
+
+    def test_marker_constant_exists(self) -> None:
+        """Test that marker constant is defined."""
+        assert isinstance(_ASYNC_IO_WRAPPER_MARKER, str)
+        assert _ASYNC_IO_WRAPPER_MARKER == "_hexdag_async_io_wrapped"
+
+
+class TestWrapAdapterAsyncMethods:
+    """Test _wrap_adapter_async_methods function."""
+
+    def test_wraps_async_methods(self) -> None:
+        """Test that async methods are wrapped."""
+
+        class TestAdapter:
+            async def aget_data(self) -> str:
+                return "data"
+
+            async def aset_data(self, value: str) -> None:
+                pass
+
+            def sync_method(self) -> str:
+                return "sync"
+
+        _wrap_adapter_async_methods(TestAdapter)
+
+        # Async methods should be wrapped
+        assert hasattr(TestAdapter.aget_data, _ASYNC_IO_WRAPPER_MARKER)
+        assert hasattr(TestAdapter.aset_data, _ASYNC_IO_WRAPPER_MARKER)
+
+        # Sync methods should not be wrapped
+        assert not hasattr(TestAdapter.sync_method, _ASYNC_IO_WRAPPER_MARKER)
+
+    def test_prevents_double_wrapping(self) -> None:
+        """Test that methods are not double-wrapped."""
+
+        class TestAdapter:
+            async def aget_data(self) -> str:
+                return "data"
+
+        # Wrap once
+        _wrap_adapter_async_methods(TestAdapter)
+        first_method = TestAdapter.aget_data
+
+        # Wrap again
+        _wrap_adapter_async_methods(TestAdapter)
+        second_method = TestAdapter.aget_data
+
+        # Should be the same method object
+        assert first_method is second_method
+
+    def test_wraps_protocol_methods(self) -> None:
+        """Test that async protocol methods are wrapped."""
+
+        class TestAdapter:
+            async def _private_method(self) -> str:
+                return "private"
+
+            async def aget_schema(self) -> dict:
+                return {}
+
+            async def aexecute_query(self, sql: str) -> list:
+                return []
+
+            async def acall_tool(self, name: str) -> str:
+                return ""
+
+        _wrap_adapter_async_methods(TestAdapter)
+
+        # Private methods should not be wrapped (unless they match protocol patterns)
+        assert not hasattr(TestAdapter._private_method, _ASYNC_IO_WRAPPER_MARKER)
+
+        # Protocol methods should be wrapped
+        assert hasattr(TestAdapter.aget_schema, _ASYNC_IO_WRAPPER_MARKER)
+        assert hasattr(TestAdapter.aexecute_query, _ASYNC_IO_WRAPPER_MARKER)
+        assert hasattr(TestAdapter.acall_tool, _ASYNC_IO_WRAPPER_MARKER)
+
+    async def test_wrapped_method_still_works(self) -> None:
+        """Test that wrapped methods still function correctly."""
+
+        class TestAdapter:
+            async def aget_value(self) -> int:
+                await asyncio.sleep(0.001)
+                return 42
+
+        _wrap_adapter_async_methods(TestAdapter)
+
+        adapter_instance = TestAdapter()
+        result = await adapter_instance.aget_value()
+
+        assert result == 42
+
+
+class TestCreateAsyncIOWrapper:
+    """Test _create_async_io_wrapper function."""
+
+    async def test_wrapper_preserves_functionality(self) -> None:
+        """Test that wrapper preserves original function behavior."""
+
+        async def original_func(x: int, y: int) -> int:
+            return x + y
+
+        wrapped = _create_async_io_wrapper(
+            original_func, "original_func", "TestClass", _is_in_async_context
+        )
+
+        result = await wrapped(5, 10)
+        assert result == 15
+
+    async def test_wrapper_preserves_metadata(self) -> None:
+        """Test that wrapper preserves function metadata."""
+
+        async def original_func() -> str:
+            """Original docstring."""
+            return "value"
+
+        wrapped = _create_async_io_wrapper(
+            original_func, "original_func", "TestClass", _is_in_async_context
+        )
+
+        assert wrapped.__name__ == "original_func"
+        assert wrapped.__doc__ == "Original docstring."
+
+    async def test_wrapper_has_marker(self) -> None:
+        """Test that wrapper has the marker attribute."""
+
+        async def original_func() -> None:
+            pass
+
+        wrapped = _create_async_io_wrapper(
+            original_func, "original_func", "TestClass", _is_in_async_context
+        )
+
+        assert hasattr(wrapped, _ASYNC_IO_WRAPPER_MARKER)
+        assert getattr(wrapped, _ASYNC_IO_WRAPPER_MARKER) is True
+
+    async def test_wrapper_handles_exceptions(self) -> None:
+        """Test that wrapper properly propagates exceptions."""
+
+        async def failing_func() -> None:
+            raise ValueError("Test error")
+
+        wrapped = _create_async_io_wrapper(
+            failing_func, "failing_func", "TestClass", _is_in_async_context
+        )
+
+        with pytest.raises(ValueError, match="Test error"):
+            await wrapped()
+
+    async def test_wrapper_handles_kwargs(self) -> None:
+        """Test that wrapper handles keyword arguments."""
+
+        async def func_with_kwargs(a: int, b: int = 10, c: int = 20) -> int:
+            return a + b + c
+
+        wrapped = _create_async_io_wrapper(
+            func_with_kwargs, "func_with_kwargs", "TestClass", _is_in_async_context
+        )
+
+        result1 = await wrapped(5)
+        assert result1 == 35  # 5 + 10 + 20
+
+        result2 = await wrapped(5, b=15)
+        assert result2 == 40  # 5 + 15 + 20
+
+        result3 = await wrapped(5, c=25)
+        assert result3 == 40  # 5 + 10 + 25
+
+
+class TestAdapterDecoratorAsyncMonitoring:
+    """Test adapter decorator with async I/O monitoring."""
+
+    def test_adapter_default_wraps_methods(self) -> None:
+        """Test that adapter decorator wraps async methods by default."""
+
+        @adapter("test_port", name="test")
+        class TestAdapter:
+            async def aget_data(self) -> str:
+                return "data"
+
+        assert hasattr(TestAdapter.aget_data, _ASYNC_IO_WRAPPER_MARKER)
+
+    def test_adapter_warn_sync_io_false(self) -> None:
+        """Test that warn_sync_io=False prevents wrapping."""
+
+        @adapter("test_port", name="test", warn_sync_io=False)
+        class TestAdapter:
+            async def aget_data(self) -> str:
+                return "data"
+
+        assert not hasattr(TestAdapter.aget_data, _ASYNC_IO_WRAPPER_MARKER)
+
+    async def test_adapter_wrapped_methods_work(self) -> None:
+        """Test that wrapped methods in adapter still work."""
+
+        @adapter("test_port", name="test")
+        class TestAdapter:
+            async def aget_value(self, multiplier: int) -> int:
+                await asyncio.sleep(0.001)
+                return 42 * multiplier
+
+        instance = TestAdapter()
+        result = await instance.aget_value(2)
+
+        assert result == 84
+
+    def test_adapter_metadata_preserved(self) -> None:
+        """Test that adapter decorator preserves class metadata."""
+
+        @adapter("test_port", name="my_adapter", description="Test adapter")
+        class TestAdapter:
+            """Original docstring."""
+
+            async def aget_data(self) -> str:
+                return "data"
+
+        assert TestAdapter._hexdag_name == "my_adapter"  # type: ignore[attr-defined]
+        assert TestAdapter._hexdag_implements_port == "test_port"  # type: ignore[attr-defined]
+        assert TestAdapter._hexdag_description == "Test adapter"  # type: ignore[attr-defined]
+
+    def test_adapter_multiple_async_methods(self) -> None:
+        """Test adapter with multiple async methods."""
+
+        @adapter("database", name="test_db")
+        class TestDatabaseAdapter:
+            async def aexecute_query(self, sql: str) -> list:
+                return []
+
+            async def aget_schema(self) -> dict:
+                return {}
+
+            async def aconnect(self) -> None:
+                pass
+
+            def sync_helper(self) -> str:
+                return "helper"
+
+        # All async methods should be wrapped
+        assert hasattr(TestDatabaseAdapter.aexecute_query, _ASYNC_IO_WRAPPER_MARKER)
+        assert hasattr(TestDatabaseAdapter.aget_schema, _ASYNC_IO_WRAPPER_MARKER)
+        assert hasattr(TestDatabaseAdapter.aconnect, _ASYNC_IO_WRAPPER_MARKER)
+
+        # Sync method should not be wrapped
+        assert not hasattr(TestDatabaseAdapter.sync_helper, _ASYNC_IO_WRAPPER_MARKER)
+
+
+class TestAdapterDecoratorEdgeCases:
+    """Test edge cases for adapter decorator async monitoring."""
+
+    def test_adapter_with_no_async_methods(self) -> None:
+        """Test adapter with only sync methods."""
+
+        @adapter("test_port", name="sync_only")
+        class SyncOnlyAdapter:
+            def get_data(self) -> str:
+                return "data"
+
+            def set_data(self, value: str) -> None:
+                pass
+
+        # Should not crash, and no methods should be wrapped
+        assert not hasattr(SyncOnlyAdapter.get_data, _ASYNC_IO_WRAPPER_MARKER)
+        assert not hasattr(SyncOnlyAdapter.set_data, _ASYNC_IO_WRAPPER_MARKER)
+
+    def test_adapter_with_properties(self) -> None:
+        """Test adapter with properties."""
+
+        @adapter("test_port", name="with_props")
+        class AdapterWithProps:
+            @property
+            def value(self) -> str:
+                return "value"
+
+            async def aget_data(self) -> str:
+                return self.value
+
+        # Property should not be wrapped
+        # Async method should be wrapped
+        assert hasattr(AdapterWithProps.aget_data, _ASYNC_IO_WRAPPER_MARKER)
+
+    def test_adapter_with_classmethod(self) -> None:
+        """Test adapter with classmethods and staticmethods."""
+
+        @adapter("test_port", name="with_classmethods")
+        class AdapterWithClassMethods:
+            @classmethod
+            async def afrom_config(cls, config: dict) -> AdapterWithClassMethods:
+                return cls()
+
+            @staticmethod
+            async def avalidate(data: dict) -> bool:
+                return True
+
+            async def aget_data(self) -> str:
+                return "data"
+
+        # All async methods should be wrapped (including class/static methods)
+        assert hasattr(AdapterWithClassMethods.aget_data, _ASYNC_IO_WRAPPER_MARKER)
+
+
+class TestAsyncIntegration:
+    """Integration tests for decorator async monitoring."""
+
+    async def test_full_adapter_lifecycle(self) -> None:
+        """Test complete adapter lifecycle with async monitoring."""
+
+        @adapter("database", name="integration_db")
+        class IntegrationDatabaseAdapter:
+            def __init__(self) -> None:
+                self.connected = False
+
+            async def aconnect(self) -> None:
+                await asyncio.sleep(0.001)
+                self.connected = True
+
+            async def aexecute(self, sql: str) -> list[dict]:
+                if not self.connected:
+                    raise RuntimeError("Not connected")
+                await asyncio.sleep(0.001)
+                return [{"result": sql}]
+
+            async def aclose(self) -> None:
+                await asyncio.sleep(0.001)
+                self.connected = False
+
+        # Create instance and run through lifecycle
+        db = IntegrationDatabaseAdapter()
+
+        assert not db.connected
+
+        await db.aconnect()
+        assert db.connected
+
+        results = await db.aexecute("SELECT * FROM test")
+        assert len(results) == 1
+        assert results[0]["result"] == "SELECT * FROM test"
+
+        await db.aclose()
+        assert not db.connected
+
+    async def test_adapter_with_inheritance(self) -> None:
+        """Test that wrapping works with adapter inheritance."""
+
+        @adapter("database", name="base_db")
+        class BaseDatabaseAdapter:
+            async def aconnect(self) -> None:
+                pass
+
+        @adapter("database", name="derived_db")
+        class DerivedDatabaseAdapter(BaseDatabaseAdapter):
+            async def aexecute(self, sql: str) -> list:
+                return []
+
+        # Both async methods should be wrapped
+        assert hasattr(DerivedDatabaseAdapter.aconnect, _ASYNC_IO_WRAPPER_MARKER)
+        assert hasattr(DerivedDatabaseAdapter.aexecute, _ASYNC_IO_WRAPPER_MARKER)

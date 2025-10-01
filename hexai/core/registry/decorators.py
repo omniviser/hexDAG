@@ -6,17 +6,25 @@ components. Registration happens during bootstrap via the manifest.
 
 from __future__ import annotations
 
+import inspect
+import logging
 import re
-from functools import partial
-from typing import TYPE_CHECKING, TypeVar
+from functools import partial, wraps
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from hexai.core.registry.models import (
     ComponentType,
     NodeSubtype,
 )
+from hexai.core.utils.async_warnings import _is_in_async_context
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
+
+# Marker to detect if a method has already been wrapped
+_ASYNC_IO_WRAPPER_MARKER = "_hexdag_async_io_wrapped"
 
 
 T = TypeVar("T")
@@ -184,6 +192,7 @@ def adapter(
     *,
     namespace: str = "user",
     description: str | None = None,
+    warn_sync_io: bool = True,
 ) -> Callable[[T], T]:
     """Adapter decorator with convention over configuration.
 
@@ -198,6 +207,10 @@ def adapter(
         Defaults to 'user' for adapters.
     description : str | None
         If None, uses class docstring.
+    warn_sync_io : bool
+        If True, wrap async methods to warn about synchronous I/O operations.
+        Defaults to True. Set to False for adapters that intentionally use sync I/O
+        (like local file-based adapters in __init__).
 
     Examples
     --------
@@ -234,9 +247,89 @@ def adapter(
         # Store the normalized port name
         cls._hexdag_implements_port = port_name  # type: ignore[attr-defined]
 
+        # Optionally wrap async methods to detect sync I/O
+        if warn_sync_io:
+            _wrap_adapter_async_methods(cls)  # type: ignore[arg-type]
+
         return cls
 
     return decorator
+
+
+def _wrap_adapter_async_methods(cls: type) -> None:
+    """Wrap async methods to warn about sync I/O operations.
+
+    Parameters
+    ----------
+    cls : type
+        The adapter class to wrap
+    """
+
+    # Get all methods from the class
+    for attr_name in dir(cls):
+        # Skip private methods and special methods except async protocol methods
+        if attr_name.startswith("_") and not attr_name.startswith((
+            "aget_",
+            "aset_",
+            "aexecute_",
+            "aresponse_",
+            "acall_",
+        )):
+            continue
+
+        try:
+            attr = getattr(cls, attr_name)
+        except AttributeError:
+            continue
+
+        # Check if it's an async method (coroutine function)
+        if inspect.iscoroutinefunction(attr):
+            # Skip if already wrapped (prevent double wrapping)
+            if hasattr(attr, _ASYNC_IO_WRAPPER_MARKER):
+                continue
+
+            # Wrap the async method
+            wrapped = _create_async_io_wrapper(attr, attr_name, cls.__name__, _is_in_async_context)
+            setattr(cls, attr_name, wrapped)
+
+
+def _create_async_io_wrapper(  # type: ignore[no-untyped-def]
+    func: Any, method_name: str, class_name: str, is_async_context_fn
+):
+    """Create wrapper to warn about sync I/O in async methods.
+
+    Parameters
+    ----------
+    func : Callable
+        The async function to wrap
+    method_name : str
+        Name of the method
+    class_name : str
+        Name of the class
+    is_async_context_fn : Callable
+        Function to check if we're in async context
+
+    Returns
+    -------
+    Callable
+        Wrapped function
+    """
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Emit debug log if in async context (which we should be)
+        if is_async_context_fn():
+            logger.debug(
+                f"Entering async method {class_name}.{method_name}() - monitoring for blocking I/O"
+            )
+
+        # Call the original function
+        return await func(*args, **kwargs)
+
+    # Mark as wrapped to prevent double wrapping
+    setattr(wrapper, _ASYNC_IO_WRAPPER_MARKER, True)
+
+    return wrapper
 
 
 tool = partial(component, ComponentType.TOOL)

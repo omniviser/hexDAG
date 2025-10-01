@@ -1,14 +1,13 @@
-"""SQLite database adapter implementation."""
+"""SQLite database adapter implementation with async support."""
 
 import logging
 import re
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from sqlite3 import Connection, Cursor
 from typing import Any
 
+import aiosqlite
 from pydantic import BaseModel, Field
 
 from hexai.core.ports.configurable import ConfigurableComponent
@@ -20,13 +19,14 @@ logger = logging.getLogger(__name__)
 @adapter(
     name="sqlite",
     implements_port="database",
-    description="SQLite database adapter for SQL query execution and schema introspection",
+    description="Async SQLite database adapter for SQL query execution and schema introspection",
 )
 class SQLiteAdapter(ConfigurableComponent):
-    """SQLite adapter for database port.
+    """Async SQLite adapter for database port.
 
     Provides a lightweight, file-based database solution that implements
     the DatabasePort interface for SQL execution and schema introspection.
+    All operations are fully async using aiosqlite.
     """
 
     # Configuration schema for TOML generation
@@ -80,83 +80,87 @@ class SQLiteAdapter(ConfigurableComponent):
         self.foreign_keys = config.foreign_keys
         self.read_only = config.read_only
 
-        self.connection: Connection | None = None
-        self._ensure_database()
+        self.connection: aiosqlite.Connection | None = None
 
-    def _ensure_database(self) -> None:
-        """Ensure database connection exists."""
+    async def _ensure_database(self) -> None:
+        """Ensure database connection exists and is configured."""
+        if self.connection is not None:
+            return
+
         db_path = str(self.db_path) if isinstance(self.db_path, Path) else self.db_path
 
         # Add read-only mode support via URI
         if self.read_only and db_path != ":memory:":
             # Use URI mode for read-only access
             db_uri = f"file:{db_path}?mode=ro"
-            self.connection = sqlite3.connect(
+            self.connection = await aiosqlite.connect(
                 db_uri,
                 uri=True,
                 check_same_thread=self.check_same_thread,
                 timeout=self.timeout,
             )
         else:
-            self.connection = sqlite3.connect(
+            self.connection = await aiosqlite.connect(
                 db_path,
                 check_same_thread=self.check_same_thread,
                 timeout=self.timeout,
             )
-        self.connection.row_factory = sqlite3.Row  # Return rows as dictionaries
+
+        self.connection.row_factory = aiosqlite.Row  # Return rows as dictionaries
 
         # Configure database settings
         if self.connection:
-            with self._get_cursor() as cursor:
+            async with self.connection.cursor() as cursor:
                 if self.journal_mode:
-                    cursor.execute(f"PRAGMA journal_mode = {self.journal_mode}")
+                    await cursor.execute(f"PRAGMA journal_mode = {self.journal_mode}")
                 if self.foreign_keys:
-                    cursor.execute("PRAGMA foreign_keys = ON")
+                    await cursor.execute("PRAGMA foreign_keys = ON")
+            await self.connection.commit()
 
-    @contextmanager
-    def _get_cursor(self) -> Iterator[Cursor]:
+    @asynccontextmanager
+    async def _get_cursor(self) -> AsyncIterator[aiosqlite.Cursor]:
         """Context manager for database cursor.
 
         Ensures proper cursor cleanup and error handling.
 
         Yields
         ------
-        Cursor
-            SQLite database cursor
+        aiosqlite.Cursor
+            Async SQLite database cursor
 
         Raises
         ------
         RuntimeError
             If database connection is not established
-        sqlite3.Error
+        aiosqlite.Error
             If database error occurs during operation
         """
+        await self._ensure_database()
         if self.connection is None:
             raise RuntimeError("Database connection not established")
 
-        cursor = self.connection.cursor()
-        try:
-            yield cursor
-        except sqlite3.Error as e:
-            logger.error(f"Database error: {e}")
-            self.connection.rollback()
-            raise
-        finally:
-            cursor.close()
+        async with self.connection.cursor() as cursor:
+            try:
+                yield cursor
+            except aiosqlite.Error as e:
+                logger.error(f"Database error: {e}")
+                await self.connection.rollback()
+                raise
 
-    def _get_all_tables(self) -> list[str]:
+    async def _get_all_tables(self) -> list[str]:
         """Get all non-system tables from the database.
 
         Returns
         -------
             List of table names
         """
-        with self._get_cursor() as cursor:
-            cursor.execute("""
+        async with self._get_cursor() as cursor:
+            await cursor.execute("""
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND name NOT LIKE 'sqlite_%'
             """)
-            return [row[0] for row in cursor.fetchall()]
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
 
     def _validate_identifier(self, identifier: str, identifier_type: str = "table") -> bool:
         """Validate a database identifier to prevent injection.
@@ -185,17 +189,17 @@ class SQLiteAdapter(ConfigurableComponent):
         -------
             Dictionary mapping table names to schema information
         """
-        tables = self._get_all_tables()
+        tables = await self._get_all_tables()
         schemas = {}
 
-        with self._get_cursor() as cursor:
+        async with self._get_cursor() as cursor:
             for table in tables:
                 if not self._validate_identifier(table):
                     continue
 
                 # Get column info
-                cursor.execute(f'PRAGMA table_info("{table}")')  # nosec B608 - validated
-                rows = cursor.fetchall()
+                await cursor.execute(f'PRAGMA table_info("{table}")')  # nosec B608 - validated
+                rows = await cursor.fetchall()
 
                 columns = {}
                 primary_keys = []
@@ -209,8 +213,9 @@ class SQLiteAdapter(ConfigurableComponent):
                         primary_keys.append(col_name)
 
                 # Get foreign keys
-                cursor.execute(f'PRAGMA foreign_key_list("{table}")')  # nosec B608 - validated
-                fk_rows = cursor.fetchall()
+                # nosec B608 - validated
+                await cursor.execute(f'PRAGMA foreign_key_list("{table}")')
+                fk_rows = await cursor.fetchall()
                 foreign_keys = [
                     {"from_column": fk_row[3], "to_table": fk_row[2], "to_column": fk_row[4]}
                     for fk_row in fk_rows
@@ -251,11 +256,11 @@ class SQLiteAdapter(ConfigurableComponent):
         ------
         ValueError
             If a required parameter is missing
-        sqlite3.Error
+        aiosqlite.Error
             If query execution fails
         """
         try:
-            with self._get_cursor() as cursor:
+            async with self._get_cursor() as cursor:
                 # Handle parameterized queries
                 if params:
                     # SQLite uses ? placeholders, but we support :name format
@@ -271,31 +276,31 @@ class SQLiteAdapter(ConfigurableComponent):
                     # Build parameter values in the correct order
                     try:
                         param_values = [params[name] for name in param_names]
-                        cursor.execute(converted_query, param_values)
+                        await cursor.execute(converted_query, param_values)
                     except KeyError as e:
                         raise ValueError(f"Missing parameter: {e}") from e
                 else:
-                    cursor.execute(query)
+                    await cursor.execute(query)
 
                 # Determine query type
                 query_type = query.strip().upper().split()[0] if query.strip() else ""
 
                 # For SELECT queries, fetch results
                 if query_type in ("SELECT", "PRAGMA", "WITH"):
-                    rows = cursor.fetchall()
-                    # Convert sqlite3.Row objects to dicts
+                    rows = await cursor.fetchall()
+                    # Convert aiosqlite.Row objects to dicts
                     return [dict(row) for row in rows]
                 # For INSERT/UPDATE/DELETE operations
                 # Note: If database is opened in read-only mode, SQLite will
                 # automatically raise an OperationalError for write operations
                 affected_rows = cursor.rowcount
                 if self.connection is not None:
-                    self.connection.commit()
+                    await self.connection.commit()
 
                 # Log the operation
                 logger.info(f"Executed {query_type} query, affected rows: {affected_rows}")
                 return []
-        except sqlite3.Error as e:
+        except aiosqlite.Error as e:
             logger.error(f"Query execution failed: {e}")
             logger.error(f"Query: {query[:100]}...")  # Log first 100 chars of query
             raise
@@ -307,16 +312,17 @@ class SQLiteAdapter(ConfigurableComponent):
         -------
             List of relationship dictionaries
         """
-        tables = self._get_all_tables()
+        tables = await self._get_all_tables()
         relationships: list[dict[str, Any]] = []
 
-        with self._get_cursor() as cursor:
+        async with self._get_cursor() as cursor:
             for table in tables:
                 if not self._validate_identifier(table):
                     continue
 
-                cursor.execute(f'PRAGMA foreign_key_list("{table}")')  # nosec B608 - validated
-                fk_rows = cursor.fetchall()
+                # nosec B608 - validated
+                await cursor.execute(f'PRAGMA foreign_key_list("{table}")')
+                fk_rows = await cursor.fetchall()
 
                 relationships.extend(
                     {
@@ -340,13 +346,13 @@ class SQLiteAdapter(ConfigurableComponent):
         """
         indexes = []
 
-        with self._get_cursor() as cursor:
+        async with self._get_cursor() as cursor:
             # Get all indexes
-            cursor.execute("""
+            await cursor.execute("""
                 SELECT name, tbl_name, sql FROM sqlite_master
                 WHERE type='index' AND sql IS NOT NULL
             """)
-            index_rows = cursor.fetchall()
+            index_rows = await cursor.fetchall()
 
             for row in index_rows:
                 index_name = row[0]
@@ -358,13 +364,13 @@ class SQLiteAdapter(ConfigurableComponent):
                     continue
 
                 # Get index info
-                cursor.execute(f'PRAGMA index_info("{index_name}")')  # nosec B608 - validated
-                col_rows = cursor.fetchall()
+                await cursor.execute(f'PRAGMA index_info("{index_name}")')  # nosec B608 - validated
+                col_rows = await cursor.fetchall()
                 columns = [col_row[2] for col_row in col_rows]
 
                 # Check if unique
-                cursor.execute(f'PRAGMA index_list("{table_name}")')  # nosec B608 - validated
-                idx_list = cursor.fetchall()
+                await cursor.execute(f'PRAGMA index_list("{table_name}")')  # nosec B608 - validated
+                idx_list = await cursor.fetchall()
                 is_unique = False
                 for idx in idx_list:
                     if idx[1] == index_name:
@@ -388,25 +394,26 @@ class SQLiteAdapter(ConfigurableComponent):
         -------
             Dictionary mapping table names to statistics
         """
-        tables = self._get_all_tables()
+        tables = await self._get_all_tables()
         stats = {}
 
-        with self._get_cursor() as cursor:
+        async with self._get_cursor() as cursor:
             for table in tables:
                 if not self._validate_identifier(table):
                     continue  # Skip invalid table names
 
                 # Get row count - use quote for identifier
                 # SQLite uses double quotes for identifiers
-                cursor.execute(f'SELECT COUNT(*) FROM "{table}"')  # nosec B608 - validated
-                row_count = cursor.fetchone()[0]
+                await cursor.execute(f'SELECT COUNT(*) FROM "{table}"')  # nosec B608 - validated
+                result = await cursor.fetchone()
+                row_count = result[0] if result else 0
 
                 # Get table size (approximate)
-                cursor.execute(
+                await cursor.execute(
                     "SELECT SUM(LENGTH(sql)) FROM sqlite_master WHERE tbl_name = ?", (table,)
                 )
-                size_result = cursor.fetchone()[0]
-                size_bytes = size_result if size_result else 0
+                size_result = await cursor.fetchone()
+                size_bytes = size_result[0] if size_result and size_result[0] else 0
 
                 stats[table] = {
                     "row_count": row_count,
@@ -416,15 +423,25 @@ class SQLiteAdapter(ConfigurableComponent):
 
         return stats
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close database connection."""
         if self.connection:
-            self.connection.close()
+            await self.connection.close()
             self.connection = None
 
-    def __del__(self) -> None:
-        """Cleanup on deletion."""
-        self.close()
+    async def __aenter__(self) -> "SQLiteAdapter":
+        """Async context manager entry."""
+        await self._ensure_database()
+        return self
+
+    async def __aexit__(
+        self,
+        _exc_type: Any,  # noqa: ARG002
+        _exc_val: Any,  # noqa: ARG002
+        _exc_tb: Any,  # noqa: ARG002
+    ) -> None:
+        """Async context manager exit."""
+        await self.close()
 
     def __repr__(self) -> str:
         """Return string representation."""

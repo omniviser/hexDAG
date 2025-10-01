@@ -39,11 +39,15 @@ openai = [
 anthropic = [
     "anthropic>=0.25.0",  # Anthropic Claude LLM adapter
 ]
+database = [
+    "aiosqlite>=0.19.0",  # Async SQLite database adapter
+]
 all = [
     "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
+    "aiosqlite>=0.19.0",  # Async SQLite adapter
 ]
 
 [project.urls]

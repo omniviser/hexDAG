@@ -70,7 +70,7 @@ class TestSQLiteAdapter:
         )
         assert results[0]["age"] == 31
 
-        adapter.close()
+        await adapter.close()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_schema_introspection(self, temp_db_path):
@@ -115,7 +115,7 @@ class TestSQLiteAdapter:
         assert fk["to_table"] == "departments"
         assert fk["to_column"] == "id"
 
-        adapter.close()
+        await adapter.close()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_relationships(self, temp_db_path):
@@ -154,7 +154,7 @@ class TestSQLiteAdapter:
                 break
         assert found
 
-        adapter.close()
+        await adapter.close()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_indexes(self, temp_db_path):
@@ -188,7 +188,7 @@ class TestSQLiteAdapter:
                 break
         assert found
 
-        adapter.close()
+        await adapter.close()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_statistics(self, temp_db_path):
@@ -217,7 +217,7 @@ class TestSQLiteAdapter:
         assert "size_bytes" in record_stats
         assert record_stats["last_updated"] is None  # SQLite doesn't track this
 
-        adapter.close()
+        await adapter.close()
 
     def test_sqlite_adapter_decorator_metadata(self):
         """Test that SQLite adapter has correct decorator metadata."""
@@ -241,7 +241,7 @@ class TestSQLiteAdapter:
         with pytest.raises(sqlite3.OperationalError):
             await adapter.aexecute_query("INVALID SQL STATEMENT")
 
-        adapter.close()
+        await adapter.close()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_parameterized_queries(self, temp_db_path):
@@ -267,22 +267,23 @@ class TestSQLiteAdapter:
         assert len(results) == 1
         assert results[0]["value"] == "'; DROP TABLE test_data; --"
 
-        adapter.close()
+        await adapter.close()
 
-    def test_sqlite_adapter_repr(self, temp_db_path):
+    @pytest.mark.asyncio
+    async def test_sqlite_adapter_repr(self, temp_db_path):
         """Test string representation of adapter."""
         adapter = SQLiteAdapter(db_path=temp_db_path)
         assert "SQLiteAdapter" in repr(adapter)
         assert temp_db_path in repr(adapter)
         assert "mode='read-write'" in repr(adapter)
-        adapter.close()
+        await adapter.close()
 
         # Test with read-only mode
         adapter_ro = SQLiteAdapter(db_path=temp_db_path, read_only=True)
         assert "SQLiteAdapter" in repr(adapter_ro)
         assert temp_db_path in repr(adapter_ro)
         assert "mode='read-only'" in repr(adapter_ro)
-        adapter_ro.close()
+        await adapter_ro.close()
 
     @pytest.mark.asyncio
     async def test_sqlite_adapter_read_only_mode(self):
@@ -309,7 +310,7 @@ class TestSQLiteAdapter:
                 "INSERT INTO test_data (value) VALUES (:value)", {"value": "test_value"}
             )
 
-            adapter_rw.close()
+            await adapter_rw.close()
 
             # Now open in read-only mode
             adapter_ro = SQLiteAdapter(db_path=db_path, read_only=True)
@@ -344,7 +345,7 @@ class TestSQLiteAdapter:
                 await adapter_ro.aexecute_query("CREATE TABLE new_table (id INTEGER)")
             assert "readonly" in str(exc_info.value).lower()
 
-            adapter_ro.close()
+            await adapter_ro.close()
 
         finally:
             # Clean up

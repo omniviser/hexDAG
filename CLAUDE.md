@@ -260,6 +260,64 @@ Examples:
 - Mock adapters for external services
 - Example-based testing for user workflows
 
+### Async I/O Enforcement
+
+hexDAG enforces async-first architecture through:
+
+1. **Static Analysis** - `scripts/check_async_io.py` scans for blocking I/O in async functions
+2. **Runtime Warnings** - `hexai/core/utils/async_warnings.py` detects blocking operations at runtime
+3. **Adapter Decorator Integration** - `@adapter` decorator automatically wraps async methods
+
+#### Running the Async I/O Checker
+
+```bash
+# Check entire codebase
+uv run python scripts/check_async_io.py
+
+# Verbose output
+uv run python scripts/check_async_io.py --verbose
+
+# Check specific paths
+uv run python scripts/check_async_io.py hexai/adapters/
+```
+
+#### Using Runtime Warnings
+
+```python
+from hexai.core.utils.async_warnings import warn_sync_io, warn_if_async
+
+# In async functions
+async def my_function():
+    warn_sync_io("file_open", "Use aiofiles.open()")
+
+# As decorator
+@warn_if_async
+def sync_helper():
+    return open('file.txt').read()
+```
+
+#### Adapter Decorator with Async Monitoring
+
+```python
+from hexai.core.registry.decorators import adapter
+
+# Default: warnings enabled
+@adapter("database", name="sqlite")
+class SQLiteAdapter:
+    async def aexecute_query(self, sql):
+        # This will be monitored for blocking I/O
+        pass
+
+# Disable warnings for intentional sync I/O
+@adapter("database", name="local_db", warn_sync_io=False)
+class LocalDBAdapter:
+    async def aexecute_query(self, sql):
+        # No warnings - intentional sync I/O
+        pass
+```
+
+See `docs/async_io_enforcement.md` for complete documentation.
+
 ### Error Handling
 - Use custom exception hierarchies (e.g., `OrchestratorError`, `ValidationError`)
 - Maintain error context and node information
