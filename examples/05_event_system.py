@@ -2,39 +2,37 @@
 
 import asyncio
 
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexai.core.application.context import ExecutionContext
 from hexai.core.application.events import (
-    ControlManager,
-    ControlResponse,
-    ControlSignal,
     Event,
-    ExecutionContext,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
-    ObserverManager,
+)
+from hexai.core.application.policies.models import (
+    PolicyContext,
+    PolicyResponse,
+    PolicySignal,
 )
 
 
-# Example control handler that skips test nodes
-async def skip_test_nodes(event: Event, context: ExecutionContext) -> ControlResponse:
+# Example policy that skips test nodes
+async def skip_test_nodes(context: PolicyContext) -> PolicyResponse:
     """Skip nodes with 'test' in the name."""
-    if isinstance(event, NodeStarted):
-        if "test" in event.name.lower():
-            print(f"  Control: Skipping test node '{event.name}'")
-            return ControlResponse(signal=ControlSignal.SKIP, data={"skipped": True})
-    return ControlResponse()  # Default: proceed
+    if isinstance(context.event, NodeStarted) and "test" in context.event.name.lower():
+        print(f"  Policy: Skipping test node '{context.event.name}'")
+        return PolicyResponse(signal=PolicySignal.SKIP, data={"skipped": True})
+    return PolicyResponse(signal=PolicySignal.PROCEED)  # Default: proceed
 
 
-# Example control handler for fallback on errors
-async def fallback_on_error(event: Event, context: ExecutionContext) -> ControlResponse:
+# Example policy for fallback on errors
+async def fallback_on_error(context: PolicyContext) -> PolicyResponse:
     """Provide fallback value for failed API nodes."""
-    if isinstance(event, NodeFailed):
-        if "api" in event.name.lower():
-            print(f"  Control: Providing fallback for '{event.name}'")
-            return ControlResponse(
-                signal=ControlSignal.FALLBACK, data={"status": "offline", "data": []}
-            )
-    return ControlResponse()
+    if isinstance(context.event, NodeFailed) and "api" in context.event.name.lower():
+        print(f"  Policy: Providing fallback for '{context.event.name}'")
+        return PolicyResponse(signal=PolicySignal.FALLBACK, data={"status": "offline", "data": []})
+    return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
 # Example observer for logging
@@ -68,28 +66,51 @@ async def main():
     """Demonstrate the simplified event system."""
     print("Simplified Event System Demo\n" + "=" * 50)
 
-    # Create ControlManager for control and ObserverManager for observability
-    control_manager = ControlManager()
-    observer_manager = ObserverManager()
+    # Create PolicyManager for execution control and ObserverManager for observability
+    policy_manager = LocalPolicyManager()
+    observer_manager = LocalObserverManager()
 
-    # Register control handlers
-    control_manager.register(skip_test_nodes)
-    control_manager.register(fallback_on_error)
+    # Register policies
+    # Create simple policy objects
+    from hexai.core.application.policies.models import SubscriberType
 
-    # Register observer_manager
+    class SkipTestPolicy:
+        priority = 0
+
+        async def evaluate(self, context):
+            return await skip_test_nodes(context)
+
+    class FallbackPolicy:
+        priority = 1
+
+        async def evaluate(self, context):
+            return await fallback_on_error(context)
+
+    # Keep strong references to policies
+    skip_policy = SkipTestPolicy()
+    fallback_policy = FallbackPolicy()
+
+    # Subscribe as CORE to ensure they stay in memory
+    policy_manager.subscribe(skip_policy, SubscriberType.CORE)
+    policy_manager.subscribe(fallback_policy, SubscriberType.CORE)
+
+    # Register observers
     observer_manager.register(log_observer)
     metrics = MetricsObserver()
-    observer_manager.register(metrics)
+    observer_manager.register(metrics.handle)
 
-    # Create execution context
-    context = ExecutionContext(dag_id="demo_pipeline")
+    # Create execution context (removed as we create policy context directly now)
+    _ = ExecutionContext(dag_id="demo_pipeline")  # Not used but shown for clarity
 
     # Simulate normal node execution
     print("\n1. Normal Node Execution:")
     event1 = NodeStarted(name="process_data", wave_index=1, dependencies=[])
     await observer_manager.notify(event1)
-    response1 = await control_manager.check(event1, context)
-    print(f"   Control decision: {response1.signal.value}")
+    policy_context1 = PolicyContext(
+        event=event1, dag_id="demo_pipeline", node_id="process_data", wave_index=1, attempt=1
+    )
+    response1 = await policy_manager.evaluate(policy_context1)
+    print(f"   Policy decision: {response1.signal.value}")
 
     # Simulate node completion
     event1_complete = NodeCompleted(
@@ -101,8 +122,11 @@ async def main():
     print("\n2. Test Node (should be skipped):")
     event2 = NodeStarted(name="test_validation", wave_index=1, dependencies=[])
     await observer_manager.notify(event2)
-    response2 = await control_manager.check(event2, context)
-    print(f"   Control decision: {response2.signal.value}")
+    policy_context2 = PolicyContext(
+        event=event2, dag_id="demo_pipeline", node_id="test_validation", wave_index=1, attempt=1
+    )
+    response2 = await policy_manager.evaluate(policy_context2)
+    print(f"   Policy decision: {response2.signal.value}")
     if response2.data:
         print(f"   Control data: {response2.data}")
 
@@ -110,8 +134,11 @@ async def main():
     print("\n3. API Node Failure (should get fallback):")
     event3 = NodeFailed(name="api_call", wave_index=1, error=Exception("Connection timeout"))
     await observer_manager.notify(event3)
-    response3 = await control_manager.check(event3, context)
-    print(f"   Control decision: {response3.signal.value}")
+    policy_context3 = PolicyContext(
+        event=event3, dag_id="demo_pipeline", node_id="api_call", wave_index=1, attempt=1
+    )
+    response3 = await policy_manager.evaluate(policy_context3)
+    print(f"   Policy decision: {response3.signal.value}")
     if response3.data:
         print(f"   Fallback data: {response3.data}")
 
@@ -119,8 +146,11 @@ async def main():
     print("\n4. Regular Node Failure:")
     event4 = NodeFailed(name="compute", wave_index=1, error=Exception("Out of memory"))
     await observer_manager.notify(event4)
-    response4 = await control_manager.check(event4, context)
-    print(f"   Control decision: {response4.signal.value}")
+    policy_context4 = PolicyContext(
+        event=event4, dag_id="demo_pipeline", node_id="compute", wave_index=1, attempt=1
+    )
+    response4 = await policy_manager.evaluate(policy_context4)
+    print(f"   Policy decision: {response4.signal.value}")
 
     # Show metrics
     print("\n" + "=" * 50)

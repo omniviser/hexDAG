@@ -34,6 +34,7 @@ class Event:
 
         Returns
         -------
+        str
             A formatted string suitable for logging
         """
         _ = log_level  # Mark as intentionally unused in base class
@@ -109,7 +110,13 @@ class NodeStarted(Event):
     dependencies: list[str] = field(default_factory=list)
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for node start event."""
+        """Format log message for node start event.
+
+        Returns
+        -------
+        str
+            Formatted log message for node start
+        """
         _ = log_level  # Unused but kept for interface consistency
         deps = f" (deps: {', '.join(self.dependencies)})" if self.dependencies else ""
         return f"🚀 Node '{self.name}' started in wave {self.wave_index}{deps}"
@@ -125,7 +132,13 @@ class NodeCompleted(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for node completion event."""
+        """Format log message for node completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for node completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Node '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
@@ -139,7 +152,13 @@ class NodeFailed(Event):
     error: Exception
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for node failure event."""
+        """Format log message for node failure event.
+
+        Returns
+        -------
+        str
+            Formatted log message for node failure
+        """
         _ = log_level  # This event always uses ERROR level
         return f"❌ Node '{self.name}' failed: {self.error}"
 
@@ -153,7 +172,13 @@ class WaveStarted(Event):
     nodes: list[str]
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for wave start event."""
+        """Format log message for wave start event.
+
+        Returns
+        -------
+        str
+            Formatted log message for wave start
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🌊 Wave {self.wave_index} started with {len(self.nodes)} nodes"
 
@@ -166,7 +191,13 @@ class WaveCompleted(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for wave completion event."""
+        """Format log message for wave completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for wave completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Wave {self.wave_index} completed in {self.duration_ms / 1000:.2f}s"
 
@@ -181,7 +212,13 @@ class PipelineStarted(Event):
     total_nodes: int
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for pipeline start event."""
+        """Format log message for pipeline start event.
+
+        Returns
+        -------
+        str
+            Formatted log message for pipeline start
+        """
         _ = log_level  # Unused but kept for interface consistency
         return (
             f"🎬 Pipeline '{self.name}' started "
@@ -198,7 +235,13 @@ class PipelineCompleted(Event):
     node_results: dict[str, Any] = field(default_factory=dict)
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for pipeline completion event."""
+        """Format log message for pipeline completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for pipeline completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
@@ -212,7 +255,13 @@ class LLMPromptSent(Event):
     messages: list[dict[str, str]]
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for LLM prompt event."""
+        """Format log message for LLM prompt event.
+
+        Returns
+        -------
+        str
+            Formatted log message for LLM prompt
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"💭 LLM prompt sent from '{self.node_name}' ({len(self.messages)} messages)"
 
@@ -226,7 +275,13 @@ class LLMResponseReceived(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for LLM response event."""
+        """Format log message for LLM response event.
+
+        Returns
+        -------
+        str
+            Formatted log message for LLM response
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🤖 LLM response for '{self.node_name}' in {self.duration_ms / 1000:.2f}s"
 
@@ -241,7 +296,13 @@ class ToolCalled(Event):
     params: dict[str, Any]
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for tool call event."""
+        """Format log message for tool call event.
+
+        Returns
+        -------
+        str
+            Formatted log message for tool call
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"🔧 Tool '{self.tool_name}' called from '{self.node_name}'"
 
@@ -256,6 +317,102 @@ class ToolCompleted(Event):
     duration_ms: float
 
     def log_message(self, log_level: int = logging.INFO) -> str:
-        """Format log message for tool completion event."""
+        """Format log message for tool completion event.
+
+        Returns
+        -------
+        str
+            Formatted log message for tool completion
+        """
         _ = log_level  # Unused but kept for interface consistency
         return f"✅ Tool '{self.tool_name}' completed in {self.duration_ms / 1000:.2f}s"
+
+
+# Policy-related events for tracking policy evaluations and decisions
+@dataclass
+class PolicyEvaluated(Event):
+    """Event emitted after a policy has been evaluated."""
+
+    policy_name: str
+    signal: str  # The signal returned by the policy
+    duration_ms: float
+    context_node: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy evaluation."""
+        _ = log_level
+        return (
+            f"📋 Policy '{self.policy_name}' evaluated -> {self.signal} ({self.duration_ms:.1f}ms)"
+        )
+
+
+@dataclass
+class PolicyTriggered(Event):
+    """Event emitted when a policy's condition is triggered."""
+
+    policy_name: str
+    trigger_reason: str
+    context_node: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy trigger."""
+        _ = log_level
+        node_info = f" for node '{self.context_node}'" if self.context_node else ""
+        return f"🎯 Policy '{self.policy_name}' triggered{node_info}: {self.trigger_reason}"
+
+
+@dataclass
+class PolicySkipped(Event):
+    """Event emitted when a policy causes a node to be skipped."""
+
+    policy_name: str
+    node_name: str
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy skip."""
+        _ = log_level
+        reason_info = f": {self.reason}" if self.reason else ""
+        return f"⏭️ Policy '{self.policy_name}' skipped node '{self.node_name}'{reason_info}"
+
+
+@dataclass
+class PolicyFallback(Event):
+    """Event emitted when a policy provides a fallback value."""
+
+    policy_name: str
+    node_name: str
+    fallback_value: Any
+    reason: str | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy fallback."""
+        _ = log_level
+        reason_info = f": {self.reason}" if self.reason else ""
+        return (
+            f"🔄 Policy '{self.policy_name}' provided fallback for '{self.node_name}'{reason_info}"
+        )
+
+
+@dataclass
+class PolicyRetry(Event):
+    """Event emitted when a policy triggers a retry."""
+
+    policy_name: str
+    node_name: str
+    attempt: int
+    delay_ms: float | None = None
+    max_attempts: int | None = None
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Format log message for policy retry."""
+        _ = log_level
+        attempt_info = f" (attempt {self.attempt}"
+        if self.max_attempts:
+            attempt_info += f"/{self.max_attempts}"
+        attempt_info += ")"
+        delay_info = f" with {self.delay_ms:.0f}ms delay" if self.delay_ms else ""
+        return (
+            f"🔁 Policy '{self.policy_name}' retrying node "
+            f"'{self.node_name}'{attempt_info}{delay_info}"
+        )

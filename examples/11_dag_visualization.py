@@ -16,7 +16,15 @@ from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.domain.dag_visualizer import DAGVisualizer
+
+try:
+    from hexai.visualization import DAGVisualizer
+except ImportError:
+    print("Error: Visualization requires graphviz. Install with:")
+    print("  pip install hexdag[viz]")
+    print("  or")
+    print("  uv pip install hexdag[viz]")
+    raise SystemExit(1) from None
 
 
 async def data_ingestion(input_data: str) -> dict:
@@ -34,7 +42,7 @@ async def data_validation(input_data: dict) -> dict:
     await asyncio.sleep(0.05)
     raw_data = input_data.get("raw_data", "")
 
-    is_valid = len(raw_data) > 0 and not raw_data.strip() == ""
+    is_valid = len(raw_data) > 0 and raw_data.strip() != ""
 
     return {
         "validated_data": raw_data if is_valid else "default_data",
@@ -180,9 +188,8 @@ async def demonstrate_dag_visualization():
         else:
             print(f"   Wave {i}: {', '.join(wave)} (parallel)")
 
-    print(
-        f"\n   💡 Total waves: {len(waves)} (parallelism opportunities: {sum(1 for wave in waves if len(wave) > 1)})"
-    )
+    parallel_ops = sum(1 for wave in waves if len(wave) > 1)
+    print(f"\n   💡 Total waves: {len(waves)} (parallelism opportunities: {parallel_ops})")
 
     # Show dependencies
     print("\n🔗 Dependency Analysis:")
@@ -252,9 +259,8 @@ async def demonstrate_execution_analysis():
     final_result = results.get("result_formatting", {}).get("final_result", {})
     audit_info = results.get("audit_logging", {}).get("audit_log", {})
 
-    print(
-        f"   📈 Prediction: {final_result.get('prediction')} (score: {final_result.get('score', 0):.3f})"
-    )
+    score = final_result.get("score", 0)
+    print(f"   📈 Prediction: {final_result.get('prediction')} (score: {score:.3f})")
     print(f"   🎯 Confidence: {final_result.get('confidence', 0):.3f}")
     print(f"   ✅ Data valid: {final_result.get('is_valid_input')}")
     print(f"   📋 Audit status: {audit_info.get('pipeline_execution')}")

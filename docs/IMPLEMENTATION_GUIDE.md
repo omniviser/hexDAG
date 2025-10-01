@@ -446,7 +446,7 @@ class DatabasePort(Protocol):
         """Execute SQL query."""
         ...
 
-class LongTermMemory(Protocol):
+class Memory(Protocol):
     """Long-term memory interface."""
 
     async def store(self, key: str, value: Any) -> None:

@@ -22,6 +22,10 @@ class FieldMappingRegistry:
             name: Name for the mapping pattern
             mapping: dict of {target_field: "source.path"}
 
+        Raises
+        ------
+        ValueError
+            If the mapping name is empty
         """
         if not name:
             raise ValueError("Mapping name cannot be empty")
@@ -38,12 +42,13 @@ class FieldMappingRegistry:
 
         Returns
         -------
+        dict[str, str]
             The resolved mapping dictionary
 
         Raises
         ------
-            ValueError: If the mapping name is not found in registry
-
+        ValueError
+            If the mapping name is not found in registry
         """
         if isinstance(name_or_mapping, str):
             if name_or_mapping not in self.mappings:
@@ -493,5 +498,6 @@ class AutoMappedInput(BaseModel):
         if isinstance(data, dict):
             return data
         if isinstance(data, BaseModel):
-            return data.model_dump()
+            result: dict[str, Any] = data.model_dump()
+            return result
         return {}

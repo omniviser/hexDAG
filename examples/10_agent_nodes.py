@@ -11,11 +11,15 @@ This example demonstrates integration with the existing tool architecture:
 import asyncio
 from typing import Any
 
-from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
+from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.config.models import ManifestEntry
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.registry import registry
+from hexai.core.registry.decorators import tool
+from hexai.core.registry.models import ComponentType
 
 
 # Define real tool functions with proper type hints
@@ -70,8 +74,29 @@ async def generate_treatment_plan(condition: str, risk_level: str = "medium") ->
     }
 
 
+def register_tool_function(func, name=None, namespace="example"):
+    """Helper to register a tool in the global registry."""
+    tool_name = name or func.__name__
+    registry.register(
+        name=tool_name,
+        component=func,
+        component_type=ComponentType.TOOL,
+        namespace=namespace,
+    )
+    return func
+
+
 async def main() -> None:
     """Demonstrate function-first tool architecture."""
+    # Bootstrap registry if needed
+    try:
+        registry.bootstrap(
+            manifest=[ManifestEntry(namespace="core", module="hexai.tools.builtin_tools")],
+            dev_mode=True,
+        )
+    except Exception:
+        print("Registry already bootstrapped")
+
     print("🤖 Example 10: Function-First Tool Architecture")
     print("=" * 60)
     print()
@@ -86,11 +111,21 @@ async def main() -> None:
     print("⚙️  Test 1: Function-Based Router (Real Tools)")
     print("-" * 50)
 
-    # Create router and register real functions
-    real_router = FunctionBasedToolRouter()
-    real_router.register_function(search_medical_literature, "search")
-    real_router.register_function(calculate_risk_score, "calculate_risk")
-    real_router.register_function(generate_treatment_plan, "generate_plan")
+    # Register tools in the global registry
+    @tool(name="search", namespace="example")
+    def search_tool(query: str, database: str = "pubmed") -> str:
+        return search_medical_literature(query, database)
+
+    @tool(name="calculate_risk", namespace="example")
+    def calculate_risk_tool(factors: str, patient_age: int) -> str:
+        return calculate_risk_score(factors, patient_age)
+
+    @tool(name="generate_plan", namespace="example")
+    def generate_plan_tool(condition: str, risk_level: str) -> str:
+        return generate_treatment_plan(condition, risk_level)
+
+    # Create router (uses global registry)
+    real_router = UnifiedToolRouter()
 
     # Show auto-extracted schemas
     print("🔍 Auto-extracted tool schemas:")
@@ -105,13 +140,21 @@ async def main() -> None:
     agent_factory = ReActAgentNode()
     mock_llm = MockLLM(
         responses=[
-            "I'll search for information about diabetes treatment.\n\nINVOKE_TOOL: search(query='diabetes treatment', database='pubmed')\n\nBased on the search results, I'll calculate the risk score.\n\nINVOKE_TOOL: calculate_risk(factors='diabetes,hypertension', patient_age=70)\n\nGiven the high risk level, I'll generate a treatment plan.\n\nINVOKE_TOOL: generate_plan(condition='diabetes', risk_level='high')\n\nBased on the medical literature and risk assessment, I recommend immediate intervention with specialist consultation and medication, with follow-up in 2 weeks."
+            "I'll search for information about diabetes treatment.\n\n"
+            "INVOKE_TOOL: search(query='diabetes treatment', database='pubmed')\n\n"
+            "Based on the search results, I'll calculate the risk score.\n\n"
+            "INVOKE_TOOL: calculate_risk(factors='diabetes,hypertension', patient_age=70)\n\n"
+            "Given the high risk level, I'll generate a treatment plan.\n\n"
+            "INVOKE_TOOL: generate_plan(condition='diabetes', risk_level='high')\n\n"
+            "Based on the medical literature and risk assessment, I recommend immediate "
+            "intervention with specialist consultation and medication, with follow-up in 2 weeks."
         ]
     )
 
     medical_agent = agent_factory(
         name="medical_agent",
-        main_prompt="You are a medical AI assistant. Analyze the patient case: {{input}}. Use available tools to research, assess risk, and generate treatment plans.",
+        main_prompt="You are a medical AI assistant. Analyze the patient case: {{input}}. "
+        "Use available tools to research, assess risk, and generate treatment plans.",
         config=AgentConfig(max_steps=3),
         output_schema=AgentState,  # Use AgentState as the output schema
     )
@@ -137,36 +180,38 @@ async def main() -> None:
         print(f"   📝 Response: {str(agent_result)[:100]}...")
     print()
 
-    # Show real tool execution results
-    print("🔬 Real tool execution results:")
-    for call in real_router.get_call_history():
-        print(f"   🧪 {call['tool_name']}: {str(call['result'])[:80]}...")
+    # Note: Tool execution results are now logged internally
+    print("🔬 Tool execution complete")
     print()
 
     # Test 2: Function Router with Mock Functions (replaces MockToolRouter)
     print("🎭 Test 2: Function Router with Mock Functions")
     print("-" * 50)
 
-    # Create router with simple mock functions (replaces MockToolRouter)
-    mock_router = FunctionBasedToolRouter()
-
+    # Register mock tools in global registry
+    @tool(name="mock_search", namespace="example")
     async def mock_search(query: str) -> str:
         return "Mock search found 5 relevant papers on diabetes"
 
+    @tool(name="mock_calculate_risk", namespace="example")
     async def mock_calculate_risk(factors: str) -> str:
         return "Mock calculation: high risk (0.85)"
 
+    @tool(name="mock_generate_plan", namespace="example")
     async def mock_generate_plan(condition: str) -> str:
         return "Mock plan: immediate intervention recommended"
 
-    mock_router.register_function(mock_search, "search")
-    mock_router.register_function(mock_calculate_risk, "calculate_risk")
-    mock_router.register_function(mock_generate_plan, "generate_plan")
+    # Create router (uses global registry)
+    mock_router = UnifiedToolRouter()
 
     # Create new MockLLM with different response for mock test
     mock_llm_2 = MockLLM(
         responses=[
-            "I'll analyze this case using available tools.\n\nINVOKE_TOOL: search(query='patient analysis')\n\nINVOKE_TOOL: calculate_risk(factors='multiple')\n\nINVOKE_TOOL: generate_plan(condition='complex')\n\nBased on mock analysis, treatment recommended."
+            "I'll analyze this case using available tools.\n\n"
+            "INVOKE_TOOL: search(query='patient analysis')\n\n"
+            "INVOKE_TOOL: calculate_risk(factors='multiple')\n\n"
+            "INVOKE_TOOL: generate_plan(condition='complex')\n\n"
+            "Based on mock analysis, treatment recommended."
         ]
     )
 
@@ -190,9 +235,8 @@ async def main() -> None:
     print("🎨 Test 3: Decorator Pattern")
     print("-" * 35)
 
-    decorator_router = FunctionBasedToolRouter()
-
-    @decorator_router.tool
+    # Register tools using decorator pattern
+    @tool(name="quick_diagnosis", namespace="example")
     async def quick_diagnosis(symptoms: str) -> dict[str, Any]:
         """Provide quick diagnostic suggestions."""
         await asyncio.sleep(0.03)
@@ -202,7 +246,9 @@ async def main() -> None:
             "confidence": 0.6,
         }
 
-    @decorator_router.tool
+    register_tool_function(quick_diagnosis)
+
+    @tool(name="check_drug_interactions", namespace="example")
     async def check_drug_interactions(medications: str) -> dict[str, Any]:
         """Check for drug interactions."""
         await asyncio.sleep(0.04)
@@ -217,11 +263,18 @@ async def main() -> None:
             "severity": "low",
         }
 
-    print(f"🔧 Registered tools via decorator: {decorator_router.get_available_tools()}")
+    register_tool_function(check_drug_interactions)
+
+    # Create router (uses global registry)
+    decorator_router = UnifiedToolRouter()
+    print(f"🔧 Available tools: {decorator_router.get_available_tools()[:5]}...")  # Show first 5
 
     # Test tool directly
-    diagnosis = await decorator_router.call_tool("quick_diagnosis", {"symptoms": "fever, headache"})
-    interactions = await decorator_router.call_tool(
+    diagnosis = await decorator_router.acall_tool(
+        "quick_diagnosis", {"symptoms": "fever, headache"}
+    )
+
+    interactions = await decorator_router.acall_tool(
         "check_drug_interactions", {"medications": "aspirin,ibuprofen"}
     )
 
@@ -233,12 +286,12 @@ async def main() -> None:
     print("🚀 Test 4: Pre-built Demo Router")
     print("-" * 40)
 
-    demo_router = FunctionBasedToolRouter()
+    demo_router = UnifiedToolRouter()
     print(f"📦 Demo router tools: {demo_router.get_available_tools()}")
 
     # Test demo tools (only basic tools are available)
     try:
-        search_result = await demo_router.call_tool("search", {"query": "AI healthcare"})
+        search_result = await demo_router.acall_tool("search", {"query": "AI healthcare"})
         print(f"   🔍 Search result: {search_result}")
     except ValueError as e:
         print(f"   ⚠️  Expected: {e}")
@@ -249,20 +302,21 @@ async def main() -> None:
     print("🔗 Test 5: Integration with ToolDescriptionManager")
     print("-" * 55)
 
-    # Create function-based router
-    integration_router = FunctionBasedToolRouter()
-
-    @integration_router.tool
+    # Register tools for integration test
+    @tool(name="medical_search", namespace="example")
     async def medical_search(query: str, database: str = "pubmed") -> dict:
         """Search medical literature for research papers."""
         await asyncio.sleep(0.1)
         return {"papers": [f"Paper about {query}"], "database": database}
 
-    @integration_router.tool
+    @tool(name="risk_calculator", namespace="example")
     async def risk_calculator(factors: str, age: int) -> dict:
         """Calculate medical risk based on patient factors."""
         await asyncio.sleep(0.05)
         return {"risk_score": 0.3, "factors": factors, "age": age}
+
+    # Create router (uses global registry)
+    integration_router = UnifiedToolRouter()
 
     # Get auto-generated ToolDefinitions for existing architecture
     tool_definitions = integration_router.get_tool_definitions()
@@ -288,7 +342,11 @@ async def main() -> None:
 
     integration_llm = MockLLM(
         responses=[
-            "I'll search for medical information.\n\nINVOKE_TOOL: medical_search(query='diabetes treatment', database='pubmed')\n\nNow I'll calculate risk.\n\nINVOKE_TOOL: risk_calculator(factors='diabetes', age=65)\n\nBased on the search and risk calculation, here's my analysis."
+            "I'll search for medical information.\n\n"
+            "INVOKE_TOOL: medical_search(query='diabetes treatment', database='pubmed')\n\n"
+            "Now I'll calculate risk.\n\n"
+            "INVOKE_TOOL: risk_calculator(factors='diabetes', age=65)\n\n"
+            "Based on the search and risk calculation, here's my analysis."
         ]
     )
 
@@ -307,10 +365,8 @@ async def main() -> None:
         print(f"   📝 Result: {str(agent_result)[:200]}...")
     print()
 
-    # Show tool execution history
-    print("🔬 Integration tool execution:")
-    for call in integration_router.get_call_history():
-        print(f"   🧪 {call['tool_name']}: {str(call['result'])[:60]}...")
+    # Note: Tool execution history is not available in UnifiedToolRouter
+    print("🔬 Integration tool execution completed successfully")
     print()
 
     # Performance Summary

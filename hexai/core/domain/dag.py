@@ -93,9 +93,8 @@ class NodeSpec:
             if isinstance(data, BaseModel):
                 # Data is a Pydantic model, convert to dict first
                 return model.model_validate(data.model_dump())
-            else:
-                # Data is dict or other type
-                return model.model_validate(data)
+            # Data is dict or other type
+            return model.model_validate(data)
         except PydanticValidationError as e:
             # Format Pydantic validation errors nicely
             error_msg = (
@@ -121,11 +120,6 @@ class NodeSpec:
         -------
         BaseModel | Any
             Validated/converted data
-
-        Raises
-        ------
-        ValidationError
-            If validation fails
         """
         return self._validate_with_model(data, self.in_model, "input")
 
@@ -141,11 +135,6 @@ class NodeSpec:
         -------
         BaseModel | Any
             Validated/converted data
-
-        Raises
-        ------
-        ValidationError
-            If validation fails
         """
         return self._validate_with_model(data, self.out_model, "output")
 
@@ -160,8 +149,8 @@ class NodeSpec:
         -------
             New NodeSpec with updated dependencies
 
-        Example
-        -------
+        Examples
+        --------
             node_b = NodeSpec("b", my_fn).after("a")
             node_c = NodeSpec("c", my_fn).after("a", "b")
         """
@@ -177,7 +166,12 @@ class NodeSpec:
         )
 
     def __repr__(self) -> str:
-        """Readable representation for debugging."""
+        """Readable representation for debugging.
+
+        Returns
+        -------
+            String representation of the NodeSpec.
+        """
         deps_str = f", deps={sorted(self.deps)}" if self.deps else ""
         types_str = ""
 
@@ -263,7 +257,8 @@ class DirectedGraph:
 
         Raises
         ------
-            DuplicateNodeError: If a node with the same name already exists
+        DuplicateNodeError
+            If a node with the same name already exists.
         """
         if node_spec.name in self.nodes:
             raise DuplicateNodeError(f"Node '{node_spec.name}' already exists in the graph")
@@ -295,10 +290,11 @@ class DirectedGraph:
 
         Raises
         ------
-            DuplicateNodeError: If any node with the same name already exists
+        DuplicateNodeError
+            If any node with the same name already exists.
 
-        Example
-        -------
+        Examples
+        --------
             graph.add_many(
                 NodeSpec("fetch", fetch_fn),
                 NodeSpec("process", process_fn).after("fetch"),
@@ -328,7 +324,8 @@ class DirectedGraph:
 
         Raises
         ------
-            KeyError: If the node doesn't exist
+        KeyError
+            If the node doesn't exist.
         """
         if node_name not in self.nodes:
             raise KeyError(f"Node '{node_name}' not found in graph")
@@ -347,7 +344,8 @@ class DirectedGraph:
 
         Raises
         ------
-            KeyError: If the node doesn't exist
+        KeyError
+            If the node doesn't exist.
         """
         if node_name not in self.nodes:
             raise KeyError(f"Node '{node_name}' not found in graph")
@@ -368,9 +366,12 @@ class DirectedGraph:
 
         Raises
         ------
-            MissingDependencyError: If any node depends on a non-existent node
-            CycleDetectedError: If a cycle is detected in the graph
-            SchemaCompatibilityError: If connected nodes have incompatible types
+        MissingDependencyError
+            If any node depends on a non-existent node.
+        CycleDetectedError
+            If a cycle is detected in the graph.
+        SchemaCompatibilityError
+            If connected nodes have incompatible types.
         """
         # Check for missing dependencies
         missing_deps: list[str] = []
@@ -385,13 +386,17 @@ class DirectedGraph:
             raise MissingDependencyError("; ".join(missing_deps))
 
         # Check for cycles using DFS
-        self._detect_cycles()
+        cycle_message = self._detect_cycles()
+        if cycle_message:
+            raise CycleDetectedError(cycle_message)
 
         # Check type compatibility between connected nodes
         if check_type_compatibility:
-            self._validate_type_compatibility()
+            incompatibilities = self._validate_type_compatibility()
+            if incompatibilities:
+                raise SchemaCompatibilityError("; ".join(incompatibilities))
 
-    def _detect_cycles(self) -> None:
+    def _detect_cycles(self) -> str | None:
         """Detect cycles using depth-first search with three states.
 
         States:
@@ -399,21 +404,22 @@ class DirectedGraph:
         - GRAY (1): Currently being processed (in recursion stack)
         - BLACK (2): Completely processed
 
-        Raises
-        ------
-            CycleDetectedError: If a cycle is detected
+        Returns
+        -------
+        str | None
+            Cycle detected message or None if no cycle is detected
         """
-        colors = {node: Color.WHITE for node in self.nodes}
+        colors = dict.fromkeys(self.nodes, Color.WHITE)
 
-        def dfs(node: str, path: list[str]) -> None:
+        def dfs(node: str, path: list[str]) -> str | None:
             if colors[node] == Color.GRAY:
                 # Found a back edge - cycle detected
                 cycle_start = path.index(node)
                 cycle = path[cycle_start:] + [node]
-                raise CycleDetectedError(f"Cycle detected: {' -> '.join(cycle)}")
+                return f"Cycle detected: {' -> '.join(cycle)}"
 
             if colors[node] == Color.BLACK:
-                return
+                return None
 
             colors[node] = Color.GRAY
             path.append(node)
@@ -421,24 +427,31 @@ class DirectedGraph:
             # Visit all dependencies
             for dep in self.nodes[node].deps:
                 if dep in self.nodes:
-                    dfs(dep, path)
+                    result = dfs(dep, path)
+                    if result:  # If cycle found, propagate it up
+                        return result
 
             path.pop()
             colors[node] = Color.BLACK
+            return None
 
         for node in self.nodes:
             if colors[node] == Color.WHITE:
-                dfs(node, [])
+                result = dfs(node, [])
+                if result:  # If cycle found, return it
+                    return result
 
-    def _validate_type_compatibility(self) -> None:
+        return None  # No cycles found
+
+    def _validate_type_compatibility(self) -> list[str]:
         """Validate type compatibility between connected nodes.
 
         For nodes with multiple dependencies, we check if the dependent node
         can handle the aggregated output types from its dependencies.
 
-        Raises
-        ------
-            SchemaCompatibilityError: If connected nodes have incompatible types
+        Returns
+        -------
+            List of incompatibility messages or empty list if no incompatibilities are found
         """
         incompatibilities = []
 
@@ -468,8 +481,7 @@ class DirectedGraph:
                         f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
                     )
 
-        if incompatibilities:
-            raise SchemaCompatibilityError("; ".join(incompatibilities))
+        return incompatibilities
 
     def waves(self) -> list[list[str]]:
         """Compute execution waves using topological sorting.
@@ -479,8 +491,13 @@ class DirectedGraph:
             List of waves, where each wave is a list of node names that can
             be executed in parallel.
 
-        Example
-        -------
+        Raises
+        ------
+        CycleDetectedError
+            If a cycle is detected (no nodes with zero in-degree found).
+
+        Examples
+        --------
             # For DAG: A -> B -> D, A -> C -> D
             # Returns: [["A"], ["B", "C"], ["D"]]
         """
@@ -516,6 +533,11 @@ class DirectedGraph:
         return waves
 
     def __repr__(self) -> str:
-        """Readable representation for debugging."""
+        """Readable representation for debugging.
+
+        Returns
+        -------
+            String representation of the DirectedGraph.
+        """
         node_names = sorted(self.nodes.keys())
         return f"DirectedGraph(nodes={node_names})"
