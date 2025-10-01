@@ -2,6 +2,9 @@
 
 This builder provides a clean, type-safe interface for configuring orchestrator
 dependencies while maintaining backward compatibility with the flat dictionary format.
+
+Enhanced with per-node and per-type port configuration support for fine-grained
+control over port assignment across different node types and specific nodes.
 """
 
 from typing import TYPE_CHECKING, Any, Self
@@ -16,6 +19,8 @@ if TYPE_CHECKING:
         PolicyManagerPort,
         ToolRouter,
     )
+
+from hexai.core.orchestration.models import PortConfig, PortsConfiguration
 
 
 class PortsBuilder:
@@ -52,6 +57,8 @@ class PortsBuilder:
     def __init__(self) -> None:
         """Initialize an empty ports builder."""
         self._ports: dict[str, Any] = {}
+        self._type_ports: dict[str, dict[str, Any]] = {}
+        self._node_ports: dict[str, dict[str, Any]] = {}
 
     def _add_port(self, key: str, port: Any) -> Self:
         """Add a port to the internal registry.
@@ -325,3 +332,150 @@ class PortsBuilder:
         """
         configured = ", ".join(self._ports.keys()) if self._ports else "none"
         return f"PortsBuilder(configured: {configured})"
+
+    # Enhanced Configuration Methods
+    # ------------------------------
+
+    def for_type(self, node_type: str, **ports: Any) -> Self:
+        """Configure ports for all nodes of a specific type.
+
+        This method allows setting default ports for all nodes of a given type
+        (e.g., "agent", "llm", "function"). These type-level defaults override
+        global defaults but are overridden by per-node configurations.
+
+        Args
+        ----
+            node_type: The node type to configure (e.g., "agent", "llm", "function")
+            **ports: Port implementations as keyword arguments
+
+        Returns
+        -------
+            Self for method chaining
+
+        Examples
+        --------
+        >>> from hexai.adapters.openai import OpenAIAdapter
+        >>> from hexai.adapters.mock import MockLLM
+        >>>
+        >>> builder = (
+        ...     PortsBuilder()
+        ...     .with_llm(MockLLM())  # Global default
+        ...     .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent nodes
+        ...     .build_configuration()
+        ... )
+        >>>
+        >>> # All agent nodes will use OpenAI, other nodes use MockLLM
+        >>> config = builder.build_configuration()
+        >>> agent_ports = config.resolve_ports("my_agent", "agent")
+        >>> assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
+        """
+        if node_type not in self._type_ports:
+            self._type_ports[node_type] = {}
+        self._type_ports[node_type].update(ports)
+        return self
+
+    def for_node(self, node_name: str, **ports: Any) -> Self:
+        """Configure ports for a specific node by name.
+
+        This method allows overriding ports for individual nodes, providing
+        the highest level of configuration precedence. Perfect for nodes that
+        require special adapters or configurations.
+
+        Args
+        ----
+            node_name: The node name to configure
+            **ports: Port implementations as keyword arguments
+
+        Returns
+        -------
+            Self for method chaining
+
+        Examples
+        --------
+        >>> from hexai.adapters.anthropic import AnthropicAdapter
+        >>> from hexai.adapters.openai import OpenAIAdapter
+        >>>
+        >>> builder = (
+        ...     PortsBuilder()
+        ...     .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent default
+        ...     .for_node("researcher", llm=AnthropicAdapter(model="claude-3"))  # Override
+        ...     .build_configuration()
+        ... )
+        >>>
+        >>> # Researcher node gets Claude, other agents get GPT-4
+        >>> config = builder.build_configuration()
+        >>> researcher_ports = config.resolve_ports("researcher", "agent")
+        >>> assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
+        """
+        if node_name not in self._node_ports:
+            self._node_ports[node_name] = {}
+        self._node_ports[node_name].update(ports)
+        return self
+
+    def build_configuration(self) -> PortsConfiguration:
+        """Build a PortsConfiguration with full inheritance support.
+
+        Creates a PortsConfiguration object that encapsulates global, per-type,
+        and per-node port configurations. This provides more flexibility than
+        the flat dictionary returned by build().
+
+        Returns
+        -------
+        PortsConfiguration
+            Configuration with port inheritance and resolution support
+
+        Examples
+        --------
+        >>> from hexai.adapters.mock import MockLLM
+        >>> from hexai.adapters.openai import OpenAIAdapter
+        >>> from hexai.adapters.anthropic import AnthropicAdapter
+        >>>
+        >>> config = (
+        ...     PortsBuilder()
+        ...     .with_llm(MockLLM())  # Global default
+        ...     .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent default
+        ...     .for_node("researcher", llm=AnthropicAdapter(model="claude-3"))  # Override
+        ...     .build_configuration()
+        ... )
+        >>>
+        >>> # Resolve ports for different nodes
+        >>> researcher = config.to_flat_dict("researcher", "agent")  # AnthropicAdapter
+        >>> analyzer = config.to_flat_dict("analyzer", "agent")  # OpenAIAdapter
+        >>> transformer = config.to_flat_dict("transformer", "function")  # MockLLM
+
+        Notes
+        -----
+        Resolution order: per-node > per-type > global defaults
+
+        See Also
+        --------
+        build : For backward-compatible flat dictionary output
+        """
+        # Wrap all ports in PortConfig
+        global_ports = (
+            {k: PortConfig(port=v) for k, v in self._ports.items()}  # noqa: E501
+            if self._ports
+            else None
+        )
+
+        # Wrap type ports
+        type_ports = None
+        if self._type_ports:
+            type_ports = {
+                node_type: {k: PortConfig(port=v) for k, v in ports.items()}
+                for node_type, ports in self._type_ports.items()
+            }
+
+        # Wrap node ports
+        node_ports = None
+        if self._node_ports:
+            node_ports = {
+                node_name: {k: PortConfig(port=v) for k, v in ports.items()}
+                for node_name, ports in self._node_ports.items()
+            }
+
+        return PortsConfiguration(
+            global_ports=global_ports,
+            type_ports=type_ports,
+            node_ports=node_ports,
+        )

@@ -2,8 +2,11 @@
 
 This module contains models for representing orchestrator execution
 state, execution context, and human-in-the-loop approval requests.
+It also includes port configuration models for managing per-node and
+per-type port customization.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -178,3 +181,226 @@ class NodeExecutionContext:
             attempt=attempt,
             metadata=self.metadata.copy(),
         )
+
+
+@dataclass(frozen=True)
+class PortConfig:
+    """Configuration for a single port instance.
+
+    A PortConfig wraps a port implementation with optional metadata,
+    allowing for fine-grained control over port behavior per node.
+
+    Attributes
+    ----------
+    port : Any
+        The port implementation instance (e.g., LLM, Database, Memory adapter)
+    metadata : Mapping[str, Any] | None
+        Optional metadata for the port (e.g., timeouts, retry settings, rate limits)
+
+    Examples
+    --------
+    >>> from hexai.adapters.mock import MockLLM
+    >>> config = PortConfig(
+    ...     port=MockLLM(),
+    ...     metadata={"timeout": 30, "max_retries": 3}
+    ... )
+    >>> config.port
+    <MockLLM object>
+    >>> config.get_metadata()
+    {'timeout': 30, 'max_retries': 3}
+    """
+
+    port: Any
+    metadata: Mapping[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """Ensure metadata is immutable if provided."""
+        if self.metadata is not None:
+            # Convert to tuple of items for immutability
+            object.__setattr__(self, "metadata", tuple(self.metadata.items()))
+
+    def get_metadata(self) -> dict[str, Any]:
+        """Get metadata as a dictionary.
+
+        Returns
+        -------
+        dict[str, Any]
+            Metadata dictionary (empty if no metadata)
+        """
+        if self.metadata is None:
+            return {}
+        return dict(self.metadata)
+
+
+@dataclass(frozen=True)
+class PortsConfiguration:
+    """Complete port configuration with inheritance and overrides.
+
+    This model supports three levels of port configuration with clear inheritance:
+    1. **Global defaults** - Apply to all nodes unless overridden
+    2. **Per-type defaults** - Apply to all nodes of a specific type (e.g., "agent", "llm")
+    3. **Per-node overrides** - Apply to specific nodes by name
+
+    **Resolution order**: per-node > per-type > global defaults
+
+    Attributes
+    ----------
+    global_ports : Mapping[str, PortConfig] | None
+        Default ports for all nodes
+    type_ports : Mapping[str, Mapping[str, PortConfig]] | None
+        Ports per node type, keyed by type name (e.g., {"agent": {"llm": config}})
+    node_ports : Mapping[str, Mapping[str, PortConfig]] | None
+        Ports per specific node name (e.g., {"researcher": {"llm": config}})
+
+    Examples
+    --------
+    >>> from hexai.adapters.mock import MockLLM
+    >>> from hexai.adapters.openai import OpenAIAdapter
+    >>> from hexai.adapters.anthropic import AnthropicAdapter
+    >>>
+    >>> # Global default: All nodes use MockLLM
+    >>> config = PortsConfiguration(
+    ...     global_ports={"llm": PortConfig(MockLLM())},
+    ...     type_ports={
+    ...         # Override for all "agent" type nodes
+    ...         "agent": {"llm": PortConfig(OpenAIAdapter(model="gpt-4"))}
+    ...     },
+    ...     node_ports={
+    ...         # Override for specific "researcher" node
+    ...         "researcher": {"llm": PortConfig(AnthropicAdapter(model="claude-3"))}
+    ...     }
+    ... )
+    >>>
+    >>> # Resolution for different nodes:
+    >>> # - "researcher" node: AnthropicAdapter (per-node override)
+    >>> researcher_ports = config.resolve_ports("researcher", "agent")
+    >>> assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
+    >>>
+    >>> # - Other "agent" nodes: OpenAIAdapter (per-type default)
+    >>> agent_ports = config.resolve_ports("analyzer", "agent")
+    >>> assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
+    >>>
+    >>> # - Other nodes: MockLLM (global default)
+    >>> function_ports = config.resolve_ports("transformer", "function")
+    >>> assert isinstance(function_ports["llm"].port, MockLLM)
+
+    Notes
+    -----
+    This design enables:
+    - **Cost optimization**: Use cheaper models for simple nodes, expensive ones for complex tasks
+    - **Performance tuning**: Different timeout/retry settings per node type
+    - **Testing flexibility**: Mock some nodes, use real adapters for others
+    - **Multi-tenant support**: Different credentials per node/type
+    """
+
+    global_ports: Mapping[str, PortConfig] | None = None
+    type_ports: Mapping[str, Mapping[str, PortConfig]] | None = None
+    node_ports: Mapping[str, Mapping[str, PortConfig]] | None = None
+
+    def __post_init__(self) -> None:
+        """Ensure all mappings are immutable."""
+        if self.global_ports is not None:
+            object.__setattr__(self, "global_ports", tuple(self.global_ports.items()))
+        if self.type_ports is not None:
+            # Convert nested dict to tuple of (key, tuple of items)
+            type_items = tuple(
+                (node_type, tuple(ports.items())) for node_type, ports in self.type_ports.items()
+            )
+            object.__setattr__(self, "type_ports", type_items)
+        if self.node_ports is not None:
+            # Convert nested dict to tuple of (key, tuple of items)
+            node_items = tuple(
+                (node_name, tuple(ports.items())) for node_name, ports in self.node_ports.items()
+            )
+            object.__setattr__(self, "node_ports", node_items)
+
+    def resolve_ports(self, node_name: str, node_type: str | None = None) -> dict[str, PortConfig]:
+        """Resolve ports for a specific node following inheritance rules.
+
+        Combines ports from all three levels (global, type, node) with proper
+        precedence: per-node > per-type > global defaults.
+
+        Parameters
+        ----------
+        node_name : str
+            Name of the node to resolve ports for
+        node_type : str | None
+            Type of the node (e.g., "llm", "agent", "function", "loop")
+
+        Returns
+        -------
+        dict[str, PortConfig]
+            Resolved ports for the node with PortConfig wrappers
+
+        Examples
+        --------
+        >>> config = PortsConfiguration(
+        ...     global_ports={"llm": PortConfig(MockLLM())},
+        ...     type_ports={"agent": {"llm": PortConfig(OpenAIAdapter())}},
+        ...     node_ports={"researcher": {"llm": PortConfig(AnthropicAdapter())}}
+        ... )
+        >>>
+        >>> # Researcher node gets Anthropic (per-node override)
+        >>> researcher_ports = config.resolve_ports("researcher", "agent")
+        >>> assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
+        >>>
+        >>> # Other agent nodes get OpenAI (per-type default)
+        >>> agent_ports = config.resolve_ports("analyzer", "agent")
+        >>> assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
+        >>>
+        >>> # Function nodes get Mock (global default)
+        >>> function_ports = config.resolve_ports("transformer", "function")
+        >>> assert isinstance(function_ports["llm"].port, MockLLM)
+        """
+        result: dict[str, PortConfig] = {}
+
+        # 1. Start with global defaults (lowest priority)
+        if self.global_ports is not None:
+            result.update(dict(self.global_ports))
+
+        # 2. Apply per-type defaults (overrides global)
+        if self.type_ports is not None and node_type is not None:
+            type_dict = dict(self.type_ports)
+            if node_type in type_dict:
+                result.update(dict(type_dict[node_type]))
+
+        # 3. Apply per-node overrides (highest priority)
+        if self.node_ports is not None:
+            node_dict = dict(self.node_ports)
+            if node_name in node_dict:
+                result.update(dict(node_dict[node_name]))
+
+        return result
+
+    def to_flat_dict(self, node_name: str, node_type: str | None = None) -> dict[str, Any]:
+        """Convert resolved ports to flat dictionary of port instances.
+
+        This extracts the actual port instances from PortConfig wrappers,
+        providing backward compatibility with the current orchestrator
+        interface that expects `dict[str, Any]` ports.
+
+        Parameters
+        ----------
+        node_name : str
+            Name of the node
+        node_type : str | None
+            Type of the node
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary mapping port names to port instances (unwrapped)
+
+        Examples
+        --------
+        >>> config = PortsConfiguration(
+        ...     global_ports={"llm": PortConfig(MockLLM())}
+        ... )
+        >>>
+        >>> # Get flat dictionary for orchestrator
+        >>> ports = config.to_flat_dict("my_node")
+        >>> assert "llm" in ports
+        >>> assert isinstance(ports["llm"], MockLLM)  # Unwrapped
+        """
+        resolved = self.resolve_ports(node_name, node_type)
+        return {port_name: config.port for port_name, config in resolved.items()}

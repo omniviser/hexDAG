@@ -252,3 +252,143 @@ class TestPortsBuilder:
         assert ports["llm"] is mock_llm
         assert ports["observer_manager"] is mock_observer
         assert ports["feature_flag"] is True
+
+
+class TestPortsBuilderEnhanced:
+    """Test enhanced PortsBuilder with per-node and per-type configuration."""
+
+    def test_for_type_configuration(self):
+        """Test configuring ports for a specific node type."""
+        mock_llm = Mock()
+        openai_llm = Mock()
+        openai_llm.name = "openai"
+
+        config = (
+            PortsBuilder()
+            .with_llm(mock_llm)
+            .for_type("agent", llm=openai_llm)
+            .build_configuration()
+        )
+
+        # Agent nodes get OpenAI
+        agent_ports = config.resolve_ports("my_agent", "agent")
+        assert agent_ports["llm"].port is openai_llm
+
+        # Other nodes get MockLLM
+        function_ports = config.resolve_ports("my_function", "function")
+        assert function_ports["llm"].port is mock_llm
+
+    def test_for_node_configuration(self):
+        """Test configuring ports for a specific node."""
+        mock_llm = Mock()
+        openai_llm = Mock()
+        anthropic_llm = Mock()
+
+        config = (
+            PortsBuilder()
+            .with_llm(mock_llm)
+            .for_type("agent", llm=openai_llm)
+            .for_node("researcher", llm=anthropic_llm)
+            .build_configuration()
+        )
+
+        # Researcher gets Anthropic
+        researcher_ports = config.resolve_ports("researcher", "agent")
+        assert researcher_ports["llm"].port is anthropic_llm
+
+        # Other agents get OpenAI
+        analyzer_ports = config.resolve_ports("analyzer", "agent")
+        assert analyzer_ports["llm"].port is openai_llm
+
+    def test_multiple_type_configurations(self):
+        """Test configuring multiple node types."""
+        mock_llm = Mock()
+        openai_llm = Mock()
+        anthropic_llm = Mock()
+
+        config = (
+            PortsBuilder()
+            .with_llm(mock_llm)
+            .for_type("agent", llm=openai_llm)
+            .for_type("llm", llm=anthropic_llm)
+            .build_configuration()
+        )
+
+        agent_ports = config.resolve_ports("my_agent", "agent")
+        assert agent_ports["llm"].port is openai_llm
+
+        llm_ports = config.resolve_ports("my_llm_node", "llm")
+        assert llm_ports["llm"].port is anthropic_llm
+
+    def test_multiple_ports_per_type(self):
+        """Test configuring multiple ports for a type."""
+        mock_llm = Mock()
+        mock_db = Mock()
+        openai_llm = Mock()
+        postgres_db = Mock()
+
+        config = (
+            PortsBuilder()
+            .with_llm(mock_llm)
+            .with_database(mock_db)
+            .for_type("agent", llm=openai_llm, database=postgres_db)
+            .build_configuration()
+        )
+
+        agent_ports = config.resolve_ports("my_agent", "agent")
+        assert agent_ports["llm"].port is openai_llm
+        assert agent_ports["database"].port is postgres_db
+
+    def test_backward_compatibility_with_build(self):
+        """Test that build() still works for backward compatibility."""
+        mock_llm = Mock()
+        mock_db = Mock()
+
+        ports_dict = PortsBuilder().with_llm(mock_llm).with_database(mock_db).build()
+
+        assert "llm" in ports_dict
+        assert "database" in ports_dict
+        assert ports_dict["llm"] is mock_llm
+        assert ports_dict["database"] is mock_db
+
+    def test_chaining_all_methods(self):
+        """Test method chaining with all configuration methods."""
+        mock_llm = Mock()
+        openai_llm = Mock()
+        anthropic_llm = Mock()
+        mock_db = Mock()
+
+        config = (
+            PortsBuilder()
+            .with_llm(mock_llm)
+            .with_database(mock_db)
+            .for_type("agent", llm=openai_llm)
+            .for_type("llm", llm=anthropic_llm)
+            .for_node("researcher", llm=Mock())
+            .build_configuration()
+        )
+
+        # Verify all levels work
+        researcher_ports = config.resolve_ports("researcher", "agent")
+        assert researcher_ports["llm"].port is not openai_llm
+
+        agent_ports = config.resolve_ports("analyzer", "agent")
+        assert agent_ports["llm"].port is openai_llm
+
+        function_ports = config.resolve_ports("transformer", "function")
+        assert function_ports["llm"].port is mock_llm
+
+    def test_with_defaults_and_overrides(self):
+        """Test using with_defaults() alongside type/node overrides."""
+        openai_llm = Mock()
+
+        builder = PortsBuilder().with_defaults().for_type("agent", llm=openai_llm)
+
+        # Should have default observer_manager and policy_manager from with_defaults()
+        ports_dict = builder.build()
+        assert "observer_manager" in ports_dict or "policy_manager" in ports_dict
+
+        # Agent nodes should get OpenAI override
+        config = builder.build_configuration()
+        agent_ports = config.resolve_ports("my_agent", "agent")
+        assert agent_ports["llm"].port is openai_llm
