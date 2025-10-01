@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -14,21 +13,16 @@ class Event:
 
     timestamp: datetime = field(default_factory=datetime.now, init=False)
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Get a formatted log message for this event.
 
         Override in subclasses to provide custom formatting.
-
-        Args
-        ----
-            log_level: The logging level (can be used for different verbosity)
 
         Returns
         -------
         str
             A formatted string suitable for logging
         """
-        _ = log_level  # Mark as intentionally unused in base class
         return f"{self.__class__.__name__} at {self.timestamp.isoformat()}"
 
 
@@ -41,7 +35,7 @@ class NodeStarted(Event):
     wave_index: int
     dependencies: list[str] = field(default_factory=list)
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for node start event.
 
         Returns
@@ -49,7 +43,6 @@ class NodeStarted(Event):
         str
             Formatted log message for node start
         """
-        _ = log_level  # Unused but kept for interface consistency
         deps = f" (deps: {', '.join(self.dependencies)})" if self.dependencies else ""
         return f"🚀 Node '{self.name}' started in wave {self.wave_index}{deps}"
 
@@ -63,7 +56,7 @@ class NodeCompleted(Event):
     result: Any
     duration_ms: float
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for node completion event.
 
         Returns
@@ -71,7 +64,6 @@ class NodeCompleted(Event):
         str
             Formatted log message for node completion
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"✅ Node '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -83,7 +75,7 @@ class NodeFailed(Event):
     wave_index: int
     error: Exception
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for node failure event.
 
         Returns
@@ -91,8 +83,30 @@ class NodeFailed(Event):
         str
             Formatted log message for node failure
         """
-        _ = log_level  # This event always uses ERROR level
         return f"❌ Node '{self.name}' failed: {self.error}"
+
+
+@dataclass
+class NodeCancelled(Event):
+    """A node execution was cancelled.
+
+    Attributes
+    ----------
+    name : str
+        Node name
+    wave_index : int
+        Wave index where node was executing
+    reason : str | None
+        Reason for cancellation (e.g., "timeout", "user_cancel")
+    """
+
+    name: str
+    wave_index: int
+    reason: str | None = None
+
+    def log_message(self) -> str:
+        """Format log message for node cancellation event."""
+        return f"🚫 Node '{self.name}' cancelled: {self.reason or 'unknown'}"
 
 
 # Wave events
@@ -103,7 +117,7 @@ class WaveStarted(Event):
     wave_index: int
     nodes: list[str]
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for wave start event.
 
         Returns
@@ -111,7 +125,6 @@ class WaveStarted(Event):
         str
             Formatted log message for wave start
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"🌊 Wave {self.wave_index} started with {len(self.nodes)} nodes"
 
 
@@ -122,7 +135,7 @@ class WaveCompleted(Event):
     wave_index: int
     duration_ms: float
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for wave completion event.
 
         Returns
@@ -130,7 +143,6 @@ class WaveCompleted(Event):
         str
             Formatted log message for wave completion
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"✅ Wave {self.wave_index} completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -143,7 +155,7 @@ class PipelineStarted(Event):
     total_waves: int
     total_nodes: int
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for pipeline start event.
 
         Returns
@@ -151,7 +163,6 @@ class PipelineStarted(Event):
         str
             Formatted log message for pipeline start
         """
-        _ = log_level  # Unused but kept for interface consistency
         return (
             f"🎬 Pipeline '{self.name}' started "
             f"({self.total_nodes} nodes, {self.total_waves} waves)"
@@ -166,7 +177,7 @@ class PipelineCompleted(Event):
     duration_ms: float
     node_results: dict[str, Any] = field(default_factory=dict)
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for pipeline completion event.
 
         Returns
@@ -174,8 +185,37 @@ class PipelineCompleted(Event):
         str
             Formatted log message for pipeline completion
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
+
+
+@dataclass
+class PipelineCancelled(Event):
+    """Pipeline execution was cancelled.
+
+    Attributes
+    ----------
+    name : str
+        Pipeline name
+    duration_ms : float
+        Duration until cancellation in milliseconds
+    reason : str | None
+        Reason for cancellation (e.g., "timeout", "user_cancel")
+    partial_results : dict[str, Any]
+        Results from nodes that completed before cancellation
+    """
+
+    name: str
+    duration_ms: float
+    reason: str | None = None
+    partial_results: dict[str, Any] = field(default_factory=dict)
+
+    def log_message(self) -> str:
+        """Format log message for pipeline cancellation event."""
+        completed_nodes = len(self.partial_results)
+        return (
+            f"🛑 Pipeline '{self.name}' cancelled after {self.duration_ms / 1000:.2f}s "
+            f"({completed_nodes} nodes completed): {self.reason or 'unknown'}"
+        )
 
 
 # LLM events
@@ -186,7 +226,7 @@ class LLMPromptSent(Event):
     node_name: str
     messages: list[dict[str, str]]
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for LLM prompt event.
 
         Returns
@@ -194,7 +234,6 @@ class LLMPromptSent(Event):
         str
             Formatted log message for LLM prompt
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"💭 LLM prompt sent from '{self.node_name}' ({len(self.messages)} messages)"
 
 
@@ -206,7 +245,7 @@ class LLMResponseReceived(Event):
     response: str
     duration_ms: float
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for LLM response event.
 
         Returns
@@ -214,7 +253,6 @@ class LLMResponseReceived(Event):
         str
             Formatted log message for LLM response
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"🤖 LLM response for '{self.node_name}' in {self.duration_ms / 1000:.2f}s"
 
 
@@ -227,7 +265,7 @@ class ToolCalled(Event):
     tool_name: str
     params: dict[str, Any]
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for tool call event.
 
         Returns
@@ -235,7 +273,6 @@ class ToolCalled(Event):
         str
             Formatted log message for tool call
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"🔧 Tool '{self.tool_name}' called from '{self.node_name}'"
 
 
@@ -248,7 +285,7 @@ class ToolCompleted(Event):
     result: Any
     duration_ms: float
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for tool completion event.
 
         Returns
@@ -256,7 +293,6 @@ class ToolCompleted(Event):
         str
             Formatted log message for tool completion
         """
-        _ = log_level  # Unused but kept for interface consistency
         return f"✅ Tool '{self.tool_name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
@@ -270,9 +306,8 @@ class PolicyEvaluated(Event):
     duration_ms: float
     context_node: str | None = None
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for policy evaluation."""
-        _ = log_level
         return (
             f"📋 Policy '{self.policy_name}' evaluated -> {self.signal} ({self.duration_ms:.1f}ms)"
         )
@@ -286,9 +321,8 @@ class PolicyTriggered(Event):
     trigger_reason: str
     context_node: str | None = None
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for policy trigger."""
-        _ = log_level
         node_info = f" for node '{self.context_node}'" if self.context_node else ""
         return f"🎯 Policy '{self.policy_name}' triggered{node_info}: {self.trigger_reason}"
 
@@ -301,9 +335,8 @@ class PolicySkipped(Event):
     node_name: str
     reason: str | None = None
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for policy skip."""
-        _ = log_level
         reason_info = f": {self.reason}" if self.reason else ""
         return f"⏭️ Policy '{self.policy_name}' skipped node '{self.node_name}'{reason_info}"
 
@@ -317,9 +350,8 @@ class PolicyFallback(Event):
     fallback_value: Any
     reason: str | None = None
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for policy fallback."""
-        _ = log_level
         reason_info = f": {self.reason}" if self.reason else ""
         return (
             f"🔄 Policy '{self.policy_name}' provided fallback for '{self.node_name}'{reason_info}"
@@ -336,9 +368,8 @@ class PolicyRetry(Event):
     delay_ms: float | None = None
     max_attempts: int | None = None
 
-    def log_message(self, log_level: int = logging.INFO) -> str:
+    def log_message(self) -> str:
         """Format log message for policy retry."""
-        _ = log_level
         attempt_info = f" (attempt {self.attempt}"
         if self.max_attempts:
             attempt_info += f"/{self.max_attempts}"

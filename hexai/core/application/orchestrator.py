@@ -20,9 +20,11 @@ from hexai.core.domain.dag import DirectedGraph, NodeSpec, ValidationError
 
 from .context import ExecutionContext
 from .events import (
+    NodeCancelled,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
+    PipelineCancelled,
     PipelineCompleted,
     PipelineStarted,
     WaveCompleted,
@@ -171,6 +173,10 @@ class Orchestrator:
         for additional_ports parameter. When using PortsBuilder, it will be
         automatically converted to a dictionary before merging with base ports.
 
+        Timeout behavior is controlled by PolicyManager. Policies can provide:
+        - `timeout` in response.data dict for pipeline-level timeout
+        - Checked at PipelineStarted event evaluation
+
         Args
         ----
             graph: The DirectedGraph to execute
@@ -244,57 +250,130 @@ class Orchestrator:
         )
         await self._notify_observer(observer_manager, event)
 
-        # Evaluate policy for pipeline start
+        # Evaluate policy for pipeline start - policy can provide timeout
         policy_response = await self._evaluate_policy(policy_manager, event, context)
         self._check_policy_signal(policy_response, "Pipeline start")
 
-        for wave_idx, wave in enumerate(waves, 1):
-            wave_start_time = time.time()
+        # Extract timeout from policy response (if provided)
+        timeout = None
+        if policy_response.data and isinstance(policy_response.data, dict):
+            timeout = policy_response.data.get("timeout")
 
-            # Fire wave started event and check control
-            wave_event = WaveStarted(
-                wave_index=wave_idx,
-                nodes=wave,
-            )
-            await self._notify_observer(observer_manager, wave_event)
-
-            # Evaluate policy for wave
-            wave_response = await self._evaluate_policy(
-                policy_manager, wave_event, context, wave_index=wave_idx
-            )
-            self._check_policy_signal(wave_response, f"Wave {wave_idx}")
-
-            wave_results = await self._execute_wave(
-                wave,
-                graph,
-                node_results,
-                initial_input,
-                all_ports,
-                context=context,
-                observer_manager=observer_manager,
-                policy_manager=policy_manager,
-                wave_index=wave_idx,
-                validate=validate,
-                **kwargs,
-            )
-            node_results.update(wave_results)
-
-            # Fire wave completed event (observation only)
-            wave_completed = WaveCompleted(
-                wave_index=wave_idx,
-                duration_ms=(time.time() - wave_start_time) * 1000,
-            )
-            await self._notify_observer(observer_manager, wave_completed)
-
-        # Fire pipeline completed event (observation only)
-        pipeline_completed = PipelineCompleted(
-            name=pipeline_name,
-            duration_ms=(time.time() - pipeline_start_time) * 1000,
+        # Execute all waves with optional timeout
+        cancelled = await self._execute_all_waves(
+            waves=waves,
+            graph=graph,
             node_results=node_results,
+            initial_input=initial_input,
+            all_ports=all_ports,
+            context=context,
+            observer_manager=observer_manager,
+            policy_manager=policy_manager,
+            timeout=timeout,
+            validate=validate,
+            **kwargs,
         )
-        await self._notify_observer(observer_manager, pipeline_completed)
+
+        # Fire appropriate completion/cancellation event
+        duration_ms = (time.time() - pipeline_start_time) * 1000
+
+        if cancelled:
+            pipeline_cancelled = PipelineCancelled(
+                name=pipeline_name,
+                duration_ms=duration_ms,
+                reason="timeout",
+                partial_results=node_results,
+            )
+            await self._notify_observer(observer_manager, pipeline_cancelled)
+        else:
+            pipeline_completed = PipelineCompleted(
+                name=pipeline_name,
+                duration_ms=duration_ms,
+                node_results=node_results,
+            )
+            await self._notify_observer(observer_manager, pipeline_completed)
 
         return node_results
+
+    async def _execute_all_waves(
+        self,
+        waves: list[list[str]],
+        graph: DirectedGraph,
+        node_results: dict[str, Any],
+        initial_input: Any,
+        all_ports: dict[str, Any],
+        context: ExecutionContext,
+        observer_manager: ObserverManagerPort | None,
+        policy_manager: PolicyManagerPort | None,
+        timeout: float | None,
+        validate: bool,
+        **kwargs: Any,
+    ) -> bool:
+        """Execute all waves with optional timeout.
+
+        Args
+        ----
+            waves: List of waves to execute
+            graph: The DirectedGraph being executed
+            node_results: Dictionary to accumulate node results
+            initial_input: Initial input data
+            all_ports: All available ports
+            context: Execution context
+            observer_manager: Optional observer manager
+            policy_manager: Optional policy manager
+            timeout: Optional timeout in seconds
+            validate: Whether to validate nodes
+            **kwargs: Additional arguments
+
+        Returns
+        -------
+        bool
+            True if execution was cancelled due to timeout, False otherwise
+        """
+        try:
+            async with asyncio.timeout(timeout):
+                for wave_idx, wave in enumerate(waves, 1):
+                    wave_start_time = time.time()
+
+                    # Fire wave started event and check control
+                    wave_event = WaveStarted(
+                        wave_index=wave_idx,
+                        nodes=wave,
+                    )
+                    await self._notify_observer(observer_manager, wave_event)
+
+                    # Evaluate policy for wave
+                    wave_response = await self._evaluate_policy(
+                        policy_manager, wave_event, context, wave_index=wave_idx
+                    )
+                    self._check_policy_signal(wave_response, f"Wave {wave_idx}")
+
+                    wave_results = await self._execute_wave(
+                        wave,
+                        graph,
+                        node_results,
+                        initial_input,
+                        all_ports,
+                        context=context,
+                        observer_manager=observer_manager,
+                        policy_manager=policy_manager,
+                        wave_index=wave_idx,
+                        validate=validate,
+                        **kwargs,
+                    )
+                    node_results.update(wave_results)
+
+                    # Fire wave completed event (observation only)
+                    wave_completed = WaveCompleted(
+                        wave_index=wave_idx,
+                        duration_ms=(time.time() - wave_start_time) * 1000,
+                    )
+                    await self._notify_observer(observer_manager, wave_completed)
+
+            return False  # Completed successfully
+
+        except TimeoutError:
+            return True  # Cancelled due to timeout
 
     async def _execute_wave(
         self,
@@ -387,6 +466,8 @@ class Orchestrator:
             If the node is blocked
         ValidationError
             If the node input is invalid
+        TimeoutError
+            If node execution exceeds timeout
         """
         node_start_time = time.time()
         # Create node context early so it's available in exception handler
@@ -433,7 +514,7 @@ class Orchestrator:
                     f"Node '{node_name}' blocked: {start_response.signal.value}"
                 )
 
-            # Execute node function
+            # Execute node function (timeout enforced by parent asyncio.timeout context)
             raw_output = (
                 await node_spec.fn(validated_input, **ports, **kwargs)
                 if asyncio.iscoroutinefunction(node_spec.fn)
@@ -464,6 +545,16 @@ class Orchestrator:
             await self._notify_observer(observer_manager, complete_event)
 
             return validated_output
+
+        except TimeoutError:
+            # Node timed out - emit cancelled event
+            cancel_event = NodeCancelled(
+                name=node_name,
+                wave_index=wave_index,
+                reason="timeout",
+            )
+            await self._notify_observer(observer_manager, cancel_event)
+            raise
 
         except Exception as e:
             # Fire node failed event and check control
