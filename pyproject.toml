@@ -136,7 +136,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
-addopts = "--cov=hexai --cov-report=html --cov-report=term-missing"
 
 [tool.coverage.run]
 source = ["hexai"]

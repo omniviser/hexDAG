@@ -134,6 +134,9 @@ plugins = [
             assert len(results) == 1
             assert results[0]["data"] == "test_value"
 
+            # Cleanup: close the adapter connection
+            await sqlite.close()
+
         finally:
             Path(config_path).unlink()
 

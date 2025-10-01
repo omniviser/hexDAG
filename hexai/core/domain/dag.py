@@ -50,6 +50,7 @@ class NodeSpec:
     out_model: type[BaseModel] | None = None  # Pydantic model for output validation
     deps: set[str] = field(default_factory=set)
     params: dict[str, Any] = field(default_factory=dict)
+    timeout: float | None = None  # Optional timeout in seconds for this node
 
     def __post_init__(self) -> None:
         """Ensure deps and params are immutable."""

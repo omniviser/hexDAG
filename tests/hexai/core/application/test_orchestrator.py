@@ -1069,3 +1069,75 @@ class TestOrchestrator:
         # Should work even with default implementations
         results = await orchestrator.run(graph, 1)
         assert results["node1"] == 2
+
+    @pytest.mark.asyncio
+    async def test_pipeline_timeout_via_policy(self):
+        """Test that PolicyManager can set pipeline-level timeout."""
+        from hexai.core.application.events import PipelineStarted
+        from hexai.core.application.policies.models import PolicyResponse, PolicySignal
+
+        class PipelineTimeoutPolicy:
+            def __init__(self, timeout: float):
+                self.timeout = timeout
+
+            async def evaluate(self, policy_context):
+                if isinstance(policy_context.event, PipelineStarted):
+                    return PolicyResponse(
+                        signal=PolicySignal.PROCEED, data={"timeout": self.timeout}
+                    )
+                return PolicyResponse(signal=PolicySignal.PROCEED)
+
+        async def slow_task(data: str, **ports) -> str:
+            await asyncio.sleep(2)
+            return f"processed: {data}"
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec(name="slow_node", fn=slow_task))
+
+        # Pipeline timeout of 1 second (task needs 2 seconds)
+        orch = Orchestrator(ports={"policy_manager": PipelineTimeoutPolicy(timeout=1.0)})
+
+        # Should timeout and return partial results (empty)
+        results = await orch.run(graph, "test_data")
+        assert results == {}
+
+    @pytest.mark.asyncio
+    async def test_node_timeout_via_nodespec(self):
+        """Test that NodeSpec.timeout works for individual nodes."""
+
+        async def slow_task(data: str, **ports) -> str:
+            await asyncio.sleep(2)
+            return f"processed: {data}"
+
+        graph = DirectedGraph()
+        # Node timeout of 0.5 seconds (task needs 2 seconds)
+        graph.add(NodeSpec(name="slow_node", fn=slow_task, timeout=0.5))
+
+        orch = Orchestrator()
+
+        # Should timeout at node level
+        with pytest.raises(Exception) as exc_info:
+            await orch.run(graph, "test_data")
+
+        error_msg = str(exc_info.value).lower()
+        assert "timeout" in error_msg or "slow_node" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_default_timeout(self):
+        """Test that orchestrator default_node_timeout works."""
+
+        async def slow_task(data: str, **ports) -> str:
+            await asyncio.sleep(2)
+            return f"processed: {data}"
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec(name="slow_node", fn=slow_task))
+
+        # Default timeout of 0.5 seconds (task needs 2 seconds)
+        orch = Orchestrator(default_node_timeout=0.5)
+
+        with pytest.raises(Exception) as exc_info:
+            await orch.run(graph, "test_data")
+
+        error_msg = str(exc_info.value).lower()
+        assert "timeout" in error_msg or "slow_node" in error_msg

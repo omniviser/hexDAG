@@ -54,6 +54,356 @@ class NodeExecutionError(OrchestratorError):
         super().__init__(f"Node '{node_name}' failed: {original_error}")
 
 
+class PolicyCoordinator:
+    """Handles policy evaluation and observer notifications.
+
+    Single responsibility: Coordinate policy decisions and event observation.
+    """
+
+    async def notify_observer(
+        self, observer_manager: ObserverManagerPort | None, event: Any
+    ) -> None:
+        """Notify observer if it exists.
+
+        Parameters
+        ----------
+        observer_manager : ObserverManagerPort | None
+            Observer manager to notify
+        event : Any
+            Event to send
+        """
+        if observer_manager:
+            await observer_manager.notify(event)
+
+    async def evaluate_policy(
+        self,
+        policy_manager: PolicyManagerPort | None,
+        event: Any,
+        context: ExecutionContext,
+        node_id: str | None = None,
+        wave_index: int | None = None,
+        attempt: int = 1,
+    ) -> PolicyResponse:
+        """Evaluate policy and create context.
+
+        Parameters
+        ----------
+        policy_manager : PolicyManagerPort | None
+            Policy manager to evaluate
+        event : Any
+            Event triggering policy evaluation
+        context : ExecutionContext
+            Current execution context
+        node_id : str | None
+            Optional node ID override
+        wave_index : int | None
+            Optional wave index override
+        attempt : int
+            Attempt number for retries
+
+        Returns
+        -------
+        PolicyResponse
+            Policy decision
+        """
+        policy_context = PolicyContext(
+            event=event,
+            dag_id=context.dag_id,
+            node_id=node_id or context.node_id,
+            wave_index=wave_index or context.wave_index,
+            attempt=attempt or context.attempt,
+        )
+
+        if policy_manager:
+            return await policy_manager.evaluate(policy_context)
+        return PolicyResponse()  # Default: proceed
+
+    def check_policy_signal(self, response: PolicyResponse, context: str) -> None:
+        """Check policy signal and raise error if not PROCEED.
+
+        Parameters
+        ----------
+        response : PolicyResponse
+            Policy response to check
+        context : str
+            Context description for error message
+
+        Raises
+        ------
+        OrchestratorError
+            If policy signal is not PROCEED
+        """
+        if response.signal != PolicySignal.PROCEED:
+            raise OrchestratorError(f"{context} blocked: {response.signal.value}")
+
+
+class InputMapper:
+    """Handles input data preparation and mapping for nodes.
+
+    Single responsibility: Map dependencies to node inputs.
+    """
+
+    def prepare_node_input(
+        self, node_spec: NodeSpec, node_results: dict[str, Any], initial_input: Any
+    ) -> Any:
+        """Prepare input data for node execution with simplified data mapping.
+
+        Parameters
+        ----------
+        node_spec : NodeSpec
+            Node specification
+        node_results : dict[str, Any]
+            Results from previously executed nodes
+        initial_input : Any
+            Initial input data for the pipeline
+
+        Returns
+        -------
+        Any
+            Prepared input data for the node
+        """
+        if not node_spec.deps:
+            # No dependencies - use initial input
+            return initial_input
+
+        if len(node_spec.deps) == 1:
+            # Single dependency - pass through directly
+            dep_name = next(iter(node_spec.deps))
+            return node_results.get(dep_name, initial_input)
+
+        # Multiple dependencies - preserve namespace structure
+        aggregated_data = {}
+
+        # Keep dependency results with their node names as keys
+        for dep_name in node_spec.deps:
+            if dep_name in node_results:
+                aggregated_data[dep_name] = node_results[dep_name]
+
+        return aggregated_data
+
+
+class NodeExecutor:
+    """Handles individual node execution with validation, timeout, and retry logic.
+
+    Single responsibility: Execute a single node with all its lifecycle concerns.
+    """
+
+    def __init__(
+        self,
+        strict_validation: bool = False,
+        default_node_timeout: float | None = None,
+    ) -> None:
+        """Initialize node executor.
+
+        Parameters
+        ----------
+        strict_validation : bool
+            If True, raise errors on validation failure
+        default_node_timeout : float | None
+            Default timeout in seconds for each node
+        """
+        self.strict_validation = strict_validation
+        self.default_node_timeout = default_node_timeout
+
+    async def execute_node(
+        self,
+        node_name: str,
+        node_spec: NodeSpec,
+        node_input: Any,
+        ports: dict[str, Any],
+        context: ExecutionContext,
+        policy_coordinator: PolicyCoordinator,
+        observer_manager: ObserverManagerPort | None,
+        policy_manager: PolicyManagerPort | None,
+        wave_index: int = 0,
+        validate: bool = True,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute a single node with full lifecycle management.
+
+        Parameters
+        ----------
+        node_name : str
+            Name of the node
+        node_spec : NodeSpec
+            Node specification
+        node_input : Any
+            Prepared input data
+        ports : dict[str, Any]
+            Available ports
+        context : ExecutionContext
+            Execution context
+        policy_coordinator : PolicyCoordinator
+            Policy coordinator instance
+        observer_manager : ObserverManagerPort | None
+            Observer manager
+        policy_manager : PolicyManagerPort | None
+            Policy manager
+        wave_index : int
+            Wave index
+        validate : bool
+            Whether to validate inputs/outputs
+        **kwargs : Any
+            Additional keyword arguments
+
+        Returns
+        -------
+        Any
+            Output of the node
+
+        Raises
+        ------
+        NodeExecutionError
+            If the node fails to execute
+        OrchestratorError
+            If the node is blocked
+        ValidationError
+            If the node input is invalid
+        TimeoutError
+            If node execution exceeds timeout
+        """
+        node_start_time = time.time()
+
+        try:
+            # Input validation
+            if validate:
+                try:
+                    validated_input = node_spec.validate_input(node_input)
+                except ValidationError as e:
+                    if self.strict_validation:
+                        raise
+                    logger.debug("Input validation failed for node '%s': %s", node_name, e)
+                    validated_input = node_input
+            else:
+                validated_input = node_input
+
+            # Fire node started event and check policy
+            start_event = NodeStarted(
+                name=node_name,
+                wave_index=wave_index,
+                dependencies=list(node_spec.deps),
+            )
+            await policy_coordinator.notify_observer(observer_manager, start_event)
+
+            # Evaluate policy for node start
+            start_response = await policy_coordinator.evaluate_policy(
+                policy_manager, start_event, context, node_id=node_name, wave_index=wave_index
+            )
+
+            # Handle control signals
+            if start_response.signal == PolicySignal.SKIP:
+                return start_response.data
+            if start_response.signal == PolicySignal.FAIL:
+                raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
+            if start_response.signal != PolicySignal.PROCEED:
+                raise OrchestratorError(
+                    f"Node '{node_name}' blocked: {start_response.signal.value}"
+                )
+
+            # Determine timeout: node_spec.timeout > orchestrator default
+            node_timeout = node_spec.timeout or self.default_node_timeout
+
+            try:
+                if node_timeout:
+                    async with asyncio.timeout(node_timeout):
+                        raw_output = await self._execute_function(
+                            node_spec, validated_input, ports, kwargs
+                        )
+                else:
+                    raw_output = await self._execute_function(
+                        node_spec, validated_input, ports, kwargs
+                    )
+            except TimeoutError as e:
+                raise TimeoutError(f"Node '{node_name}' exceeded timeout of {node_timeout}s") from e
+
+            # Output validation
+            if validate:
+                try:
+                    validated_output = node_spec.validate_output(raw_output)
+                except ValidationError as e:
+                    if self.strict_validation:
+                        raise
+                    logger.debug("Output validation failed for node '%s': %s", node_name, e)
+                    validated_output = raw_output
+            else:
+                validated_output = raw_output
+
+            # Fire node completed event
+            complete_event = NodeCompleted(
+                name=node_name,
+                wave_index=wave_index,
+                result=validated_output,
+                duration_ms=(time.time() - node_start_time) * 1000,
+            )
+            await policy_coordinator.notify_observer(observer_manager, complete_event)
+
+            return validated_output
+
+        except TimeoutError:
+            # Node timed out - emit cancelled event
+            cancel_event = NodeCancelled(
+                name=node_name,
+                wave_index=wave_index,
+                reason="timeout",
+            )
+            await policy_coordinator.notify_observer(observer_manager, cancel_event)
+            raise
+
+        except Exception as e:
+            # Fire node failed event and check policy
+            fail_event = NodeFailed(
+                name=node_name,
+                wave_index=wave_index,
+                error=e,
+            )
+            await policy_coordinator.notify_observer(observer_manager, fail_event)
+
+            # Evaluate policy for node failure
+            fail_response = await policy_coordinator.evaluate_policy(
+                policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
+            )
+
+            # Handle retry signal
+            if fail_response.signal == PolicySignal.RETRY:
+                # Re-raise to let orchestrator handle retry
+                raise
+
+            # Default: propagate the error
+            raise NodeExecutionError(node_name, e) from e
+
+    async def _execute_function(
+        self,
+        node_spec: NodeSpec,
+        validated_input: Any,
+        ports: dict[str, Any],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        """Execute node function with proper async/sync handling.
+
+        Parameters
+        ----------
+        node_spec : NodeSpec
+            The node specification containing the function
+        validated_input : Any
+            Validated input data
+        ports : dict[str, Any]
+            Available ports
+        kwargs : dict[str, Any]
+            Additional keyword arguments
+
+        Returns
+        -------
+        Any
+            Output from the node function
+        """
+        if asyncio.iscoroutinefunction(node_spec.fn):
+            return await node_spec.fn(validated_input, **ports, **kwargs)
+        # Run sync functions in executor to avoid blocking event loop
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: node_spec.fn(validated_input, **ports, **kwargs)
+        )
+
+
 class Orchestrator:
     """Orchestrates DAG execution with concurrent processing and resource management.
 
@@ -70,6 +420,7 @@ class Orchestrator:
         max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
         ports: dict[str, Any] | None = None,
         strict_validation: bool = False,
+        default_node_timeout: float | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -78,18 +429,27 @@ class Orchestrator:
             max_concurrent_nodes: Maximum number of nodes to execute concurrently
             ports: Shared ports/dependencies for all pipeline executions
             strict_validation: If True, raise errors on validation failure
+            default_node_timeout: Default timeout in seconds for each node (None = no timeout)
         """
         self.max_concurrent_nodes = max_concurrent_nodes
         self._semaphore = asyncio.Semaphore(max_concurrent_nodes)
         self.ports = ports or {}
         self.strict_validation = strict_validation
+        self.default_node_timeout = default_node_timeout
+
+        # Initialize collaborators (dependency injection)
+        self._policy_coordinator = PolicyCoordinator()
+        self._input_mapper = InputMapper()
+        self._node_executor = NodeExecutor(
+            strict_validation=strict_validation,
+            default_node_timeout=default_node_timeout,
+        )
 
     async def _notify_observer(
         self, observer_manager: ObserverManagerPort | None, event: Any
     ) -> None:
-        """Notify observer if it exists."""
-        if observer_manager:
-            await observer_manager.notify(event)
+        """Notify observer if it exists (delegates to PolicyCoordinator)."""
+        await self._policy_coordinator.notify_observer(observer_manager, event)
 
     async def _evaluate_policy(
         self,
@@ -100,23 +460,14 @@ class Orchestrator:
         wave_index: int | None = None,
         attempt: int = 1,
     ) -> PolicyResponse:
-        """Evaluate policy and create context."""
-        policy_context = PolicyContext(
-            event=event,
-            dag_id=context.dag_id,
-            node_id=node_id or context.node_id,
-            wave_index=wave_index or context.wave_index,
-            attempt=attempt or context.attempt,
+        """Evaluate policy and create context (delegates to PolicyCoordinator)."""
+        return await self._policy_coordinator.evaluate_policy(
+            policy_manager, event, context, node_id, wave_index, attempt
         )
 
-        if policy_manager:
-            return await policy_manager.evaluate(policy_context)
-        return PolicyResponse()  # Default: proceed
-
     def _check_policy_signal(self, response: PolicyResponse, context: str) -> None:
-        """Check policy signal and raise error if not PROCEED."""
-        if response.signal != PolicySignal.PROCEED:
-            raise OrchestratorError(f"{context} blocked: {response.signal.value}")
+        """Check policy signal and raise error if not PROCEED (delegates to PolicyCoordinator)."""
+        self._policy_coordinator.check_policy_signal(response, context)
 
     @classmethod
     def from_builder(
@@ -448,7 +799,7 @@ class Orchestrator:
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
-        """Execute a single node.
+        """Execute a single node (delegates to NodeExecutor with retry logic).
 
         The orchestrator provides the MECHANISM for retries through the RETRY signal,
         but the retry POLICY (when to retry, how many times, delays) is determined
@@ -462,176 +813,68 @@ class Orchestrator:
         ------
         NodeExecutionError
             If the node fails to execute
-        OrchestratorError
-            If the node is blocked
-        ValidationError
-            If the node input is invalid
-        TimeoutError
-            If node execution exceeds timeout
         """
-        node_start_time = time.time()
         # Create node context early so it's available in exception handler
         _ = context.with_node(node_name, wave_index)  # For future use
 
         try:
+            # Prepare input using InputMapper
             node_spec = graph.nodes[node_name]
-            node_input = self._prepare_node_input(node_spec, node_results, initial_input)
+            node_input = self._input_mapper.prepare_node_input(
+                node_spec, node_results, initial_input
+            )
 
-            # Use domain validation
-            if validate:
-                try:
-                    validated_input = node_spec.validate_input(node_input)
-                except ValidationError as e:
-                    if self.strict_validation:
-                        raise
-                    logger.debug("Input validation failed for node '%s': %s", node_name, e)
-                    validated_input = node_input
-            else:
-                validated_input = node_input
-
-            # Fire node started event and check control
-            start_event = NodeStarted(
-                name=node_name,
+            # Delegate execution to NodeExecutor
+            return await self._node_executor.execute_node(
+                node_name=node_name,
+                node_spec=node_spec,
+                node_input=node_input,
+                ports=ports,
+                context=context,
+                policy_coordinator=self._policy_coordinator,
+                observer_manager=observer_manager,
+                policy_manager=policy_manager,
                 wave_index=wave_index,
-                dependencies=list(node_spec.deps),
-            )
-            await self._notify_observer(observer_manager, start_event)
-
-            # Evaluate policy for node start
-            start_response = await self._evaluate_policy(
-                policy_manager, start_event, context, node_id=node_name, wave_index=wave_index
+                validate=validate,
+                **kwargs,
             )
 
-            # Handle control signals
-            if start_response.signal == PolicySignal.SKIP:
-                # Skip this node and return fallback value if provided
-                return start_response.data
-            if start_response.signal == PolicySignal.FAIL:
-                raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
-            if start_response.signal != PolicySignal.PROCEED:
-                # For now, treat other signals as errors
-                raise OrchestratorError(
-                    f"Node '{node_name}' blocked: {start_response.signal.value}"
-                )
-
-            # Execute node function (timeout enforced by parent asyncio.timeout context)
-            raw_output = (
-                await node_spec.fn(validated_input, **ports, **kwargs)
-                if asyncio.iscoroutinefunction(node_spec.fn)
-                else await asyncio.get_running_loop().run_in_executor(
-                    None, lambda: node_spec.fn(validated_input, **ports, **kwargs)
-                )
-            )
-
-            # Use domain validation
-            if validate:
-                try:
-                    validated_output = node_spec.validate_output(raw_output)
-                except ValidationError as e:
-                    if self.strict_validation:
-                        raise
-                    logger.debug("Output validation failed for node '%s': %s", node_name, e)
-                    validated_output = raw_output
-            else:
-                validated_output = raw_output
-
-            # Fire node completed event (observation only)
-            complete_event = NodeCompleted(
-                name=node_name,
-                wave_index=wave_index,
-                result=validated_output,
-                duration_ms=(time.time() - node_start_time) * 1000,
-            )
-            await self._notify_observer(observer_manager, complete_event)
-
-            return validated_output
-
-        except TimeoutError:
-            # Node timed out - emit cancelled event
-            cancel_event = NodeCancelled(
-                name=node_name,
-                wave_index=wave_index,
-                reason="timeout",
-            )
-            await self._notify_observer(observer_manager, cancel_event)
-            raise
-
-        except Exception as e:
-            # Fire node failed event and check control
-            fail_event = NodeFailed(
-                name=node_name,
-                wave_index=wave_index,
-                error=e,
-            )
-            await self._notify_observer(observer_manager, fail_event)
-
-            # Evaluate policy for node failure
-            fail_response = await self._evaluate_policy(
-                policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
-            )
-
-            # Handle control signals
-            if fail_response.signal == PolicySignal.FALLBACK:
-                # Return fallback value instead of failing
-                return fail_response.data
-            if fail_response.signal == PolicySignal.RETRY:
-                # RETRY signal indicates the policy wants to retry
-                # The orchestrator enables this by re-executing the node
-                # The retry policy (attempts, delays) is managed by the handler
-                retry_data = fail_response.data if isinstance(fail_response.data, dict) else {}
-                delay = retry_data.get("delay", 0)
-
-                if delay > 0:
-                    await asyncio.sleep(delay)
-
-                # Recursive call to retry the node execution
-                # The policy handler tracks attempts and decides when to stop
-                return await self._execute_node(
-                    node_name=node_name,
-                    graph=graph,
-                    node_results=node_results,
-                    initial_input=initial_input,
-                    ports=ports,
-                    context=context.with_attempt(context.attempt + 1),
-                    observer_manager=observer_manager,
-                    policy_manager=policy_manager,
+        except NodeExecutionError as e:
+            # Check if this is a RETRY signal from the policy
+            # The orchestrator handles retries at this level
+            if hasattr(e, "__cause__") and isinstance(e.__cause__, Exception):
+                # Try to get retry signal from policy
+                fail_event = NodeFailed(
+                    name=node_name,
                     wave_index=wave_index,
-                    validate=validate,
-                    **kwargs,
+                    error=e.__cause__,
                 )
-            # Default: propagate the error
-            raise NodeExecutionError(node_name, e) from e
+                fail_response = await self._evaluate_policy(
+                    policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
+                )
 
-    def _prepare_node_input(
-        self, node_spec: NodeSpec, node_results: dict[str, Any], initial_input: Any
-    ) -> Any:
-        """Prepare input data for node execution with simplified data mapping.
+                if fail_response.signal == PolicySignal.FALLBACK:
+                    return fail_response.data
+                if fail_response.signal == PolicySignal.RETRY:
+                    retry_data = fail_response.data if isinstance(fail_response.data, dict) else {}
+                    delay = retry_data.get("delay", 0)
 
-        Args
-        ----
-            node_spec: Node specification
-            node_results: Results from previously executed nodes
-            initial_input: Initial input data for the pipeline
+                    if delay > 0:
+                        await asyncio.sleep(delay)
 
-        Returns
-        -------
-            Prepared input data for the node
-        """
-        if not node_spec.deps:
-            # No dependencies - use initial input
-            return initial_input
-
-        if len(node_spec.deps) == 1:
-            # Single dependency - pass through directly
-            dep_name = next(iter(node_spec.deps))
-            return node_results.get(dep_name, initial_input)
-
-        # Multiple dependencies - preserve namespace structure
-        aggregated_data = {}
-
-        # Keep dependency results with their node names as keys
-        for dep_name in node_spec.deps:
-            if dep_name in node_results:
-                aggregated_data[dep_name] = node_results[dep_name]
-
-        return aggregated_data
+                    # Retry
+                    return await self._execute_node(
+                        node_name=node_name,
+                        graph=graph,
+                        node_results=node_results,
+                        initial_input=initial_input,
+                        ports=ports,
+                        context=context.with_attempt(context.attempt + 1),
+                        observer_manager=observer_manager,
+                        policy_manager=policy_manager,
+                        wave_index=wave_index,
+                        validate=validate,
+                        **kwargs,
+                    )
+            # Default: propagate
+            raise

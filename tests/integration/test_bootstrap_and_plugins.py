@@ -265,3 +265,6 @@ class TestPluginSystemIntegration:
         stats = await sqlite.aget_table_statistics()
         assert "test_table" in stats
         assert stats["test_table"]["row_count"] == 1
+
+        # Cleanup: close the adapter connection
+        await sqlite.close()
