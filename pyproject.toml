@@ -276,6 +276,7 @@ ignore = [
 "DOC202", # (Optional) Don't require "Yields" section
 "DOC501", # Don't require documenting raised exceptions in docstrings
 "DOC402", # Don't require documenting yields in docstrings
+    "UP042"
 ]
 
 [tool.ruff.lint.pydocstyle]
