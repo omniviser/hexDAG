@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel, create_model
 
-from ...domain.dag import NodeSpec
+from hexai.core.domain.dag import NodeSpec
 
 
 class BaseNodeFactory(ABC):
@@ -17,7 +17,13 @@ class BaseNodeFactory(ABC):
     def create_pydantic_model(
         self, name: str, schema: dict[str, Any] | type[BaseModel] | type[Any] | None
     ) -> type[BaseModel] | None:
-        """Create a Pydantic model from a schema."""
+        """Create a Pydantic model from a schema.
+
+        Raises
+        ------
+        ValueError
+            If schema type is not supported
+        """
         if schema is None:
             return None
 
@@ -58,7 +64,7 @@ class BaseNodeFactory(ABC):
         # Handle primitive types - create a simple wrapper model
         # At this point, schema should be a type
         try:
-            return create_model(name, value=(schema, ...))
+            return cast("type[Any] | None", create_model(name, value=(schema, ...)))
         except Exception:
             # If we get here, schema is an unexpected type
             raise ValueError("Schema must be a dict, type, or Pydantic model") from None
@@ -87,9 +93,15 @@ class BaseNodeFactory(ABC):
         )
 
     @abstractmethod
-    def __call__(self, name: str, *args: Any, **kwargs: Any) -> NodeSpec:
+    def __call__(self, name: str, *args: Any, **kwargs: Any) -> NodeSpec:  # noqa: ARG002
         """Create a NodeSpec.
 
         Must be implemented by subclasses.
+
+        Args:
+            name: Name of the node
+            *args: Additional positional arguments (unused, for subclass flexibility)
+            **kwargs: Additional keyword arguments
         """
-        pass
+        _ = args  # Marked as intentionally unused for subclass API flexibility
+        raise NotImplementedError

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable  # noqa: TC003 - needed at runtime for TypeAdapter
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Protocol, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter, field_validator
 
@@ -30,13 +30,28 @@ class ClassComponent(BaseModel):
     @field_validator("value")
     @classmethod
     def validate_is_class(cls, v: Any) -> Any:
-        """Ensure value is actually a class."""
+        """Ensure value is actually a class.
+
+        Returns
+        -------
+            The validated class value.
+
+        Raises
+        ------
+        ValueError
+            If value is not a class.
+        """
         if not isinstance(v, type):
             raise ValueError(f"Expected a class, got {type(v).__name__}")
         return v
 
     def instantiate(self, **init_params: Any) -> object:
-        """Create instance with initialization parameters."""
+        """Create instance with initialization parameters.
+
+        Returns
+        -------
+            An instance of the component class.
+        """
         return self.value(**init_params)
 
 
@@ -51,13 +66,28 @@ class FunctionComponent(BaseModel):
     @field_validator("value")
     @classmethod
     def validate_is_callable(cls, v: Callable) -> Callable:
-        """Ensure value is callable."""
+        """Ensure value is callable.
+
+        Returns
+        -------
+            The validated callable value.
+
+        Raises
+        ------
+        ValueError
+            If value is not callable.
+        """
         if not callable(v):
             raise ValueError(f"Expected callable, got {type(v).__name__}")
         return v
 
     def instantiate(self) -> Callable[..., object]:
-        """Return function as-is (not called)."""
+        """Return function as-is (not called).
+
+        Returns
+        -------
+            The function component.
+        """
         return self.value
 
 
@@ -70,7 +100,12 @@ class InstanceComponent(BaseModel):
     value: Any  # Already instantiated object - Any required as we accept any instance
 
     def instantiate(self) -> object:
-        """Return instance as-is."""
+        """Return instance as-is.
+
+        Returns
+        -------
+            The component instance.
+        """
         return self.value
 
 
@@ -93,11 +128,13 @@ class ComponentType(StrEnum):
     """Enumeration of component types in the registry."""
 
     NODE = "node"
-    ADAPTER = "adapter"
+    PORT = "port"  # The interface/protocol (e.g., LLM)
+    ADAPTER = "adapter"  # Implementation of a port (e.g., AnthropicAdapter)
     TOOL = "tool"
     POLICY = "policy"
     MEMORY = "memory"
     OBSERVER = "observer"
+    CONTROLLER = "controller"
 
 
 class NodeSubtype(StrEnum):
@@ -120,60 +157,6 @@ class Namespace(StrEnum):
     PLUGIN = "plugin"  # For plugin components
 
 
-class MetadataExtension(BaseModel):
-    """Extension metadata with strict typing."""
-
-    string_values: dict[str, str] = Field(default_factory=dict)
-    int_values: dict[str, int] = Field(default_factory=dict)
-    bool_values: dict[str, bool] = Field(default_factory=dict)
-    float_values: dict[str, float] = Field(default_factory=dict)
-
-    def get(
-        self, key: str, default: str | int | bool | float | None = None
-    ) -> str | int | bool | float | None:
-        """Get value by key from any type dict."""
-        stores: list[dict] = [
-            self.string_values,
-            self.int_values,
-            self.bool_values,
-            self.float_values,
-        ]
-        for store in stores:
-            if key in store:
-                return store[key]  # type: ignore[no-any-return]
-        return default
-
-    def set(self, key: str, value: str | int | bool | float) -> None:
-        """Set value in appropriate type dict."""
-        match value:
-            case str():
-                self.string_values[key] = value
-            case int():
-                self.int_values[key] = value
-            case bool():
-                self.bool_values[key] = value
-            case float():
-                self.float_values[key] = value
-            case _:
-                raise TypeError(f"Unsupported metadata type: {type(value)}")
-
-
-class DecoratorMetadata(BaseModel):
-    """Immutable metadata attached by decorators.
-
-    This is what decorators attach to classes via __hexdag_metadata__.
-    It's frozen to prevent accidental mutation after decoration.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    type: ComponentType | str
-    name: str
-    declared_namespace: str = Field(default="user")
-    subtype: NodeSubtype | str | None = None
-    description: str = Field(default="")
-
-
 class ComponentMetadata(BaseModel):
     """Metadata for registered components.
 
@@ -189,8 +172,9 @@ class ComponentMetadata(BaseModel):
     namespace: str = Field(default="core")
     subtype: NodeSubtype | str | None = None
     description: str = Field(default="")
-    # Extensible metadata with strict typing
-    metadata_extensions: MetadataExtension = Field(default_factory=MetadataExtension)
+    # Only non-inferable metadata
+    implements_port: str | None = None  # For adapters only
+    port_requirements: list[str] = Field(default_factory=list)  # For tools needing ports
 
     @property
     def raw_component(self) -> object:
@@ -269,14 +253,3 @@ class InstanceFactory:
         if isinstance(component, ClassComponent) and init_params:
             return component.instantiate(**init_params)
         return component.instantiate()
-
-
-# ============================================================================
-# Protocols and Extensions
-# ============================================================================
-
-
-class ComponentProtocol(Protocol):
-    """Protocol for components that can be registered."""
-
-    __hexdag_metadata__: object  # DecoratorMetadata

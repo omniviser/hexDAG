@@ -250,35 +250,29 @@ async def generate_product_recommendations(input_data: Any, **kwargs) -> dict:
 
     # Generate recommendations based on customer value and preferences
     if value_tier == "high":
-        recommendations.append(
-            {
-                "product_id": "PROD001",
-                "reason": "Premium customer - high-value electronics",
-                "confidence": 0.9,
-                "estimated_value": 999.99,
-            }
-        )
+        recommendations.append({
+            "product_id": "PROD001",
+            "reason": "Premium customer - high-value electronics",
+            "confidence": 0.9,
+            "estimated_value": 999.99,
+        })
 
     if "PROD" in preferred_categories:
-        recommendations.append(
-            {
-                "product_id": "PROD002",
-                "reason": "Matches customer preferences",
-                "confidence": 0.7,
-                "estimated_value": 89.99,
-            }
-        )
+        recommendations.append({
+            "product_id": "PROD002",
+            "reason": "Matches customer preferences",
+            "confidence": 0.7,
+            "estimated_value": 89.99,
+        })
 
     # Add complementary products
     if product and product.category == "Electronics":
-        recommendations.append(
-            {
-                "product_id": "PROD003",
-                "reason": "Complementary to electronics purchase",
-                "confidence": 0.6,
-                "estimated_value": 129.99,
-            }
-        )
+        recommendations.append({
+            "product_id": "PROD003",
+            "reason": "Complementary to electronics purchase",
+            "confidence": 0.6,
+            "estimated_value": 129.99,
+        })
 
     return {
         "recommendations": recommendations,
@@ -489,9 +483,9 @@ async def demonstrate_complex_workflow():
     orchestrator = Orchestrator()
 
     for i, scenario in enumerate(test_scenarios, 1):
-        print(
-            f"\n🧪 Scenario {i}: Customer {scenario['customer_id']} → Product {scenario['product_id']}"
-        )
+        customer_id = scenario["customer_id"]
+        product_id = scenario["product_id"]
+        print(f"\n🧪 Scenario {i}: Customer {customer_id} → Product {product_id}")
 
         start_time = time.time()
         results = await orchestrator.run(graph, scenario)
@@ -507,9 +501,8 @@ async def demonstrate_complex_workflow():
         print(f"   💰 Customer value: {executive_summary.get('customer_value', 'unknown')}")
         print(f"   📊 Recommendations: {executive_summary.get('recommendation_count', 0)}")
         print(f"   ⚠️  Risk level: {executive_summary.get('risk_level', 'unknown')}")
-        print(
-            f"   🎯 Optimization priority: {executive_summary.get('optimization_priority', 'medium')}"
-        )
+        opt_priority = executive_summary.get("optimization_priority", "medium")
+        print(f"   🎯 Optimization priority: {opt_priority}")
 
         # Show business impact
         business_impact = final_report.get("business_impact", {})
@@ -517,9 +510,8 @@ async def demonstrate_complex_workflow():
             f"   💵 Revenue potential: ${business_impact.get('estimated_revenue_potential', 0):.0f}"
         )
         print(f"   🛡️  Risk factors: {business_impact.get('risk_mitigation_value', 0)}")
-        print(
-            f"   🔧 Optimization opportunities: {business_impact.get('optimization_opportunities', 0)}"
-        )
+        opt_opportunities = business_impact.get("optimization_opportunities", 0)
+        print(f"   🔧 Optimization opportunities: {opt_opportunities}")
 
     return results
 

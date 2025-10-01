@@ -10,15 +10,30 @@ class Secret:
         self.__value = value  # Double underscore for name mangling
 
     def get(self) -> str:
-        """Return the wrapped secret value securely."""
+        """Return the wrapped secret value securely.
+
+        Returns
+        -------
+            The secret value.
+        """
         return self.__value
 
     def __repr__(self) -> str:
-        """Return a safe string representation for debugging."""
+        """Return a safe string representation for debugging.
+
+        Returns
+        -------
+            A safe string representation "<SECRET>".
+        """
         return "<SECRET>"
 
     def __str__(self) -> str:
-        """Return a safe string representation for display."""
+        """Return a safe string representation for display.
+
+        Returns
+        -------
+            A safe string representation "<SECRET>".
+        """
         return "<SECRET>"
 
     @staticmethod
@@ -38,7 +53,10 @@ class Secret:
 
         Raises:
         ------
-            ValueError: If the secret is not found.
+        KeyError
+            If the secret is not found in environment variables.
+        ValueError
+            If the secret value is empty.
         """
         value = os.getenv(name)
 

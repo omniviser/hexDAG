@@ -1,7 +1,5 @@
 """Tests for DAG primitives: NodeSpec and DirectedGraph."""
 
-from typing import Optional
-
 import pytest
 from pydantic import BaseModel, Field
 
@@ -32,7 +30,7 @@ class TestInputModel(BaseModel):
 
     name: str
     value: int
-    optional_field: Optional[str] = None
+    optional_field: str | None = None
 
 
 class TestOutputModel(BaseModel):

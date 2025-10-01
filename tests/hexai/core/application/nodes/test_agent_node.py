@@ -3,8 +3,8 @@
 import pytest
 from pydantic import BaseModel
 
-from hexai.adapters.function_tool_router import FunctionBasedToolRouter
 from hexai.adapters.mock.mock_llm import MockLLM
+from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.agent_node import AgentConfig
 from hexai.core.application.nodes.tool_utils import ToolCallFormat
 from hexai.core.bootstrap import ensure_bootstrapped
@@ -32,7 +32,7 @@ class TestReActAgentNode:
     @pytest.fixture
     def mock_tool_router(self):
         """Fixture for mock tool router."""
-        return FunctionBasedToolRouter()
+        return UnifiedToolRouter()
 
     @pytest.fixture
     def agent_node(self):

@@ -27,7 +27,12 @@ class TestMismatch(NamedTuple):
 
 
 def get_source_files() -> set[Path]:
-    """Get all Python source files in the hexai module."""
+    """Get all Python source files in the hexai module.
+
+    Returns
+    -------
+        Set of Path objects for source files.
+    """
     src_root = Path("hexai")
     if not src_root.exists():
         return set()
@@ -42,7 +47,12 @@ def get_source_files() -> set[Path]:
 
 
 def get_test_files() -> set[Path]:
-    """Get all test files in the hexai test directory."""
+    """Get all test files in the hexai test directory.
+
+    Returns
+    -------
+        Set of Path objects for test files.
+    """
     test_root = Path("tests/hexai")
     if not test_root.exists():
         return set()
@@ -55,7 +65,12 @@ def get_test_files() -> set[Path]:
 
 
 def source_to_test_path(source_file: Path) -> Path:
-    """Convert a source file path to its expected test file path."""
+    """Convert a source file path to its expected test file path.
+
+    Returns
+    -------
+        Expected test file path.
+    """
     # hexai/core/domain/dag.py -> tests/hexai/core/domain/test_dag.py
 
     # Remove the hexai prefix
@@ -63,13 +78,21 @@ def source_to_test_path(source_file: Path) -> Path:
 
     # Change module.py to test_module.py
     test_filename = f"test_{relative_path.name}"
-    test_path = Path("tests/hexai") / relative_path.parent / test_filename
-
-    return test_path
+    return Path("tests/hexai") / relative_path.parent / test_filename
 
 
 def test_to_source_path(test_file: Path) -> Path:
-    """Convert a test file path to its expected source file path."""
+    """Convert a test file path to its expected source file path.
+
+    Returns
+    -------
+        Expected source file path.
+
+    Raises
+    ------
+    ValueError
+        If test file doesn't follow naming convention.
+    """
     # tests/hexai/core/domain/test_dag.py -> hexai/core/domain/dag.py
 
     # Remove the tests/hexai prefix
@@ -80,13 +103,16 @@ def test_to_source_path(test_file: Path) -> Path:
         raise ValueError(f"Test file {test_file} doesn't follow test_ naming convention")
 
     source_filename = relative_path.name[5:]  # Remove "test_"
-    source_path = Path("hexai") / relative_path.parent / source_filename
-
-    return source_path
+    return Path("hexai") / relative_path.parent / source_filename
 
 
 def check_test_structure() -> list[TestMismatch]:
-    """Check the test structure for consistency."""
+    """Check the test structure for consistency.
+
+    Returns
+    -------
+        List of TestMismatch objects for any issues found.
+    """
     source_files = get_source_files()
     test_files = get_test_files()
 
@@ -147,7 +173,12 @@ def check_test_structure() -> list[TestMismatch]:
 
 
 def main() -> int:
-    """Check test structure and return exit code."""
+    """Check test structure and return exit code.
+
+    Returns
+    -------
+        Exit code (0 for success, 1 for failure).
+    """
     print("🔍 Checking test structure consistency...")
 
     mismatches = check_test_structure()

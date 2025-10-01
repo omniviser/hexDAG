@@ -11,9 +11,10 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from ...domain.dag import NodeSpec
-from ...registry import node
-from ...registry.models import NodeSubtype
+from hexai.core.domain.dag import NodeSpec
+from hexai.core.registry import node
+from hexai.core.registry.models import NodeSubtype
+
 from .base_node_factory import BaseNodeFactory
 
 
@@ -45,7 +46,13 @@ class LoopNode(BaseNodeFactory):
 
         Returns
         -------
+        NodeSpec
             NodeSpec configured for loop control
+
+        Raises
+        ------
+        ValueError
+            If max_iterations is not positive
         """
         # Validate max_iterations
         if max_iterations <= 0:
@@ -151,6 +158,7 @@ class ConditionalNode(BaseNodeFactory):
 
         Returns
         -------
+        NodeSpec
             NodeSpec configured for conditional routing
         """
 

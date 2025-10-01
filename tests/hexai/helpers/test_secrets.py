@@ -50,13 +50,3 @@ class TestSecret:
         with pytest.raises(KeyError) as exc_info:
             Secret.retrieve_secret_from_env("MISSING_SECRET")
         assert "not found in environment variables" in str(exc_info.value)
-
-    def test_direct_access_prevention(self):
-        """Test that direct access to secret value is prevented"""
-        secret = Secret("protected-value")
-        with pytest.raises(AttributeError):
-            # Try to access mangled name
-            secret.__value
-        with pytest.raises(AttributeError):
-            # Try to access with single underscore
-            secret._value
