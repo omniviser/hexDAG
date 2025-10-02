@@ -205,7 +205,7 @@ jobs:
           set -e  # Exit immediately if a command exits with a non-zero status
           export PATH="$HOME/.local/bin:$PATH"
           echo "Running yamllint for YAML config quality..."
-          uv run yamllint -d relaxed .
+          uv run yamllint -d relaxed -i .venv .
         displayName: "Run yamllint - YAML config quality"
 
       - script: |
