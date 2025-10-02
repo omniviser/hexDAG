@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.context import get_port
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -183,8 +184,8 @@ async def test_basic_integration():
     # Create test functions
     async def data_processor(input_data: Any, **kwargs) -> dict:
         """Process data and save to database."""
-        db = kwargs.get("database")
-        logger = kwargs.get("logger")
+        db = get_port("database")
+        logger = get_port("logger")
 
         # Process data
         processed_data = {"original": input_data, "processed": True, "timestamp": time.time()}
@@ -199,8 +200,8 @@ async def test_basic_integration():
 
     async def notification_sender(input_data: Any, **kwargs) -> dict:
         """Send notification email."""
-        email = kwargs.get("email")
-        logger = kwargs.get("logger")
+        email = get_port("email")
+        logger = get_port("logger")
 
         # Send email
         email_result = await email.send_email(
@@ -255,8 +256,8 @@ async def test_error_handling():
 
     async def unreliable_processor(input_data: Any, **kwargs) -> dict:
         """Process data with potential failures."""
-        db = kwargs.get("database")
-        logger = kwargs.get("logger")
+        db = get_port("database")
+        logger = get_port("logger")
 
         try:
             # Try to save data
@@ -274,8 +275,8 @@ async def test_error_handling():
 
     async def notification_with_retry(input_data: Any, **kwargs) -> dict:
         """Send notification with retry logic."""
-        email = kwargs.get("email")
-        logger = kwargs.get("logger")
+        email = get_port("email")
+        logger = get_port("logger")
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -333,7 +334,7 @@ async def test_performance_monitoring():
 
     async def performance_monitored_operation(input_data: Any, **kwargs) -> dict:
         """Operation with performance monitoring."""
-        logger = kwargs.get("logger")
+        logger = get_port("logger")
 
         start_time = time.time()
 
@@ -341,11 +342,11 @@ async def test_performance_monitoring():
         await asyncio.sleep(0.2)
 
         # Save to database
-        db = kwargs.get("database")
+        db = get_port("database")
         await db.save_data("performance_data", {"timestamp": start_time})
 
         # Send notification
-        email = kwargs.get("email")
+        email = get_port("email")
         await email.send_email(
             to_address="monitoring@example.com",
             subject="Performance Report",

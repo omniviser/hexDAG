@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from hexai.core.application.events import NodeCancelled, NodeCompleted, NodeFailed, NodeStarted
 from hexai.core.application.policies.models import PolicyResponse, PolicySignal
+from hexai.core.context import ExecutionContext
 from hexai.core.domain.dag import NodeSpec, ValidationError
 from hexai.core.orchestration.components.node_executor import (
     NodeExecutionError,
@@ -124,16 +125,19 @@ class TestNodeExecutor:
         """Test executing an async function."""
         node_spec = NodeSpec("test_node", simple_async_function)
 
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         assert result == 10  # 5 * 2
         # Check events were emitted
@@ -146,16 +150,19 @@ class TestNodeExecutor:
         """Test executing a sync function."""
         node_spec = NodeSpec("test_node", simple_sync_function)
 
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         assert result == 15  # 5 * 3
 
@@ -172,16 +179,19 @@ class TestNodeExecutor:
             in_model=SimpleInput,
         )
 
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input={"value": 5},
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input={"value": 5},
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         assert result == 10
 
@@ -204,17 +214,20 @@ class TestNodeExecutor:
         )
 
         # Should not raise, will use unvalidated input
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,  # Wrong format, should be dict
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-            validate=True,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,  # Wrong format, should be dict
+                context=context,
+                policy_coordinator=coordinator,
+                validate=True,
+            )
 
         assert result == 10  # Still works with raw input
 
@@ -235,16 +248,19 @@ class TestNodeExecutor:
 
         # In strict mode, validation error becomes NodeExecutionError
         with pytest.raises((ValidationError, NodeExecutionError)):
-            await strict_executor.execute_node(
-                node_name="test_node",
-                node_spec=node_spec,
-                node_input="invalid",
-                ports={},
-                context=context,
-                policy_coordinator=coordinator,
+            async with ExecutionContext(
                 observer_manager=observer,
                 policy_manager=policy,
-            )
+                run_id="test-run",
+                ports={},
+            ):
+                await strict_executor.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input="invalid",
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
 
     @pytest.mark.asyncio
     async def test_output_validation_success(
@@ -258,16 +274,19 @@ class TestNodeExecutor:
         )
 
         # Function returns int, which will be validated against SimpleOutput
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         assert isinstance(result, (int, SimpleOutput))
 
@@ -279,16 +298,19 @@ class TestNodeExecutor:
         node_spec = NodeSpec("test_node", slow_function)
 
         with pytest.raises(NodeTimeoutError) as exc_info:
-            await executor_with_timeout.execute_node(
-                node_name="test_node",
-                node_spec=node_spec,
-                node_input=5,
-                ports={},
-                context=context,
-                policy_coordinator=coordinator,
+            async with ExecutionContext(
                 observer_manager=observer,
                 policy_manager=policy,
-            )
+                run_id="test-run",
+                ports={},
+            ):
+                await executor_with_timeout.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input=5,
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
 
         assert exc_info.value.node_name == "test_node"
         assert exc_info.value.timeout == 1.0
@@ -303,16 +325,19 @@ class TestNodeExecutor:
         node_spec = NodeSpec("test_node", slow_function, timeout=0.1)
 
         with pytest.raises(NodeTimeoutError) as exc_info:
-            await executor.execute_node(
-                node_name="test_node",
-                node_spec=node_spec,
-                node_input=5,
-                ports={},
-                context=context,
-                policy_coordinator=coordinator,
+            async with ExecutionContext(
                 observer_manager=observer,
                 policy_manager=policy,
-            )
+                run_id="test-run",
+                ports={},
+            ):
+                await executor.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input=5,
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
 
         assert exc_info.value.timeout == 0.1
 
@@ -322,16 +347,19 @@ class TestNodeExecutor:
         node_spec = NodeSpec("test_node", failing_function)
 
         with pytest.raises(NodeExecutionError) as exc_info:
-            await executor.execute_node(
-                node_name="test_node",
-                node_spec=node_spec,
-                node_input=5,
-                ports={},
-                context=context,
-                policy_coordinator=coordinator,
+            async with ExecutionContext(
                 observer_manager=observer,
                 policy_manager=policy,
-            )
+                run_id="test-run",
+                ports={},
+            ):
+                await executor.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input=5,
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
 
         assert exc_info.value.node_name == "test_node"
         assert isinstance(exc_info.value.original_error, ValueError)
@@ -344,16 +372,19 @@ class TestNodeExecutor:
         policy = MockPolicyManager(PolicyResponse(signal=PolicySignal.SKIP, data="skipped"))
         node_spec = NodeSpec("test_node", simple_async_function)
 
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         assert result == "skipped"  # Returns policy data
 
@@ -365,38 +396,47 @@ class TestNodeExecutor:
 
         # Policy FAIL raises OrchestratorError which gets wrapped in NodeExecutionError
         with pytest.raises((OrchestratorError, NodeExecutionError), match="blocked"):
-            await executor.execute_node(
-                node_name="test_node",
-                node_spec=node_spec,
-                node_input=5,
-                ports={},
-                context=context,
-                policy_coordinator=coordinator,
+            async with ExecutionContext(
                 observer_manager=observer,
                 policy_manager=policy,
-            )
+                run_id="test-run",
+                ports={},
+            ):
+                await executor.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input=5,
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
 
     @pytest.mark.asyncio
     async def test_ports_passed_to_function(self, executor, coordinator, context, observer, policy):
-        """Test that ports are passed to node function."""
+        """Test that ports are accessible from node function via ExecutionContext."""
+        from hexai.core.context import get_port
 
-        async def function_with_ports(input_data: int, llm=None, database=None) -> dict:
+        async def function_with_ports(input_data: int) -> dict:
+            llm = get_port("llm")
+            database = get_port("database")
             return {"input": input_data, "llm": llm, "database": database}
 
         node_spec = NodeSpec("test_node", function_with_ports)
         mock_llm = "mock_llm"
         mock_db = "mock_db"
 
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={"llm": mock_llm, "database": mock_db},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={"llm": mock_llm, "database": mock_db},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         assert result["input"] == 5
         assert result["llm"] == "mock_llm"
@@ -413,17 +453,20 @@ class TestNodeExecutor:
 
         node_spec = NodeSpec("test_node", function_with_kwargs)
 
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-            custom_arg="custom_value",
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+                custom_arg="custom_value",
+            )
 
         assert result["input"] == 5
         assert result["kwargs"]["custom_arg"] == "custom_value"
@@ -439,17 +482,20 @@ class TestNodeExecutor:
         )
 
         # Should not validate even with wrong input format
-        result = await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,  # Not a dict
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-            validate=False,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,  # Not a dict
+                context=context,
+                policy_coordinator=coordinator,
+                validate=False,
+            )
 
         assert result == 10
 
@@ -460,16 +506,19 @@ class TestNodeExecutor:
         """Test that NodeCompleted event contains duration."""
         node_spec = NodeSpec("test_node", simple_async_function)
 
-        await executor.execute_node(
-            node_name="test_node",
-            node_spec=node_spec,
-            node_input=5,
-            ports={},
-            context=context,
-            policy_coordinator=coordinator,
+        async with ExecutionContext(
             observer_manager=observer,
             policy_manager=policy,
-        )
+            run_id="test-run",
+            ports={},
+        ):
+            await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
 
         completed_event = next(e for e in observer.events if isinstance(e, NodeCompleted))
         assert completed_event.duration_ms > 0

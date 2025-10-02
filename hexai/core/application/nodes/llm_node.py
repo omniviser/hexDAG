@@ -12,7 +12,7 @@ from hexai.core.registry.models import NodeSubtype
 from .base_llm_node import BaseLLMNode
 
 
-@node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core")
+@node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core", required_ports=["llm"])
 class LLMNode(BaseLLMNode):
     """Simple factory for creating LLM-based nodes with rich template support.
 

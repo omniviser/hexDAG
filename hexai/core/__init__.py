@@ -17,6 +17,19 @@ Example usage:
 """
 
 from hexai.core.bootstrap import bootstrap_registry, ensure_bootstrapped
+from hexai.core.context import (
+    ExecutionContext,
+    clear_execution_context,
+    get_observer_manager,
+    get_policy_manager,
+    get_port,
+    get_ports,
+    get_run_id,
+    set_observer_manager,
+    set_policy_manager,
+    set_ports,
+    set_run_id,
+)
 from hexai.core.exceptions import (
     ConfigurationError,
     DependencyError,
@@ -43,6 +56,18 @@ __all__ = [
     "ComponentType",
     "bootstrap_registry",
     "ensure_bootstrapped",
+    # Execution Context
+    "ExecutionContext",
+    "clear_execution_context",
+    "get_observer_manager",
+    "get_policy_manager",
+    "get_port",
+    "get_ports",
+    "get_run_id",
+    "set_observer_manager",
+    "set_policy_manager",
+    "set_ports",
+    "set_run_id",
     # Exceptions
     "HexDAGError",
     "ConfigurationError",

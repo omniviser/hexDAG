@@ -14,6 +14,7 @@ import random
 from typing import Any
 
 from hexai.core.application.orchestrator import Orchestrator
+from hexai.core.context import get_port
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 
 
@@ -38,7 +39,7 @@ class UnreliableService:
 # Error handling functions
 async def reliable_processor(input_data: str, **kwargs) -> dict:
     """Process data with retry mechanism."""
-    service = kwargs.get("unreliable_service")
+    service = get_port("unreliable_service")
     max_retries = 3
 
     for attempt in range(max_retries):
@@ -55,8 +56,8 @@ async def reliable_processor(input_data: str, **kwargs) -> dict:
 
 async def graceful_degradation(input_data: Any, **kwargs) -> dict:
     """Process data with graceful degradation."""
-    primary_service = kwargs.get("primary_service")
-    fallback_service = kwargs.get("fallback_service")
+    primary_service = get_port("primary_service")
+    fallback_service = get_port("fallback_service")
 
     try:
         # Try primary service
@@ -73,8 +74,8 @@ async def graceful_degradation(input_data: Any, **kwargs) -> dict:
 
 async def circuit_breaker_processor(input_data: str, **kwargs) -> dict:
     """Process data with circuit breaker pattern."""
-    service = kwargs.get("circuit_service")
-    circuit = kwargs.get("circuit_breaker")
+    service = get_port("circuit_service")
+    circuit = get_port("circuit_breaker")
 
     if circuit.is_open():
         return {"status": "circuit_open", "message": "Circuit breaker is open, skipping call"}

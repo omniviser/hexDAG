@@ -8,6 +8,7 @@ from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.nodes.agent_node import AgentConfig
 from hexai.core.application.nodes.tool_utils import ToolCallFormat
 from hexai.core.bootstrap import ensure_bootstrapped
+from hexai.core.context import ExecutionContext
 from hexai.core.registry import registry
 
 # Ensure registry is bootstrapped for tests
@@ -107,7 +108,13 @@ class TestReActAgentNode:
         input_data = {"input": "Test input"}
         ports = {"llm": mock_llm, "tool_router": mock_tool_router}
 
-        result = await node_spec.fn(input_data, **ports)
+        async with ExecutionContext(
+            observer_manager=None,
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            result = await node_spec.fn(input_data)
 
         # Agent returns state dict
         assert isinstance(result, dict)
@@ -128,7 +135,13 @@ class TestReActAgentNode:
         input_data = {"input": "Test input"}
         ports = {"llm": mock_llm, "tool_router": mock_tool_router}
 
-        result = await node_spec.fn(input_data, **ports)
+        async with ExecutionContext(
+            observer_manager=None,
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            result = await node_spec.fn(input_data)
 
         # Should return the structured output from tool_end
         assert isinstance(result, CustomOutput)

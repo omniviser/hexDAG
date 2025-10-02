@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.prompt import PromptInput
 from hexai.core.application.prompt.template import PromptTemplate
+from hexai.core.context import get_port, get_ports
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.protocols import is_dict_convertible
@@ -79,7 +80,12 @@ class AgentConfig:
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
 
 
-@node(name="agent_node", subtype=NodeSubtype.AGENT, namespace="core")
+@node(
+    name="agent_node",
+    subtype=NodeSubtype.AGENT,
+    namespace="core",
+    required_ports=["llm", "tool_router"],
+)
 class ReActAgentNode(BaseNodeFactory):
     """Multi-step reasoning agent.
 
@@ -147,6 +153,10 @@ class ReActAgentNode(BaseNodeFactory):
             name, main_prompt, continuation_prompts or {}, output_model, config
         )
 
+        # Copy required_ports from class to wrapper function
+        if hasattr(self.__class__, "_hexdag_required_ports"):
+            agent_fn._hexdag_required_ports = self.__class__._hexdag_required_ports  # type: ignore[attr-defined]
+
         # Use universal input mapping method
         return self.create_node_with_mapping(
             name=name,
@@ -207,8 +217,12 @@ class ReActAgentNode(BaseNodeFactory):
             Agent function with internal loop control
         """
 
-        async def single_step_executor(input_data: Any, **ports: Any) -> Any:
-            """Execute single reasoning step - designed for internal loop orchestration."""
+        async def single_step_executor(input_data: Any) -> Any:
+            """Execute single reasoning step."""
+            from hexai.core.context import get_port
+
+            ports = get_ports() or {}
+
             # Initialize or update state from previous iteration
             state = self._initialize_or_update_state(input_data)
 
@@ -219,7 +233,7 @@ class ReActAgentNode(BaseNodeFactory):
 
             # Check if we got a final output (tool_end was called)
             final_output = await self._check_for_final_output(
-                updated_state, output_model, ports.get("event_manager")
+                updated_state, output_model, get_port("event_manager")
             )
             if final_output is not None:
                 return final_output
@@ -243,15 +257,16 @@ class ReActAgentNode(BaseNodeFactory):
             response = result.get("response", "")
             return "tool_end" in response.lower()
 
-        async def agent_with_internal_loop(input_data: Any, **ports: Any) -> Any:
-            """Agent executor that uses loop concepts for iteration control."""
+        async def agent_with_internal_loop(input_data: Any) -> Any:
+            """Agent executor with internal loop control."""
+
             # Start with initial input
             current_result = input_data
 
             # Run the loop until success condition is met or max iterations reached
             for _ in range(config.max_steps):
                 # Execute single step
-                step_result = await single_step_executor(current_result, **ports)
+                step_result = await single_step_executor(current_result)
 
                 # Check if we got final output (structured model)
                 if not isinstance(step_result, dict):
@@ -262,7 +277,7 @@ class ReActAgentNode(BaseNodeFactory):
                     final_output = await self._check_for_final_output(
                         self._initialize_or_update_state(step_result),
                         output_model,
-                        ports.get("event_manager"),
+                        get_port("event_manager"),
                     )
                     if final_output is not None:
                         return final_output
@@ -412,8 +427,8 @@ carried_data={'key': 'value'})"""
         # Create LLM node for this step
         llm_node_spec = self.llm_node.from_template(node_name, template=prompt)
 
-        # Execute LLM with the prepared input
-        return await llm_node_spec.fn(llm_input, **ports)  # type: ignore[no-any-return]
+        # Execute LLM with the prepared input (no ports passed - uses ExecutionContext)
+        return await llm_node_spec.fn(llm_input)  # type: ignore[no-any-return]
 
     async def _execute_single_step(
         self,

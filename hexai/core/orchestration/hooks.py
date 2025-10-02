@@ -192,37 +192,20 @@ class PreDagHookManager:
 
     async def execute_hooks(
         self,
-        ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
         pipeline_name: str,
     ) -> dict[str, Any]:
-        """Execute all pre-DAG hooks in order.
-
-        Parameters
-        ----------
-        ports : dict[str, Any]
-            All available ports for the pipeline
-        context : NodeExecutionContext
-            Execution context for this pipeline run
-        observer_manager : ObserverManagerPort | None
-            Optional observer for event emission
-        pipeline_name : str
-            Name of the pipeline being executed
-
-        Returns
-        -------
-        dict[str, Any]
-            Results from all hook executions
-
-        Raises
-        ------
-        OrchestratorError
-            If health checks fail and fail_fast is enabled
-        """
+        """Execute all pre-DAG hooks in order."""
+        from hexai.core.context import (
+            get_observer_manager,
+            get_port,
+            get_ports,
+        )
         from hexai.core.orchestration.components import OrchestratorError
 
         results: dict[str, Any] = {}
+        ports = get_ports() or {}
+        observer_manager = get_observer_manager()
 
         # 1. Health checks
         if self.config.enable_health_checks:
@@ -249,8 +232,8 @@ class PreDagHookManager:
         # 2. Secret injection
         if self.config.enable_secret_injection:
             logger.info(f"Loading secrets for pipeline '{pipeline_name}'")
-            secret_port = ports.get("secret")
-            memory = ports.get("memory")
+            secret_port = get_port("secret")
+            memory = get_port("memory")
             secret_results = await self._secret_manager.load_secrets(
                 secret_port=secret_port, memory=memory, dag_id=context.dag_id
             )
@@ -323,41 +306,22 @@ class PostDagHookManager:
 
     async def execute_hooks(
         self,
-        ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
         pipeline_name: str,
         pipeline_status: Literal["success", "failed", "cancelled"],
         node_results: dict[str, Any],
         error: Exception | None = None,
     ) -> dict[str, Any]:
-        """Execute all post-DAG hooks.
+        """Execute all post-DAG hooks."""
+        from hexai.core.context import (
+            get_observer_manager,
+            get_port,
+            get_ports,
+        )
 
-        All exceptions are caught and logged to prevent masking the original pipeline error.
-
-        Parameters
-        ----------
-        ports : dict[str, Any]
-            All available ports
-        context : NodeExecutionContext
-            Execution context
-        observer_manager : ObserverManagerPort | None
-            Optional observer manager
-        pipeline_name : str
-            Pipeline name
-        pipeline_status : Literal["success", "failed", "cancelled"]
-            Final pipeline status
-        node_results : dict[str, Any]
-            Results from all executed nodes
-        error : Exception | None
-            Exception if pipeline failed
-
-        Returns
-        -------
-        dict[str, Any]
-            Results from all hook executions
-        """
         results: dict[str, Any] = {}
+        ports = get_ports() or {}
+        observer_manager = get_observer_manager()
 
         # Check if hooks should run based on pipeline status
         should_run = (
@@ -400,7 +364,7 @@ class PostDagHookManager:
         if self.config.enable_secret_cleanup and self._pre_hook_manager:
             try:
                 secret_manager = self._pre_hook_manager.get_secret_manager()
-                memory = ports.get("memory")
+                memory = get_port("memory")
                 secret_cleanup = await secret_manager.cleanup_secrets(
                     memory=memory, dag_id=context.dag_id
                 )
@@ -431,10 +395,11 @@ class PostDagHookManager:
         observer_manager: ObserverManagerPort | None,
     ) -> dict[str, Any]:
         """Save final checkpoint state."""
+        from hexai.core.context import get_port
         from hexai.core.orchestration.components import CheckpointManager
         from hexai.core.orchestration.models import CheckpointState
 
-        memory = ports.get("memory")
+        memory = get_port("memory")
         if not memory:
             logger.debug("No memory port available for checkpoint save")
             return {"skipped": "No memory port available"}

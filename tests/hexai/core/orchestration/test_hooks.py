@@ -2,6 +2,7 @@
 
 import pytest
 
+from hexai.core.context import ExecutionContext
 from hexai.core.orchestration.hooks import (
     HookConfig,
     PostDagHookConfig,
@@ -120,12 +121,15 @@ class TestPreDagHookManager:
         manager = PreDagHookManager(config)
 
         # Execute
-        results = await manager.execute_hooks(
-            ports=ports,
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context, pipeline_name="test_pipeline"
+            )
 
         # Assert
         assert "health_checks" in results
@@ -155,12 +159,15 @@ class TestPreDagHookManager:
         manager = PreDagHookManager(config)
 
         # Execute - should not raise
-        results = await manager.execute_hooks(
-            ports=ports,
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context, pipeline_name="test_pipeline"
+            )
 
         # Assert
         assert "health_checks" in results
@@ -186,12 +193,13 @@ class TestPreDagHookManager:
 
         # Execute and assert raises
         with pytest.raises(OrchestratorError, match="Health check failed"):
-            await manager.execute_hooks(
-                ports=ports,
-                context=mock_context,
+            async with ExecutionContext(
                 observer_manager=None,
-                pipeline_name="test_pipeline",
-            )
+                policy_manager=None,
+                run_id="test-run",
+                ports=ports,
+            ):
+                await manager.execute_hooks(context=mock_context, pipeline_name="test_pipeline")
 
     @pytest.mark.asyncio
     async def test_secret_injection(self, mock_context):
@@ -221,12 +229,15 @@ class TestPreDagHookManager:
         manager = PreDagHookManager(config)
 
         # Execute
-        results = await manager.execute_hooks(
-            ports=ports,
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context, pipeline_name="test_pipeline"
+            )
 
         # Assert
         assert "secrets_loaded" in results
@@ -258,12 +269,15 @@ class TestPreDagHookManager:
         manager = PreDagHookManager(config)
 
         # Execute
-        results = await manager.execute_hooks(
-            ports={},
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports={},
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context, pipeline_name="test_pipeline"
+            )
 
         # Assert
         assert hook_called
@@ -287,12 +301,15 @@ class TestPreDagHookManager:
         manager = PreDagHookManager(config)
 
         # Execute
-        results = await manager.execute_hooks(
-            ports=ports,
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context, pipeline_name="test_pipeline"
+            )
 
         # Assert - only one health check (for llm adapter)
         assert len(results["health_checks"]) == 1
@@ -321,14 +338,18 @@ class TestPostDagHookManager:
         manager = PostDagHookManager(config)
 
         # Execute
-        results = await manager.execute_hooks(
-            ports=ports,
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-            pipeline_status="success",
-            node_results={},
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports=ports,
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+                pipeline_status="success",
+                node_results={},
+            )
 
         # Assert
         assert "adapter_cleanup" in results
@@ -349,15 +370,19 @@ class TestPostDagHookManager:
         manager = PostDagHookManager(config)
 
         # Execute with failed status
-        results = await manager.execute_hooks(
-            ports={"llm": adapter},
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-            pipeline_status="failed",
-            node_results={},
-            error=Exception("Test error"),
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports={"llm": adapter},
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+                pipeline_status="failed",
+                node_results={},
+                error=Exception("Test error"),
+            )
 
         # Assert cleanup still ran
         assert adapter.close_called
@@ -376,14 +401,18 @@ class TestPostDagHookManager:
         manager = PostDagHookManager(config)
 
         # Execute with success status
-        results = await manager.execute_hooks(
-            ports={"llm": adapter},
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-            pipeline_status="success",
-            node_results={},
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports={"llm": adapter},
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+                pipeline_status="success",
+                node_results={},
+            )
 
         # Assert hooks were skipped
         assert results.get("skipped") is True
@@ -409,14 +438,18 @@ class TestPostDagHookManager:
         manager = PostDagHookManager(config)
 
         # Execute
-        results = await manager.execute_hooks(
-            ports={},
-            context=mock_context,
+        async with ExecutionContext(
             observer_manager=None,
-            pipeline_name="test_pipeline",
-            pipeline_status="success",
-            node_results={"node1": "result1"},
-        )
+            policy_manager=None,
+            run_id="test-run",
+            ports={},
+        ):
+            results = await manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+                pipeline_status="success",
+                node_results={"node1": "result1"},
+            )
 
         # Assert
         assert hook_called

@@ -86,12 +86,14 @@ class MockLoggerAdapter:
 
 
 # Business Logic Functions
-async def process_user_data(input_data: dict, **ports) -> dict:
+async def process_user_data(input_data: dict, **kwargs) -> dict:
     """Process user data using ports."""
-    # Get ports from kwargs
-    db = ports.get("database")
-    email = ports.get("email")
-    logger = ports.get("logger")
+    # Get ports from execution context
+    from hexai.core.context import get_port
+
+    db = get_port("database")
+    email = get_port("email")
+    logger = get_port("logger")
 
     # Business logic
     user_id = input_data.get("user_id", "unknown")
@@ -120,8 +122,10 @@ async def process_user_data(input_data: dict, **ports) -> dict:
 
 async def generate_report(input_data: Any, **kwargs) -> dict:
     """Generate report using database port."""
-    db = kwargs.get("database")
-    logger = kwargs.get("logger")
+    from hexai.core.context import get_port
+
+    db = get_port("database")
+    logger = get_port("logger")
 
     # Load data from database
     user_data = await db.load("default")

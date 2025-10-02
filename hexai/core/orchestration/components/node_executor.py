@@ -18,6 +18,7 @@ else:
 
 from hexai.core.application.events import NodeCancelled, NodeCompleted, NodeFailed, NodeStarted
 from hexai.core.application.policies.models import PolicySignal
+from hexai.core.context import get_observer_manager, get_policy_manager
 from hexai.core.domain.dag import NodeSpec, ValidationError
 from hexai.core.orchestration.components.policy_coordinator import (
     OrchestratorError,
@@ -110,81 +111,13 @@ class NodeExecutor:
         node_name: str,
         node_spec: NodeSpec,
         node_input: Any,
-        ports: dict[str, Any],
         context: NodeExecutionContext,
         policy_coordinator: PolicyCoordinator,
-        observer_manager: ObserverManagerPort | None,
-        policy_manager: PolicyManagerPort | None,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
         """Execute a single node with full lifecycle management.
-
-        This method orchestrates the complete node execution lifecycle:
-
-        1. **Input Validation**: Validate input data (if enabled)
-        2. **Start Event**: Emit NodeStarted event
-        3. **Start Policy**: Evaluate policy (can skip/fail/proceed)
-        4. **Execution**: Run node function (with timeout if configured)
-        5. **Output Validation**: Validate output data (if enabled)
-        6. **Complete Event**: Emit NodeCompleted event
-        7. **Error Handling**: Emit NodeFailed/NodeCancelled on errors
-
-        Parameters
-        ----------
-        node_name : str
-            Name of the node being executed
-        node_spec : NodeSpec
-            Node specification containing function and validation models
-        node_input : Any
-            Prepared input data for the node
-        ports : dict[str, Any]
-            Available ports (llm, database, etc.)
-        context : NodeExecutionContext
-            Execution context for tracking
-        policy_coordinator : PolicyCoordinator
-            Coordinator for policy evaluation
-        observer_manager : ObserverManagerPort | None
-            Observer for event notifications
-        policy_manager : PolicyManagerPort | None
-            Manager for policy decisions
-        wave_index : int, default=0
-            Current wave index (for parallel execution)
-        validate : bool, default=True
-            Whether to validate inputs/outputs
-        **kwargs : Any
-            Additional keyword arguments passed to node function
-
-        Returns
-        -------
-        Any
-            Output of the node (validated if validation enabled)
-
-        Raises
-        ------
-        NodeExecutionError
-            If the node fails to execute
-        NodeTimeoutError
-            If node execution exceeds timeout
-        OrchestratorError
-            If policy blocks execution (FAIL signal)
-        ValidationError
-            If validation fails (only in strict mode)
-
-        Examples
-        --------
-        >>> executor = NodeExecutor(strict_validation=True, default_node_timeout=30.0)
-        >>>
-        >>> result = await executor.execute_node(
-        ...     node_name="analyzer",
-        ...     node_spec=NodeSpec("analyzer", analyze_data, timeout=60.0),
-        ...     node_input={"text": "sample"},
-        ...     ports={"llm": my_llm},
-        ...     context=exec_context,
-        ...     policy_coordinator=coordinator,
-        ...     observer_manager=observer,
-        ...     policy_manager=policy,
         ...     wave_index=1
         ... )
         """
@@ -209,11 +142,11 @@ class NodeExecutor:
                 wave_index=wave_index,
                 dependencies=list(node_spec.deps),
             )
-            await policy_coordinator.notify_observer(observer_manager, start_event)
+            await policy_coordinator.notify_observer(get_observer_manager(), start_event)
 
             # Evaluate policy for node start
             start_response = await policy_coordinator.evaluate_policy(
-                policy_manager, start_event, context, node_id=node_name, wave_index=wave_index
+                get_policy_manager(), start_event, context, node_id=node_name, wave_index=wave_index
             )
 
             # Handle control signals
@@ -233,12 +166,10 @@ class NodeExecutor:
                 if node_timeout:
                     async with asyncio.timeout(node_timeout):
                         raw_output = await self._execute_function(
-                            node_spec, validated_input, ports, kwargs
+                            node_spec, validated_input, kwargs
                         )
                 else:
-                    raw_output = await self._execute_function(
-                        node_spec, validated_input, ports, kwargs
-                    )
+                    raw_output = await self._execute_function(node_spec, validated_input, kwargs)
             except TimeoutError as e:
                 # node_timeout is guaranteed to be set here because TimeoutError
                 # only occurs when timeout is set
@@ -264,7 +195,7 @@ class NodeExecutor:
                 result=validated_output,
                 duration_ms=(time.time() - node_start_time) * 1000,
             )
-            await policy_coordinator.notify_observer(observer_manager, complete_event)
+            await policy_coordinator.notify_observer(get_observer_manager(), complete_event)
 
             return validated_output
 
@@ -275,7 +206,7 @@ class NodeExecutor:
                 wave_index=wave_index,
                 reason="timeout",
             )
-            await policy_coordinator.notify_observer(observer_manager, cancel_event)
+            await policy_coordinator.notify_observer(get_observer_manager(), cancel_event)
             raise
 
         except Exception as e:
@@ -285,11 +216,11 @@ class NodeExecutor:
                 wave_index=wave_index,
                 error=e,
             )
-            await policy_coordinator.notify_observer(observer_manager, fail_event)
+            await policy_coordinator.notify_observer(get_observer_manager(), fail_event)
 
             # Evaluate policy for node failure
             fail_response = await policy_coordinator.evaluate_policy(
-                policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
+                get_policy_manager(), fail_event, context, node_id=node_name, wave_index=wave_index
             )
 
             # Handle retry signal
@@ -304,40 +235,18 @@ class NodeExecutor:
         self,
         node_spec: NodeSpec,
         validated_input: Any,
-        ports: dict[str, Any],
         kwargs: dict[str, Any],
     ) -> Any:
-        """Execute node function with proper async/sync handling.
-
-        Handles both async and sync node functions correctly:
-        - Async functions are awaited directly
-        - Sync functions are run in an executor to avoid blocking the event loop
-
-        Parameters
-        ----------
-        node_spec : NodeSpec
-            The node specification containing the function
-        validated_input : Any
-            Validated input data
-        ports : dict[str, Any]
-            Available ports (passed as **kwargs to function)
-        kwargs : dict[str, Any]
-            Additional keyword arguments
-
-        Returns
-        -------
-        Any
-            Output from the node function
-
-        Notes
-        -----
-        Sync functions are executed in a thread pool executor to prevent
-        blocking the async event loop. This ensures good performance even
-        when mixing sync and async nodes.
-        """
+        """Execute node function. Ports accessed via ExecutionContext, not parameters."""
         if asyncio.iscoroutinefunction(node_spec.fn):
-            return await node_spec.fn(validated_input, **ports, **kwargs)
+            return await node_spec.fn(validated_input, **kwargs)
         # Run sync functions in executor to avoid blocking event loop
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: node_spec.fn(validated_input, **ports, **kwargs)
-        )
+        # IMPORTANT: Copy context so ContextVars propagate to thread pool
+        import contextvars
+
+        ctx = contextvars.copy_context()
+
+        def _run_sync() -> Any:
+            return node_spec.fn(validated_input, **kwargs)
+
+        return await asyncio.get_running_loop().run_in_executor(None, ctx.run, _run_sync)

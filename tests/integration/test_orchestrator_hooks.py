@@ -255,7 +255,9 @@ async def test_orchestrator_secret_injection_with_custom_prefix():
 
     def capture_secrets(x=None, **kwargs) -> str:
         # Capture memory state during execution
-        memory = kwargs.get("memory")
+        from hexai.core.context import get_port
+
+        memory = get_port("memory")
         if memory:
             secrets_loaded["api_key"] = memory.storage.get("env:API_KEY")
         return "captured"
@@ -563,7 +565,9 @@ async def test_orchestrator_secret_injection_isolated_per_run():
     captured_secrets = []
 
     def capture_secret(x=None, **kwargs) -> str:
-        memory = kwargs.get("memory")
+        from hexai.core.context import get_port
+
+        memory = get_port("memory")
         if memory:
             secret = memory.storage.get("secret:API_KEY")
             captured_secrets.append(secret)

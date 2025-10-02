@@ -8,8 +8,8 @@ from pydantic import BaseModel
 
 from hexai.core.application.prompt import PromptInput, TemplateType
 from hexai.core.application.prompt.template import PromptTemplate
+from hexai.core.context import get_port
 from hexai.core.domain.dag import NodeSpec
-from hexai.core.exceptions import DependencyError
 
 from .base_node_factory import BaseNodeFactory
 
@@ -96,18 +96,9 @@ class BaseLLMNode(BaseNodeFactory):
             Async wrapper function for LLM execution
         """
 
-        async def llm_wrapper(validated_input: dict[str, Any], **ports: Any) -> Any:
-            """Execute LLM call with proper event emission.
-
-            Raises
-            ------
-            DependencyError
-                If LLM port is not provided
-            """
-            llm = ports.get("llm")
-
-            if not llm:
-                raise DependencyError("llm", "LLM port is required for this node type")
+        async def llm_wrapper(validated_input: dict[str, Any]) -> Any:
+            """Execute LLM call with proper event emission."""
+            llm = get_port("llm")  # Validated by orchestrator
 
             try:
                 enhanced_template = template
@@ -226,6 +217,10 @@ Example: {example_json}
         llm_wrapper = self.create_llm_wrapper(
             name, prepared_template, input_model, output_model, rich_features
         )
+
+        # Copy required_ports from class to wrapper function
+        if hasattr(self.__class__, "_hexdag_required_ports"):
+            llm_wrapper._hexdag_required_ports = self.__class__._hexdag_required_ports  # type: ignore[attr-defined]
 
         # Build NodeSpec using universal method
         return self.create_node_with_mapping(

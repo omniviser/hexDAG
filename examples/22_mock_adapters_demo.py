@@ -77,12 +77,14 @@ async def demo_workflow_with_mocks():
     from hexai.core.application.nodes import FunctionNode
 
     # Create a node that uses multiple mock adapters
-    async def process_customer_query(input_data, **ports):
+    async def process_customer_query(input_data, **kwargs):
         """Process a customer query using mock adapters."""
-        llm = ports.get("llm")
-        db = ports.get("database")
-        memory = ports.get("memory")
-        tools = ports.get("tool_router")
+        from hexai.core.context import get_port
+
+        llm = get_port("llm")
+        db = get_port("database")
+        memory = get_port("memory")
+        tools = get_port("tool_router")
 
         # Check memory for cached response
         cached = await memory.aget(f"query_{input_data['query_id']}")
@@ -159,7 +161,11 @@ async def demo_workflow_with_mocks():
     print("\n📥 Input:")
     print(f"   {input_data}")
 
-    result = await node.fn(input_data, **ports)
+    # Use ExecutionContext to make ports available to the function
+    from hexai.core.context import ExecutionContext
+
+    async with ExecutionContext(ports=ports):
+        result = await node.fn(input_data)
 
     print("\n📤 Output:")
     print(f"   Source: {result['source']}")
@@ -168,7 +174,8 @@ async def demo_workflow_with_mocks():
 
     # Run again to test caching
     print("\n🔄 Running again (should use cache):")
-    result2 = await node.fn(input_data, **ports)
+    async with ExecutionContext(ports=ports):
+        result2 = await node.fn(input_data)
     print(f"   Source: {result2['source']}")
     print(f"   Response: {result2['response']}")
 

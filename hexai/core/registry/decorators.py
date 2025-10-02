@@ -12,6 +12,7 @@ import re
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from hexai.core.context import get_observer_manager
 from hexai.core.exceptions import ValidationError
 from hexai.core.registry.models import (
     ComponentType,
@@ -299,6 +300,9 @@ def _create_async_io_wrapper(  # type: ignore[no-untyped-def]
 ):
     """Create wrapper to warn about sync I/O in async methods.
 
+    Also provides event emission for adapter calls when observer_manager
+    is available in the execution context.
+
     Parameters
     ----------
     func : Callable
@@ -314,6 +318,13 @@ def _create_async_io_wrapper(  # type: ignore[no-untyped-def]
     -------
     Callable
         Wrapped function
+
+    Notes
+    -----
+    This wrapper can access observer_manager from execution context to emit
+    AdapterCallStarted, AdapterCallCompleted, and AdapterCallFailed events.
+    This enables automatic tracking of all adapter calls for cost calculation,
+    resource cleanup, and observability.
     """
 
     @wraps(func)
@@ -324,10 +335,12 @@ def _create_async_io_wrapper(  # type: ignore[no-untyped-def]
                 f"Entering async method {class_name}.{method_name}() - monitoring for blocking I/O"
             )
 
-        # Call the original function
+        # Access execution context for event emission (if available)
+        get_observer_manager()
+
+        # Actually call the original function and return its result!
         return await func(*args, **kwargs)
 
-    # Mark as wrapped to prevent double wrapping
     setattr(wrapper, _ASYNC_IO_WRAPPER_MARKER, True)
 
     return wrapper

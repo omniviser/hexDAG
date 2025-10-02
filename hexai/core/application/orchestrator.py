@@ -7,6 +7,7 @@ concurrently where possible using asyncio.gather().
 import asyncio
 import logging
 import time
+import uuid
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -16,6 +17,7 @@ else:
     ObserverManagerPort = Any
     PolicyManagerPort = Any
 
+from hexai.core.context import ExecutionContext
 from hexai.core.domain.dag import DirectedGraph
 from hexai.core.orchestration import NodeExecutionContext
 from hexai.core.orchestration.components import (
@@ -84,6 +86,9 @@ class Orchestrator:
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
 
+        # Validate known port types
+        self._validate_port_types(self.ports)
+
         # Initialize collaborators (dependency injection)
         self._policy_coordinator = PolicyCoordinator()
         self._input_mapper = InputMapper()
@@ -121,6 +126,81 @@ class Orchestrator:
     def _check_policy_signal(self, response: PolicyResponse, context: str) -> None:
         """Check policy signal and raise error if not PROCEED (delegates to PolicyCoordinator)."""
         self._policy_coordinator.check_policy_signal(response, context)
+
+    def _validate_port_types(self, ports: dict[str, Any]) -> None:
+        """Validate that orchestrator ports match expected types.
+
+        Args
+        ----
+            ports: Dictionary of ports to validate
+
+        Notes
+        -----
+        This provides helpful warnings if ports don't match expected protocols.
+        Currently checks observer_manager and policy_manager.
+        """
+        # Check observer_manager if provided
+        if "observer_manager" in ports:
+            obs = ports["observer_manager"]
+            if not hasattr(obs, "notify"):
+                logger.warning(
+                    f"Port 'observer_manager' doesn't have 'notify' method. "
+                    f"Expected ObserverManagerPort, got {type(obs).__name__}"
+                )
+
+        # Check policy_manager if provided
+        if "policy_manager" in ports:
+            policy = ports["policy_manager"]
+            if not hasattr(policy, "evaluate"):
+                logger.warning(
+                    f"Port 'policy_manager' doesn't have 'evaluate' method. "
+                    f"Expected PolicyManagerPort, got {type(policy).__name__}"
+                )
+
+    def _validate_required_ports(
+        self, graph: DirectedGraph, available_ports: dict[str, Any]
+    ) -> None:
+        """Validate that all required ports for nodes in the DAG are available.
+
+        Args
+        ----
+            graph: The DirectedGraph to validate
+            available_ports: Dictionary of available ports
+
+        Raises
+        ------
+            OrchestratorError: If required ports are missing
+        """
+        missing_ports: dict[str, list[str]] = {}
+
+        for node_name, node_spec in graph.nodes.items():
+            # Check if node function has required_ports metadata
+            fn = node_spec.fn
+            required_ports: list[str] = []
+
+            # Try to get required_ports from the function/method
+            if hasattr(fn, "_hexdag_required_ports"):
+                required_ports = getattr(fn, "_hexdag_required_ports", [])
+            # Note: type ignore needed for pyright - hasattr doesn't narrow union types for it
+            elif hasattr(fn, "__self__") and hasattr(fn.__self__, "__class__"):  # type: ignore[unused-ignore]
+                # It's a bound method - check the class
+                node_class = fn.__self__.__class__  # type: ignore[unused-ignore]
+                required_ports = getattr(node_class, "_hexdag_required_ports", [])
+
+            # Check each required port
+            for port_name in required_ports:
+                if port_name not in available_ports:
+                    if node_name not in missing_ports:
+                        missing_ports[node_name] = []
+                    missing_ports[node_name].append(port_name)
+
+        # Raise error if any ports are missing
+        if missing_ports:
+            error_msg = "Missing required ports:\n"
+            for node_name, ports in missing_ports.items():
+                error_msg += f"  Node '{node_name}': {', '.join(ports)}\n"
+            error_msg += f"\nAvailable ports: {', '.join(available_ports.keys())}"
+            raise OrchestratorError(error_msg)
 
     @classmethod
     def from_builder(
@@ -233,6 +313,9 @@ class Orchestrator:
             except Exception as e:
                 raise OrchestratorError(f"Invalid DAG: {e}") from e
 
+        # Validate required ports for all nodes
+        self._validate_required_ports(graph, all_ports)
+
         node_results: dict[str, Any] = {}
         waves = graph.waves()
         pipeline_start_time = time.time()
@@ -245,106 +328,108 @@ class Orchestrator:
         # Create execution context for this DAG run
         pipeline_name = getattr(graph, "name", "unnamed")
         context = NodeExecutionContext(dag_id=pipeline_name)
+        run_id = str(uuid.uuid4())
 
-        # PRE-DAG HOOKS: Execute before pipeline starts
-        pre_hook_results = await self._pre_hook_manager.execute_hooks(
-            ports=all_ports,
-            context=context,
+        # Set up execution context for all components
+        async with ExecutionContext(
             observer_manager=observer_manager,
-            pipeline_name=pipeline_name,
-        )
-        # Store hook results in context for nodes to access
-        context.metadata["pre_dag_hooks"] = pre_hook_results
-
-        # Fire pipeline started event and check control
-        event = PipelineStarted(
-            name=pipeline_name,
-            total_waves=len(waves),
-            total_nodes=len(graph.nodes),
-        )
-        await self._notify_observer(observer_manager, event)
-
-        # Evaluate policy for pipeline start - policy can provide timeout
-        policy_response = await self._evaluate_policy(policy_manager, event, context)
-        self._check_policy_signal(policy_response, "Pipeline start")
-
-        # Extract timeout from policy response (if provided)
-        timeout = None
-        if policy_response.data and isinstance(policy_response.data, dict):
-            timeout = policy_response.data.get("timeout")
-
-        # Track pipeline status for post-DAG hooks
-
-        pipeline_status: Literal["success", "failed", "cancelled"] = "success"
-        pipeline_error: Exception | None = None
-        cancelled = False
-
-        try:
-            # Execute all waves with optional timeout
-            cancelled = await self._execute_all_waves(
-                waves=waves,
-                graph=graph,
-                node_results=node_results,
-                initial_input=initial_input,
-                all_ports=all_ports,
+            policy_manager=policy_manager,
+            run_id=run_id,
+            ports=all_ports,
+        ):
+            # PRE-DAG HOOKS: Execute before pipeline starts
+            pre_hook_results = await self._pre_hook_manager.execute_hooks(
                 context=context,
-                observer_manager=observer_manager,
-                policy_manager=policy_manager,
-                timeout=timeout,
-                validate=validate,
-                **kwargs,
+                pipeline_name=pipeline_name,
             )
+            # Store hook results in context for nodes to access
+            context.metadata["pre_dag_hooks"] = pre_hook_results
 
-            # Determine final status
-            if cancelled:
-                pipeline_status = "cancelled"
+            # Fire pipeline started event and check control
+            event = PipelineStarted(
+                name=pipeline_name,
+                total_waves=len(waves),
+                total_nodes=len(graph.nodes),
+            )
+            await self._notify_observer(observer_manager, event)
 
-        except Exception as e:
-            pipeline_status = "failed"
-            pipeline_error = e
-            raise  # Re-raise to preserve stack trace
+            # Evaluate policy for pipeline start - policy can provide timeout
+            policy_response = await self._evaluate_policy(policy_manager, event, context)
+            self._check_policy_signal(policy_response, "Pipeline start")
 
-        finally:
-            # Fire appropriate completion/cancellation event
-            duration_ms = (time.time() - pipeline_start_time) * 1000
+            # Extract timeout from policy response (if provided)
+            timeout = None
+            if policy_response.data and isinstance(policy_response.data, dict):
+                timeout = policy_response.data.get("timeout")
 
-            if cancelled:
-                pipeline_cancelled = PipelineCancelled(
-                    name=pipeline_name,
-                    duration_ms=duration_ms,
-                    reason="timeout",
-                    partial_results=node_results,
-                )
-                await self._notify_observer(observer_manager, pipeline_cancelled)
-            elif pipeline_status == "success":
-                pipeline_completed = PipelineCompleted(
-                    name=pipeline_name,
-                    duration_ms=duration_ms,
-                    node_results=node_results,
-                )
-                await self._notify_observer(observer_manager, pipeline_completed)
+            # Track pipeline status for post-DAG hooks
 
-            # POST-DAG HOOKS: Always execute for cleanup (even on failure)
+            pipeline_status: Literal["success", "failed", "cancelled"] = "success"
+            pipeline_error: Exception | None = None
+            cancelled = False
+
             try:
-                post_hook_results = await self._post_hook_manager.execute_hooks(
-                    ports=all_ports,
-                    context=context,
-                    observer_manager=observer_manager,
-                    pipeline_name=pipeline_name,
-                    pipeline_status=pipeline_status,
+                # Execute all waves with optional timeout
+                cancelled = await self._execute_all_waves(
+                    waves=waves,
+                    graph=graph,
                     node_results=node_results,
-                    error=pipeline_error,
-                )
-                # Store post-hook results in context (for debugging/logging)
-                context.metadata["post_dag_hooks"] = post_hook_results
-
-            except Exception as post_hook_error:
-                # Log but don't fail the pipeline due to post-hook errors
-                logger.error(
-                    f"Post-DAG hooks failed: {post_hook_error}",
-                    exc_info=True,
+                    initial_input=initial_input,
+                    context=context,
+                    timeout=timeout,
+                    validate=validate,
+                    **kwargs,
                 )
 
+                # Determine final status
+                if cancelled:
+                    pipeline_status = "cancelled"
+
+            except Exception as e:
+                pipeline_status = "failed"
+                pipeline_error = e
+                raise  # Re-raise to preserve stack trace
+
+            finally:
+                # Fire appropriate completion/cancellation event
+                duration_ms = (time.time() - pipeline_start_time) * 1000
+
+                if cancelled:
+                    pipeline_cancelled = PipelineCancelled(
+                        name=pipeline_name,
+                        duration_ms=duration_ms,
+                        reason="timeout",
+                        partial_results=node_results,
+                    )
+                    await self._notify_observer(observer_manager, pipeline_cancelled)
+                elif pipeline_status == "success":
+                    pipeline_completed = PipelineCompleted(
+                        name=pipeline_name,
+                        duration_ms=duration_ms,
+                        node_results=node_results,
+                    )
+                    await self._notify_observer(observer_manager, pipeline_completed)
+
+                # POST-DAG HOOKS: Always execute for cleanup (even on failure)
+                try:
+                    post_hook_results = await self._post_hook_manager.execute_hooks(
+                        context=context,
+                        pipeline_name=pipeline_name,
+                        pipeline_status=pipeline_status,
+                        node_results=node_results,
+                        error=pipeline_error,
+                    )
+                    # Store post-hook results in context (for debugging/logging)
+                    context.metadata["post_dag_hooks"] = post_hook_results
+
+                except Exception as post_hook_error:
+                    # Log but don't fail the pipeline due to post-hook errors
+                    logger.error(
+                        f"Post-DAG hooks failed: {post_hook_error}",
+                        exc_info=True,
+                    )
+
+        # Return results (outside ExecutionContext - it's cleaned up automatically)
         return node_results
 
     async def _execute_all_waves(
@@ -353,45 +438,19 @@ class Orchestrator:
         graph: DirectedGraph,
         node_results: dict[str, Any],
         initial_input: Any,
-        all_ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
-        policy_manager: PolicyManagerPort | None,
         timeout: float | None,
         validate: bool,
         **kwargs: Any,
     ) -> bool:
-        """Execute all waves with optional timeout (delegates to WaveExecutor).
-
-        Args
-        ----
-            waves: List of waves to execute
-            graph: The DirectedGraph being executed
-            node_results: Dictionary to accumulate node results
-            initial_input: Initial input data
-            all_ports: All available ports
-            context: Execution context
-            observer_manager: Optional observer manager
-            policy_manager: Optional policy manager
-            timeout: Optional timeout in seconds
-            validate: Whether to validate nodes
-            **kwargs: Additional arguments
-
-        Returns
-        -------
-        bool
-            True if execution was cancelled due to timeout, False otherwise
-        """
+        """Execute all waves with optional timeout (delegates to WaveExecutor)."""
         return await self._wave_executor.execute_all_waves(
             waves=waves,
             node_executor_fn=self._execute_node,
             graph=graph,
             node_results=node_results,
             initial_input=initial_input,
-            all_ports=all_ports,
             context=context,
-            observer_manager=observer_manager,
-            policy_manager=policy_manager,
             policy_coordinator=self._policy_coordinator,
             timeout=timeout,
             validate=validate,
@@ -404,29 +463,12 @@ class Orchestrator:
         graph: DirectedGraph,
         node_results: dict[str, Any],
         initial_input: Any,
-        ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
-        policy_manager: PolicyManagerPort | None,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
-        """Execute a single node (delegates to NodeExecutor with retry logic).
-
-        The orchestrator provides the MECHANISM for retries through the RETRY signal,
-        but the retry POLICY (when to retry, how many times, delays) is determined
-        by control handlers registered with the EventBus.
-
-        Returns
-        -------
-            Output of the node
-
-        Raises
-        ------
-        NodeExecutionError
-            If the node fails to execute
-        """
+        """Execute a single node (delegates to NodeExecutor with retry logic)."""
         # Create node context early so it's available in exception handler
         _ = context.with_node(node_name, wave_index)  # For future use
 
@@ -442,11 +484,8 @@ class Orchestrator:
                 node_name=node_name,
                 node_spec=node_spec,
                 node_input=node_input,
-                ports=ports,
                 context=context,
                 policy_coordinator=self._policy_coordinator,
-                observer_manager=observer_manager,
-                policy_manager=policy_manager,
                 wave_index=wave_index,
                 validate=validate,
                 **kwargs,
@@ -456,6 +495,8 @@ class Orchestrator:
             # Check if this is a RETRY signal from the policy
             # The orchestrator handles retries at this level
             if hasattr(e, "__cause__") and isinstance(e.__cause__, Exception):
+                from hexai.core.context import get_policy_manager
+
                 # Try to get retry signal from policy
                 fail_event = NodeFailed(
                     name=node_name,
@@ -463,7 +504,11 @@ class Orchestrator:
                     error=e.__cause__,
                 )
                 fail_response = await self._evaluate_policy(
-                    policy_manager, fail_event, context, node_id=node_name, wave_index=wave_index
+                    get_policy_manager(),
+                    fail_event,
+                    context,
+                    node_id=node_name,
+                    wave_index=wave_index,
                 )
 
                 if fail_response.signal == PolicySignal.FALLBACK:
@@ -481,10 +526,7 @@ class Orchestrator:
                         graph=graph,
                         node_results=node_results,
                         initial_input=initial_input,
-                        ports=ports,
                         context=context.with_attempt(context.attempt + 1),
-                        observer_manager=observer_manager,
-                        policy_manager=policy_manager,
                         wave_index=wave_index,
                         validate=validate,
                         **kwargs,

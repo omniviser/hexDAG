@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from hexai.core.application.orchestrator import NodeExecutionError, Orchestrator, OrchestratorError
 from hexai.core.bootstrap import ensure_bootstrapped
+from hexai.core.context import get_port
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.core.registry import registry
 
@@ -316,8 +317,12 @@ class TestOrchestrator:
     async def test_ports_flag_injection(self, orchestrator, observers):
         """Test dummy node reads ports['flag'] == 42."""
 
-        def dummy_node_with_flag_check(input_data, flag=None, **ports):
+        def dummy_node_with_flag_check(input_data):
             """Check for flag port."""
+            from hexai.core.context import get_port
+
+            # Get flag from ExecutionContext
+            flag = get_port("flag")
             # Verify the flag is what we expect
             assert flag == 42
             return {"result": "success", "flag_value": flag, "input": input_data}
@@ -345,14 +350,18 @@ class TestOrchestrator:
         from hexai.adapters.mock.mock_llm import MockLLM
         from hexai.adapters.unified_tool_router import UnifiedToolRouter
 
-        async def async_dummy_node_with_ports(input_data, llm=None, tool_router=None, **ports):
+        async def async_dummy_node_with_ports(input_data):
             """Async dummy node that uses ports."""
+            from hexai.core.context import get_port
+
             result = {"input": input_data}
 
+            llm = get_port("llm")
             if llm:
                 llm_response = await llm.aresponse([{"role": "user", "content": "test"}])
                 result["llm_response"] = llm_response
 
+            tool_router = get_port("tool_router")
             if tool_router:
                 tool_result = await tool_router.acall_tool(
                     "test_tool", {"input_data": "test_input"}
@@ -423,8 +432,13 @@ class TestOrchestrator:
     async def test_ports_with_additional_kwargs(self, orchestrator, observers):
         """Test that ports work alongside additional kwargs."""
 
-        def node_with_ports_and_kwargs(input_data, flag=None, extra_param=None, **kwargs):
-            return {"flag": flag, "extra_param": extra_param, "input": input_data, "kwargs": kwargs}
+        def node_with_ports_and_kwargs(input_data, extra_param=None, **kwargs):
+            return {
+                "flag": get_port("flag"),
+                "extra_param": extra_param,
+                "input": input_data,
+                "kwargs": kwargs,
+            }
 
         graph = DirectedGraph()
         graph.add(NodeSpec("mixed_node", node_with_ports_and_kwargs))
@@ -694,8 +708,12 @@ class TestOrchestrator:
         shared_ports = {"database": "mock_db", "cache": "mock_cache"}
         orchestrator = Orchestrator(ports=shared_ports)
 
-        def node_with_shared_ports(input_data, database=None, cache=None, **ports):
-            return {"database": database, "cache": cache, "input": input_data}
+        def node_with_shared_ports(input_data):
+            return {
+                "database": get_port("database"),
+                "cache": get_port("cache"),
+                "input": input_data,
+            }
 
         graph = DirectedGraph()
         graph.add(NodeSpec("test_node", node_with_shared_ports))
@@ -715,8 +733,11 @@ class TestOrchestrator:
     async def test_observers_as_port(self, orchestrator):
         """Test that event manager is passed as a port to nodes."""
 
-        async def node_with_observers(input_data, observer_manager=None, **ports):
+        async def node_with_observers(input_data):
             """Node that uses event manager from ports."""
+            from hexai.core.context import get_port
+
+            observer_manager = get_port("observer_manager")
             if observer_manager:
                 await observer_manager.emit(MagicMock())  # Mock event
             return {"used_observers": observer_manager is not None}

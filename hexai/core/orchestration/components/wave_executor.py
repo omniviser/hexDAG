@@ -61,51 +61,18 @@ class WaveExecutor:
         graph: DirectedGraph,
         node_results: dict[str, Any],
         initial_input: Any,
-        all_ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
-        policy_manager: PolicyManagerPort | None,
         policy_coordinator: Any,  # PolicyCoordinator
         timeout: float | None,
         validate: bool,
         **kwargs: Any,
     ) -> bool:
-        """Execute all waves with optional timeout.
+        """Execute all waves with optional timeout."""
+        from hexai.core.context import (
+            get_observer_manager,
+            get_policy_manager,
+        )
 
-        Parameters
-        ----------
-        waves : list[list[str]]
-            List of waves (each wave is a list of node names)
-        node_executor_fn : Callable
-            Function to execute a single node (typically orchestrator._execute_node)
-        graph : DirectedGraph
-            The DirectedGraph being executed
-        node_results : dict[str, Any]
-            Dictionary to accumulate node results (mutated in place)
-        initial_input : Any
-            Initial input data
-        all_ports : dict[str, Any]
-            All available ports
-        context : NodeExecutionContext
-            Execution context
-        observer_manager : ObserverManagerPort | None
-            Observer manager
-        policy_manager : PolicyManagerPort | None
-            Policy manager
-        policy_coordinator : PolicyCoordinator
-            Policy coordinator for evaluating policies
-        timeout : float | None
-            Optional timeout in seconds for all waves
-        validate : bool
-            Whether to validate nodes
-        **kwargs : Any
-            Additional arguments passed to node executor
-
-        Returns
-        -------
-        bool
-            True if execution was cancelled due to timeout, False otherwise
-        """
         try:
             async with asyncio.timeout(timeout):
                 for wave_idx, wave in enumerate(waves, 1):
@@ -116,11 +83,11 @@ class WaveExecutor:
                         wave_index=wave_idx,
                         nodes=wave,
                     )
-                    await policy_coordinator.notify_observer(observer_manager, wave_event)
+                    await policy_coordinator.notify_observer(get_observer_manager(), wave_event)
 
                     # Evaluate policy for wave
                     wave_response = await policy_coordinator.evaluate_policy(
-                        policy_manager, wave_event, context, wave_index=wave_idx
+                        get_policy_manager(), wave_event, context, wave_index=wave_idx
                     )
                     policy_coordinator.check_policy_signal(wave_response, f"Wave {wave_idx}")
 
@@ -131,10 +98,7 @@ class WaveExecutor:
                         graph=graph,
                         node_results=node_results,
                         initial_input=initial_input,
-                        ports=all_ports,
                         context=context,
-                        observer_manager=observer_manager,
-                        policy_manager=policy_manager,
                         wave_index=wave_idx,
                         validate=validate,
                         **kwargs,
@@ -146,7 +110,7 @@ class WaveExecutor:
                         wave_index=wave_idx,
                         duration_ms=(time.time() - wave_start_time) * 1000,
                     )
-                    await policy_coordinator.notify_observer(observer_manager, wave_completed)
+                    await policy_coordinator.notify_observer(get_observer_manager(), wave_completed)
 
             return False  # Completed successfully
 
@@ -162,48 +126,12 @@ class WaveExecutor:
         graph: DirectedGraph,
         node_results: dict[str, Any],
         initial_input: Any,
-        ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
-        policy_manager: PolicyManagerPort | None,
         wave_index: int,
         validate: bool,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Execute all nodes in a wave with concurrency limiting.
-
-        Parameters
-        ----------
-        wave : list[str]
-            List of node names to execute in parallel
-        node_executor_fn : Callable
-            Function to execute a single node
-        graph : DirectedGraph
-            The DirectedGraph being executed
-        node_results : dict[str, Any]
-            Results from previous nodes
-        initial_input : Any
-            Initial input data
-        ports : dict[str, Any]
-            Available ports
-        context : NodeExecutionContext
-            Execution context
-        observer_manager : ObserverManagerPort | None
-            Observer manager
-        policy_manager : PolicyManagerPort | None
-            Policy manager
-        wave_index : int
-            Current wave index
-        validate : bool
-            Whether to validate nodes
-        **kwargs : Any
-            Additional arguments
-
-        Returns
-        -------
-        dict[str, Any]
-            Dictionary mapping node names to their execution results for this wave
-        """
+        """Execute all nodes in a wave with concurrency limiting."""
 
         async def execute_with_semaphore(node_name: str) -> tuple[str, Any]:
             """Execute a single node with semaphore-based concurrency control."""
@@ -213,10 +141,7 @@ class WaveExecutor:
                     graph=graph,
                     node_results=node_results,
                     initial_input=initial_input,
-                    ports=ports,
                     context=context,
-                    observer_manager=observer_manager,
-                    policy_manager=policy_manager,
                     wave_index=wave_index,
                     validate=validate,
                     **kwargs,
