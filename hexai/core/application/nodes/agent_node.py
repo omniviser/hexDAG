@@ -14,7 +14,7 @@ from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.context import get_port, get_ports
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.ports.tool_router import ToolRouter
-from hexai.core.protocols import is_dict_convertible
+from hexai.core.protocols import to_dict
 from hexai.core.registry import node
 from hexai.core.registry.models import NodeSubtype
 
@@ -152,10 +152,6 @@ class ReActAgentNode(BaseNodeFactory):
         agent_fn = self._create_agent_with_loop(
             name, main_prompt, continuation_prompts or {}, output_model, config
         )
-
-        # Copy required_ports from class to wrapper function
-        if hasattr(self.__class__, "_hexdag_required_ports"):
-            agent_fn._hexdag_required_ports = self.__class__._hexdag_required_ports  # type: ignore[attr-defined]
 
         # Use universal input mapping method
         return self.create_node_with_mapping(
@@ -306,13 +302,10 @@ class ReActAgentNode(BaseNodeFactory):
 
         # Case 2: Fresh input (first iteration)
         # Handle both dict and Pydantic model inputs
-        if isinstance(input_data, dict):
-            raw_input = input_data
-        elif is_dict_convertible(input_data):
-            # Pydantic model - convert to dict using protocol
-            raw_input = input_data.model_dump()
-        else:
-            # Fallback for other types
+        try:
+            raw_input = to_dict(input_data)
+        except TypeError:
+            # Fallback for non-dict types
             raw_input = {"input": str(input_data)}
 
         # Create fresh AgentState
@@ -572,17 +565,11 @@ carried_data={'key': 'value'})"""
 
             if isinstance(result_data, dict):
                 return result_data
-        except (json.JSONDecodeError, SyntaxError, ValueError):
+            return None
+        except (json.JSONDecodeError, SyntaxError, ValueError, IndexError):
             # Failed to parse - return None to skip this result
-            pass
-        except Exception as e:
-            # Log unexpected errors but continue
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.debug("Unexpected error parsing tool_end result: %s", e)
-
-        return None
+            # IndexError: split failed (malformed tool_end output)
+            return None
 
     async def _emit_agent_metadata(self, state: AgentState, event_manager: Any) -> None:
         """Emit agent metadata trace event.
@@ -630,12 +617,16 @@ carried_data={'key': 'value'})"""
                     # Create and return the final output
                     return output_model.model_validate(parsed_data)
 
-                except Exception as e:
-                    # Log validation errors but continue processing
+                except (ValueError, TypeError) as e:
+                    # Validation failed - try next tool_end result
                     import logging
 
                     logger = logging.getLogger(__name__)
-                    logger.debug("Failed to validate tool_end result: %e", e)
+                    logger.debug(
+                        "Failed to validate tool_end result against %s: %s",
+                        output_model.__name__,
+                        e,
+                    )
                     continue  # Skip this tool result and try the next one
 
         return None

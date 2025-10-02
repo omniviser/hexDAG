@@ -19,7 +19,12 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class ValidationError(Exception):
-    """Validation error for all validation failures in the domain."""
+    """Domain-specific validation error for DAG validation.
+
+    Note: This is separate from hexai.core.exceptions.ValidationError
+    which is used for general field validation. This exception is specifically
+    for DAG node input/output validation failures.
+    """
 
     pass
 

@@ -198,6 +198,50 @@ def is_schema_type(type_obj: Any) -> bool:
         return False
 
 
+def to_dict(obj: Any) -> dict[str, Any]:
+    """Convert object to dictionary, handling multiple input types.
+
+    This centralizes the type conversion logic used throughout the codebase.
+
+    Args
+    ----
+        obj: Object to convert (dict, Pydantic model, or other)
+
+    Returns
+    -------
+        Dictionary representation of the object
+
+    Raises
+    ------
+        TypeError
+            If object cannot be converted to dict
+
+    Examples
+    --------
+    >>> to_dict({"key": "value"})
+    {'key': 'value'}
+    >>> from pydantic import BaseModel
+    >>> class MyModel(BaseModel):
+    ...     field: str
+    >>> to_dict(MyModel(field="value"))
+    {'field': 'value'}
+    >>> to_dict("not_convertible")  # Raises TypeError
+    """
+    # Case 1: Already a dict
+    if isinstance(obj, dict):
+        return obj
+
+    # Case 2: Pydantic model or dict-convertible
+    if isinstance(obj, DictConvertible):
+        return obj.model_dump()
+
+    # Case 3: Cannot convert
+    raise TypeError(
+        f"Cannot convert {type(obj).__name__} to dict. "
+        f"Expected dict or object with model_dump() method"
+    )
+
+
 __all__ = [
     "ComponentWithExecute",
     "ConfigurablePort",
@@ -207,4 +251,5 @@ __all__ = [
     "has_execute_method",
     "is_dict_convertible",
     "is_schema_type",
+    "to_dict",
 ]

@@ -29,7 +29,7 @@ class BaseNodeFactory(ABC):
             return None
 
         if is_schema_type(schema):
-            return schema  # type: ignore[return-value]
+            return schema  # type: ignore[return-value]  # is_schema_type checks for BaseModel subclass
 
         if isinstance(schema, dict):
             # Create field definitions for create_model
@@ -66,9 +66,20 @@ class BaseNodeFactory(ABC):
         # At this point, schema should be a type
         try:
             return cast("type[Any] | None", create_model(name, value=(schema, ...)))
-        except Exception:
+        except (TypeError, AttributeError) as e:
             # If we get here, schema is an unexpected type
-            raise ValueError("Schema must be a dict, type, or Pydantic model") from None
+            raise ValueError(
+                f"Schema must be a dict, type, or Pydantic model, got {type(schema).__name__}"
+            ) from e
+
+    def _copy_required_ports_to_wrapper(self, wrapper_fn: Any) -> None:
+        """Copy required_ports metadata from factory class to wrapper function.
+
+        This ensures port requirements are preserved when creating node functions.
+        """
+        if hasattr(self.__class__, "_hexdag_required_ports"):
+            # _hexdag_required_ports is added dynamically by @node decorator
+            wrapper_fn._hexdag_required_ports = self.__class__._hexdag_required_ports  # pyright: ignore[reportAttributeAccessIssue]  # noqa: B010
 
     def create_node_with_mapping(
         self,
@@ -80,6 +91,9 @@ class BaseNodeFactory(ABC):
         **kwargs: Any,
     ) -> NodeSpec:
         """Universal NodeSpec creation."""
+        # Copy required_ports metadata to wrapper
+        self._copy_required_ports_to_wrapper(wrapped_fn)
+
         # Create Pydantic models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)

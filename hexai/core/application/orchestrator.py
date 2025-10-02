@@ -17,7 +17,7 @@ else:
     ObserverManagerPort = Any
     PolicyManagerPort = Any
 
-from hexai.core.context import ExecutionContext
+from hexai.core.context import ExecutionContext, get_policy_manager
 from hexai.core.domain.dag import DirectedGraph
 from hexai.core.orchestration import NodeExecutionContext
 from hexai.core.orchestration.components import (
@@ -369,13 +369,18 @@ class Orchestrator:
             cancelled = False
 
             try:
-                # Execute all waves with optional timeout
-                cancelled = await self._execute_all_waves(
+                # Execute all waves with optional timeout (delegate to WaveExecutor)
+                cancelled = await self._wave_executor.execute_all_waves(
                     waves=waves,
+                    node_executor_fn=self._execute_node,
                     graph=graph,
                     node_results=node_results,
                     initial_input=initial_input,
+                    all_ports=all_ports,
                     context=context,
+                    observer_manager=observer_manager,
+                    policy_manager=policy_manager,
+                    policy_coordinator=self._policy_coordinator,
                     timeout=timeout,
                     validate=validate,
                     **kwargs,
@@ -468,9 +473,21 @@ class Orchestrator:
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
-        """Execute a single node (delegates to NodeExecutor with retry logic)."""
+        """Execute a single node (delegates to NodeExecutor with retry logic).
+
+        Note: all_ports, observer_manager, policy_manager are filtered out from kwargs
+        since they're accessed via ExecutionContext, not passed to node functions.
+        """
         # Create node context early so it's available in exception handler
         _ = context.with_node(node_name, wave_index)  # For future use
+
+        # Filter out orchestrator-level kwargs that shouldn't be passed to nodes
+        # These are available via ExecutionContext instead
+        node_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in {"all_ports", "observer_manager", "policy_manager"}
+        }
 
         try:
             # Prepare input using InputMapper
@@ -488,15 +505,13 @@ class Orchestrator:
                 policy_coordinator=self._policy_coordinator,
                 wave_index=wave_index,
                 validate=validate,
-                **kwargs,
+                **node_kwargs,
             )
 
         except NodeExecutionError as e:
             # Check if this is a RETRY signal from the policy
             # The orchestrator handles retries at this level
             if hasattr(e, "__cause__") and isinstance(e.__cause__, Exception):
-                from hexai.core.context import get_policy_manager
-
                 # Try to get retry signal from policy
                 fail_event = NodeFailed(
                     name=node_name,

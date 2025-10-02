@@ -10,6 +10,7 @@ from hexai.core.application.prompt import PromptInput, TemplateType
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.context import get_port
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.protocols import to_dict
 
 from .base_node_factory import BaseNodeFactory
 
@@ -107,11 +108,10 @@ class BaseLLMNode(BaseNodeFactory):
 
                 # Convert validated_input to dict if needed
                 # Note: signature is dict[str, Any] but runtime may pass Pydantic models
-                if isinstance(validated_input, dict):
-                    input_dict = validated_input
-                elif hasattr(validated_input, "model_dump"):  # type: ignore[unreachable]
-                    input_dict = validated_input.model_dump()
-                else:
+                try:
+                    input_dict = to_dict(validated_input)
+                except TypeError:
+                    # Already compatible type, use as-is
                     input_dict = validated_input
 
                 messages, template_vars = self._generate_messages(enhanced_template, input_dict)
@@ -126,8 +126,9 @@ class BaseLLMNode(BaseNodeFactory):
 
                 return result
 
-            except Exception as e:
-                raise e
+            except Exception:
+                # Re-raise to preserve stack trace and let orchestrator handle
+                raise
 
         return llm_wrapper
 
@@ -217,10 +218,6 @@ Example: {example_json}
         llm_wrapper = self.create_llm_wrapper(
             name, prepared_template, input_model, output_model, rich_features
         )
-
-        # Copy required_ports from class to wrapper function
-        if hasattr(self.__class__, "_hexdag_required_ports"):
-            llm_wrapper._hexdag_required_ports = self.__class__._hexdag_required_ports  # type: ignore[attr-defined]
 
         # Build NodeSpec using universal method
         return self.create_node_with_mapping(

@@ -225,8 +225,8 @@ class FunctionNode(BaseNodeFactory):
 
             return input_schema, output_schema
 
-        except Exception:
-            # If anything goes wrong with inference, return None for both
+        except (TypeError, AttributeError, ValueError):
+            # If type hints are malformed or unavailable, skip inference
             return None, None
 
     @staticmethod

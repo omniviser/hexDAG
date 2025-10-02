@@ -5,6 +5,7 @@ nodes with full lifecycle management including validation, timeout, and events.
 """
 
 import asyncio
+import contextvars
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -242,8 +243,6 @@ class NodeExecutor:
             return await node_spec.fn(validated_input, **kwargs)
         # Run sync functions in executor to avoid blocking event loop
         # IMPORTANT: Copy context so ContextVars propagate to thread pool
-        import contextvars
-
         ctx = contextvars.copy_context()
 
         def _run_sync() -> Any:
