@@ -16,14 +16,14 @@ from hexai.visualization import DAGVisualizer
 from hexai.visualization.dag_visualizer import export_dag_to_dot, render_dag_to_image
 
 
-class TestInput(BaseModel):
+class SampleInput(BaseModel):
     """Test input model."""
 
     text: str
     priority: int
 
 
-class TestOutput(BaseModel):
+class SampleOutput(BaseModel):
     """Test output model."""
 
     result: str
@@ -181,7 +181,7 @@ class TestDAGVisualizer:
         visualizer = DAGVisualizer(graph)
 
         # Test with Pydantic model
-        schema = TestInput
+        schema = SampleInput
         label = visualizer._format_schema_label("Input", schema)
         assert "text: str" in label
         assert "priority: int" in label
@@ -401,7 +401,7 @@ class TestDAGVisualizer:
 
         # Mock node spec with in_model
         node_spec = Mock()
-        node_spec.in_model = TestInput
+        node_spec.in_model = SampleInput
 
         schema = visualizer._extract_node_input_schema(node_spec)
         assert schema is not None
@@ -415,7 +415,7 @@ class TestDAGVisualizer:
 
         # Mock node spec with out_model
         node_spec = Mock()
-        node_spec.out_model = TestOutput
+        node_spec.out_model = SampleOutput
 
         schema = visualizer._extract_node_output_schema(node_spec)
         assert schema is not None
@@ -428,7 +428,7 @@ class TestDAGVisualizer:
         visualizer = DAGVisualizer(graph)
 
         # Test with Pydantic model
-        schema = visualizer._convert_type_to_schema_dict(TestInput)
+        schema = visualizer._convert_type_to_schema_dict(SampleInput)
         assert schema is not None
         assert "text" in schema
         assert "priority" in schema
@@ -442,8 +442,8 @@ class TestDAGVisualizer:
         graph = DirectedGraph()
         visualizer = DAGVisualizer(graph)
 
-        def test_func(input_data: TestInput, context) -> TestOutput:
-            return TestOutput(result="test", confidence=0.8)
+        def test_func(input_data: SampleInput, context) -> SampleOutput:
+            return SampleOutput(result="test", confidence=0.8)
 
         schema = visualizer._extract_function_input_schema(test_func)
         assert schema is not None
@@ -455,8 +455,8 @@ class TestDAGVisualizer:
         graph = DirectedGraph()
         visualizer = DAGVisualizer(graph)
 
-        def test_func(input_data, context) -> TestOutput:
-            return TestOutput(result="test", confidence=0.8)
+        def test_func(input_data, context) -> SampleOutput:
+            return SampleOutput(result="test", confidence=0.8)
 
         schema = visualizer._extract_function_output_schema(test_func)
         assert schema is not None

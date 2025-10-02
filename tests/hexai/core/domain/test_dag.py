@@ -24,17 +24,17 @@ def another_fn():
     return "another_result"
 
 
-# Test models for validation
-class TestInputModel(BaseModel):
-    """Test input model for validation tests."""
+# Sample models for validation tests
+class SampleInputModel(BaseModel):
+    """Sample input model for validation tests."""
 
     name: str
     value: int
     optional_field: str | None = None
 
 
-class TestOutputModel(BaseModel):
-    """Test output model for validation tests."""
+class SampleOutputModel(BaseModel):
+    """Sample output model for validation tests."""
 
     result: str
     count: int = Field(gt=0)
@@ -69,9 +69,9 @@ class TestNodeSpec:
 
     def test_with_models(self):
         """Test setting input/output Pydantic models."""
-        node = NodeSpec("test", dummy_fn, in_model=TestInputModel, out_model=TestOutputModel)
-        assert node.in_model is TestInputModel
-        assert node.out_model is TestOutputModel
+        node = NodeSpec("test", dummy_fn, in_model=SampleInputModel, out_model=SampleOutputModel)
+        assert node.in_model is SampleInputModel
+        assert node.out_model is SampleOutputModel
 
     def test_repr(self):
         """Test string representation."""
@@ -81,11 +81,11 @@ class TestNodeSpec:
 
         # Test with dependencies and models
         node_with_deps = NodeSpec(
-            "test", dummy_fn, in_model=TestInputModel, out_model=TestOutputModel
+            "test", dummy_fn, in_model=SampleInputModel, out_model=SampleOutputModel
         ).after("dep1")
         repr_with_deps = repr(node_with_deps)
         assert "NodeSpec('test'" in repr_with_deps
-        assert "TestInputModel -> TestOutputModel" in repr_with_deps
+        assert "SampleInputModel -> SampleOutputModel" in repr_with_deps
         assert "deps=['dep1']" in repr_with_deps
 
     def test_immutability(self):
@@ -183,28 +183,28 @@ class TestNodeSpec:
 
     def test_validate_input_with_valid_data(self):
         """Test validation with valid input data."""
-        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+        node = NodeSpec("test_node", dummy_fn, in_model=SampleInputModel)
 
         # Test with dict
         test_data = {"name": "test", "value": 42}
         result = node.validate_input(test_data)
-        assert isinstance(result, TestInputModel)
+        assert isinstance(result, SampleInputModel)
         assert result.name == "test"
         assert result.value == 42
         assert result.optional_field is None
 
     def test_validate_input_already_correct_type(self):
         """Test validation when data is already the correct type."""
-        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+        node = NodeSpec("test_node", dummy_fn, in_model=SampleInputModel)
 
         # Test with already validated model
-        test_data = TestInputModel(name="test", value=42)
+        test_data = SampleInputModel(name="test", value=42)
         result = node.validate_input(test_data)
         assert result is test_data  # Should return same instance
 
     def test_validate_input_with_invalid_data(self):
         """Test validation with invalid input data."""
-        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+        node = NodeSpec("test_node", dummy_fn, in_model=SampleInputModel)
 
         # Missing required field
         test_data = {"name": "test"}  # Missing 'value'
@@ -216,12 +216,12 @@ class TestNodeSpec:
 
     def test_validate_input_with_type_coercion(self):
         """Test validation with automatic type coercion."""
-        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel)
+        node = NodeSpec("test_node", dummy_fn, in_model=SampleInputModel)
 
         # String that can be converted to int
         test_data = {"name": "test", "value": "42"}
         result = node.validate_input(test_data)
-        assert isinstance(result, TestInputModel)
+        assert isinstance(result, SampleInputModel)
         assert result.value == 42  # Coerced to int
 
     def test_validate_output_with_no_model(self):
@@ -235,18 +235,18 @@ class TestNodeSpec:
 
     def test_validate_output_with_valid_data(self):
         """Test output validation with valid data."""
-        node = NodeSpec("test_node", dummy_fn, out_model=TestOutputModel)
+        node = NodeSpec("test_node", dummy_fn, out_model=SampleOutputModel)
 
         # Test with dict
         test_data = {"result": "success", "count": 5}
         result = node.validate_output(test_data)
-        assert isinstance(result, TestOutputModel)
+        assert isinstance(result, SampleOutputModel)
         assert result.result == "success"
         assert result.count == 5
 
     def test_validate_output_with_invalid_data(self):
         """Test output validation with invalid data."""
-        node = NodeSpec("test_node", dummy_fn, out_model=TestOutputModel)
+        node = NodeSpec("test_node", dummy_fn, out_model=SampleOutputModel)
 
         # Invalid count (must be > 0)
         test_data = {"result": "success", "count": 0}
@@ -258,19 +258,24 @@ class TestNodeSpec:
 
     def test_validate_with_model_shared_logic(self):
         """Test that both input and output use same validation logic."""
-        node = NodeSpec("test_node", dummy_fn, in_model=TestInputModel, out_model=TestOutputModel)
+        node = NodeSpec(
+            "test_node", dummy_fn, in_model=SampleInputModel, out_model=SampleOutputModel
+        )
 
         # Both should handle None model the same way
         assert node._validate_with_model({"test": "data"}, None, "input") == {"test": "data"}
         assert node._validate_with_model({"test": "data"}, None, "output") == {"test": "data"}
 
         # Both should handle already-correct type the same way
-        input_instance = TestInputModel(name="test", value=1)
-        output_instance = TestOutputModel(result="test", count=1)
+        input_instance = SampleInputModel(name="test", value=1)
+        output_instance = SampleOutputModel(result="test", count=1)
 
-        assert node._validate_with_model(input_instance, TestInputModel, "input") is input_instance
         assert (
-            node._validate_with_model(output_instance, TestOutputModel, "output") is output_instance
+            node._validate_with_model(input_instance, SampleInputModel, "input") is input_instance
+        )
+        assert (
+            node._validate_with_model(output_instance, SampleOutputModel, "output")
+            is output_instance
         )
 
 

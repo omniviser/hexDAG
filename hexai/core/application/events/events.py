@@ -444,3 +444,39 @@ class CheckpointRestored(Event):
             f"🔄 Checkpoint restored for run '{self.run_id}' "
             f"({len(self.restored_nodes)} nodes already completed)"
         )
+
+
+# Health check events
+@dataclass
+class HealthCheckCompleted(Event):
+    """Adapter health check completed.
+
+    Emitted when an adapter's ahealth_check() method completes during pre-DAG hooks.
+
+    Attributes
+    ----------
+    adapter_name : str
+        Name of the adapter that was checked
+    port_name : str
+        Name of the port this adapter implements
+    status : HealthStatus
+        Health check result with status and details
+    """
+
+    adapter_name: str
+    port_name: str
+    status: Any  # HealthStatus, but using Any to avoid circular import
+
+    def log_message(self) -> str:
+        """Format log message for health check event."""
+        status_emoji = {
+            "healthy": "✅",
+            "degraded": "⚠️",
+            "unhealthy": "❌",
+        }.get(getattr(self.status, "status", "unknown"), "ℹ️")
+
+        latency = ""
+        if hasattr(self.status, "latency_ms") and self.status.latency_ms:
+            latency = f" ({self.status.latency_ms:.1f}ms)"
+
+        return f"{status_emoji} Health check [{self.port_name}]: {self.status.status}{latency}"

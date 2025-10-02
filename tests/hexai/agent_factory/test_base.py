@@ -424,8 +424,8 @@ class TestPipelineDefinition:
 class TestPipelineCatalog:
     """Tests for PipelineCatalog."""
 
-    class TestRegistrationPipeline(PipelineDefinition):
-        """Test class for registration of a pipeline."""
+    class SampleRegistrationPipeline(PipelineDefinition):
+        """Sample pipeline class for testing registration."""
 
         @property
         def name(self) -> str:
@@ -453,7 +453,7 @@ class TestPipelineCatalog:
         assert len(catalog._pipelines) == 0
 
         # Register the pipeline
-        catalog.register_pipeline(self.TestRegistrationPipeline)
+        catalog.register_pipeline(self.SampleRegistrationPipeline)
 
         # Should now contain the registered pipeline
         assert "test_registration" in catalog._pipelines

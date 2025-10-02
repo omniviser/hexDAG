@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from hexai.adapters.local.in_memory_memory import InMemoryMemory
+from hexai.adapters.memory import InMemoryMemory
 
 
 class TestInMemoryMemory:

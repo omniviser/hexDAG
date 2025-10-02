@@ -1,7 +1,10 @@
 """In-memory implementation of Memory for testing purposes."""
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from hexai.core.ports.healthcheck import HealthStatus
 
 from pydantic import BaseModel, Field
 
@@ -178,3 +181,65 @@ class InMemoryMemory(Memory, ConfigurableComponent):
             Number of items currently stored in memory
         """
         return len(self.storage)
+
+    async def ahealth_check(self) -> "HealthStatus":
+        """Check health of in-memory storage.
+
+        Returns
+        -------
+        HealthStatus
+            Health status indicating storage is operational
+
+        Examples
+        --------
+        >>> memory = InMemoryMemory()
+        >>> status = await memory.ahealth_check()
+        >>> status.status  # "healthy"
+        """
+        from hexai.core.ports.healthcheck import HealthStatus
+
+        # Check if storage is functional
+        try:
+            # Test basic operations
+            test_key = "__health_check__"
+            await self.aset(test_key, "test")
+            value = await self.aget(test_key)
+
+            # Clean up test key
+            if test_key in self.storage:
+                del self.storage[test_key]
+
+            if value != "test":
+                return HealthStatus(
+                    status="unhealthy",
+                    adapter_name="InMemoryMemory",
+                    error=Exception("Storage read/write verification failed"),
+                )
+
+            # Check if approaching size limit
+            details: dict[str, Any] = {"size": len(self.storage)}
+            if self.max_size:
+                usage_percent = (len(self.storage) / self.max_size) * 100
+                details["max_size"] = self.max_size
+                details["usage_percent"] = round(usage_percent, 1)
+
+                if usage_percent > 90:
+                    return HealthStatus(
+                        status="degraded",
+                        adapter_name="InMemoryMemory",
+                        details=details,
+                    )
+
+            return HealthStatus(
+                status="healthy",
+                adapter_name="InMemoryMemory",
+                details=details,
+                latency_ms=0.1,  # In-memory is always fast
+            )
+
+        except Exception as e:
+            return HealthStatus(
+                status="unhealthy",
+                adapter_name="InMemoryMemory",
+                error=e,
+            )

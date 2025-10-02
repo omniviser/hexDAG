@@ -9,6 +9,7 @@ from .events import (
     CheckpointRestored,
     CheckpointSaved,
     Event,
+    HealthCheckCompleted,
     LLMPromptSent,
     LLMResponseReceived,
     NodeCancelled,
@@ -52,4 +53,5 @@ __all__ = [
     "PolicyRetry",
     "CheckpointSaved",
     "CheckpointRestored",
+    "HealthCheckCompleted",
 ]

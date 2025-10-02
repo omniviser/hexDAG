@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from hexai.adapters.local import FileMemoryAdapter
+from hexai.adapters.memory import FileMemoryAdapter
 
 
 class TestFileMemoryAdapter:

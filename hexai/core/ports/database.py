@@ -1,9 +1,12 @@
 """Database port interface for accessing database schema information."""
 
 from abc import abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from hexai.core.registry.decorators import port
+
+if TYPE_CHECKING:
+    from hexai.core.ports.healthcheck import HealthStatus
 
 
 @port(name="database", namespace="core")
@@ -14,6 +17,11 @@ class DatabasePort(Protocol):
     This port abstracts access to database systems, allowing the analytics engine to work with
     different database backends. Implementations may use direct connections (psycopg2, SQLAlchemy)
     or REST APIs for cloud databases (Snowflake, BigQuery, etc.).
+
+    Optional Methods
+    ----------------
+    Adapters may optionally implement:
+    - ahealth_check(): Verify database connectivity and query execution
     """
 
     # Required methods
@@ -98,5 +106,32 @@ class DatabasePort(Protocol):
                     "last_updated": str
                 }
             }
+        """
+        ...
+
+    async def ahealth_check(self) -> "HealthStatus":
+        """Check database adapter health and connectivity (optional).
+
+        Adapters should verify:
+        - Database connection status
+        - Connection pool health
+        - Basic query execution (e.g., SELECT 1)
+        - Authentication status
+
+        This method is optional. If not implemented, the adapter will be
+        considered healthy by default.
+
+        Returns
+        -------
+        HealthStatus
+            Current health status with details about database connectivity
+
+        Examples
+        --------
+        >>> # PostgreSQL adapter health check
+        >>> status = await postgres_adapter.ahealth_check()
+        >>> status.status  # "healthy", "degraded", or "unhealthy"
+        >>> status.latency_ms  # Time taken for health check query
+        >>> status.details  # {"pool_size": 10, "active_connections": 3}
         """
         ...

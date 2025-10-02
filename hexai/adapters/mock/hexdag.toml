@@ -9,7 +9,8 @@ modules = [
 
 # Plugin modules - mock adapters for testing and development
 plugins = [
-    "hexai.adapters.mock",  # Mock implementations of all ports
+    "hexai.adapters.mock",    # Mock implementations of all ports
+    "hexai.adapters.memory",  # Memory adapter implementations
 ]
 
 # Development mode - allows post-bootstrap registration for testing

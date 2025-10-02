@@ -2,7 +2,8 @@
 
 import pytest
 
-from hexai.adapters.database import SQLiteAdapter, SQLiteMemoryAdapter
+from hexai.adapters.database import SQLiteAdapter
+from hexai.adapters.memory import SQLiteMemoryAdapter
 
 
 class TestSQLiteMemoryAdapter:

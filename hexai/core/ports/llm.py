@@ -1,11 +1,14 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
 from hexai.core.registry.decorators import port
+
+if TYPE_CHECKING:
+    from hexai.core.ports.healthcheck import HealthStatus
 
 
 class Message(BaseModel):
@@ -30,6 +33,11 @@ class LLM(Protocol):
     LLMs provide natural language generation capabilities. Implementations
     may use various backends (OpenAI, Anthropic, local models, etc.) but
     must provide the aresponse method for generating text from messages.
+
+    Optional Methods
+    ----------------
+    Adapters may optionally implement:
+    - ahealth_check(): Verify LLM API connectivity and availability
     """
 
     @abstractmethod
@@ -45,3 +53,30 @@ class LLM(Protocol):
             The generated response as a string, or None if failed.
         """
         pass
+
+    async def ahealth_check(self) -> "HealthStatus":
+        """Check LLM adapter health and connectivity (optional).
+
+        Adapters should verify:
+        - API connectivity to the LLM service
+        - Model availability
+        - Authentication status
+        - Rate limit status (if applicable)
+
+        This method is optional. If not implemented, the adapter will be
+        considered healthy by default.
+
+        Returns
+        -------
+        HealthStatus
+            Current health status with details about connectivity and availability
+
+        Examples
+        --------
+        >>> # OpenAI adapter health check
+        >>> status = await openai_adapter.ahealth_check()
+        >>> status.status  # "healthy", "degraded", or "unhealthy"
+        >>> status.latency_ms  # Time taken for health check
+        >>> status.details  # {"model": "gpt-4", "rate_limit_remaining": 100}
+        """
+        ...

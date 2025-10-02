@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from hexai.adapters.local import InMemoryMemory
+from hexai.adapters.memory import InMemoryMemory
 from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.core.orchestration.components import CheckpointManager
 from hexai.core.orchestration.models import CheckpointState

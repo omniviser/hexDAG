@@ -29,8 +29,12 @@ def main():
     basic_config = """
 # Modules to load into the registry
 modules = [
+    "hexai.core.ports",  # Load ports first
     "hexai.core.application.nodes",
-    "hexai.adapters.mock",
+]
+
+plugins = [
+    "hexai.adapters.mock",  # Load adapters as plugins
 ]
 
 # Enable development mode
@@ -49,7 +53,8 @@ dev_mode = true
         config = load_config(config_path)
         print(f"✓ Loaded {len(config.modules)} modules")
         print(f"✓ Dev mode: {config.dev_mode}")
-        print(f"✓ Generated manifest with {len(config.get_manifest().entries)} entries")
+        total_entries = len(config.modules) + len(config.plugins)
+        print(f"✓ Configuration has {total_entries} total module entries")
         print()
 
         # Bootstrap registry with this config
@@ -62,40 +67,36 @@ dev_mode = true
         if registry.ready:
             registry._reset_for_testing()
 
-    # Example 2: Configuration with bindings and environments
-    print("2. CONFIGURATION WITH BINDINGS")
+    # Example 2: Configuration with settings
+    print("2. CONFIGURATION WITH SETTINGS")
     print("-" * 40)
 
     full_config = """
-modules = ["hexai.core.application.nodes"]
+modules = ["hexai.core.ports", "hexai.core.application.nodes"]
+plugins = ["hexai.adapters.mock"]
 dev_mode = false
 
-# Default bindings (stored for future use)
-[bindings]
-llm = "mock_llm"
-database = { adapter = "sqlite", config = { path = "dev.db" } }
-
-# Production environment
-[env.production.bindings]
-llm = "openai_adapter"
-database = { adapter = "postgres", config = { host = "${DB_HOST}", port = 5432 } }
-
-# Development environment
-[env.development.bindings]
-llm = "mock_llm"
-database = "in_memory_db"
-
-# Additional settings
+# Application settings
 [settings]
 log_level = "INFO"
 enable_metrics = true
+max_retries = 3
+
+[settings.database]
+connection_timeout = 30
+pool_size = 10
+
+[settings.llm]
+model = "gpt-4"
+temperature = 0.7
+max_tokens = 1000
 """
 
     print("Config content (excerpt):")
-    print("- Default bindings defined")
-    print("- Production environment config")
-    print("- Development environment config")
-    print("- Additional settings")
+    print("- Core modules and plugins")
+    print("- Application settings")
+    print("- Database settings")
+    print("- LLM settings")
     print()
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
@@ -105,23 +106,23 @@ enable_metrics = true
     try:
         config = load_config(config_path)
 
-        # Show default bindings
-        print("Default bindings:")
-        for port, binding in config.bindings.items():
-            print(f"  {port}: {binding.adapter}")
+        # Show settings
+        print("Application settings:")
+        print(f"  log_level: {config.settings.get('log_level')}")
+        print(f"  enable_metrics: {config.settings.get('enable_metrics')}")
+        print(f"  max_retries: {config.settings.get('max_retries')}")
         print()
 
-        # Show environment-specific bindings
-        print("Production bindings:")
-        prod_bindings = config.get_bindings_for_environment("production")
-        for port, binding in prod_bindings.items():
-            print(f"  {port}: {binding.adapter}")
+        print("Database settings:")
+        db_settings = config.settings.get("database", {})
+        for key, value in db_settings.items():
+            print(f"  {key}: {value}")
         print()
 
-        print("Development bindings:")
-        dev_bindings = config.get_bindings_for_environment("development")
-        for port, binding in dev_bindings.items():
-            print(f"  {port}: {binding.adapter}")
+        print("LLM settings:")
+        llm_settings = config.settings.get("llm", {})
+        for key, value in llm_settings.items():
+            print(f"  {key}: {value}")
         print()
 
         # Show settings
@@ -140,8 +141,9 @@ enable_metrics = true
 modules = ["hexai.core.application.nodes"]
 plugins = ["my_plugin.components"]
 
-[tool.hexdag.bindings]
-llm = "gpt4"
+[tool.hexdag.settings]
+log_level = "DEBUG"
+enable_profiling = true
 
 [project]
 name = "my-project"
@@ -165,19 +167,19 @@ version = "1.0.0"
 
         print(f"✓ Modules: {config.modules}")
         print(f"✓ Plugins: {config.plugins}")
-        print(f"✓ Default LLM binding: {config.bindings.get('llm', {}).adapter}")
+        print(f"✓ Settings: {config.settings}")
         print()
     finally:
         pyproject_path.unlink()
 
     print("KEY POINTS:")
     print("-" * 40)
-    print("• TOML config replaces YAML manifests")
+    print("• TOML config for module and plugin management")
     print("• Supports both hexdag.toml and pyproject.toml")
-    print("• Environment variable substitution with ${VAR}")
-    print("• Environment-specific configurations")
-    print("• Bindings stored for future use (orchestrator integration in later PR)")
-    print("• Manifest synthesis happens automatically")
+    print("• Flexible settings system with nested configuration")
+    print("• Dev mode for development-time component registration")
+    print("• Automatic module discovery and registration")
+    print("• Clean separation of core modules and plugins")
 
 
 if __name__ == "__main__":

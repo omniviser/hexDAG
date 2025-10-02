@@ -135,7 +135,7 @@ async def demo_workflow_with_mocks():
     )
 
     # Get mock adapters directly from their modules for creating new instances
-    from hexai.adapters.local.in_memory_memory import InMemoryMemory
+    from hexai.adapters.memory import InMemoryMemory
     from hexai.adapters.mock.mock_database import MockDatabaseAdapter
     from hexai.adapters.mock.mock_llm import MockLLM
     from hexai.adapters.mock.mock_tool_router import MockToolRouter

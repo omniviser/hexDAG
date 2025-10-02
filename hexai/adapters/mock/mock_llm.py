@@ -1,13 +1,16 @@
 """Mock LLM implementation for testing purposes."""
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import LLM, MessageList
 from hexai.core.registry import adapter
+
+if TYPE_CHECKING:
+    from hexai.core.ports.healthcheck import HealthStatus
 
 
 @adapter(implements_port="llm")
@@ -103,6 +106,16 @@ class MockLLM(LLM, ConfigurableComponent):
 
         self.call_count += 1
         return response
+
+    async def ahealth_check(self) -> "HealthStatus":
+        """Health check for Mock LLM (always healthy)."""
+        from hexai.core.ports.healthcheck import HealthStatus
+
+        return HealthStatus(
+            status="healthy",
+            adapter_name="MockLLM",
+            latency_ms=0.1,
+        )
 
     # Testing utilities (not part of the LLM port interface)
     def reset(self) -> None:

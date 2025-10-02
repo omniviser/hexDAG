@@ -7,7 +7,7 @@ concurrently where possible using asyncio.gather().
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from hexai.core.ports.observer_manager import ObserverManagerPort
@@ -24,6 +24,13 @@ from hexai.core.orchestration.components import (
     NodeExecutor,
     OrchestratorError,
     PolicyCoordinator,
+    WaveExecutor,
+)
+from hexai.core.orchestration.hooks import (
+    HookConfig,
+    PostDagHookConfig,
+    PostDagHookManager,
+    PreDagHookManager,
 )
 
 from .events import (
@@ -58,6 +65,8 @@ class Orchestrator:
         ports: dict[str, Any] | None = None,
         strict_validation: bool = False,
         default_node_timeout: float | None = None,
+        pre_hook_config: HookConfig | None = None,
+        post_hook_config: PostDagHookConfig | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -67,6 +76,8 @@ class Orchestrator:
             ports: Shared ports/dependencies for all pipeline executions
             strict_validation: If True, raise errors on validation failure
             default_node_timeout: Default timeout in seconds for each node (None = no timeout)
+            pre_hook_config: Configuration for pre-DAG hooks (health checks, secrets, etc.)
+            post_hook_config: Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
         """
         self.max_concurrent_nodes = max_concurrent_nodes
         self.ports = ports or {}
@@ -81,9 +92,10 @@ class Orchestrator:
             default_node_timeout=default_node_timeout,
         )
 
-        # Import and initialize WaveExecutor
-        from hexai.core.orchestration.components import WaveExecutor
+        # Initialize hook managers
 
+        self._pre_hook_manager = PreDagHookManager(pre_hook_config)
+        self._post_hook_manager = PostDagHookManager(post_hook_config, self._pre_hook_manager)
         self._wave_executor = WaveExecutor(max_concurrent_nodes=max_concurrent_nodes)
 
     async def _notify_observer(
@@ -234,6 +246,16 @@ class Orchestrator:
         pipeline_name = getattr(graph, "name", "unnamed")
         context = NodeExecutionContext(dag_id=pipeline_name)
 
+        # PRE-DAG HOOKS: Execute before pipeline starts
+        pre_hook_results = await self._pre_hook_manager.execute_hooks(
+            ports=all_ports,
+            context=context,
+            observer_manager=observer_manager,
+            pipeline_name=pipeline_name,
+        )
+        # Store hook results in context for nodes to access
+        context.metadata["pre_dag_hooks"] = pre_hook_results
+
         # Fire pipeline started event and check control
         event = PipelineStarted(
             name=pipeline_name,
@@ -251,39 +273,77 @@ class Orchestrator:
         if policy_response.data and isinstance(policy_response.data, dict):
             timeout = policy_response.data.get("timeout")
 
-        # Execute all waves with optional timeout
-        cancelled = await self._execute_all_waves(
-            waves=waves,
-            graph=graph,
-            node_results=node_results,
-            initial_input=initial_input,
-            all_ports=all_ports,
-            context=context,
-            observer_manager=observer_manager,
-            policy_manager=policy_manager,
-            timeout=timeout,
-            validate=validate,
-            **kwargs,
-        )
+        # Track pipeline status for post-DAG hooks
 
-        # Fire appropriate completion/cancellation event
-        duration_ms = (time.time() - pipeline_start_time) * 1000
+        pipeline_status: Literal["success", "failed", "cancelled"] = "success"
+        pipeline_error: Exception | None = None
+        cancelled = False
 
-        if cancelled:
-            pipeline_cancelled = PipelineCancelled(
-                name=pipeline_name,
-                duration_ms=duration_ms,
-                reason="timeout",
-                partial_results=node_results,
-            )
-            await self._notify_observer(observer_manager, pipeline_cancelled)
-        else:
-            pipeline_completed = PipelineCompleted(
-                name=pipeline_name,
-                duration_ms=duration_ms,
+        try:
+            # Execute all waves with optional timeout
+            cancelled = await self._execute_all_waves(
+                waves=waves,
+                graph=graph,
                 node_results=node_results,
+                initial_input=initial_input,
+                all_ports=all_ports,
+                context=context,
+                observer_manager=observer_manager,
+                policy_manager=policy_manager,
+                timeout=timeout,
+                validate=validate,
+                **kwargs,
             )
-            await self._notify_observer(observer_manager, pipeline_completed)
+
+            # Determine final status
+            if cancelled:
+                pipeline_status = "cancelled"
+
+        except Exception as e:
+            pipeline_status = "failed"
+            pipeline_error = e
+            raise  # Re-raise to preserve stack trace
+
+        finally:
+            # Fire appropriate completion/cancellation event
+            duration_ms = (time.time() - pipeline_start_time) * 1000
+
+            if cancelled:
+                pipeline_cancelled = PipelineCancelled(
+                    name=pipeline_name,
+                    duration_ms=duration_ms,
+                    reason="timeout",
+                    partial_results=node_results,
+                )
+                await self._notify_observer(observer_manager, pipeline_cancelled)
+            elif pipeline_status == "success":
+                pipeline_completed = PipelineCompleted(
+                    name=pipeline_name,
+                    duration_ms=duration_ms,
+                    node_results=node_results,
+                )
+                await self._notify_observer(observer_manager, pipeline_completed)
+
+            # POST-DAG HOOKS: Always execute for cleanup (even on failure)
+            try:
+                post_hook_results = await self._post_hook_manager.execute_hooks(
+                    ports=all_ports,
+                    context=context,
+                    observer_manager=observer_manager,
+                    pipeline_name=pipeline_name,
+                    pipeline_status=pipeline_status,
+                    node_results=node_results,
+                    error=pipeline_error,
+                )
+                # Store post-hook results in context (for debugging/logging)
+                context.metadata["post_dag_hooks"] = post_hook_results
+
+            except Exception as post_hook_error:
+                # Log but don't fail the pipeline due to post-hook errors
+                logger.error(
+                    f"Post-DAG hooks failed: {post_hook_error}",
+                    exc_info=True,
+                )
 
         return node_results
 

@@ -43,7 +43,7 @@ registry._core_loading = False  # type: ignore  # Block core namespace registrat
 # Define placeholders for lazy-loaded adapters to satisfy __all__ checking
 # These will be replaced by __getattr__ when accessed
 if TYPE_CHECKING:
-    from hexai.adapters.local.in_memory_memory import InMemoryMemory
+    from hexai.adapters.memory import InMemoryMemory
     from hexai.adapters.mock import MockDatabaseAdapter, MockLLM
 
 

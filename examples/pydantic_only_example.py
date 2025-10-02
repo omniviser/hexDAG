@@ -114,7 +114,7 @@ async def main():
     print("-" * 30)
 
     # Build DAG with Pydantic models
-    graph = DirectedGraph(check_types=True, strict_types=False)
+    graph = DirectedGraph()
 
     # Add nodes with Pydantic type contracts
     graph.add(NodeSpec(name="load", fn=load_text, out_model=TextInput))
