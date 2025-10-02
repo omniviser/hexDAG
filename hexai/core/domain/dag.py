@@ -4,8 +4,10 @@ This module provides the core building blocks for defining and executing
 directed acyclic graphs of agents in the Hex-DAG framework.
 """
 
+import sys
+from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Literal, TypeVar
@@ -29,7 +31,7 @@ class ValidationError(Exception):
     for DAG node input/output validation failures.
     """
 
-    pass
+    __slots__ = ()
 
 
 class Color(Enum):
@@ -40,7 +42,7 @@ class Color(Enum):
     BLACK = 2  # Completely processed
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NodeSpec:
     """Immutable representation of a node in a DAG.
 
@@ -63,8 +65,11 @@ class NodeSpec:
     timeout: float | None = None  # Optional timeout in seconds for this node
 
     def __post_init__(self) -> None:
-        """Ensure deps and params are immutable."""
-        object.__setattr__(self, "deps", frozenset(self.deps))
+        """Ensure deps and params are immutable, and intern strings for performance."""
+        # Intern node name for memory efficiency and faster comparisons
+        object.__setattr__(self, "name", sys.intern(self.name))
+        # Intern dependency names as well
+        object.__setattr__(self, "deps", frozenset(sys.intern(d) for d in self.deps))
         object.__setattr__(self, "params", MappingProxyType(self.params))
 
     def _validate_with_model(
@@ -167,16 +172,8 @@ class NodeSpec:
             node_b = NodeSpec("b", my_fn).after("a")
             node_c = NodeSpec("c", my_fn).after("a", "b")
         """
-        new_deps = self.deps | set(node_names)
-
-        return NodeSpec(
-            name=self.name,
-            fn=self.fn,
-            in_model=self.in_model,
-            out_model=self.out_model,
-            deps=new_deps,
-            params=dict(self.params),
-        )
+        new_deps = self.deps | frozenset(node_names)
+        return replace(self, deps=new_deps)
 
     def __repr__(self) -> str:
         """Readable representation for debugging.
@@ -202,31 +199,31 @@ class NodeSpec:
 class DirectedGraphError(Exception):
     """Base exception for DirectedGraph errors."""
 
-    pass
+    __slots__ = ()
 
 
 class CycleDetectedError(DirectedGraphError):
     """Raised when a cycle is detected in the DAG."""
 
-    pass
+    __slots__ = ()
 
 
 class MissingDependencyError(DirectedGraphError):
     """Raised when a node depends on a non-existent node."""
 
-    pass
+    __slots__ = ()
 
 
 class DuplicateNodeError(DirectedGraphError):
     """Raised when attempting to add a node with an existing name."""
 
-    pass
+    __slots__ = ()
 
 
 class SchemaCompatibilityError(DirectedGraphError):
     """Raised when connected nodes have incompatible schemas."""
 
-    pass
+    __slots__ = ()
 
 
 class DirectedGraph:
@@ -250,8 +247,16 @@ class DirectedGraph:
             nodes: Optional list of NodeSpec instances to add to the graph
         """
         self.nodes: dict[str, NodeSpec] = {}
-        self._forward_edges: dict[str, set[str]] = {}  # Private: node -> set of dependents
-        self._reverse_edges: dict[str, set[str]] = {}  # Private: node -> set of dependencies
+        self._forward_edges: defaultdict[str, set[str]] = defaultdict(
+            set
+        )  # node -> set of dependents
+        self._reverse_edges: defaultdict[str, set[str]] = defaultdict(
+            set
+        )  # node -> set of dependencies
+
+        # Cache for expensive operations
+        self._waves_cache: list[list[str]] | None = None
+        self._validation_cache: bool = False
 
         # Add nodes if provided
         if nodes:
@@ -277,18 +282,22 @@ class DirectedGraph:
             raise DuplicateNodeError(f"Node '{node_spec.name}' already exists in the graph")
 
         self.nodes[node_spec.name] = node_spec
-        self._forward_edges[node_spec.name] = set()
+        self._forward_edges[node_spec.name]  # Ensure key exists (defaultdict creates empty set)
         self._reverse_edges[node_spec.name] = set(node_spec.deps)
 
         # Update forward edges from dependencies to this node
         for dep in node_spec.deps:
-            if dep in self._forward_edges:
-                self._forward_edges[dep].add(node_spec.name)
-            else:
-                # Dependency doesn't exist yet, create placeholder
-                self._forward_edges[dep] = {node_spec.name}
+            self._forward_edges[dep].add(node_spec.name)
+
+        # Invalidate caches when graph structure changes
+        self._invalidate_caches()
 
         return self
+
+    def _invalidate_caches(self) -> None:
+        """Invalidate cached results when graph structure changes."""
+        self._waves_cache = None
+        self._validation_cache = False
 
     def add_many(self, *node_specs: NodeSpec) -> "DirectedGraph":
         """Add multiple nodes to the graph.
@@ -365,7 +374,12 @@ class DirectedGraph:
         return set(self._forward_edges.get(node_name, _EMPTY_SET))
 
     def validate(self, check_type_compatibility: bool = True) -> None:
-        """Validate the DAG structure and optionally type compatibility.
+        """Validate the DAG structure and optionally type compatibility with caching.
+
+        Caching behavior:
+        - Structural validation (dependencies, cycles) is cached after first success
+        - Type compatibility validation is NOT cached (expensive but changes with node specs)
+        - Cache invalidated when graph structure changes (add/remove nodes)
 
         Checks for:
         - Missing dependencies
@@ -386,24 +400,29 @@ class DirectedGraph:
         SchemaCompatibilityError
             If connected nodes have incompatible types.
         """
-        # Check for missing dependencies
-        missing_deps: list[str] = []
-        for node_name, node_spec in self.nodes.items():
-            missing_deps.extend(
-                f"Node '{node_name}' depends on missing node '{dep}'"
-                for dep in node_spec.deps
-                if dep not in self.nodes
-            )
+        # Skip structural validation if already validated and graph hasn't changed
+        if not self._validation_cache:
+            # Check for missing dependencies
+            missing_deps: list[str] = []
+            for node_name, node_spec in self.nodes.items():
+                missing_deps.extend(
+                    f"Node '{node_name}' depends on missing node '{dep}'"
+                    for dep in node_spec.deps
+                    if dep not in self.nodes
+                )
 
-        if missing_deps:
-            raise MissingDependencyError("; ".join(missing_deps))
+            if missing_deps:
+                raise MissingDependencyError("; ".join(missing_deps))
 
-        # Check for cycles using DFS
-        cycle_message = self._detect_cycles()
-        if cycle_message:
-            raise CycleDetectedError(cycle_message)
+            # Check for cycles using DFS
+            cycle_message = self._detect_cycles()
+            if cycle_message:
+                raise CycleDetectedError(cycle_message)
 
-        # Check type compatibility between connected nodes
+            # Cache structural validation result
+            self._validation_cache = True
+
+        # Check type compatibility between connected nodes (not cached - less frequent)
         if check_type_compatibility:
             incompatibilities = self._validate_type_compatibility()
             if incompatibilities:
@@ -497,7 +516,12 @@ class DirectedGraph:
         return incompatibilities
 
     def waves(self) -> list[list[str]]:
-        """Compute execution waves using topological sorting.
+        """Compute execution waves using topological sorting with caching.
+
+        Caches the result since waves() is called multiple times during orchestration:
+        1. During DAG validation
+        2. At pipeline start for event emission
+        3. For each wave execution
 
         Returns
         -------
@@ -514,6 +538,10 @@ class DirectedGraph:
             # For DAG: A -> B -> D, A -> C -> D
             # Returns: [["A"], ["B", "C"], ["D"]]
         """
+        # Return cached result if available
+        if self._waves_cache is not None:
+            return self._waves_cache
+
         if not self.nodes:
             return []
 
@@ -543,6 +571,8 @@ class DirectedGraph:
                     if dependent in in_degrees:
                         in_degrees[dependent] -= 1
 
+        # Cache the result
+        self._waves_cache = waves
         return waves
 
     def __repr__(self) -> str:
@@ -554,3 +584,15 @@ class DirectedGraph:
         """
         node_names = sorted(self.nodes.keys())
         return f"DirectedGraph(nodes={node_names})"
+
+    def __len__(self) -> int:
+        """Return the number of nodes in the graph."""
+        return len(self.nodes)
+
+    def __bool__(self) -> bool:
+        """Return True if the graph has nodes."""
+        return bool(self.nodes)
+
+    def __contains__(self, node_name: str) -> bool:
+        """Check if a node exists in the graph."""
+        return node_name in self.nodes

@@ -209,6 +209,18 @@ class ExecutionContext:
     This provides a clean way to set all execution context variables at once
     using a context manager pattern.
 
+    Important
+    ---------
+    The context is automatically cleaned up on exit via __aexit__. This means:
+
+    1. **All async operations (observers, hooks) MUST complete before context exit**
+    2. Observer notifications should always use `await` before exiting context
+    3. Post-DAG hooks must execute INSIDE the context, not after
+    4. Do not create fire-and-forget tasks that outlive the context
+
+    The orchestrator correctly handles this by awaiting all notifications and
+    executing post-hooks inside the context block before cleanup.
+
     Examples
     --------
     >>> async with ExecutionContext(
@@ -219,6 +231,8 @@ class ExecutionContext:
     ... ):
     ...     # All components can access context
     ...     result = await execute_dag(dag, inputs)
+    ...     # IMPORTANT: All observer notifications and hooks complete here
+    ... # Context cleaned up here - observers/policies no longer accessible
     """
 
     def __init__(

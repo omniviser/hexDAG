@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class Event:
     """Base class for all events - provides timestamp."""
 
@@ -27,7 +27,7 @@ class Event:
 
 
 # Node events
-@dataclass
+@dataclass(slots=True)
 class NodeStarted(Event):
     """A node has started execution."""
 
@@ -47,7 +47,7 @@ class NodeStarted(Event):
         return f"🚀 Node '{self.name}' started in wave {self.wave_index}{deps}"
 
 
-@dataclass
+@dataclass(slots=True)
 class NodeCompleted(Event):
     """A node has completed successfully."""
 
@@ -67,7 +67,7 @@ class NodeCompleted(Event):
         return f"✅ Node '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
-@dataclass
+@dataclass(slots=True)
 class NodeFailed(Event):
     """A node has failed."""
 
@@ -86,7 +86,7 @@ class NodeFailed(Event):
         return f"❌ Node '{self.name}' failed: {self.error}"
 
 
-@dataclass
+@dataclass(slots=True)
 class NodeCancelled(Event):
     """A node execution was cancelled.
 
@@ -110,7 +110,7 @@ class NodeCancelled(Event):
 
 
 # Wave events
-@dataclass
+@dataclass(slots=True)
 class WaveStarted(Event):
     """A wave of parallel nodes has started."""
 
@@ -128,7 +128,7 @@ class WaveStarted(Event):
         return f"🌊 Wave {self.wave_index} started with {len(self.nodes)} nodes"
 
 
-@dataclass
+@dataclass(slots=True)
 class WaveCompleted(Event):
     """A wave has completed."""
 
@@ -147,7 +147,7 @@ class WaveCompleted(Event):
 
 
 # Pipeline events
-@dataclass
+@dataclass(slots=True)
 class PipelineStarted(Event):
     """Pipeline execution has started."""
 
@@ -169,7 +169,7 @@ class PipelineStarted(Event):
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class PipelineCompleted(Event):
     """Pipeline has completed successfully."""
 
@@ -188,7 +188,7 @@ class PipelineCompleted(Event):
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
-@dataclass
+@dataclass(slots=True)
 class PipelineCancelled(Event):
     """Pipeline execution was cancelled.
 
@@ -219,7 +219,7 @@ class PipelineCancelled(Event):
 
 
 # LLM events
-@dataclass
+@dataclass(slots=True)
 class LLMPromptSent(Event):
     """LLM prompt has been sent."""
 
@@ -237,7 +237,7 @@ class LLMPromptSent(Event):
         return f"💭 LLM prompt sent from '{self.node_name}' ({len(self.messages)} messages)"
 
 
-@dataclass
+@dataclass(slots=True)
 class LLMResponseReceived(Event):
     """LLM response has been received."""
 
@@ -257,7 +257,7 @@ class LLMResponseReceived(Event):
 
 
 # Tool events
-@dataclass
+@dataclass(slots=True)
 class ToolCalled(Event):
     """A tool has been invoked."""
 
@@ -276,7 +276,7 @@ class ToolCalled(Event):
         return f"🔧 Tool '{self.tool_name}' called from '{self.node_name}'"
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCompleted(Event):
     """A tool has completed."""
 
@@ -297,7 +297,7 @@ class ToolCompleted(Event):
 
 
 # Policy-related events for tracking policy evaluations and decisions
-@dataclass
+@dataclass(slots=True)
 class PolicyEvaluated(Event):
     """Event emitted after a policy has been evaluated."""
 
@@ -313,7 +313,7 @@ class PolicyEvaluated(Event):
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class PolicyTriggered(Event):
     """Event emitted when a policy's condition is triggered."""
 
@@ -327,7 +327,7 @@ class PolicyTriggered(Event):
         return f"🎯 Policy '{self.policy_name}' triggered{node_info}: {self.trigger_reason}"
 
 
-@dataclass
+@dataclass(slots=True)
 class PolicySkipped(Event):
     """Event emitted when a policy causes a node to be skipped."""
 
@@ -341,7 +341,7 @@ class PolicySkipped(Event):
         return f"⏭️ Policy '{self.policy_name}' skipped node '{self.node_name}'{reason_info}"
 
 
-@dataclass
+@dataclass(slots=True)
 class PolicyFallback(Event):
     """Event emitted when a policy provides a fallback value."""
 
@@ -358,7 +358,7 @@ class PolicyFallback(Event):
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class PolicyRetry(Event):
     """Event emitted when a policy triggers a retry."""
 
@@ -382,7 +382,7 @@ class PolicyRetry(Event):
 
 
 # Checkpoint events
-@dataclass
+@dataclass(slots=True)
 class CheckpointSaved(Event):
     """Emitted when a checkpoint is saved.
 
@@ -414,7 +414,7 @@ class CheckpointSaved(Event):
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class CheckpointRestored(Event):
     """Emitted when execution resumes from a checkpoint.
 
@@ -447,7 +447,7 @@ class CheckpointRestored(Event):
 
 
 # Health check events
-@dataclass
+@dataclass(slots=True)
 class HealthCheckCompleted(Event):
     """Adapter health check completed.
 

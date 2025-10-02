@@ -33,11 +33,18 @@ Custom configuration:
 
 import logging
 import sys
+import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+import orjson
+
 # Global flag to track if logging has been configured
 _LOGGING_CONFIGURED = False
+
+# Thread-safe lock for configuration
+_config_lock = threading.Lock()
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LogFormat = Literal["console", "json", "structured"]
@@ -49,6 +56,8 @@ class StructuredFormatter(logging.Formatter):
     Provides clean, readable logs with optional color coding for terminals.
     Includes timestamp, level, logger name, and message with context.
     """
+
+    __slots__ = ("use_color", "include_timestamp")
 
     # ANSI color codes for terminal output
     COLORS = {
@@ -105,10 +114,10 @@ class JSONFormatter(logging.Formatter):
     (e.g., ELK stack, Datadog, CloudWatch).
     """
 
-    def format(self, record: logging.LogRecord) -> str:
-        """Format log record as JSON."""
-        import json
+    __slots__ = ()
 
+    def format(self, record: logging.LogRecord) -> str:
+        """Format log record as JSON using orjson for performance."""
         log_data = {
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
             "level": record.levelname,
@@ -153,7 +162,9 @@ class JSONFormatter(logging.Formatter):
             ]
         })
 
-        return json.dumps(log_data)
+        # orjson.dumps returns bytes, json.dumps returns str
+        result = orjson.dumps(log_data)
+        return result.decode() if isinstance(result, bytes) else result
 
 
 def configure_logging(
@@ -207,59 +218,65 @@ def configure_logging(
     """
     global _LOGGING_CONFIGURED
 
-    # Check if already configured
-    if _LOGGING_CONFIGURED and not force_reconfigure:
-        return
+    # Thread-safe configuration check
+    with _config_lock:
+        # Double-check pattern for thread safety
+        if _LOGGING_CONFIGURED and not force_reconfigure:
+            return
 
-    # Get root logger
-    root_logger = logging.getLogger()
+        # Get root logger
+        root_logger = logging.getLogger()
 
-    # Clear existing handlers
-    root_logger.handlers.clear()
+        # Clear existing handlers
+        root_logger.handlers.clear()
 
-    # Set log level
-    log_level = getattr(logging, level)
-    root_logger.setLevel(log_level)
+        # Set log level
+        log_level = getattr(logging, level)
+        root_logger.setLevel(log_level)
 
-    # Create formatter based on format type
-    formatter: logging.Formatter
-    if format == "json":
-        formatter = JSONFormatter()
-    elif format == "structured":
-        formatter = StructuredFormatter(use_color=use_color, include_timestamp=include_timestamp)
-    else:  # console
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        # Create formatter based on format type
+        formatter: logging.Formatter
+        if format == "json":
+            formatter = JSONFormatter()
+        elif format == "structured":
+            formatter = StructuredFormatter(
+                use_color=use_color, include_timestamp=include_timestamp
+            )
+        else:  # console
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-    # Console handler (stderr for better separation from stdout)
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(log_level)
-    root_logger.addHandler(console_handler)
+        # Console handler (stderr for better separation from stdout)
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(log_level)
+        root_logger.addHandler(console_handler)
 
-    # File handler (if specified)
-    if output_file:
-        output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        # File handler (if specified)
+        if output_file:
+            output_path = Path(output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(output_path)
-        # Always use JSON for file output for easier parsing
-        file_handler.setFormatter(JSONFormatter() if format == "json" else formatter)
-        file_handler.setLevel(log_level)
-        root_logger.addHandler(file_handler)
+            file_handler = logging.FileHandler(output_path)
+            # Always use JSON for file output for easier parsing
+            file_handler.setFormatter(JSONFormatter() if format == "json" else formatter)
+            file_handler.setLevel(log_level)
+            root_logger.addHandler(file_handler)
 
-    # Set library loggers to WARNING by default to reduce noise
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("concurrent").setLevel(logging.WARNING)
+        # Set library loggers to WARNING by default to reduce noise
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("asyncio").setLevel(logging.WARNING)
+        logging.getLogger("concurrent").setLevel(logging.WARNING)
 
-    _LOGGING_CONFIGURED = True
+        _LOGGING_CONFIGURED = True
 
 
+@lru_cache(maxsize=256)
 def get_logger(name: str) -> logging.Logger:
-    """Get a logger instance with the given name.
+    """Get a logger instance with the given name (cached for performance).
 
     This is the recommended way to get loggers in hexDAG. It ensures
-    consistent configuration and lazy initialization.
+    consistent configuration and lazy initialization. Logger instances
+    are cached to avoid repeated lookups.
 
     Parameters
     ----------
@@ -282,15 +299,18 @@ def get_logger(name: str) -> logging.Logger:
     - If configure_logging() hasn't been called, uses Python's default config
     - Logger names follow the module hierarchy (e.g., "hexai.core.orchestrator")
     - Extra context can be passed via the 'extra' parameter
+    - Logger instances are cached for performance
     """
     return logging.getLogger(name)
 
 
+@lru_cache(maxsize=128)
 def get_logger_for_component(component_type: str, component_name: str) -> logging.Logger:
-    """Get a logger for a specific component instance.
+    """Get a logger for a specific component instance (cached for performance).
 
     Useful for adapters, nodes, and other components that need
-    instance-specific logging.
+    instance-specific logging. Logger instances are cached to avoid
+    repeated string formatting and lookups.
 
     Parameters
     ----------

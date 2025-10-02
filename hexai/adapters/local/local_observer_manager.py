@@ -130,6 +130,13 @@ class LocalObserverManager:
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
             self._strong_refs: dict[str, Any] = {}  # Keep alive certain observers
+            # Track observer IDs for cleanup callback
+            self._observer_refs: dict[str, weakref.ref] = {}
+
+    def _on_observer_deleted(self, observer_id: str) -> None:
+        """Cleanup callback when observer is garbage collected."""
+        # Remove event filter for dead observer to prevent memory leak
+        self._event_filters.pop(observer_id, None)
 
     def _store_observer(self, observer_id: str, observer: Any, keep_alive: bool) -> None:
         """Store observer with appropriate reference type."""
@@ -137,6 +144,10 @@ class LocalObserverManager:
             try:
                 # Try to create weak reference
                 self._weak_handlers[observer_id] = observer
+                # Create weak ref with cleanup callback
+                self._observer_refs[observer_id] = weakref.ref(
+                    observer, lambda _: self._on_observer_deleted(observer_id)
+                )
                 # Keep strong ref if requested
                 if keep_alive:
                     self._strong_refs[observer_id] = observer
@@ -274,7 +285,8 @@ class LocalObserverManager:
         tasks = [self._limited_invoke(observer, event) for observer in interested_observers]
 
         # Wait for all with timeout
-        total_timeout = self._timeout + (len(tasks) * DEFAULT_CLEANUP_INTERVAL) + 1.0
+        # Fixed timeout buffer since observers run concurrently, not sequentially
+        total_timeout = self._timeout + 1.0
 
         try:
             await asyncio.wait_for(
@@ -295,6 +307,7 @@ class LocalObserverManager:
         if self._use_weak_refs:
             self._weak_handlers.clear()
             self._strong_refs.clear()
+            self._observer_refs.clear()
 
     async def close(self) -> None:
         """Close the manager and cleanup resources."""

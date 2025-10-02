@@ -6,6 +6,7 @@ object access without the security risks of full template engines like Jinja2.
 
 import re
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Any
 
 
@@ -15,6 +16,42 @@ class PromptTemplateError(Exception):
 
 class MissingVariableError(PromptTemplateError):
     """Raised when required template variables are missing."""
+
+
+# ---------------------------------------------------------------------------
+# Cached Template Parsing
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=256)
+def _extract_variables_cached(template: str) -> tuple[str, ...]:
+    """Extract variable names from template with caching.
+
+    This function is cached because template parsing with regex is expensive
+    and templates are often reused (e.g., same prompt template for multiple nodes).
+
+    Parameters
+    ----------
+    template : str
+        Template string to analyze
+
+    Returns
+    -------
+    tuple[str, ...]
+        Tuple of unique root variable names found in template
+    """
+    # Extract variables from {{ variable }} patterns
+    pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
+    matches = re.findall(pattern, template)
+
+    # Extract root variable names (before any dots) and deduplicate
+    root_vars = []
+    for match in matches:
+        root_var = match.split(".")[0]
+        if root_var not in root_vars:
+            root_vars.append(root_var)
+
+    return tuple(root_vars)
 
 
 # ---------------------------------------------------------------------------
@@ -65,32 +102,8 @@ class PromptTemplate:
         if input_vars is not None:
             self.input_vars = list(input_vars)
         else:
-            self.input_vars = self._extract_variables(template)
-
-    def _extract_variables(self, template: str) -> list[str]:
-        """Extract variable names from template.
-
-        Args
-        ----
-            template: Template string to analyze
-
-        Returns
-        -------
-        list[str]
-            List of unique root variable names found in template
-        """
-        # Extract variables from {{ variable }} patterns
-        pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
-        matches = re.findall(pattern, template)
-
-        # Extract root variable names (before any dots) and deduplicate
-        root_vars = []
-        for match in matches:
-            root_var = match.split(".")[0]
-            if root_var not in root_vars:
-                root_vars.append(root_var)
-
-        return root_vars
+            # Use cached extraction for performance
+            self.input_vars = list(_extract_variables_cached(template))
 
     def _get_nested_value(self, data: dict[str, Any], key: str) -> Any:
         """Get value from nested dictionary using dot notation.
@@ -386,8 +399,8 @@ class FewShotPromptTemplate(PromptTemplate):
         # Rebuild the complete template
         self.template = self._build_template()
 
-        # Re-extract variables from the new template
-        self.input_vars = self._extract_variables(self.template)
+        # Re-extract variables from the new template using cached function
+        self.input_vars = list(_extract_variables_cached(self.template))
 
     def __add__(self, other: str) -> "FewShotPromptTemplate":
         """Add text to template using + operator.

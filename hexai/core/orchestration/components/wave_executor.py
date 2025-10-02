@@ -142,8 +142,13 @@ class WaveExecutor:
                 return node_name, result
 
         # Execute all nodes in the wave concurrently
-        tasks = [execute_with_semaphore(node_name) for node_name in wave]
-        wave_outputs = await asyncio.gather(*tasks, return_exceptions=True)
+        # Create coroutines
+        coros = [execute_with_semaphore(node_name) for node_name in wave]
+
+        # Note: asyncio.gather with return_exceptions=True handles BaseException propagation
+        # internally and will cancel remaining tasks. We rely on the semaphore's async context
+        # manager (__aexit__) to properly release resources even on cancellation.
+        wave_outputs = await asyncio.gather(*coros, return_exceptions=True)
 
         # Process results and handle exceptions
         wave_results = {}
@@ -155,7 +160,7 @@ class WaveExecutor:
                 exceptions.append((None, output))
             elif isinstance(output, BaseException):
                 # For non-Exception BaseExceptions (KeyboardInterrupt, SystemExit),
-                # re-raise immediately
+                # these should have been caught above, but handle defensively
                 raise output
             else:
                 node_name, result = output
