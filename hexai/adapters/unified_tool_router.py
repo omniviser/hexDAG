@@ -2,13 +2,13 @@
 
 import asyncio
 import inspect
-import logging
 from typing import Any
 
 from pydantic import BaseModel
 
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
 from hexai.core.exceptions import ResourceNotFoundError
+from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.protocols import has_execute_method
@@ -16,7 +16,7 @@ from hexai.core.registry import registry  # Use the direct module-level singleto
 from hexai.core.registry.decorators import adapter
 from hexai.core.registry.models import ClassComponent, ComponentType, FunctionComponent
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 __all__ = ["UnifiedToolRouter"]
 

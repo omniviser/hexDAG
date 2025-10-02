@@ -4,16 +4,16 @@ This adapter allows using SQLite databases as a Memory storage backend,
 providing persistent key-value storage with SQL database benefits.
 """
 
-import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.database import DatabasePort
 from hexai.core.registry.decorators import adapter
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @adapter(

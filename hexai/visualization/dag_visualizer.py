@@ -5,7 +5,6 @@ visualization and debugging purposes.
 """
 
 import contextlib
-import logging
 import pathlib
 import platform
 import shutil
@@ -27,8 +26,9 @@ except ImportError as e:
     ) from e
 
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DAGVisualizer:

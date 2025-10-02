@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -11,10 +10,11 @@ else:
     ObserverManagerPort = Any
 
 from hexai.core.application.events import HealthCheckCompleted
+from hexai.core.logging import get_logger
 from hexai.core.ports.healthcheck import HealthStatus
 from hexai.core.protocols import HealthCheckable
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Constants
 MANAGER_PORT_NAMES = frozenset({"observer_manager", "policy_manager"})

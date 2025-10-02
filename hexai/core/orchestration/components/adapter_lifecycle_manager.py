@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
+
+from hexai.core.logging import get_logger
 
 if TYPE_CHECKING:
     from hexai.core.ports.observer_manager import ObserverManagerPort
 else:
     ObserverManagerPort = Any
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Port names to skip during cleanup
 MANAGER_PORT_NAMES = frozenset({"observer_manager", "policy_manager"})

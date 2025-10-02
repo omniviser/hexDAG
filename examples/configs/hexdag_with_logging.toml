@@ -1,0 +1,31 @@
+# HexDAG Configuration with Logging
+# This example shows how to configure logging via TOML
+
+[tool.hexdag]
+# Load custom modules and plugins
+modules = ["myapp.adapters", "myapp.nodes"]
+plugins = []
+
+# Enable development mode
+dev_mode = true
+
+[tool.hexdag.logging]
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+level = "DEBUG"
+
+# Output format: console, json, structured
+format = "structured"
+
+# Optional: Write logs to file (in addition to console)
+# output_file = "/var/log/hexdag/app.log"
+
+# Use ANSI color codes (auto-disabled for non-TTY)
+use_color = true
+
+# Include timestamp in log output
+include_timestamp = true
+
+# Additional custom settings
+[tool.hexdag.settings]
+max_retries = 3
+timeout = 30

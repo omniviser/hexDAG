@@ -42,6 +42,10 @@ EXAMPLE_CATEGORIES = {
         "22_mock_adapters_demo.py",
         "23_lazy_loading_demo.py",
     ],
+    "configuration": [
+        "24_logging_configuration.py",
+        "25_config_based_logging.py",
+    ],
     "utilities": [
         "pydantic_only_example.py",
         "toml_config_example.py",

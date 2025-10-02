@@ -1,6 +1,5 @@
 """SQLite database adapter implementation with async support."""
 
-import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -10,10 +9,11 @@ from typing import Any
 import aiosqlite
 from pydantic import BaseModel, Field
 
+from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.registry.decorators import adapter
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @adapter(

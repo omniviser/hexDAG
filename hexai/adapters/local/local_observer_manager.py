@@ -6,13 +6,13 @@ concurrency control, and fault isolation.
 """
 
 import asyncio
-import logging
 import uuid
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol
 
 from hexai.core.application.events.events import Event
+from hexai.core.logging import get_logger
 from hexai.core.ports.observer_manager import (
     AsyncObserverFunc,
     Observer,
@@ -36,7 +36,7 @@ class LoggingErrorHandler:
     def __init__(self, logger: Any | None = None):
         """Initialize with optional logger."""
         if logger is None:
-            logger = logging.getLogger(__name__)
+            logger = get_logger(__name__)
         self.logger = logger
 
     def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
@@ -274,7 +274,7 @@ class LocalObserverManager:
         tasks = [self._limited_invoke(observer, event) for observer in interested_observers]
 
         # Wait for all with timeout
-        total_timeout = self._timeout + (len(tasks) * DEFAULT_CLEANUP_INTERVAL)
+        total_timeout = self._timeout + (len(tasks) * DEFAULT_CLEANUP_INTERVAL) + 1.0
 
         try:
             await asyncio.wait_for(

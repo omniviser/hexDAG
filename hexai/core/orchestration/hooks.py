@@ -11,7 +11,6 @@ Hooks provide extensibility points before and after DAG execution for:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -22,6 +21,7 @@ if TYPE_CHECKING:
     from hexai.core.orchestration.models import NodeExecutionContext
     from hexai.core.ports.observer_manager import ObserverManagerPort
 
+from hexai.core.logging import get_logger
 from hexai.core.orchestration.components.adapter_lifecycle_manager import (
     AdapterLifecycleManager,
 )
@@ -35,7 +35,7 @@ from hexai.core.orchestration.hook_context import (
     PreHookManagerProtocol,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Constants to replace magic values
 HEALTH_CHECK_LATENCY_PRECISION = 1  # Decimal places for latency display

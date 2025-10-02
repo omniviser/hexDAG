@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from hexai.core.config import config_to_manifest_entries, get_default_config, load_config
+from hexai.core.logging import configure_logging, get_logger
 from hexai.core.registry import registry
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def bootstrap_registry(
@@ -59,6 +59,15 @@ def bootstrap_registry(
 
     # Load configuration
     config = get_default_config() if use_defaults else load_config(config_path)
+
+    # Configure logging from config (before anything else)
+    configure_logging(
+        level=config.logging.level,
+        format=config.logging.format,
+        output_file=config.logging.output_file,
+        use_color=config.logging.use_color,
+        include_timestamp=config.logging.include_timestamp,
+    )
 
     # Clear precedence: parameter > config > default(False)
     final_dev_mode = dev_mode if dev_mode is not None else config.dev_mode

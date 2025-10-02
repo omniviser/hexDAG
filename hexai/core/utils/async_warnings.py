@@ -9,14 +9,15 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
-import logging
 import warnings
 from typing import TYPE_CHECKING, Any, TypeVar
+
+from hexai.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 

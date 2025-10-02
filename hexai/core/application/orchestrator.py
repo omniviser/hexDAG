@@ -5,7 +5,6 @@ concurrently where possible using asyncio.gather().
 """
 
 import asyncio
-import logging
 import time
 import uuid
 from typing import TYPE_CHECKING, Any, Literal
@@ -19,6 +18,7 @@ else:
 
 from hexai.core.context import ExecutionContext, get_policy_manager
 from hexai.core.domain.dag import DirectedGraph, DirectedGraphError
+from hexai.core.logging import get_logger
 from hexai.core.orchestration import NodeExecutionContext
 from hexai.core.orchestration.components import (
     InputMapper,
@@ -44,7 +44,7 @@ from .events import (
 from .policies.models import PolicyResponse, PolicySignal
 from .ports_builder import PortsBuilder
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Default configuration constants
 DEFAULT_MAX_CONCURRENT_NODES = 10

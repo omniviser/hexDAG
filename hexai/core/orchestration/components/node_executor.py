@@ -6,7 +6,6 @@ nodes with full lifecycle management including validation, timeout, and events.
 
 import asyncio
 import contextvars
-import logging
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -21,13 +20,14 @@ from hexai.core.application.events import NodeCancelled, NodeCompleted, NodeFail
 from hexai.core.application.policies.models import PolicySignal
 from hexai.core.context import get_observer_manager, get_policy_manager
 from hexai.core.domain.dag import NodeSpec, ValidationError
+from hexai.core.logging import get_logger
 from hexai.core.orchestration.components.policy_coordinator import (
     OrchestratorError,
     PolicyCoordinator,
 )
 from hexai.core.orchestration.models import NodeExecutionContext
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class NodeExecutionError(Exception):

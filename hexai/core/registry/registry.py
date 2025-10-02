@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import logging
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
+from hexai.core.logging import get_logger
 from hexai.core.registry.discovery import register_components as default_register_components
 from hexai.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
@@ -29,7 +29,7 @@ from hexai.core.registry.models import (
 if TYPE_CHECKING:
     from hexai.core.config import ManifestEntry
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ComponentRegistry:

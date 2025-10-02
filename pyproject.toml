@@ -126,6 +126,15 @@ plugins = [
 # Development mode enabled by default
 dev_mode = true
 
+# Logging configuration - automatically applied during bootstrap
+# Environment variables (HEXDAG_LOG_*) override these settings
+[tool.hexdag.logging]
+level = "INFO"             # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+format = "structured"      # Output format: console, json, structured
+use_color = true           # Use ANSI color codes (auto-disabled for non-TTY)
+include_timestamp = true   # Include timestamp in output
+# output_file = "hexdag.log"  # Optional: write logs to file
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

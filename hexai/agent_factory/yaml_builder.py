@@ -3,7 +3,6 @@
 Simple pipeline builder that focuses on basic YAML processing with simple data mapping.
 """
 
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -16,9 +15,10 @@ from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.logging import get_logger
 from hexai.core.registry import registry
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class YamlPipelineBuilderError(Exception):

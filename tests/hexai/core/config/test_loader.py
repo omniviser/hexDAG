@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from hexai.core.config import ConfigLoader, config_to_manifest_entries, load_config
+from hexai.core.config.models import LoggingConfig
 
 
 class TestConfigLoader:
@@ -165,3 +166,292 @@ modules = ["from_hexdag"]
                 assert config.modules == ["from_hexdag"]
             finally:
                 os.chdir(original_cwd)
+
+
+class TestLoggingConfigParsing:
+    """Test parsing of logging configuration from TOML."""
+
+    def test_default_logging_config(self):
+        """Test that default logging config has correct values."""
+        config = LoggingConfig()
+
+        assert config.level == "INFO"
+        assert config.format == "structured"
+        assert config.output_file is None
+        assert config.use_color is True
+        assert config.include_timestamp is True
+
+    def test_parse_logging_from_toml(self):
+        """Test parsing logging section from TOML."""
+        toml_content = """
+[tool.hexdag.logging]
+level = "DEBUG"
+format = "json"
+output_file = "/var/log/hexdag/app.log"
+use_color = false
+include_timestamp = false
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            config = load_config(config_path)
+
+            assert config.logging.level == "DEBUG"
+            assert config.logging.format == "json"
+            assert config.logging.output_file == "/var/log/hexdag/app.log"
+            assert config.logging.use_color is False
+            assert config.logging.include_timestamp is False
+        finally:
+            Path(config_path).unlink()
+
+    def test_partial_logging_config(self):
+        """Test that partial logging config uses defaults for missing fields."""
+        toml_content = """
+[tool.hexdag.logging]
+level = "WARNING"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            config = load_config(config_path)
+
+            assert config.logging.level == "WARNING"
+            # Defaults for other fields
+            assert config.logging.format == "structured"
+            assert config.logging.output_file is None
+            assert config.logging.use_color is True
+        finally:
+            Path(config_path).unlink()
+
+    def test_no_logging_section_uses_defaults(self):
+        """Test that missing logging section uses all defaults."""
+        toml_content = """
+[tool.hexdag]
+dev_mode = true
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            config = load_config(config_path)
+
+            # Should use all defaults
+            assert config.logging.level == "INFO"
+            assert config.logging.format == "structured"
+            assert config.logging.output_file is None
+        finally:
+            Path(config_path).unlink()
+
+
+class TestEnvironmentVariableOverrides:
+    """Test environment variable overrides for logging config."""
+
+    def setup_method(self):
+        """Clear environment variables before each test."""
+        env_vars = [
+            "HEXDAG_LOG_LEVEL",
+            "HEXDAG_LOG_FORMAT",
+            "HEXDAG_LOG_FILE",
+            "HEXDAG_LOG_COLOR",
+            "HEXDAG_LOG_TIMESTAMP",
+        ]
+        for var in env_vars:
+            if var in os.environ:
+                del os.environ[var]
+
+    def test_env_level_override(self):
+        """Test HEXDAG_LOG_LEVEL overrides TOML config."""
+        toml_content = """
+[tool.hexdag.logging]
+level = "INFO"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_LEVEL"] = "DEBUG"
+            config = load_config(config_path)
+
+            assert config.logging.level == "DEBUG"
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_LEVEL"]
+
+    def test_env_format_override(self):
+        """Test HEXDAG_LOG_FORMAT overrides TOML config."""
+        toml_content = """
+[tool.hexdag.logging]
+format = "structured"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_FORMAT"] = "json"
+            config = load_config(config_path)
+
+            assert config.logging.format == "json"
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_FORMAT"]
+
+    def test_env_file_override(self):
+        """Test HEXDAG_LOG_FILE overrides TOML config."""
+        toml_content = """
+[tool.hexdag.logging]
+output_file = "/tmp/original.log"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_FILE"] = "/tmp/override.log"
+            config = load_config(config_path)
+
+            assert config.logging.output_file == "/tmp/override.log"
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_FILE"]
+
+    def test_env_color_override(self):
+        """Test HEXDAG_LOG_COLOR overrides TOML config."""
+        toml_content = """
+[tool.hexdag.logging]
+use_color = true
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_COLOR"] = "false"
+            config = load_config(config_path)
+
+            assert config.logging.use_color is False
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_COLOR"]
+
+    def test_env_timestamp_override(self):
+        """Test HEXDAG_LOG_TIMESTAMP overrides TOML config."""
+        toml_content = """
+[tool.hexdag.logging]
+include_timestamp = true
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_TIMESTAMP"] = "0"
+            config = load_config(config_path)
+
+            assert config.logging.include_timestamp is False
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_TIMESTAMP"]
+
+    def test_multiple_env_overrides(self):
+        """Test multiple environment variables override together."""
+        toml_content = """
+[tool.hexdag.logging]
+level = "INFO"
+format = "console"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_LEVEL"] = "ERROR"
+            os.environ["HEXDAG_LOG_FORMAT"] = "json"
+            os.environ["HEXDAG_LOG_FILE"] = "/tmp/test.log"
+
+            config = load_config(config_path)
+
+            assert config.logging.level == "ERROR"
+            assert config.logging.format == "json"
+            assert config.logging.output_file == "/tmp/test.log"
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_LEVEL"]
+            del os.environ["HEXDAG_LOG_FORMAT"]
+            del os.environ["HEXDAG_LOG_FILE"]
+
+    def test_env_without_toml_section(self):
+        """Test env vars work even when TOML has no logging section."""
+        toml_content = """
+[tool.hexdag]
+dev_mode = true
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            os.environ["HEXDAG_LOG_LEVEL"] = "DEBUG"
+            config = load_config(config_path)
+
+            assert config.logging.level == "DEBUG"
+        finally:
+            Path(config_path).unlink()
+            del os.environ["HEXDAG_LOG_LEVEL"]
+
+
+class TestBootstrapIntegration:
+    """Test integration with bootstrap process."""
+
+    def test_bootstrap_configures_logging(self):
+        """Test that bootstrap_registry() configures logging from config."""
+        from hexai.core.bootstrap import bootstrap_registry
+        from hexai.core.logging import get_logger
+        from hexai.core.registry import registry
+
+        toml_content = """
+[tool.hexdag.logging]
+level = "DEBUG"
+format = "console"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write(toml_content)
+            config_path = f.name
+
+        try:
+            # Reset registry
+            if registry.ready:
+                registry._ready = False
+                registry._components.clear()
+
+            # Bootstrap with config
+            bootstrap_registry(config_path)
+
+            # Verify we can get a logger and it works
+            logger = get_logger("test")
+            logger.debug("Test message")  # Should not raise
+
+            assert registry.ready
+        finally:
+            Path(config_path).unlink()
+            # Reset for other tests
+            if registry.ready:
+                registry._ready = False
+                registry._components.clear()

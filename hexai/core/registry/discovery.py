@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import logging
 from types import ModuleType  # noqa: TC003
 from typing import TYPE_CHECKING
+
+from hexai.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,7 +30,7 @@ def has_hexdag_attrs(obj: object) -> bool:
     return hasattr(obj, "_hexdag_type") and hasattr(obj, "_hexdag_name")
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def discover_components(module: ModuleType) -> list[tuple[str, type | Callable | object]]:

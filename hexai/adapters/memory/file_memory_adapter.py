@@ -9,7 +9,6 @@ data, use JSON or TEXT formats instead.
 """
 
 import json
-import logging
 import pickle  # nosec B403 - Pickle usage documented, user must choose format
 from enum import StrEnum
 from pathlib import Path
@@ -17,10 +16,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.registry.decorators import adapter
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FileFormat(StrEnum):

@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import tomllib  # Python 3.11+
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
-from hexai.core.config.models import HexDAGConfig, ManifestEntry
+from hexai.core.config.models import HexDAGConfig, LoggingConfig, ManifestEntry
+from hexai.core.logging import get_logger
 
 # Type alias for configuration data that can be recursively substituted
 type ConfigData = str | dict[str, ConfigData] | list[ConfigData] | int | float | bool | None
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @lru_cache(maxsize=32)
@@ -79,8 +79,13 @@ class ConfigLoader:
                 logger.warning("No [tool.hexdag] section found in pyproject.toml, using defaults")
                 return get_default_config()
         else:
-            # Direct hexdag.toml file
-            hexdag_data = data
+            # Direct hexdag.toml file - check if it has [tool.hexdag] or is flat
+            if "tool" in data and "hexdag" in data.get("tool", {}):
+                # TOML file uses [tool.hexdag] format (like pyproject.toml)
+                hexdag_data = data["tool"]["hexdag"]
+            else:
+                # Flat format (top-level keys)
+                hexdag_data = data
 
         # Process environment variable substitution
         hexdag_data = self._substitute_env_vars(hexdag_data)
@@ -212,12 +217,73 @@ class ConfigLoader:
         # Parse dev mode
         config.dev_mode = data.get("dev_mode", False)
 
+        # Parse logging configuration with environment variable overrides
+        config.logging = self._parse_logging_config(data.get("logging", {}))
+
         # Parse settings section
         if "settings" in data:
             config.settings = data["settings"]
             logger.debug("Loaded %d settings", len(config.settings))
 
         return config
+
+    def _parse_logging_config(self, logging_data: dict[str, Any]) -> LoggingConfig:
+        """Parse logging configuration with environment variable overrides.
+
+        Environment variables take precedence over TOML configuration:
+        - HEXDAG_LOG_LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        - HEXDAG_LOG_FORMAT: Output format (console, json, structured)
+        - HEXDAG_LOG_FILE: Optional file path for log output
+        - HEXDAG_LOG_COLOR: Use color output (true/false)
+        - HEXDAG_LOG_TIMESTAMP: Include timestamp (true/false)
+
+        Parameters
+        ----------
+        logging_data : dict[str, Any]
+            Logging section from TOML config
+
+        Returns
+        -------
+        LoggingConfig
+            Parsed logging configuration with env overrides applied
+        """
+        # Start with TOML config values
+        level = logging_data.get("level", "INFO")
+        format_type = logging_data.get("format", "structured")
+        output_file = logging_data.get("output_file")
+        use_color = logging_data.get("use_color", True)
+        include_timestamp = logging_data.get("include_timestamp", True)
+
+        # Apply environment variable overrides
+        if env_level := os.getenv("HEXDAG_LOG_LEVEL"):
+            level = env_level.upper()
+            logger.debug(f"Overriding log level from env: {level}")
+
+        if env_format := os.getenv("HEXDAG_LOG_FORMAT"):
+            format_type = env_format.lower()
+            logger.debug(f"Overriding log format from env: {format_type}")
+
+        if env_file := os.getenv("HEXDAG_LOG_FILE"):
+            output_file = env_file
+            logger.debug(f"Overriding log file from env: {output_file}")
+
+        if env_color := os.getenv("HEXDAG_LOG_COLOR"):
+            use_color = env_color.lower() in ("true", "1", "yes")
+            logger.debug(f"Overriding log color from env: {use_color}")
+
+        if env_timestamp := os.getenv("HEXDAG_LOG_TIMESTAMP"):
+            include_timestamp = env_timestamp.lower() in ("true", "1", "yes")
+            logger.debug(f"Overriding log timestamp from env: {include_timestamp}")
+
+        # Cast to proper Literal types for type safety
+        # These will be validated by Pydantic at runtime
+        return LoggingConfig(
+            level=cast("Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']", level),
+            format=cast("Literal['console', 'json', 'structured']", format_type),
+            output_file=output_file,
+            use_color=use_color,
+            include_timestamp=include_timestamp,
+        )
 
 
 @lru_cache(maxsize=32)

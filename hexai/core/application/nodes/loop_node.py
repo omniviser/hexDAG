@@ -7,12 +7,12 @@ This module provides the LoopNode factory that creates nodes capable of:
 - Dynamic routing decisions
 """
 
-import logging
 from collections.abc import Callable
 from typing import Any
 
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.exceptions import ValidationError
+from hexai.core.logging import get_logger
 from hexai.core.protocols import is_dict_convertible
 from hexai.core.registry import node
 from hexai.core.registry.models import NodeSubtype
@@ -62,7 +62,7 @@ class LoopNode(BaseNodeFactory):
 
         async def loop_controller_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute loop control logic."""
-            logger = logging.getLogger("hexai.app.application.nodes.loop_node")
+            logger = get_logger("hexai.app.application.nodes.loop_node")
             logger.info("🔄 LOOP NODE: %s", name)
 
             # Get current iteration count from input state
@@ -166,7 +166,7 @@ class ConditionalNode(BaseNodeFactory):
 
         async def conditional_router_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute conditional routing logic."""
-            logger = logging.getLogger("hexai.app.application.nodes.conditional_node")
+            logger = get_logger("hexai.app.application.nodes.conditional_node")
             logger.info("🧭 CONDITIONAL NODE: %s", name)
 
             # Extract data using protocol

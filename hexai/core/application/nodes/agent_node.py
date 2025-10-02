@@ -13,6 +13,7 @@ from hexai.core.application.prompt import PromptInput
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.context import get_port, get_ports
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.logging import get_logger
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.protocols import to_dict
 from hexai.core.registry import node
@@ -622,9 +623,8 @@ carried_data={'key': 'value'})"""
 
                 except (ValueError, TypeError) as e:
                     # Validation failed - try next tool_end result
-                    import logging
 
-                    logger = logging.getLogger(__name__)
+                    logger = get_logger(__name__)
                     logger.debug(
                         "Failed to validate tool_end result against %s: %s",
                         output_model.__name__,

@@ -7,13 +7,13 @@ components. Registration happens during bootstrap via the manifest.
 from __future__ import annotations
 
 import inspect
-import logging
 import re
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from hexai.core.context import get_observer_manager
 from hexai.core.exceptions import ValidationError
+from hexai.core.logging import get_logger
 from hexai.core.registry.models import (
     ComponentType,
     NodeSubtype,
@@ -23,7 +23,7 @@ from hexai.core.utils.async_warnings import _is_in_async_context
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Marker to detect if a method has already been wrapped
 _ASYNC_IO_WRAPPER_MARKER = "_hexdag_async_io_wrapped"
