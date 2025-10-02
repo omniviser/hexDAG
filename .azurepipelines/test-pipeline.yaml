@@ -98,6 +98,14 @@ jobs:
       - script: |
           set -e  # Exit immediately if a command exits with a non-zero status
           export PATH="$HOME/.local/bin:$PATH"
+          echo "Creating virtual environment with uv..."
+          uv venv --clear
+          echo "Virtual environment created."
+        displayName: "Create UV Virtual Environment"
+
+      - script: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          export PATH="$HOME/.local/bin:$PATH"
           echo "Installing dependencies with UV..."
           uv pip install -e ".[dev,docs]" 
           echo "Running Ruff linting..."
