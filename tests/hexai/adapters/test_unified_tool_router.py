@@ -204,7 +204,9 @@ class TestUnifiedToolRouter:
     @pytest.mark.asyncio
     async def test_tool_not_found_error(self, router):
         """Test error when tool is not found."""
-        with pytest.raises(ValueError, match="Tool 'nonexistent' not found"):
+        from hexai.core.exceptions import ResourceNotFoundError
+
+        with pytest.raises(ResourceNotFoundError, match="Tool 'nonexistent' not found"):
             await router.acall_tool("nonexistent", {})
 
     def test_get_tool_schema(self, router):
@@ -497,12 +499,11 @@ class TestUnifiedToolRouterWithPorts:
         router = UnifiedToolRouter()
 
         # Tool requiring ports should fail since we don't support auto-injection anymore
-        with pytest.raises(ValueError) as exc_info:
+        from hexai.core.exceptions import ResourceNotFoundError
+
+        with pytest.raises(ResourceNotFoundError) as exc_info:
             await router.acall_tool("db_tool", {"query": "SELECT * FROM users"})
-        assert (
-            "not found" in str(exc_info.value).lower()
-            or "requires parameters" in str(exc_info.value).lower()
-        )
+        assert "not found" in str(exc_info.value).lower()
 
 
 class MockDatabasePort:

@@ -97,12 +97,14 @@ class TestLLMNode:
     @pytest.mark.asyncio
     async def test_missing_llm_port_error(self, llm_node):
         """Test error when LLM port is missing."""
+        from hexai.core.exceptions import DependencyError
+
         node_spec = llm_node("test_error", "Process: {{data}}")
 
         input_data = {"data": "test"}
         ports = {}  # No LLM port
 
-        with pytest.raises(ValueError, match="LLM port is required"):
+        with pytest.raises(DependencyError, match="llm"):
             await node_spec.fn(input_data, **ports)
 
     def test_input_mapping_support(self, llm_node):

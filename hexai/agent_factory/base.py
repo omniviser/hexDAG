@@ -11,6 +11,7 @@ import yaml
 from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.exceptions import ConfigurationError
 
 
 class PipelineDefinition(ABC):
@@ -75,7 +76,7 @@ class PipelineDefinition(ABC):
 
         Raises
         ------
-        ValueError
+        ConfigurationError
             If no pipeline YAML is found
         """
         if input_data is None:
@@ -85,7 +86,7 @@ class PipelineDefinition(ABC):
 
         try:
             if not self._yaml_path:
-                raise ValueError(f"No pipeline YAML found for {self.name}")
+                raise ConfigurationError(self.name, "YAML path not configured")
 
             # Build and execute
             graph, pipeline_metadata = self.builder.build_from_yaml_file(self._yaml_path)

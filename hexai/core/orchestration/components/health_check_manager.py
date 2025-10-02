@@ -12,6 +12,7 @@ else:
 
 from hexai.core.application.events import HealthCheckCompleted
 from hexai.core.ports.healthcheck import HealthStatus
+from hexai.core.protocols import HealthCheckable
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,8 @@ class HealthCheckManager:
             if port_name in MANAGER_PORT_NAMES:
                 continue
 
-            # Check if adapter implements health check method
-            if hasattr(adapter, "ahealth_check") and callable(adapter.ahealth_check):
+            # Check if adapter implements health check protocol
+            if isinstance(adapter, HealthCheckable):
                 status = await self._check_single_adapter(port_name, adapter, observer_manager)
                 health_results.append(status)
 

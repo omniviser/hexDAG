@@ -3,6 +3,7 @@
 import asyncio
 from typing import Any
 
+from hexai.core.exceptions import DependencyError
 from hexai.core.ports.database import DatabasePort
 from hexai.core.registry import tool
 
@@ -33,11 +34,11 @@ async def database_query(
 
     Raises
     ------
-    ValueError
+    DependencyError
         If database port is not provided
     """
     if database_port is None:
-        raise ValueError("Database port is required but not provided")
+        raise DependencyError("database_port", "required for database query execution")
 
     # Use the database port to execute the query
     return await database_port.aexecute_query(sql, params or {})
@@ -64,11 +65,11 @@ async def database_execute(
 
     Raises
     ------
-    ValueError
+    DependencyError
         If database port is not provided
     """
     if database_port is None:
-        raise ValueError("Database port is required but not provided")
+        raise DependencyError("database_port", "required for database query execution")
 
     # Execute returns no value, just runs the query
     await database_port.aexecute_query(sql, params or {})
@@ -93,11 +94,11 @@ async def list_tables(database_port: DatabasePort | None = None) -> list[str]:
 
     Raises
     ------
-    ValueError
+    DependencyError
         If database port is not provided
     """
     if database_port is None:
-        raise ValueError("Database port is required but not provided")
+        raise DependencyError("database_port", "required for database query execution")
 
     # Standard SQL to get table list (may vary by database)
     sql = """
@@ -132,11 +133,11 @@ async def describe_table(
 
     Raises
     ------
-    ValueError
+    DependencyError
         If database port is not provided
     """
     if database_port is None:
-        raise ValueError("Database port is required but not provided")
+        raise DependencyError("database_port", "required for database query execution")
 
     sql = """
     SELECT
@@ -176,11 +177,11 @@ def database_query_sync(
 
     Raises
     ------
-    ValueError
+    DependencyError
         If database port is not provided
     """
     if database_port is None:
-        raise ValueError("Database port is required but not provided")
+        raise DependencyError("database_port", "required for database query execution")
     return asyncio.run(database_port.aexecute_query(sql, params or {}))
 
 

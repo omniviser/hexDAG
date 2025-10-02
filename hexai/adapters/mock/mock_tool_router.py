@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.exceptions import ResourceNotFoundError
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.registry import adapter
@@ -107,7 +108,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
 
         Raises
         ------
-        ValueError
+        ResourceNotFoundError
             If tool not found and raise_on_unknown_tool is True
         """
         # Simulate delay
@@ -124,7 +125,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
         # Check if tool exists
         if tool_name not in self.tools:
             if self.raise_on_unknown_tool:
-                raise ValueError(f"Unknown tool: {tool_name}")
+                raise ResourceNotFoundError("tool", tool_name, list(self.tools.keys()))
             return {"error": f"Unknown tool: {tool_name}"}
 
         # Return mock results based on tool

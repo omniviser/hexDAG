@@ -8,8 +8,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
+from hexai.core.exceptions import ResourceNotFoundError
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
+from hexai.core.protocols import has_execute_method
 from hexai.core.registry import registry  # Use the direct module-level singleton
 from hexai.core.registry.decorators import adapter
 from hexai.core.registry.models import ClassComponent, ComponentType, FunctionComponent
@@ -85,7 +87,7 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
 
         Raises
         ------
-        ValueError
+        ResourceNotFoundError
             If tool not found in registry
         """
         try:
@@ -95,7 +97,7 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
             tool = registry.get(tool_name)
         except Exception as e:
             available = self.get_available_tools()
-            raise ValueError(f"Tool '{tool_name}' not found. Available: {available}") from e
+            raise ResourceNotFoundError("tool", tool_name, available) from e
 
         # Execute tool outside the try/except so tool errors aren't wrapped
         return await self._execute_tool(tool, params)
@@ -112,8 +114,8 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
             # Handle different tool types
             if inspect.iscoroutinefunction(tool):
                 return await self._call_with_params(tool, params, is_async=True)
-            if hasattr(tool, "execute"):
-                # Class with execute method
+            if has_execute_method(tool):
+                # Class with execute method (protocol-based check)
                 execute_method = tool.execute
                 if asyncio.iscoroutinefunction(execute_method):
                     return await self._call_with_params(execute_method, params, is_async=True)
@@ -244,23 +246,23 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
         metadata = component_info.metadata
         component = metadata.component
 
-        # Try to extract from function or class
-        target_func = None
-        if isinstance(component, FunctionComponent):
-            target_func = component.value
-        elif isinstance(component, ClassComponent) and hasattr(component.value, "execute"):
-            target_func = component.value.execute
-
-        if target_func:
-            return self._generate_tool_definition_from_function(target_func, component_info.name)
-        # Return minimal definition for other cases
-        return ToolDefinition(
-            name=component_info.name,
-            simplified_description=metadata.description or f"Tool {component_info.name}",
-            detailed_description=metadata.description or f"Tool {component_info.name}",
-            parameters=[],
-            examples=[f"{component_info.name}()"],
-        )
+        # Extract function from component using pattern matching (Python 3.12+)
+        match component:
+            case FunctionComponent(value=func):
+                return self._generate_tool_definition_from_function(func, component_info.name)
+            case ClassComponent(value=cls) if has_execute_method(cls):
+                return self._generate_tool_definition_from_function(
+                    cls.execute, component_info.name
+                )
+            case _:
+                # Return minimal definition for other cases
+                return ToolDefinition(
+                    name=component_info.name,
+                    simplified_description=metadata.description or f"Tool {component_info.name}",
+                    detailed_description=metadata.description or f"Tool {component_info.name}",
+                    parameters=[],
+                    examples=[f"{component_info.name}()"],
+                )
 
     def _generate_tool_definition_from_function(self, func: Any, tool_name: str) -> ToolDefinition:
         """Generate ToolDefinition from a function's signature and docstring.

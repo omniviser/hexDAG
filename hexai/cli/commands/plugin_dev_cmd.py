@@ -62,11 +62,12 @@ def create_plugin(
     (plugin_path / "tests").mkdir()
 
     # Create __init__.py
+    class_name = name.replace("_", " ").title().replace(" ", "")
     init_content = f'''"""${name} plugin for hexDAG."""
 
-from .{name} import *
+from .{name} import {class_name}
 
-__all__ = ["{name.replace("_", " ").title().replace(" ", "")}"]
+__all__ = ["{class_name}"]
 '''
     (plugin_path / "__init__.py").write_text(init_content)
 

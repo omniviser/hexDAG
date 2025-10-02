@@ -8,6 +8,8 @@ from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter, field_validator
 
+from hexai.core.exceptions import TypeMismatchError
+
 # Type variables
 T = TypeVar("T")
 TComponent = TypeVar("TComponent")
@@ -50,11 +52,11 @@ class ClassComponent(BaseModel):
 
         Raises
         ------
-        ValueError
+        TypeMismatchError
             If value is not a class.
         """
         if not isinstance(v, type):
-            raise ValueError(f"Expected a class, got {type(v).__name__}")
+            raise TypeMismatchError("component", "a class", type(v).__name__)
         return v
 
     def instantiate(self, **init_params: Any) -> object:
@@ -86,11 +88,11 @@ class FunctionComponent(BaseModel):
 
         Raises
         ------
-        ValueError
+        TypeMismatchError
             If value is not callable.
         """
         if not callable(v):
-            raise ValueError(f"Expected callable, got {type(v).__name__}")
+            raise TypeMismatchError("component", "callable", type(v).__name__)
         return v
 
     def instantiate(self) -> Callable[..., object]:

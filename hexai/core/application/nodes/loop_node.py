@@ -12,6 +12,8 @@ from collections.abc import Callable
 from typing import Any
 
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.exceptions import ValidationError
+from hexai.core.protocols import is_dict_convertible
 from hexai.core.registry import node
 from hexai.core.registry.models import NodeSubtype
 
@@ -51,12 +53,12 @@ class LoopNode(BaseNodeFactory):
 
         Raises
         ------
-        ValueError
+        ValidationError
             If max_iterations is not positive
         """
         # Validate max_iterations
         if max_iterations <= 0:
-            raise ValueError("max_iterations must be positive")
+            raise ValidationError("max_iterations", "must be positive")
 
         async def loop_controller_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute loop control logic."""
@@ -167,11 +169,11 @@ class ConditionalNode(BaseNodeFactory):
             logger = logging.getLogger("hexai.app.application.nodes.conditional_node")
             logger.info("🧭 CONDITIONAL NODE: %s", name)
 
-            # Extract data
-            if hasattr(input_data, "model_dump"):
-                data_dict = input_data.model_dump()
-            elif isinstance(input_data, dict):
+            # Extract data using protocol
+            if isinstance(input_data, dict):
                 data_dict = input_data
+            elif is_dict_convertible(input_data):
+                data_dict = input_data.model_dump()
             else:
                 data_dict = {"input": input_data}
 

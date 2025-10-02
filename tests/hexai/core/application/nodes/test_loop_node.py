@@ -108,13 +108,15 @@ class TestLoopNode:
 
     def test_loop_node_invalid_max_iterations(self):
         """Test loop node with invalid max_iterations."""
+        from hexai.core.exceptions import ValidationError
+
         ensure_bootstrapped()
         loop_node = registry.get("loop_node", namespace="core")
 
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
+        with pytest.raises(ValidationError, match="max_iterations"):
             loop_node("test_loop", max_iterations=0)
 
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
+        with pytest.raises(ValidationError, match="max_iterations"):
             loop_node("test_loop", max_iterations=-1)
 
 

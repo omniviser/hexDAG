@@ -8,6 +8,7 @@ from typing import Any, get_type_hints
 from pydantic import BaseModel
 
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.protocols import is_schema_type
 from hexai.core.registry import node
 from hexai.core.registry.models import NodeSubtype
 
@@ -210,16 +211,16 @@ class FunctionNode(BaseNodeFactory):
                 )
                 if first_param and first_param.name in type_hints:
                     param_type = type_hints[first_param.name]
-                    # Check if it's a Pydantic model
-                    if isinstance(param_type, type) and issubclass(param_type, BaseModel):
+                    # Check if it's a Pydantic model using protocol
+                    if is_schema_type(param_type):
                         input_schema = param_type
 
             # Infer output schema from return annotation
             output_schema = None
             if "return" in type_hints:
                 return_type = type_hints["return"]
-                # Check if it's a Pydantic model
-                if isinstance(return_type, type) and issubclass(return_type, BaseModel):
+                # Check if it's a Pydantic model using protocol
+                if is_schema_type(return_type):
                     output_schema = return_type
 
             return input_schema, output_schema

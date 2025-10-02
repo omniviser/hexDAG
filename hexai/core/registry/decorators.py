@@ -12,6 +12,7 @@ import re
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from hexai.core.exceptions import ValidationError
 from hexai.core.registry.models import (
     ComponentType,
     NodeSubtype,
@@ -109,7 +110,7 @@ def component(
         if isinstance(name, list):
             # Multiple names provided - first is primary, rest are aliases
             if not name:  # Validate list is not empty
-                raise ValueError("If providing a list of names, it cannot be empty")
+                raise ValidationError("If providing a list of names, it", "cannot be empty")
             all_names = name
             primary_name = name[0]
         elif name:

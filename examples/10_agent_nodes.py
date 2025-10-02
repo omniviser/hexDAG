@@ -17,6 +17,7 @@ from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReA
 from hexai.core.application.orchestrator import Orchestrator
 from hexai.core.config.models import ManifestEntry
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.exceptions import ResourceNotFoundError
 from hexai.core.registry import registry
 from hexai.core.registry.decorators import tool
 from hexai.core.registry.models import ComponentType
@@ -293,7 +294,7 @@ async def main() -> None:
     try:
         search_result = await demo_router.acall_tool("search", {"query": "AI healthcare"})
         print(f"   🔍 Search result: {search_result}")
-    except ValueError as e:
+    except ResourceNotFoundError as e:
         print(f"   ⚠️  Expected: {e}")
         print("   📝 Demo router only has basic agent tools")
     print()

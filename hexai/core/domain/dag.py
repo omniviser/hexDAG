@@ -13,6 +13,8 @@ from typing import Any, Literal, TypeVar
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
+from hexai.core.protocols import is_dict_convertible
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -90,11 +92,13 @@ class NodeSpec:
             return data
 
         try:
-            # Check if data is a Pydantic model (more robust than hasattr)
-            if isinstance(data, BaseModel):
-                # Data is a Pydantic model, convert to dict first
-                return model.model_validate(data.model_dump())
-            # Data is dict or other type
+            # Check if data is dict-convertible using protocol
+            if is_dict_convertible(data):
+                # Pydantic model or dict-like - convert to dict first
+                return model.model_validate(
+                    data.model_dump() if not isinstance(data, dict) else data
+                )
+            # Data is other type
             return model.model_validate(data)
         except PydanticValidationError as e:
             # Format Pydantic validation errors nicely

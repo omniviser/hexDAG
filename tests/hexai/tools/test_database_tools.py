@@ -190,5 +190,7 @@ class TestDatabaseToolsValidation:
     @pytest.mark.asyncio
     async def test_missing_database_port(self):
         """Test error when database port is missing."""
-        with pytest.raises(ValueError, match="Database port is required"):
+        from hexai.core.exceptions import DependencyError
+
+        with pytest.raises(DependencyError, match="database_port"):
             await database_query(sql="SELECT *", database_port=None)

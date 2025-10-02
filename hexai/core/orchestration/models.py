@@ -13,6 +13,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from hexai.core.exceptions import ValidationError
+
 
 @dataclass(frozen=True)
 class OrchestratorConfig:
@@ -55,10 +57,14 @@ class OrchestratorConfig:
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
         if self.max_concurrent_nodes <= 0:
-            raise ValueError("max_concurrent_nodes must be positive")
+            raise ValidationError(
+                "max_concurrent_nodes", "must be positive", self.max_concurrent_nodes
+            )
 
         if self.default_node_timeout is not None and self.default_node_timeout <= 0:
-            raise ValueError("default_node_timeout must be positive or None")
+            raise ValidationError(
+                "default_node_timeout", "must be positive or None", self.default_node_timeout
+            )
 
 
 class CheckpointState(BaseModel):

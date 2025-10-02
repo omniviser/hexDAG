@@ -65,9 +65,11 @@ class TestMockToolRouter:
     @pytest.mark.asyncio
     async def test_unknown_tool_raises_error(self):
         """Test that unknown tools raise an error when configured to do so."""
+        from hexai.core.exceptions import ResourceNotFoundError
+
         router = MockToolRouter(raise_on_unknown_tool=True)
 
-        with pytest.raises(ValueError, match="Unknown tool: nonexistent"):
+        with pytest.raises(ResourceNotFoundError, match="Tool 'nonexistent' not found"):
             await router.acall_tool("nonexistent", {})
 
     @pytest.mark.asyncio

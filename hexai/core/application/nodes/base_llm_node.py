@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from hexai.core.application.prompt import PromptInput, TemplateType
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.exceptions import DependencyError
 
 from .base_node_factory import BaseNodeFactory
 
@@ -100,21 +101,25 @@ class BaseLLMNode(BaseNodeFactory):
 
             Raises
             ------
-            ValueError
+            DependencyError
                 If LLM port is not provided
             """
             llm = ports.get("llm")
 
             if not llm:
-                raise ValueError("LLM port is required")
+                raise DependencyError("llm", "LLM port is required for this node type")
 
             try:
                 enhanced_template = template
                 if rich_features and output_model:
                     enhanced_template = self.enhance_template_with_schema(template, output_model)
 
-                if hasattr(validated_input, "model_dump"):
-                    input_dict = validated_input.model_dump()  # pyright: ignore
+                # Convert validated_input to dict if needed
+                # Note: signature is dict[str, Any] but runtime may pass Pydantic models
+                if isinstance(validated_input, dict):
+                    input_dict = validated_input
+                elif hasattr(validated_input, "model_dump"):  # type: ignore[unreachable]
+                    input_dict = validated_input.model_dump()
                 else:
                     input_dict = validated_input
 

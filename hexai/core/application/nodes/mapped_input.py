@@ -6,6 +6,9 @@ from typing import Any, cast
 
 from pydantic import BaseModel, Field, create_model, model_validator
 
+from hexai.core.exceptions import ResourceNotFoundError, ValidationError
+from hexai.core.protocols import DictConvertible, is_dict_convertible, is_schema_type
+
 
 class FieldMappingRegistry:
     """Registry for common field mappings - empty by default, no magic."""
@@ -24,13 +27,13 @@ class FieldMappingRegistry:
 
         Raises
         ------
-        ValueError
+        ValidationError
             If the mapping name is empty
         """
         if not name:
-            raise ValueError("Mapping name cannot be empty")
+            raise ValidationError("name", "cannot be empty")
         if not mapping:
-            raise ValueError("Mapping cannot be empty")
+            raise ValidationError("mapping", "cannot be empty")
         self.mappings[name] = mapping
 
     def get(self, name_or_mapping: str | dict[str, str]) -> dict[str, str]:
@@ -47,15 +50,13 @@ class FieldMappingRegistry:
 
         Raises
         ------
-        ValueError
+        ResourceNotFoundError
             If the mapping name is not found in registry
         """
         if isinstance(name_or_mapping, str):
             if name_or_mapping not in self.mappings:
-                available = ", ".join(self.mappings.keys()) if self.mappings else "none"
-                raise ValueError(
-                    f"Unknown field mapping: '{name_or_mapping}'. Available mappings: {available}"
-                )
+                available = list(self.mappings.keys()) if self.mappings else []
+                raise ResourceNotFoundError("field mapping", name_or_mapping, available)
             return self.mappings[name_or_mapping]
         return name_or_mapping
 
@@ -68,7 +69,7 @@ class FieldExtractor:
     """Handles extraction of values from nested data structures."""
 
     @staticmethod
-    def extract(data: dict[Any, Any] | BaseModel, path: str) -> Any:
+    def extract(data: dict[Any, Any] | DictConvertible, path: str) -> Any:
         """Extract value from nested data structure using dot notation path.
 
         Args
@@ -115,8 +116,8 @@ class FieldExtractor:
         if isinstance(data, dict):
             return data.get(key)
 
-        # Handle Pydantic models
-        if isinstance(data, BaseModel):
+        # Handle Pydantic models using protocol
+        if is_dict_convertible(data):
             return getattr(data, key, None)
 
         # Try generic attribute access for other objects
@@ -173,8 +174,8 @@ class TypeInferrer:
 
         """
         try:
-            # Pydantic v2 approach
-            if hasattr(model, "model_fields"):
+            # Pydantic v2 approach - use protocol check
+            if is_schema_type(model):
                 model_fields = getattr(model, "model_fields", {})
                 if field_name in model_fields:
                     annotation: type[Any] = model_fields[field_name].annotation
@@ -198,10 +199,7 @@ class TypeInferrer:
             True if the type is a BaseModel subclass
 
         """
-        try:
-            return isinstance(field_type, type) and issubclass(field_type, BaseModel)
-        except TypeError:
-            return False
+        return is_schema_type(field_type)
 
 
 class ModelFactory:
@@ -497,7 +495,7 @@ class AutoMappedInput(BaseModel):
         """
         if isinstance(data, dict):
             return data
-        if isinstance(data, BaseModel):
+        if is_dict_convertible(data):
             result: dict[str, Any] = data.model_dump()
             return result
         return {}

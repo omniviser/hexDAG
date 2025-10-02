@@ -6,6 +6,7 @@ from typing import Any, cast
 from pydantic import BaseModel, create_model
 
 from hexai.core.domain.dag import NodeSpec
+from hexai.core.protocols import is_schema_type
 
 
 class BaseNodeFactory(ABC):
@@ -27,8 +28,8 @@ class BaseNodeFactory(ABC):
         if schema is None:
             return None
 
-        if isinstance(schema, type) and issubclass(schema, BaseModel):
-            return schema
+        if is_schema_type(schema):
+            return schema  # type: ignore[return-value]
 
         if isinstance(schema, dict):
             # Create field definitions for create_model

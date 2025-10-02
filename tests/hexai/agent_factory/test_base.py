@@ -66,7 +66,10 @@ class TestPipelineDefinition:
         result = await pipeline.execute()
 
         assert result["status"] == "error"
-        assert "No pipeline YAML found" in result["error"]
+        assert (
+            "YAML path not configured" in result["error"]
+            or "No pipeline YAML found" in result["error"]
+        )
 
     @pytest.mark.asyncio
     async def test_execute_with_yaml(self):

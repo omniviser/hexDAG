@@ -13,6 +13,7 @@ from hexai.core.application.prompt import PromptInput
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.ports.tool_router import ToolRouter
+from hexai.core.protocols import is_dict_convertible
 from hexai.core.registry import node
 from hexai.core.registry.models import NodeSubtype
 
@@ -290,12 +291,11 @@ class ReActAgentNode(BaseNodeFactory):
 
         # Case 2: Fresh input (first iteration)
         # Handle both dict and Pydantic model inputs
-        if isinstance(input_data, BaseModel):
-            # Pydantic model - convert to dict
-            raw_input = input_data.model_dump()
-        elif isinstance(input_data, dict):
-            # Already a dict
+        if isinstance(input_data, dict):
             raw_input = input_data
+        elif is_dict_convertible(input_data):
+            # Pydantic model - convert to dict using protocol
+            raw_input = input_data.model_dump()
         else:
             # Fallback for other types
             raw_input = {"input": str(input_data)}

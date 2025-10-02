@@ -11,6 +11,7 @@ from hexai.core.application.nodes.mapped_input import (
     ModelFactory,
     TypeInferrer,
 )
+from hexai.core.exceptions import ResourceNotFoundError
 
 
 # Test models
@@ -68,10 +69,11 @@ class TestFieldMappingRegistry:
         assert retrieved == inline_mapping
 
     def test_get_unknown_mapping_raises(self):
-        """Test getting unknown mapping raises ValueError."""
+        """Test getting unknown mapping raises ResourceNotFoundError."""
+
         registry = FieldMappingRegistry()
 
-        with pytest.raises(ValueError, match="Unknown field mapping: 'nonexistent'"):
+        with pytest.raises(ResourceNotFoundError, match="Field Mapping 'nonexistent' not found"):
             registry.get("nonexistent")
 
     def test_clear_registry(self):
@@ -242,16 +244,20 @@ class TestAutoMappedInput:
 
     def test_registry_empty_name_error(self):
         """Test that registering with empty name raises error."""
+        from hexai.core.exceptions import ValidationError
+
         registry = FieldMappingRegistry()
 
-        with pytest.raises(ValueError, match="Mapping name cannot be empty"):
+        with pytest.raises(ValidationError, match="Validation failed for 'name'"):
             registry.register("", {"field": "value"})
 
     def test_registry_empty_mapping_error(self):
         """Test that registering empty mapping raises error."""
+        from hexai.core.exceptions import ValidationError
+
         registry = FieldMappingRegistry()
 
-        with pytest.raises(ValueError, match="Mapping cannot be empty"):
+        with pytest.raises(ValidationError, match="Validation failed for 'mapping'"):
             registry.register("test", {})
 
     def test_field_extractor_empty_path(self):

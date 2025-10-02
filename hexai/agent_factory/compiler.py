@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 
 from hexai.agent_factory.base import PipelineCatalog
 from hexai.core.domain.dag import DirectedGraph
+from hexai.core.exceptions import ResourceNotFoundError
+from hexai.core.protocols import SchemaProvider
 
 
 def validate_pipeline_compilation(graph: DirectedGraph, pipeline_name: str) -> None:
@@ -107,7 +109,7 @@ class PipelineCompiler:
 
         Raises
         ------
-        ValueError
+        ResourceNotFoundError
             If the pipeline is not found in the catalog
         """
         yaml_path = Path(yaml_path)
@@ -121,7 +123,9 @@ class PipelineCompiler:
         catalog = PipelineCatalog()
         pipeline_instance = catalog.get_pipeline(pipeline_name)
         if not pipeline_instance:
-            raise ValueError(f"Pipeline '{pipeline_name}' not found in catalog")
+            available_pipelines = catalog.list_pipelines()
+            available = [p["name"] for p in available_pipelines]
+            raise ResourceNotFoundError("pipeline", pipeline_name, available)
 
         # Step 3: Let PipelineBuilder do ALL the uncompiled work
         # This includes: YAML parsing, function resolution, validation
@@ -380,11 +384,15 @@ class PipelineCompiler:
         """
         if hasattr(type_obj, "__annotations__"):  # TypedDict
             return {k: getattr(v, "__name__", str(v)) for k, v in type_obj.__annotations__.items()}
-        if hasattr(type_obj, "model_fields"):  # Pydantic
-            return {
-                k: getattr(v.annotation, "__name__", str(v.annotation))
-                for k, v in type_obj.model_fields.items()
-            }
+        if isinstance(type_obj, type) and issubclass(type_obj, SchemaProvider):  # Pydantic
+            # Access model_fields through typing.cast to satisfy type checkers
+            from pydantic import BaseModel
+
+            if issubclass(type_obj, BaseModel):
+                return {
+                    k: getattr(v.annotation, "__name__", str(v.annotation))
+                    for k, v in type_obj.model_fields.items()
+                }
         if hasattr(type_obj, "__name__"):
             return {"result": type_obj.__name__}
         return None

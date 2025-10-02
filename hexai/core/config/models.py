@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from hexai.core.exceptions import ValidationError
+
 
 @dataclass
 class ManifestEntry:
@@ -18,15 +20,15 @@ class ManifestEntry:
 
         Raises
         ------
-        ValueError
+        ValidationError
             If namespace or module is empty or namespace contains ':'
         """
         if not self.namespace:
-            raise ValueError("Namespace cannot be empty")
+            raise ValidationError("namespace", "cannot be empty")
         if not self.module:
-            raise ValueError("Module path cannot be empty")
+            raise ValidationError("module", "cannot be empty")
         if ":" in self.namespace:
-            raise ValueError(f"Namespace cannot contain ':' - got {self.namespace}")
+            raise ValidationError("namespace", "cannot contain ':'", self.namespace)
 
 
 @dataclass
