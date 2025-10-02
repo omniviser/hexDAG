@@ -905,11 +905,12 @@ class TestDirectedGraph:
 
         graph.add(node_a).add(node_b)
 
-        # Test that we get copies, not references
+        # Test that we get immutable frozensets (performance optimization)
         deps_1 = graph.get_dependencies("B")
         deps_2 = graph.get_dependencies("B")
 
-        assert deps_1 is not deps_2  # Different objects
+        # frozensets are immutable, so returning same instance is safe and faster
+        assert deps_1 is deps_2  # Same immutable object (performance optimization)
         assert deps_1 == deps_2  # Same content
 
     def test_error_message_specificity(self):
@@ -936,13 +937,14 @@ class TestDirectedGraph:
 
         graph.add(node_a).add(node_b)
 
-        # Try to modify returned dependencies
+        # Verify returned dependencies are immutable (frozenset)
         deps = graph.get_dependencies("B")
-        original_deps = deps.copy()
-        deps.add("should_not_appear")
+        assert isinstance(deps, frozenset)
 
-        # Internal state should be unchanged
-        assert graph.get_dependencies("B") == original_deps
+        # frozenset doesn't have .add() - this is the protection we want!
+        # Attempting to modify would raise AttributeError
+        # Internal state is inherently safe with frozenset
+        assert graph.get_dependencies("B") == deps
 
     # Stress Tests
 

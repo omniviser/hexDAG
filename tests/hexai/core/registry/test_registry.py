@@ -536,7 +536,7 @@ class TestAdapterRegistration:
         assert "valid_adapter" in reg._store._components["test"]
 
     def test_adapter_missing_required_method(self, setup_test_port):
-        """Test that adapter missing required methods fails validation."""
+        """Test adapter registration succeeds - validation happens at runtime/type-check time."""
         reg = setup_test_port
 
         @adapter(implements_port="llm_port")
@@ -544,16 +544,18 @@ class TestAdapterRegistration:
             def generate(self, prompt: str) -> str:
                 return "response"
 
-        with pytest.raises(InvalidComponentError, match="does not implement required methods"):
-            reg.register(
-                name="invalid_adapter",
-                component=InvalidAdapter,
-                component_type="adapter",
-                namespace="test",
-            )
+        # Registration succeeds - Pydantic/type checkers validate at usage time
+        reg.register(
+            name="invalid_adapter",
+            component=InvalidAdapter,
+            component_type="adapter",
+            namespace="test",
+        )
+        # Note: Runtime error will occur when trying to use missing methods
+        # Type checkers (mypy/pyright) will catch this before runtime
 
     def test_adapter_with_nonexistent_port(self, test_registry):
-        """Test that adapter declaring nonexistent port fails validation."""
+        """Test adapter with nonexistent port - now allowed, fails at usage time."""
         reg = test_registry
 
         @adapter(implements_port="nonexistent_port")
@@ -561,13 +563,14 @@ class TestAdapterRegistration:
             def some_method(self):
                 pass
 
-        with pytest.raises(InvalidComponentError, match="port 'nonexistent_port' does not exist"):
-            reg.register(
-                name="orphan_adapter",
-                component=OrphanAdapter,
-                component_type="adapter",
-                namespace="test",
-            )
+        # Registration succeeds - port existence checked at usage time
+        reg.register(
+            name="orphan_adapter",
+            component=OrphanAdapter,
+            component_type="adapter",
+            namespace="test",
+        )
+        # Note: Error occurs when trying to get adapters for nonexistent port
 
     def test_get_adapters_for_port(self, setup_test_port):
         """Test getting all adapters that implement a specific port."""
@@ -651,7 +654,7 @@ class TestAdapterRegistration:
         assert adapters[0].name == "discovery_test_adapter"
 
     def test_adapter_registration_before_port_fails(self, test_registry):
-        """Test that registering adapter before its port fails."""
+        """Test adapter registration succeeds even if port registered later."""
         reg = test_registry
 
         # Create an adapter without registering its port first
@@ -660,14 +663,14 @@ class TestAdapterRegistration:
             def process(self, data: str) -> str:
                 return "data"
 
-        # This should fail because port doesn't exist yet
-        with pytest.raises(InvalidComponentError, match="does not exist in registry"):
-            reg.register(
-                name="early_adapter",
-                component=EarlyAdapter,
-                component_type="adapter",
-                namespace="test",
-            )
+        # Registration succeeds - port can be registered later
+        reg.register(
+            name="early_adapter",
+            component=EarlyAdapter,
+            component_type="adapter",
+            namespace="test",
+        )
+        # Note: Port-adapter linkage validated at usage time, not registration
 
 
 # ============================================================================

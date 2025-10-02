@@ -13,6 +13,7 @@ to all components without explicit parameter passing.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -30,7 +31,8 @@ _policy_manager_context: ContextVar[PolicyManagerPort | None] = ContextVar(
 
 _run_id_context: ContextVar[str | None] = ContextVar("run_id", default=None)
 
-_ports_context: ContextVar[dict[str, Any] | None] = ContextVar("ports", default=None)
+# Ports stored as immutable MappingProxyType to prevent race conditions in concurrent execution
+_ports_context: ContextVar[MappingProxyType[str, Any] | None] = ContextVar("ports", default=None)
 
 
 # ============================================================================
@@ -147,21 +149,25 @@ def set_ports(ports: dict[str, Any] | None) -> None:
 
     This allows adapters and components to access ports without explicit passing.
 
+    IMPORTANT: Ports are stored as immutable MappingProxyType to prevent race
+    conditions when multiple nodes execute concurrently.
+
     Parameters
     ----------
     ports : dict[str, Any] | None
         Ports dictionary containing all available adapters and services
     """
-    _ports_context.set(ports)
+    # Wrap in MappingProxyType to make immutable and prevent concurrent modification
+    _ports_context.set(MappingProxyType(ports) if ports else None)
 
 
-def get_ports() -> dict[str, Any] | None:
-    """Get ports dict from current async execution context.
+def get_ports() -> MappingProxyType[str, Any] | None:
+    """Get immutable ports mapping from current async execution context.
 
     Returns
     -------
-    dict[str, Any] | None
-        Current ports dictionary, or None if not in orchestrator context
+    MappingProxyType[str, Any] | None
+        Immutable view of ports dictionary, or None if not in orchestrator context
     """
     return _ports_context.get()
 

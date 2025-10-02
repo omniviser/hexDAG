@@ -35,7 +35,7 @@ class TestNodeEvents:
 
         assert event.name == "test"
         assert event.wave_index == 0
-        assert event.dependencies == []
+        assert event.dependencies == ()  # Empty tuple (performance optimization)
         assert isinstance(event.timestamp, datetime)
 
     def test_node_completed_creation(self):

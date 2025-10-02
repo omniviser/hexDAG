@@ -126,7 +126,7 @@ class CheckpointManager:
                     NodeSpec(
                         name=spec.name,
                         fn=spec.fn,
-                        deps={d for d in spec.deps if d not in completed},
+                        deps=frozenset(d for d in spec.deps if d not in completed),
                         timeout=spec.timeout,
                     )
                 )

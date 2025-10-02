@@ -6,14 +6,7 @@ wave-based execution with semaphore-based concurrency limiting.
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from hexai.core.ports.observer_manager import ObserverManagerPort
-    from hexai.core.ports.policy_manager import PolicyManagerPort
-else:
-    ObserverManagerPort = Any
-    PolicyManagerPort = Any
+from typing import Any
 
 from hexai.core.application.events import WaveCompleted, WaveStarted
 from hexai.core.domain.dag import DirectedGraph
@@ -154,12 +147,30 @@ class WaveExecutor:
 
         # Process results and handle exceptions
         wave_results = {}
-        for output in wave_outputs:
-            if isinstance(output, BaseException):
-                # Re-raise exceptions (they will be caught by the orchestrator)
-                raise output
+        exceptions: list[tuple[str | None, Exception]] = []
 
-            node_name, result = output
-            wave_results[node_name] = result
+        for output in wave_outputs:
+            if isinstance(output, Exception):
+                # Collect exception with node name if available
+                exceptions.append((None, output))
+            elif isinstance(output, BaseException):
+                # For non-Exception BaseExceptions (KeyboardInterrupt, SystemExit),
+                # re-raise immediately
+                raise output
+            else:
+                node_name, result = output
+                wave_results[node_name] = result
+
+        # Raise all collected exceptions
+        if exceptions:
+            if len(exceptions) == 1:
+                # Single exception - raise directly
+                raise exceptions[0][1]
+            # Multiple exceptions - raise as ExceptionGroup
+            exception_list = [exc for _, exc in exceptions]
+            raise ExceptionGroup(
+                f"Multiple node failures in wave {wave_index} ({len(exceptions)} nodes failed)",
+                exception_list,
+            )
 
         return wave_results

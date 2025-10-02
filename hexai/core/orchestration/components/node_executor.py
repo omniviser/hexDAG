@@ -124,6 +124,10 @@ class NodeExecutor:
         """
         node_start_time = time.time()
 
+        # Cache context lookups once at start (performance optimization)
+        observer_mgr = get_observer_manager()
+        policy_mgr = get_policy_manager()
+
         try:
             # Input validation
             if validate:
@@ -141,13 +145,13 @@ class NodeExecutor:
             start_event = NodeStarted(
                 name=node_name,
                 wave_index=wave_index,
-                dependencies=list(node_spec.deps),
+                dependencies=tuple(node_spec.deps),
             )
-            await policy_coordinator.notify_observer(get_observer_manager(), start_event)
+            await policy_coordinator.notify_observer(observer_mgr, start_event)
 
             # Evaluate policy for node start
             start_response = await policy_coordinator.evaluate_policy(
-                get_policy_manager(), start_event, context, node_id=node_name, wave_index=wave_index
+                policy_mgr, start_event, context, node_id=node_name, wave_index=wave_index
             )
 
             # Handle control signals
@@ -196,7 +200,7 @@ class NodeExecutor:
                 result=validated_output,
                 duration_ms=(time.time() - node_start_time) * 1000,
             )
-            await policy_coordinator.notify_observer(get_observer_manager(), complete_event)
+            await policy_coordinator.notify_observer(observer_mgr, complete_event)
 
             return validated_output
 
@@ -207,30 +211,52 @@ class NodeExecutor:
                 wave_index=wave_index,
                 reason="timeout",
             )
-            await policy_coordinator.notify_observer(get_observer_manager(), cancel_event)
+            await policy_coordinator.notify_observer(observer_mgr, cancel_event)
+            raise  # Re-raise original timeout error
+
+        except NodeExecutionError:
+            # Already wrapped - just re-raise
             raise
 
-        except Exception as e:
-            # Fire node failed event and check policy
+        except (ValidationError, ValueError, TypeError, KeyError, AttributeError) as validation_err:
+            # Validation/type errors - emit failure event
             fail_event = NodeFailed(
                 name=node_name,
                 wave_index=wave_index,
-                error=e,
+                error=validation_err,
             )
-            await policy_coordinator.notify_observer(get_observer_manager(), fail_event)
+            await policy_coordinator.notify_observer(observer_mgr, fail_event)
 
-            # Evaluate policy for node failure
+            # Evaluate policy for validation failure
             fail_response = await policy_coordinator.evaluate_policy(
-                get_policy_manager(), fail_event, context, node_id=node_name, wave_index=wave_index
+                policy_mgr, fail_event, context, node_id=node_name, wave_index=wave_index
             )
 
-            # Handle retry signal
+            # Handle policy response
             if fail_response.signal == PolicySignal.RETRY:
-                # Re-raise to let orchestrator handle retry
+                raise  # Let orchestrator retry
+
+            # Wrap and propagate
+            raise NodeExecutionError(node_name, validation_err) from validation_err
+
+        except RuntimeError as runtime_err:
+            # Runtime execution errors
+            fail_event = NodeFailed(
+                name=node_name,
+                wave_index=wave_index,
+                error=runtime_err,
+            )
+            await policy_coordinator.notify_observer(observer_mgr, fail_event)
+
+            # Evaluate policy
+            fail_response = await policy_coordinator.evaluate_policy(
+                policy_mgr, fail_event, context, node_id=node_name, wave_index=wave_index
+            )
+
+            if fail_response.signal == PolicySignal.RETRY:
                 raise
 
-            # Default: propagate the error
-            raise NodeExecutionError(node_name, e) from e
+            raise NodeExecutionError(node_name, runtime_err) from runtime_err
 
     async def _execute_function(
         self,

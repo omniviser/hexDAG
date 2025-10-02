@@ -4,7 +4,7 @@ import ast
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -21,6 +21,9 @@ from hexai.core.registry.models import NodeSubtype
 from .base_node_factory import BaseNodeFactory
 from .llm_node import LLMNode
 from .tool_utils import ToolCallFormat, ToolParser
+
+if TYPE_CHECKING:
+    from types import MappingProxyType
 
 
 class PhaseContext(TypedDict):
@@ -217,14 +220,14 @@ class ReActAgentNode(BaseNodeFactory):
             """Execute single reasoning step."""
             from hexai.core.context import get_port
 
-            ports = get_ports() or {}
+            ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
 
             # Initialize or update state from previous iteration
             state = self._initialize_or_update_state(input_data)
 
             # Execute single reasoning step
             updated_state = await self._execute_single_step(
-                state, name, main_prompt, continuation_prompts, config, ports
+                state, name, main_prompt, continuation_prompts, config, dict(ports)
             )
 
             # Check if we got a final output (tool_end was called)

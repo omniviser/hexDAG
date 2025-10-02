@@ -100,7 +100,8 @@ class AdapterLifecycleManager:
                     await cleanup_method()
                     logger.info(f"✅ Cleaned up adapter: {port_name}")
                     return True  # Only call first matching cleanup method
-                except Exception as e:
+                except (RuntimeError, ValueError, TypeError, ConnectionError, OSError) as e:
+                    # Expected cleanup errors - log but don't crash
                     logger.warning(f"Cleanup failed for {port_name}: {e}")
                     return False
 

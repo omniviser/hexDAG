@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from hexai.core.registry.adapter_validator import AdapterValidator
+# Removed AdapterValidator - validation moved to runtime/type-checkers
 from hexai.core.registry.bootstrap_manager import BootstrapManager
 from hexai.core.registry.component_store import ComponentStore
 from hexai.core.registry.discovery import register_components as default_register_components
@@ -42,8 +42,7 @@ class ComponentRegistry:
     The registry now delegates to specialized collaborators:
     - ComponentStore: Storage and retrieval
     - BootstrapManager: Lifecycle management
-    - ComponentValidator: General validation
-    - AdapterValidator: Adapter-specific validation
+    - RegistryValidator: Name and namespace validation
     """
 
     def __init__(self, _search_priority: tuple[str, ...] | None = None) -> None:
@@ -57,7 +56,7 @@ class ComponentRegistry:
         # Collaborators
         self._store = ComponentStore(search_priority=_search_priority)
         self._bootstrap = BootstrapManager(self._store)
-        self._adapter_validator = AdapterValidator(self._store)
+        # Removed AdapterValidator - Pydantic Protocols handle validation at runtime
 
         # Track configurable components
         self._configurable_components: dict[str, dict[str, Any]] = {}
@@ -169,12 +168,6 @@ class ComponentRegistry:
             component_type_enum = RegistryValidator.validate_component_type(component_type)
             wrapped_component = RegistryValidator.wrap_component(component)
             RegistryValidator.validate_component_name(name)
-
-            # Validate adapter if it's an adapter component
-            if component_type_enum == ComponentType.ADAPTER:
-                self._adapter_validator.validate_adapter_registration(
-                    name, component, namespace_str
-                )
 
             # Check namespace permissions
             if RegistryValidator.is_protected_namespace(namespace_str) and not privileged:

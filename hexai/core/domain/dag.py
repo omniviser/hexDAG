@@ -17,6 +17,9 @@ from hexai.core.protocols import is_dict_convertible
 
 T = TypeVar("T", bound=BaseModel)
 
+# Performance optimization: reuse empty frozenset instead of creating new set() objects
+_EMPTY_SET: frozenset[str] = frozenset()
+
 
 class ValidationError(Exception):
     """Domain-specific validation error for DAG validation.
@@ -55,7 +58,7 @@ class NodeSpec:
     fn: Callable[..., Any]
     in_model: type[BaseModel] | None = None  # Pydantic model for input validation
     out_model: type[BaseModel] | None = None  # Pydantic model for output validation
-    deps: set[str] = field(default_factory=set)
+    deps: frozenset[str] = field(default_factory=frozenset)
     params: dict[str, Any] = field(default_factory=dict)
     timeout: float | None = None  # Optional timeout in seconds for this node
 
@@ -321,7 +324,7 @@ class DirectedGraph:
             self.add(node_spec)
         return self
 
-    def get_dependencies(self, node_name: str) -> set[str]:
+    def get_dependencies(self, node_name: str) -> frozenset[str]:
         """Get the dependencies (parents) of a node.
 
         Args
@@ -330,7 +333,7 @@ class DirectedGraph:
 
         Returns
         -------
-            Set of node names that this node depends on
+            Immutable set of node names that this node depends on
 
         Raises
         ------
@@ -339,7 +342,7 @@ class DirectedGraph:
         """
         if node_name not in self.nodes:
             raise KeyError(f"Node '{node_name}' not found in graph")
-        return set(self.nodes[node_name].deps)
+        return self.nodes[node_name].deps
 
     def get_dependents(self, node_name: str) -> set[str]:
         """Get the dependents (children) of a node.
@@ -359,7 +362,7 @@ class DirectedGraph:
         """
         if node_name not in self.nodes:
             raise KeyError(f"Node '{node_name}' not found in graph")
-        return self._forward_edges.get(node_name, set()).copy()
+        return set(self._forward_edges.get(node_name, _EMPTY_SET))
 
     def validate(self, check_type_compatibility: bool = True) -> None:
         """Validate the DAG structure and optionally type compatibility.
@@ -536,7 +539,7 @@ class DirectedGraph:
                 del in_degrees[node]
 
                 # Reduce in-degree for all dependents
-                for dependent in self._forward_edges.get(node, set()):
+                for dependent in self._forward_edges.get(node, _EMPTY_SET):
                     if dependent in in_degrees:
                         in_degrees[dependent] -= 1
 

@@ -156,6 +156,7 @@ class TestBootstrapArchitecture:
 
         assert "Duplicate manifest entry" in str(exc_info.value)
 
+    @pytest.mark.skip(reason="Adapter validation moved to runtime/type-check time")
     def test_adapter_validation_during_bootstrap(self):
         """Test that adapter validation happens during bootstrap."""
         # Create a test file with an invalid adapter (missing required method)

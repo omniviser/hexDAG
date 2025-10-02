@@ -130,8 +130,8 @@ class HealthCheckManager:
 
             return status
 
-        except Exception as e:
-            # Health check itself failed
+        except (RuntimeError, ConnectionError, TimeoutError, ValueError) as e:
+            # Health check errors - mark adapter as unhealthy
             logger.error(f"Health check failed for {port_name}: {e}", exc_info=True)
             adapter_name = getattr(adapter, "_hexdag_name", port_name)
             return HealthStatus(

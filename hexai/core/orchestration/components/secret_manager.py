@@ -110,7 +110,8 @@ class SecretManager:
 
             return mapping
 
-        except Exception as e:
+        except (ValueError, KeyError, RuntimeError) as e:
+            # Secret loading errors
             logger.error(f"Failed to inject secrets: {e}", exc_info=True)
             raise
 
@@ -159,7 +160,8 @@ class SecretManager:
                 await memory.aset(secret_key, None)
                 removed_count += 1
                 logger.debug(f"Removed secret from memory: {secret_key}")
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
+                # Secret removal errors - log but continue cleanup
                 logger.warning(f"Failed to remove secret '{secret_key}': {e}")
 
         # Clean up tracked keys

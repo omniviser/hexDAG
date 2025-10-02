@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from types import MappingProxyType
 
     from hexai.core.orchestration.models import NodeExecutionContext
     from hexai.core.ports.observer_manager import ObserverManagerPort
@@ -196,6 +197,7 @@ class PreDagHookManager:
         pipeline_name: str,
     ) -> dict[str, Any]:
         """Execute all pre-DAG hooks in order."""
+
         from hexai.core.context import (
             get_observer_manager,
             get_port,
@@ -204,14 +206,14 @@ class PreDagHookManager:
         from hexai.core.orchestration.components import OrchestratorError
 
         results: dict[str, Any] = {}
-        ports = get_ports() or {}
+        ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
 
         # 1. Health checks
         if self.config.enable_health_checks:
             logger.info(f"Running health checks for pipeline '{pipeline_name}'")
             health_results = await self._health_check_manager.check_all_adapters(
-                ports=ports, observer_manager=observer_manager, pipeline_name=pipeline_name
+                ports=dict(ports), observer_manager=observer_manager, pipeline_name=pipeline_name
             )
             results["health_checks"] = health_results
 
@@ -246,7 +248,8 @@ class PreDagHookManager:
             try:
                 hook_result = await hook(ports, context)
                 results[hook_name] = hook_result
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError, TypeError) as e:
+                # Specific hook errors - these are expected failure modes
                 logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
                 results[hook_name] = {"error": str(e)}
                 raise
@@ -310,7 +313,7 @@ class PostDagHookManager:
         pipeline_name: str,
         pipeline_status: Literal["success", "failed", "cancelled"],
         node_results: dict[str, Any],
-        error: Exception | None = None,
+        error: BaseException | None = None,
     ) -> dict[str, Any]:
         """Execute all post-DAG hooks."""
         from hexai.core.context import (
@@ -320,7 +323,7 @@ class PostDagHookManager:
         )
 
         results: dict[str, Any] = {}
-        ports = get_ports() or {}
+        ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
 
         # Check if hooks should run based on pipeline status
@@ -342,10 +345,11 @@ class PostDagHookManager:
         ):
             try:
                 checkpoint_result = await self._save_checkpoint(
-                    ports, context, node_results, pipeline_status, observer_manager
+                    dict(ports), context, node_results, pipeline_status, observer_manager
                 )
                 results["checkpoint"] = checkpoint_result
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError, OSError) as e:
+                # Checkpoint-specific errors
                 logger.error(f"Checkpoint save failed: {e}", exc_info=True)
                 results["checkpoint"] = {"error": str(e)}
 
@@ -356,7 +360,8 @@ class PostDagHookManager:
                 logger.debug(f"Running custom post-DAG hook: {hook_name}")
                 hook_result = await hook(ports, context, node_results, pipeline_status, error)
                 results[hook_name] = hook_result
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError, TypeError) as e:
+                # Custom hook errors - don't fail cleanup for these
                 logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
                 results[hook_name] = {"error": str(e)}
 
@@ -369,7 +374,8 @@ class PostDagHookManager:
                     memory=memory, dag_id=context.dag_id
                 )
                 results["secret_cleanup"] = secret_cleanup
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
+                # Secret cleanup errors
                 logger.error(f"Secret cleanup failed: {e}", exc_info=True)
                 results["secret_cleanup"] = {"error": str(e)}
 
@@ -377,10 +383,11 @@ class PostDagHookManager:
         if self.config.enable_adapter_cleanup:
             try:
                 adapter_cleanup = await self._adapter_lifecycle_manager.cleanup_all_adapters(
-                    ports=ports, observer_manager=observer_manager
+                    ports=dict(ports), observer_manager=observer_manager
                 )
                 results["adapter_cleanup"] = adapter_cleanup
-            except Exception as e:
+            except (RuntimeError, ValueError, ConnectionError) as e:
+                # Adapter cleanup errors
                 logger.error(f"Adapter cleanup failed: {e}", exc_info=True)
                 results["adapter_cleanup"] = {"error": str(e)}
 

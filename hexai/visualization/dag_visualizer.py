@@ -542,7 +542,7 @@ class DAGVisualizer:
                 first_nodes.append(node_name)
 
         # Find last nodes (no dependents)
-        all_dependencies = set()
+        all_dependencies: set[str] = set()
         for node_name in self.graph.nodes:
             all_dependencies.update(self.graph.get_dependencies(node_name))
 
@@ -567,7 +567,7 @@ class DAGVisualizer:
                 first_nodes.append(node_name)
 
         # Find last nodes (no dependents)
-        all_dependencies = set()
+        all_dependencies: set[str] = set()
         for node_name in self.graph.nodes:
             all_dependencies.update(self.graph.get_dependencies(node_name))
 

@@ -103,7 +103,7 @@ class BaseNodeFactory(ABC):
             fn=wrapped_fn,
             in_model=input_model,
             out_model=output_model,
-            deps=set(deps or []),
+            deps=frozenset(deps or []),
             params=kwargs,
         )
 

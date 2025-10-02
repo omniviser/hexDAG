@@ -18,7 +18,7 @@ else:
     PolicyManagerPort = Any
 
 from hexai.core.context import ExecutionContext, get_policy_manager
-from hexai.core.domain.dag import DirectedGraph
+from hexai.core.domain.dag import DirectedGraph, DirectedGraphError
 from hexai.core.orchestration import NodeExecutionContext
 from hexai.core.orchestration.components import (
     InputMapper,
@@ -306,11 +306,16 @@ class Orchestrator:
             else:
                 all_ports.update(additional_ports)
         if validate:
+            # Validate DAG structure - catch specific DAG errors
             try:
                 # By default, skip type checking for backward compatibility
                 # Enable via graph.validate(check_type_compatibility=True)
                 graph.validate(check_type_compatibility=False)
-            except Exception as e:
+            except DirectedGraphError as e:
+                # DAG-specific errors (cycles, missing nodes, etc.)
+                raise OrchestratorError(f"Invalid DAG: {e}") from e
+            except (ValueError, TypeError, KeyError) as e:
+                # Other validation errors
                 raise OrchestratorError(f"Invalid DAG: {e}") from e
 
         # Validate required ports for all nodes
@@ -365,7 +370,7 @@ class Orchestrator:
             # Track pipeline status for post-DAG hooks
 
             pipeline_status: Literal["success", "failed", "cancelled"] = "success"
-            pipeline_error: Exception | None = None
+            pipeline_error: BaseException | None = None
             cancelled = False
 
             try:
@@ -385,17 +390,18 @@ class Orchestrator:
                     validate=validate,
                     **kwargs,
                 )
-
-                # Determine final status
+            except BaseException as e:
+                # Track error for post-hooks (do NOT modify state in handler!)
+                pipeline_error = e
+                raise  # Re-raise immediately
+            else:
+                # Success path - determine status after execution
                 if cancelled:
                     pipeline_status = "cancelled"
-
-            except Exception as e:
-                pipeline_status = "failed"
-                pipeline_error = e
-                raise  # Re-raise to preserve stack trace
-
             finally:
+                # Update status based on what happened (outside try/except)
+                if pipeline_error is not None:
+                    pipeline_status = "failed"
                 # Fire appropriate completion/cancellation event
                 duration_ms = (time.time() - pipeline_start_time) * 1000
 
@@ -426,9 +432,8 @@ class Orchestrator:
                     )
                     # Store post-hook results in context (for debugging/logging)
                     context.metadata["post_dag_hooks"] = post_hook_results
-
-                except Exception as post_hook_error:
-                    # Log but don't fail the pipeline due to post-hook errors
+                except (RuntimeError, ValueError, KeyError) as post_hook_error:
+                    # Specific cleanup errors - log but don't fail pipeline
                     logger.error(
                         f"Post-DAG hooks failed: {post_hook_error}",
                         exc_info=True,

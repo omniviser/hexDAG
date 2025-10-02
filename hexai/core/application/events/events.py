@@ -33,7 +33,7 @@ class NodeStarted(Event):
 
     name: str
     wave_index: int
-    dependencies: list[str] = field(default_factory=list)
+    dependencies: tuple[str, ...] | list[str] = field(default_factory=tuple)
 
     def log_message(self) -> str:
         """Format log message for node start event.
