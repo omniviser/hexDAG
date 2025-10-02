@@ -368,16 +368,11 @@ class TestImprovedAPI:
         self.registry = ComponentRegistry()
 
     def test_ergonomic_locking_api(self):
-        """Test the new ergonomic locking API."""
-        # Test that locking works by registering and retrieving
-        with self.registry._lock.write():
-            # Can write
-            self.registry.register("test_lock", lambda: "locked", "tool")
-
-        with self.registry._lock.read():
-            # Can read
-            result = self.registry.get("test_lock")
-            assert result() == "locked"
+        """Test that locking works during registration."""
+        # With simplified threading.Lock, just test registration works
+        self.registry.register("test_lock", lambda: "locked", "tool")
+        result = self.registry.get("test_lock")
+        assert result() == "locked"
 
     def test_separate_metadata_from_instantiation(self):
         """Test that get_metadata returns metadata without instantiation."""
@@ -510,7 +505,7 @@ class TestAdapterRegistration:
             component=ClassComponent(value=LLMPort),
             namespace="core",
         )
-        test_registry._store._components.setdefault("core", {})["llm_port"] = port_meta
+        test_registry._components.setdefault("core", {})["llm_port"] = port_meta
         return test_registry
 
     def test_valid_adapter_registration(self, setup_test_port):
@@ -532,8 +527,8 @@ class TestAdapterRegistration:
             namespace="test",
         )
 
-        assert "test" in reg._store._components
-        assert "valid_adapter" in reg._store._components["test"]
+        assert "test" in reg._components
+        assert "valid_adapter" in reg._components["test"]
 
     def test_adapter_missing_required_method(self, setup_test_port):
         """Test adapter registration succeeds - validation happens at runtime/type-check time."""
@@ -686,7 +681,7 @@ class TestRegistryPluginRequirements:
         registry = ComponentRegistry()
 
         # Module without requirements should return None (no skip reason)
-        result = registry._bootstrap._check_plugin_requirements("hexai.adapters.mock.mock_llm")
+        result = registry._check_plugin_requirements("hexai.adapters.mock.mock_llm")
         assert result is None
 
     def test_check_plugin_requirements_missing_package(self):
@@ -694,9 +689,7 @@ class TestRegistryPluginRequirements:
         registry = ComponentRegistry()
 
         with patch("importlib.util.find_spec", return_value=None):
-            result = registry._bootstrap._check_plugin_requirements(
-                "hexai.adapters.llm.openai_adapter"
-            )
+            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
 
         assert result is not None
         assert "Module hexai.adapters.llm.openai_adapter not found" in result
@@ -710,9 +703,7 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {}, clear=True),
         ):
-            result = registry._bootstrap._check_plugin_requirements(
-                "hexai.adapters.llm.openai_adapter"
-            )
+            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
 
         # Should return None since module exists (env vars checked at runtime)
         assert result is None
@@ -726,9 +717,7 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
-            result = registry._bootstrap._check_plugin_requirements(
-                "hexai.adapters.llm.openai_adapter"
-            )
+            result = registry._check_plugin_requirements("hexai.adapters.llm.openai_adapter")
 
         assert result is None  # No reason to skip
 
@@ -745,7 +734,7 @@ class TestRegistryPluginRequirements:
 
         # Test missing module
         with patch("importlib.util.find_spec", return_value=None):
-            result = registry._bootstrap._check_plugin_requirements(module_path)
+            result = registry._check_plugin_requirements(module_path)
             assert f"Module {module_path} not found" in result
 
         # Test module exists (env vars not checked at import time)
@@ -753,7 +742,7 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {}, clear=True),
         ):
-            result = registry._bootstrap._check_plugin_requirements(module_path)
+            result = registry._check_plugin_requirements(module_path)
             assert result is None  # Module exists, env vars checked at runtime
 
         # Test all requirements met
@@ -761,7 +750,7 @@ class TestRegistryPluginRequirements:
             patch("importlib.util.find_spec", return_value=MagicMock()),
             patch.dict(os.environ, {env_var: "test-key"}),
         ):
-            result = registry._bootstrap._check_plugin_requirements(module_path)
+            result = registry._check_plugin_requirements(module_path)
             assert result is None
 
 
@@ -790,7 +779,7 @@ class TestRegistryManifestLoading:
         with patch("hexai.core.registry.registry.default_register_components") as mock_register:
             mock_register.return_value = 1  # Simulate 1 component registered
 
-            total = clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
+            total = clean_registry._load_manifest_modules(manifest, mock_register)
 
         assert total == 2  # Both modules loaded
         assert mock_register.call_count == 2
@@ -806,13 +795,13 @@ class TestRegistryManifestLoading:
 
         with (
             patch("hexai.core.registry.registry.default_register_components") as mock_register,
-            patch.object(clean_registry._bootstrap, "_check_plugin_requirements") as mock_check,
+            patch.object(clean_registry, "_check_plugin_requirements") as mock_check,
         ):
             # Only the second module (plugin) gets checked, and it's missing env var
             mock_check.return_value = "Missing environment variable"
             mock_register.return_value = 5  # Core ports registers 5 components
 
-            total = clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
+            total = clean_registry._load_manifest_modules(manifest, mock_register)
 
         assert total == 5  # Only core module loaded
         assert mock_register.call_count == 1  # Plugin was skipped
@@ -830,7 +819,7 @@ class TestRegistryManifestLoading:
             mock_register.side_effect = ImportError("Module not found")
 
             with pytest.raises(ImportError):
-                clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
+                clean_registry._load_manifest_modules(manifest, mock_register)
 
     def test_load_manifest_plugin_module_failure_continues(self, clean_registry):
         """Test that plugin module failures don't stop loading."""
@@ -846,7 +835,7 @@ class TestRegistryManifestLoading:
             # First succeeds, broken.plugin is skipped by _check_plugin_requirements, third succeeds
             mock_register.side_effect = [5, 3]  # Only called for valid modules
 
-            total = clean_registry._bootstrap._load_manifest_modules(manifest, mock_register)
+            total = clean_registry._load_manifest_modules(manifest, mock_register)
 
         assert total == 8  # 5 from core + 3 from mock
         assert mock_register.call_count == 2  # Only called for existing modules

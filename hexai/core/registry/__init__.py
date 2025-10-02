@@ -39,6 +39,10 @@ Examples
 >>> # Access components
 >>> from hexai.core.registry import registry
 >>> processor = registry.get('my_processor', namespace='user')
+
+Note: The `introspection` module is optional and not exported by default.
+It's primarily used for testing and CLI tooling. Import it directly if needed:
+>>> from hexai.core.registry.introspection import extract_port_methods
 """
 
 from hexai.core.registry.decorators import (

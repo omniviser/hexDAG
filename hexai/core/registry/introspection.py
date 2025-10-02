@@ -1,7 +1,21 @@
-"""Introspection utilities for extracting metadata by convention.
+"""Optional introspection utilities for port/adapter validation.
 
-This module provides utilities to extract metadata from components using
-Python's introspection capabilities instead of explicit metadata declarations.
+⚠️  OPTIONAL MODULE - Not required for core registry functionality.
+
+This module provides utilities for runtime introspection of ports and adapters.
+It's primarily used in tests for validating port/adapter compatibility and may
+be useful for CLI tooling or debugging.
+
+Core registry operations (registration, lookup, bootstrap) do NOT depend on
+this module - they use decorator metadata instead.
+
+Use cases:
+- Testing: Validate adapters implement required port methods
+- CLI tools: Inspect port requirements and adapter capabilities
+- Debugging: Extract tool signatures and port methods dynamically
+
+If you're building a plugin or adapter, you probably don't need this module.
+Use the @adapter and @port decorators instead, which handle metadata automatically.
 """
 
 from __future__ import annotations

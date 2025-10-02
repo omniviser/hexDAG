@@ -136,7 +136,7 @@ class TestBootstrapArchitecture:
         with pytest.raises(RegistryAlreadyBootstrappedError) as exc_info:
             registry.bootstrap(entries)
 
-        assert "already been bootstrapped" in str(exc_info.value)
+        assert "already bootstrapped" in str(exc_info.value).lower()
 
     def test_reset_allows_re_bootstrap(self):
         """Reset should allow re-bootstrapping."""

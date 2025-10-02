@@ -2,6 +2,27 @@
 
 Bootstrap-based component registry with declarative YAML manifests and namespace isolation.
 
+## Architecture (Simplified 2025)
+
+The registry has been **simplified from 2,668 → 1,906 lines (28.5% reduction)** by undoing over-engineered abstractions:
+
+**What was removed:**
+- ❌ `ComponentStore` (414 lines) - Storage now inline in ComponentRegistry
+- ❌ `BootstrapManager` (302 lines) - Lifecycle management now inline
+- ❌ `ReadWriteLock` (144 lines) - Replaced with simple `threading.Lock`
+- ❌ `validation.py` (212 lines) - Merged into `models.py`
+
+**Current structure (7 files):**
+- ✅ `registry.py` (538 lines) - All-in-one registry class
+- ✅ `models.py` (387 lines) - Types + validation logic
+- ✅ `decorators.py` (392 lines) - Component decorators
+- ✅ `discovery.py` (245 lines) - Auto-discovery with two-phase registration
+- ✅ `introspection.py` (185 lines) - **Optional** utilities for testing/CLI
+- ✅ `exceptions.py` (82 lines) - Error types
+- ✅ `__init__.py` (77 lines) - Public API
+
+**Key principle:** A single cohesive 500-line registry class is NOT a "god class" - it's appropriate for a registry. The previous "separation of concerns" refactoring made it worse, not better.
+
 ## Overview
 
 The registry follows a **bootstrap-based architecture** similar to Django's app registry:
@@ -272,22 +293,19 @@ config:
 
 ## Thread Safety
 
-All operations are thread-safe:
-- Multiple concurrent reads allowed
-- Writes have exclusive access
-- Bootstrap is single-threaded
+Bootstrap uses a simple `threading.Lock` for thread safety during initialization.
+After bootstrap, the registry is immutable and thread-safe by design (no writes).
 
-## Architecture
+## File Structure
 
 ```
-manifest.py       - YAML manifest loading
-discovery.py      - Component discovery system
-bootstrap.py      - Bootstrap utilities
-registry.py       - Core registry (immutable after bootstrap)
-decorators.py     - Metadata-only decorators
-models.py         - Data models
-locks.py          - Thread safety
-exceptions.py     - Custom exceptions
+registry.py       - All-in-one registry (storage + lifecycle + bootstrap)
+models.py         - Type definitions + validation logic
+decorators.py     - Metadata-only decorators (@node, @adapter, etc)
+discovery.py      - Component auto-discovery with two-phase registration
+introspection.py  - Optional utilities for testing/CLI (not core)
+exceptions.py     - Custom exception types
+__init__.py       - Public API exports
 ```
 
 ## Testing

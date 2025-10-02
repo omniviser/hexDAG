@@ -60,10 +60,10 @@ def register_components(registry, namespace):
         namespace=namespace,
     )
 
-    # Manually register the port using the internal store
-    if namespace not in registry._store._components:
-        registry._store._components[namespace] = {}
-    registry._store._components[namespace]["test_port"] = port_meta
+    # Manually register the port using the internal storage
+    if namespace not in registry._components:
+        registry._components[namespace] = {}
+    registry._components[namespace]["test_port"] = port_meta
 
     # Discover and register the decorated components from this module
     module = sys.modules[__name__]
