@@ -7,6 +7,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from hexai.core.application.prompt import PromptInput, TemplateType
+from hexai.core.application.prompt.security.prompt_sanitizer import (
+    SanitizationConfig,
+    sanitize_text,
+)
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
 
@@ -135,6 +139,16 @@ class BaseLLMNode(BaseNodeFactory):
 
         return llm_wrapper
 
+    def _apply_sanitization(
+        self, validated_input: dict[str, Any], cfg: SanitizationConfig
+    ) -> dict[str, Any]:
+        if not cfg.use_sanitizer:
+            return validated_input
+        return {
+            k: sanitize_text(v, cfg) if isinstance(v, str) else v
+            for k, v in validated_input.items()
+        }
+
     def _generate_messages(
         self, template: TemplateType, validated_input: dict[str, Any]
     ) -> tuple[list[dict[str, str]], dict[str, Any]]:
@@ -145,8 +159,10 @@ class BaseLLMNode(BaseNodeFactory):
         tuple[list[dict[str, str]], dict[str, Any]]
             Tuple containing (messages, template_variables)
         """
-        messages = template.to_messages(**validated_input)
-        return messages, validated_input
+        cfg = validated_input.get("_sanitization_cfg", SanitizationConfig(use_sanitizer=False))
+        safe_input = self._apply_sanitization(validated_input, cfg)
+        messages = template.to_messages(**safe_input)
+        return messages, safe_input
 
     # Remove the individual message generation methods - they're not needed
     # All templates support to_messages() method

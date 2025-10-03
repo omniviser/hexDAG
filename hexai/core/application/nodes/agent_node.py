@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.prompt import PromptInput
+from hexai.core.application.prompt.security.prompt_sanitizer import SanitizationConfig
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.ports.tool_router import ToolRouter
@@ -460,6 +461,7 @@ carried_data={'key': 'value'})"""
             "phase_target": current_phase_context.get("target_output", ""),
         }
 
+        llm_input.setdefault("_sanitization_cfg", SanitizationConfig())
         # Get LLM response
         response = await self._get_llm_response(enhanced_prompt, llm_input, ports, node_step_name)
 

@@ -13,6 +13,7 @@ from hexai.agent_factory.yaml_validator import YamlValidator
 
 # ObserverManager is now a port - passed as dependency
 from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
+from hexai.core.application.prompt.security.prompt_sanitizer import parse_sanitization_config
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import DirectedGraph
@@ -131,6 +132,18 @@ class YamlPipelineBuilder:
             node_type = node_config.get("type", "function")
             params = node_config.get("params", {})
             deps = node_config.get("depends_on", [])
+
+            # Prompt Sanitization extraction
+            try:
+                raw_sanit = params.get("sanitization")
+                sanit_cfg = parse_sanitization_config(raw_sanit)
+            except Exception as e:
+                raise YamlPipelineBuilderError(
+                    f"Invalid sanitization config for node '{node_id}': {e}"
+                ) from e
+            params["_sanitization_cfg"] = sanit_cfg
+            if "sanitization" in params:
+                del params["sanitization"]
 
             # Handle field_mapping parameter
             field_mapping = params.get("field_mapping")
