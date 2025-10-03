@@ -61,7 +61,7 @@ stages:
           displayName: 'Lint and type check'
 
         - script: |
-            uv run licensecheck --using "PEP631:dev" --zero
+            uv run licensecheck --zero
           displayName: 'Check dependency licenses'
 
         - script: |

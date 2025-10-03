@@ -108,7 +108,6 @@ dev = [
     "twine>=6.1.0",
     "licensecheck>=2024.3",
     "pip-licenses>=5.0.0",
-    "griffe>=1.5.1,<2",
 
 ]
 

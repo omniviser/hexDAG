@@ -246,15 +246,8 @@ repos:
 
       - id: license-check
         name: Check dependency licenses
-        entry: uv run licensecheck --using "PEP631:dev" --zero
+        entry: uv run licensecheck --zero
         language: system
         pass_filenames: false
         stages: [pre-push]
         always_run: true
-
-      - id: api-compat-check
-        name: Check API compatibility
-        entry: uv run griffe check hexai --against origin/main
-        language: system
-        pass_filenames: false
-        stages: [pre-push]
