@@ -6,13 +6,13 @@ Supports multiple tool calling formats and tool description management.
 import json
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ToolCallFormat(Enum):
+class ToolCallFormat(StrEnum):
     """Tool calling formats supported by INVOKE_TOOL: prefix."""
 
     FUNCTION_CALL = "function_call"  # INVOKE_TOOL: tool_name(param1='value1')

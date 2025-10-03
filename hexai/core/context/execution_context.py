@@ -54,10 +54,12 @@ def set_observer_manager(manager: ObserverManagerPort | None) -> None:
 
     Examples
     --------
-    >>> # In orchestrator
-    >>> observer_manager = ports.get("observer_manager")
-    >>> set_observer_manager(observer_manager)
-    >>> # Now all components can emit events
+    Example usage::
+
+        # In orchestrator
+        observer_manager = ports.get("observer_manager")
+        set_observer_manager(observer_manager)
+        # Now all components can emit events
     """
     _observer_manager_context.set(manager)
 
@@ -75,10 +77,12 @@ def get_observer_manager() -> ObserverManagerPort | None:
 
     Examples
     --------
-    >>> # In any component
-    >>> observer_manager = get_observer_manager()
-    >>> if observer_manager:
-    ...     await observer_manager.notify(NodeStarted(...))
+    Example usage::
+
+        # In any component
+        observer_manager = get_observer_manager()
+        if observer_manager:
+            await observer_manager.notify(NodeStarted(...))
     """
     return _observer_manager_context.get()
 
@@ -187,10 +191,12 @@ def get_port(port_name: str) -> Any:
 
     Examples
     --------
-    >>> # In any component
-    >>> llm = get_port("llm")
-    >>> if llm:
-    ...     response = await llm.aresponse(messages)
+    Example usage::
+
+        # In any component
+        llm = get_port("llm")
+        if llm:
+            response = await llm.aresponse(messages)
     """
     ports = _ports_context.get()
     if ports is None:
@@ -223,16 +229,18 @@ class ExecutionContext:
 
     Examples
     --------
-    >>> async with ExecutionContext(
-    ...     observer_manager=observer,
-    ...     policy_manager=policy,
-    ...     run_id="run-123",
-    ...     ports=all_ports
-    ... ):
-    ...     # All components can access context
-    ...     result = await execute_dag(dag, inputs)
-    ...     # IMPORTANT: All observer notifications and hooks complete here
-    ... # Context cleaned up here - observers/policies no longer accessible
+    Example usage::
+
+        async with ExecutionContext(
+            observer_manager=observer,
+            policy_manager=policy,
+            run_id="run-123",
+            ports=all_ports
+        ):
+            # All components can access context
+            result = await execute_dag(dag, inputs)
+            # IMPORTANT: All observer notifications and hooks complete here
+        # Context cleaned up here - observers/policies no longer accessible
     """
 
     def __init__(

@@ -77,12 +77,14 @@ class HookConfig:
 
     Examples
     --------
-    >>> config = HookConfig(
-    ...     enable_health_checks=True,
-    ...     health_check_fail_fast=True,
-    ...     enable_secret_injection=True,
-    ...     secret_keys=["OPENAI_API_KEY", "DB_PASSWORD"]
-    ... )
+    Example usage::
+
+        config = HookConfig(
+        enable_health_checks=True,
+        health_check_fail_fast=True,
+        enable_secret_injection=True,
+        secret_keys=["OPENAI_API_KEY", "DB_PASSWORD"]
+        )
     """
 
     enable_health_checks: bool = True
@@ -150,15 +152,17 @@ class PreDagHookManager:
 
     Examples
     --------
-    >>> config = HookConfig(enable_health_checks=True)
-    >>> manager = PreDagHookManager(config)
-    >>> results = await manager.execute_hooks(
-    ...     ports={"llm": openai, "database": postgres},
-    ...     context=context,
-    ...     observer_manager=observer,
-    ...     policy_manager=policy,
-    ...     pipeline_name="my_pipeline"
-    ... )
+    Example usage::
+
+        config = HookConfig(enable_health_checks=True)
+        manager = PreDagHookManager(config)
+        results = await manager.execute_hooks(
+        ports={"llm": openai, "database": postgres},
+        context=context,
+        observer_manager=observer,
+        policy_manager=policy,
+        pipeline_name="my_pipeline"
+        )
     """
 
     def __init__(self, config: HookConfig | None = None):
@@ -273,18 +277,20 @@ class PostDagHookManager:
 
     Examples
     --------
-    >>> config = PostDagHookConfig(enable_secret_cleanup=True)
-    >>> manager = PostDagHookManager(config)
-    >>> results = await manager.execute_hooks(
-    ...     ports=ports,
-    ...     context=context,
-    ...     observer_manager=observer,
-    ...     policy_manager=policy,
-    ...     pipeline_name="my_pipeline",
-    ...     pipeline_status="success",
-    ...     node_results=results,
-    ...     duration_ms=1500.0
-    ... )
+    Example usage::
+
+        config = PostDagHookConfig(enable_secret_cleanup=True)
+        manager = PostDagHookManager(config)
+        results = await manager.execute_hooks(
+        ports=ports,
+        context=context,
+        observer_manager=observer,
+        policy_manager=policy,
+        pipeline_name="my_pipeline",
+        pipeline_status="success",
+        node_results=results,
+        duration_ms=1500.0
+        )
     """
 
     def __init__(

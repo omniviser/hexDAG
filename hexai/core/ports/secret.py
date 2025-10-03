@@ -56,9 +56,11 @@ class SecretPort(Protocol):
 
         Examples
         --------
-        >>> # Fetch secret from KeyVault
-        >>> secret = await keyvault.aget_secret("OPENAI_API_KEY")
-        >>> api_key = secret.get()  # Unwrap the secret value
+        Example usage::
+
+            # Fetch secret from KeyVault
+            secret = await keyvault.aget_secret("OPENAI_API_KEY")
+            api_key = secret.get()  # Unwrap the secret value
         """
         ...
 
@@ -87,18 +89,20 @@ class SecretPort(Protocol):
 
         Examples
         --------
-        >>> # Load specific secrets
-        >>> mapping = await keyvault.aload_secrets_to_memory(
-        ...     memory=memory,
-        ...     keys=["OPENAI_API_KEY", "DATABASE_PASSWORD"]
-        ... )
-        >>> # Returns: {"OPENAI_API_KEY": "secret:OPENAI_API_KEY", ...}
+        Example usage::
 
-        >>> # Load all secrets
-        >>> mapping = await keyvault.aload_secrets_to_memory(memory=memory)
+            # Load specific secrets
+            mapping = await keyvault.aload_secrets_to_memory(
+            memory=memory,
+            keys=["OPENAI_API_KEY", "DATABASE_PASSWORD"]
+            )
+            # Returns: {"OPENAI_API_KEY": "secret:OPENAI_API_KEY", ...}
 
-        >>> # Retrieve in nodes
-        >>> api_key = await memory.aget("secret:OPENAI_API_KEY")
+            # Load all secrets
+            mapping = await keyvault.aload_secrets_to_memory(memory=memory)
+
+            # Retrieve in nodes
+            api_key = await memory.aget("secret:OPENAI_API_KEY")
         """
         ...
 
@@ -112,8 +116,10 @@ class SecretPort(Protocol):
 
         Examples
         --------
-        >>> names = await keyvault.alist_secret_names()
-        >>> # ["OPENAI_API_KEY", "DATABASE_PASSWORD", "STRIPE_KEY"]
+        Example usage::
+
+            names = await keyvault.alist_secret_names()
+            # ["OPENAI_API_KEY", "DATABASE_PASSWORD", "STRIPE_KEY"]
         """
         ...
 
@@ -135,9 +141,11 @@ class SecretPort(Protocol):
 
         Examples
         --------
-        >>> # Azure KeyVault health check
-        >>> status = await keyvault.ahealth_check()
-        >>> status.status  # "healthy", "degraded", or "unhealthy"
-        >>> status.details  # {"vault_url": "...", "authenticated": True}
+        Example usage::
+
+            # Azure KeyVault health check
+            status = await keyvault.ahealth_check()
+            status.status  # "healthy", "degraded", or "unhealthy"
+            status.details  # {"vault_url": "...", "authenticated": True}
         """
         ...

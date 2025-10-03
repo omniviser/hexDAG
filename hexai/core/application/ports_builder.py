@@ -354,20 +354,22 @@ class PortsBuilder:
 
         Examples
         --------
-        >>> from hexai.adapters.openai import OpenAIAdapter
-        >>> from hexai.adapters.mock import MockLLM
-        >>>
-        >>> builder = (
-        ...     PortsBuilder()
-        ...     .with_llm(MockLLM())  # Global default
-        ...     .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent nodes
-        ...     .build_configuration()
-        ... )
-        >>>
-        >>> # All agent nodes will use OpenAI, other nodes use MockLLM
-        >>> config = builder.build_configuration()
-        >>> agent_ports = config.resolve_ports("my_agent", "agent")
-        >>> assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
+        Example usage::
+
+            from hexai.adapters.openai import OpenAIAdapter
+            from hexai.adapters.mock import MockLLM
+
+            builder = (
+                PortsBuilder()
+                .with_llm(MockLLM())  # Global default
+                .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent nodes
+                .build_configuration()
+            )
+
+            # All agent nodes will use OpenAI, other nodes use MockLLM
+            config = builder.build_configuration()
+            agent_ports = config.resolve_ports("my_agent", "agent")
+            assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
         """
         if node_type not in self._type_ports:
             self._type_ports[node_type] = {}
@@ -392,20 +394,22 @@ class PortsBuilder:
 
         Examples
         --------
-        >>> from hexai.adapters.anthropic import AnthropicAdapter
-        >>> from hexai.adapters.openai import OpenAIAdapter
-        >>>
-        >>> builder = (
-        ...     PortsBuilder()
-        ...     .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent default
-        ...     .for_node("researcher", llm=AnthropicAdapter(model="claude-3"))  # Override
-        ...     .build_configuration()
-        ... )
-        >>>
-        >>> # Researcher node gets Claude, other agents get GPT-4
-        >>> config = builder.build_configuration()
-        >>> researcher_ports = config.resolve_ports("researcher", "agent")
-        >>> assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
+        Example usage::
+
+            from hexai.adapters.anthropic import AnthropicAdapter
+            from hexai.adapters.openai import OpenAIAdapter
+
+            builder = (
+                PortsBuilder()
+                .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent default
+                .for_node("researcher", llm=AnthropicAdapter(model="claude-3"))  # Override
+                .build_configuration()
+            )
+
+            # Researcher node gets Claude, other agents get GPT-4
+            config = builder.build_configuration()
+            researcher_ports = config.resolve_ports("researcher", "agent")
+            assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
         """
         if node_name not in self._node_ports:
             self._node_ports[node_name] = {}
@@ -426,22 +430,24 @@ class PortsBuilder:
 
         Examples
         --------
-        >>> from hexai.adapters.mock import MockLLM
-        >>> from hexai.adapters.openai import OpenAIAdapter
-        >>> from hexai.adapters.anthropic import AnthropicAdapter
-        >>>
-        >>> config = (
-        ...     PortsBuilder()
-        ...     .with_llm(MockLLM())  # Global default
-        ...     .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent default
-        ...     .for_node("researcher", llm=AnthropicAdapter(model="claude-3"))  # Override
-        ...     .build_configuration()
-        ... )
-        >>>
-        >>> # Resolve ports for different nodes
-        >>> researcher = config.to_flat_dict("researcher", "agent")  # AnthropicAdapter
-        >>> analyzer = config.to_flat_dict("analyzer", "agent")  # OpenAIAdapter
-        >>> transformer = config.to_flat_dict("transformer", "function")  # MockLLM
+        Example usage::
+
+            from hexai.adapters.mock import MockLLM
+            from hexai.adapters.openai import OpenAIAdapter
+            from hexai.adapters.anthropic import AnthropicAdapter
+
+            config = (
+                PortsBuilder()
+                .with_llm(MockLLM())  # Global default
+                .for_type("agent", llm=OpenAIAdapter(model="gpt-4"))  # Agent default
+                .for_node("researcher", llm=AnthropicAdapter(model="claude-3"))  # Override
+                .build_configuration()
+            )
+
+            # Resolve ports for different nodes
+            researcher = config.to_flat_dict("researcher", "agent")  # AnthropicAdapter
+            analyzer = config.to_flat_dict("analyzer", "agent")  # OpenAIAdapter
+            transformer = config.to_flat_dict("transformer", "function")  # MockLLM
 
         Notes
         -----

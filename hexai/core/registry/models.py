@@ -253,19 +253,21 @@ class InstanceFactory:
 
         Examples
         --------
-        >>> # Class - gets instantiated
-        >>> class MyNode:
-        ...     def __init__(self, value=42):
-        ...         self.value = value
-        >>> component = ClassComponent(value=MyNode)
-        >>> instance = InstanceFactory.create_instance(component, value=100)
-        >>> assert instance.value == 100
+        Example usage::
 
-        >>> # Function - returned as-is
-        >>> def my_tool(x): return x * 2
-        >>> component = FunctionComponent(value=my_tool)
-        >>> tool = InstanceFactory.create_instance(component)
-        >>> assert tool(5) == 10
+            # Class - gets instantiated
+            class MyNode:
+            def __init__(self, value=42):
+            self.value = value
+            component = ClassComponent(value=MyNode)
+            instance = InstanceFactory.create_instance(component, value=100)
+            assert instance.value == 100
+
+            # Function - returned as-is
+            def my_tool(x): return x * 2
+            component = FunctionComponent(value=my_tool)
+            tool = InstanceFactory.create_instance(component)
+            assert tool(5) == 10
         """
         if isinstance(component, ClassComponent) and init_params:
             return component.instantiate(**init_params)

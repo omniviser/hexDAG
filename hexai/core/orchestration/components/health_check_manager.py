@@ -31,12 +31,14 @@ class HealthCheckManager:
 
     Examples
     --------
-    >>> manager = HealthCheckManager(fail_fast=True, warn_only=False)
-    >>> health_results = await manager.check_all_adapters(
-    ...     ports={"llm": openai, "database": postgres},
-    ...     observer_manager=observer,
-    ...     pipeline_name="my_pipeline"
-    ... )
+    Example usage::
+
+        manager = HealthCheckManager(fail_fast=True, warn_only=False)
+        health_results = await manager.check_all_adapters(
+            ports={"llm": openai, "database": postgres},
+            observer_manager=observer,
+            pipeline_name="my_pipeline"
+        )
     """
 
     def __init__(self, fail_fast: bool = False, warn_only: bool = True):

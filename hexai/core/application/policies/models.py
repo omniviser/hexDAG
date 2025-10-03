@@ -1,11 +1,11 @@
 """Data models for policy management system."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class PolicySignal(Enum):
+class PolicySignal(StrEnum):
     """Signals that policies can return to control execution flow."""
 
     PROCEED = "proceed"  # Continue normal execution
@@ -15,7 +15,7 @@ class PolicySignal(Enum):
     FAIL = "fail"  # Fail the operation
 
 
-class SubscriberType(Enum):
+class SubscriberType(StrEnum):
     """Types of policy subscribers for lifecycle management."""
 
     CORE = "core"  # Core framework policies (strong reference)

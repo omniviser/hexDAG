@@ -64,19 +64,21 @@ class NodeExecutor:
 
     Examples
     --------
-    >>> executor = NodeExecutor(strict_validation=True, default_node_timeout=30.0)
-    >>>
-    >>> result = await executor.execute_node(
-    ...     node_name="my_node",
-    ...     node_spec=NodeSpec("my_node", my_function),
-    ...     node_input={"data": "value"},
-    ...     ports={"llm": llm_adapter},
-    ...     context=execution_context,
-    ...     policy_coordinator=coordinator,
-    ...     observer_manager=observer,
-    ...     policy_manager=policy,
-    ...     wave_index=0
-    ... )
+    Example usage::
+
+        executor = NodeExecutor(strict_validation=True, default_node_timeout=30.0)
+
+        result = await executor.execute_node(
+            node_name="my_node",
+            node_spec=NodeSpec("my_node", my_function),
+            node_input={"data": "value"},
+            ports={"llm": llm_adapter},
+            context=execution_context,
+            policy_coordinator=coordinator,
+            observer_manager=observer,
+            policy_manager=policy,
+            wave_index=0
+        )
     """
 
     def __init__(
@@ -98,11 +100,13 @@ class NodeExecutor:
 
         Examples
         --------
-        >>> # Strict validation, 30 second default timeout
-        >>> executor = NodeExecutor(strict_validation=True, default_node_timeout=30.0)
-        >>>
-        >>> # Lenient validation, no timeout
-        >>> executor = NodeExecutor(strict_validation=False)
+        Strict validation, 30 second default timeout::
+
+            executor = NodeExecutor(strict_validation=True, default_node_timeout=30.0)
+
+        Lenient validation, no timeout::
+
+            executor = NodeExecutor(strict_validation=False)
         """
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout

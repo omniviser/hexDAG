@@ -21,9 +21,11 @@ PendingApproval : Model for HITL approval requests
 
 Examples
 --------
->>> from hexai.core.orchestration import Orchestrator, OrchestratorConfig
->>> config = OrchestratorConfig(max_concurrent_nodes=5)
->>> orchestrator = Orchestrator(config=config)
+Example usage::
+
+    from hexai.core.orchestration import Orchestrator, OrchestratorConfig
+    config = OrchestratorConfig(max_concurrent_nodes=5)
+    orchestrator = Orchestrator(config=config)
 """
 
 from hexai.core.orchestration.components import CheckpointManager

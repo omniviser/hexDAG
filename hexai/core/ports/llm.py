@@ -73,10 +73,11 @@ class LLM(Protocol):
 
         Examples
         --------
-        >>> # OpenAI adapter health check
-        >>> status = await openai_adapter.ahealth_check()
-        >>> status.status  # "healthy", "degraded", or "unhealthy"
-        >>> status.latency_ms  # Time taken for health check
-        >>> status.details  # {"model": "gpt-4", "rate_limit_remaining": 100}
+        OpenAI adapter health check::
+
+            status = await openai_adapter.ahealth_check()
+            status.status  # "healthy", "degraded", or "unhealthy"
+            status.latency_ms  # Time taken for health check
+            status.details  # {"model": "gpt-4", "rate_limit_remaining": 100}
         """
         ...

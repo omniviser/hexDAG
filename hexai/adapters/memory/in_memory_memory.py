@@ -192,9 +192,10 @@ class InMemoryMemory(Memory, ConfigurableComponent):
 
         Examples
         --------
-        >>> memory = InMemoryMemory()
-        >>> status = await memory.ahealth_check()
-        >>> status.status  # "healthy"
+        Example usage::
+
+            memory = InMemoryMemory()
+            status = await memory.ahealth_check()
         """
         from hexai.core.ports.healthcheck import HealthStatus
 

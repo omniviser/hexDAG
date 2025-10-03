@@ -39,22 +39,24 @@ class HealthStatus:
 
     Examples
     --------
-    >>> # Healthy adapter
-    >>> HealthStatus(
-    ...     status="healthy",
-    ...     adapter_name="openai",
-    ...     port_name="llm",
-    ...     latency_ms=45.2
-    ... )
+    Example usage::
 
-    >>> # Unhealthy adapter with error
-    >>> HealthStatus(
-    ...     status="unhealthy",
-    ...     adapter_name="postgres",
-    ...     port_name="database",
-    ...     error=ConnectionError("Could not connect to database"),
-    ...     details={"host": "localhost", "port": 5432}
-    ... )
+        # Healthy adapter
+        HealthStatus(
+        status="healthy",
+        adapter_name="openai",
+        port_name="llm",
+        latency_ms=45.2
+        )
+
+        # Unhealthy adapter with error
+        HealthStatus(
+        status="unhealthy",
+        adapter_name="postgres",
+        port_name="database",
+        error=ConnectionError("Could not connect to database"),
+        details={"host": "localhost", "port": 5432}
+        )
     """
 
     status: Literal["healthy", "degraded", "unhealthy"]

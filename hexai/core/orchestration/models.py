@@ -37,16 +37,18 @@ class OrchestratorConfig:
 
     Examples
     --------
-    >>> config = OrchestratorConfig(
-    ...     max_concurrent_nodes=5,
-    ...     strict_validation=True,
-    ...     default_node_timeout=30.0
-    ... )
-    >>> orchestrator = Orchestrator(config=config)
+    Example usage::
 
-    >>> # Or use defaults
-    >>> config = OrchestratorConfig()
-    >>> config.max_concurrent_nodes
+        config = OrchestratorConfig(
+        max_concurrent_nodes=5,
+        strict_validation=True,
+        default_node_timeout=30.0
+        )
+        orchestrator = Orchestrator(config=config)
+
+        # Or use defaults
+        config = OrchestratorConfig()
+        config.max_concurrent_nodes
     10
     """
 
@@ -205,14 +207,16 @@ class PortConfig:
 
     Examples
     --------
-    >>> from hexai.adapters.mock import MockLLM
-    >>> config = PortConfig(
-    ...     port=MockLLM(),
-    ...     metadata={"timeout": 30, "max_retries": 3}
-    ... )
-    >>> config.port
+    Example usage::
+
+        from hexai.adapters.mock import MockLLM
+        config = PortConfig(
+        port=MockLLM(),
+        metadata={"timeout": 30, "max_retries": 3}
+        )
+        config.port
     <MockLLM object>
-    >>> config.get_metadata()
+        config.get_metadata()
     {'timeout': 30, 'max_retries': 3}
     """
 
@@ -260,35 +264,37 @@ class PortsConfiguration:
 
     Examples
     --------
-    >>> from hexai.adapters.mock import MockLLM
-    >>> from hexai.adapters.openai import OpenAIAdapter
-    >>> from hexai.adapters.anthropic import AnthropicAdapter
-    >>>
-    >>> # Global default: All nodes use MockLLM
-    >>> config = PortsConfiguration(
-    ...     global_ports={"llm": PortConfig(MockLLM())},
-    ...     type_ports={
-    ...         # Override for all "agent" type nodes
-    ...         "agent": {"llm": PortConfig(OpenAIAdapter(model="gpt-4"))}
-    ...     },
-    ...     node_ports={
-    ...         # Override for specific "researcher" node
-    ...         "researcher": {"llm": PortConfig(AnthropicAdapter(model="claude-3"))}
-    ...     }
-    ... )
-    >>>
-    >>> # Resolution for different nodes:
-    >>> # - "researcher" node: AnthropicAdapter (per-node override)
-    >>> researcher_ports = config.resolve_ports("researcher", "agent")
-    >>> assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
-    >>>
-    >>> # - Other "agent" nodes: OpenAIAdapter (per-type default)
-    >>> agent_ports = config.resolve_ports("analyzer", "agent")
-    >>> assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
-    >>>
-    >>> # - Other nodes: MockLLM (global default)
-    >>> function_ports = config.resolve_ports("transformer", "function")
-    >>> assert isinstance(function_ports["llm"].port, MockLLM)
+    Example usage::
+
+        from hexai.adapters.mock import MockLLM
+        from hexai.adapters.openai import OpenAIAdapter
+        from hexai.adapters.anthropic import AnthropicAdapter
+
+        # Global default: All nodes use MockLLM
+        config = PortsConfiguration(
+        global_ports={"llm": PortConfig(MockLLM())},
+        type_ports={
+        # Override for all "agent" type nodes
+        "agent": {"llm": PortConfig(OpenAIAdapter(model="gpt-4"))}
+        },
+        node_ports={
+        # Override for specific "researcher" node
+        "researcher": {"llm": PortConfig(AnthropicAdapter(model="claude-3"))}
+        }
+        )
+
+        # Resolution for different nodes:
+        # - "researcher" node: AnthropicAdapter (per-node override)
+        researcher_ports = config.resolve_ports("researcher", "agent")
+        assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
+
+        # - Other "agent" nodes: OpenAIAdapter (per-type default)
+        agent_ports = config.resolve_ports("analyzer", "agent")
+        assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
+
+        # - Other nodes: MockLLM (global default)
+        function_ports = config.resolve_ports("transformer", "function")
+        assert isinstance(function_ports["llm"].port, MockLLM)
 
     Notes
     -----
@@ -340,23 +346,25 @@ class PortsConfiguration:
 
         Examples
         --------
-        >>> config = PortsConfiguration(
-        ...     global_ports={"llm": PortConfig(MockLLM())},
-        ...     type_ports={"agent": {"llm": PortConfig(OpenAIAdapter())}},
-        ...     node_ports={"researcher": {"llm": PortConfig(AnthropicAdapter())}}
-        ... )
-        >>>
-        >>> # Researcher node gets Anthropic (per-node override)
-        >>> researcher_ports = config.resolve_ports("researcher", "agent")
-        >>> assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
-        >>>
-        >>> # Other agent nodes get OpenAI (per-type default)
-        >>> agent_ports = config.resolve_ports("analyzer", "agent")
-        >>> assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
-        >>>
-        >>> # Function nodes get Mock (global default)
-        >>> function_ports = config.resolve_ports("transformer", "function")
-        >>> assert isinstance(function_ports["llm"].port, MockLLM)
+        Example usage::
+
+            config = PortsConfiguration(
+            global_ports={"llm": PortConfig(MockLLM())},
+            type_ports={"agent": {"llm": PortConfig(OpenAIAdapter())}},
+            node_ports={"researcher": {"llm": PortConfig(AnthropicAdapter())}}
+            )
+
+            # Researcher node gets Anthropic (per-node override)
+            researcher_ports = config.resolve_ports("researcher", "agent")
+            assert isinstance(researcher_ports["llm"].port, AnthropicAdapter)
+
+            # Other agent nodes get OpenAI (per-type default)
+            agent_ports = config.resolve_ports("analyzer", "agent")
+            assert isinstance(agent_ports["llm"].port, OpenAIAdapter)
+
+            # Function nodes get Mock (global default)
+            function_ports = config.resolve_ports("transformer", "function")
+            assert isinstance(function_ports["llm"].port, MockLLM)
         """
         result: dict[str, PortConfig] = {}
 
@@ -399,14 +407,16 @@ class PortsConfiguration:
 
         Examples
         --------
-        >>> config = PortsConfiguration(
-        ...     global_ports={"llm": PortConfig(MockLLM())}
-        ... )
-        >>>
-        >>> # Get flat dictionary for orchestrator
-        >>> ports = config.to_flat_dict("my_node")
-        >>> assert "llm" in ports
-        >>> assert isinstance(ports["llm"], MockLLM)  # Unwrapped
+        Example usage::
+
+            config = PortsConfiguration(
+            global_ports={"llm": PortConfig(MockLLM())}
+            )
+
+            # Get flat dictionary for orchestrator
+            ports = config.to_flat_dict("my_node")
+            assert "llm" in ports
+            assert isinstance(ports["llm"], MockLLM)  # Unwrapped
         """
         resolved = self.resolve_ports(node_name, node_type)
         return {port_name: config.port for port_name, config in resolved.items()}

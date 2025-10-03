@@ -38,10 +38,12 @@ class PolicyCoordinator:
 
     Examples
     --------
-    >>> coordinator = PolicyCoordinator()
-    >>> await coordinator.notify_observer(observer_manager, NodeStarted(...))
-    >>> response = await coordinator.evaluate_policy(policy_manager, event, context)
-    >>> coordinator.check_policy_signal(response, "Node execution")
+    Example usage::
+
+        coordinator = PolicyCoordinator()
+        await coordinator.notify_observer(observer_manager, NodeStarted(...))
+        response = await coordinator.evaluate_policy(policy_manager, event, context)
+        coordinator.check_policy_signal(response, "Node execution")
     """
 
     async def notify_observer(
@@ -58,9 +60,11 @@ class PolicyCoordinator:
 
         Examples
         --------
-        >>> from hexai.core.application.events import NodeStarted
-        >>> event = NodeStarted(name="my_node", wave_index=0)
-        >>> await coordinator.notify_observer(observer_manager, event)
+        Example usage::
+
+            from hexai.core.application.events import NodeStarted
+            event = NodeStarted(name="my_node", wave_index=0)
+            await coordinator.notify_observer(observer_manager, event)
         """
         if observer_manager:
             await observer_manager.notify(event)
@@ -101,15 +105,17 @@ class PolicyCoordinator:
 
         Examples
         --------
-        >>> response = await coordinator.evaluate_policy(
-        ...     policy_manager=my_policy,
-        ...     event=NodeStarted(name="test"),
-        ...     context=execution_context,
-        ...     node_id="my_node",
-        ...     wave_index=0
-        ... )
-        >>> if response.signal == PolicySignal.SKIP:
-        ...     print("Node was skipped by policy")
+        Example usage::
+
+            response = await coordinator.evaluate_policy(
+                policy_manager=my_policy,
+                event=NodeStarted(name="test"),
+                context=execution_context,
+                node_id="my_node",
+                wave_index=0
+            )
+            if response.signal == PolicySignal.SKIP:
+                print("Node was skipped by policy")
         """
         policy_context = PolicyContext(
             event=event,
@@ -144,9 +150,11 @@ class PolicyCoordinator:
 
         Examples
         --------
-        >>> response = await coordinator.evaluate_policy(...)
-        >>> coordinator.check_policy_signal(response, "Pipeline start")
-        ... # Raises OrchestratorError if signal != PROCEED
+        Example usage::
+
+            response = await coordinator.evaluate_policy(...)
+            coordinator.check_policy_signal(response, "Pipeline start")
+            # Raises OrchestratorError if signal != PROCEED
         """
         if response.signal != PolicySignal.PROCEED:
             raise OrchestratorError(f"{context} blocked: {response.signal.value}")

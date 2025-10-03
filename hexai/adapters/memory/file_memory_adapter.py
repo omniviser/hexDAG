@@ -70,14 +70,10 @@ class FileMemoryAdapter(ConfigurableComponent):
 
     Examples
     --------
-    >>> # JSON storage
-    >>> memory = FileMemoryAdapter(base_path="./data", format="json")
-    >>> await memory.aset("config", {"key": "value"})
-    >>> config = await memory.aget("config")
+    Example usage::
 
-    >>> # Pickle storage for Python objects
-    >>> memory = FileMemoryAdapter(base_path="./cache", format="pickle")
-    >>> await memory.aset("checkpoint", checkpoint_state)
+        memory = FileMemoryAdapter(base_path="./data", format="json")
+        memory = FileMemoryAdapter(base_path="./cache", format="pickle")
     """
 
     class Config(BaseModel):

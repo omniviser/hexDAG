@@ -128,10 +128,12 @@ class DatabasePort(Protocol):
 
         Examples
         --------
-        >>> # PostgreSQL adapter health check
-        >>> status = await postgres_adapter.ahealth_check()
-        >>> status.status  # "healthy", "degraded", or "unhealthy"
-        >>> status.latency_ms  # Time taken for health check query
-        >>> status.details  # {"pool_size": 10, "active_connections": 3}
+        Example usage::
+
+            # PostgreSQL adapter health check
+            status = await postgres_adapter.ahealth_check()
+            status.status  # "healthy", "degraded", or "unhealthy"
+            status.latency_ms  # Time taken for health check query
+            status.details  # {"pool_size": 10, "active_connections": 3}
         """
         ...

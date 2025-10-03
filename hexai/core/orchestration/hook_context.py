@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 # Constants for pipeline status (replacing string literals)
-class PipelineStatus(Enum):
+class PipelineStatus(StrEnum):
     """Pipeline execution status enumeration.
 
     This replaces string literals for pipeline status with a proper type.
@@ -52,13 +52,15 @@ class PreHookContext:
 
     Examples
     --------
-    >>> ctx = PreHookContext(
-    ...     ports={"llm": openai, "database": postgres},
-    ...     context=execution_context,
-    ...     observer_manager=observer,
-    ...     pipeline_name="my_pipeline"
-    ... )
-    >>> results = await manager.execute_hooks(ctx)
+    Example usage::
+
+        ctx = PreHookContext(
+            ports={"llm": openai, "database": postgres},
+            context=execution_context,
+            observer_manager=observer,
+            pipeline_name="my_pipeline"
+        )
+        results = await manager.execute_hooks(ctx)
     """
 
     ports: dict[str, Any]
@@ -93,16 +95,18 @@ class PostHookContext:
 
     Examples
     --------
-    >>> ctx = PostHookContext(
-    ...     ports=ports,
-    ...     context=execution_context,
-    ...     observer_manager=observer,
-    ...     pipeline_name="my_pipeline",
-    ...     pipeline_status=PipelineStatus.SUCCESS,
-    ...     node_results={"node1": "result1"},
-    ...     error=None
-    ... )
-    >>> results = await manager.execute_hooks(ctx)
+    Example usage::
+
+        ctx = PostHookContext(
+            ports=ports,
+            context=execution_context,
+            observer_manager=observer,
+            pipeline_name="my_pipeline",
+            pipeline_status=PipelineStatus.SUCCESS,
+            node_results={"node1": "result1"},
+            error=None
+        )
+        results = await manager.execute_hooks(ctx)
     """
 
     ports: dict[str, Any]

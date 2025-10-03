@@ -16,10 +16,10 @@ Basic usage:
 >>> logger = get_logger(__name__)
 >>> logger.info("Pipeline started", pipeline_id="123")
 
-Configure logging globally:
+Configure logging globally::
 
->>> from hexai.core.logging import configure_logging
->>> configure_logging(level="DEBUG", format="json")
+    from hexai.core.logging import configure_logging
+    configure_logging(level="DEBUG", format="json")
 
 Custom configuration:
 
@@ -85,21 +85,21 @@ def configure_logging(
 
     Examples
     --------
-    Development setup:
+    Development setup::
 
-    >>> configure_logging(level="DEBUG", format="structured", use_color=True)
+        configure_logging(level="DEBUG", format="structured", use_color=True)
 
-    Production setup:
+    Production setup::
 
-    >>> configure_logging(
-    ...     level="INFO",
-    ...     format="json",
-    ...     output_file="/var/log/hexdag/app.log"
-    ... )
+        configure_logging(
+            level="INFO",
+            format="json",
+            output_file="/var/log/hexdag/app.log"
+        )
 
-    Testing setup:
+    Testing setup::
 
-    >>> configure_logging(level="WARNING", format="console")
+        configure_logging(level="WARNING", format="console")
     """
     global _CURRENT_CONFIG, _HANDLER_IDS
 

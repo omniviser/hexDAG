@@ -21,12 +21,14 @@ class ComponentWithExecute(Protocol):
 
     Examples
     --------
-    >>> class MyTool:
-    ...     def execute(self, **kwargs: Any) -> Any:
-    ...         return "result"
-    >>>
-    >>> def use_tool(tool: ComponentWithExecute) -> Any:
-    ...     return tool.execute(param=1)
+    Example usage::
+
+        class MyTool:
+        def execute(self, **kwargs: Any) -> Any:
+        return "result"
+
+        def use_tool(tool: ComponentWithExecute) -> Any:
+        return tool.execute(param=1)
     """
 
     def execute(self, **kwargs: Any) -> Any:
@@ -45,10 +47,12 @@ class ConfigurablePort(Protocol):
 
     Examples
     --------
-    >>> class MyAdapter:
-    ...     @classmethod
-    ...     def get_config_class(cls) -> type:
-    ...         return MyConfig
+    Example usage::
+
+        class MyAdapter:
+        @classmethod
+        def get_config_class(cls) -> type:
+        return MyConfig
     """
 
     @classmethod
@@ -63,9 +67,11 @@ class HealthCheckable(Protocol):
 
     Examples
     --------
-    >>> class MyAdapter:
-    ...     async def ahealth_check(self) -> dict[str, Any]:
-    ...         return {"status": "healthy"}
+    Example usage::
+
+        class MyAdapter:
+        async def ahealth_check(self) -> dict[str, Any]:
+        return {"status": "healthy"}
     """
 
     async def ahealth_check(self) -> dict[str, Any]:
@@ -91,9 +97,11 @@ class DictConvertible(Protocol):
 
     Examples
     --------
-    >>> class MyModel:
-    ...     def model_dump(self) -> dict[str, Any]:
-    ...         return {"field": "value"}
+    Example usage::
+
+        class MyModel:
+        def model_dump(self) -> dict[str, Any]:
+        return {"field": "value"}
     """
 
     def model_dump(self) -> dict[str, Any]:
@@ -107,10 +115,12 @@ class SchemaProvider(Protocol):
 
     Examples
     --------
-    >>> class MyModel:
-    ...     @classmethod
-    ...     def model_json_schema(cls) -> dict[str, Any]:
-    ...         return {"type": "object", "properties": {}}
+    Example usage::
+
+        class MyModel:
+        @classmethod
+        def model_json_schema(cls) -> dict[str, Any]:
+        return {"type": "object", "properties": {}}
     """
 
     @classmethod
@@ -139,9 +149,11 @@ def has_execute_method(obj: Any) -> bool:
 
     Examples
     --------
-    >>> class Tool:
-    ...     def execute(self): pass
-    >>> has_execute_method(Tool())
+    Example usage::
+
+        class Tool:
+        def execute(self): pass
+        has_execute_method(Tool())
     True
     """
     return isinstance(obj, ComponentWithExecute)
@@ -160,12 +172,14 @@ def is_dict_convertible(obj: Any) -> bool:
 
     Examples
     --------
-    >>> from pydantic import BaseModel
-    >>> class MyModel(BaseModel):
-    ...     field: str
-    >>> is_dict_convertible(MyModel(field="value"))
+    Example usage::
+
+        from pydantic import BaseModel
+        class MyModel(BaseModel):
+        field: str
+        is_dict_convertible(MyModel(field="value"))
     True
-    >>> is_dict_convertible({"key": "value"})
+        is_dict_convertible({"key": "value"})
     True
     """
     return isinstance(obj, (dict, DictConvertible))
@@ -184,12 +198,14 @@ def is_schema_type(type_obj: Any) -> bool:
 
     Examples
     --------
-    >>> from pydantic import BaseModel
-    >>> class MyModel(BaseModel):
-    ...     field: str
-    >>> is_schema_type(MyModel)  # Type check
+    Example usage::
+
+        from pydantic import BaseModel
+        class MyModel(BaseModel):
+        field: str
+        is_schema_type(MyModel)  # Type check
     True
-    >>> is_schema_type(MyModel(field="val"))  # Instance check
+        is_schema_type(MyModel(field="val"))  # Instance check
     False
     """
     try:
@@ -218,14 +234,16 @@ def to_dict(obj: Any) -> dict[str, Any]:
 
     Examples
     --------
-    >>> to_dict({"key": "value"})
+    Example usage::
+
+        to_dict({"key": "value"})
     {'key': 'value'}
-    >>> from pydantic import BaseModel
-    >>> class MyModel(BaseModel):
-    ...     field: str
-    >>> to_dict(MyModel(field="value"))
+        from pydantic import BaseModel
+        class MyModel(BaseModel):
+        field: str
+        to_dict(MyModel(field="value"))
     {'field': 'value'}
-    >>> to_dict("not_convertible")  # Raises TypeError
+        to_dict("not_convertible")  # Raises TypeError
     """
     # Case 1: Already a dict
     if isinstance(obj, dict):

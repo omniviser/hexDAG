@@ -34,20 +34,23 @@ class CheckpointManager:
 
     Examples
     --------
-    >>> # In-memory storage (testing)
-    >>> storage = InMemoryMemory()
-    >>> mgr = CheckpointManager(storage=storage)
-    >>> await mgr.save(state)
-    >>> restored = await mgr.load("run-123")
+    In-memory storage (testing)::
 
-    >>> # File-based storage (production)
-    >>> storage = FileMemoryAdapter(base_path="./checkpoints", format="json")
-    >>> mgr = CheckpointManager(storage=storage)
+        storage = InMemoryMemory()
+        mgr = CheckpointManager(storage=storage)
+        await mgr.save(state)
+        restored = await mgr.load("run-123")
 
-    >>> # Database storage (enterprise)
-    >>> db = SQLiteAdapter(db_path="hexdag.db")
-    >>> storage = SQLiteMemoryAdapter(database=db)
-    >>> mgr = CheckpointManager(storage=storage)
+    File-based storage (production)::
+
+        storage = FileMemoryAdapter(base_path="./checkpoints", format="json")
+        mgr = CheckpointManager(storage=storage)
+
+    Database storage (enterprise)::
+
+        db = SQLiteAdapter(db_path="hexdag.db")
+        storage = SQLiteMemoryAdapter(database=db)
+        mgr = CheckpointManager(storage=storage)
     """
 
     def __init__(

@@ -27,12 +27,14 @@ class AdapterLifecycleManager:
 
     Examples
     --------
-    >>> manager = AdapterLifecycleManager()
-    >>> result = await manager.cleanup_all_adapters(
-    ...     ports={"llm": openai, "database": postgres},
-    ...     observer_manager=observer
-    ... )
-    >>> # {"cleaned_adapters": ["llm", "database"], "count": 2}
+    Example usage::
+
+        manager = AdapterLifecycleManager()
+        result = await manager.cleanup_all_adapters(
+            ports={"llm": openai, "database": postgres},
+            observer_manager=observer
+        )
+        # {"cleaned_adapters": ["llm", "database"], "count": 2}
     """
 
     # Methods to try for cleanup, in order of preference
@@ -59,11 +61,13 @@ class AdapterLifecycleManager:
 
         Examples
         --------
-        >>> result = await manager.cleanup_all_adapters(
-        ...     ports={"llm": openai, "database": postgres},
-        ...     observer_manager=observer
-        ... )
-        >>> # {"cleaned_adapters": ["llm", "database"], "count": 2}
+        Example usage::
+
+            result = await manager.cleanup_all_adapters(
+                ports={"llm": openai, "database": postgres},
+                observer_manager=observer
+            )
+            # {"cleaned_adapters": ["llm", "database"], "count": 2}
         """
         cleaned_adapters = []
 

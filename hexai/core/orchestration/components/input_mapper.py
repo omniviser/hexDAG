@@ -26,31 +26,33 @@ class InputMapper:
 
     Examples
     --------
-    >>> mapper = InputMapper()
-    >>>
-    >>> # No dependencies - gets initial input
-    >>> input_data = mapper.prepare_node_input(
-    ...     node_spec=NodeSpec("start", fn),
-    ...     node_results={},
-    ...     initial_input="Hello"
-    ... )
-    >>> assert input_data == "Hello"
-    >>>
-    >>> # Single dependency - gets that result directly
-    >>> input_data = mapper.prepare_node_input(
-    ...     node_spec=NodeSpec("process", fn, deps={"start"}),
-    ...     node_results={"start": "processed"},
-    ...     initial_input="Hello"
-    ... )
-    >>> assert input_data == "processed"
-    >>>
-    >>> # Multiple dependencies - gets dict of results
-    >>> input_data = mapper.prepare_node_input(
-    ...     node_spec=NodeSpec("combine", fn, deps={"start", "process"}),
-    ...     node_results={"start": "A", "process": "B"},
-    ...     initial_input="Hello"
-    ... )
-    >>> assert input_data == {"start": "A", "process": "B"}
+    Example usage::
+
+        mapper = InputMapper()
+
+        # No dependencies - gets initial input
+        input_data = mapper.prepare_node_input(
+            node_spec=NodeSpec("start", fn),
+            node_results={},
+            initial_input="Hello"
+        )
+        assert input_data == "Hello"
+
+        # Single dependency - gets that result directly
+        input_data = mapper.prepare_node_input(
+            node_spec=NodeSpec("process", fn, deps={"start"}),
+            node_results={"start": "processed"},
+            initial_input="Hello"
+        )
+        assert input_data == "processed"
+
+        # Multiple dependencies - gets dict of results
+        input_data = mapper.prepare_node_input(
+            node_spec=NodeSpec("combine", fn, deps={"start", "process"}),
+            node_results={"start": "A", "process": "B"},
+            initial_input="Hello"
+        )
+        assert input_data == {"start": "A", "process": "B"}
     """
 
     def prepare_node_input(

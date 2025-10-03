@@ -24,14 +24,12 @@ class MockToolAdapter(ToolRouter, ConfigurableComponent):
 
     Example
     -------
-        >>> mock_tools = {
-        ...     "search_customers": [{"id": 1, "name": "Alice"}],
-        ...     "get_product": {"id": 42, "name": "Widget", "price": 9.99}
-        ... }
-        >>> router = MockToolAdapter(mock_tools)
-        >>> result = await router.acall_tool("search_customers", {})
-        >>> print(result)
-        [{"id": 1, "name": "Alice"}]
+    Example usage::
+
+        mock_tools = {
+            "search_customers": [{"id": 1, "name": "Alice"}],
+            "get_product": {"id": 42, "name": "Widget", "price": 9.99}
+        }
     """
 
     # Configuration schema for TOML generation

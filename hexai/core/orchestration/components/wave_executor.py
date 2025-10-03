@@ -31,12 +31,14 @@ class WaveExecutor:
 
     Examples
     --------
-    >>> executor = WaveExecutor(max_concurrent_nodes=10)
-    >>> cancelled = await executor.execute_all_waves(
-    ...     waves=waves,
-    ...     node_executor_fn=orchestrator._execute_node,
-    ...     ...
-    ... )
+    Example usage::
+
+        executor = WaveExecutor(max_concurrent_nodes=10)
+        cancelled = await executor.execute_all_waves(
+            waves=waves,
+            node_executor_fn=orchestrator._execute_node,
+            ...
+        )
     """
 
     def __init__(

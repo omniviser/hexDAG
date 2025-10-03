@@ -10,6 +10,15 @@ from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
+from hexai.core.types import (
+    FrequencyPenalty,
+    PresencePenalty,
+    RetryCount,
+    Temperature02,
+    TimeoutSeconds,
+    TokenCount,
+    TopP,
+)
 from hexai.helpers.secrets import Secret
 
 logger = get_logger(__name__)
@@ -37,22 +46,18 @@ class OpenAIAdapter(ConfigurableComponent):
             default=None, description="OpenAI API key (or use OPENAI_API_KEY env var)"
         )
         model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
-        temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
-        max_tokens: int | None = Field(default=None, description="Maximum tokens to generate")
+        temperature: Temperature02 = 0.7
+        max_tokens: TokenCount | None = None
         response_format: Literal["text", "json_object"] = Field(
             default="text", description="Output format (text or json_object)"
         )
-        seed: int | None = Field(default=None, description="Seed for deterministic generation")
-        top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Top-p sampling parameter")
-        frequency_penalty: float = Field(
-            default=0.0, ge=-2.0, le=2.0, description="Frequency penalty"
-        )
-        presence_penalty: float = Field(
-            default=0.0, ge=-2.0, le=2.0, description="Presence penalty"
-        )
-        system_prompt: str | None = Field(default=None, description="Default system prompt")
-        timeout: float = Field(default=60.0, gt=0, description="Request timeout in seconds")
-        max_retries: int = Field(default=2, ge=0, description="Maximum retry attempts")
+        seed: int | None = None
+        top_p: TopP = 1.0
+        frequency_penalty: FrequencyPenalty = 0.0
+        presence_penalty: PresencePenalty = 0.0
+        system_prompt: str | None = None
+        timeout: TimeoutSeconds = 60.0
+        max_retries: RetryCount = 2
 
     @classmethod
     def get_config_class(cls) -> type[BaseModel]:

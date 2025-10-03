@@ -60,6 +60,11 @@ stages:
           displayName: 'Lint and type check'
 
         - script: |
+            # Run doctest first
+            uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ -v --junitxml=junit/test-results-doctest.xml --doctest-continue-on-failure
+          displayName: 'Run doctests'
+
+        - script: |
             # Run main tests
             uv run pytest tests/hexai/ -v --junitxml=junit/test-results-main.xml --cov=hexai --cov-report=xml --cov-report=html
 

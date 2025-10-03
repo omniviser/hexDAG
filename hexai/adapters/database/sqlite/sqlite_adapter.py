@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.registry.decorators import adapter
+from hexai.core.types import TimeoutSeconds
 
 logger = get_logger(__name__)
 
@@ -41,11 +42,11 @@ class SQLiteAdapter(ConfigurableComponent):
             default=False,
             description="SQLite check_same_thread parameter (False for async compatibility)",
         )
-        timeout: float = Field(default=5.0, gt=0, description="Connection timeout in seconds")
+        timeout: TimeoutSeconds = 5.0
         journal_mode: str = Field(
             default="WAL", description="Journal mode (WAL for better concurrency)"
         )
-        foreign_keys: bool = Field(default=True, description="Enable foreign key constraints")
+        foreign_keys: bool = True
         read_only: bool = Field(
             default=False, description="Open database in read-only mode (prevents modifications)"
         )

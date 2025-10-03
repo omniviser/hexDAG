@@ -23,18 +23,20 @@ class SecretManager:
 
     Examples
     --------
-    >>> manager = SecretManager(prefix="secret:", keys=["OPENAI_API_KEY"])
-    >>> # Load secrets
-    >>> mapping = await manager.load_secrets(
-    ...     secret_port=keyvault,
-    ...     memory=memory,
-    ...     dag_id="my_pipeline"
-    ... )
-    >>> # Clean up after execution
-    >>> await manager.cleanup_secrets(
-    ...     memory=memory,
-    ...     dag_id="my_pipeline"
-    ... )
+    Example usage::
+
+        manager = SecretManager(prefix="secret:", keys=["OPENAI_API_KEY"])
+        # Load secrets
+        mapping = await manager.load_secrets(
+            secret_port=keyvault,
+            memory=memory,
+            dag_id="my_pipeline"
+        )
+        # Clean up after execution
+        await manager.cleanup_secrets(
+            memory=memory,
+            dag_id="my_pipeline"
+        )
     """
 
     def __init__(
@@ -79,12 +81,14 @@ class SecretManager:
 
         Examples
         --------
-        >>> mapping = await manager.load_secrets(
-        ...     secret_port=keyvault,
-        ...     memory=memory,
-        ...     dag_id="my_pipeline"
-        ... )
-        >>> # Returns: {"OPENAI_API_KEY": "secret:OPENAI_API_KEY", ...}
+        Example usage::
+
+            mapping = await manager.load_secrets(
+                secret_port=keyvault,
+                memory=memory,
+                dag_id="my_pipeline"
+            )
+            # Returns: {"OPENAI_API_KEY": "secret:OPENAI_API_KEY", ...}
         """
         if not secret_port:
             logger.debug("No secret port configured, skipping secret injection")
@@ -137,11 +141,13 @@ class SecretManager:
 
         Examples
         --------
-        >>> result = await manager.cleanup_secrets(
-        ...     memory=memory,
-        ...     dag_id="my_pipeline"
-        ... )
-        >>> # {"cleaned": True, "keys_removed": 2}
+        Example usage::
+
+            result = await manager.cleanup_secrets(
+                memory=memory,
+                dag_id="my_pipeline"
+            )
+            # {"cleaned": True, "keys_removed": 2}
         """
         if not memory:
             logger.debug("No memory port available for secret cleanup")

@@ -165,6 +165,14 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: doctest
+        name: Run doctest
+        entry: uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on-failure
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: pytest
         name: Run pytest
         entry: uv run pytest tests/hexai/ -x --tb=short

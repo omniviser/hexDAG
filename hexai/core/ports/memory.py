@@ -66,9 +66,11 @@ class Memory(Protocol):
 
         Examples
         --------
-        >>> # Redis memory adapter health check
-        >>> status = await redis_memory.ahealth_check()
-        >>> status.status  # "healthy", "degraded", or "unhealthy"
-        >>> status.details  # {"connected_clients": 5, "used_memory_mb": 128}
+        Example usage::
+
+            # Redis memory adapter health check
+            status = await redis_memory.ahealth_check()
+            status.status  # "healthy", "degraded", or "unhealthy"
+            status.details  # {"connected_clients": 5, "used_memory_mb": 128}
         """
         ...

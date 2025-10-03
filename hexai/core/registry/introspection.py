@@ -46,19 +46,21 @@ def extract_port_methods(port_class: type) -> tuple[list[str], list[str]]:
 
     Examples
     --------
-    >>> from abc import abstractmethod
-    >>> @runtime_checkable
-    ... class DatabasePort(Protocol):
-    ...     @abstractmethod
-    ...     def query(self, sql: str) -> list: ...
-    ...     @abstractmethod
-    ...     def execute(self, sql: str) -> None: ...
-    ...     def batch_execute(self, statements: list[str]) -> None:
-    ...         for stmt in statements:
-    ...             self.execute(stmt)
-    >>> required, optional = extract_port_methods(DatabasePort)
-    >>> assert required == ["query", "execute"]
-    >>> assert optional == ["batch_execute"]
+    Example usage::
+
+        from abc import abstractmethod
+        @runtime_checkable
+        class DatabasePort(Protocol):
+        @abstractmethod
+        def query(self, sql: str) -> list: ...
+        @abstractmethod
+        def execute(self, sql: str) -> None: ...
+        def batch_execute(self, statements: list[str]) -> None:
+        for stmt in statements:
+        self.execute(stmt)
+        required, optional = extract_port_methods(DatabasePort)
+        assert required == ["query", "execute"]
+        assert optional == ["batch_execute"]
     """
     required = []
     optional = []
@@ -99,14 +101,16 @@ def extract_tool_signature(func: Callable) -> dict[str, object]:
 
     Examples
     --------
-    >>> async def search(query: str, limit: int = 10) -> list[dict]:
-    ...     pass
-    >>> info = extract_tool_signature(search)
-    >>> assert info["is_async"] is True
-    >>> assert len(info["parameters"]) == 2
-    >>> assert info["parameters"][0]["name"] == "query"
-    >>> assert info["parameters"][0]["required"] is True
-    >>> assert info["parameters"][1]["default"] == 10
+    Example usage::
+
+        async def search(query: str, limit: int = 10) -> list[dict]:
+        pass
+        info = extract_tool_signature(search)
+        assert info["is_async"] is True
+        assert len(info["parameters"]) == 2
+        assert info["parameters"][0]["name"] == "query"
+        assert info["parameters"][0]["required"] is True
+        assert info["parameters"][1]["default"] == 10
     """
     sig = inspect.signature(func)
 
@@ -149,13 +153,15 @@ def validate_adapter_implementation(
 
     Examples
     --------
-    >>> class SQLiteAdapter:
-    ...     def query(self, sql: str) -> list:
-    ...         return []
-    >>> # If execute is required but missing:
-    >>> valid, missing = validate_adapter_implementation(SQLiteAdapter, DatabasePort)
-    >>> assert not valid
-    >>> assert "execute" in missing
+    Example usage::
+
+        class SQLiteAdapter:
+        def query(self, sql: str) -> list:
+        return []
+        # If execute is required but missing:
+        valid, missing = validate_adapter_implementation(SQLiteAdapter, DatabasePort)
+        assert not valid
+        assert "execute" in missing
     """
     required_methods, _ = extract_port_methods(port_class)
 
@@ -184,15 +190,17 @@ def infer_adapter_capabilities(
 
     Examples
     --------
-    >>> class SQLiteAdapter:
-    ...     def query(self, sql: str) -> list:
-    ...         return []
-    ...     def execute(self, sql: str) -> None:
-    ...         pass
-    ...     def batch_execute(self, statements: list[str]) -> None:
-    ...         pass
-    >>> capabilities = infer_adapter_capabilities(SQLiteAdapter, DatabasePort)
-    >>> assert "supports_batch_execute" in capabilities
+    Example usage::
+
+        class SQLiteAdapter:
+        def query(self, sql: str) -> list:
+        return []
+        def execute(self, sql: str) -> None:
+        pass
+        def batch_execute(self, statements: list[str]) -> None:
+        pass
+        capabilities = infer_adapter_capabilities(SQLiteAdapter, DatabasePort)
+        assert "supports_batch_execute" in capabilities
     """
     _, optional_methods = extract_port_methods(port_class)
 

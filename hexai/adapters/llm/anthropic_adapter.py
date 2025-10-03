@@ -9,6 +9,13 @@ from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
+from hexai.core.types import (
+    PositiveInt,
+    RetryCount,
+    Temperature01,
+    TimeoutSeconds,
+    TopP,
+)
 from hexai.helpers.secrets import Secret
 
 logger = get_logger(__name__)
@@ -36,13 +43,13 @@ class AnthropicAdapter(ConfigurableComponent):
             default=None, description="Anthropic API key (or use ANTHROPIC_API_KEY env var)"
         )
         model: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model to use")
-        temperature: float = Field(default=0.7, ge=0.0, le=1.0, description="Sampling temperature")
-        max_tokens: int = Field(default=4096, gt=0, description="Maximum tokens to generate")
-        top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Top-p sampling parameter")
-        top_k: int | None = Field(default=None, gt=0, description="Top-k sampling parameter")
-        system_prompt: str | None = Field(default=None, description="Default system prompt")
-        timeout: float = Field(default=60.0, gt=0, description="Request timeout in seconds")
-        max_retries: int = Field(default=2, ge=0, description="Maximum retry attempts")
+        temperature: Temperature01 = 0.7
+        max_tokens: PositiveInt = 4096
+        top_p: TopP = 1.0
+        top_k: PositiveInt | None = None
+        system_prompt: str | None = None
+        timeout: TimeoutSeconds = 60.0
+        max_retries: RetryCount = 2
 
     @classmethod
     def get_config_class(cls) -> type[BaseModel]:

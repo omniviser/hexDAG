@@ -29,6 +29,10 @@ uv run pytest --cov=hexai --cov-report=html --cov-report=term-missing
 uv run pytest tests/hexai/agent_factory/ -x --tb=short  # Agent factory tests
 uv run pytest tests/hexai/core/                        # Core framework tests
 uv run pytest tests/hexai/validation/                  # Validation tests
+
+# Run doctests (tests embedded in docstrings)
+uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/
+uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on-failure  # See all failures
 ```
 
 ### Code Quality

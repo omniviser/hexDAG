@@ -32,7 +32,9 @@ class ConfigurationError(HexDAGError):
 
     Examples
     --------
-    >>> raise ConfigurationError("pipeline", "YAML file not found")
+    Example usage::
+
+        raise ConfigurationError("pipeline", "YAML file not found")
     """
 
     def __init__(self, component: str, reason: str) -> None:
@@ -55,7 +57,9 @@ class ValidationError(HexDAGError):
 
     Examples
     --------
-    >>> raise ValidationError("max_iterations", "must be positive", value=-1)
+    Example usage::
+
+        raise ValidationError("max_iterations", "must be positive", value=-1)
     """
 
     def __init__(self, field: str, constraint: str, value: object = None) -> None:
@@ -89,7 +93,9 @@ class ResourceNotFoundError(HexDAGError):
 
     Examples
     --------
-    >>> raise ResourceNotFoundError("pipeline", "my_workflow", ["workflow1", "workflow2"])
+    Example usage::
+
+        raise ResourceNotFoundError("pipeline", "my_workflow", ["workflow1", "workflow2"])
     """
 
     def __init__(
@@ -119,7 +125,9 @@ class DependencyError(HexDAGError):
 
     Examples
     --------
-    >>> raise DependencyError("llm", "LLM port is required for agent nodes")
+    Example usage::
+
+        raise DependencyError("llm", "LLM port is required for agent nodes")
     """
 
     def __init__(self, dependency: str, reason: str) -> None:
@@ -147,7 +155,9 @@ class TypeMismatchError(HexDAGError):
 
     Examples
     --------
-    >>> raise TypeMismatchError("component", str, dict)
+    Example usage::
+
+        raise TypeMismatchError("component", str, dict)
     """
 
     def __init__(

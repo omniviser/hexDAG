@@ -325,7 +325,7 @@ class Orchestrator:
         --------
         Using dictionary for additional ports (traditional approach):
 
-        >>> results = await orchestrator.run(
+        >>> results = await orchestrator.run(  # doctest: +SKIP
         ...     graph,
         ...     input_data,
         ...     additional_ports={"llm": MockLLM()}
@@ -333,7 +333,7 @@ class Orchestrator:
 
         Using PortsBuilder for additional ports (new approach):
 
-        >>> results = await orchestrator.run(
+        >>> results = await orchestrator.run(  # doctest: +SKIP
         ...     graph,
         ...     input_data,
         ...     additional_ports=PortsBuilder().with_llm(MockLLM())

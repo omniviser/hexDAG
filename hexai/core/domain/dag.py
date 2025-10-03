@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from enum import Enum
+from enum import Enum, auto
 from types import MappingProxyType
 from typing import Any, Literal, TypeVar
 
@@ -37,9 +37,9 @@ class ValidationError(Exception):
 class Color(Enum):
     """Colors for DFS cycle detection algorithm."""
 
-    WHITE = 0  # Unvisited
-    GRAY = 1  # Currently being processed (in recursion stack)
-    BLACK = 2  # Completely processed
+    WHITE = auto()  # Unvisited
+    GRAY = auto()  # Currently being processed (in recursion stack)
+    BLACK = auto()  # Completely processed
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,11 +44,11 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
 
     Examples
     --------
-    >>> from hexai.adapters.database.sqlite import SQLiteAdapter
-    >>> db = SQLiteAdapter(db_path="app.db")
-    >>> memory = SQLiteMemoryAdapter(database=db)
-    >>> await memory.aset("key", "value")
-    >>> value = await memory.aget("key")
+    Example usage::
+
+        from hexai.adapters.database.sqlite import SQLiteAdapter
+        db = SQLiteAdapter(db_path="memory.db")
+        memory = SQLiteMemoryAdapter(database=db, table_name="memory_store")
     """
 
     class Config(BaseModel):

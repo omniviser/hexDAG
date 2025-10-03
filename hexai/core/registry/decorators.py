@@ -41,6 +41,8 @@ def _snake_case(name: str) -> str:
 
     Examples
     --------
+    Example usage::
+
     XMLHttpRequest -> xml_http_request
     HTMLParser -> html_parser
     SimpleHTTPServer -> simple_http_server
@@ -89,21 +91,23 @@ def component(
 
     Examples
     --------
-    >>> @component('node', name='passthrough')
-    >>> class PassthroughNode:
-    ...     '''Passes data through unchanged.'''
-    ...     pass
-    >>>
-    >>> @component('tool', name=['search', 'find'])
-    >>> def search_tool(query: str) -> list:
-    ...     '''Search for items.'''
-    ...     return []
-    >>>
-    >>> # After decoration, they have attributes:
-    >>> assert hasattr(PassthroughNode, '_hexdag_type')
-    >>> assert hasattr(search_tool, '_hexdag_type')
-    >>> assert PassthroughNode._hexdag_name == 'passthrough'
-    >>> assert search_tool._hexdag_names == ['search', 'find']
+    Example usage::
+
+        @component('node', name='passthrough')
+        class PassthroughNode:
+        '''Passes data through unchanged.'''
+        pass
+
+        @component('tool', name=['search', 'find'])
+        def search_tool(query: str) -> list:
+        '''Search for items.'''
+        return []
+
+        # After decoration, they have attributes:
+        assert hasattr(PassthroughNode, '_hexdag_type')
+        assert hasattr(search_tool, '_hexdag_type')
+        assert PassthroughNode._hexdag_name == 'passthrough'
+        assert search_tool._hexdag_names == ['search', 'find']
     """
 
     def decorator(cls: T) -> T:
@@ -216,13 +220,15 @@ def adapter(
 
     Examples
     --------
-    >>> @adapter("database")
-    >>> class SQLiteAdapter:  # Name becomes 'sqlite_adapter'
-    ...     '''SQLite database implementation.'''
-    ...
-    >>> @adapter("llm", name="gpt4")  # Explicit name
-    >>> class OpenAIAdapter:
-    ...     pass
+    Example usage::
+
+        @adapter("database")
+        class SQLiteAdapter:  # Name becomes 'sqlite_adapter'
+        '''SQLite database implementation.'''
+
+        @adapter("llm", name="gpt4")  # Explicit name
+        class OpenAIAdapter:
+        pass
     """
 
     def decorator(cls: T) -> T:
