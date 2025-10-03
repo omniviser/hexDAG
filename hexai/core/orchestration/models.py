@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from hexai.core.exceptions import ValidationError
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OrchestratorConfig:
     """Configuration for orchestrator behavior.
 
@@ -122,7 +122,7 @@ class CheckpointState(BaseModel):
     metadata: dict[str, Any] = {}
 
 
-@dataclass
+@dataclass(slots=True)
 class NodeExecutionContext:
     """Lightweight context tracking current execution position.
 
@@ -191,7 +191,7 @@ class NodeExecutionContext:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PortConfig:
     """Configuration for a single port instance.
 
@@ -242,7 +242,7 @@ class PortConfig:
         return dict(self.metadata)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PortsConfiguration:
     """Complete port configuration with inheritance and overrides.
 

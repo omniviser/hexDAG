@@ -56,8 +56,24 @@ stages:
             uv run ruff check . --config=pyproject.toml --output-format=github
             uv run ruff format . --check
             uv run mypy hexai/
+            uv run pyright hexai/
             uv run bandit -r hexai/ -f json -o bandit-output.json || true
           displayName: 'Lint and type check'
+
+        - script: |
+            uv run licensecheck --using "PEP631:dev" --zero
+          displayName: 'Check dependency licenses'
+
+        - script: |
+            uv run deptry .
+            uv run vulture hexai/ --min-confidence 90
+            uv run radon cc hexai/ --min B --show-complexity
+            uv run safety check --json
+          displayName: 'Additional quality checks'
+
+        - script: |
+            uv run python scripts/check_async_io.py
+          displayName: 'Check async I/O compliance'
 
         - script: |
             # Run doctest first
@@ -150,3 +166,40 @@ stages:
             python scripts/check_examples.py
           displayName: 'Validate examples'
           continueOnError: true
+
+  - stage: MutationTesting
+    displayName: 'Mutation Testing'
+    dependsOn: [Quality, Integration]
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Mutmut
+        displayName: 'Run Mutation Tests'
+        timeoutInMinutes: 120
+        steps:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+          displayName: 'Use Python $(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip uv
+            uv sync --all-extras
+          displayName: 'Install dependencies'
+
+        - script: |
+            uv run mutmut run --paths-to-mutate=hexai/ --tests-dir=tests/ --runner="pytest -x --tb=short -q"
+          displayName: 'Run mutation testing'
+          continueOnError: true
+
+        - script: |
+            uv run mutmut html
+          displayName: 'Generate mutation test report'
+          condition: succeededOrFailed()
+
+        - task: PublishPipelineArtifact@1
+          condition: succeededOrFailed()
+          inputs:
+            targetPath: 'html'
+            artifact: 'mutation-test-report'
+            publishLocation: 'pipeline'
+          displayName: 'Publish mutation test report'

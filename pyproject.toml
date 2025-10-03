@@ -70,6 +70,10 @@ dev = [
     "pytest-asyncio>=0.21.0,<0.22",
     "pytest-cov>=5.0.0,<6",
     "pytest-mock>=3.14.0,<4",
+    "pytest-memray>=1.7.0,<2",
+    "memray>=1.14.0,<2",
+    "mutmut>=3.1.0,<4",
+    "diff-cover>=9.0.0,<10",
 
     # Code quality tools
     "deptry>=0.23.1",
@@ -102,6 +106,9 @@ dev = [
     "vulture>=2.11",
     "radon>=6.0.1",
     "twine>=6.1.0",
+    "licensecheck>=2024.3",
+    "pip-licenses>=5.0.0",
+    "griffe>=1.5.1,<2",
 
 ]
 
@@ -162,10 +169,14 @@ omit = [
     "*/conftest.py",
     "*/__pycache__/*",
     "*/examples/*",
-    "*_plugins/*"
+    "*_plugins/*",
+    "hexai/cli/*"  # CLI has separate test suite with 67% coverage
 ]
 
 [tool.coverage.report]
+# Fail if coverage drops below threshold
+fail_under = 70
+
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -177,6 +188,15 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod"
 ]
+
+# Show which lines are missing coverage
+show_missing = true
+
+# Skip fully covered files in report
+skip_covered = false
+
+# Precision for coverage percentage
+precision = 2
 
 
 [tool.mypy]
@@ -194,7 +214,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-exclude = ["tests/", "examples/"]
+exclude = ["tests/", "examples/", ".mutmut-config.py"]
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
@@ -212,7 +232,7 @@ disallow_untyped_decorators = false
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist"]
+exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist", ".mutmut-config.py"]
 include = ["hexai"]
 
 # Type checking settings

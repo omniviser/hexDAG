@@ -36,10 +36,12 @@ import sys
 from contextlib import suppress
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     import types
+
+    from hexai.core.types import Logger
 
 from loguru import logger
 
@@ -191,7 +193,7 @@ def configure_logging(
 
 
 @lru_cache(maxsize=256)
-def get_logger(name: str) -> Any:  # Returns loguru.Logger
+def get_logger(name: str) -> "Logger":
     """Get a logger instance with the given name (cached for performance).
 
     This is the recommended way to get loggers in hexDAG. Logger instances
@@ -226,9 +228,7 @@ def get_logger(name: str) -> Any:  # Returns loguru.Logger
 
 
 @lru_cache(maxsize=128)
-def get_logger_for_component(
-    component_type: str, component_name: str
-) -> Any:  # Returns loguru.Logger
+def get_logger_for_component(component_type: str, component_name: str) -> "Logger":
     """Get a logger for a specific component instance (cached for performance).
 
     Useful for adapters, nodes, and other components that need

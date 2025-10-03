@@ -24,7 +24,7 @@ class SubscriberType(StrEnum):
     TEMPORARY = "temporary"  # Temporary policies (weak reference)
 
 
-@dataclass
+@dataclass(slots=True)
 class PolicyContext:
     """Context information provided to policies for evaluation.
 
@@ -47,7 +47,7 @@ class PolicyContext:
     metadata: dict[str, Any] | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class PolicyResponse:
     """Response from a policy evaluation.
 

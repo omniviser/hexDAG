@@ -40,14 +40,32 @@ uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on
 # Run all pre-commit hooks
 uv run pre-commit run --all-files
 
-# Individual tools
-uv run black hexai/                    # Code formatting
-uv run isort hexai/                    # Import sorting
+# Linting and formatting
 uv run ruff check hexai/ --fix         # Linting with auto-fix
-uv run ruff format hexai/              # Ruff formatting
+uv run ruff format hexai/              # Code formatting
 uv run mypy hexai/                     # Type checking
+uv run pyright hexai/                  # Alternative type checker
 uv run bandit -r hexai                 # Security scanning
-uv run deptry .                        # Dependency analysis
+
+# Dependency analysis
+uv run deptry .                        # Unused dependencies
+uv run safety check                    # Vulnerability scanning
+./scripts/check_licenses.sh            # License compliance
+
+# Code quality metrics
+uv run vulture hexai/ --min-confidence 90    # Dead code detection
+uv run radon cc hexai/ --min B               # Complexity analysis
+
+# Coverage and testing
+./scripts/coverage_report.sh           # Full coverage report
+./scripts/diff_coverage.sh             # Coverage on changed code only
+./scripts/run_mutation_tests.sh        # Mutation testing (slow!)
+
+# API compatibility
+./scripts/check_api_compat.sh          # Check for breaking changes
+
+# Memory profiling
+./scripts/profile_memory.sh            # Memory leak detection
 ```
 
 ### Examples

@@ -76,7 +76,7 @@ class AgentState(BaseModel):
     model_config = ConfigDict(extra="allow")  # Allow additional fields from input mapping
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class AgentConfig:
     """Agent configuration for multi-step reasoning."""
 

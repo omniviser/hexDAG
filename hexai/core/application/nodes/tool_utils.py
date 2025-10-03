@@ -70,7 +70,7 @@ class ToolDefinition(BaseModel):
         return "\n".join(lines)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ToolCall:
     """Parsed tool call information."""
 

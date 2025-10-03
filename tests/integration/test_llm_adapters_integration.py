@@ -1,6 +1,5 @@
 """Integration tests for LLM adapters with fake and real API scenarios."""
 
-import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 

@@ -23,7 +23,7 @@ class Config(BaseModel):
 ```
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import Field
 
@@ -136,6 +136,20 @@ Percentage = Annotated[float, Field(ge=0.0, le=100.0, description="Percentage [0
 """Percentage value, range [0.0, 100.0]."""
 
 # ============================================================================
+# Framework Type Aliases (Python 3.12+ type statement)
+# ============================================================================
+
+# These use the modern `type` statement (PEP 695) instead of TypeAlias
+# Note: Using Any here to avoid circular imports and external dependencies
+
+# Logger type (loguru.Logger - using Any to avoid import)
+type Logger = Any  # loguru.Logger
+
+# Port types (to be replaced with proper Protocol definitions)
+type PortInstance = Any  # Generic port implementation
+type PortsDict = dict[str, PortInstance]  # Dictionary of port name -> port instance
+
+# ============================================================================
 # Backward Compatibility (deprecated, use specific types above)
 # ============================================================================
 
@@ -168,4 +182,8 @@ __all__ = [
     "TenantId",
     "Confidence",
     "Percentage",
+    # Framework types
+    "Logger",
+    "PortInstance",
+    "PortsDict",
 ]

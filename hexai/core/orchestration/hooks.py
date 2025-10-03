@@ -54,7 +54,7 @@ __all__ = [
 ]
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class HookConfig:
     """Configuration for pre-DAG hooks.
 
@@ -96,7 +96,7 @@ class HookConfig:
     custom_hooks: list[Callable] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class PostDagHookConfig:
     """Configuration for post-DAG hooks.
 

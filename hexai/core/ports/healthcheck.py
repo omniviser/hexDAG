@@ -12,7 +12,7 @@ from typing import Any, Literal
 __all__ = ["HealthStatus"]
 
 
-@dataclass
+@dataclass(slots=True)
 class HealthStatus:
     """Health check result returned by adapters.
 

@@ -32,7 +32,7 @@ class PipelineStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-@dataclass
+@dataclass(slots=True)
 class PreHookContext:
     """Context for pre-DAG hook execution.
 
@@ -69,7 +69,7 @@ class PreHookContext:
     pipeline_name: str
 
 
-@dataclass
+@dataclass(slots=True)
 class PostHookContext:
     """Context for post-DAG hook execution.
 

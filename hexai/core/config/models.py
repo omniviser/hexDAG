@@ -8,7 +8,7 @@ from typing import Any, Literal
 from hexai.core.exceptions import ValidationError
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Logging configuration for HexDAG.
 
@@ -52,7 +52,7 @@ class LoggingConfig:
     include_timestamp: bool = True
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ManifestEntry:
     """Single entry defining a module to load."""
 
@@ -75,7 +75,7 @@ class ManifestEntry:
             raise ValidationError("namespace", "cannot contain ':'", self.namespace)
 
 
-@dataclass
+@dataclass(slots=True)
 class HexDAGConfig:
     """Complete HexDAG configuration.
 
