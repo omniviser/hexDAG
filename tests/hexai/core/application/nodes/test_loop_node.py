@@ -1,7 +1,12 @@
-"""Tests for LoopNode and ConditionalNode implementations."""
+"""Tests for LoopNode and ConditionalNode (builder-first, using only registry objects)."""
+
+import asyncio
 
 import pytest
 
+from hexai.core.application.nodes.loop_node import (
+    StopReason,
+)
 from hexai.core.bootstrap import ensure_bootstrapped
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.registry import registry
@@ -10,258 +15,211 @@ from hexai.core.registry import registry
 ensure_bootstrapped()
 
 
-class MockEventManager:
-    """Mock event manager for testing."""
-
-    def __init__(self, session_id: str | None = None):
-        self.session_id = session_id or "test-session-123"
-        self.events = []
-
-    async def emit(self, event):
-        """Mock emit that just stores events."""
-        self.events.append(event)
-
-
 class TestLoopNode:
-    """Test cases for LoopNode functionality."""
-
-    def test_loop_node_creation(self):
-        """Test that LoopNode creates valid NodeSpec instances."""
-        ensure_bootstrapped()
-        loop_node = registry.get("loop_node", namespace="core")
-        node_spec = loop_node("test_loop", max_iterations=5)
-
-        assert isinstance(node_spec, NodeSpec)
-        assert node_spec.name == "test_loop"
-        assert callable(node_spec.fn)
+    """LoopNode via fluent builder, using only the object fetched from registry."""
 
     @pytest.mark.asyncio
-    async def test_loop_node_successful_execution(self):
-        """Test loop node execution with success condition."""
-        ensure_bootstrapped()
+    async def test_collect_last(self):
         loop_node = registry.get("loop_node", namespace="core")
 
-        def success_condition(data):
-            return data.get("score", 0) > 0.8
+        i_key = "i"
 
-        node_spec = loop_node("test_loop", max_iterations=3, success_condition=success_condition)
+        def process(data, state):
+            return state.get(i_key, 0)
 
-        event_manager = MockEventManager()
-        input_data = {"score": 0.9, "attempt": 1}  # Use data that meets the condition
+        def on_end(state, out):
+            return {i_key: state.get(i_key, 0) + 1}
 
-        # Replace the internal loop logic for testing
-        original_fn = node_spec.fn
+        spec: NodeSpec = (
+            loop_node.name("retry")
+            .condition(lambda d, s: s.get(i_key, 0) < 3)
+            .do(process)
+            .on_iteration_end(on_end)
+            .init_state({i_key: 0})
+            .collect_last()
+            .max_iterations(10)
+            .build()
+        )
+        assert isinstance(spec, NodeSpec)
 
-        async def test_fn(input_data, **ports):
-            # Simulate loop execution with success condition
-            if success_condition(input_data):
-                return {
-                    "result": input_data,
-                    "iterations_completed": 1,
-                    "success": True,
-                    "loop_metadata": {"condition_met": True},
-                }
-            return await original_fn(input_data, **ports)
-
-        result = await test_fn(input_data, event_manager=event_manager)
-
-        # Should exit early when condition is met
-        assert result["success"] is True
-        assert result["iterations_completed"] == 1
+        result = await spec.fn({"any": "payload"})
+        assert result["result"] == 2
+        assert result["metadata"]["iterations"] == 3
+        assert result["metadata"]["state"][i_key] == 3
+        stopped = result["metadata"]["stopped_by"]
+        stopped = stopped.value if hasattr(stopped, "value") else stopped
+        assert stopped == StopReason.CONDITION.value
 
     @pytest.mark.asyncio
-    async def test_loop_node_max_iterations(self):
-        """Test loop node hitting max iterations without success."""
-        ensure_bootstrapped()
+    async def test_collect_list(self):
         loop_node = registry.get("loop_node", namespace="core")
 
-        def never_succeeds(data):
-            return False
+        def body(data, state):
+            return f"v-{state.get('k', 0)}"
 
-        node_spec = loop_node("test_loop", max_iterations=2, success_condition=never_succeeds)
+        def on_end(state, out):
+            return {"k": state.get("k", 0) + 1}
 
-        # Verify the node spec was created correctly
-        assert node_spec.name == "test_loop"
-        assert callable(node_spec.fn)
+        spec = (
+            loop_node.name("listy")
+            .condition(lambda d, s: s.get("k", 0) < 4)
+            .do(body)
+            .on_iteration_end(on_end)
+            .init_state({"k": 0})
+            .collect_list()
+            .max_iterations(10)
+            .build()
+        )
+        assert isinstance(spec, NodeSpec)
+
+        result = await spec.fn({"x": 1})
+        assert result["result"] == ["v-0", "v-1", "v-2", "v-3"]
+        assert result["metadata"]["iterations"] == 4
+        assert result["metadata"]["state"]["k"] == 4
 
     @pytest.mark.asyncio
-    async def test_loop_node_no_success_condition(self):
-        """Test loop node without success condition (runs full iterations)."""
-        ensure_bootstrapped()
+    async def test_collect_reduce(self):
         loop_node = registry.get("loop_node", namespace="core")
-        node_spec = loop_node("test_loop", max_iterations=3)
 
-        # Verify node structure
-        assert node_spec.name == "test_loop"
-        assert callable(node_spec.fn)
+        def body(data, state):
+            return state.get("n", 0)
+
+        def on_end(state, out):
+            return {"n": state.get("n", 0) + 1}
+
+        def reducer(acc, x):
+            return (acc or 0) + (x or 0)
+
+        spec = (
+            loop_node.name("reducer")
+            .condition(lambda d, s: s.get("n", 0) < 5)
+            .do(body)
+            .on_iteration_end(on_end)
+            .init_state({"n": 0})
+            .collect_reduce(reducer)
+            .max_iterations(10)
+            .build()
+        )
+        assert isinstance(spec, NodeSpec)
+
+        result = await spec.fn({"input": True})
+        assert result["result"] == 10
+        assert result["metadata"]["iterations"] == 5
+        assert result["metadata"]["state"]["n"] == 5
+        stopped = result["metadata"]["stopped_by"]
+        stopped = stopped.value if hasattr(stopped, "value") else stopped
+        assert stopped == StopReason.CONDITION.value
 
     @pytest.mark.asyncio
-    async def test_loop_node_custom_iteration_key(self):
-        """Test loop node with custom iteration key."""
-        ensure_bootstrapped()
-        loop_node = registry.get("loop_node", namespace="core")
-        node_spec = loop_node("test_loop", max_iterations=2, iteration_key="custom_iteration")
-
-        # Verify node was created with custom iteration key
-        assert node_spec.name == "test_loop"
-        assert callable(node_spec.fn)
-
-    def test_loop_node_invalid_max_iterations(self):
-        """Test loop node with invalid max_iterations."""
-        ensure_bootstrapped()
+    async def test_break_if(self):
         loop_node = registry.get("loop_node", namespace="core")
 
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
-            loop_node("test_loop", max_iterations=0)
+        def body(data, state):
+            return state.get("i", 0)
 
-        with pytest.raises(ValueError, match="max_iterations must be positive"):
-            loop_node("test_loop", max_iterations=-1)
+        def on_end(state, out):
+            return {"i": state.get("i", 0) + 1}
+
+        spec = (
+            loop_node.name("breaker")
+            .condition(lambda d, s: True)
+            .do(body)
+            .on_iteration_end(on_end)
+            .init_state({"i": 0})
+            .collect_list()
+            .break_if(lambda d, s: s.get("i", 0) >= 3)
+            .iteration_key("iter")
+            .max_iterations(10)
+            .build()
+        )
+        assert isinstance(spec, NodeSpec)
+
+        result = await spec.fn({"flags": {"skip": False}})
+        assert result["result"] == [0, 1, 2]
+        assert result["metadata"]["iterations"] == 3
+        assert result["metadata"]["state"]["i"] == 3
+        stopped = result["metadata"]["stopped_by"]
+        stopped = stopped.value if hasattr(stopped, "value") else stopped
+        assert stopped == StopReason.BREAK_GUARD.value
+
+    @pytest.mark.asyncio
+    async def test_max_iterations_safety(self):
+        loop_node = registry.get("loop_node", namespace="core")
+
+        def body(data, state):
+            return "x"
+
+        def on_end(state, out):
+            return {"c": state.get("c", 0) + 1}
+
+        spec = (
+            loop_node.name("safety")
+            .condition(lambda d, s: True)
+            .do(body)
+            .on_iteration_end(on_end)
+            .init_state({"c": 0})
+            .collect_list()
+            .max_iterations(2)
+            .build()
+        )
+        assert isinstance(spec, NodeSpec)
+
+        result = await spec.fn({"k": "v"})
+        assert result["result"] == ["x", "x"]
+        assert result["metadata"]["iterations"] == 2
+        stopped = result["metadata"]["stopped_by"]
+        stopped = stopped.value if hasattr(stopped, "value") else stopped
+        assert stopped == StopReason.LIMIT.value
 
 
 class TestConditionalNode:
-    """Test cases for ConditionalNode functionality."""
+    """ConditionalNode via fluent builder, using only the object fetched from registry."""
 
-    def test_conditional_node_creation(self):
-        """Test that ConditionalNode creates valid NodeSpec instances."""
-        ensure_bootstrapped()
+    def test_basic(self):
         conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "test_conditional",
-            condition_key="should_continue",
-            true_action="retry",
-            false_action="proceed",
+
+        spec: NodeSpec = (
+            conditional_node.name("router")
+            .when(lambda d, s: d.get("kind") == "A", "ACTION_A")
+            .when(lambda d, s: d.get("kind") == "B", "ACTION_B")
+            .otherwise("ACTION_DEFAULT")
+            .build()
         )
+        assert isinstance(spec, NodeSpec)
 
-        assert isinstance(node_spec, NodeSpec)
-        assert node_spec.name == "test_conditional"
-        assert callable(node_spec.fn)
+        result = asyncio.get_event_loop().run_until_complete(spec.fn({"kind": "B"}))
+        assert result["result"] == "ACTION_B"
+        assert result["metadata"]["evaluations"] == [False, True]
+        assert result["metadata"]["has_else"] is True
 
-    @pytest.mark.asyncio
-    async def test_conditional_node_true_condition(self):
-        """Test conditional node when condition is True."""
-        ensure_bootstrapped()
+    def test_deps_and_models_passthrough(self):
         conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "test_conditional",
-            condition_key="should_continue",
-            true_action="retry",
-            false_action="proceed",
+
+        class InModel:
+            pass
+
+        class OutModel:
+            pass
+
+        spec: NodeSpec = (
+            conditional_node.name("router2")
+            .when(lambda d, s: True, "OK")
+            .deps({"dep1", "dep2"})
+            .in_model(InModel)
+            .out_model(OutModel)
+            .build()
         )
+        assert isinstance(spec, NodeSpec)
+        assert "dep1" in spec.deps and "dep2" in spec.deps
+        assert spec.in_model is InModel
+        assert spec.out_model is OutModel
 
-        event_manager = MockEventManager()
-        input_data = {"should_continue": True, "confidence": "low", "extra_data": "test"}
-
-        result = await node_spec.fn(input_data, event_manager=event_manager)
-
-        # Check result structure
-        assert "condition_key" in result
-        assert "condition_value" in result
-        assert "action" in result
-        assert "routing_decision" in result
-
-        # Check values
-        assert result["condition_key"] == "should_continue"
-        assert result["condition_value"] is True
-        assert result["action"] == "retry"
-        assert "continue based on should_continue" in result["routing_decision"]
-
-        # Check original data is preserved
-        assert result["confidence"] == "low"
-        assert result["extra_data"] == "test"
-
-    @pytest.mark.asyncio
-    async def test_conditional_node_false_condition(self):
-        """Test conditional node when condition is False."""
-        ensure_bootstrapped()
+    def test_otherwise_only(self):
         conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "test_conditional",
-            condition_key="should_continue",
-            true_action="retry",
-            false_action="proceed",
-        )
 
-        event_manager = MockEventManager()
-        input_data = {"should_continue": False, "confidence": "high"}
+        spec: NodeSpec = conditional_node.name("fallback_only").otherwise("DEFAULT").build()
+        assert isinstance(spec, NodeSpec)
 
-        result = await node_spec.fn(input_data, event_manager=event_manager)
-
-        # Check result values
-        assert result["condition_key"] == "should_continue"
-        assert result["condition_value"] is False
-        assert result["action"] == "proceed"
-        assert "proceed based on should_continue" in result["routing_decision"]
-
-    @pytest.mark.asyncio
-    async def test_conditional_node_missing_condition_key(self):
-        """Test conditional node when condition key is missing."""
-        ensure_bootstrapped()
-        conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "test_conditional",
-            condition_key="missing_key",
-            true_action="retry",
-            false_action="proceed",
-        )
-
-        event_manager = MockEventManager()
-        input_data = {"other_data": "value"}
-
-        result = await node_spec.fn(input_data, event_manager=event_manager)
-
-        # Should default to false when key is missing
-        assert result["condition_key"] == "missing_key"
-        assert result["condition_value"] is False
-        assert result["action"] == "proceed"
-
-    @pytest.mark.asyncio
-    async def test_conditional_node_non_boolean_condition(self):
-        """Test conditional node with non-boolean condition value."""
-        ensure_bootstrapped()
-        conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "test_conditional",
-            condition_key="score",
-            true_action="pass",
-            false_action="fail",
-        )
-
-        event_manager = MockEventManager()
-
-        # Test truthy value
-        input_data = {"score": 0.8}
-        result = await node_spec.fn(input_data, event_manager=event_manager)
-        assert result["condition_value"] is True
-        assert result["action"] == "pass"
-
-        # Test falsy value
-        input_data = {"score": 0}
-        result = await node_spec.fn(input_data, event_manager=event_manager)
-        assert result["condition_value"] is False
-        assert result["action"] == "fail"
-
-    @pytest.mark.asyncio
-    async def test_conditional_node_event_manager_integration(self):
-        """Test conditional node integration with event manager."""
-        ensure_bootstrapped()
-        conditional_node = registry.get("conditional_node", namespace="core")
-        node_spec = conditional_node(
-            "test_conditional",
-            condition_key="ready",
-            true_action="execute",
-            false_action="wait",
-        )
-
-        event_manager = MockEventManager()
-        input_data = {"ready": True, "task": "process_data"}
-
-        result = await node_spec.fn(input_data, event_manager=event_manager)
-
-        # Verify result structure
-        assert result["condition_key"] == "ready"
-        assert result["condition_value"] is True
-        assert result["action"] == "execute"
-        assert result["task"] == "process_data"  # Original data preserved
-
-        # Event manager should be available for use
-        assert event_manager is not None
+        result = asyncio.get_event_loop().run_until_complete(spec.fn({"x": 1}))
+        assert result["result"] == "DEFAULT"
+        assert result["metadata"]["has_else"] is True

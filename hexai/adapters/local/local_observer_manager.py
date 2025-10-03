@@ -10,21 +10,21 @@ concurrency control, and fault isolation.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import uuid
 import weakref
+from collections.abc import Awaitable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from hexai.core.application.events.decorators import (
-    EVENT_METADATA_ATTR,
-    EventDecoratorMetadata,
-    EventType,
-    EventTypesInput,
-    normalize_event_types,
+from hexai.core.application.events.batching import (
+    BatchingConfig,
+    BatchingMetrics,
+    EventBatchEnvelope,
+    EventBatcher,
 )
+from hexai.core.application.events.events import Event
 from hexai.core.ports.observer_manager import (
     AsyncObserverFunc,
     Observer,
@@ -33,8 +33,7 @@ from hexai.core.ports.observer_manager import (
 )
 from hexai.core.registry import adapter
 
-if TYPE_CHECKING:
-    from hexai.core.application.events.events import Event
+LOGGER = logging.getLogger(__name__)
 
 
 class ErrorHandler(Protocol):
@@ -137,6 +136,8 @@ class LocalObserverManager:
         max_sync_workers: int = DEFAULT_MAX_SYNC_WORKERS,
         error_handler: ErrorHandler | None = None,
         use_weak_refs: bool = True,
+        batching_config: BatchingConfig | None = None,
+        batching_enabled: bool = True,
     ) -> None:
         """Initialize the local observer manager.
 
@@ -147,11 +148,14 @@ class LocalObserverManager:
             max_sync_workers: Maximum thread pool workers for sync observers
             error_handler: Optional error handler, defaults to LoggingErrorHandler
             use_weak_refs: If True, use weak references to prevent memory leaks
+            batching_config: Optional batching configuration
+            batching_enabled: Toggle to bypass batching (useful for tests/debug)
         """
         self._max_concurrent = max_concurrent_observers
         self._timeout = observer_timeout
         self._error_handler = error_handler or LoggingErrorHandler()
         self._use_weak_refs = use_weak_refs
+        self._batching_config = batching_config or BatchingConfig()
 
         # Semaphore for concurrency control
         self._semaphore = asyncio.Semaphore(max_concurrent_observers)
@@ -172,6 +176,14 @@ class LocalObserverManager:
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
             self._strong_refs: dict[str, Any] = {}  # Keep alive certain observers
+
+        self._batcher: EventBatcher[Event] | None = None
+        if batching_enabled:
+            self._batcher = EventBatcher(
+                self._flush_envelope,
+                self._batching_config,
+                logger=LOGGER,
+            )
 
     def _store_observer(self, observer_id: str, observer: Any, keep_alive: bool) -> None:
         """Store observer with appropriate reference type."""
@@ -317,45 +329,28 @@ class LocalObserverManager:
         ----
             event: The event to distribute to observers
         """
-        # Check both strong and weak handlers; exit early when nothing is registered
-        if not self._handlers and (
-            not self._use_weak_refs or not getattr(self, "_weak_handlers", None)
-        ):
+        active_observers = self._collect_active_observers()
+        if not active_observers:
             return
 
-        to_check: dict[str, Observer] = {}
+        if self._batcher is not None:
+            await self._batcher.add(event)
+            return
 
-        if self._use_weak_refs:
-            for obs_id in list(self._weak_handlers.keys()):
-                observer = self._weak_handlers.get(obs_id)
-                if observer is not None:
-                    to_check[obs_id] = observer
+        observers = self._collect_interested_observers(event, active_observers)
+        if not observers:
+            return
 
-        to_check.update(self._handlers)
-
-        interested = [
-            (obs_id, observer)
-            for obs_id, observer in to_check.items()
-            if self._should_notify(obs_id, event)
+        tasks = [
+            self._dispatch_events(observer_id, observer, (event,))
+            for observer_id, observer in observers.items()
         ]
 
-        if not interested:
-            return
-
-        tasks = [self._limited_invoke(obs_id, observer, event) for obs_id, observer in interested]
-
-        total_timeout = self._timeout + (len(tasks) * DEFAULT_CLEANUP_INTERVAL)
-
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=total_timeout,
-            )
-        except TimeoutError:
-            self._error_handler.handle_error(
-                TimeoutError(f"Observer notification timed out after {total_timeout}s"),
-                {"event_type": type(event).__name__, "handler_name": "LocalObserverManager"},
-            )
+        await self._run_with_timeout(
+            tasks,
+            type(event).__name__,
+            is_critical=self._is_priority_event(event),
+        )
 
     def clear(self) -> None:
         """Remove all registered observers."""
@@ -370,6 +365,9 @@ class LocalObserverManager:
 
     async def close(self) -> None:
         """Close the manager and cleanup resources."""
+        if self._batcher is not None:
+            await self._batcher.close()
+
         self.clear()
         if not self._executor_shutdown:
             self._executor.shutdown(wait=False)
@@ -395,7 +393,15 @@ class LocalObserverManager:
 
         return count
 
-    def __enter__(self) -> LocalObserverManager:
+    @property
+    def batching_metrics(self) -> BatchingMetrics | None:
+        """Expose batching metrics when batching is enabled."""
+
+        if self._batcher is None:
+            return None
+        return self._batcher.metrics
+
+    def __enter__(self) -> "LocalObserverManager":
         """Context manager entry.
 
         Returns
@@ -439,6 +445,147 @@ class LocalObserverManager:
 
     # Private helper methods
 
+    async def _flush_envelope(self, envelope: EventBatchEnvelope) -> None:
+        """Flush a prepared event envelope to interested observers."""
+
+        active_observers = self._collect_active_observers()
+        if not active_observers:
+            return
+
+        tasks = []
+        batch_contains_priority = False
+
+        for observer_id, observer in active_observers.items():
+            events = self._filter_events_for_observer(observer_id, envelope.events)
+            if not events:
+                continue
+
+            if any(self._is_priority_event(event) for event in events):
+                batch_contains_priority = True
+
+            batch_envelope = None
+            if self._supports_batch(observer):
+                batch_envelope = self._make_filtered_envelope(envelope, events)
+
+            tasks.append(self._dispatch_events(observer_id, observer, events, batch_envelope))
+
+        if not tasks:
+            return
+
+        await self._run_with_timeout(
+            tasks,
+            f"batch:{envelope.flush_reason.value}",
+            is_critical=batch_contains_priority,
+        )
+
+    def _collect_active_observers(self) -> dict[str, Observer]:
+        """Collect currently active observers, pruning dead weak references."""
+
+        observers: dict[str, Observer] = dict(self._handlers)
+
+        if self._use_weak_refs:
+            for observer_id in list(self._weak_handlers.keys()):
+                observer = self._weak_handlers.get(observer_id)
+                if observer is None:
+                    self._weak_handlers.pop(observer_id, None)
+                    self._event_filters.pop(observer_id, None)
+                    self._strong_refs.pop(observer_id, None)
+                    continue
+                observers.setdefault(observer_id, observer)
+
+        return observers
+
+    def _collect_interested_observers(
+        self, event: Event, observers: dict[str, Observer]
+    ) -> dict[str, Observer]:
+        """Filter observers down to those interested in the given event."""
+
+        return {
+            observer_id: observer
+            for observer_id, observer in observers.items()
+            if self._should_notify(observer_id, event)
+        }
+
+    async def _dispatch_events(
+        self,
+        observer_id: str,
+        observer: Observer,
+        events: Sequence[Event],
+        envelope: EventBatchEnvelope | None = None,
+    ) -> None:
+        """Dispatch one or more events to an observer under concurrency control."""
+
+        _ = observer_id  # kept for potential future logging
+
+        async with self._semaphore:
+            if envelope is not None and self._supports_batch(observer):
+                await self._safe_invoke_batch(observer, envelope, events)
+            else:
+                for event in events:
+                    await self._safe_invoke(observer, event)
+
+    def _filter_events_for_observer(
+        self, observer_id: str, events: Sequence[Event]
+    ) -> tuple[Event, ...]:
+        """Return events from the batch that match the observer's filter."""
+
+        event_filter = self._event_filters.get(observer_id)
+        if event_filter is None:
+            return tuple(events)
+
+        return tuple(event for event in events if type(event) in event_filter)
+
+    def _make_filtered_envelope(
+        self, envelope: EventBatchEnvelope, events: Sequence[Event]
+    ) -> EventBatchEnvelope:
+        """Create envelope tailored to an observer's filtered events."""
+
+        if len(events) == len(envelope.events):
+            return envelope
+
+        return EventBatchEnvelope(
+            batch_id=envelope.batch_id,
+            sequence_no=envelope.sequence_no,
+            created_at=envelope.created_at,
+            events=tuple(events),
+            flush_reason=envelope.flush_reason,
+        )
+
+    def _supports_batch(self, observer: Observer) -> bool:
+        """Check whether observer exposes a batch handler."""
+
+        handler = getattr(observer, "handle_batch", None)
+        return callable(handler)
+
+    async def _run_with_timeout(
+        self,
+        tasks: Sequence[Awaitable[Any]],
+        context_label: str,
+        *,
+        is_critical: bool = False,
+    ) -> None:
+        """Run observer tasks enforcing a global timeout."""
+
+        if not tasks:
+            return
+
+        total_timeout = self._timeout + (len(tasks) * DEFAULT_CLEANUP_INTERVAL)
+
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=total_timeout,
+            )
+        except TimeoutError:
+            self._error_handler.handle_error(
+                TimeoutError(f"Observer notification timed out after {total_timeout}s"),
+                {
+                    "event_type": context_label,
+                    "handler_name": "LocalObserverManager",
+                    "is_critical": is_critical,
+                },
+            )
+
     def _should_notify(self, observer_id: str, event: Event) -> bool:
         """Check if observer should be notified of this event type."""
         event_filter = self._event_filters.get(observer_id)
@@ -450,17 +597,7 @@ class LocalObserverManager:
         # Check if event type matches any allowed type (supports subclassing)
         return isinstance(event, tuple(event_filter))
 
-    async def _limited_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
-        """Invoke observer with concurrency limit."""
-        per_observer = self._observer_semaphores.get(observer_id)
-        if per_observer is None:
-            async with self._semaphore:
-                await self._safe_invoke(observer_id, observer, event)
-        else:
-            async with self._semaphore, per_observer:
-                await self._safe_invoke(observer_id, observer, event)
-
-    async def _safe_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
+    async def _safe_invoke(self, observer: Observer, event: Event) -> None:
         """Safely invoke an observer with timeout."""
         timeout_value = self._observer_timeouts.get(observer_id, self._timeout)
         try:
@@ -475,7 +612,7 @@ class LocalObserverManager:
                 {
                     "handler_name": name,
                     "event_type": type(event).__name__,
-                    "is_critical": False,
+                    "is_critical": self._is_priority_event(event),
                 },
             )
         except Exception as exc:
@@ -485,6 +622,53 @@ class LocalObserverManager:
                 {
                     "handler_name": name,
                     "event_type": type(event).__name__,
-                    "is_critical": False,
+                    "is_critical": self._is_priority_event(event),
                 },
             )
+
+    async def _safe_invoke_batch(
+        self, observer: Observer, envelope: EventBatchEnvelope, events: Sequence[Event]
+    ) -> None:
+        """Safely invoke an observer's batch handler."""
+
+        handler = getattr(observer, "handle_batch", None)
+        if handler is None:
+            for event in events:
+                await self._safe_invoke(observer, event)
+            return
+
+        try:
+            result = handler(envelope)
+            if inspect.isawaitable(result):
+                await asyncio.wait_for(result, timeout=self._timeout)
+            else:
+                loop = asyncio.get_running_loop()
+                await asyncio.wait_for(
+                    loop.run_in_executor(self._executor, lambda: result),
+                    timeout=self._timeout,
+                )
+        except TimeoutError as e:
+            name = getattr(observer, "__name__", observer.__class__.__name__)
+            self._error_handler.handle_error(
+                e,
+                {
+                    "handler_name": name,
+                    "event_type": f"batch:{envelope.flush_reason.value}",
+                    "is_critical": any(self._is_priority_event(event) for event in events),
+                },
+            )
+        except Exception as e:
+            name = getattr(observer, "__name__", observer.__class__.__name__)
+            self._error_handler.handle_error(
+                e,
+                {
+                    "handler_name": name,
+                    "event_type": f"batch:{envelope.flush_reason.value}",
+                    "is_critical": any(self._is_priority_event(event) for event in events),
+                },
+            )
+
+    def _is_priority_event(self, event: Event) -> bool:
+        """Check if event is considered priority/critical."""
+
+        return isinstance(event, self._batching_config.priority_event_types)

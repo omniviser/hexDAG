@@ -6,6 +6,7 @@ Clean, simplified event system with clear separation of concerns:
 
 # Event classes
 from .events import (
+    EVENT_REGISTRY,
     Event,
     LLMPromptSent,
     LLMResponseReceived,
@@ -44,4 +45,5 @@ __all__ = [
     "PolicySkipped",
     "PolicyFallback",
     "PolicyRetry",
+    "EVENT_REGISTRY",
 ]

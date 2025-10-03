@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "pydantic~=2.0",
+    "orjson>=3.10.0",
 ]
 
 [project.optional-dependencies]
@@ -39,11 +40,15 @@ openai = [
 anthropic = [
     "anthropic>=0.25.0",  # Anthropic Claude LLM adapter
 ]
+sqlalchemy = [
+    "sqlalchemy>=2.0,<3.0",  # SQLAlchemy adapter
+]
 all = [
     "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
+    "sqlalchemy>=2.0,<3.0",  # SQLAlchemy adapter
 ]
 
 [project.urls]
@@ -182,7 +187,7 @@ module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["openai", "anthropic", "graphviz"]
+module = ["openai", "anthropic", "graphviz", "orjson"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -276,6 +281,7 @@ ignore = [
 "DOC202", # (Optional) Don't require "Yields" section
 "DOC501", # Don't require documenting raised exceptions in docstrings
 "DOC402", # Don't require documenting yields in docstrings
+    "UP042"
 ]
 
 [tool.ruff.lint.pydocstyle]
