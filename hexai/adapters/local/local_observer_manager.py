@@ -35,9 +35,7 @@ class LoggingErrorHandler:
 
     def __init__(self, logger: Any | None = None):
         """Initialize with optional logger."""
-        if logger is None:
-            logger = get_logger(__name__)
-        self.logger = logger
+        self.logger: Any = logger if logger is not None else get_logger(__name__)
 
     def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
         """Log the error with context."""

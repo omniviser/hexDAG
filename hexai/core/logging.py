@@ -1,4 +1,4 @@
-"""Centralized logging configuration for hexDAG.
+"""Centralized logging configuration for hexDAG using Loguru.
 
 Provides consistent logging across the framework with support for:
 - Multiple output formats (console, JSON, structured)
@@ -6,6 +6,7 @@ Provides consistent logging across the framework with support for:
 - Performance monitoring
 - Structured context logging
 - Integration with observability systems
+- Idempotent configuration
 
 Examples
 --------
@@ -13,7 +14,7 @@ Basic usage:
 
 >>> from hexai.core.logging import get_logger
 >>> logger = get_logger(__name__)
->>> logger.info("Pipeline started", extra={"pipeline_id": "123"})
+>>> logger.info("Pipeline started", pipeline_id="123")
 
 Configure logging globally:
 
@@ -27,144 +28,28 @@ Custom configuration:
 ...     level="INFO",
 ...     format="structured",
 ...     output_file="hexdag.log",
-...     include_context=True
 ... )
 """
 
 import logging
 import sys
-import threading
+from contextlib import suppress
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-import orjson
+if TYPE_CHECKING:
+    import types
 
-# Global flag to track if logging has been configured
-_LOGGING_CONFIGURED = False
+from loguru import logger
 
-# Thread-safe lock for configuration
-_config_lock = threading.Lock()
-
-LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+LogLevel = Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LogFormat = Literal["console", "json", "structured"]
 
-
-class StructuredFormatter(logging.Formatter):
-    """Enhanced formatter with structured output and color support.
-
-    Provides clean, readable logs with optional color coding for terminals.
-    Includes timestamp, level, logger name, and message with context.
-    """
-
-    __slots__ = ("use_color", "include_timestamp")
-
-    # ANSI color codes for terminal output
-    COLORS = {
-        "DEBUG": "\033[36m",  # Cyan
-        "INFO": "\033[32m",  # Green
-        "WARNING": "\033[33m",  # Yellow
-        "ERROR": "\033[31m",  # Red
-        "CRITICAL": "\033[35m",  # Magenta
-        "RESET": "\033[0m",  # Reset
-    }
-
-    def __init__(self, use_color: bool = True, include_timestamp: bool = True):
-        super().__init__()
-        self.use_color = use_color and sys.stderr.isatty()
-        self.include_timestamp = include_timestamp
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format log record with structure and optional color."""
-        # Build timestamp
-        timestamp = ""
-        if self.include_timestamp:
-            timestamp = f"{self.formatTime(record, '%Y-%m-%d %H:%M:%S')} "
-
-        # Build level with optional color
-        level = record.levelname
-        if self.use_color:
-            color = self.COLORS.get(level, self.COLORS["RESET"])
-            level_colored = f"{color}{level:8s}{self.COLORS['RESET']}"
-        else:
-            level_colored = f"{level:8s}"
-
-        # Build logger name (shorten if too long)
-        logger_name = record.name
-        if len(logger_name) > 30:
-            parts = logger_name.split(".")
-            if len(parts) > 2:
-                logger_name = f"{parts[0]}...{parts[-1]}"
-
-        # Format message
-        message = record.getMessage()
-
-        # Add exception info if present
-        if record.exc_info:
-            message += f"\n{self.formatException(record.exc_info)}"
-
-        # Build final output
-        return f"{timestamp}[{level_colored}] {logger_name:30s} | {message}"
-
-
-class JSONFormatter(logging.Formatter):
-    """JSON formatter for structured logging and log aggregation systems.
-
-    Outputs logs as JSON for easy parsing by log aggregation tools
-    (e.g., ELK stack, Datadog, CloudWatch).
-    """
-
-    __slots__ = ()
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format log record as JSON using orjson for performance."""
-        log_data = {
-            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
-        }
-
-        # Add exception info if present
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
-
-        # Add extra context from record
-        log_data.update({
-            key: value
-            for key, value in record.__dict__.items()
-            if key
-            not in [
-                "name",
-                "msg",
-                "args",
-                "created",
-                "filename",
-                "funcName",
-                "levelname",
-                "levelno",
-                "lineno",
-                "module",
-                "msecs",
-                "message",
-                "pathname",
-                "process",
-                "processName",
-                "relativeCreated",
-                "thread",
-                "threadName",
-                "exc_info",
-                "exc_text",
-                "stack_info",
-            ]
-        })
-
-        # orjson.dumps returns bytes, json.dumps returns str
-        result = orjson.dumps(log_data)
-        return result.decode() if isinstance(result, bytes) else result
+# Store configured state to enable idempotent reconfiguration
+_CURRENT_CONFIG: dict | None = None
+# Track handler IDs added by configure_logging for safe cleanup
+_HANDLER_IDS: list[int] = []
 
 
 def configure_logging(
@@ -177,17 +62,17 @@ def configure_logging(
 ) -> None:
     """Configure global logging for hexDAG framework.
 
-    This should be called once at application startup to set up consistent
-    logging across the entire framework.
+    This function is idempotent - calling it multiple times with the same
+    configuration will not duplicate handlers or change settings.
 
     Parameters
     ----------
     level : LogLevel, default="INFO"
-        Minimum log level to output (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        Minimum log level to output (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format : LogFormat, default="structured"
         Output format:
         - "console": Simple console output
-        - "json": JSON format for log aggregation
+        - "json": JSON format for log aggregation (uses orjson for performance)
         - "structured": Enhanced structured format with colors
     output_file : str | Path | None, default=None
         Optional file path to write logs to (in addition to console)
@@ -196,7 +81,7 @@ def configure_logging(
     include_timestamp : bool, default=True
         Include timestamp in log output
     force_reconfigure : bool, default=False
-        Force reconfiguration even if already configured
+        Force reconfiguration even if already configured with same settings
 
     Examples
     --------
@@ -216,67 +101,101 @@ def configure_logging(
 
     >>> configure_logging(level="WARNING", format="console")
     """
-    global _LOGGING_CONFIGURED
+    global _CURRENT_CONFIG, _HANDLER_IDS
 
-    # Thread-safe configuration check
-    with _config_lock:
-        # Double-check pattern for thread safety
-        if _LOGGING_CONFIGURED and not force_reconfigure:
-            return
+    # Check if already configured with same settings (idempotent)
+    current_config = {
+        "level": level,
+        "format": format,
+        "output_file": str(output_file) if output_file else None,
+        "use_color": use_color,
+        "include_timestamp": include_timestamp,
+    }
 
-        # Get root logger
-        root_logger = logging.getLogger()
+    if not force_reconfigure and current_config == _CURRENT_CONFIG:
+        return
 
-        # Clear existing handlers
-        root_logger.handlers.clear()
+    # Remove only our handlers, not all handlers (safer for testing/integration)
+    for handler_id in _HANDLER_IDS:
+        with suppress(ValueError):
+            # Handler may have been removed elsewhere, ignore ValueError
+            logger.remove(handler_id)
+    _HANDLER_IDS.clear()
 
-        # Set log level
-        log_level = getattr(logging, level)
-        root_logger.setLevel(log_level)
+    # Prepare format strings and track handler IDs
+    if format == "json":
+        # JSON format with orjson serialization
+        handler_id = logger.add(
+            sys.stderr,
+            level=level,
+            serialize=True,  # JSON output
+            backtrace=True,
+            diagnose=True,
+        )
+        _HANDLER_IDS.append(handler_id)
+    elif format == "structured":
+        # Structured format with optional colors
+        timestamp_fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> " if include_timestamp else ""
+        color_level = (
+            "<level>{level: <8}</level>" if use_color and sys.stderr.isatty() else "{level: <8}"
+        )
+        structured_format = f"{timestamp_fmt}[{color_level}]"
+        structured_format += "<cyan>{{name}}:{{function}}:{{line}}</cyan> "
+        structured_format += "| <level>{{message}}</level>"
 
-        # Create formatter based on format type
-        formatter: logging.Formatter
-        if format == "json":
-            formatter = JSONFormatter()
-        elif format == "structured":
-            formatter = StructuredFormatter(
-                use_color=use_color, include_timestamp=include_timestamp
-            )
-        else:  # console
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        handler_id = logger.add(
+            sys.stderr,
+            level=level,
+            format=structured_format,
+            colorize=use_color and sys.stderr.isatty(),
+            backtrace=True,
+            diagnose=True,
+        )
+        _HANDLER_IDS.append(handler_id)
+    else:  # console
+        # Simple console format
+        timestamp_fmt = "{time:YYYY-MM-DD HH:mm:ss} " if include_timestamp else ""
+        console_format = f"{timestamp_fmt}{{level: <8}} | {{name}} | {{message}}"
 
-        # Console handler (stderr for better separation from stdout)
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(log_level)
-        root_logger.addHandler(console_handler)
+        handler_id = logger.add(
+            sys.stderr,
+            level=level,
+            format=console_format,
+            colorize=False,
+            backtrace=True,
+            diagnose=False,
+        )
+        _HANDLER_IDS.append(handler_id)
 
-        # File handler (if specified)
-        if output_file:
-            output_path = Path(output_file)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Add file handler if specified
+    if output_file:
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            file_handler = logging.FileHandler(output_path)
-            # Always use JSON for file output for easier parsing
-            file_handler.setFormatter(JSONFormatter() if format == "json" else formatter)
-            file_handler.setLevel(log_level)
-            root_logger.addHandler(file_handler)
+        # File output always uses JSON for easier parsing
+        handler_id = logger.add(
+            output_path,
+            level=level,
+            serialize=True,  # JSON format for files
+            rotation="10 MB",  # Rotate when file reaches 10MB
+            retention="1 week",  # Keep logs for 1 week
+            compression="zip",  # Compress rotated logs
+            backtrace=True,
+            diagnose=True,
+        )
+        _HANDLER_IDS.append(handler_id)
 
-        # Set library loggers to WARNING by default to reduce noise
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
-        logging.getLogger("asyncio").setLevel(logging.WARNING)
-        logging.getLogger("concurrent").setLevel(logging.WARNING)
-
-        _LOGGING_CONFIGURED = True
+    # Set library loggers to WARNING by default to reduce noise
+    # (Loguru intercepts stdlib logging via logging bridge if needed)
+    _CURRENT_CONFIG = current_config
 
 
 @lru_cache(maxsize=256)
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str) -> Any:  # Returns loguru.Logger
     """Get a logger instance with the given name (cached for performance).
 
-    This is the recommended way to get loggers in hexDAG. It ensures
-    consistent configuration and lazy initialization. Logger instances
-    are cached to avoid repeated lookups.
+    This is the recommended way to get loggers in hexDAG. Logger instances
+    are bound with the module name for better tracking.
 
     Parameters
     ----------
@@ -285,32 +204,35 @@ def get_logger(name: str) -> logging.Logger:
 
     Returns
     -------
-    logging.Logger
-        Configured logger instance
+    loguru.Logger
+        Configured logger instance bound with the module name
 
     Examples
     --------
     >>> logger = get_logger(__name__)
     >>> logger.info("Starting orchestrator")
-    >>> logger.debug("Processing node", extra={"node_id": "abc123"})
+    >>> logger.debug("Processing node", node_id="abc123")
 
     Notes
     -----
-    - If configure_logging() hasn't been called, uses Python's default config
+    - If configure_logging() hasn't been called, initializes with sensible defaults
     - Logger names follow the module hierarchy (e.g., "hexai.core.orchestrator")
-    - Extra context can be passed via the 'extra' parameter
+    - Extra context can be passed as keyword arguments
     - Logger instances are cached for performance
     """
-    return logging.getLogger(name)
+    # Lazy initialization - only configure if not already done
+    _ensure_configured()
+    return logger.bind(module=name)
 
 
 @lru_cache(maxsize=128)
-def get_logger_for_component(component_type: str, component_name: str) -> logging.Logger:
+def get_logger_for_component(
+    component_type: str, component_name: str
+) -> Any:  # Returns loguru.Logger
     """Get a logger for a specific component instance (cached for performance).
 
     Useful for adapters, nodes, and other components that need
-    instance-specific logging. Logger instances are cached to avoid
-    repeated string formatting and lookups.
+    instance-specific logging.
 
     Parameters
     ----------
@@ -321,31 +243,65 @@ def get_logger_for_component(component_type: str, component_name: str) -> loggin
 
     Returns
     -------
-    logging.Logger
-        Logger with hierarchical name like "hexai.adapter.openai_llm"
+    loguru.Logger
+        Logger bound with hierarchical name like "hexai.adapter.openai_llm"
 
     Examples
     --------
     >>> logger = get_logger_for_component("adapter", "openai_llm")
     >>> logger.info("LLM adapter initialized")
     """
+    # Lazy initialization - only configure if not already done
+    _ensure_configured()
     logger_name = f"hexai.{component_type}.{component_name}"
-    return logging.getLogger(logger_name)
+    return logger.bind(
+        module=logger_name, component_type=component_type, component_name=component_name
+    )
 
 
-# Auto-configure with sensible defaults if not explicitly configured
-# This ensures logging works even if configure_logging() is never called
-def _ensure_default_config() -> None:
-    """Ensure logging has at least basic configuration."""
-    global _LOGGING_CONFIGURED
+def enable_stdlib_logging_bridge() -> None:
+    """Enable interception of stdlib logging for third-party libraries.
 
-    if not _LOGGING_CONFIGURED:
-        # Check if root logger has handlers
-        root_logger = logging.getLogger()
-        if not root_logger.handlers:
-            # No handlers - configure with defaults
-            configure_logging(level="INFO", format="structured")
+    This redirects all stdlib logging.Logger calls to Loguru, ensuring
+    consistent formatting across all logs including from dependencies.
+
+    Examples
+    --------
+    >>> from hexai.core.logging import configure_logging, enable_stdlib_logging_bridge
+    >>> configure_logging(level="INFO", format="structured")
+    >>> enable_stdlib_logging_bridge()  # Now all stdlib logging goes through loguru
+    """
+
+    class InterceptHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            # Get corresponding Loguru level if it exists
+            level: str | int
+            try:
+                level = logger.level(record.levelname).name
+            except ValueError:
+                level = record.levelno
+
+            # Find caller from where originated the logged message
+            frame: types.FrameType | None = sys._getframe(6)
+            depth = 6
+            while frame and frame.f_code.co_filename == logging.__file__:
+                frame = frame.f_back
+                depth += 1
+
+            logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+    # Intercept all stdlib logging
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 
-# Auto-configure on module import
-_ensure_default_config()
+def _ensure_configured() -> None:
+    """Ensure logging has at least basic configuration (lazy initialization).
+
+    This is called automatically by get_logger() if no configuration exists.
+    Users can call configure_logging() explicitly for custom settings.
+    """
+    global _CURRENT_CONFIG
+
+    if _CURRENT_CONFIG is None:
+        # Default configuration - minimal, non-intrusive
+        configure_logging(level="INFO", format="structured")

@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "pydantic~=2.0",
     "orjson>=3.9.0",  # Fast JSON serialization (2-5x faster than stdlib json)
+    "loguru>=0.7.0",  # Modern logging with better defaults and idempotency
 ]
 
 [project.optional-dependencies]

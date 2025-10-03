@@ -258,7 +258,7 @@ class TestOpenAIAdapter:
             adapter = OpenAIAdapter(api_key="test-key")
             messages: MessageList = [Message(role="user", content="Hello")]
 
-            with patch("hexai.adapters.llm.openai_adapter.logging.error") as mock_log:
+            with patch("hexai.adapters.llm.openai_adapter.logger.error") as mock_log:
                 result = await adapter.aresponse(messages)
 
             assert result is None

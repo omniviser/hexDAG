@@ -1,15 +1,17 @@
 """Anthropic adapter for LLM interactions."""
 
-import logging
 from typing import Any
 
 from anthropic import AsyncAnthropic
 from pydantic import BaseModel, Field
 
+from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
 from hexai.helpers.secrets import Secret
+
+logger = get_logger(__name__)
 
 
 @adapter(
@@ -157,5 +159,5 @@ class AnthropicAdapter(ConfigurableComponent):
             return None
 
         except Exception as e:
-            logging.error(f"Anthropic API error: {e}")
+            logger.error(f"Anthropic API error: {e}")
             return None

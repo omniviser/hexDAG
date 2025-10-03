@@ -1,12 +1,45 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models."""
 
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from typing import Any, cast
 
 from pydantic import BaseModel, create_model
 
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.protocols import is_schema_type
+
+
+@lru_cache(maxsize=256)
+def _create_cached_model(name: str, fields_tuple: tuple[tuple[str, Any], ...]) -> type[BaseModel]:
+    """Create and cache Pydantic models using lru_cache.
+
+    Uses hash-based lookup (faster than string keys) with automatic LRU eviction.
+    Thread-safe and prevents unbounded cache growth.
+
+    Cache key includes both name and fields_tuple to prevent collisions when
+    different schemas share the same model name.
+
+    Parameters
+    ----------
+    name : str
+        Model class name
+    fields_tuple : tuple[tuple[str, Any], ...]
+        Hashable field definitions (used in cache key to ensure uniqueness)
+
+    Returns
+    -------
+    type[BaseModel]
+        Cached Pydantic model class
+
+    Notes
+    -----
+    The cache key is the combination of (name, fields_tuple), so two different
+    field definitions with the same name will create separate cache entries.
+    This prevents cache collisions while still providing performance benefits.
+    """
+    fields_dict = dict(fields_tuple)
+    return create_model(name, **fields_dict)
 
 
 class BaseNodeFactory(ABC):
@@ -32,35 +65,39 @@ class BaseNodeFactory(ABC):
             return schema  # type: ignore[return-value]  # is_schema_type checks for BaseModel subclass
 
         if isinstance(schema, dict):
+            # String type names mapping (for when field_type is a string)
+            type_map = {
+                "str": str,
+                "int": int,
+                "float": float,
+                "bool": bool,
+                "list": list,
+                "dict": dict,
+                "Any": Any,
+            }
+
             # Create field definitions for create_model
-            # Convert dict values to proper Pydantic field format
             field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
-                # Handle various type specifications
-                if isinstance(field_type, str):
-                    # String type names - convert to actual types
-                    type_map = {
-                        "str": str,
-                        "int": int,
-                        "float": float,
-                        "bool": bool,
-                        "list": list,
-                        "dict": dict,
-                        "Any": Any,
-                    }
-                    actual_type = type_map.get(field_type, Any)
-                    field_definitions[field_name] = (actual_type, ...)
-                elif isinstance(field_type, type):
-                    # Already a type
-                    field_definitions[field_name] = (field_type, ...)
-                elif isinstance(field_type, tuple):
-                    # Already in the correct format (type, default)
-                    field_definitions[field_name] = field_type
-                else:
-                    # Unknown type specification - use Any
-                    field_definitions[field_name] = (Any, ...)
+                # Dispatch based on field_type's type using match pattern
+                match field_type:
+                    case str():
+                        # String type names - convert to actual types
+                        actual_type = type_map.get(field_type, Any)
+                        field_definitions[field_name] = (actual_type, ...)
+                    case type():
+                        # Already a type
+                        field_definitions[field_name] = (field_type, ...)
+                    case tuple():
+                        # Already in the correct format (type, default)
+                        field_definitions[field_name] = field_type
+                    case _:
+                        # Unknown type specification - use Any
+                        field_definitions[field_name] = (Any, ...)
 
-            return cast("type[BaseModel]", create_model(name, **field_definitions))
+            # Convert to tuple for lru_cache (hashable)
+            fields_tuple = tuple(sorted(field_definitions.items()))
+            return _create_cached_model(name, fields_tuple)
 
         # Handle primitive types - create a simple wrapper model
         # At this point, schema should be a type

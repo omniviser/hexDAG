@@ -7,6 +7,8 @@ concurrently where possible using asyncio.gather().
 import asyncio
 import time
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -48,6 +50,51 @@ logger = get_logger(__name__)
 
 # Default configuration constants
 DEFAULT_MAX_CONCURRENT_NODES = 10
+
+
+@asynccontextmanager
+async def _managed_ports(
+    base_ports: dict[str, Any], additional_ports: dict[str, Any] | None = None
+) -> AsyncIterator[dict[str, Any]]:
+    """Manage port lifecycle with automatic cleanup.
+
+    Ports that implement asetup()/aclose() methods will be automatically
+    initialized and cleaned up.
+    """
+    all_ports = {**base_ports}
+    if additional_ports:
+        all_ports.update(additional_ports)
+
+    # Setup ports
+    initialized: list[str] = []
+    for name, port in all_ports.items():
+        if hasattr(port, "asetup") and asyncio.iscoroutinefunction(port.asetup):
+            try:
+                await port.asetup()
+                initialized.append(name)
+            except Exception as e:
+                logger.error(f"Port setup failed: {name}: {e}")
+                # Cleanup initialized ports
+                for cleanup_name in initialized:
+                    cleanup_port = all_ports[cleanup_name]
+                    if hasattr(cleanup_port, "aclose") and asyncio.iscoroutinefunction(
+                        cleanup_port.aclose
+                    ):
+                        with suppress(Exception):
+                            await cleanup_port.aclose()
+                raise
+
+    try:
+        yield all_ports
+    finally:
+        # Cleanup
+        for name in initialized:
+            port = all_ports[name]
+            if hasattr(port, "aclose") and asyncio.iscoroutinefunction(port.aclose):
+                try:
+                    await port.aclose()
+                except Exception as e:
+                    logger.warning(f"Port cleanup failed: {name}: {e}")
 
 
 class Orchestrator:
@@ -274,11 +321,6 @@ class Orchestrator:
         dict[str, Any]
             Dictionary mapping node names to their execution results
 
-        Raises
-        ------
-        OrchestratorError
-            If DAG validation fails or pipeline/wave execution is blocked
-
         Examples
         --------
         Using dictionary for additional ports (traditional approach):
@@ -297,14 +339,32 @@ class Orchestrator:
         ...     additional_ports=PortsBuilder().with_llm(MockLLM())
         ... )
         """
-        # Merge orchestrator ports with additional execution-specific ports
-        all_ports = {**self.ports}
+        # Prepare additional ports (convert PortsBuilder if needed)
+        additional_ports_dict: dict[str, Any] | None = None
         if additional_ports:
-            # Handle both dictionary and PortsBuilder
             if isinstance(additional_ports, PortsBuilder):
-                all_ports.update(additional_ports.build())
+                additional_ports_dict = additional_ports.build()
             else:
-                all_ports.update(additional_ports)
+                additional_ports_dict = additional_ports
+
+        # Use managed_ports context manager for automatic lifecycle management
+        async with _managed_ports(self.ports, additional_ports_dict) as all_ports:
+            return await self._execute_with_ports(
+                graph, initial_input, all_ports, validate, **kwargs
+            )
+
+    async def _execute_with_ports(
+        self,
+        graph: DirectedGraph,
+        initial_input: Any,
+        all_ports: dict[str, Any],
+        validate: bool,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Execute DAG with managed ports (internal method).
+
+        This method is separated to work with the managed_ports context manager.
+        """
         if validate:
             # Validate DAG structure - catch specific DAG errors
             try:

@@ -1,16 +1,18 @@
 """OpenAI adapter for LLM interactions."""
 
 import json
-import logging
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from hexai.core.logging import get_logger
 from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
 from hexai.helpers.secrets import Secret
+
+logger = get_logger(__name__)
 
 
 @adapter(
@@ -185,5 +187,5 @@ class OpenAIAdapter(ConfigurableComponent):
             return None
 
         except Exception as e:
-            logging.error(f"OpenAI API error: {e}")
+            logger.error(f"OpenAI API error: {e}")
             return None

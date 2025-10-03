@@ -339,57 +339,60 @@ class PostDagHookManager:
 
         logger.info(f"Running post-DAG hooks for pipeline '{pipeline_name}' ({pipeline_status})")
 
-        # 1. Save checkpoint (if enabled)
-        if self.config.enable_checkpoint_save and (
-            pipeline_status == "success" or self.config.checkpoint_on_failure
-        ):
-            try:
-                checkpoint_result = await self._save_checkpoint(
-                    dict(ports), context, node_results, pipeline_status, observer_manager
-                )
-                results["checkpoint"] = checkpoint_result
-            except (RuntimeError, ValueError, KeyError, OSError) as e:
-                # Checkpoint-specific errors
-                logger.error(f"Checkpoint save failed: {e}", exc_info=True)
-                results["checkpoint"] = {"error": str(e)}
+        try:
+            # 1. Save checkpoint (if enabled)
+            if self.config.enable_checkpoint_save and (
+                pipeline_status == "success" or self.config.checkpoint_on_failure
+            ):
+                try:
+                    checkpoint_result = await self._save_checkpoint(
+                        dict(ports), context, node_results, pipeline_status, observer_manager
+                    )
+                    results["checkpoint"] = checkpoint_result
+                except Exception as e:
+                    # Catch all checkpoint errors - don't let them block cleanup
+                    logger.error(f"Checkpoint save failed: {e}", exc_info=True)
+                    results["checkpoint"] = {"error": str(e)}
 
-        # 2. Custom hooks (user-defined)
-        for hook in self.config.custom_hooks:
-            hook_name = hook.__name__
-            try:
-                logger.debug(f"Running custom post-DAG hook: {hook_name}")
-                hook_result = await hook(ports, context, node_results, pipeline_status, error)
-                results[hook_name] = hook_result
-            except (RuntimeError, ValueError, KeyError, TypeError) as e:
-                # Custom hook errors - don't fail cleanup for these
-                logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
-                results[hook_name] = {"error": str(e)}
+            # 2. Custom hooks (user-defined)
+            for hook in self.config.custom_hooks:
+                hook_name = hook.__name__
+                try:
+                    logger.debug(f"Running custom post-DAG hook: {hook_name}")
+                    hook_result = await hook(ports, context, node_results, pipeline_status, error)
+                    results[hook_name] = hook_result
+                except Exception as e:
+                    # Catch ALL exceptions from custom hooks - don't let them block cleanup
+                    logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
+                    results[hook_name] = {"error": str(e)}
 
-        # 3. Secret cleanup (security - do this before adapter cleanup)
-        if self.config.enable_secret_cleanup and self._pre_hook_manager:
-            try:
-                secret_manager = self._pre_hook_manager.get_secret_manager()
-                memory = get_port("memory")
-                secret_cleanup = await secret_manager.cleanup_secrets(
-                    memory=memory, dag_id=context.dag_id
-                )
-                results["secret_cleanup"] = secret_cleanup
-            except (RuntimeError, ValueError, KeyError) as e:
-                # Secret cleanup errors
-                logger.error(f"Secret cleanup failed: {e}", exc_info=True)
-                results["secret_cleanup"] = {"error": str(e)}
+        finally:
+            # CRITICAL CLEANUP: Always run these, even if above hooks fail
+            # 3. Secret cleanup (security - do this before adapter cleanup)
+            if self.config.enable_secret_cleanup and self._pre_hook_manager:
+                try:
+                    secret_manager = self._pre_hook_manager.get_secret_manager()
+                    memory = get_port("memory")
+                    secret_cleanup = await secret_manager.cleanup_secrets(
+                        memory=memory, dag_id=context.dag_id
+                    )
+                    results["secret_cleanup"] = secret_cleanup
+                except Exception as e:
+                    # Catch ALL exceptions - secret cleanup must be robust
+                    logger.error(f"Secret cleanup failed: {e}", exc_info=True)
+                    results["secret_cleanup"] = {"error": str(e)}
 
-        # 4. Adapter cleanup (close connections - do this last)
-        if self.config.enable_adapter_cleanup:
-            try:
-                adapter_cleanup = await self._adapter_lifecycle_manager.cleanup_all_adapters(
-                    ports=dict(ports), observer_manager=observer_manager
-                )
-                results["adapter_cleanup"] = adapter_cleanup
-            except (RuntimeError, ValueError, ConnectionError) as e:
-                # Adapter cleanup errors
-                logger.error(f"Adapter cleanup failed: {e}", exc_info=True)
-                results["adapter_cleanup"] = {"error": str(e)}
+            # 4. Adapter cleanup (close connections - do this last)
+            if self.config.enable_adapter_cleanup:
+                try:
+                    adapter_cleanup = await self._adapter_lifecycle_manager.cleanup_all_adapters(
+                        ports=dict(ports), observer_manager=observer_manager
+                    )
+                    results["adapter_cleanup"] = adapter_cleanup
+                except Exception as e:
+                    # Catch ALL exceptions - adapter cleanup must be robust
+                    logger.error(f"Adapter cleanup failed: {e}", exc_info=True)
+                    results["adapter_cleanup"] = {"error": str(e)}
 
         return results
 

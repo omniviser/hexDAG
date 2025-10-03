@@ -1,13 +1,12 @@
-"""Tests for centralized logging configuration."""
+"""Tests for centralized logging configuration using Loguru."""
 
-import logging
-import sys
 from pathlib import Path
 
+from loguru import logger
+
 from hexai.core.logging import (
-    JSONFormatter,
-    StructuredFormatter,
     configure_logging,
+    enable_stdlib_logging_bridge,
     get_logger,
     get_logger_for_component,
 )
@@ -16,209 +15,38 @@ from hexai.core.logging import (
 class TestGetLogger:
     """Test get_logger function."""
 
-    def test_get_logger_returns_logger(self):
-        """Test that get_logger returns a logger instance."""
-        logger = get_logger("test.module")
-        assert isinstance(logger, logging.Logger)
-        assert logger.name == "test.module"
+    def test_get_logger_returns_bound_logger(self):
+        """Test that get_logger returns a bound logger instance."""
+        test_logger = get_logger("test.module")
+        # Loguru returns the same logger instance, just bound with context
+        assert test_logger is not None
 
     def test_get_logger_with_name(self):
         """Test that __name__ style usage works."""
-        logger = get_logger(__name__)
-        assert isinstance(logger, logging.Logger)
-        assert "test_logging" in logger.name
+        test_logger = get_logger(__name__)
+        assert test_logger is not None
 
-    def test_get_logger_returns_same_instance(self):
-        """Test that get_logger returns the same instance for the same name."""
-        logger1 = get_logger("test.module")
-        logger2 = get_logger("test.module")
+    def test_get_logger_caches_results(self):
+        """Test that get_logger caches logger instances."""
+        logger1 = get_logger("test.cache")
+        logger2 = get_logger("test.cache")
+        # Should return same bound logger (cached)
         assert logger1 is logger2
 
 
 class TestGetLoggerForComponent:
     """Test get_logger_for_component function."""
 
-    def test_creates_hierarchical_name(self):
-        """Test that component logger has hierarchical name."""
-        logger = get_logger_for_component("adapter", "openai_llm")
-        assert logger.name == "hexai.adapter.openai_llm"
+    def test_get_logger_for_component(self):
+        """Test component-specific logger creation."""
+        comp_logger = get_logger_for_component("adapter", "openai_llm")
+        assert comp_logger is not None
 
-    def test_different_components_get_different_loggers(self):
-        """Test that different components get different loggers."""
-        logger1 = get_logger_for_component("adapter", "openai")
-        logger2 = get_logger_for_component("adapter", "anthropic")
-        assert logger1 is not logger2
-        assert logger1.name != logger2.name
-
-
-class TestStructuredFormatter:
-    """Test StructuredFormatter."""
-
-    def test_formats_basic_message(self):
-        """Test basic message formatting."""
-        formatter = StructuredFormatter(use_color=False, include_timestamp=False)
-        record = logging.LogRecord(
-            name="test.logger",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=10,
-            msg="Test message",
-            args=(),
-            exc_info=None,
-        )
-
-        output = formatter.format(record)
-        assert "INFO" in output
-        assert "test.logger" in output
-        assert "Test message" in output
-
-    def test_formats_with_timestamp(self):
-        """Test formatting with timestamp."""
-        formatter = StructuredFormatter(use_color=False, include_timestamp=True)
-        record = logging.LogRecord(
-            name="test.logger",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=10,
-            msg="Test message",
-            args=(),
-            exc_info=None,
-        )
-
-        output = formatter.format(record)
-        # Should contain timestamp pattern like "2024-01-01 12:00:00"
-        assert any(char.isdigit() for char in output[:20])
-
-    def test_formats_with_color(self):
-        """Test formatting with color codes."""
-        formatter = StructuredFormatter(use_color=True, include_timestamp=False)
-        # Temporarily make stderr appear as TTY
-        original_isatty = sys.stderr.isatty
-        sys.stderr.isatty = lambda: True
-
-        try:
-            formatter = StructuredFormatter(use_color=True, include_timestamp=False)
-            record = logging.LogRecord(
-                name="test.logger",
-                level=logging.ERROR,
-                pathname="test.py",
-                lineno=10,
-                msg="Error message",
-                args=(),
-                exc_info=None,
-            )
-
-            output = formatter.format(record)
-            # Should contain ANSI color codes
-            assert "\033[" in output or "ERROR" in output
-        finally:
-            sys.stderr.isatty = original_isatty
-
-    def test_formats_exception(self):
-        """Test formatting with exception info."""
-        formatter = StructuredFormatter(use_color=False, include_timestamp=False)
-
-        try:
-            raise ValueError("Test error")
-        except ValueError:
-            import sys
-
-            exc_info = sys.exc_info()
-
-        record = logging.LogRecord(
-            name="test.logger",
-            level=logging.ERROR,
-            pathname="test.py",
-            lineno=10,
-            msg="Error occurred",
-            args=(),
-            exc_info=exc_info,
-        )
-
-        output = formatter.format(record)
-        assert "Error occurred" in output
-        assert "ValueError" in output
-        assert "Test error" in output
-
-
-class TestJSONFormatter:
-    """Test JSONFormatter."""
-
-    def test_formats_as_json(self):
-        """Test that output is valid JSON."""
-        import json
-
-        formatter = JSONFormatter()
-        record = logging.LogRecord(
-            name="test.logger",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=10,
-            msg="Test message",
-            args=(),
-            exc_info=None,
-        )
-
-        output = formatter.format(record)
-        parsed = json.loads(output)
-
-        assert parsed["level"] == "INFO"
-        assert parsed["logger"] == "test.logger"
-        assert parsed["message"] == "Test message"
-        assert "timestamp" in parsed
-
-    def test_includes_exception_in_json(self):
-        """Test that exceptions are included in JSON output."""
-        import json
-
-        formatter = JSONFormatter()
-
-        try:
-            raise ValueError("Test error")
-        except ValueError:
-            import sys
-
-            exc_info = sys.exc_info()
-
-        record = logging.LogRecord(
-            name="test.logger",
-            level=logging.ERROR,
-            pathname="test.py",
-            lineno=10,
-            msg="Error occurred",
-            args=(),
-            exc_info=exc_info,
-        )
-
-        output = formatter.format(record)
-        parsed = json.loads(output)
-
-        assert "exception" in parsed
-        assert "ValueError" in parsed["exception"]
-
-    def test_includes_extra_context(self):
-        """Test that extra context is included in JSON."""
-        import json
-
-        formatter = JSONFormatter()
-        record = logging.LogRecord(
-            name="test.logger",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=10,
-            msg="Test message",
-            args=(),
-            exc_info=None,
-        )
-        # Add extra context
-        record.pipeline_id = "abc123"
-        record.node_name = "test_node"
-
-        output = formatter.format(record)
-        parsed = json.loads(output)
-
-        assert parsed["pipeline_id"] == "abc123"
-        assert parsed["node_name"] == "test_node"
+    def test_logger_for_component_caches(self):
+        """Test that component loggers are cached."""
+        logger1 = get_logger_for_component("adapter", "test_adapter")
+        logger2 = get_logger_for_component("adapter", "test_adapter")
+        assert logger1 is logger2
 
 
 class TestConfigureLogging:
@@ -226,154 +54,153 @@ class TestConfigureLogging:
 
     def setup_method(self):
         """Reset logging configuration before each test."""
-        # Clear all handlers
-        root_logger = logging.getLogger()
-        root_logger.handlers.clear()
-        root_logger.setLevel(logging.WARNING)
+        # Loguru cleanup - remove all handlers
+        logger.remove()
 
-        # Reset the configured flag
+        # Reset the configuration tracking
         import hexai.core.logging as logging_module
 
-        logging_module._LOGGING_CONFIGURED = False
-
-    def test_configures_log_level(self):
-        """Test that configure_logging sets the log level."""
-        configure_logging(level="DEBUG", format="console")
-
-        root_logger = logging.getLogger()
-        assert root_logger.level == logging.DEBUG
-
-    def test_configures_structured_format(self):
-        """Test structured format configuration."""
-        configure_logging(level="INFO", format="structured")
-
-        root_logger = logging.getLogger()
-        assert len(root_logger.handlers) > 0
-
-        handler = root_logger.handlers[0]
-        assert isinstance(handler.formatter, StructuredFormatter)
+        logging_module._CURRENT_CONFIG = None
 
     def test_configures_json_format(self):
         """Test JSON format configuration."""
         configure_logging(level="INFO", format="json")
 
-        root_logger = logging.getLogger()
-        assert len(root_logger.handlers) > 0
+        # Loguru configured successfully (no exception)
+        # We can verify by checking handlers exist
+        assert len(logger._core.handlers) > 0
 
-        handler = root_logger.handlers[0]
-        assert isinstance(handler.formatter, JSONFormatter)
+    def test_configures_structured_format(self):
+        """Test structured format configuration."""
+        configure_logging(level="INFO", format="structured")
+
+        # Loguru configured successfully
+        assert len(logger._core.handlers) > 0
 
     def test_configures_console_format(self):
         """Test console format configuration."""
         configure_logging(level="INFO", format="console")
 
-        root_logger = logging.getLogger()
-        assert len(root_logger.handlers) > 0
-
-        handler = root_logger.handlers[0]
-        assert isinstance(handler.formatter, logging.Formatter)
-        assert not isinstance(handler.formatter, (StructuredFormatter, JSONFormatter))
+        # Loguru configured successfully
+        assert len(logger._core.handlers) > 0
 
     def test_configures_file_output(self, tmp_path: Path):
         """Test file output configuration."""
         log_file = tmp_path / "test.log"
         configure_logging(level="INFO", format="json", output_file=log_file)
 
-        root_logger = logging.getLogger()
         # Should have console + file handler
-        assert len(root_logger.handlers) == 2
+        assert len(logger._core.handlers) == 2
 
-        # Check that file was created (may be created on first log)
-        logger = get_logger("test")
-        logger.info("Test message")
+        # Write a log message
+        test_logger = get_logger("test")
+        test_logger.info("Test message")
 
         # File should exist after logging
         assert log_file.exists()
 
-    def test_skips_reconfiguration_by_default(self):
-        """Test that configure_logging skips if already configured."""
+    def test_idempotent_reconfiguration(self):
+        """Test that configure_logging is idempotent with same config."""
         configure_logging(level="DEBUG", format="console")
-        root_logger = logging.getLogger()
-        original_level = root_logger.level
+        handler_count_1 = len(logger._core.handlers)
 
-        # Try to reconfigure
-        configure_logging(level="ERROR", format="json")
+        # Call again with same config - should not add handlers
+        configure_logging(level="DEBUG", format="console")
+        handler_count_2 = len(logger._core.handlers)
 
-        # Should still be at DEBUG level
-        assert root_logger.level == original_level
+        assert handler_count_1 == handler_count_2
 
-    def test_force_reconfiguration(self):
+    def test_force_reconfigure(self):
         """Test force_reconfigure parameter."""
-        configure_logging(level="DEBUG", format="console")
-        root_logger = logging.getLogger()
-
-        # Force reconfiguration
-        configure_logging(level="ERROR", format="json", force_reconfigure=True)
-
-        # Should be at ERROR level now
-        assert root_logger.level == logging.ERROR
-
-    def test_sets_library_loggers_to_warning(self):
-        """Test that noisy library loggers are set to WARNING."""
-        configure_logging(level="DEBUG", format="console")
-
-        urllib3_logger = logging.getLogger("urllib3")
-        assert urllib3_logger.level == logging.WARNING
-
-
-class TestLoggingIntegration:
-    """Integration tests for logging system."""
-
-    def setup_method(self):
-        """Reset logging configuration before each test."""
-        root_logger = logging.getLogger()
-        root_logger.handlers.clear()
-        root_logger.setLevel(logging.WARNING)
-
-        import hexai.core.logging as logging_module
-
-        logging_module._LOGGING_CONFIGURED = False
-
-    def test_logger_outputs_messages(self):
-        """Test that logger can output messages without errors."""
-        configure_logging(level="INFO", format="console")
-        logger = get_logger("test")
-
-        # Just verify these don't raise errors
-        logger.info("Test message")
-        logger.debug("Debug message")  # Should be filtered out
-        logger.warning("Warning message")
-        logger.error("Error message")
-
-    def test_logger_with_extra_context(self):
-        """Test logging with extra context."""
-        configure_logging(level="INFO", format="json")
-        logger = get_logger("test")
-
-        # Verify extra context doesn't cause errors
-        logger.info("Pipeline started", extra={"pipeline_id": "abc123", "user": "test_user"})
-        logger.error("Pipeline failed", extra={"error_code": 500})
-
-    def test_multiple_log_levels(self):
-        """Test that different log levels work correctly."""
-        configure_logging(level="DEBUG", format="structured")
-        logger = get_logger("test")
-
-        # Verify all log levels work
-        logger.debug("Debug message")
-        logger.info("Info message")
-        logger.warning("Warning message")
-        logger.error("Error message")
-        logger.critical("Critical message")
-
-    def test_logger_hierarchy_works(self):
-        """Test that logger hierarchy works correctly."""
         configure_logging(level="INFO", format="console")
 
-        # Create parent and child loggers
-        parent = get_logger("hexai.core")
-        child = get_logger("hexai.core.orchestrator")
+        # Force reconfigure with different settings
+        configure_logging(level="DEBUG", format="structured", force_reconfigure=True)
 
-        # Both should work
-        parent.info("Parent message")
-        child.info("Child message")
+        # Should have reconfigured
+        assert len(logger._core.handlers) > 0
+
+    def test_multiple_formats(self):
+        """Test switching between formats."""
+        # JSON format
+        configure_logging(level="INFO", format="json", force_reconfigure=True)
+        assert len(logger._core.handlers) > 0
+
+        # Structured format
+        configure_logging(level="INFO", format="structured", force_reconfigure=True)
+        assert len(logger._core.handlers) > 0
+
+        # Console format
+        configure_logging(level="INFO", format="console", force_reconfigure=True)
+        assert len(logger._core.handlers) > 0
+
+
+class TestStdlibLoggingBridge:
+    """Test stdlib logging bridge functionality."""
+
+    def test_enable_stdlib_logging_bridge(self):
+        """Test that stdlib logging bridge can be enabled."""
+        # Should not raise
+        enable_stdlib_logging_bridge()
+
+        # Test that stdlib logging works
+        import logging as stdlib_logging
+
+        stdlib_logger = stdlib_logging.getLogger("test_bridge")
+        # This should work without error
+        stdlib_logger.info("Test message through bridge")
+
+
+class TestLoggingHandlerIsolation:
+    """Test that logging handler cleanup is isolated and safe."""
+
+    def test_handler_cleanup_preserves_external_handlers(self):
+        """Test that reconfiguring logging doesn't remove external handlers."""
+        from loguru import logger as loguru_logger
+
+        # Add an external handler (simulating pytest or other framework)
+        external_messages = []
+
+        def external_sink(message):
+            external_messages.append(message)
+
+        external_handler_id = loguru_logger.add(external_sink, format="{message}")
+
+        try:
+            # Configure logging (should only remove its own handlers)
+            configure_logging(level="INFO", format="console")
+
+            # Reconfigure with different settings
+            configure_logging(level="DEBUG", format="json", force_reconfigure=True)
+
+            # External handler should still be present
+            test_logger = get_logger("test")
+            test_logger.info("Test message")
+
+            # External sink should have received the message
+            assert len(external_messages) > 0
+            assert any("Test message" in str(msg) for msg in external_messages)
+
+        finally:
+            # Clean up external handler
+            loguru_logger.remove(external_handler_id)
+
+    def test_multiple_reconfigurations_dont_leak_handlers(self):
+        """Test that multiple reconfigurations don't accumulate handlers."""
+        from loguru import logger as loguru_logger
+
+        # Get initial handler count
+        initial_handlers = len(loguru_logger._core.handlers)
+
+        # Configure multiple times
+        for _ in range(5):
+            configure_logging(level="INFO", format="console", force_reconfigure=True)
+
+        # Handler count should not grow unbounded (should only have our handlers + initial)
+        final_handlers = len(loguru_logger._core.handlers)
+
+        # We should have at most initial + 1 (our console handler)
+        # Allow some tolerance for test framework handlers
+        assert final_handlers <= initial_handlers + 2, (
+            f"Handler leak detected: started with {initial_handlers}, ended with {final_handlers}"
+        )

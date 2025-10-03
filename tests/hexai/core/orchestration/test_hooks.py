@@ -83,11 +83,11 @@ class MockMemory:
     def __init__(self):
         self.storage = {}
 
-    async def aget(self, key: str):
+    async def aget(self, key: str, dag_id: str | None = None):
         """Get value from memory."""
         return self.storage.get(key)
 
-    async def aset(self, key: str, value):
+    async def aset(self, key: str, value, dag_id: str | None = None):
         """Set value in memory."""
         self.storage[key] = value
 
@@ -456,3 +456,174 @@ class TestPostDagHookManager:
         assert received_status == "success"
         assert "custom_cleanup" in results
         assert results["custom_cleanup"]["cleaned"] is True
+
+
+class TestPostHookCleanupRobustness:
+    """Test that critical cleanup happens even when other hooks fail."""
+
+    @pytest.mark.asyncio
+    async def test_secret_cleanup_runs_even_when_custom_hook_fails(self):
+        """Test that secret cleanup runs even if custom hook raises unexpected exception."""
+        # Setup
+        mock_memory = MockMemory()
+        mock_secret = MockSecretPort({"API_KEY": "secret123"})
+
+        # Pre-hook manager to inject secrets
+        pre_config = HookConfig(enable_secret_injection=True)
+        pre_manager = PreDagHookManager(pre_config)
+
+        # Create a custom hook that fails with unexpected exception
+        def failing_hook(ports, context, node_results, status, error):
+            raise AttributeError("Unexpected attribute error in custom hook!")
+
+        # Post-hook config with failing custom hook
+        post_config = PostDagHookConfig(
+            custom_hooks=[failing_hook],
+            enable_secret_cleanup=True,
+            enable_adapter_cleanup=False,
+        )
+        post_manager = PostDagHookManager(post_config, pre_manager)
+
+        mock_context = NodeExecutionContext(dag_id="test-dag")
+
+        # Execute: First inject secrets, then try cleanup with failing hook
+        async with ExecutionContext(
+            observer_manager=None,
+            policy_manager=None,
+            run_id="test-run",
+            ports={"memory": mock_memory, "secret": mock_secret},
+        ):
+            # Inject secrets
+            await pre_manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+            )
+
+            # Verify secret was injected
+            secret_key = "secret:API_KEY"
+            stored_secret = await mock_memory.aget(secret_key, dag_id="test-dag")
+            assert stored_secret == "secret123"
+
+            # Run post-hooks with failing custom hook
+            results = await post_manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+                pipeline_status="success",
+                node_results={},
+            )
+
+            # Assert: Custom hook failed but secret cleanup still ran
+            assert "failing_hook" in results
+            assert "error" in results["failing_hook"]
+            assert "Unexpected attribute error" in results["failing_hook"]["error"]
+
+            # Critical: Secret cleanup should have run despite custom hook failure
+            assert "secret_cleanup" in results
+            assert results["secret_cleanup"]["keys_removed"] == 1
+
+            # Verify secret was actually removed
+            cleaned_secret = await mock_memory.aget(secret_key, dag_id="test-dag")
+            assert cleaned_secret is None
+
+    @pytest.mark.asyncio
+    async def test_adapter_cleanup_runs_even_when_checkpoint_fails(self):
+        """Test that adapter cleanup runs even if checkpoint save fails."""
+        # Setup
+        mock_adapter = MockAdapterWithHealth()
+        MockMemory()
+
+        # Post-hook config with checkpoint enabled but it will fail
+        post_config = PostDagHookConfig(
+            enable_checkpoint_save=True,
+            enable_adapter_cleanup=True,
+            enable_secret_cleanup=False,
+        )
+        post_manager = PostDagHookManager(post_config, None)
+
+        mock_context = NodeExecutionContext(dag_id="test-dag")
+
+        # Make memory fail during checkpoint save by not having required methods
+        class BrokenMemory:
+            async def aget(self, key, dag_id=None):
+                raise RuntimeError("Memory is broken!")
+
+            async def aset(self, key, value, dag_id=None):
+                raise RuntimeError("Memory is broken!")
+
+        async with ExecutionContext(
+            observer_manager=None,
+            policy_manager=None,
+            run_id="test-run",
+            ports={"memory": BrokenMemory(), "test_adapter": mock_adapter},
+        ):
+            # Run post-hooks
+            results = await post_manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test_pipeline",
+                pipeline_status="success",
+                node_results={"node1": "result1"},
+            )
+
+            # Checkpoint should have failed
+            assert "checkpoint" in results
+            # Note: checkpoint might be skipped if memory port check fails early
+            # The important thing is adapter cleanup still runs
+
+            # Critical: Adapter cleanup should have run despite checkpoint issues
+            assert "adapter_cleanup" in results
+            assert mock_adapter.close_called is True
+
+    @pytest.mark.asyncio
+    async def test_all_cleanup_runs_with_multiple_failures(self):
+        """Test that all cleanup operations run even with multiple failures."""
+        # Setup
+        mock_memory = MockMemory()
+        mock_secret = MockSecretPort({"KEY": "value"})
+        mock_adapter = MockAdapterWithHealth()
+
+        pre_config = HookConfig(enable_secret_injection=True)
+        pre_manager = PreDagHookManager(pre_config)
+
+        # Multiple failing custom hooks
+        def hook1(ports, context, node_results, status, error):
+            raise ValueError("Hook 1 failed")
+
+        def hook2(ports, context, node_results, status, error):
+            raise TypeError("Hook 2 failed")
+
+        post_config = PostDagHookConfig(
+            custom_hooks=[hook1, hook2],
+            enable_secret_cleanup=True,
+            enable_adapter_cleanup=True,
+        )
+        post_manager = PostDagHookManager(post_config, pre_manager)
+
+        mock_context = NodeExecutionContext(dag_id="test-dag")
+
+        async with ExecutionContext(
+            observer_manager=None,
+            policy_manager=None,
+            run_id="test-run",
+            ports={"memory": mock_memory, "secret": mock_secret, "adapter": mock_adapter},
+        ):
+            # Inject secret
+            await pre_manager.execute_hooks(context=mock_context, pipeline_name="test")
+
+            # Run post-hooks with multiple failures
+            results = await post_manager.execute_hooks(
+                context=mock_context,
+                pipeline_name="test",
+                pipeline_status="success",
+                node_results={},
+            )
+
+            # Both custom hooks failed
+            assert "hook1" in results and "error" in results["hook1"]
+            assert "hook2" in results and "error" in results["hook2"]
+
+            # Critical: Both cleanup operations still ran
+            assert "secret_cleanup" in results
+            assert results["secret_cleanup"]["keys_removed"] == 1
+
+            assert "adapter_cleanup" in results
+            assert mock_adapter.close_called is True
