@@ -6,7 +6,7 @@ providing persistent key-value storage with SQL database benefits.
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
@@ -52,6 +52,8 @@ class SQLiteMemoryAdapter(ConfigurableAdapter):
     """
 
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for SQLite Memory adapter."""
 
         table_name: str = Field(

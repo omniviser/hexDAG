@@ -36,12 +36,18 @@ class TestPipelineBuilder:
     def test_build_simple_graph(self):
         """Test building a simple graph with one node."""
         yaml_content = """
-nodes:
-  - id: processor
-    type: function
-    params:
-      fn: sample_function
-    depends_on: []
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: simple-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: processor
+      spec:
+        fn: sample_function
+        dependencies: []
 """
 
         graph, metadata = self.builder.build_from_yaml_string(yaml_content)
@@ -53,31 +59,124 @@ nodes:
         assert node.name == "processor"
         assert len(node.deps) == 0
 
-        # Check default metadata
-        assert metadata["name"] is None
-        assert metadata["description"] is None
+        # Check metadata
+        assert metadata["name"] == "simple-pipeline"
+
+    def test_build_k8s_style_graph(self):
+        """Test building a graph with declarative manifest YAML format."""
+        yaml_content = """
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: test-pipeline
+  description: Test declarative manifest pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: processor
+      spec:
+        fn: sample_function
+        dependencies: []
+"""
+
+        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+
+        assert len(graph.nodes) == 1
+        assert "processor" in graph.nodes
+        node = graph.nodes["processor"]
+        assert isinstance(node, NodeSpec)
+        assert node.name == "processor"
+        assert len(node.deps) == 0
+
+        # Check metadata from declarative manifest format
+        assert metadata["name"] == "test-pipeline"
+        assert metadata["description"] == "Test declarative manifest pipeline"
+
+    def test_build_k8s_style_with_dependencies(self):
+        """Test declarative manifest YAML with dependencies."""
+        yaml_content = """
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: pipeline-with-deps
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: node1
+      spec:
+        fn: sample_function
+        dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: node2
+      spec:
+        fn: sample_function
+        dependencies: [node1]
+"""
+
+        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+
+        assert len(graph.nodes) == 2
+        assert graph.nodes["node1"].deps == set()
+        assert graph.nodes["node2"].deps == {"node1"}
+
+    def test_build_k8s_style_with_namespace(self):
+        """Test declarative manifest YAML with namespace-qualified kind."""
+        yaml_content = """
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: test-pipeline
+spec:
+  nodes:
+    - kind: core:function_node
+      metadata:
+        name: processor
+      spec:
+        fn: sample_function
+        dependencies: []
+"""
+
+        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+
+        assert len(graph.nodes) == 1
+        assert "processor" in graph.nodes
+        node = graph.nodes["processor"]
+        assert isinstance(node, NodeSpec)
+        assert node.name == "processor"
 
     def test_build_with_dependencies(self):
         """Test building pipeline with dependencies."""
         yaml_content = """
-nodes:
-  - id: node1
-    type: function
-    params:
-      fn: sample_function
-    depends_on: []
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: multi-node-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: node1
+      spec:
+        fn: sample_function
+        dependencies: []
 
-  - id: node2
-    type: function
-    params:
-      fn: sample_function
-    depends_on: [node1]
+    - kind: function_node
+      metadata:
+        name: node2
+      spec:
+        fn: sample_function
+        dependencies: [node1]
 
-  - id: node3
-    type: function
-    params:
-      fn: sample_function
-    depends_on: [node1, node2]
+    - kind: function_node
+      metadata:
+        name: node3
+      spec:
+        fn: sample_function
+        dependencies: [node1, node2]
 """
 
         graph, metadata = self.builder.build_from_yaml_string(yaml_content)
@@ -90,21 +189,28 @@ nodes:
     def test_build_with_input_mapping(self):
         """Test building pipeline with input mapping."""
         yaml_content = """
-nodes:
-  - id: node1
-    type: function
-    params:
-      fn: sample_function
-    depends_on: []
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: input-mapping-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: node1
+      spec:
+        fn: sample_function
+        dependencies: []
 
-  - id: node2
-    type: function
-    params:
-      fn: sample_function
-      input_mapping:
-        data: "node1.result"
-        metadata: "node1.status"
-    depends_on: [node1]
+    - kind: function_node
+      metadata:
+        name: node2
+      spec:
+        fn: sample_function
+        input_mapping:
+          data: "node1.result"
+          metadata: "node1.status"
+        dependencies: [node1]
 """
 
         graph, metadata = self.builder.build_from_yaml_string(yaml_content)
@@ -123,18 +229,23 @@ nodes:
     def test_pipeline_metadata_extraction(self):
         """Test extraction of pipeline-wide metadata."""
         yaml_content = """
-name: test_pipeline
-description: A test pipeline for validation
-field_mapping_mode: "none"
-version: "1.0.0"
-author: "Test Author"
-tags: ["test", "validation"]
-
-nodes:
-  - id: test_node
-    type: function
-    params:
-      fn: test_function
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: test_pipeline
+  description: A test pipeline for validation
+  version: "1.0.0"
+  author: "Test Author"
+  tags: ["test", "validation"]
+  field_mapping_mode: "none"
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test_node
+      spec:
+        fn: test_function
+        dependencies: []
 """
 
         # This will fail due to missing function, but we can catch and check metadata
@@ -155,13 +266,19 @@ nodes:
         """Test field mapping mode validation."""
         # Test invalid field mapping mode
         yaml_content = """
-field_mapping_mode: "invalid_mode"
-
-nodes:
-  - id: test_node
-    type: function
-    params:
-      fn: test_function
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: field-mapping-validation-pipeline
+  field_mapping_mode: "invalid_mode"
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test_node
+      spec:
+        fn: test_function
+        dependencies: []
 """
 
         with pytest.raises(YamlPipelineBuilderError, match="Invalid field_mapping_mode"):
@@ -172,13 +289,19 @@ nodes:
         """Test custom field mappings validation."""
         # Test custom mode without mappings
         yaml_content = """
-field_mapping_mode: "custom"
-
-nodes:
-  - id: test_node
-    type: function
-    params:
-      fn: test_function
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: custom-field-mappings-pipeline
+  field_mapping_mode: "custom"
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test_node
+      spec:
+        fn: test_function
+        dependencies: []
 """
         with pytest.raises(
             YamlPipelineBuilderError,
@@ -188,16 +311,22 @@ nodes:
 
         # Test custom mode with mappings
         yaml_content_valid = """
-field_mapping_mode: "custom"
-custom_field_mappings:
-  text: ["content", "data"]
-  result: ["output", "response"]
-
-nodes:
-  - id: test_node
-    type: function
-    params:
-      fn: test_function
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: custom-field-mappings-valid-pipeline
+  field_mapping_mode: "custom"
+  custom_field_mappings:
+    text: ["content", "data"]
+    result: ["output", "response"]
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test_node
+      spec:
+        fn: test_function
+        dependencies: []
 """
         with pytest.raises(TypeError, match="'test_function' is not a callable object"):
             self.builder.build_from_yaml_string(yaml_content_valid)
@@ -217,12 +346,19 @@ nodes:
     def test_input_mapping_validation_error(self):
         """Test input mapping validation errors."""
         yaml_content = """
-nodes:
-  - id: node1
-    type: function
-    params:
-      fn: sample_function
-      input_mapping: "invalid_format"  # Should be dict, not string
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: input-mapping-validation-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: node1
+      spec:
+        fn: sample_function
+        input_mapping: "invalid_format"  # Should be dict, not string
+        dependencies: []
 """
 
         with pytest.raises(
@@ -231,65 +367,74 @@ nodes:
         ):
             self.builder.build_from_yaml_string(yaml_content)
 
-    @pytest.mark.skip(reason="data mapping validation features not fully implemented")
-    def test_data_mapping_validation(self):
-        """Test data mapping validation warnings."""
-        # Test with missing dependency reference
-        yaml_content = """
-nodes:
-  - id: node1
-    type: function
-    params:
-      fn: sample_function
-    depends_on: []
+    def test_namespace_parsing_core(self):
+        """Test that core namespace is correctly parsed."""
+        # Test simple kind (should default to core namespace)
+        node_type, namespace = YamlPipelineBuilder._parse_kind("llm_node")
+        assert node_type == "llm"
+        assert namespace == "core"
 
-  - id: node2
-    type: function
-    params:
-      fn: sample_function
-      input_mapping:
-        data: "missing_node.result"  # References non-existent node
-    depends_on: [node1]
+        # Test kind without _node suffix
+        node_type, namespace = YamlPipelineBuilder._parse_kind("function")
+        assert node_type == "function"
+        assert namespace == "core"
+
+    def test_namespace_parsing_custom(self):
+        """Test that custom plugin namespaces are correctly parsed."""
+        # Test namespace-qualified kind
+        node_type, namespace = YamlPipelineBuilder._parse_kind("my-plugin:dalle_node")
+        assert node_type == "dalle"
+        assert namespace == "my-plugin"
+
+        # Test with different separator patterns
+        node_type, namespace = YamlPipelineBuilder._parse_kind("openai:gpt4_node")
+        assert node_type == "gpt4"
+        assert namespace == "openai"
+
+    def test_namespace_qualified_node_lookup(self):
+        """Test that namespace-qualified nodes are looked up correctly in registry."""
+        from unittest.mock import Mock, patch
+
+        from hexai.core.domain.dag import NodeSpec
+
+        yaml_content = """
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: plugin-test-pipeline
+spec:
+  nodes:
+    - kind: my-plugin:dalle_node
+      metadata:
+        name: image_gen
+      spec:
+        prompt: "Generate an image"
+        dependencies: []
 """
 
-        import yaml
+        # Mock the registry to verify it's called with correct namespace
+        mock_factory = Mock(return_value=NodeSpec("image_gen", lambda: None))
 
-        config = yaml.safe_load(yaml_content)
-        warnings = self.builder.validate_data_mapping(config)
+        # Patch ensure_bootstrapped, registry, and validator to bypass validation
+        with (
+            patch("hexai.agent_factory.yaml_builder.ensure_bootstrapped"),
+            patch("hexai.agent_factory.yaml_builder.registry") as mock_registry,
+            patch.object(self.builder.validator, "validate") as mock_validate,
+        ):
+            # Make validator always pass
+            mock_validate_result = Mock()
+            mock_validate_result.is_valid = True
+            mock_validate_result.errors = []
+            mock_validate_result.warnings = []
+            mock_validate_result.suggestions = []
+            mock_validate.return_value = mock_validate_result
 
-        assert len(warnings) > 0
-        assert any("missing_node" in warning for warning in warnings)
+            mock_registry.get.return_value = mock_factory
 
-    @pytest.mark.skip(reason="data mapping dependency validation not fully implemented")
-    def test_data_mapping_dependency_validation(self):
-        """Test data mapping dependency validation warnings."""
-        yaml_content = """
-nodes:
-  - id: node1
-    type: function
-    params:
-      fn: sample_function
-    depends_on: []
+            # Should successfully build
+            graph, metadata = self.builder.build_from_yaml_string(yaml_content)
 
-  - id: node2
-    type: function
-    params:
-      fn: sample_function
-      input_mapping:
-        data: "node3.result"  # References node3 but not in dependencies
-    depends_on: [node1]
-
-  - id: node3
-    type: function
-    params:
-      fn: sample_function
-    depends_on: [node1]
-"""
-
-        import yaml
-
-        config = yaml.safe_load(yaml_content)
-        warnings = self.builder.validate_data_mapping(config)
-
-        assert len(warnings) > 0
-        assert any("not in dependencies" in warning for warning in warnings)
+            # Verify registry.get was called with the correct namespace
+            mock_registry.get.assert_called_once_with("dalle_node", namespace="my-plugin")
+            assert len(graph.nodes) == 1
+            assert "image_gen" in graph.nodes

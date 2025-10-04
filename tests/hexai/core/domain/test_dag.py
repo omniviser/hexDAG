@@ -450,6 +450,61 @@ class TestDirectedGraph:
         with pytest.raises(CycleDetectedError, match="Cycle detected"):
             graph.validate()
 
+    def test_static_detect_cycle_simple_cycle(self):
+        """Test DirectedGraph.detect_cycle() static method with simple cycle."""
+        # a -> b -> c -> a
+        graph = {"a": {"b"}, "b": {"c"}, "c": {"a"}}
+        result = DirectedGraph.detect_cycle(graph)
+        assert result is not None
+        assert "Cycle detected" in result
+        assert "a" in result and "b" in result and "c" in result
+
+    def test_static_detect_cycle_no_cycle(self):
+        """Test DirectedGraph.detect_cycle() static method with valid DAG."""
+        # a -> b -> c
+        graph = {"a": {"b"}, "b": {"c"}, "c": set()}
+        result = DirectedGraph.detect_cycle(graph)
+        assert result is None
+
+    def test_static_detect_cycle_empty_graph(self):
+        """Test DirectedGraph.detect_cycle() static method with empty graph."""
+        result = DirectedGraph.detect_cycle({})
+        assert result is None
+
+    def test_static_detect_cycle_self_dependency(self):
+        """Test DirectedGraph.detect_cycle() static method with self-dependency."""
+        # a -> a
+        graph = {"a": {"a"}}
+        result = DirectedGraph.detect_cycle(graph)
+        assert result is not None
+        assert "Cycle detected" in result
+        assert "a" in result
+
+    def test_static_detect_cycle_complex_cycle(self):
+        """Test DirectedGraph.detect_cycle() with complex cycle in larger graph."""
+        # a -> b -> c -> d -> b (cycle in b->c->d->b)
+        graph = {"a": {"b"}, "b": {"c"}, "c": {"d"}, "d": {"b"}}
+        result = DirectedGraph.detect_cycle(graph)
+        assert result is not None
+        assert "Cycle detected" in result
+
+    def test_static_detect_cycle_with_frozenset(self):
+        """Test DirectedGraph.detect_cycle() works with frozenset dependencies."""
+        # Test with frozenset (immutable) instead of set
+        graph = {"a": frozenset({"b"}), "b": frozenset({"c"}), "c": frozenset()}
+        result = DirectedGraph.detect_cycle(graph)
+        assert result is None
+
+    def test_static_detect_cycle_disconnected_components(self):
+        """Test DirectedGraph.detect_cycle() with disconnected components, one with cycle."""
+        # Component 1: a -> b (no cycle)
+        # Component 2: x -> y -> x (cycle)
+        graph = {"a": {"b"}, "b": set(), "x": {"y"}, "y": {"x"}}
+        result = DirectedGraph.detect_cycle(graph)
+        assert result is not None
+        assert "Cycle detected" in result
+        assert "x" in result and "y" in result
+
     def test_complex_valid_dag(self):
         """Test a more complex but valid DAG."""
         graph = DirectedGraph()

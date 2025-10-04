@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.ports.tool_router import ToolRouter
@@ -34,6 +34,8 @@ class MockToolAdapter(ToolRouter, ConfigurableAdapter):
 
     # Configuration schema for TOML generation
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for Mock Tool Adapter."""
 
         default_response: Any = Field(

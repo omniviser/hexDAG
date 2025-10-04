@@ -4,7 +4,7 @@ import json
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
@@ -40,6 +40,8 @@ class OpenAIAdapter(ConfigurableAdapter):
 
     # Configuration schema for TOML generation
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for OpenAI adapter."""
 
         api_key: str | None = Field(

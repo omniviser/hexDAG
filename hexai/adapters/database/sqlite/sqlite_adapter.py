@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
@@ -32,6 +32,8 @@ class SQLiteAdapter(ConfigurableAdapter):
 
     # Configuration schema for TOML generation
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for SQLite adapter."""
 
         db_path: str = Field(

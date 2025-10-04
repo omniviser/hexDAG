@@ -145,6 +145,49 @@ class ConfigurableAdapter:
         """
         return self._extra_kwargs.get(key, default)
 
+    def get_config_dict(self) -> dict[str, Any]:
+        """Export config as dictionary for debugging/serialization.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary representation of the configuration
+
+        Examples
+        --------
+        >>> adapter.get_config_dict()  # doctest: +SKIP
+        {'api_key': 'sk-...', 'timeout': 30.0}
+        """
+        return self.config.model_dump()
+
+    def __repr__(self) -> str:
+        """Readable representation showing adapter class and config.
+
+        Returns
+        -------
+        str
+            String representation like: MyAdapter(api_key='***', timeout=30.0)
+
+        Examples
+        --------
+        >>> adapter = MyAdapter(api_key='secret', timeout=30.0)  # doctest: +SKIP
+        >>> repr(adapter)  # doctest: +SKIP
+        "MyAdapter(api_key='***', timeout=30.0)"
+        """
+        config_items = []
+        for key, value in self.config.model_dump().items():
+            # Mask sensitive fields (api_key, password, secret, token)
+            if any(
+                sensitive in key.lower() for sensitive in ["key", "password", "secret", "token"]
+            ):
+                display_value = "'***'"
+            else:
+                display_value = repr(value)
+            config_items.append(f"{key}={display_value}")
+
+        config_str = ", ".join(config_items)
+        return f"{self.__class__.__name__}({config_str})"
+
     @classmethod
     def get_config_class(cls) -> type[BaseModel]:
         """Return configuration schema class.

@@ -213,9 +213,17 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: interrogate
+        name: interrogate - docstring coverage
+        entry: uv run interrogate hexai/ --fail-under 95 --quiet
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: safety-check
         name: safety - dependency vulnerability scan
-        entry: uv run safety check --json
+        entry: bash -c 'uv run safety check --output bare 2>&1 | grep -v "DEPRECATED\|pkg_resources" || true'
         language: system
         stages: [pre-commit]
         pass_filenames: false

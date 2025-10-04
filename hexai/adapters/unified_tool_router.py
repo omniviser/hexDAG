@@ -4,7 +4,7 @@ import asyncio
 import inspect
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
 from hexai.core.configurable import ConfigurableAdapter
@@ -44,6 +44,8 @@ class UnifiedToolRouter(ToolRouter, ConfigurableAdapter):
 
     # Configuration schema for TOML generation
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for Unified Tool Router."""
 
         # No configuration needed for this adapter as it uses the global registry

@@ -5,7 +5,7 @@ import asyncio
 import operator
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.exceptions import ResourceNotFoundError
@@ -19,6 +19,8 @@ class MockToolRouter(ToolRouter, ConfigurableAdapter):
 
     # Configuration schema for TOML generation
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for Mock Tool Router."""
 
         available_tools: list[str] = Field(

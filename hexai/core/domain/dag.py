@@ -6,7 +6,7 @@ directed acyclic graphs of agents in the Hex-DAG framework.
 
 import sys
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from types import MappingProxyType
@@ -262,6 +262,68 @@ class DirectedGraph:
         if nodes:
             self.add_many(*nodes)
 
+    @staticmethod
+    def detect_cycle(graph: Mapping[str, set[str] | frozenset[str]]) -> str | None:
+        """Detect cycles in a dependency graph using DFS with three-state coloring.
+
+        This is a public static method that can be used to detect cycles in simple
+        dependency graphs before constructing a full DirectedGraph.
+
+        Parameters
+        ----------
+        graph : Mapping[str, set[str] | frozenset[str]]
+            Dependency graph where keys are node names and values are sets of dependencies
+
+        Returns
+        -------
+        str | None
+            Cycle description if found, None otherwise
+
+        Examples
+        --------
+        >>> graph = {"a": {"b"}, "b": {"c"}, "c": {"a"}}  # a->b->c->a
+        >>> DirectedGraph.detect_cycle(graph)
+        'Cycle detected: a -> b -> c -> a'
+
+        >>> graph = {"a": {"b"}, "b": {"c"}, "c": set()}  # No cycle
+        >>> result = DirectedGraph.detect_cycle(graph)
+        >>> result is None
+        True
+        """
+        colors = dict.fromkeys(graph, Color.WHITE)
+
+        def dfs(node: str, path: list[str]) -> str | None:
+            if colors[node] == Color.GRAY:
+                # Found a back edge - cycle detected
+                cycle_start = path.index(node)
+                cycle = path[cycle_start:] + [node]
+                return f"Cycle detected: {' -> '.join(cycle)}"
+
+            if colors[node] == Color.BLACK:
+                return None
+
+            colors[node] = Color.GRAY
+            path.append(node)
+
+            # Visit all dependencies
+            for dep in graph.get(node, set()):
+                if dep in colors:  # Only visit nodes that exist in graph
+                    result = dfs(dep, path)
+                    if result:  # If cycle found, propagate it up
+                        return result
+
+            path.pop()
+            colors[node] = Color.BLACK
+            return None
+
+        for node in graph:
+            if colors[node] == Color.WHITE:
+                result = dfs(node, [])
+                if result:  # If cycle found, return it
+                    return result
+
+        return None  # No cycles found
+
     def add(self, node_spec: NodeSpec) -> "DirectedGraph":
         """Add a NodeSpec to the graph.
 
@@ -431,49 +493,14 @@ class DirectedGraph:
     def _detect_cycles(self) -> str | None:
         """Detect cycles using depth-first search with three states.
 
-        States:
-        - WHITE (0): Unvisited
-        - GRAY (1): Currently being processed (in recursion stack)
-        - BLACK (2): Completely processed
-
         Returns
         -------
         str | None
             Cycle detected message or None if no cycle is detected
         """
-        colors = dict.fromkeys(self.nodes, Color.WHITE)
-
-        def dfs(node: str, path: list[str]) -> str | None:
-            if colors[node] == Color.GRAY:
-                # Found a back edge - cycle detected
-                cycle_start = path.index(node)
-                cycle = path[cycle_start:] + [node]
-                return f"Cycle detected: {' -> '.join(cycle)}"
-
-            if colors[node] == Color.BLACK:
-                return None
-
-            colors[node] = Color.GRAY
-            path.append(node)
-
-            # Visit all dependencies
-            for dep in self.nodes[node].deps:
-                if dep in self.nodes:
-                    result = dfs(dep, path)
-                    if result:  # If cycle found, propagate it up
-                        return result
-
-            path.pop()
-            colors[node] = Color.BLACK
-            return None
-
-        for node in self.nodes:
-            if colors[node] == Color.WHITE:
-                result = dfs(node, [])
-                if result:  # If cycle found, return it
-                    return result
-
-        return None  # No cycles found
+        # Build a simple dependency graph from NodeSpecs and use static method
+        graph = {name: node_spec.deps for name, node_spec in self.nodes.items()}
+        return DirectedGraph.detect_cycle(graph)
 
     def _validate_type_compatibility(self) -> list[str]:
         """Validate type compatibility between connected nodes.

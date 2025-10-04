@@ -14,9 +14,10 @@ from hexai.agent_factory.yaml_validator import YamlValidator
 from hexai.core.application.nodes.mapped_input import FieldMappingRegistry
 from hexai.core.application.prompt.template import ChatPromptTemplate
 from hexai.core.bootstrap import ensure_bootstrapped
-from hexai.core.domain.dag import DirectedGraph
+from hexai.core.domain.dag import DirectedGraph, NodeSpec
 from hexai.core.logging import get_logger
 from hexai.core.registry import registry
+from hexai.core.registry.models import NAMESPACE_SEPARATOR
 
 logger = get_logger(__name__)
 
@@ -76,11 +77,23 @@ class YamlPipelineBuilder:
             ) from e
 
     def build_from_yaml_string(self, yaml_content: str) -> tuple[DirectedGraph, dict[str, Any]]:
-        """Convert YAML string to DirectedGraph.
+        """Convert declarative YAML manifest to DirectedGraph.
 
-        Simple approach with basic data mapping support and intelligent auto-conversion.
-        Supports input_mapping for explicit field mapping between nodes.
-        Automatically converts incompatible LLM configurations to compatible formats.
+        Expects declarative manifest format with K8s-style structure:
+        ```yaml
+        apiVersion: v1
+        kind: Pipeline
+        metadata:
+          name: my-pipeline
+        spec:
+          nodes:
+            - kind: llm_node
+              metadata:
+                name: processor
+              spec:
+                prompt_template: "Process {{input}}"
+                dependencies: []
+        ```
 
         Parameters
         ----------
@@ -91,18 +104,47 @@ class YamlPipelineBuilder:
         -------
         tuple[DirectedGraph, dict[str, Any]]
             Tuple of (DirectedGraph, pipeline_metadata)
+        """
+        config = self._parse_and_validate_yaml(yaml_content)
+        pipeline_metadata = self._extract_pipeline_metadata(config)
+        self._register_common_mappings(config)
+
+        graph = self._build_graph_from_config(config)
+
+        logger.info("✅ Built pipeline with %d nodes", len(graph.nodes))
+        return graph, pipeline_metadata
+
+    def _parse_and_validate_yaml(self, yaml_content: str) -> dict[str, Any]:
+        """Parse YAML content and validate the configuration.
+
+        Parameters
+        ----------
+        yaml_content : str
+            YAML content string to parse
+
+        Returns
+        -------
+        dict[str, Any]
+            Validated configuration dictionary
 
         Raises
         ------
         YamlPipelineBuilderError
-            If YAML validation fails
-        TypeError
-            If the node factory is not callable
+            If YAML parsing or validation fails
         """
         try:
             config = yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
             raise YamlPipelineBuilderError(f"Invalid YAML content: {e}") from e
+
+        # Ensure config is a dictionary
+        if not isinstance(config, dict):
+            raise YamlPipelineBuilderError(
+                f"YAML root must be a dictionary, got {type(config).__name__}"
+            )
+
+        # Validate manifest format
+        self._validate_manifest_format(config)
 
         # Validate configuration
         validation_result = self.validator.validate(config)
@@ -119,109 +161,244 @@ class YamlPipelineBuilder:
         for suggestion in validation_result.suggestions:
             logger.info("YAML validation suggestion: %s", suggestion)
 
+        return config
+
+    def _build_graph_from_config(self, config: dict[str, Any]) -> DirectedGraph:
+        """Build DirectedGraph from validated configuration.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Validated YAML configuration
+
+        Returns
+        -------
+        DirectedGraph
+            Constructed graph with all nodes
+        """
         graph = DirectedGraph()
+        nodes_list = config.get("spec", {}).get("nodes", [])
 
-        # Extract pipeline-wide metadata and register common mappings
-        pipeline_metadata = self._extract_pipeline_metadata(config)
-        self._register_common_mappings(config)
-
-        # Build nodes with simple processing and data mapping
-        for node_config in config["nodes"]:
-            node_id = node_config["id"]
-            node_type = node_config.get("type", "function")
-            params = node_config.get("params", {})
-            deps = node_config.get("depends_on", [])
-
-            # Handle field_mapping parameter
-            field_mapping = params.get("field_mapping")
-            if field_mapping:
-                # Resolve mapping (could be a string reference or inline dict)
-                resolved_mapping = self.field_mapping_registry.get(field_mapping)
-                params["field_mapping"] = resolved_mapping
-                logger.debug("Node '%s' using field mapping: %s", node_id, resolved_mapping)
-
-            # Auto-convert LLM nodes with incompatible template + schema combinations
-            if node_type == "llm":
-                logger.debug("📋 LLM node '%s' original params: %s", node_id, list(params.keys()))
-                params = self._auto_convert_llm_node(node_id, params)
-                logger.debug("📋 LLM node '%s' final params: %s", node_id, list(params.keys()))
-
-            # Resolve function references (no schema inference)
-            if node_type == "function" and "fn" in params:
-                func_ref = params["fn"]
-                if isinstance(func_ref, str) and func_ref in self.registered_functions:
-                    actual_func = self.registered_functions[func_ref]
-                    params["fn"] = actual_func
-
-            # Create node using NodeFactory (let nodes handle their own logic)
-            # Ensure registry is bootstrapped
-            ensure_bootstrapped()
-
-            # Get node factory from registry
-            factory_name = f"{node_type}_node"
-            factory = registry.get(factory_name, namespace="core")
-
-            # Ensure factory is callable
-            if not callable(factory):
-                raise TypeError(
-                    f"Expected callable factory for {factory_name}, got {type(factory)}"
-                )
-
-            # Create node using factory
-            node = factory(node_id, **params)
-
-            # Ensure node is a NodeSpec
-            from hexai.core.domain.dag import NodeSpec
-
-            if not isinstance(node, NodeSpec):
-                raise TypeError(f"Factory {factory_name} did not return a NodeSpec")
-
-            # Add dependencies
-            if deps:
-                node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
-
+        for node_config in nodes_list:
+            node = self._build_node_from_config(node_config)
             graph.add(node)
 
-        logger.info("✅ Built pipeline with %d nodes", len(graph.nodes))
+        return graph
 
-        return graph, pipeline_metadata
+    def _build_node_from_config(self, node_config: dict[str, Any]) -> NodeSpec:
+        """Build a single NodeSpec from node configuration.
 
-    def _extract_pipeline_metadata(self, config: dict[str, Any]) -> dict[str, Any]:
-        """Extract pipeline-wide metadata from YAML configuration.
+        Parameters
+        ----------
+        node_config : dict[str, Any]
+            Node configuration from YAML
+
+        Returns
+        -------
+        NodeSpec
+            Constructed node specification
+        """
+        # Extract node configuration
+        node_id = node_config.get("metadata", {}).get("name")
+        node_type, namespace = self._parse_kind(node_config["kind"])
+        params = node_config.get("spec", {}).copy()  # Copy to avoid modifying original
+        deps = params.pop("dependencies", [])
+
+        # Process parameters
+        params = self._process_node_params(node_id, node_type, params)
+
+        # Create node using factory
+        node = self._create_node_from_factory(node_id, node_type, namespace, params)
+
+        # Add dependencies
+        if deps:
+            node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
+
+        return node
+
+    def _process_node_params(
+        self, node_id: str, node_type: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Process and transform node parameters.
+
+        Parameters
+        ----------
+        node_id : str
+            Node identifier
+        node_type : str
+            Type of node (e.g., "llm", "function")
+        params : dict[str, Any]
+            Raw node parameters
+
+        Returns
+        -------
+        dict[str, Any]
+            Processed parameters
+        """
+        # Handle field_mapping parameter
+        field_mapping = params.get("field_mapping")
+        if field_mapping:
+            resolved_mapping = self.field_mapping_registry.get(field_mapping)
+            params["field_mapping"] = resolved_mapping
+            logger.debug("Node '%s' using field mapping: %s", node_id, resolved_mapping)
+
+        # Auto-convert LLM nodes with incompatible template + schema combinations
+        if node_type == "llm":
+            logger.debug("📋 LLM node '%s' original params: %s", node_id, list(params.keys()))
+            params = self._auto_convert_llm_node(node_id, params)
+            logger.debug("📋 LLM node '%s' final params: %s", node_id, list(params.keys()))
+
+        # Resolve function references
+        if node_type == "function" and "fn" in params:
+            func_ref = params["fn"]
+            if isinstance(func_ref, str) and func_ref in self.registered_functions:
+                params["fn"] = self.registered_functions[func_ref]
+
+        return params
+
+    @staticmethod
+    def _create_node_from_factory(
+        node_id: str, node_type: str, namespace: str, params: dict[str, Any]
+    ) -> NodeSpec:
+        """Create NodeSpec using registry factory.
+
+        Parameters
+        ----------
+        node_id : str
+            Node identifier
+        node_type : str
+            Type of node
+        namespace : str
+            Component namespace
+        params : dict[str, Any]
+            Processed node parameters
+
+        Returns
+        -------
+        NodeSpec
+            Created node specification
+
+        Raises
+        ------
+        TypeError
+            If factory is not callable or doesn't return NodeSpec
+        """
+        ensure_bootstrapped()
+
+        factory_name = f"{node_type}_node"
+        factory = registry.get(factory_name, namespace=namespace)
+
+        if not callable(factory):
+            raise TypeError(f"Expected callable factory for {factory_name}, got {type(factory)}")
+
+        node = factory(node_id, **params)
+
+        if not isinstance(node, NodeSpec):
+            raise TypeError(f"Factory {factory_name} did not return a NodeSpec")
+
+        return node
+
+    @staticmethod
+    def _validate_manifest_format(config: dict[str, Any]) -> None:
+        """Validate that config uses declarative manifest format.
+
+        Args
+        ----
+            config: Raw YAML configuration
+
+        Raises
+        ------
+            YamlPipelineBuilderError: If config is not in manifest format
+        """
+        if "kind" not in config:
+            raise YamlPipelineBuilderError(
+                "YAML must use declarative manifest format with 'kind' field. "
+                "Example:\n"
+                "apiVersion: v1\n"
+                "kind: Pipeline\n"
+                "metadata:\n"
+                "  name: my-pipeline\n"
+                "spec:\n"
+                "  nodes: [...]"
+            )
+
+        if "spec" not in config:
+            raise YamlPipelineBuilderError("Manifest YAML must have 'spec' field")
+
+        if "metadata" not in config:
+            raise YamlPipelineBuilderError("Manifest YAML must have 'metadata' field")
+
+    @staticmethod
+    def _parse_kind(kind: str) -> tuple[str, str]:
+        """Parse kind into (node_type, namespace).
+
+        Supports both simple kinds and namespace-qualified kinds:
+        - "llm_node" -> ("llm", "core")
+        - "my-plugin:dalle_node" -> ("dalle", "my-plugin")
+
+        Args
+        ----
+            kind: Kind string from YAML
+
+        Returns
+        -------
+            Tuple of (node_type, namespace)
+        """
+        if NAMESPACE_SEPARATOR in kind:
+            # Namespace-qualified kind
+            namespace, node_kind = kind.split(NAMESPACE_SEPARATOR, 1)
+        else:
+            # Simple kind - assume core namespace
+            namespace = "core"
+            node_kind = kind
+
+        # Remove '_node' suffix if present (e.g., "llm_node" -> "llm")
+        node_type = node_kind.removesuffix("_node")
+
+        return node_type, namespace
+
+    @staticmethod
+    def _extract_pipeline_metadata(config: dict[str, Any]) -> dict[str, Any]:
+        """Extract pipeline-wide metadata from declarative YAML manifest.
 
         Returns
         -------
             dict: Pipeline metadata
         """
+        metadata_section = config.get("metadata", {})
+        spec = config.get("spec", {})
+
         metadata = {
-            "name": config.get("name"),
-            "description": config.get("description"),
+            "name": metadata_section.get("name"),
+            "description": metadata_section.get("description"),
         }
 
-        # Include common_field_mappings in metadata
-        if "common_field_mappings" in config:
-            metadata["common_field_mappings"] = config["common_field_mappings"]
+        # Include common_field_mappings from spec
+        if "common_field_mappings" in spec:
+            metadata["common_field_mappings"] = spec["common_field_mappings"]
 
-        # Extract other pipeline-wide configurations
+        # Extract other metadata fields
         for key in ["version", "author", "tags", "environment"]:
-            if key in config:
-                metadata[key] = config[key]
+            if key in metadata_section:
+                metadata[key] = metadata_section[key]
 
         return metadata
 
     def _register_common_mappings(self, config: dict[str, Any]) -> None:
-        """Register common field mappings from config.
+        """Register common field mappings from manifest config.
 
         Args
         ----
             config: Pipeline configuration
         """
-        common_mappings = config.get("common_field_mappings", {})
+        common_mappings = config.get("spec", {}).get("common_field_mappings", {})
+
         for name, mapping in common_mappings.items():
             self.field_mapping_registry.register(name, mapping)
             logger.debug("Registered common field mapping '%s': %s", name, mapping)
 
-    def _auto_convert_llm_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _auto_convert_llm_node(node_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Auto-convert LLM node parameters to handle common configuration incompatibilities.
 
         Specifically handles the case where prompt_template (string) is used with output_schema,
@@ -265,118 +442,3 @@ class YamlPipelineBuilder:
             )
 
         return params
-
-    def validate_data_mapping(self, config: dict[str, Any]) -> list[str]:
-        """Validate field mappings in YAML configuration.
-
-        Parameters
-        ----------
-        config : dict[str, Any]
-            YAML configuration to validate
-
-        Returns
-        -------
-        list[str]
-            List of validation warnings (not errors)
-        """
-        warnings = []
-
-        # Validate common_field_mappings
-        common_mappings = config.get("common_field_mappings", {})
-        if common_mappings and not isinstance(common_mappings, dict):
-            warnings.append("common_field_mappings must be a dictionary")
-
-        # Validate node field_mapping references
-        nodes = config.get("nodes", [])
-        common_mappings = config.get("common_field_mappings", {})
-
-        # Collect all node names for validation
-        node_names = {node.get("id") for node in nodes if node.get("id")}
-
-        for node_config in nodes:
-            node_id = node_config.get("id")
-            params = node_config.get("params", {})
-            field_mapping = params.get("field_mapping")
-            input_mapping = params.get("input_mapping")
-
-            # Get dependencies for this node
-            dependencies = set(node_config.get("depends_on", []))
-
-            # Validate field_mapping
-            if field_mapping:
-                # If it's a string, check it references a known common mapping
-                if isinstance(field_mapping, str):
-                    if field_mapping not in common_mappings:
-                        warnings.append(
-                            f"Node '{node_id}' references unknown field mapping '{field_mapping}'"
-                        )
-                # If it's a dict, validate it's properly formatted
-                elif isinstance(field_mapping, dict):
-                    for target, source in field_mapping.items():
-                        if not isinstance(source, str):
-                            warnings.append(
-                                f"Node '{node_id}' field mapping has invalid source for '{target}'"
-                            )
-                else:
-                    warnings.append(
-                        f"Node '{node_id}' field_mapping must be a string reference or dict"
-                    )
-
-            # Validate input_mapping if present
-            if input_mapping:
-                warnings.extend(
-                    self._validate_mapping_references(
-                        node_id, input_mapping, node_names, dependencies, "input_mapping"
-                    )
-                )
-
-        return warnings
-
-    def _validate_mapping_references(
-        self,
-        node_id: str,
-        mapping: dict[str, Any],
-        node_names: set[str],
-        dependencies: set[str],
-        mapping_type: str,
-    ) -> list[str]:
-        """Validate mapping references and return warnings.
-
-        Parameters
-        ----------
-        node_id : str
-            ID of the node being validated
-        mapping : dict[str, Any]
-            Mapping dictionary to validate
-        node_names : set[str]
-            Set of all node names in the pipeline
-        dependencies : set[str]
-            Set of dependencies for the current node
-        mapping_type : str
-            Type of mapping being validated
-
-        Returns
-        -------
-        list[str]
-            List of validation warnings
-        """
-        warnings = []
-
-        for source_path in mapping.values():
-            # Skip validation for non-string values (like defaults)
-            if not isinstance(source_path, str):
-                continue
-
-            if "." in source_path:
-                node_name, _field_name = source_path.split(".", 1)
-                if node_name not in node_names:
-                    warnings.append(
-                        f"Node '{node_id}' {mapping_type} references unknown node '{node_name}'"
-                    )
-                elif node_name not in dependencies:
-                    warnings.append(
-                        f"Node '{node_id}' {mapping_type} references '{node_name}' "
-                        f"which is not a dependency"
-                    )
-
-        return warnings

@@ -3,7 +3,7 @@
 import asyncio
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.ports.database import DatabasePort
@@ -16,6 +16,8 @@ class MockDatabaseAdapter(DatabasePort, ConfigurableAdapter):
 
     # Configuration schema for TOML generation
     class Config(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
         """Configuration schema for Mock Database adapter."""
 
         enable_sample_data: bool = Field(
