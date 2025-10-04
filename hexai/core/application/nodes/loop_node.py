@@ -63,7 +63,7 @@ class LoopNode(BaseNodeFactory):
         async def loop_controller_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute loop control logic."""
             logger = get_logger("hexai.app.application.nodes.loop_node")
-            logger.info("🔄 LOOP NODE: %s", name)
+            logger.info("🔄 LOOP NODE: {name}", name=name)
 
             # Get current iteration count from input state
             if isinstance(input_data, dict):
@@ -75,7 +75,11 @@ class LoopNode(BaseNodeFactory):
                 loop_history = []
                 state = {"input": input_data}
 
-            logger.info("🔢 Starting iteration %d/%d", current_iteration, max_iterations)
+            logger.info(
+                "🔢 Starting iteration {current}/{max}",
+                current=current_iteration,
+                max=max_iterations,
+            )
 
             # Extract relevant data for evaluation
             if isinstance(input_data, dict):
@@ -92,9 +96,11 @@ class LoopNode(BaseNodeFactory):
             if success_condition is not None:
                 try:
                     success_criteria_met = success_condition(data_dict)
-                    logger.debug("🎯 Success condition evaluated: %s", success_criteria_met)
+                    logger.debug(
+                        "🎯 Success condition evaluated: {result}", result=success_criteria_met
+                    )
                 except Exception as e:
-                    logger.error("❌ Success condition evaluation failed: %s", e)
+                    logger.error("❌ Success condition evaluation failed: {error}", error=e)
                     success_criteria_met = False
             else:
                 # Default success condition: check for termination signals
@@ -167,7 +173,7 @@ class ConditionalNode(BaseNodeFactory):
         async def conditional_router_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute conditional routing logic."""
             logger = get_logger("hexai.app.application.nodes.conditional_node")
-            logger.info("🧭 CONDITIONAL NODE: %s", name)
+            logger.info("🧭 CONDITIONAL NODE: {name}", name=name)
 
             # Extract data using protocol
             if isinstance(input_data, dict):

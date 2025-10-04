@@ -140,7 +140,11 @@ class NodeExecutor:
                 except ValidationError as e:
                     if self.strict_validation:
                         raise
-                    logger.debug("Input validation failed for node '%s': %s", node_name, e)
+                    logger.debug(
+                        "Input validation failed for node '{node}': {error}",
+                        node=node_name,
+                        error=e,
+                    )
                     validated_input = node_input
             else:
                 validated_input = node_input
@@ -192,7 +196,11 @@ class NodeExecutor:
                 except ValidationError as e:
                     if self.strict_validation:
                         raise
-                    logger.debug("Output validation failed for node '%s': %s", node_name, e)
+                    logger.debug(
+                        "Output validation failed for node '{node}': {error}",
+                        node=node_name,
+                        error=e,
+                    )
                     validated_output = raw_output
             else:
                 validated_output = raw_output

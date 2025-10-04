@@ -76,7 +76,9 @@ def bootstrap_registry(
     entries = config_to_manifest_entries(config)
     registry.bootstrap(entries, dev_mode=final_dev_mode)
 
-    logger.info("Registry initialized with %d components", len(registry.list_components()))
+    logger.info(
+        "Registry initialized with {count} components", count=len(registry.list_components())
+    )
 
 
 def ensure_bootstrapped(config_path: str | Path | None = None, use_defaults: bool = False) -> None:

@@ -113,7 +113,7 @@ class ComponentRegistry:
             # Store configuration
             self._manifest = manifest
             self._dev_mode = dev_mode
-            logger.info("Bootstrapping registry with %d entries", len(manifest))
+            logger.info("Bootstrapping registry with {count} entries", count=len(manifest))
 
             # Load modules and register components
             self._bootstrap_context = True
@@ -139,14 +139,22 @@ class ComponentRegistry:
                         )
                     except ImportError as e:
                         if is_core:
-                            logger.error("Failed to import core module %s: %s", entry.module, e)
+                            logger.error(
+                                "Failed to import core module {module}: {error}",
+                                module=entry.module,
+                                error=e,
+                            )
                             raise
                         logger.warning(f"Optional module {entry.module} not available: {e}")
                     except (
                         ComponentAlreadyRegisteredError,
                         NamespacePermissionError,
                     ) as e:
-                        logger.error("Failed to register components from %s: %s", entry.module, e)
+                        logger.error(
+                            "Failed to register components from {module}: {error}",
+                            module=entry.module,
+                            error=e,
+                        )
                         raise
 
                 # Mark as ready
@@ -307,7 +315,7 @@ class ComponentRegistry:
             name, component, component_type_enum, namespace_str, implements_port_str
         )
 
-        logger.debug("Registered %s", metadata.qualified_name)
+        logger.debug("Registered {name}", name=metadata.qualified_name)
         return metadata
 
     def _track_configurable_component(
@@ -331,9 +339,13 @@ class ComponentRegistry:
                     "type": component_type,
                     "port": implements_port,
                 }
-                logger.debug("Registered configurable component: %s", name)
+                logger.debug("Registered configurable component: {name}", name=name)
             except Exception as e:
-                logger.debug("Component %s does not implement ConfigurableComponent: %s", name, e)
+                logger.debug(
+                    "Component {name} does not implement ConfigurableComponent: {error}",
+                    name=name,
+                    error=e,
+                )
 
     # ========================================================================
     # Component Retrieval (inline from ComponentStore)

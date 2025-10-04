@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: sentiment-classifier
+  description: Classify customer feedback sentiment
+  version: "1.0"
+  author: HexDAG Examples
+  tags: ["sentiment", "classification", "customer-feedback"]
+
+spec:
+  input_schema:
+    type: object
+    properties:
+      feedback_text:
+        type: string
+        minLength: 10
+      customer_id:
+        type: string
+    required: [feedback_text, customer_id]
+
+  nodes:
+    # Validate input
+    - kind: function_node
+      metadata:
+        name: validate_input
+      spec:
+        fn: validate_feedback
+        input_mapping:
+          text: input.feedback_text
+          customer: input.customer_id
+        dependencies: []
+
+    # Analyze sentiment using plugin
+    - kind: textproc:sentiment_analyzer_node
+      metadata:
+        name: sentiment_analysis
+        annotations:
+          description: Analyze feedback sentiment
+          timeout: "5s"
+      spec:
+        text: "{{validate_input.cleaned_text}}"
+        model: "simple"
+        dependencies: [validate_input]
+
+    # Route based on sentiment
+    - kind: conditional_node
+      metadata:
+        name: sentiment_router
+      spec:
+        condition_key: "sentiment_analysis.sentiment"
+        true_action: "handle_positive"
+        false_action: "handle_negative"
+        dependencies: [sentiment_analysis]
+
+    # Handle positive feedback
+    - kind: function_node
+      metadata:
+        name: handle_positive
+      spec:
+        fn: process_positive_feedback
+        input_mapping:
+          customer_id: input.customer_id
+          sentiment_data: sentiment_analysis
+        dependencies: []
+
+    # Handle negative feedback
+    - kind: function_node
+      metadata:
+        name: handle_negative
+      spec:
+        fn: escalate_negative_feedback
+        input_mapping:
+          customer_id: input.customer_id
+          sentiment_data: sentiment_analysis
+        dependencies: []

@@ -75,6 +75,11 @@ uv.lock
 outputs/
 sbom.json
 
+# MkDocs
+site/
+docs/reference/*.md
+docs/namespaces/*.md
+
 # HexDAG config (only in root, not in subdirectories or examples)
 /hexdag.toml
 

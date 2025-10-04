@@ -147,17 +147,22 @@ def _register_component_direct(
 
             # Log appropriate message based on type
             if component_type == ComponentType.PORT:
-                logger.debug("Registered port %s:%s from %s", namespace, name, module_path)
+                logger.debug(
+                    "Registered port {namespace}:{name} from {module}",
+                    namespace=namespace,
+                    name=name,
+                    module=module_path,
+                )
             else:
                 component_type_str = (
                     component_type if isinstance(component_type, str) else "component"
                 )
                 logger.debug(
-                    "Registered %s %s:%s from %s",
-                    component_type_str,
-                    namespace,
-                    name,
-                    module_path,
+                    "Registered {type} {namespace}:{name} from {module}",
+                    type=component_type_str,
+                    namespace=namespace,
+                    name=name,
+                    module=module_path,
                 )
         except Exception as e:
             component_type_str = (
@@ -200,13 +205,13 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
     try:
         module = importlib.import_module(module_path)
     except ImportError as e:
-        logger.error("Failed to import module '%s': %s", module_path, e)
+        logger.error("Failed to import module '{module}': {error}", module=module_path, error=e)
         raise
 
     # Check if module has a custom register_components function
     if hasattr(module, "register_components"):
         # Module has custom registration logic
-        logger.debug("Using custom register_components from %s", module_path)
+        logger.debug("Using custom register_components from {module}", module=module_path)
         result = module.register_components(registry, namespace)
         # Ensure we return an int
         return int(result) if result is not None else 0
@@ -223,7 +228,7 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
             unique_components.append((name, component))
     components = unique_components
 
-    logger.debug("Phase A: Registering ports from %s", module_path)
+    logger.debug("Phase A: Registering ports from {module}", module=module_path)
 
     for _, component in components:
         if not hasattr(component, "_hexdag_type"):
@@ -234,7 +239,9 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
             count += _register_component_direct(registry, component, namespace, module_path)
 
     # Phase B: Register everything else
-    logger.debug("Phase B: Registering adapters and other components from %s", module_path)
+    logger.debug(
+        "Phase B: Registering adapters and other components from {module}", module=module_path
+    )
     for _, component in components:
         if not hasattr(component, "_hexdag_type"):
             continue

@@ -44,12 +44,24 @@ anthropic = [
 database = [
     "aiosqlite>=0.19.0",  # Async SQLite database adapter
 ]
+cli = [
+    "typer>=0.9.0",  # CLI framework
+    "rich>=13.0.0",  # Rich terminal output
+]
+docs = [
+    "mkdocs>=1.6.0",  # Documentation site generator
+    "mkdocs-material>=9.6.0",  # Material theme for MkDocs
+    "mkdocstrings[python]>=0.24.0",  # Auto-generate API docs
+    "pymdown-extensions>=10.0",  # Markdown extensions
+]
 all = [
     "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
     "aiosqlite>=0.19.0",  # Async SQLite adapter
+    "typer>=0.9.0",  # CLI framework
+    "rich>=13.0.0",  # Rich terminal output
 ]
 
 [project.urls]
@@ -91,9 +103,11 @@ dev = [
     "pre-commit==3.8.0",
     "commitizen==4.8.3",
     "watchdog==6.0.0",
-    # Documentation
+    # Documentation (pinned versions for development)
     "mkdocs==1.6.1",
     "mkdocs-material==9.6.16",
+    "mkdocstrings[python]>=0.24.0",
+    "pymdown-extensions==10.13",
     "mkdocs-mermaid2-plugin==1.2.1",
     # Types and tools
     "types-pyyaml==6.0.12",
@@ -210,7 +224,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-exclude = ["tests/", "examples/", ".mutmut-config.py"]
+exclude = ["tests/", "examples/", ".mutmut-config.py", "docs/"]
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
@@ -228,7 +242,7 @@ disallow_untyped_decorators = false
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist", ".mutmut-config.py"]
+exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist", ".mutmut-config.py", "docs/**"]
 include = ["hexai"]
 
 # Type checking settings
@@ -320,12 +334,12 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["UP", "SIM117", "SIM102", "SIM105", "PERF401"]
-"examples/*" = ["UP", "E501"]
+"examples/*" = ["UP", "E501", "PTH123"]
 "examples/demo/*" = ["E501"]
 "hexai_plugins/*" = ["UP", "TCH", "FA"]
 "hexai/core/application/events/observers.py" = ["SIM115"]
 "hexai/core/registry/discovery.py" = ["TC003", "TC001"]
-"hexai/cli/*" = ["DOC501", "PTH123"]  # CLI uses typer.Exit which shouldn't be documented
+"hexai/cli/*" = ["DOC501", "PTH123", "B008", "B904", "SIM102"]  # CLI: typer patterns
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexai"]
@@ -390,12 +404,16 @@ exclude = [
     ".venv",  # Virtual environment
     "venv",  # Alternative virtual environment name
     "examples/demo",  # Demo files with mock langchain imports
+    "examples/plugins",  # Plugin examples have their own dependencies
+    "examples/run_text_analysis_pipeline.py",  # Uses plugin-specific transformers
+    "examples/simple_text_analysis.py",  # Uses plugin-specific transformers
     "tests",  # Test files use dev dependencies
     "hexai_plugins",  # External plugin directories
 ]
 
 # Per-rule ignores for specific packages
-per_rule_ignores = { DEP002 = ["openai", "anthropic"] }
+[tool.deptry.per_rule_ignores]
+DEP002 = ["openai", "anthropic"]
 
 # Package name mappings
 package_module_name_map = { openai = "openai", anthropic = "anthropic" }

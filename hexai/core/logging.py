@@ -32,6 +32,7 @@ Custom configuration:
 """
 
 import logging
+import os
 import sys
 from contextlib import suppress
 from functools import lru_cache
@@ -117,10 +118,10 @@ def configure_logging(
     if not force_reconfigure and current_config == _CURRENT_CONFIG:
         return
 
-    # Remove only our handlers, not all handlers (safer for testing/integration)
+    # Remove only our previously added handlers (not external ones)
+    # This ensures we don't interfere with pytest or other framework handlers
     for handler_id in _HANDLER_IDS:
         with suppress(ValueError):
-            # Handler may have been removed elsewhere, ignore ValueError
             logger.remove(handler_id)
     _HANDLER_IDS.clear()
 
@@ -141,9 +142,10 @@ def configure_logging(
         color_level = (
             "<level>{level: <8}</level>" if use_color and sys.stderr.isatty() else "{level: <8}"
         )
-        structured_format = f"{timestamp_fmt}[{color_level}]"
-        structured_format += "<cyan>{{name}}:{{function}}:{{line}}</cyan> "
-        structured_format += "| <level>{{message}}</level>"
+        structured_format = (
+            f"{timestamp_fmt}[{color_level}]"
+            "<cyan>{name}:{function}:{line}</cyan> | <level>{message}</level>"
+        )
 
         handler_id = logger.add(
             sys.stderr,
@@ -300,8 +302,11 @@ def _ensure_configured() -> None:
     This is called automatically by get_logger() if no configuration exists.
     Users can call configure_logging() explicitly for custom settings.
     """
+
     global _CURRENT_CONFIG
 
     if _CURRENT_CONFIG is None:
-        # Default configuration - minimal, non-intrusive
-        configure_logging(level="INFO", format="structured")
+        # Default configuration - check environment variables first
+        level = os.getenv("HEXDAG_LOG_LEVEL", "INFO").upper()
+        format_type = os.getenv("HEXDAG_LOG_FORMAT", "structured").lower()
+        configure_logging(level=level, format=format_type)  # type: ignore

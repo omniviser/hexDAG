@@ -111,7 +111,7 @@ class YamlPipelineBuilder:
 
         graph = self._build_graph_from_config(config)
 
-        logger.info("✅ Built pipeline with %d nodes", len(graph.nodes))
+        logger.info("✅ Built pipeline with {count} nodes", count=len(graph.nodes))
         return graph, pipeline_metadata
 
     def _parse_and_validate_yaml(self, yaml_content: str) -> dict[str, Any]:
@@ -157,9 +157,9 @@ class YamlPipelineBuilder:
 
         # Log warnings and suggestions
         for warning in validation_result.warnings:
-            logger.warning("YAML validation warning: %s", warning)
+            logger.warning("YAML validation warning: {msg}", msg=warning)
         for suggestion in validation_result.suggestions:
-            logger.info("YAML validation suggestion: %s", suggestion)
+            logger.info("YAML validation suggestion: {msg}", msg=suggestion)
 
         return config
 
@@ -240,13 +240,25 @@ class YamlPipelineBuilder:
         if field_mapping:
             resolved_mapping = self.field_mapping_registry.get(field_mapping)
             params["field_mapping"] = resolved_mapping
-            logger.debug("Node '%s' using field mapping: %s", node_id, resolved_mapping)
+            logger.debug(
+                "Node '{node_id}' using field mapping: {mapping}",
+                node_id=node_id,
+                mapping=resolved_mapping,
+            )
 
         # Auto-convert LLM nodes with incompatible template + schema combinations
         if node_type == "llm":
-            logger.debug("📋 LLM node '%s' original params: %s", node_id, list(params.keys()))
+            logger.debug(
+                "📋 LLM node '{node_id}' original params: {params}",
+                node_id=node_id,
+                params=list(params.keys()),
+            )
             params = self._auto_convert_llm_node(node_id, params)
-            logger.debug("📋 LLM node '%s' final params: %s", node_id, list(params.keys()))
+            logger.debug(
+                "📋 LLM node '{node_id}' final params: {params}",
+                node_id=node_id,
+                params=list(params.keys()),
+            )
 
         # Resolve function references
         if node_type == "function" and "fn" in params:
@@ -395,7 +407,9 @@ class YamlPipelineBuilder:
 
         for name, mapping in common_mappings.items():
             self.field_mapping_registry.register(name, mapping)
-            logger.debug("Registered common field mapping '%s': %s", name, mapping)
+            logger.debug(
+                "Registered common field mapping '{name}': {mapping}", name=name, mapping=mapping
+            )
 
     @staticmethod
     def _auto_convert_llm_node(node_id: str, params: dict[str, Any]) -> dict[str, Any]:

@@ -65,7 +65,7 @@ class ConfigLoader:
 
     def _load_and_parse(self, config_path: Path) -> HexDAGConfig:
         """Load and parse configuration file."""
-        logger.info("Loading configuration from %s", config_path)
+        logger.info("Loading configuration from {path}", path=config_path)
 
         # Load TOML
         with config_path.open("rb") as f:
@@ -207,12 +207,12 @@ class ConfigLoader:
         # Parse modules list
         if "modules" in data:
             config.modules = data["modules"]
-            logger.debug("Loaded %d modules", len(config.modules))
+            logger.debug("Loaded {count} modules", count=len(config.modules))
 
         # Parse plugins list
         if "plugins" in data:
             config.plugins = data["plugins"]
-            logger.debug("Loaded %d plugins", len(config.plugins))
+            logger.debug("Loaded {count} plugins", count=len(config.plugins))
 
         # Parse dev mode
         config.dev_mode = data.get("dev_mode", False)
@@ -223,7 +223,7 @@ class ConfigLoader:
         # Parse settings section
         if "settings" in data:
             config.settings = data["settings"]
-            logger.debug("Loaded %d settings", len(config.settings))
+            logger.debug("Loaded {count} settings", count=len(config.settings))
 
         return config
 

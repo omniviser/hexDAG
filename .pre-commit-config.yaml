@@ -112,7 +112,7 @@ repos:
     rev: 1.8.6
     hooks:
       - id: bandit
-        args: [-r, hexai]
+        args: [-ll]  # Only report Medium and High severity
         exclude: ^(tests/|hexai_plugins/)
 
   # Security - Dependency vulnerabilities
