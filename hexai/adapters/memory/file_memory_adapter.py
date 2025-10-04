@@ -14,9 +14,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexai.core.logging import get_logger
 from hexai.core.registry.decorators import adapter
 
@@ -76,9 +76,7 @@ class FileMemoryAdapter(ConfigurableAdapter):
         memory = FileMemoryAdapter(base_path="./cache", format="pickle")
     """
 
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for File Memory adapter."""
 
         base_path: str = Field(default="./memory_store", description="Base directory path")

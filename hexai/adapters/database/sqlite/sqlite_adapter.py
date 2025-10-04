@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexai.core.logging import get_logger
 from hexai.core.registry.decorators import adapter
 from hexai.core.types import TimeoutSeconds
+from hexai.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
 
@@ -31,9 +32,7 @@ class SQLiteAdapter(ConfigurableAdapter):
     """
 
     # Configuration schema for TOML generation
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for SQLite adapter."""
 
         db_path: str = Field(
@@ -171,10 +170,7 @@ class SQLiteAdapter(ConfigurableAdapter):
         bool
             True if valid, False otherwise
         """
-        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", identifier):
-            logger.warning(f"Invalid {identifier_type} name: {identifier}")
-            return False
-        return True
+        return validate_sql_identifier(identifier, identifier_type=identifier_type)
 
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables.

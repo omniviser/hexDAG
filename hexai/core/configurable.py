@@ -3,11 +3,98 @@
 This module provides:
 1. ConfigurableComponent - Protocol for components with configuration
 2. ConfigurableAdapter - Base class that implements the protocol and eliminates boilerplate
+3. SecretField - Helper for declaring secret configuration fields
 """
 
+from __future__ import annotations
+
+import os
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, SecretStr  # noqa: TC002
+
+from hexai.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class AdapterConfig(BaseModel):
+    """Base configuration class for all adapters.
+
+    This base class provides common configuration behavior:
+    - Frozen models (immutable after creation) for safety
+    - Consistent configuration across all adapters
+
+    Subclasses should define their specific configuration fields.
+
+    Examples
+    --------
+    >>> class MyAdapterConfig(AdapterConfig):
+    ...     api_key: str
+    ...     timeout: float = 30.0
+    >>> config = MyAdapterConfig(api_key="test")
+    >>> config.timeout
+    30.0
+    >>> config.timeout = 60  # doctest: +SKIP
+    ValidationError: Instance is frozen
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
+def SecretField(
+    env_var: str,
+    memory_key: str | None = None,
+    default: Any = None,
+    description: str | None = None,
+    **field_kwargs: Any,
+) -> Any:
+    """Create a secret field with auto-resolution from Memory or environment.
+
+    This helper marks a Pydantic field as a secret, which enables:
+    1. Auto-hiding in logs/repr (uses Pydantic SecretStr)
+    2. Auto-resolution from Memory (secret:KEY) via orchestrator
+    3. Fallback to environment variable if not in Memory
+    4. Clear documentation of secret requirements
+
+    Parameters
+    ----------
+    env_var : str
+        Environment variable name to read from (e.g., "OPENAI_API_KEY")
+    memory_key : str | None, optional
+        Key to use in Memory port (defaults to env_var).
+        Will be prefixed with "secret:" automatically.
+    default : Any, optional
+        Default value if not found (default: None)
+    description : str | None, optional
+        Field description for schema documentation
+    **field_kwargs : Any
+        Additional Pydantic Field() parameters
+
+    Returns
+    -------
+    Any
+        Pydantic Field with secret metadata (typed as Any for use in assignments)
+
+    Examples
+    --------
+    >>> class MyAdapterConfig(AdapterConfig):
+    ...     api_key: SecretStr | None = SecretField(
+    ...         env_var="OPENAI_API_KEY",
+    ...         description="OpenAI API key"
+    ...     )
+    ...     timeout: float = 30.0
+    """
+    return Field(
+        default=default,
+        description=description,
+        json_schema_extra={
+            "secret": True,
+            "env_var": env_var,
+            "memory_key": memory_key or env_var,
+        },
+        **field_kwargs,
+    )
 
 
 @runtime_checkable
@@ -85,13 +172,15 @@ class ConfigurableAdapter:
     Config: type[BaseModel]
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initialize adapter with automatic config management.
+        """Initialize adapter with automatic config and secret management.
 
         Parameters
         ----------
         **kwargs : Any
             Configuration options matching Config schema fields.
             Extra kwargs (not in Config) are stored for get_extra_kwarg().
+            Special kwargs:
+            - memory: Memory port for runtime secret resolution (optional)
 
         Raises
         ------
@@ -103,6 +192,12 @@ class ConfigurableAdapter:
             raise AttributeError(
                 f"{self.__class__.__name__} must define a nested Config class (Pydantic model)"
             )
+
+        # Extract memory for secret resolution (don't pass to config)
+        self._memory = kwargs.pop("memory", None)
+
+        # Auto-resolve secrets from environment (synchronous)
+        kwargs = self._resolve_secrets_from_env(kwargs)
 
         # Extract config fields from kwargs
         config_data = {
@@ -116,6 +211,51 @@ class ConfigurableAdapter:
 
         # Store extra kwargs not in config schema (for API-specific params)
         self._extra_kwargs = {k: v for k, v in kwargs.items() if k not in self.Config.model_fields}
+
+    def _resolve_secrets_from_env(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Resolve secret fields from environment variables.
+
+        Resolution order for secret fields:
+        1. Explicit kwarg (highest priority) - kwargs['api_key'] = "sk-..."
+        2. Environment variable - os.getenv("OPENAI_API_KEY")
+        3. Field default - None (will be set to default)
+
+        Parameters
+        ----------
+        kwargs : dict[str, Any]
+            Input keyword arguments
+
+        Returns
+        -------
+        dict[str, Any]
+            Updated kwargs with resolved secrets
+        """
+        for field_name, field_info in self.Config.model_fields.items():
+            # Check if field is marked as secret
+            extras = field_info.json_schema_extra
+            if not isinstance(extras, dict):
+                continue
+            if not extras.get("secret"):
+                continue
+
+            # Skip if already provided explicitly
+            if field_name in kwargs and kwargs[field_name]:
+                # Wrap in SecretStr if it's a plain string
+                if isinstance(kwargs[field_name], str):
+                    kwargs[field_name] = SecretStr(kwargs[field_name])
+                continue
+
+            # Try environment variable
+            env_var = extras.get("env_var")
+            if env_var and isinstance(env_var, str):
+                value = os.getenv(env_var)
+                if value and value != "":
+                    kwargs[field_name] = SecretStr(value)
+                    logger.debug(f"✓ Resolved {field_name} from env: {env_var}")
+                else:
+                    logger.debug(f"✗ {field_name} not found in env: {env_var}")
+
+        return kwargs
 
     def get_extra_kwarg(self, key: str, default: Any = None) -> Any:
         """Get extra kwarg not in config schema.

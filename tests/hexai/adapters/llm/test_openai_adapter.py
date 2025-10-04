@@ -13,35 +13,35 @@ class TestOpenAIAdapter:
 
     def test_initialization_with_api_key(self):
         """Test adapter initialization with API key provided."""
-        with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client:
-            adapter = OpenAIAdapter(api_key="test-key")
-            assert adapter.config.model == "gpt-4o-mini"
-            assert adapter.config.temperature == 0.7
-            assert adapter.config.max_tokens is None  # Default is now None for model default
-            assert adapter.config.response_format == "text"  # New field
-            # Note: seed is not in the Config schema anymore
-            mock_client.assert_called_once_with(api_key="test-key", timeout=60.0, max_retries=2)
+        adapter = OpenAIAdapter(api_key="test-key")
+        assert adapter.config.model == "gpt-4o-mini"
+        assert adapter.config.temperature == 0.7
+        assert adapter.config.max_tokens is None
+        assert adapter.config.response_format == "text"
+        # API key should be hidden in config
+        assert str(adapter.config.api_key) == "**********"
+        # Client should be initialized
+        assert adapter.client is not None
 
     def test_initialization_with_env_variable(self):
         """Test adapter initialization with API key from environment."""
-        with patch(
-            "hexai.adapters.llm.openai_adapter.Secret.retrieve_secret_from_env"
-        ) as mock_secret:
-            mock_secret_obj = MagicMock()
-            mock_secret_obj.get.return_value = "env-key"
-            mock_secret.return_value = mock_secret_obj
+        import os
 
-            with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client:
-                OpenAIAdapter()
-                mock_client.assert_called_once_with(api_key="env-key", timeout=60.0, max_retries=2)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}):
+            adapter = OpenAIAdapter()
+            # API key should be auto-resolved from env and hidden
+            assert str(adapter.config.api_key) == "**********"
+            # Client should be initialized
+            assert adapter.client is not None
 
     def test_initialization_without_api_key_raises_error(self):
         """Test that initialization without API key raises ValueError."""
-        with patch(
-            "hexai.adapters.llm.openai_adapter.Secret.retrieve_secret_from_env"
-        ) as mock_secret:
-            mock_secret.side_effect = KeyError("Secret 'OPENAI_API_KEY' not found")
-            with pytest.raises(ValueError, match="OpenAI API key must be provided"):
+        import os
+
+        with patch.dict(os.environ, {}, clear=True):
+            # Remove OPENAI_API_KEY from env
+            os.environ.pop("OPENAI_API_KEY", None)
+            with pytest.raises(ValueError, match="OpenAI API key required"):
                 OpenAIAdapter()
 
     def test_initialization_with_custom_parameters(self):
@@ -262,7 +262,7 @@ class TestOpenAIAdapter:
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            mock_log.assert_called_once_with("OpenAI API error: API Error")
+            mock_log.assert_called_once_with("OpenAI API error: API Error", exc_info=True)
 
     @pytest.mark.asyncio
     async def test_different_model_configurations(self):

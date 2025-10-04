@@ -42,31 +42,29 @@ class BaseLLMNode(BaseNodeFactory):
         return template
 
     @staticmethod
-    def infer_input_schema_from_template(template: TemplateType) -> dict[str, Any]:
+    def infer_input_schema_from_template(
+        template: str | TemplateType, special_params: set[str] | None = None
+    ) -> dict[str, Any]:
         """Infer input schema from template variables.
+
+        Parameters
+        ----------
+        template : str | TemplateType
+            Template to infer schema from
+        special_params : set[str] | None
+            Set of special parameter names to exclude from schema
 
         Returns
         -------
         dict[str, Any]
             Dictionary mapping variable names to their types
         """
-        variables = getattr(template, "input_vars", [])
-
-        # Filter out special parameters that are not template variables
-        special_params = {"context_history", "system_prompt"}
-        variables = [var for var in variables if var not in special_params]
-
-        if not variables:
-            return {"input": str}  # Default single input field
-
-        schema = {}
-        for var in variables:
-            # Handle nested variables like user.name -> user field
-            base_var = var.split(".")[0]
-            if base_var not in special_params:
-                schema[base_var] = str
-
-        return schema
+        # Use the shared implementation from BaseNodeFactory
+        if special_params is None:
+            special_params = {"context_history", "system_prompt"}
+        return BaseNodeFactory.infer_input_schema_from_template(
+            template, special_params=special_params
+        )
 
     def enhance_template_with_schema(
         self, template: TemplateType, output_model: type[BaseModel]

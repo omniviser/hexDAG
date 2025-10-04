@@ -4,9 +4,9 @@ import json
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field, SecretStr
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
 from hexai.core.logging import get_logger
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
@@ -19,7 +19,6 @@ from hexai.core.types import (
     TokenCount,
     TopP,
 )
-from hexai.helpers.secrets import Secret
 
 logger = get_logger(__name__)
 
@@ -36,17 +35,27 @@ class OpenAIAdapter(ConfigurableAdapter):
     This adapter provides integration with OpenAI's GPT models through
     their API. It supports async operations and handles message conversion
     between hexDAG's format and OpenAI's format.
+
+    Secret Management
+    -----------------
+    API key resolution order:
+    1. Explicit config: OpenAIAdapter(api_key="sk-...")
+    2. Environment variable: OPENAI_API_KEY
+    3. Memory port (orchestrator): secret:OPENAI_API_KEY
+
+    The API key is automatically hidden in logs and repr using Pydantic SecretStr.
     """
 
     # Configuration schema for TOML generation
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for OpenAI adapter."""
 
-        api_key: str | None = Field(
-            default=None, description="OpenAI API key (or use OPENAI_API_KEY env var)"
+        # Secret field - auto-resolved from env/memory, auto-hidden in logs
+        api_key: SecretStr | None = SecretField(
+            env_var="OPENAI_API_KEY", description="OpenAI API key (auto-hidden in logs)"
         )
+
+        # Regular configuration fields
         model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
         temperature: Temperature02 = 0.7
         max_tokens: TokenCount | None = None
@@ -70,25 +79,24 @@ class OpenAIAdapter(ConfigurableAdapter):
         Args
         ----
             **kwargs: Configuration options (api_key, model, temperature, etc.)
+                     Secrets are auto-resolved from environment or memory port.
         """
-        # Initialize config (accessible via self.config.field_name)
+        # Initialize config - secrets are auto-resolved in super().__init__()
         super().__init__(**kwargs)
 
-        # Get API key (from config or environment)
-        api_key_str = self.config.api_key
-        if not api_key_str:
-            try:
-                api_secret = Secret.retrieve_secret_from_env("OPENAI_API_KEY")
-                api_key_str = api_secret.get()
-            except (KeyError, ValueError) as e:
-                raise ValueError(
-                    f"OpenAI API key must be provided either as parameter or "
-                    f"through OPENAI_API_KEY environment variable: {e}"
-                ) from e
+        # Extract API key from config (already resolved)
+        api_key = self.config.api_key.get_secret_value() if self.config.api_key else None
+        if not api_key:
+            raise ValueError(
+                "OpenAI API key required. Provide via:\n"
+                "1. api_key parameter\n"
+                "2. OPENAI_API_KEY environment variable\n"
+                "3. Memory port (secret:OPENAI_API_KEY) from orchestrator"
+            )
 
         # Initialize OpenAI client
         client_kwargs: dict[str, Any] = {
-            "api_key": api_key_str,
+            "api_key": api_key,
             "timeout": self.config.timeout,
             "max_retries": self.config.max_retries,
         }
@@ -143,7 +151,7 @@ class OpenAIAdapter(ConfigurableAdapter):
             if stop_seq := self.get_extra_kwarg("stop_sequences"):
                 request_params["stop"] = stop_seq
 
-            # Add response format if JSON mode is requested
+            # Handle response_format for structured output
             if self.config.response_format == "json_object":
                 request_params["response_format"] = {"type": "json_object"}
 
@@ -153,29 +161,23 @@ class OpenAIAdapter(ConfigurableAdapter):
             # Extract content from response with better error handling
             if response.choices and len(response.choices) > 0:
                 message = response.choices[0].message
-                if message.content:
-                    return str(message.content)
+                if message and message.content:
+                    content: str = str(message.content)
 
-                # Handle function calls or tool calls if present (for future extensibility)
-                if (
-                    hasattr(message, "tool_calls")
-                    and message.tool_calls
-                    and len(message.tool_calls) > 0
-                ):
-                    # Return tool call information as JSON string
-                    return json.dumps([
-                        {
-                            "id": tc.id,
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            },
-                        }
-                        for tc in message.tool_calls
-                    ])
+                    # Parse JSON if response_format is json_object
+                    if self.config.response_format == "json_object":
+                        try:
+                            # Validate it's valid JSON
+                            json.loads(content)
+                            return content
+                        except json.JSONDecodeError:
+                            logger.warning("Response was not valid JSON despite json_object format")
+                            return content
+                    return content
 
+            logger.warning("No content in OpenAI response")
             return None
 
         except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
+            logger.error(f"OpenAI API error: {e}", exc_info=True)
             return None

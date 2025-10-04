@@ -285,6 +285,88 @@ def get_annotated_metadata(type_hint: Any) -> tuple[Any, tuple[Any, ...]]:
 
 
 # ============================================================================
+# Secret Wrapper
+# ============================================================================
+
+
+class Secret:
+    """Minimal secret wrapper to avoid accidental str() in logs.
+
+    This class wraps sensitive string values to prevent them from being
+    accidentally logged or printed. It's used by the SecretPort interface
+    to return secret values in a safe manner.
+
+    The Secret class uses name mangling (double underscore) to make it
+    harder to accidentally access the raw value.
+
+    Examples
+    --------
+    >>> secret = Secret("my-api-key")
+    >>> print(secret)  # Safe - won't print the value
+    <SECRET>
+    >>> str(secret)  # Safe - won't convert to string
+    '<SECRET>'
+    >>> secret.get()  # Explicit access required
+    'my-api-key'
+
+    Usage in adapters::
+
+        # SecretPort implementation
+        async def aget_secret(self, key: str) -> Secret:
+            value = os.getenv(key)
+            return Secret(value)
+
+        # Using the secret
+        secret = await adapter.aget_secret("API_KEY")
+        print(secret)  # <SECRET> (safe)
+        api_key = secret.get()  # "sk-..." (explicit)
+    """
+
+    def __init__(self, value: str) -> None:
+        """Initialize secret with a value.
+
+        Parameters
+        ----------
+        value : str
+            The secret value to wrap
+        """
+        self.__value = value  # Double underscore for name mangling
+
+    def get(self) -> str:
+        """Return the wrapped secret value securely.
+
+        This is the only way to access the actual secret value.
+        Requiring explicit .get() makes it clear when secrets are being accessed.
+
+        Returns
+        -------
+        str
+            The secret value
+        """
+        return self.__value
+
+    def __repr__(self) -> str:
+        """Return a safe string representation for debugging.
+
+        Returns
+        -------
+        str
+            A safe string representation "<SECRET>"
+        """
+        return "<SECRET>"
+
+    def __str__(self) -> str:
+        """Return a safe string representation for display.
+
+        Returns
+        -------
+        str
+            A safe string representation "<SECRET>"
+        """
+        return "<SECRET>"
+
+
+# ============================================================================
 # Backward Compatibility (deprecated, use specific types above)
 # ============================================================================
 
@@ -317,6 +399,8 @@ __all__ = [
     "TenantId",
     "Confidence",
     "Percentage",
+    # Secret wrapper
+    "Secret",
     # Framework types
     "Logger",
     "PortInstance",

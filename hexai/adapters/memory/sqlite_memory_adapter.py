@@ -6,12 +6,13 @@ providing persistent key-value storage with SQL database benefits.
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexai.core.logging import get_logger
 from hexai.core.ports.database import DatabasePort
 from hexai.core.registry.decorators import adapter
+from hexai.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
 
@@ -51,9 +52,7 @@ class SQLiteMemoryAdapter(ConfigurableAdapter):
         memory = SQLiteMemoryAdapter(database=db, table_name="memory_store")
     """
 
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for SQLite Memory adapter."""
 
         table_name: str = Field(
@@ -99,20 +98,8 @@ class SQLiteMemoryAdapter(ConfigurableAdapter):
         ----------
         table_name : str
             Table name to validate
-
-        Raises
-        ------
-        ValueError
-            If table name contains invalid characters
         """
-        import re
-
-        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
-            raise ValueError(
-                f"Invalid table name '{table_name}'. "
-                "Table names must start with a letter or underscore "
-                "and contain only letters, numbers, and underscores."
-            )
+        validate_sql_identifier(table_name, identifier_type="table", raise_on_invalid=True)
 
     async def _ensure_table(self) -> None:
         """Create key-value table if it doesn't exist."""

@@ -1,13 +1,18 @@
 """Simplified BaseNodeFactory for creating nodes with Pydantic models."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, create_model
 
 from hexai.core.domain.dag import NodeSpec
 from hexai.core.protocols import is_schema_type
+
+if TYPE_CHECKING:
+    from hexai.core.application.prompt.template import PromptTemplate
 
 
 @lru_cache(maxsize=256)
@@ -108,6 +113,73 @@ class BaseNodeFactory(ABC):
             raise ValueError(
                 f"Schema must be a dict, type, or Pydantic model, got {type(schema).__name__}"
             ) from e
+
+    @staticmethod
+    def infer_input_schema_from_template(
+        template: str | PromptTemplate,
+        special_params: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """Infer input schema from template variables with configurable filtering.
+
+        This method extracts variable names from a prompt template and creates
+        a schema dictionary mapping those variables to string types. It supports
+        filtering out special parameters that are not user inputs.
+
+        Parameters
+        ----------
+        template : str | PromptTemplate
+            The prompt template to analyze. Can be a string or PromptTemplate instance.
+        special_params : set[str] | None, optional
+            Set of parameter names to exclude from the schema (e.g., "context_history").
+            If None, no filtering is applied.
+
+        Returns
+        -------
+        dict[str, Any]
+            Schema dictionary mapping variable names to str type.
+            Returns {"input": str} if no variables found.
+
+        Examples
+        --------
+        >>> BaseNodeFactory.infer_input_schema_from_template("Hello {{name}}")
+        {'name': <class 'str'>}
+
+        >>> BaseNodeFactory.infer_input_schema_from_template(
+        ...     "Process {{user}} with {{context_history}}",
+        ...     special_params={"context_history"}
+        ... )
+        {'user': <class 'str'>}
+
+        >>> BaseNodeFactory.infer_input_schema_from_template("No variables")
+        {'input': <class 'str'>}
+        """
+        # Import here to avoid circular dependency
+        from hexai.core.application.prompt.template import PromptTemplate
+
+        # Convert string to PromptTemplate if needed
+        if isinstance(template, str):
+            template = PromptTemplate(template)
+
+        # Extract variables from template
+        variables = getattr(template, "input_vars", [])
+
+        # Filter special parameters if provided
+        if special_params:
+            variables = [v for v in variables if v not in special_params]
+
+        # Return default schema if no variables
+        if not variables:
+            return {"input": str}
+
+        # Handle nested variables (e.g., "user.name" -> "user")
+        schema: dict[str, Any] = {}
+        for var in variables:
+            base_var = var.split(".")[0]
+            # Double-check against special params for nested variables
+            if not special_params or base_var not in special_params:
+                schema[base_var] = str
+
+        return schema
 
     def _copy_required_ports_to_wrapper(self, wrapper_fn: Any) -> None:
         """Copy required_ports metadata from factory class to wrapper function.

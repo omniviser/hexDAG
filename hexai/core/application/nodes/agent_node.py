@@ -175,14 +175,9 @@ class ReActAgentNode(BaseNodeFactory):
         dict[str, Any]
             Inferred input schema mapping
         """
-        if isinstance(prompt, str):
-            prompt = PromptTemplate(prompt)
-
-        if hasattr(prompt, "input_vars"):
-            user_vars = set(prompt.input_vars)
-            return dict.fromkeys(user_vars, str) if user_vars else {"input": str}
-
-        return {"input": str}
+        # Use the shared implementation from BaseNodeFactory
+        # AgentNode doesn't filter special params, so pass None
+        return BaseNodeFactory.infer_input_schema_from_template(prompt, special_params=None)
 
     def _get_current_prompt(
         self,

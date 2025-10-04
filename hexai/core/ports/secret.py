@@ -8,7 +8,7 @@ from hexai.core.registry.decorators import port
 if TYPE_CHECKING:
     from hexai.core.ports.healthcheck import HealthStatus
     from hexai.core.ports.memory import Memory
-    from hexai.helpers.secrets import Secret
+    from hexai.core.types import Secret
 
 
 @port(

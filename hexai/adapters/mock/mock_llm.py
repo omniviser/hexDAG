@@ -3,9 +3,9 @@
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexai.core.ports.llm import LLM, MessageList
 from hexai.core.registry import adapter
 
@@ -22,9 +22,7 @@ class MockLLM(LLM, ConfigurableAdapter):
     """
 
     # Configuration schema for TOML generation
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for Mock LLM adapter."""
 
         responses: list[str] | str | None = Field(

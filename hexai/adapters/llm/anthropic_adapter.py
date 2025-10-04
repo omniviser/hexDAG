@@ -3,9 +3,9 @@
 from typing import Any
 
 from anthropic import AsyncAnthropic
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field, SecretStr
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
 from hexai.core.logging import get_logger
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
@@ -16,7 +16,6 @@ from hexai.core.types import (
     TimeoutSeconds,
     TopP,
 )
-from hexai.helpers.secrets import Secret
 
 logger = get_logger(__name__)
 
@@ -33,17 +32,27 @@ class AnthropicAdapter(ConfigurableAdapter):
     This adapter provides integration with Anthropic's Claude models through
     their API. It supports async operations and handles message conversion
     between hexDAG's format and Anthropic's format.
+
+    Secret Management
+    -----------------
+    API key resolution order:
+    1. Explicit config: AnthropicAdapter(api_key="sk-...")
+    2. Environment variable: ANTHROPIC_API_KEY
+    3. Memory port (orchestrator): secret:ANTHROPIC_API_KEY
+
+    The API key is automatically hidden in logs and repr using Pydantic SecretStr.
     """
 
     # Configuration schema for TOML generation
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for Anthropic adapter."""
 
-        api_key: str | None = Field(
-            default=None, description="Anthropic API key (or use ANTHROPIC_API_KEY env var)"
+        # Secret field - auto-resolved from env/memory, auto-hidden in logs
+        api_key: SecretStr | None = SecretField(
+            env_var="ANTHROPIC_API_KEY", description="Anthropic API key (auto-hidden in logs)"
         )
+
+        # Regular configuration fields
         model: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model to use")
         temperature: Temperature01 = 0.7
         max_tokens: PositiveInt = 4096
@@ -62,38 +71,31 @@ class AnthropicAdapter(ConfigurableAdapter):
         Args
         ----
             **kwargs: Configuration options (api_key, model, temperature, etc.)
+                     Secrets are auto-resolved from environment or memory port.
         """
-        # Initialize config (accessible via self.config.field_name)
+        # Initialize config - secrets are auto-resolved in super().__init__()
         super().__init__(**kwargs)
-        self.model = self.config.model
-        self.temperature = self.config.temperature
-        self.max_tokens = self.config.max_tokens
-        self.top_p = self.config.top_p
-        self.top_k = self.config.top_k
-        self.system_prompt = self.config.system_prompt
-        self.stop_sequences = kwargs.get("stop_sequences")  # Not in config schema
 
-        # Get API key
-        api_key_str = self.config.api_key
-        if not api_key_str:
-            try:
-                api_secret = Secret.retrieve_secret_from_env("ANTHROPIC_API_KEY")
-                api_key_str = api_secret.get()
-            except (KeyError, ValueError) as e:
-                raise ValueError(
-                    f"Anthropic API key must be provided either as parameter or "
-                    f"through ANTHROPIC_API_KEY environment variable: {e}"
-                ) from e
+        # Extract API key from config (already resolved)
+        api_key = self.config.api_key.get_secret_value() if self.config.api_key else None
+        if not api_key:
+            raise ValueError(
+                "Anthropic API key required. Provide via:\n"
+                "1. api_key parameter\n"
+                "2. ANTHROPIC_API_KEY environment variable\n"
+                "3. Memory port (secret:ANTHROPIC_API_KEY) from orchestrator"
+            )
 
         # Initialize Anthropic client
         client_kwargs: dict[str, Any] = {
-            "api_key": api_key_str,
+            "api_key": api_key,
             "timeout": self.config.timeout,
             "max_retries": self.config.max_retries,
         }
 
-        if "base_url" in kwargs:
-            client_kwargs["base_url"] = kwargs["base_url"]
+        # Add base_url if provided as extra kwarg
+        if base_url := self.get_extra_kwarg("base_url"):
+            client_kwargs["base_url"] = base_url
 
         self.client = AsyncAnthropic(**client_kwargs)
 
@@ -111,7 +113,7 @@ class AnthropicAdapter(ConfigurableAdapter):
         try:
             # Convert MessageList to Anthropic format
             # Anthropic requires system messages to be separate
-            system_message = self.system_prompt
+            system_message = self.config.system_prompt
             anthropic_messages = []
 
             for msg in messages:
@@ -125,25 +127,24 @@ class AnthropicAdapter(ConfigurableAdapter):
                     # Convert "user" and "assistant" messages
                     anthropic_messages.append({"role": msg.role, "content": msg.content})
 
-            # Make API call
             # Build request parameters
             request_params: dict[str, Any] = {
-                "model": self.model,
+                "model": self.config.model,
                 "messages": anthropic_messages,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "top_p": self.top_p,
+                "temperature": self.config.temperature,
+                "max_tokens": self.config.max_tokens,
+                "top_p": self.config.top_p,
             }
 
             # Add optional parameters
             if system_message is not None:
                 request_params["system"] = system_message
 
-            if self.top_k is not None:
-                request_params["top_k"] = self.top_k
+            if self.config.top_k is not None:
+                request_params["top_k"] = self.config.top_k
 
-            if self.stop_sequences:
-                request_params["stop_sequences"] = self.stop_sequences
+            if stop_sequences := self.get_extra_kwarg("stop_sequences"):
+                request_params["stop_sequences"] = stop_sequences
 
             response = await self.client.messages.create(**request_params)
 
@@ -154,8 +155,9 @@ class AnthropicAdapter(ConfigurableAdapter):
                 if hasattr(first_content, "text"):
                     return str(first_content.text)
 
+            logger.warning("No text content in Anthropic response")
             return None
 
         except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
+            logger.error(f"Anthropic API error: {e}", exc_info=True)
             return None

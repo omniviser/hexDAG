@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from hexai.core.ports.healthcheck import HealthStatus
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from hexai.core.configurable import ConfigurableAdapter
+from hexai.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexai.core.ports.memory import Memory
 from hexai.core.registry import adapter
 
@@ -28,9 +28,7 @@ class InMemoryMemory(Memory, ConfigurableAdapter):
     """
 
     # Configuration schema for TOML generation
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
+    class Config(AdapterConfig):
         """Configuration schema for In-Memory adapter."""
 
         delay_seconds: float = Field(

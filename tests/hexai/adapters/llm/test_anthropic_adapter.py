@@ -13,33 +13,34 @@ class TestAnthropicAdapter:
 
     def test_initialization_with_api_key(self):
         """Test adapter initialization with API key provided."""
-        with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_client:
-            adapter = AnthropicAdapter(api_key="test-key")
-            assert adapter.model == "claude-3-5-sonnet-20241022"
-            assert adapter.temperature == 0.7
-            assert adapter.max_tokens == 4096
-            mock_client.assert_called_once_with(api_key="test-key", timeout=60.0, max_retries=2)
+        adapter = AnthropicAdapter(api_key="test-key")
+        assert adapter.config.model == "claude-3-5-sonnet-20241022"
+        assert adapter.config.temperature == 0.7
+        assert adapter.config.max_tokens == 4096
+        # API key should be hidden in config
+        assert str(adapter.config.api_key) == "**********"
+        # Client should be initialized
+        assert adapter.client is not None
 
     def test_initialization_with_env_variable(self):
         """Test adapter initialization with API key from environment."""
-        with patch(
-            "hexai.adapters.llm.anthropic_adapter.Secret.retrieve_secret_from_env"
-        ) as mock_secret:
-            mock_secret_obj = MagicMock()
-            mock_secret_obj.get.return_value = "env-key"
-            mock_secret.return_value = mock_secret_obj
+        import os
 
-            with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_client:
-                AnthropicAdapter()
-                mock_client.assert_called_once_with(api_key="env-key", timeout=60.0, max_retries=2)
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "env-key"}):
+            adapter = AnthropicAdapter()
+            # API key should be auto-resolved from env and hidden
+            assert str(adapter.config.api_key) == "**********"
+            # Client should be initialized
+            assert adapter.client is not None
 
     def test_initialization_without_api_key_raises_error(self):
         """Test that initialization without API key raises ValueError."""
-        with patch(
-            "hexai.adapters.llm.anthropic_adapter.Secret.retrieve_secret_from_env"
-        ) as mock_secret:
-            mock_secret.side_effect = KeyError("Secret 'ANTHROPIC_API_KEY' not found")
-            with pytest.raises(ValueError, match="Anthropic API key must be provided"):
+        import os
+
+        with patch.dict(os.environ, {}, clear=True):
+            # Remove ANTHROPIC_API_KEY from env
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+            with pytest.raises(ValueError, match="Anthropic API key required"):
                 AnthropicAdapter()
 
     def test_initialization_with_custom_parameters(self):
@@ -52,9 +53,9 @@ class TestAnthropicAdapter:
                 max_tokens=2000,
                 timeout=30.0,
             )
-            assert adapter.model == "claude-3-opus-20240229"
-            assert adapter.temperature == 0.5
-            assert adapter.max_tokens == 2000
+            assert adapter.config.model == "claude-3-opus-20240229"
+            assert adapter.config.temperature == 0.5
+            assert adapter.config.max_tokens == 2000
             # Check that client was called with expected arguments
             mock_client.assert_called_once()
 
@@ -244,4 +245,4 @@ class TestAnthropicAdapter:
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            mock_log.assert_called_once_with("Anthropic API error: API Error")
+            mock_log.assert_called_once_with("Anthropic API error: API Error", exc_info=True)

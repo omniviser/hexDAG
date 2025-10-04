@@ -1,5 +1,5 @@
 """CLI command modules."""
 
-from . import init_cmd, plugins_cmd, registry_cmd
+from . import create_cmd, init_cmd, plugins_cmd, registry_cmd, schema_cmd, validate_cmd
 
-__all__ = ["init_cmd", "plugins_cmd", "registry_cmd"]
+__all__ = ["create_cmd", "init_cmd", "plugins_cmd", "registry_cmd", "schema_cmd", "validate_cmd"]
