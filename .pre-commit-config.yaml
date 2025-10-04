@@ -199,7 +199,7 @@ repos:
 
       - id: vulture
         name: vulture - dead code detection
-        entry: uv run vulture hexai/ --min-confidence 90
+        entry: uv run vulture hexai/ .vulture_whitelist.py --min-confidence 90
         language: system
         types: [python]
         stages: [pre-commit]

@@ -5,8 +5,8 @@ from typing import Any
 from anthropic import AsyncAnthropic
 from pydantic import BaseModel, Field
 
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
 from hexai.core.types import (
@@ -27,7 +27,7 @@ logger = get_logger(__name__)
     namespace="core",
     description="Anthropic Claude adapter for language model interactions",
 )
-class AnthropicAdapter(ConfigurableComponent):
+class AnthropicAdapter(ConfigurableAdapter):
     """Anthropic implementation of the LLM port.
 
     This adapter provides integration with Anthropic's Claude models through
@@ -51,10 +51,8 @@ class AnthropicAdapter(ConfigurableComponent):
         timeout: TimeoutSeconds = 60.0
         max_retries: RetryCount = 2
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(self, **kwargs: Any):
         """Initialize Anthropic adapter.
@@ -63,27 +61,18 @@ class AnthropicAdapter(ConfigurableComponent):
         ----
             **kwargs: Configuration options (api_key, model, temperature, etc.)
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
-
-        # Create and validate config
-        config = self.Config(**config_data)
-
-        # Store configuration
-        self.config = config
-        self.model = config.model
-        self.temperature = config.temperature
-        self.max_tokens = config.max_tokens
-        self.top_p = config.top_p
-        self.top_k = config.top_k
-        self.system_prompt = config.system_prompt
+        # Initialize config (accessible via self.config.field_name)
+        super().__init__(**kwargs)
+        self.model = self.config.model
+        self.temperature = self.config.temperature
+        self.max_tokens = self.config.max_tokens
+        self.top_p = self.config.top_p
+        self.top_k = self.config.top_k
+        self.system_prompt = self.config.system_prompt
         self.stop_sequences = kwargs.get("stop_sequences")  # Not in config schema
 
         # Get API key
-        api_key_str = config.api_key
+        api_key_str = self.config.api_key
         if not api_key_str:
             try:
                 api_secret = Secret.retrieve_secret_from_env("ANTHROPIC_API_KEY")
@@ -97,8 +86,8 @@ class AnthropicAdapter(ConfigurableComponent):
         # Initialize Anthropic client
         client_kwargs: dict[str, Any] = {
             "api_key": api_key_str,
-            "timeout": config.timeout,
-            "max_retries": config.max_retries,
+            "timeout": self.config.timeout,
+            "max_retries": self.config.max_retries,
         }
 
         if "base_url" in kwargs:

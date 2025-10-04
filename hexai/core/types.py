@@ -23,7 +23,7 @@ class Config(BaseModel):
 ```
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, get_args, get_origin
 
 from pydantic import Field
 
@@ -150,6 +150,141 @@ type PortInstance = Any  # Generic port implementation
 type PortsDict = dict[str, PortInstance]  # Dictionary of port name -> port instance
 
 # ============================================================================
+# Type Inspection Utilities
+# ============================================================================
+
+
+def is_literal_type(type_hint: Any) -> bool:
+    """Check if type hint is a Literal type.
+
+    Examples
+    --------
+    >>> from typing import Literal
+    >>> is_literal_type(Literal["a", "b"])
+    True
+    >>> is_literal_type(str)
+    False
+    """
+    try:
+        from typing import Literal
+
+        origin = get_origin(type_hint)
+        return origin is Literal
+    except ImportError:
+        return False
+
+
+def is_union_type(type_hint: Any) -> bool:
+    """Check if type hint is a Union type (including | syntax).
+
+    Examples
+    --------
+    >>> from typing import Union
+    >>> is_union_type(Union[str, int])
+    True
+    >>> is_union_type(str | int)
+    True
+    >>> is_union_type(str)
+    False
+    """
+    origin = get_origin(type_hint)
+
+    # Handle Union type
+    try:
+        from typing import Union
+
+        if origin is Union:
+            return True
+    except ImportError:
+        pass
+
+    # Handle | syntax (Python 3.10+)
+    try:
+        from types import UnionType
+
+        if isinstance(type_hint, UnionType):
+            return True
+    except ImportError:
+        pass
+
+    return False
+
+
+def is_list_type(type_hint: Any) -> bool:
+    """Check if type hint is a list type.
+
+    Examples
+    --------
+    >>> is_list_type(list[str])
+    True
+    >>> is_list_type(list)
+    True
+    >>> is_list_type(str)
+    False
+    """
+    origin = get_origin(type_hint)
+    return origin is list or type_hint is list
+
+
+def is_dict_type(type_hint: Any) -> bool:
+    """Check if type hint is a dict type.
+
+    Examples
+    --------
+    >>> is_dict_type(dict[str, int])
+    True
+    >>> is_dict_type(dict)
+    True
+    >>> is_dict_type(str)
+    False
+    """
+    origin = get_origin(type_hint)
+    return origin is dict or type_hint is dict
+
+
+def is_annotated_type(type_hint: Any) -> bool:
+    """Check if type hint is an Annotated type.
+
+    Examples
+    --------
+    >>> from typing import Annotated
+    >>> from pydantic import Field
+    >>> is_annotated_type(Annotated[int, Field(ge=0)])
+    True
+    >>> is_annotated_type(int)
+    False
+    """
+    try:
+        from typing import Annotated
+
+        origin = get_origin(type_hint)
+        return origin is Annotated
+    except ImportError:
+        return False
+
+
+def get_annotated_metadata(type_hint: Any) -> tuple[Any, tuple[Any, ...]]:
+    """Extract base type and metadata from Annotated type.
+
+    Examples
+    --------
+    >>> from typing import Annotated
+    >>> from pydantic import Field
+    >>> base, metadata = get_annotated_metadata(Annotated[int, Field(ge=0)])
+    >>> base
+    <class 'int'>
+    """
+    args = get_args(type_hint)
+    if not args:
+        return type_hint, ()
+
+    base_type = args[0]
+    metadata = args[1:] if len(args) > 1 else ()
+
+    return base_type, metadata
+
+
+# ============================================================================
 # Backward Compatibility (deprecated, use specific types above)
 # ============================================================================
 
@@ -186,4 +321,11 @@ __all__ = [
     "Logger",
     "PortInstance",
     "PortsDict",
+    # Type inspection utilities
+    "is_literal_type",
+    "is_union_type",
+    "is_list_type",
+    "is_dict_type",
+    "is_annotated_type",
+    "get_annotated_metadata",
 ]

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class TestConfigurableComponent:
     """Test the ConfigurableComponent protocol."""
 
-    def test_protocol_implementation(self):
+    def test_protocol_implementation(self) -> None:
         """Test that classes can implement the ConfigurableComponent protocol."""
 
         class MyConfig(BaseModel):
@@ -30,7 +30,7 @@ class TestConfigurableComponent:
         # Check the methods work
         assert adapter.get_config_class() == MyConfig
 
-    def test_config_class_fields(self):
+    def test_config_class_fields(self) -> None:
         """Test that config class fields are accessible."""
 
         class TestConfig(BaseModel):

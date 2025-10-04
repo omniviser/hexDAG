@@ -15,10 +15,10 @@ class TestOpenAIAdapter:
         """Test adapter initialization with API key provided."""
         with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client:
             adapter = OpenAIAdapter(api_key="test-key")
-            assert adapter.model == "gpt-4o-mini"
-            assert adapter.temperature == 0.7
-            assert adapter.max_tokens is None  # Default is now None for model default
-            assert adapter.response_format == "text"  # New field
+            assert adapter.config.model == "gpt-4o-mini"
+            assert adapter.config.temperature == 0.7
+            assert adapter.config.max_tokens is None  # Default is now None for model default
+            assert adapter.config.response_format == "text"  # New field
             # Note: seed is not in the Config schema anymore
             mock_client.assert_called_once_with(api_key="test-key", timeout=60.0, max_retries=2)
 
@@ -54,9 +54,9 @@ class TestOpenAIAdapter:
                 max_tokens=2000,
                 timeout=30.0,
             )
-            assert adapter.model == "gpt-4o"
-            assert adapter.temperature == 0.5
-            assert adapter.max_tokens == 2000
+            assert adapter.config.model == "gpt-4o"
+            assert adapter.config.temperature == 0.5
+            assert adapter.config.max_tokens == 2000
             mock_client.assert_called_once_with(api_key="test-key", timeout=30.0, max_retries=2)
 
     @pytest.mark.asyncio

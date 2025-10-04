@@ -11,6 +11,8 @@ import re
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
+# Import from configurable module to avoid circular dependency with hexai.core.__init__
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.context import get_observer_manager
 from hexai.core.exceptions import ValidationError
 from hexai.core.logging import get_logger
@@ -236,6 +238,20 @@ def adapter(
         cls = component(ComponentType.ADAPTER, name, namespace=namespace, description=description)(
             cls
         )
+
+        # Validate adapter uses ConfigurableAdapter (best practice)
+        # Check if cls is a class and has __mro__ attribute
+        if inspect.isclass(cls):
+            try:
+                if not any(
+                    issubclass(base, ConfigurableAdapter) for base in cls.__mro__ if base != cls
+                ):
+                    logger.warning(
+                        f"Adapter '{cls.__name__}' does not inherit from ConfigurableAdapter. "
+                        f"Consider using ConfigurableAdapter to eliminate config boilerplate. "
+                    )
+            except (ImportError, TypeError):
+                pass  # ConfigurableAdapter not available or comparison failed
 
         # Normalize the port reference to a string
         port_name = implements_port

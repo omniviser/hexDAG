@@ -25,8 +25,13 @@ from hexai.core.registry.models import (
     NodeSubtype,
     RegistryValidator,
 )
+from hexai.core.schema import SchemaGenerator
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable as CallableType,  # noqa: F401 - used in cast() string literal
+    )
+
     from hexai.core.config import ManifestEntry
 
 logger = get_logger(__name__)
@@ -61,6 +66,9 @@ class ComponentRegistry:
 
         # Configurable components tracking
         self._configurable_components: dict[str, dict[str, Any]] = {}
+
+        # Schema cache for performance
+        self._schema_cache: dict[str, dict | str] = {}
 
         # Simple lock for bootstrap phase only
         self._lock = Lock()
@@ -397,6 +405,73 @@ class ComponentRegistry:
         """Get all registered configurable components."""
         return self._configurable_components.copy()
 
+    def get_schema(
+        self, name: str, namespace: str | None = None, format: str = "dict"
+    ) -> dict | str:
+        """Get auto-generated schema for a component.
+
+        Generates JSON Schema from the component's callable signature.
+        Schemas are cached for performance.
+
+        Parameters
+        ----------
+        name : str
+            Component name
+        namespace : str | None
+            Optional namespace (searches if not provided)
+        format : str
+            Output format - "dict", "yaml", or "json"
+
+        Returns
+        -------
+        dict | str
+            Schema in requested format
+
+
+        Examples
+        --------
+        >>> schema = registry.get_schema("llm_node", format="yaml")  # doctest: +SKIP
+        >>> print(schema)  # doctest: +SKIP
+        type: object
+        properties:
+          template:
+            type: string
+        ...
+        """
+        # Create cache key
+        cache_key = f"{namespace or 'auto'}:{name}:{format}"
+
+        # Check cache
+        if cache_key in self._schema_cache:
+            return self._schema_cache[cache_key]
+
+        # Get component metadata
+        metadata = self.get_metadata(name, namespace)
+
+        # Extract callable from component
+        import inspect
+        from typing import cast
+
+        component: Any = metadata.raw_component
+
+        # If it's a class, get the __call__ method
+        if inspect.isclass(component) and callable(component):
+            # Get __call__ method from an instance
+            try:
+                instance = component()
+                component = instance.__call__
+            except Exception:
+                # Fallback: try to get __call__ from class
+                component = component.__call__
+
+        # Generate schema (component is now guaranteed to be callable)
+        schema = SchemaGenerator.from_callable(cast("CallableType", component), format=format)
+
+        # Cache the result
+        self._schema_cache[cache_key] = schema
+
+        return schema
+
     # ========================================================================
     # Component Listing
     # ========================================================================
@@ -526,6 +601,7 @@ class ComponentRegistry:
         self._components.clear()
         self._protected_components.clear()
         self._configurable_components.clear()
+        self._schema_cache.clear()
         self._ready = False
         self._manifest = None
         self._dev_mode = False

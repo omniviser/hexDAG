@@ -7,14 +7,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.exceptions import ResourceNotFoundError
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.registry import adapter
 
 
 @adapter(name="mock_tool_router", implements_port="tool_router", namespace="plugin")
-class MockToolRouter(ToolRouter, ConfigurableComponent):
+class MockToolRouter(ToolRouter, ConfigurableAdapter):
     """Mock implementation of ToolRouter for testing."""
 
     # Configuration schema for TOML generation
@@ -31,10 +31,8 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
             default=True, description="Whether to raise an error for unknown tools"
         )
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize mock tool router.
@@ -43,19 +41,8 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
         ----
             **kwargs: Configuration options
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
-
-        # Create and validate config
-        config = self.Config(**config_data)
-
-        # Store configuration
-        self.config = config
-        self.delay_seconds = config.delay_seconds
-        self.raise_on_unknown_tool = config.raise_on_unknown_tool
+        # Initialize config (accessible via self.config.field_name)
+        ConfigurableAdapter.__init__(self, **kwargs)
 
         # Default mock tools
         self.tools: dict[str, dict[str, Any]] = {
@@ -112,8 +99,8 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
             If tool not found and raise_on_unknown_tool is True
         """
         # Simulate delay
-        if self.delay_seconds > 0:
-            await asyncio.sleep(self.delay_seconds)
+        if self.config.delay_seconds > 0:
+            await asyncio.sleep(self.config.delay_seconds)
 
         # Record the call
         self.call_history.append({
@@ -124,7 +111,7 @@ class MockToolRouter(ToolRouter, ConfigurableComponent):
 
         # Check if tool exists
         if tool_name not in self.tools:
-            if self.raise_on_unknown_tool:
+            if self.config.raise_on_unknown_tool:
                 raise ResourceNotFoundError("tool", tool_name, list(self.tools.keys()))
             return {"error": f"Unknown tool: {tool_name}"}
 

@@ -9,8 +9,8 @@ from typing import Any
 import aiosqlite
 from pydantic import BaseModel, Field
 
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.registry.decorators import adapter
 from hexai.core.types import TimeoutSeconds
 
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
     implements_port="database",
     description="Async SQLite database adapter for SQL query execution and schema introspection",
 )
-class SQLiteAdapter(ConfigurableComponent):
+class SQLiteAdapter(ConfigurableAdapter):
     """Async SQLite adapter for database port.
 
     Provides a lightweight, file-based database solution that implements
@@ -51,10 +51,8 @@ class SQLiteAdapter(ConfigurableComponent):
             default=False, description="Open database in read-only mode (prevents modifications)"
         )
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize SQLite adapter.
@@ -63,23 +61,16 @@ class SQLiteAdapter(ConfigurableComponent):
         ----
             **kwargs: Configuration options (db_path, timeout, etc.)
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
-
-        # Create and validate config
-        config = self.Config(**config_data)
-
-        # Store configuration
-        self.config = config
-        self.db_path = Path(config.db_path) if config.db_path != ":memory:" else config.db_path
-        self.check_same_thread = config.check_same_thread
-        self.timeout = config.timeout
-        self.journal_mode = config.journal_mode
-        self.foreign_keys = config.foreign_keys
-        self.read_only = config.read_only
+        # Initialize config (accessible via self.config.field_name)
+        super().__init__(**kwargs)
+        self.db_path = (
+            Path(self.config.db_path) if self.config.db_path != ":memory:" else self.config.db_path
+        )
+        self.check_same_thread = self.config.check_same_thread
+        self.timeout = self.config.timeout
+        self.journal_mode = self.config.journal_mode
+        self.foreign_keys = self.config.foreign_keys
+        self.read_only = self.config.read_only
 
         self.connection: aiosqlite.Connection | None = None
 

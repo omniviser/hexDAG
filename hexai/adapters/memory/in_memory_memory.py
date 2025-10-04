@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
-from hexai.core.ports.configurable import ConfigurableComponent
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.ports.memory import Memory
 from hexai.core.registry import adapter
 
@@ -16,7 +16,7 @@ __all__ = ["InMemoryMemory"]
 
 
 @adapter(name="in_memory_memory", implements_port="memory")
-class InMemoryMemory(Memory, ConfigurableComponent):
+class InMemoryMemory(Memory, ConfigurableAdapter):
     """In-memory implementation of Memory for testing.
 
     Features:
@@ -38,10 +38,8 @@ class InMemoryMemory(Memory, ConfigurableComponent):
             default=None, gt=0, description="Maximum number of items to store (None for unlimited)"
         )
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the in-memory storage.
@@ -50,20 +48,11 @@ class InMemoryMemory(Memory, ConfigurableComponent):
         ----
             **kwargs: Configuration options
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
+        # Initialize config (accessible via self.config.field_name)
+        ConfigurableAdapter.__init__(self, **kwargs)
 
-        # Create and validate config
-        config = self.Config(**config_data)
-
-        # Store configuration
-        self.config = config
+        # State (not from config)
         self.storage: dict[str, Any] = {}
-        self.delay_seconds = config.delay_seconds
-        self.max_size = config.max_size
         self.access_history: list[dict[str, Any]] = []
 
     async def aget(self, key: str) -> Any:
@@ -78,8 +67,8 @@ class InMemoryMemory(Memory, ConfigurableComponent):
             The stored value, or None if key doesn't exist
         """
         # Simulate access delay
-        if self.delay_seconds > 0:
-            await asyncio.sleep(self.delay_seconds)
+        if self.config.delay_seconds > 0:
+            await asyncio.sleep(self.config.delay_seconds)
 
         result = self.storage.get(key)
 
@@ -107,16 +96,16 @@ class InMemoryMemory(Memory, ConfigurableComponent):
             If max_size is exceeded
         """
         # Simulate access delay
-        if self.delay_seconds > 0:
-            await asyncio.sleep(self.delay_seconds)
+        if self.config.delay_seconds > 0:
+            await asyncio.sleep(self.config.delay_seconds)
 
         # Check size limit
         if (
-            self.max_size is not None
+            self.config.max_size is not None
             and key not in self.storage
-            and len(self.storage) >= self.max_size
+            and len(self.storage) >= self.config.max_size
         ):
-            raise MemoryError(f"Memory limit of {self.max_size} items exceeded")
+            raise MemoryError(f"Memory limit of {self.config.max_size} items exceeded")
 
         self.storage[key] = value
 
@@ -219,9 +208,9 @@ class InMemoryMemory(Memory, ConfigurableComponent):
 
             # Check if approaching size limit
             details: dict[str, Any] = {"size": len(self.storage)}
-            if self.max_size:
-                usage_percent = (len(self.storage) / self.max_size) * 100
-                details["max_size"] = self.max_size
+            if self.config.max_size is not None:
+                usage_percent = (len(self.storage) / self.config.max_size) * 100
+                details["max_size"] = self.config.max_size
                 details["usage_percent"] = round(usage_percent, 1)
 
                 if usage_percent > 90:

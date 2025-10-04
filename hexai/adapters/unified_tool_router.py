@@ -7,9 +7,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from hexai.core.application.nodes.tool_utils import ToolDefinition, ToolParameter
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.exceptions import ResourceNotFoundError
 from hexai.core.logging import get_logger
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.protocols import has_execute_method
 from hexai.core.registry import registry  # Use the direct module-level singleton
@@ -22,7 +22,7 @@ __all__ = ["UnifiedToolRouter"]
 
 
 @adapter(implements_port="tool_router")
-class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
+class UnifiedToolRouter(ToolRouter, ConfigurableAdapter):
     """ToolRouter adapter that uses the global registry singleton.
 
     This adapter is a thin wrapper around the global ComponentRegistry that:
@@ -49,11 +49,6 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
         # No configuration needed for this adapter as it uses the global registry
         pass
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
-
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the router - uses the global registry singleton.
 
@@ -61,15 +56,8 @@ class UnifiedToolRouter(ToolRouter, ConfigurableComponent):
         ----
             **kwargs: Configuration options (none needed for this adapter)
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
-
-        # Create and validate config (empty for this adapter)
-        config = self.Config(**config_data)
-        self.config = config
+        # Initialize config (accessible via self.config.field_name)
+        ConfigurableAdapter.__init__(self, **kwargs)
 
         # No other initialization needed - we use get_registry() when needed
 

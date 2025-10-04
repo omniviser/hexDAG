@@ -16,8 +16,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.registry.decorators import adapter
 
 logger = get_logger(__name__)
@@ -44,7 +44,7 @@ class FileFormat(StrEnum):
     implements_port="memory",
     description="File-based memory storage supporting JSON, pickle, and text formats",
 )
-class FileMemoryAdapter(ConfigurableComponent):
+class FileMemoryAdapter(ConfigurableAdapter):
     """Memory adapter backed by file system.
 
     Provides persistent key-value storage using files, with support for
@@ -90,10 +90,8 @@ class FileMemoryAdapter(ConfigurableComponent):
             default=None, description="Custom file extension (defaults to format name)"
         )
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(
         self,
@@ -115,17 +113,19 @@ class FileMemoryAdapter(ConfigurableComponent):
         extension : str | None
             Custom file extension (defaults to format name)
         """
-        config = self.Config(
+        # Initialize config via ConfigurableAdapter
+        ConfigurableAdapter.__init__(
+            self,
             base_path=str(base_path),
             format=FileFormat(format) if isinstance(format, str) else format,
             create_dirs=create_dirs,
             extension=extension,
         )
 
-        self.base_path = Path(config.base_path)
-        self.format = FileFormat(config.format)
-        self.create_dirs = config.create_dirs
-        self.extension = config.extension or self.format.value
+        self.base_path = Path(self.config.base_path)
+        self.format = FileFormat(self.config.format)
+        self.create_dirs = self.config.create_dirs
+        self.extension = self.config.extension or self.format.value
 
         if self.create_dirs:
             self.base_path.mkdir(parents=True, exist_ok=True)

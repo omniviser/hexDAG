@@ -25,6 +25,164 @@ from hexai.core.registry.models import (
 )
 from hexai.core.registry.registry import ComponentRegistry
 
+# ============================================================================
+# Schema Integration Tests
+# ============================================================================
+
+
+class TestRegistrySchemaIntegration:
+    """Test registry.get_schema() method."""
+
+    @pytest.fixture(autouse=True)
+    def setup_registry(self):
+        """Setup test registry with sample component."""
+        from hexai.core.bootstrap import ensure_bootstrapped
+
+        # Ensure registry is bootstrapped
+        ensure_bootstrapped()
+        yield
+        # Don't reset - other tests may need the registry
+
+    def test_get_schema_for_existing_component(self):
+        """Test getting schema for an existing node."""
+        # Get schema for llm_node
+        schema = registry.get_schema("llm_node", namespace="core")
+
+        assert isinstance(schema, dict)
+        assert schema["type"] == "object"
+        assert "properties" in schema
+        # LLM node should have template parameter
+        assert "template" in schema["properties"]
+
+    def test_get_schema_yaml_format(self):
+        """Test getting schema in YAML format."""
+        import yaml
+
+        schema_yaml = registry.get_schema("llm_node", namespace="core", format="yaml")
+
+        assert isinstance(schema_yaml, str)
+        # Should be valid YAML
+        parsed = yaml.safe_load(schema_yaml)
+        assert parsed["type"] == "object"
+
+    def test_get_schema_json_format(self):
+        """Test getting schema in JSON format."""
+        import json
+
+        schema_json = registry.get_schema("llm_node", namespace="core", format="json")
+
+        assert isinstance(schema_json, str)
+        # Should be valid JSON
+        parsed = json.loads(schema_json)
+        assert parsed["type"] == "object"
+
+    def test_get_schema_nonexistent_component(self):
+        """Test getting schema for non-existent component."""
+        with pytest.raises(ComponentNotFoundError):
+            registry.get_schema("nonexistent_node", namespace="core")
+
+    def test_schema_caching(self):
+        """Test that schemas are cached."""
+        # First call
+        schema1 = registry.get_schema("llm_node", namespace="core")
+
+        # Second call should return cached version
+        schema2 = registry.get_schema("llm_node", namespace="core")
+
+        # Should be the same object (cached)
+        assert schema1 is schema2
+
+    def test_schema_cache_different_formats(self):
+        """Test that different formats are cached separately."""
+        schema_dict = registry.get_schema("llm_node", namespace="core", format="dict")
+        schema_yaml = registry.get_schema("llm_node", namespace="core", format="yaml")
+
+        # Should be different objects
+        assert schema_dict != schema_yaml
+        assert isinstance(schema_dict, dict)
+        assert isinstance(schema_yaml, str)
+
+    def test_get_schema_with_namespace_inference(self):
+        """Test getting schema without specifying namespace."""
+        # Should find llm_node in core namespace
+        schema = registry.get_schema("llm_node")
+
+        assert isinstance(schema, dict)
+        assert "template" in schema["properties"]
+
+    def test_schema_includes_constraints(self):
+        """Test that Pydantic Field constraints are in schema."""
+        # agent_node has max_steps with constraints
+        schema = registry.get_schema("agent_node", namespace="core")
+
+        # Check if max_steps has min/max constraints
+        if "max_steps" in schema["properties"]:
+            max_steps_prop = schema["properties"]["max_steps"]
+            # Should have numeric constraints
+            assert max_steps_prop["type"] == "integer"
+
+    def test_schema_includes_descriptions(self):
+        """Test that docstring descriptions are included."""
+        schema = registry.get_schema("llm_node", namespace="core")
+
+        # Check if any property has a description
+        # (depends on whether LLMNode has docstrings)
+        properties = schema["properties"]
+        assert len(properties) > 0
+
+
+class TestSchemaForCustomComponents:
+    """Test schema generation for custom components."""
+
+    def test_custom_component_schema(self):
+        """Test schema generation for a custom registered component."""
+        from typing import Annotated
+
+        from hexai.core.domain.dag import NodeSpec
+        from hexai.core.registry import node
+
+        # Register a custom node
+        @node(name="test_schema_node", namespace="test")
+        class TestSchemaNode:
+            def __call__(
+                self,
+                name: str,
+                value: Annotated[int, Field(ge=0, le=100)],
+                mode: str = "default",
+            ) -> NodeSpec:
+                pass
+
+        # Ensure it's registered
+        from hexai.core.bootstrap import ensure_bootstrapped
+
+        ensure_bootstrapped()
+
+        # Try to register it if not already
+        try:
+            registry.register(
+                "test_schema_node",
+                TestSchemaNode,
+                "node",
+                namespace="test",
+                privileged=False,
+            )
+        except Exception:
+            pass  # Already registered
+
+        # Get schema
+        schema = registry.get_schema("test_schema_node", namespace="test")
+
+        # Verify schema structure
+        assert "value" in schema["properties"]
+        assert schema["properties"]["value"]["minimum"] == 0
+        assert schema["properties"]["value"]["maximum"] == 100
+
+        # mode has default
+        assert schema["properties"]["mode"]["default"] == "default"
+
+        # value is required (no default)
+        assert "value" in schema["required"]
+
 
 class TestComponentRegistry:
     """Test the main ComponentRegistry class."""

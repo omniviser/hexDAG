@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from hexai.core.ports.configurable import ConfigurableComponent
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.ports.tool_router import ToolRouter
 from hexai.core.registry import adapter
 
@@ -15,7 +15,7 @@ from hexai.core.registry import adapter
     namespace="plugin",
     description="Simple mock tool adapter with predefined responses",
 )
-class MockToolAdapter(ToolRouter, ConfigurableComponent):
+class MockToolAdapter(ToolRouter, ConfigurableAdapter):
     """Mock tool adapter that returns predefined responses.
 
     This is a simpler alternative to MockToolRouter, designed for
@@ -41,10 +41,8 @@ class MockToolAdapter(ToolRouter, ConfigurableComponent):
         )
         raise_on_unknown: bool = Field(default=False, description="Raise error for unknown tools")
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(
         self,
@@ -58,20 +56,11 @@ class MockToolAdapter(ToolRouter, ConfigurableComponent):
             mock_responses: Dictionary mapping tool names to their predefined responses.
             **kwargs: Configuration options (default_response, raise_on_unknown)
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
+        # Initialize config (accessible via self.config.field_name)
+        ConfigurableAdapter.__init__(self, **kwargs)
 
-        # Create and validate config
-        config = self.Config(**config_data)
-        self.config = config
-
-        # Store configuration
+        # Store configuration and custom parameters
         self.mock_responses = mock_responses or {}
-        self.default_response = config.default_response
-        self.raise_on_unknown = config.raise_on_unknown
 
         # Track call history for testing
         self.call_history: list[dict[str, Any]] = []
@@ -107,13 +96,13 @@ class MockToolAdapter(ToolRouter, ConfigurableComponent):
             return response
 
         # Handle unknown tools
-        if self.raise_on_unknown:
+        if self.config.raise_on_unknown:
             available = ", ".join(self.mock_responses.keys())
             raise ValueError(f"Unknown tool: '{tool_name}'. Available tools: {available or 'none'}")
 
         # Return default response
-        if self.default_response is not None:
-            return self.default_response
+        if self.config.default_response is not None:
+            return self.config.default_response
 
         return {
             "status": "success",

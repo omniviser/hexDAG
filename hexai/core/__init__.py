@@ -17,6 +17,7 @@ Example usage:
 """
 
 from hexai.core.bootstrap import bootstrap_registry, ensure_bootstrapped
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.context import (
     ExecutionContext,
     clear_execution_context,
@@ -56,6 +57,8 @@ __all__ = [
     "ComponentType",
     "bootstrap_registry",
     "ensure_bootstrapped",
+    # Base Classes
+    "ConfigurableAdapter",
     # Execution Context
     "ExecutionContext",
     "clear_execution_context",

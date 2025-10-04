@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from hexai.core.ports.configurable import ConfigurableComponent
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.ports.llm import LLM, MessageList
 from hexai.core.registry import adapter
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @adapter(implements_port="llm")
-class MockLLM(LLM, ConfigurableComponent):
+class MockLLM(LLM, ConfigurableAdapter):
     """Mock implementation of the LLM interface for testing.
 
     The LLM port interface is stateless, but this mock provides testing utilities like response
@@ -33,10 +33,8 @@ class MockLLM(LLM, ConfigurableComponent):
             default=0.0, ge=0.0, description="Artificial delay to simulate API latency"
         )
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize with configuration.
@@ -45,20 +43,12 @@ class MockLLM(LLM, ConfigurableComponent):
         ----
             **kwargs: Configuration options (responses, delay_seconds)
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
+        # Initialize config (accessible via self.config.field_name)
+        # Note: Explicitly call ConfigurableAdapter.__init__ because Protocol blocks super()
+        ConfigurableAdapter.__init__(self, **kwargs)
 
-        # Create and validate config
-        config = self.Config(**config_data)
-
-        # Store configuration
-        self.config = config
-
-        # Process responses
-        responses = kwargs.get("responses", config.responses)
+        # Process responses (convert to list if needed)
+        responses = kwargs.get("responses", self.config.responses)
         if responses is not None:
             if isinstance(responses, str):
                 self.responses = [responses]
@@ -67,7 +57,7 @@ class MockLLM(LLM, ConfigurableComponent):
         else:
             self.responses = ['{"result": "Mock response"}']
 
-        self.delay_seconds = config.delay_seconds
+        # Non-config state
         self.call_count = 0
         self.last_messages: MessageList | None = None
         self.should_raise = False
@@ -93,8 +83,8 @@ class MockLLM(LLM, ConfigurableComponent):
         self.last_messages = messages
 
         # Simulate delay if configured
-        if self.delay_seconds > 0:
-            await asyncio.sleep(self.delay_seconds)
+        if self.config.delay_seconds > 0:
+            await asyncio.sleep(self.config.delay_seconds)
 
         if self.should_raise:
             raise Exception("Mock LLM error for testing")

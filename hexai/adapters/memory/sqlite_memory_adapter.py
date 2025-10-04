@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.database import DatabasePort
 from hexai.core.registry.decorators import adapter
 
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
     implements_port="memory",
     description="SQLite-backed persistent memory storage using key-value table",
 )
-class SQLiteMemoryAdapter(ConfigurableComponent):
+class SQLiteMemoryAdapter(ConfigurableAdapter):
     """Memory adapter backed by SQLite database.
 
     Provides persistent key-value storage using SQLite, bridging the
@@ -62,10 +62,8 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
             default=True, description="Automatically create table schema if it doesn't exist"
         )
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(
         self, database: DatabasePort, table_name: str = "memory_store", auto_init: bool = True
@@ -82,14 +80,13 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
             Automatically create table if it doesn't exist
 
         """
-        config = self.Config(table_name=table_name, auto_init=auto_init)
+        # Initialize config via ConfigurableAdapter
+        ConfigurableAdapter.__init__(self, table_name=table_name, auto_init=auto_init)
 
         # Validate table name to prevent SQL injection
-        self._validate_table_name(config.table_name)
+        self._validate_table_name(self.config.table_name)
 
         self.database = database
-        self.table_name = config.table_name
-        self.auto_init = config.auto_init
         self._initialized = False
 
     @staticmethod
@@ -122,7 +119,7 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
 
         # Table name is validated in __init__, safe to use in f-string
         sql = f"""
-        CREATE TABLE IF NOT EXISTS {self.table_name} (
+        CREATE TABLE IF NOT EXISTS {self.config.table_name} (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -130,7 +127,7 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
         """  # nosec B608 - table_name is validated
         await self.database.aexecute_query(sql)
         self._initialized = True
-        logger.debug(f"Initialized table '{self.table_name}' for memory storage")
+        logger.debug(f"Initialized table '{self.config.table_name}' for memory storage")
 
     async def aget(self, key: str) -> Any:
         """Retrieve a value from memory.
@@ -145,11 +142,11 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
         Any
             The stored value, or None if key doesn't exist
         """
-        if self.auto_init:
+        if self.config.auto_init:
             await self._ensure_table()
 
         # Table name is validated, user data in parameters
-        sql = f"SELECT value FROM {self.table_name} WHERE key = :key"  # nosec B608
+        sql = f"SELECT value FROM {self.config.table_name} WHERE key = :key"  # nosec B608
         rows = await self.database.aexecute_query(sql, {"key": key})
 
         if not rows:
@@ -167,17 +164,17 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
         value : Any
             The value to store (must be serializable to string)
         """
-        if self.auto_init:
+        if self.config.auto_init:
             await self._ensure_table()
 
         # SQLite doesn't support standard UPSERT, use INSERT OR REPLACE
         # Table name is validated, user data in parameters
         sql = f"""
-        INSERT OR REPLACE INTO {self.table_name} (key, value, updated_at)
+        INSERT OR REPLACE INTO {self.config.table_name} (key, value, updated_at)
         VALUES (:key, :value, CURRENT_TIMESTAMP)
         """  # nosec B608
         await self.database.aexecute_query(sql, {"key": key, "value": str(value)})
-        logger.debug(f"Stored key '{key}' in table '{self.table_name}'")
+        logger.debug(f"Stored key '{key}' in table '{self.config.table_name}'")
 
     async def adelete(self, key: str) -> bool:
         """Delete a key from memory.
@@ -192,7 +189,7 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
         bool
             True if key existed and was deleted, False otherwise
         """
-        if self.auto_init:
+        if self.config.auto_init:
             await self._ensure_table()
 
         # Check if key exists first
@@ -201,9 +198,9 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
             return False
 
         # Table name is validated, user data in parameters
-        sql = f"DELETE FROM {self.table_name} WHERE key = :key"  # nosec B608
+        sql = f"DELETE FROM {self.config.table_name} WHERE key = :key"  # nosec B608
         await self.database.aexecute_query(sql, {"key": key})
-        logger.debug(f"Deleted key '{key}' from table '{self.table_name}'")
+        logger.debug(f"Deleted key '{key}' from table '{self.config.table_name}'")
         return True
 
     async def alist_keys(self, prefix: str | None = None) -> list[str]:
@@ -219,30 +216,30 @@ class SQLiteMemoryAdapter(ConfigurableComponent):
         list[str]
             List of matching keys
         """
-        if self.auto_init:
+        if self.config.auto_init:
             await self._ensure_table()
 
         if prefix:
             # Table name is validated, user data in parameters
-            sql = f"SELECT key FROM {self.table_name} WHERE key LIKE :prefix"  # nosec B608
+            sql = f"SELECT key FROM {self.config.table_name} WHERE key LIKE :prefix"  # nosec B608
             rows = await self.database.aexecute_query(sql, {"prefix": f"{prefix}%"})
         else:
             # Table name is validated
-            sql = f"SELECT key FROM {self.table_name}"  # nosec B608
+            sql = f"SELECT key FROM {self.config.table_name}"  # nosec B608
             rows = await self.database.aexecute_query(sql)
 
         return [row["key"] for row in rows]
 
     async def aclear(self) -> None:
         """Clear all keys from memory."""
-        if self.auto_init:
+        if self.config.auto_init:
             await self._ensure_table()
 
         # Table name is validated
-        sql = f"DELETE FROM {self.table_name}"  # nosec B608
+        sql = f"DELETE FROM {self.config.table_name}"  # nosec B608
         await self.database.aexecute_query(sql)
-        logger.info(f"Cleared all keys from table '{self.table_name}'")
+        logger.info(f"Cleared all keys from table '{self.config.table_name}'")
 
     def __repr__(self) -> str:
         """Return string representation."""
-        return f"SQLiteMemoryAdapter(table='{self.table_name}')"
+        return f"SQLiteMemoryAdapter(table='{self.config.table_name}')"

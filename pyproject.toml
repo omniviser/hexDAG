@@ -343,7 +343,7 @@ version_files = [
 
 [tool.vulture]
 min_confidence = 90
-paths = ["hexai"]
+paths = ["hexai", ".vulture_whitelist.py"]
 exclude = ["tests/", "examples/", "hexai/core/ports/", "hexai_plugins/"]
 
 

@@ -6,8 +6,8 @@ from typing import Any, Literal
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from hexai.core.configurable import ConfigurableAdapter
 from hexai.core.logging import get_logger
-from hexai.core.ports.configurable import ConfigurableComponent
 from hexai.core.ports.llm import MessageList
 from hexai.core.registry import adapter
 from hexai.core.types import (
@@ -30,7 +30,7 @@ logger = get_logger(__name__)
     namespace="core",
     description="OpenAI GPT adapter for language model interactions",
 )
-class OpenAIAdapter(ConfigurableComponent):
+class OpenAIAdapter(ConfigurableAdapter):
     """OpenAI implementation of the LLM port.
 
     This adapter provides integration with OpenAI's GPT models through
@@ -59,10 +59,8 @@ class OpenAIAdapter(ConfigurableComponent):
         timeout: TimeoutSeconds = 60.0
         max_retries: RetryCount = 2
 
-    @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema."""
-        return cls.Config
+    # Type hint for mypy to understand self.config has Config fields
+    config: Config
 
     def __init__(self, **kwargs: Any):
         """Initialize OpenAI adapter.
@@ -71,30 +69,11 @@ class OpenAIAdapter(ConfigurableComponent):
         ----
             **kwargs: Configuration options (api_key, model, temperature, etc.)
         """
-        # Create config from kwargs using the Config schema
-        config_data = {}
-        for field_name in self.Config.model_fields:
-            if field_name in kwargs:
-                config_data[field_name] = kwargs[field_name]
+        # Initialize config (accessible via self.config.field_name)
+        super().__init__(**kwargs)
 
-        # Create and validate config
-        config = self.Config(**config_data)
-
-        # Store configuration
-        self.config = config
-        self.model = config.model
-        self.temperature = config.temperature
-        self.max_tokens = config.max_tokens
-        self.response_format = config.response_format
-        self.seed = config.seed
-        self.top_p = config.top_p
-        self.frequency_penalty = config.frequency_penalty
-        self.presence_penalty = config.presence_penalty
-        self.stop_sequences = kwargs.get("stop_sequences")  # Not in config schema
-        self.system_prompt = config.system_prompt
-
-        # Get API key
-        api_key_str = config.api_key
+        # Get API key (from config or environment)
+        api_key_str = self.config.api_key
         if not api_key_str:
             try:
                 api_secret = Secret.retrieve_secret_from_env("OPENAI_API_KEY")
@@ -108,14 +87,15 @@ class OpenAIAdapter(ConfigurableComponent):
         # Initialize OpenAI client
         client_kwargs: dict[str, Any] = {
             "api_key": api_key_str,
-            "timeout": config.timeout,
-            "max_retries": config.max_retries,
+            "timeout": self.config.timeout,
+            "max_retries": self.config.max_retries,
         }
 
-        if "organization" in kwargs:
-            client_kwargs["organization"] = kwargs["organization"]
-        if "base_url" in kwargs:
-            client_kwargs["base_url"] = kwargs["base_url"]
+        # Add extra kwargs (organization, base_url) not in config schema
+        if org := self.get_extra_kwarg("organization"):
+            client_kwargs["organization"] = org
+        if base_url := self.get_extra_kwarg("base_url"):
+            client_kwargs["base_url"] = base_url
 
         self.client = AsyncOpenAI(**client_kwargs)
 
@@ -135,31 +115,34 @@ class OpenAIAdapter(ConfigurableComponent):
             openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
             # Add system prompt if configured
-            if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
-                openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
+            if self.config.system_prompt and not any(
+                msg["role"] == "system" for msg in openai_messages
+            ):
+                openai_messages.insert(0, {"role": "system", "content": self.config.system_prompt})
 
             # Build request parameters with modern API format
             request_params: dict[str, Any] = {
-                "model": self.model,
+                "model": self.config.model,
                 "messages": openai_messages,
-                "temperature": self.temperature,
-                "top_p": self.top_p,
-                "frequency_penalty": self.frequency_penalty,
-                "presence_penalty": self.presence_penalty,
+                "temperature": self.config.temperature,
+                "top_p": self.config.top_p,
+                "frequency_penalty": self.config.frequency_penalty,
+                "presence_penalty": self.config.presence_penalty,
             }
 
             # Add optional parameters only if set
-            if self.max_tokens is not None:
-                request_params["max_tokens"] = self.max_tokens
+            if self.config.max_tokens is not None:
+                request_params["max_tokens"] = self.config.max_tokens
 
-            if self.seed is not None:
-                request_params["seed"] = self.seed
+            if self.config.seed is not None:
+                request_params["seed"] = self.config.seed
 
-            if self.stop_sequences:
-                request_params["stop"] = self.stop_sequences
+            # Stop sequences from extra kwargs (not in config schema)
+            if stop_seq := self.get_extra_kwarg("stop_sequences"):
+                request_params["stop"] = stop_seq
 
             # Add response format if JSON mode is requested
-            if self.response_format == "json_object":
+            if self.config.response_format == "json_object":
                 request_params["response_format"] = {"type": "json_object"}
 
             # Make API call with modern format
