@@ -5,8 +5,6 @@ interface with all safety features including weak references, event filtering,
 concurrency control, and fault isolation.
 """
 
-# pyright: reportMissingImports=false
-
 from __future__ import annotations
 
 import asyncio
@@ -14,9 +12,10 @@ import inspect
 import logging
 import uuid
 import weakref
-from collections.abc import Awaitable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from hexai.core.application.events.batching import (
     BatchingConfig,
@@ -24,7 +23,13 @@ from hexai.core.application.events.batching import (
     EventBatchEnvelope,
     EventBatcher,
 )
-from hexai.core.application.events.events import Event
+from hexai.core.application.events.decorators import (
+    EVENT_METADATA_ATTR,
+    EventDecoratorMetadata,
+    EventType,
+    EventTypesInput,
+    normalize_event_types,
+)
 from hexai.core.ports.observer_manager import (
     AsyncObserverFunc,
     Observer,
@@ -32,6 +37,11 @@ from hexai.core.ports.observer_manager import (
     ObserverManagerPort,
 )
 from hexai.core.registry import adapter
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Sequence
+
+    from hexai.core.application.events.events import Event
 
 LOGGER = logging.getLogger(__name__)
 
@@ -401,7 +411,7 @@ class LocalObserverManager:
             return None
         return self._batcher.metrics
 
-    def __enter__(self) -> "LocalObserverManager":
+    def __enter__(self) -> LocalObserverManager:
         """Context manager entry.
 
         Returns
@@ -515,14 +525,22 @@ class LocalObserverManager:
     ) -> None:
         """Dispatch one or more events to an observer under concurrency control."""
 
-        _ = observer_id  # kept for potential future logging
+        per_observer_semaphore = self._observer_semaphores.get(observer_id)
 
-        async with self._semaphore:
+        async def _execute() -> None:
             if envelope is not None and self._supports_batch(observer):
-                await self._safe_invoke_batch(observer, envelope, events)
+                await self._safe_invoke_batch(observer_id, observer, envelope, events)
             else:
                 for event in events:
-                    await self._safe_invoke(observer, event)
+                    await self._safe_invoke(observer_id, observer, event)
+
+        if per_observer_semaphore is None:
+            async with self._semaphore:
+                await _execute()
+            return
+
+        async with self._semaphore, per_observer_semaphore:
+            await _execute()
 
     def _filter_events_for_observer(
         self, observer_id: str, events: Sequence[Event]
@@ -597,7 +615,7 @@ class LocalObserverManager:
         # Check if event type matches any allowed type (supports subclassing)
         return isinstance(event, tuple(event_filter))
 
-    async def _safe_invoke(self, observer: Observer, event: Event) -> None:
+    async def _safe_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
         """Safely invoke an observer with timeout."""
         timeout_value = self._observer_timeouts.get(observer_id, self._timeout)
         try:
@@ -627,26 +645,37 @@ class LocalObserverManager:
             )
 
     async def _safe_invoke_batch(
-        self, observer: Observer, envelope: EventBatchEnvelope, events: Sequence[Event]
+        self,
+        observer_id: str,
+        observer: Observer,
+        envelope: EventBatchEnvelope,
+        events: Sequence[Event],
     ) -> None:
         """Safely invoke an observer's batch handler."""
 
         handler = getattr(observer, "handle_batch", None)
         if handler is None:
             for event in events:
-                await self._safe_invoke(observer, event)
+                await self._safe_invoke(observer_id, observer, event)
             return
 
+        timeout_value = self._observer_timeouts.get(observer_id, self._timeout)
+
+        loop = asyncio.get_running_loop()
+
         try:
-            result = handler(envelope)
-            if inspect.isawaitable(result):
-                await asyncio.wait_for(result, timeout=self._timeout)
+            if inspect.iscoroutinefunction(handler):
+                coroutine = handler(envelope)
+                if timeout_value is None:
+                    await coroutine
+                else:
+                    await asyncio.wait_for(coroutine, timeout=timeout_value)
             else:
-                loop = asyncio.get_running_loop()
-                await asyncio.wait_for(
-                    loop.run_in_executor(self._executor, lambda: result),
-                    timeout=self._timeout,
-                )
+                task = loop.run_in_executor(self._executor, handler, envelope)
+                if timeout_value is None:
+                    await task
+                else:
+                    await asyncio.wait_for(task, timeout=timeout_value)
         except TimeoutError as e:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(

@@ -1,7 +1,5 @@
 """Local implementation of PolicyManagerPort using Python built-ins."""
 
-# pyright: reportMissingImports=false
-
 import asyncio
 import heapq
 import inspect

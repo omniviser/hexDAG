@@ -41,23 +41,18 @@ class EventDecoratorMetadata:
 
 def normalize_event_types(event_types: EventTypesInput) -> set[EventType] | None:
     """Normalize user-provided event types to a validated set."""
+
     if event_types is None:
         return None
 
-    if isinstance(event_types, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+    if isinstance(event_types, type):
         _ensure_event_subclass(event_types)
         return {event_types}
 
-    if isinstance(event_types, Iterable):  # pyright: ignore[reportUnnecessaryIsInstance]
+    if isinstance(event_types, Iterable):
         normalized: set[EventType] = set()
         for item in event_types:
-            if not isinstance(item, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                raise TypeError(
-                    "event_types must contain Event subclasses; "
-                    f"got instance of {type(item).__name__}"
-                )
-            _ensure_event_subclass(item)
-            normalized.add(item)
+            normalized.add(_ensure_event_subclass(item))
         return normalized
 
     raise TypeError(
@@ -65,10 +60,19 @@ def normalize_event_types(event_types: EventTypesInput) -> set[EventType] | None
     )
 
 
-def _ensure_event_subclass(event_type: EventType) -> None:
-    """Ensure ``event_type`` is a subclass of :class:`Event`."""
-    if not issubclass(event_type, Event):  # pyright: ignore[reportUnnecessaryIsInstance]
+def _ensure_event_subclass(event_type: Any) -> EventType:
+    """Validate and return an event subclass."""
+
+    if not isinstance(event_type, type):
+        raise TypeError(
+            "event_types must contain Event subclasses; "
+            f"got instance of {type(event_type).__name__}"
+        )
+
+    if not issubclass(event_type, Event):
         raise TypeError(f"event_types must contain Event subclasses; got {event_type!r}")
+
+    return event_type
 
 
 def control_handler(
