@@ -3,7 +3,7 @@
 
 name: support_ticket_analyzer
 description: >
-  Analyze customer support tickets for sentiment, 
+  Analyze customer support tickets for sentiment,
   category, and priority
 
 # Input validation - because production systems need contracts
@@ -48,7 +48,7 @@ nodes:
       required: ["issue_type", "technical_details", "customer_emotion"]
     depends_on: []
 
-  # Step 2: Conditional routing based on customer tier 
+  # Step 2: Conditional routing based on customer tier
   # (enterprise gets special treatment)
   - type: conditional
     id: tier_router
@@ -142,7 +142,7 @@ nodes:
       args:
         channel: "#support-urgent"
         message: >
-          "New {{response_generator.assigned_team}} 
+          "New {{response_generator.assigned_team}}
           ticket: {{response_generator.ticket_id}}"
     depends_on: [response_generator]
 
@@ -161,7 +161,7 @@ nodes:
       function: create_jira_ticket
       args:
         summary: >
-          "{{ticket_parser.issue_type}}: 
+          "{{ticket_parser.issue_type}}:
           {{response_generator.ticket_id}}"
         description: "{{response_generator.internal_notes}}"
         priority: "{{tier_router.result.priority}}"

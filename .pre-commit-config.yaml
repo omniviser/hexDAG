@@ -99,7 +99,7 @@ repos:
       - id: mypy
         name: mypy-plugins
         # Add plugin deps here
-        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]  
+        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]
         args: [--ignore-missing-imports, --python-version=3.12, hexai_plugins/]
         files: ^hexai_plugins/.*\.py$
         exclude: ^hexai_plugins/.*\.venv/
