@@ -107,11 +107,11 @@ dev = [
 ]
   
 docs = [
-    "sphinx",
-    "sphinx-rtd-theme",
-    "sphinx-autodoc-typehints",
-    "pydocstyle",
-    "doc8"
+    "sphinx==7.2.6",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinx-autodoc-typehints==2.0.0",
+    "pydocstyle==6.3.0",
+    "doc8==2.0.0"
 ]
 
 

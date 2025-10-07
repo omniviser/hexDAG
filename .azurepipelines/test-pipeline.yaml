@@ -249,9 +249,8 @@ jobs:
     displayName: "Install dependencies with uv"
 
   - script: |
-      source .venv/bin/activate
-      pydocstyle src/
-      doc8 docs/
+      uv run pydocstyle src/
+      uv run python -m doc8 docs/
     displayName: "Check docstrings & docs formatting"
 
   - script: |
