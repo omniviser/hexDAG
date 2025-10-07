@@ -111,7 +111,7 @@ class PromptTemplate:
             value = value[part] if isinstance(value, dict) else getattr(value, part)
         return value
 
-    def render(self, **kwargs: Any) -> str:
+    def _render(self, **kwargs: Any) -> str:
         """Render the template with provided variables.
 
         Args
@@ -131,11 +131,11 @@ class PromptTemplate:
         Examples
         --------
             template = PromptTemplate("Hello {{name}}!")
-            result = template.render(name="Alice")  # "Hello Alice!"
+            result = template._render(name="Alice")  # "Hello Alice!"
 
             # With nested data
             template = PromptTemplate("User: {{user.name}}")
-            result = template.render(user={"name": "Bob"})  # "User: Bob"
+            result = template._render(user={"name": "Bob"})  # "User: Bob"
         """
         # Check for missing required variables
         missing_vars = [var for var in self.input_vars if var not in kwargs]
@@ -182,7 +182,7 @@ class PromptTemplate:
         --------
             # Default behavior
             template = PromptTemplate("Hello {{name}}!")
-            rendered = template.render(name="Alice")
+            rendered = template._render(name="Alice")
             parsed = template.parse_output(rendered)  # Same as rendered
 
             # Custom parsing in subclass
@@ -192,7 +192,7 @@ class PromptTemplate:
         """
         return output
 
-    def format(self, **kwargs: Any) -> str:
+    def _format(self, **kwargs: Any) -> str:
         r"""Render template and parse output in one step.
 
         Args
@@ -207,9 +207,9 @@ class PromptTemplate:
         Examples
         --------
             template = PromptTemplate("Hello {{name}}!")
-            result = template.format(name="Alice")  # "Hello Alice!"
+            result = template._format(name="Alice")  # "Hello Alice!"
         """
-        rendered = self.render(**kwargs)
+        rendered = self._render(**kwargs)
         return self.parse_output(rendered)
 
     def to_messages(self, system_prompt: str | None = None, **kwargs: Any) -> list[dict[str, str]]:
@@ -250,7 +250,7 @@ class PromptTemplate:
             messages.append({"role": "system", "content": system_prompt})
 
         # Add user message with rendered template
-        user_content = self.format(**kwargs)
+        user_content = self._format(**kwargs)
         messages.append({"role": "user", "content": user_content})
 
         return messages
