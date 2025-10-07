@@ -31,6 +31,7 @@ Custom configuration:
 ... )
 """
 
+import contextvars
 import logging
 import os
 import sys
@@ -45,14 +46,18 @@ if TYPE_CHECKING:
     from hexai.core.types import Logger
 
 from loguru import logger
+from rich.logging import RichHandler
 
 LogLevel = Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-LogFormat = Literal["console", "json", "structured"]
+LogFormat = Literal["console", "json", "structured", "rich", "dual"]
 
 # Store configured state to enable idempotent reconfiguration
 _CURRENT_CONFIG: dict | None = None
 # Track handler IDs added by configure_logging for safe cleanup
 _HANDLER_IDS: list[int] = []
+
+# Correlation ID context variable for request tracing
+correlation_id: contextvars.ContextVar[str] = contextvars.ContextVar("correlation_id", default="-")
 
 
 def configure_logging(
@@ -62,6 +67,11 @@ def configure_logging(
     use_color: bool = True,
     include_timestamp: bool = True,
     force_reconfigure: bool = False,
+    use_rich: bool = False,
+    dual_sink: bool = False,
+    enable_stdlib_bridge: bool = False,
+    backtrace: bool = True,
+    diagnose: bool = True,
 ) -> None:
     """Configure global logging for hexDAG framework.
 
@@ -74,9 +84,11 @@ def configure_logging(
         Minimum log level to output (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format : LogFormat, default="structured"
         Output format:
-        - "console": Simple console output
+        - "console": Simple console output (no colors, basic format)
         - "json": JSON format for log aggregation (uses orjson for performance)
-        - "structured": Enhanced structured format with colors
+        - "structured": Enhanced structured format with colors (Loguru native)
+        - "rich": Rich console handler with beautiful formatting
+        - "dual": Dual-sink mode (Rich to stderr + JSON to stdout)
     output_file : str | Path | None, default=None
         Optional file path to write logs to (in addition to console)
     use_color : bool, default=True
@@ -85,19 +97,35 @@ def configure_logging(
         Include timestamp in log output
     force_reconfigure : bool, default=False
         Force reconfiguration even if already configured with same settings
+    use_rich : bool, default=False
+        Use Rich library for enhanced console output (overrides format if True)
+    dual_sink : bool, default=False
+        Enable dual-sink: Rich console (stderr) + JSON (stdout) simultaneously
+    enable_stdlib_bridge : bool, default=False
+        Enable interception of stdlib logging for third-party libraries
+    backtrace : bool, default=True
+        Enable backtrace for debugging (disable in production for security)
+    diagnose : bool, default=True
+        Enable diagnose mode with variable values (disable in production for security)
 
     Examples
     --------
-    Development setup::
+    Development setup with Rich::
 
-        configure_logging(level="DEBUG", format="structured", use_color=True)
+        configure_logging(level="DEBUG", format="rich", use_rich=True)
+
+    Dual-sink setup (Rich console + JSON for aggregation)::
+
+        configure_logging(level="INFO", dual_sink=True, use_rich=True)
 
     Production setup::
 
         configure_logging(
             level="INFO",
             format="json",
-            output_file="/var/log/hexdag/app.log"
+            output_file="/var/log/hexdag/app.log",
+            backtrace=True,
+            diagnose=False,  # Disable for security
         )
 
     Testing setup::
@@ -113,6 +141,11 @@ def configure_logging(
         "output_file": str(output_file) if output_file else None,
         "use_color": use_color,
         "include_timestamp": include_timestamp,
+        "use_rich": use_rich,
+        "dual_sink": dual_sink,
+        "enable_stdlib_bridge": enable_stdlib_bridge,
+        "backtrace": backtrace,
+        "diagnose": diagnose,
     }
 
     if not force_reconfigure and current_config == _CURRENT_CONFIG:
@@ -126,48 +159,98 @@ def configure_logging(
     _HANDLER_IDS.clear()
 
     # Prepare format strings and track handler IDs
-    if format == "json":
-        # JSON format with orjson serialization
+    if dual_sink or format == "dual":
+        # Dual-sink mode: Rich console (stderr) + JSON (stdout)
+        # 1. Rich handler for human-readable output to stderr
+        rich_handler = RichHandler(
+            rich_tracebacks=True,
+            markup=True,
+            show_time=include_timestamp,
+            show_level=True,
+            show_path=True,
+        )
         handler_id = logger.add(
-            sys.stderr,
+            sink=rich_handler,
             level=level,
-            serialize=True,  # JSON output
-            backtrace=True,
-            diagnose=True,
+            format="{message}",
+            backtrace=backtrace,
+            diagnose=diagnose,
         )
         _HANDLER_IDS.append(handler_id)
+
+        # 2. JSON handler for machine-readable output to stdout
+        handler_id = logger.add(
+            sink=sys.stdout,
+            level=level,
+            serialize=True,  # JSON output
+            backtrace=backtrace,
+            diagnose=diagnose,
+        )
+        _HANDLER_IDS.append(handler_id)
+
+    elif use_rich or format == "rich":
+        # Rich-only mode
+        rich_handler = RichHandler(
+            rich_tracebacks=True,
+            markup=True,
+            show_time=include_timestamp,
+            show_level=True,
+            show_path=True,
+        )
+        handler_id = logger.add(
+            sink=rich_handler,
+            level=level,
+            format="{message}",
+            backtrace=backtrace,
+            diagnose=diagnose,
+        )
+        _HANDLER_IDS.append(handler_id)
+
+    elif format == "json":
+        # JSON format with orjson serialization
+        handler_id = logger.add(
+            sink=sys.stderr,
+            level=level,
+            serialize=True,  # JSON output
+            backtrace=backtrace,
+            diagnose=diagnose,
+        )
+        _HANDLER_IDS.append(handler_id)
+
     elif format == "structured":
         # Structured format with optional colors
         timestamp_fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> " if include_timestamp else ""
         color_level = (
             "<level>{level: <8}</level>" if use_color and sys.stderr.isatty() else "{level: <8}"
         )
+        # Note: cid (correlation ID) is injected via .bind() in get_logger()
         structured_format = (
             f"{timestamp_fmt}[{color_level}]"
             "<cyan>{name}:{function}:{line}</cyan> | <level>{message}</level>"
         )
 
         handler_id = logger.add(
-            sys.stderr,
+            sink=sys.stderr,
             level=level,
             format=structured_format,
             colorize=use_color and sys.stderr.isatty(),
-            backtrace=True,
-            diagnose=True,
+            backtrace=backtrace,
+            diagnose=diagnose,
         )
         _HANDLER_IDS.append(handler_id)
+
     else:  # console
         # Simple console format
         timestamp_fmt = "{time:YYYY-MM-DD HH:mm:ss} " if include_timestamp else ""
         console_format = f"{timestamp_fmt}{{level: <8}} | {{name}} | {{message}}"
 
         handler_id = logger.add(
-            sys.stderr,
+            sink=sys.stderr,
             level=level,
             format=console_format,
             colorize=False,
-            backtrace=True,
-            diagnose=False,
+            backtrace=backtrace,
+            diagnose=diagnose,
         )
         _HANDLER_IDS.append(handler_id)
 
@@ -178,19 +261,21 @@ def configure_logging(
 
         # File output always uses JSON for easier parsing
         handler_id = logger.add(
-            output_path,
+            sink=output_path,
             level=level,
             serialize=True,  # JSON format for files
             rotation="10 MB",  # Rotate when file reaches 10MB
             retention="1 week",  # Keep logs for 1 week
             compression="zip",  # Compress rotated logs
-            backtrace=True,
-            diagnose=True,
+            backtrace=backtrace,
+            diagnose=diagnose,
         )
         _HANDLER_IDS.append(handler_id)
 
-    # Set library loggers to WARNING by default to reduce noise
-    # (Loguru intercepts stdlib logging via logging bridge if needed)
+    # Enable stdlib logging bridge if requested
+    if enable_stdlib_bridge:
+        enable_stdlib_logging_bridge()
+
     _CURRENT_CONFIG = current_config
 
 
@@ -200,6 +285,8 @@ def get_logger(name: str) -> "Logger":
 
     This is the recommended way to get loggers in hexDAG. Logger instances
     are bound with the module name for better tracking.
+
+    Correlation IDs are dynamically included via ContextVar when logging.
 
     Parameters
     ----------
@@ -213,14 +300,17 @@ def get_logger(name: str) -> "Logger":
 
     Examples
     --------
+    >>> from hexai.core.logging import get_logger, set_correlation_id
+    >>> set_correlation_id("req-123")
     >>> logger = get_logger(__name__)
-    >>> logger.info("Starting orchestrator")
+    >>> logger.info("Starting orchestrator")  # Includes cid=req-123 in context
     >>> logger.debug("Processing node", node_id="abc123")
 
     Notes
     -----
     - If configure_logging() hasn't been called, initializes with sensible defaults
     - Logger names follow the module hierarchy (e.g., "hexai.core.orchestrator")
+    - Correlation ID is automatically included from ContextVar when set
     - Extra context can be passed as keyword arguments
     - Logger instances are cached for performance
     """
@@ -294,6 +384,58 @@ def enable_stdlib_logging_bridge() -> None:
 
     # Intercept all stdlib logging
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+
+def set_correlation_id(cid: str) -> None:
+    """Set correlation ID for the current context.
+
+    This ID will be automatically included in all log records emitted
+    within the current async context or thread.
+
+    Parameters
+    ----------
+    cid : str
+        Correlation ID (e.g., request ID, trace ID, session ID)
+
+    Examples
+    --------
+    >>> from hexai.core.logging import set_correlation_id, get_logger
+    >>> set_correlation_id("req-abc-123")
+    >>> logger = get_logger(__name__)
+    >>> logger.info("Processing request")  # Logs will include cid=req-abc-123
+    """
+    correlation_id.set(cid)
+
+
+def get_correlation_id() -> str:
+    """Get the current correlation ID.
+
+    Returns
+    -------
+    str
+        Current correlation ID, or "-" if not set
+
+    Examples
+    --------
+    >>> from hexai.core.logging import get_correlation_id, set_correlation_id
+    >>> get_correlation_id()
+    '-'
+    >>> set_correlation_id('req-abc-123')
+    >>> get_correlation_id()
+    'req-abc-123'
+    """
+    return correlation_id.get()
+
+
+def clear_correlation_id() -> None:
+    """Clear the correlation ID for the current context.
+
+    Examples
+    --------
+    >>> from hexai.core.logging import clear_correlation_id
+    >>> clear_correlation_id()
+    """
+    correlation_id.set("-")
 
 
 def _ensure_configured() -> None:

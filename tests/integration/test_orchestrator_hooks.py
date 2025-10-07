@@ -85,7 +85,7 @@ class MockSecretPort:
         self.health_check_count = 0
 
     async def aget_secret(self, key: str):
-        from hexai.helpers.secrets import Secret
+        from hexai.core.types import Secret
 
         return Secret(self.secrets[key])
 

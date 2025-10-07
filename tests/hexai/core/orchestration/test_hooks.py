@@ -50,7 +50,7 @@ class MockSecretPort:
 
     async def aget_secret(self, key: str):
         """Get single secret."""
-        from hexai.helpers.secrets import Secret
+        from hexai.core.types import Secret
 
         if key not in self.secrets:
             raise KeyError(f"Secret '{key}' not found")

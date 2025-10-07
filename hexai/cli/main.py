@@ -14,6 +14,7 @@ except ImportError:
     sys.exit(1)
 
 from hexai.cli.commands import (
+    build_cmd,
     config_cmd,
     docs_cmd,
     init_cmd,
@@ -41,6 +42,9 @@ app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
 app.add_typer(registry_cmd.app, name="registry", help="Inspect the component registry")
 app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
+
+# Add build command directly
+app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
 
 
 @app.callback()

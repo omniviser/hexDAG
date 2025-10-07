@@ -15,7 +15,38 @@ from hexai.core.logging import get_logger
 # Type alias for configuration data that can be recursively substituted
 type ConfigData = str | dict[str, ConfigData] | list[ConfigData] | int | float | bool | None
 
+# Constants for boolean environment variable parsing
+_TRUTHY_VALUES = frozenset({"true", "1", "yes", "on", "enabled"})
+_FALSY_VALUES = frozenset({"false", "0", "no", "off", "disabled"})
+
 logger = get_logger(__name__)
+
+
+def _parse_bool_env(value: str) -> bool:
+    """Parse boolean from environment variable value.
+
+    Parameters
+    ----------
+    value : str
+        Environment variable value
+
+    Returns
+    -------
+    bool
+        Parsed boolean value
+
+    Raises
+    ------
+    ValueError
+        If value is not a recognized boolean string
+    """
+    normalized = value.lower().strip()
+    if normalized in _TRUTHY_VALUES:
+        return True
+    if normalized in _FALSY_VALUES:
+        return False
+    expected = _TRUTHY_VALUES | _FALSY_VALUES
+    raise ValueError(f"Invalid boolean value: {value!r}. Expected one of: {expected}")
 
 
 @lru_cache(maxsize=32)
@@ -232,10 +263,15 @@ class ConfigLoader:
 
         Environment variables take precedence over TOML configuration:
         - HEXDAG_LOG_LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        - HEXDAG_LOG_FORMAT: Output format (console, json, structured)
+        - HEXDAG_LOG_FORMAT: Output format (console, json, structured, rich, dual)
         - HEXDAG_LOG_FILE: Optional file path for log output
         - HEXDAG_LOG_COLOR: Use color output (true/false)
         - HEXDAG_LOG_TIMESTAMP: Include timestamp (true/false)
+        - HEXDAG_LOG_RICH: Use Rich library for enhanced output (true/false)
+        - HEXDAG_LOG_DUAL_SINK: Enable dual-sink mode (true/false)
+        - HEXDAG_LOG_STDLIB_BRIDGE: Enable stdlib logging bridge (true/false)
+        - HEXDAG_LOG_BACKTRACE: Enable backtrace in logs (true/false)
+        - HEXDAG_LOG_DIAGNOSE: Enable diagnose mode (true/false)
 
         Parameters
         ----------
@@ -253,6 +289,11 @@ class ConfigLoader:
         output_file = logging_data.get("output_file")
         use_color = logging_data.get("use_color", True)
         include_timestamp = logging_data.get("include_timestamp", True)
+        use_rich = logging_data.get("use_rich", False)
+        dual_sink = logging_data.get("dual_sink", False)
+        enable_stdlib_bridge = logging_data.get("enable_stdlib_bridge", False)
+        backtrace = logging_data.get("backtrace", True)
+        diagnose = logging_data.get("diagnose", True)
 
         # Apply environment variable overrides
         if env_level := os.getenv("HEXDAG_LOG_LEVEL"):
@@ -268,21 +309,67 @@ class ConfigLoader:
             logger.debug(f"Overriding log file from env: {output_file}")
 
         if env_color := os.getenv("HEXDAG_LOG_COLOR"):
-            use_color = env_color.lower() in ("true", "1", "yes")
-            logger.debug(f"Overriding log color from env: {use_color}")
+            try:
+                use_color = _parse_bool_env(env_color)
+                logger.debug(f"Overriding log color from env: {use_color}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_COLOR value: {e}")
 
         if env_timestamp := os.getenv("HEXDAG_LOG_TIMESTAMP"):
-            include_timestamp = env_timestamp.lower() in ("true", "1", "yes")
-            logger.debug(f"Overriding log timestamp from env: {include_timestamp}")
+            try:
+                include_timestamp = _parse_bool_env(env_timestamp)
+                logger.debug(f"Overriding log timestamp from env: {include_timestamp}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_TIMESTAMP value: {e}")
+
+        if env_rich := os.getenv("HEXDAG_LOG_RICH"):
+            try:
+                use_rich = _parse_bool_env(env_rich)
+                logger.debug(f"Overriding use_rich from env: {use_rich}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_RICH value: {e}")
+
+        if env_dual_sink := os.getenv("HEXDAG_LOG_DUAL_SINK"):
+            try:
+                dual_sink = _parse_bool_env(env_dual_sink)
+                logger.debug(f"Overriding dual_sink from env: {dual_sink}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_DUAL_SINK value: {e}")
+
+        if env_stdlib_bridge := os.getenv("HEXDAG_LOG_STDLIB_BRIDGE"):
+            try:
+                enable_stdlib_bridge = _parse_bool_env(env_stdlib_bridge)
+                logger.debug(f"Overriding enable_stdlib_bridge from env: {enable_stdlib_bridge}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_STDLIB_BRIDGE value: {e}")
+
+        if env_backtrace := os.getenv("HEXDAG_LOG_BACKTRACE"):
+            try:
+                backtrace = _parse_bool_env(env_backtrace)
+                logger.debug(f"Overriding backtrace from env: {backtrace}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_BACKTRACE value: {e}")
+
+        if env_diagnose := os.getenv("HEXDAG_LOG_DIAGNOSE"):
+            try:
+                diagnose = _parse_bool_env(env_diagnose)
+                logger.debug(f"Overriding diagnose from env: {diagnose}")
+            except ValueError as e:
+                logger.warning(f"Invalid HEXDAG_LOG_DIAGNOSE value: {e}")
 
         # Cast to proper Literal types for type safety
         # These will be validated by Pydantic at runtime
         return LoggingConfig(
             level=cast("Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']", level),
-            format=cast("Literal['console', 'json', 'structured']", format_type),
+            format=cast("Literal['console', 'json', 'structured', 'dual', 'rich']", format_type),
             output_file=output_file,
             use_color=use_color,
             include_timestamp=include_timestamp,
+            use_rich=use_rich,
+            dual_sink=dual_sink,
+            enable_stdlib_bridge=enable_stdlib_bridge,
+            backtrace=backtrace,
+            diagnose=diagnose,
         )
 
 

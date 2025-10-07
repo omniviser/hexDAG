@@ -1,6 +1,5 @@
 """OpenAI adapter for LLM interactions."""
 
-import json
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
@@ -164,15 +163,6 @@ class OpenAIAdapter(ConfigurableAdapter):
                 if message and message.content:
                     content: str = str(message.content)
 
-                    # Parse JSON if response_format is json_object
-                    if self.config.response_format == "json_object":
-                        try:
-                            # Validate it's valid JSON
-                            json.loads(content)
-                            return content
-                        except json.JSONDecodeError:
-                            logger.warning("Response was not valid JSON despite json_object format")
-                            return content
                     return content
 
             logger.warning("No content in OpenAI response")

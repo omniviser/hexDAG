@@ -102,6 +102,9 @@ result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
 - **[🔧 Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Build production-ready AI workflows
 - **[🎯 Agent Patterns](docs/PIPELINES_GUIDE.md)** - Multi-agent coordination patterns
 
+### CLI & Tools
+- **[⌨️ CLI Reference](docs/CLI_REFERENCE.md)** - Complete command-line interface documentation (includes Docker build guide)
+
 ### Planning
 - **[🗺️ Roadmap](docs/ROADMAP.md)** - Our vision for the future of AI orchestration
 
@@ -164,6 +167,22 @@ uv run pre-commit run --all-files
 - **Nested Field Extraction**: Access deeply nested data with dot notation
 - **Type Inference**: Automatic type detection from Pydantic models
 - **Flexible Patterns**: Support for passthrough, rename, and prefixed mappings
+
+## 🔒 Production Security
+
+### Docker Build Command
+
+The `hexdag build` command generates containerized deployments from YAML pipelines.
+
+⚠️ **IMPORTANT**: This command is designed for **development and trusted pipelines only**.
+
+**Production Safety:**
+```bash
+# Disable build command in production environments
+export HEXDAG_DISABLE_BUILD=1
+```
+
+**For detailed documentation**, including security threat model, hardening checklist, and Docker Compose patterns, see the [CLI Reference](docs/CLI_REFERENCE.md#build---build-docker-containers).
 
 ## 🤝 Community
 
