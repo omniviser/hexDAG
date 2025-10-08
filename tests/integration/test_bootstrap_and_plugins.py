@@ -76,8 +76,8 @@ class TestSystemBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.adapters.mock",
-                "hexdag.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.mock",
+                "hexdag.builtin.adapters.llm.openai_adapter",
             ],
         )
 
@@ -98,7 +98,9 @@ class TestSystemBootstrap:
 
     def test_ensure_bootstrapped_idempotent(self):
         """Test that ensure_bootstrapped can be called multiple times safely."""
-        config = HexDAGConfig(modules=["hexdag.core.ports"], plugins=["hexdag.adapters.mock"])
+        config = HexDAGConfig(
+            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.mock"]
+        )
 
         with patch("hexdag.core.bootstrap.load_config", return_value=config):
             # First call bootstraps
@@ -126,8 +128,8 @@ class TestPluginSystemIntegration:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.adapters.llm.openai_adapter",
-                "hexdag.adapters.mock",
+                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.mock",
             ],
         )
 
@@ -156,7 +158,9 @@ class TestPluginSystemIntegration:
         if global_registry.ready:
             global_registry._reset_for_testing()
 
-        config = HexDAGConfig(modules=["hexdag.core.ports"], plugins=["hexdag.adapters.mock"])
+        config = HexDAGConfig(
+            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.mock"]
+        )
 
         with patch("hexdag.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
@@ -188,7 +192,7 @@ class TestPluginSystemIntegration:
                 "hexdag.core.ports",
             ],
             plugins=[
-                "hexdag.adapters.database.sqlite",  # SQLite database adapter
+                "hexdag.builtin.adapters.database.sqlite",  # SQLite database adapter
             ],
         )
 
@@ -218,7 +222,7 @@ class TestPluginSystemIntegration:
                 "hexdag.core.ports",
             ],
             plugins=[
-                "hexdag.adapters.database.sqlite",
+                "hexdag.builtin.adapters.database.sqlite",
             ],
         )
 

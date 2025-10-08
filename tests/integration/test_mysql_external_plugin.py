@@ -53,7 +53,7 @@ class TestMySQLExternalPlugin:
 
         manifest = [
             ManifestEntry(namespace="core", module="hexdag.core.ports"),
-            ManifestEntry(namespace="plugin", module="hexdag.adapters.database.sqlite"),
+            ManifestEntry(namespace="plugin", module="hexdag.builtin.adapters.database.sqlite"),
             ManifestEntry(namespace="plugin", module="mysql_adapter"),
         ]
 

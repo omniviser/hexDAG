@@ -12,6 +12,29 @@ from hexdag.cli.commands.plugins_cmd import (
     _get_available_plugins,
     app,
 )
+from hexdag.core.registry.models import ClassComponent, ComponentMetadata, ComponentType
+
+
+def make_component_metadata(
+    name: str,
+    component_type: ComponentType,
+    namespace: str = "core",
+    description: str = "",
+    implements_port: str | None = None,
+) -> ComponentMetadata:
+    """Helper to create ComponentMetadata with required fields."""
+
+    class DummyComponent:
+        pass
+
+    return ComponentMetadata(
+        name=name,
+        component_type=component_type,
+        component=ClassComponent(value=DummyComponent),
+        namespace=namespace,
+        description=description,
+        implements_port=implements_port,
+    )
 
 
 @pytest.fixture
@@ -202,8 +225,8 @@ class TestGetAvailablePlugins:
 
     def test_get_available_plugins_returns_list(self):
         """Test that _get_available_plugins returns a list."""
-        with patch("hexdag.cli.commands.plugins_cmd.bootstrap_registry"):
-            with patch("hexdag.cli.commands.plugins_cmd.registry") as mock_registry:
+        with patch("hexdag.core.bootstrap.bootstrap_registry"):
+            with patch("hexdag.core.registry.registry") as mock_registry:
                 mock_registry.list_components.return_value = []
 
                 plugins = _get_available_plugins()
@@ -211,8 +234,8 @@ class TestGetAvailablePlugins:
 
     def test_get_available_plugins_includes_known_extras(self):
         """Test that known extras are included."""
-        with patch("hexdag.cli.commands.plugins_cmd.bootstrap_registry"):
-            with patch("hexdag.cli.commands.plugins_cmd.registry") as mock_registry:
+        with patch("hexdag.core.bootstrap.bootstrap_registry"):
+            with patch("hexdag.core.registry.registry") as mock_registry:
                 mock_registry.list_components.return_value = []
 
                 plugins = _get_available_plugins()
@@ -221,17 +244,19 @@ class TestGetAvailablePlugins:
 
     def test_get_available_plugins_with_adapters(self):
         """Test getting plugins with adapters from registry."""
-        from hexdag.core.registry.models import ComponentInfo, ComponentMetadata, ComponentType
+        from hexdag.core.registry.models import ComponentInfo, ComponentType
 
-        with patch("hexdag.cli.commands.plugins_cmd.bootstrap_registry"):
-            with patch("hexdag.cli.commands.plugins_cmd.registry") as mock_registry:
+        with patch("hexdag.core.bootstrap.bootstrap_registry"):
+            with patch("hexdag.core.registry.registry") as mock_registry:
                 # Mock adapter component
                 adapter_info = ComponentInfo(
                     name="mock_llm",
                     qualified_name="plugin:mock_llm",
                     component_type=ComponentType.ADAPTER,
                     namespace="plugin",
-                    metadata=ComponentMetadata(implements_port="llm"),
+                    metadata=make_component_metadata(
+                        "mock_llm", ComponentType.ADAPTER, namespace="plugin", implements_port="llm"
+                    ),
                 )
 
                 mock_registry.list_components.return_value = [adapter_info]

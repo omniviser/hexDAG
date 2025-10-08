@@ -84,17 +84,23 @@ def list_components(
 
     # Output based on format
     if format == "json":
+        import json
+
         data = [
             {
                 "name": c.name,
                 "qualified_name": c.qualified_name,
-                "type": c.component_type.value,
+                "type": str(c.component_type.value)
+                if hasattr(c.component_type, "value")
+                else str(c.component_type),
                 "namespace": c.namespace,
-                "metadata": c.model_dump(),
+                "description": c.metadata.description if c.metadata else "",
+                "subtype": str(c.metadata.subtype) if c.metadata and c.metadata.subtype else None,
+                "implements_port": c.metadata.implements_port if c.metadata else None,
             }
             for c in components
         ]
-        console.print_json(data=data)
+        console.print(json.dumps(data, indent=2))
     elif format == "yaml":
         import yaml
 
@@ -102,9 +108,13 @@ def list_components(
             {
                 "name": c.name,
                 "qualified_name": c.qualified_name,
-                "type": c.component_type.value,
+                "type": str(c.component_type.value)
+                if hasattr(c.component_type, "value")
+                else str(c.component_type),
                 "namespace": c.namespace,
-                "metadata": c.model_dump(),
+                "description": c.metadata.description if c.metadata else "",
+                "subtype": str(c.metadata.subtype) if c.metadata and c.metadata.subtype else None,
+                "implements_port": c.metadata.implements_port if c.metadata else None,
             }
             for c in components
         ]

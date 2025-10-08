@@ -32,7 +32,7 @@ modules = [
     "hexdag.builtin.nodes"
 ]
 plugins = [
-    "hexdag.adapters.mock"
+    "hexdag.builtin.adapters.mock"
 ]
 dev_mode = true
 """
@@ -65,7 +65,7 @@ dev_mode = true
             config_content = """
 [tool.hexdag]
 modules = ["hexdag.core.ports"]
-plugins = ["hexdag.adapters.mock"]
+plugins = ["hexdag.builtin.adapters.mock"]
 
 [tool.hexdag.settings]
 log_level = "DEBUG"
@@ -100,8 +100,8 @@ modules = [
     "hexdag.builtin.nodes"
 ]
 plugins = [
-    "hexdag.adapters.mock",
-    "hexdag.adapters.database.sqlite"
+    "hexdag.builtin.adapters.mock",
+    "hexdag.builtin.adapters.database.sqlite"
 ]
 """
             f.write(config_content)
@@ -147,9 +147,9 @@ plugins = [
             config_content = """
 modules = ["hexdag.core.ports"]
 plugins = [
-    "hexdag.adapters.mock",  # Always available
-    "hexdag.adapters.llm.openai_adapter",  # Requires OPENAI_API_KEY
-    "hexdag.adapters.llm.anthropic_adapter"  # Requires ANTHROPIC_API_KEY
+    "hexdag.builtin.adapters.mock",  # Always available
+    "hexdag.builtin.adapters.llm.openai_adapter",  # Requires OPENAI_API_KEY
+    "hexdag.builtin.adapters.llm.anthropic_adapter"  # Requires ANTHROPIC_API_KEY
 ]
 """
             f.write(config_content)

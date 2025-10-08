@@ -18,7 +18,7 @@ def make_component_metadata(
     name: str,
     component_type: ComponentType,
     namespace: str = "core",
-    description: str | None = None,
+    description: str = "",
 ) -> ComponentMetadata:
     """Helper to create ComponentMetadata with required fields."""
 
@@ -126,14 +126,14 @@ class TestListComponents:
                 qualified_name="core:adapter1",
                 component_type=ComponentType.ADAPTER,
                 namespace="core",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata("adapter1", ComponentType.ADAPTER),
             )
             port = ComponentInfo(
                 name="port1",
                 qualified_name="core:port1",
                 component_type=ComponentType.PORT,
                 namespace="core",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata("port1", ComponentType.PORT),
             )
 
             mock_registry.list_components.return_value = [adapter, port]
@@ -149,14 +149,18 @@ class TestListComponents:
                 qualified_name="core:core_comp",
                 component_type=ComponentType.ADAPTER,
                 namespace="core",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata(
+                    "core_comp", ComponentType.ADAPTER, namespace="core"
+                ),
             )
             plugin_comp = ComponentInfo(
                 name="plugin_comp",
                 qualified_name="plugin:plugin_comp",
                 component_type=ComponentType.ADAPTER,
                 namespace="plugin",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata(
+                    "plugin_comp", ComponentType.ADAPTER, namespace="plugin"
+                ),
             )
 
             mock_registry.list_components.return_value = [core_comp, plugin_comp]
@@ -204,14 +208,18 @@ class TestShowComponent:
                 qualified_name="core:same_name",
                 component_type=ComponentType.ADAPTER,
                 namespace="core",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata(
+                    "same_name", ComponentType.ADAPTER, namespace="core"
+                ),
             )
             comp2 = ComponentInfo(
                 name="same_name",
                 qualified_name="plugin:same_name",
                 component_type=ComponentType.ADAPTER,
                 namespace="plugin",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata(
+                    "same_name", ComponentType.ADAPTER, namespace="plugin"
+                ),
             )
 
             mock_registry.list_components.return_value = [comp1, comp2]
@@ -237,7 +245,9 @@ class TestShowComponent:
                 qualified_name="core:test_port",
                 component_type=ComponentType.PORT,
                 namespace="core",
-                metadata=ComponentMetadata(description="Test port"),
+                metadata=make_component_metadata(
+                    "test_port", ComponentType.PORT, description="Test port"
+                ),
             )
 
             mock_registry.list_components.return_value = [port]
@@ -261,17 +271,17 @@ class TestTreeCommand:
             assert result.exit_code == 0
 
     def test_tree_command_with_ports_only(self, runner, mock_registry):
-        """Test tree command showing only ports."""
+        """Test tree command showing ports."""
         with patch("hexdag.cli.commands.registry_cmd.bootstrap_registry"):
             port = ComponentInfo(
                 name="port1",
                 qualified_name="core:port1",
                 component_type=ComponentType.PORT,
                 namespace="core",
-                metadata=ComponentMetadata(),
+                metadata=make_component_metadata("port1", ComponentType.PORT, namespace="core"),
             )
 
             mock_registry.list_components.return_value = [port]
 
-            result = runner.invoke(app, ["tree", "--ports-only"])
+            result = runner.invoke(app, ["tree"])
             assert result.exit_code == 0

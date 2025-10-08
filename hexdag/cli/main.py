@@ -47,8 +47,9 @@ app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation"
 app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def callback(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -58,8 +59,16 @@ def callback(
 ) -> None:
     """HexDAG CLI - Modular DAG orchestration framework."""
     if version:
-        console.print("[bold blue]HexDAG[/bold blue] version [green]0.1.0[/green]")
-        raise typer.Exit()
+        # Read version from package metadata
+        try:
+            from importlib.metadata import version as get_version
+
+            pkg_version = get_version("hexdag")
+        except Exception:
+            pkg_version = "0.1.0"  # Fallback
+
+        console.print(f"[bold blue]HexDAG[/bold blue] version [green]{pkg_version}[/green]")
+        raise typer.Exit(code=0)
 
 
 def main() -> None:

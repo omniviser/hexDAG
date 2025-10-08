@@ -56,15 +56,23 @@ class TestCallback:
 
     def test_callback_with_version_true_exits(self):
         """Test that callback raises Exit when version=True."""
+        from unittest.mock import MagicMock
+
         import typer
 
+        mock_ctx = MagicMock(spec=typer.Context)
         with pytest.raises(typer.Exit):
-            callback(version=True)
+            callback(ctx=mock_ctx, version=True)
 
     def test_callback_with_version_false_does_nothing(self):
         """Test that callback does nothing when version=False."""
+        from unittest.mock import MagicMock
+
+        import typer
+
+        mock_ctx = MagicMock(spec=typer.Context)
         # Should not raise any exception
-        callback(version=False)
+        callback(ctx=mock_ctx, version=False)
 
 
 class TestMainFunction:

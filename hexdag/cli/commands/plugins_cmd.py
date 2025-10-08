@@ -193,7 +193,7 @@ def install_plugin(
         # Use markup=False for the command
         console.print("Running: [bold]", end="")
         console.print(cmd_str, markup=False, style="bold")
-        console.print("[/bold]", end="\n")
+        console.print("")  # Empty line
 
         # Run the installation - using list format without shell=True for security
         result = subprocess.run(cmd_list, capture_output=True, text=True)  # nosec B603

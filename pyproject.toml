@@ -5,7 +5,7 @@ description = "Lightweight DAG orchestration framework with enterprise pipeline 
 authors = [{ name = "hexDAG Team" }]
 requires-python = "~=3.12.0"
 readme = "README.md"
-license = "MIT"
+license = { text = "Apache-2.0" }
 keywords = [
     "dag",
     "orchestration",
@@ -17,13 +17,14 @@ keywords = [
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     "pydantic~=2.0",
+    "pyyaml~=6.0",   # YAML pipeline support (core feature)
     "orjson>=3.9.0", # Fast JSON serialization (2-5x faster than stdlib json)
     "loguru>=0.7.0",
     "typer>=0.9.0",  # CLI framework (previously optional)
@@ -31,9 +32,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-yaml = [
-    "pyyaml~=6.0",  # For YAML pipeline support
-]
 viz = [
     "graphviz>=0.20.0,<0.21",  # For DAG visualization
 ]
@@ -53,7 +51,6 @@ docs = [
     "pymdown-extensions>=10.0",  # Markdown extensions
 ]
 all = [
-    "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
@@ -81,6 +78,9 @@ dev = [
     "memray>=1.14.0,<2",
     "mutmut>=3.1.0,<4",
     "diff-cover>=9.0.0,<10",
+    # Build and publish tools
+    "build>=1.0.0",
+    "twine>=6.1.0",
     # Code quality tools
     "deptry>=0.23.1",
     "black==24.10.0",
@@ -111,7 +111,6 @@ dev = [
     "yamllint>=1.35.0",
     "vulture>=2.11",
     "radon>=6.0.1",
-    "twine>=6.1.0",
     "licensecheck>=2024.3",
     "pip-licenses>=5.0.0",
     "interrogate>=1.7.0",
@@ -347,6 +346,21 @@ tag_format = "v$version"
 version_files = [
     "pyproject.toml:version"
 ]
+update_changelog_on_bump = true
+bump_message = "chore(release): bump version $current_version → $new_version"
+
+# Changelog configuration
+[tool.commitizen.change_type_map]
+feat = "Features"
+fix = "Bug Fixes"
+docs = "Documentation"
+style = "Styles"
+refactor = "Code Refactoring"
+perf = "Performance Improvements"
+test = "Tests"
+build = "Build System"
+ci = "Continuous Integration"
+chore = "Chores"
 
 [tool.vulture]
 min_confidence = 90
