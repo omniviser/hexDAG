@@ -58,6 +58,14 @@ Documentation = "https://dev.azure.com/omniviser/hexDAG"
 
 [project.scripts]
 hexdag = "hexai.cli:main"
+# Documentation commands (inline Python)
+docs-build = "scripts.docs:build"
+docs-clean = "scripts.docs:clean"
+docs-rebuild = "scripts.docs:rebuild"
+docs-check = "scripts.docs:check"
+docs-autobuild = "scripts.docs:autobuild"
+run-check-examples = "scripts.check_examples:main"
+run-check-tests = "scripts.check_test_structure:main"
 
 [dependency-groups]
 dev = [
@@ -101,7 +109,14 @@ dev = [
     "vulture>=2.11",
     "radon>=6.0.1",
     "twine>=6.1.0",
-
+]
+  
+docs = [
+    "sphinx==7.2.6",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinx-autodoc-typehints==2.0.0",
+    "pydocstyle==6.3.0",
+    "doc8==2.0.0"
 ]
 
 
@@ -179,8 +194,13 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-exclude = ["tests/", "examples/"]
 disable_error_code = ["import-untyped"]
+exclude = [
+    "tests/",
+    "scripts/",
+    "examples/",
+    "docs/"
+]
 
 [[tool.mypy.overrides]]
 module = ["tests.*", "hexai_plugins.*"]
@@ -226,7 +246,7 @@ reportUndefinedVariable = true
 reportIncompatibleMethodOverride = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples", "hexai_plugins"]
+exclude_dirs = ["tests", "examples", "docs", "scripts", "hexai_plugins"]
 skips = ["B101", "B601"]
 
 [tool.ruff]

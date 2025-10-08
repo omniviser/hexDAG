@@ -2,7 +2,9 @@
 # "Because 80% of LLM workflows just need to work, not win a Turing test"
 
 name: support_ticket_analyzer
-description: Analyze customer support tickets for sentiment, category, and priority
+description: >
+  Analyze customer support tickets for sentiment,
+  category, and priority
 
 # Input validation - because production systems need contracts
 input_schema:
@@ -46,7 +48,8 @@ nodes:
       required: ["issue_type", "technical_details", "customer_emotion"]
     depends_on: []
 
-  # Step 2: Conditional routing based on customer tier (enterprise gets special treatment)
+  # Step 2: Conditional routing based on customer tier
+  # (enterprise gets special treatment)
   - type: conditional
     id: tier_router
     params:
@@ -138,7 +141,9 @@ nodes:
       function: send_slack_notification
       args:
         channel: "#support-urgent"
-        message: "New {{response_generator.assigned_team}} ticket: {{response_generator.ticket_id}}"
+        message: >
+          "New {{response_generator.assigned_team}}
+          ticket: {{response_generator.ticket_id}}"
     depends_on: [response_generator]
 
   - type: function
@@ -155,7 +160,9 @@ nodes:
     params:
       function: create_jira_ticket
       args:
-        summary: "{{ticket_parser.issue_type}}: {{response_generator.ticket_id}}"
+        summary: >
+          "{{ticket_parser.issue_type}}:
+          {{response_generator.ticket_id}}"
         description: "{{response_generator.internal_notes}}"
         priority: "{{tier_router.result.priority}}"
     depends_on: [response_generator]
