@@ -245,7 +245,7 @@ jobs:
       curl -LsSf https://astral.sh/uv/install.sh | sh
       export PATH="$HOME/.local/bin:$PATH"
       uv venv
-      uv pip install -e ".[dev,docs]"
+      uv sync --group dev --group docs 
     displayName: "Install dependencies with uv"
 
   - script: |
