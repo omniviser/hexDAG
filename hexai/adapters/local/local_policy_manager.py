@@ -34,27 +34,19 @@ class LocalPolicyManager(PolicyManagerPort):
 
     def __init__(self) -> None:
         """Initialize the local policy manager."""
-        # Core storage using weak references
         self._policies: WeakSet[Policy] = WeakSet()
-
-        # Metadata using WeakKeyDictionary for automatic cleanup
         self._policy_metadata: WeakKeyDictionary[Policy, dict[str, Any]] = WeakKeyDictionary()
-
-        # Subscription tracking by type for efficient filtering
         self._by_type: dict[SubscriberType, WeakSet[Policy]] = defaultdict(WeakSet)
 
-        # Strong references for CORE and PLUGIN types
         self._strong_refs: dict[SubscriberType, set[Policy]] = {
             SubscriberType.CORE: set(),
             SubscriberType.PLUGIN: set(),
         }
 
-        # Subscription ID mapping
         self._subscriptions: weakref.WeakValueDictionary[str, Policy] = (
             weakref.WeakValueDictionary()
         )
 
-        # Cache for priority queue to avoid rebuilding on every evaluate() call
         self._priority_queue_cache: list[tuple[int, int, Policy]] | None = None
         self._cache_generation: int = 0
 
@@ -72,21 +64,17 @@ class LocalPolicyManager(PolicyManagerPort):
         -------
             PolicyResponse with signal and optional data
         """
-        # Use cached priority queue if available (avoid rebuilding on every call)
         if self._priority_queue_cache is None:
             pq: list[tuple[int, int, Policy]] = []
             for idx, policy in enumerate(self._policies):
                 if policy in self._policy_metadata:
                     metadata = self._policy_metadata[policy]
                     priority = metadata.get("priority", policy.priority)
-                    # Use idx for stable sort when priorities are equal
                     heapq.heappush(pq, (priority, idx, policy))
             self._priority_queue_cache = pq
         else:
-            # Clone cached queue for consumption (heap is mutated during pop)
             pq = self._priority_queue_cache.copy()
 
-        # Process in priority order
         while pq:
             _, _, policy = heapq.heappop(pq)
             try:
@@ -94,7 +82,6 @@ class LocalPolicyManager(PolicyManagerPort):
                 if response.signal != PolicySignal.PROCEED:
                     return response
             except Exception:
-                # Skip failed policies - this is intentional behavior
                 continue  # nosec B112
 
         return PolicyResponse(signal=PolicySignal.PROCEED)
@@ -118,27 +105,20 @@ class LocalPolicyManager(PolicyManagerPort):
         """
         subscription_id = str(uuid4())
 
-        # Add to core storage
         self._policies.add(policy)
 
-        # Store metadata
         self._policy_metadata[policy] = {
             "subscription_id": subscription_id,
             "subscriber_type": subscriber_type,
             "priority": getattr(policy, "priority", 100),
         }
 
-        # Add to type-specific collection
         self._by_type[subscriber_type].add(policy)
 
-        # Keep strong reference for framework/plugin policies
         if subscriber_type in (SubscriberType.CORE, SubscriberType.PLUGIN):
             self._strong_refs[subscriber_type].add(policy)
 
-        # Store subscription mapping
         self._subscriptions[subscription_id] = policy
-
-        # Invalidate cache when policies change
         self._priority_queue_cache = None
 
         return subscription_id
@@ -158,11 +138,9 @@ class LocalPolicyManager(PolicyManagerPort):
         if policy is None:
             return False
 
-        # Get metadata before removal
         metadata = self._policy_metadata.get(policy, {})
         subscriber_type = metadata.get("subscriber_type")
 
-        # Remove from all collections
         self._policies.discard(policy)
 
         if subscriber_type:
@@ -170,11 +148,9 @@ class LocalPolicyManager(PolicyManagerPort):
             if subscriber_type in self._strong_refs:
                 self._strong_refs[subscriber_type].discard(policy)
 
-        # Remove subscription
         if subscription_id in self._subscriptions:
             del self._subscriptions[subscription_id]
 
-        # Invalidate cache when policies change
         self._priority_queue_cache = None
 
         return True
@@ -187,17 +163,14 @@ class LocalPolicyManager(PolicyManagerPort):
             subscriber_type: If specified, only clear this type.
         """
         if subscriber_type is None:
-            # Clear all
             self._policies.clear()
             self._policy_metadata.clear()
             self._by_type.clear()
             for refs in self._strong_refs.values():
                 refs.clear()
             self._subscriptions.clear()
-            # Invalidate cache
             self._priority_queue_cache = None
         else:
-            # Clear specific type
             policies_to_remove = list(self._by_type[subscriber_type])
             for policy in policies_to_remove:
                 metadata = self._policy_metadata.get(policy, {})

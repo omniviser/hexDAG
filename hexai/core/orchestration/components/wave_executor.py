@@ -73,20 +73,14 @@ class WaveExecutor:
                 for wave_idx, wave in enumerate(waves, 1):
                     wave_start_time = time.time()
 
-                    # Fire wave started event and check control
-                    wave_event = WaveStarted(
-                        wave_index=wave_idx,
-                        nodes=wave,
-                    )
+                    wave_event = WaveStarted(wave_index=wave_idx, nodes=wave)
                     await policy_coordinator.notify_observer(get_observer_manager(), wave_event)
 
-                    # Evaluate policy for wave
                     wave_response = await policy_coordinator.evaluate_policy(
                         get_policy_manager(), wave_event, context, wave_index=wave_idx
                     )
                     policy_coordinator.check_policy_signal(wave_response, f"Wave {wave_idx}")
 
-                    # Execute the wave (node timeouts raise NodeTimeoutError, not TimeoutError)
                     wave_results = await self._execute_wave(
                         wave=wave,
                         node_executor_fn=node_executor_fn,
@@ -100,19 +94,16 @@ class WaveExecutor:
                     )
                     node_results.update(wave_results)
 
-                    # Fire wave completed event
                     wave_completed = WaveCompleted(
                         wave_index=wave_idx,
                         duration_ms=(time.time() - wave_start_time) * 1000,
                     )
                     await policy_coordinator.notify_observer(get_observer_manager(), wave_completed)
 
-            return False  # Completed successfully
+            return False
 
         except TimeoutError:
-            # This is a pipeline-level timeout (from asyncio.timeout(timeout))
-            # Node-level timeouts raise NodeTimeoutError and propagate up
-            return True  # Cancelled due to timeout
+            return True
 
     async def _execute_wave(
         self,
@@ -129,7 +120,6 @@ class WaveExecutor:
         """Execute all nodes in a wave with concurrency limiting."""
 
         async def execute_with_semaphore(node_name: str) -> tuple[str, Any]:
-            """Execute a single node with semaphore-based concurrency control."""
             async with self._semaphore:
                 result = await node_executor_fn(
                     node_name=node_name,
@@ -143,39 +133,30 @@ class WaveExecutor:
                 )
                 return node_name, result
 
-        # Execute all nodes in the wave concurrently
-        # Create coroutines
-        coros = [execute_with_semaphore(node_name) for node_name in wave]
+        wave_size = len(wave)
+        coros: list[Any] = [None] * wave_size
+        for i, node_name in enumerate(wave):
+            coros[i] = execute_with_semaphore(node_name)
 
-        # Note: asyncio.gather with return_exceptions=True handles BaseException propagation
-        # internally and will cancel remaining tasks. We rely on the semaphore's async context
-        # manager (__aexit__) to properly release resources even on cancellation.
         wave_outputs = await asyncio.gather(*coros, return_exceptions=True)
 
-        # Process results and handle exceptions (lazy list creation)
         wave_results = {}
         exceptions: list[tuple[str | None, Exception]] | None = None
 
         for output in wave_outputs:
             if isinstance(output, Exception):
-                # Lazy create exception list only when first exception found
                 if exceptions is None:
                     exceptions = []
                 exceptions.append((None, output))
             elif isinstance(output, BaseException):
-                # For non-Exception BaseExceptions (KeyboardInterrupt, SystemExit),
-                # these should have been caught above, but handle defensively
                 raise output
             else:
                 node_name, result = output
                 wave_results[node_name] = result
 
-        # Raise all collected exceptions
         if exceptions:
             if len(exceptions) == 1:
-                # Single exception - raise directly
                 raise exceptions[0][1]
-            # Multiple exceptions - raise as ExceptionGroup
             exception_list = [exc for _, exc in exceptions]
             raise ExceptionGroup(
                 f"Multiple node failures in wave {wave_index} ({len(exceptions)} nodes failed)",

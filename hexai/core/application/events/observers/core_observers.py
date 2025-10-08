@@ -136,7 +136,6 @@ class PerformanceMetricsObserver:
             - total_failures: Total failures across all nodes
             - overall_success_rate: Overall success rate percentage
         """
-        # Single-pass computation: build all dicts in one iteration (O(n) instead of O(6n))
         avg_timings, min_timings, max_timings = {}, {}, {}
         node_executions, failures, success_rates = {}, {}, {}
 
@@ -298,7 +297,6 @@ class AlertingObserver:
         list[Alert]
             List of Alert objects matching the criteria
         """
-        # Single-pass filtering (avoid creating intermediate lists)
         return [
             a
             for a in self.alerts

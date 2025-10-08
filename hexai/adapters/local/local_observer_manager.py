@@ -111,50 +111,36 @@ class LocalObserverManager:
         self._error_handler = error_handler or LoggingErrorHandler()
         self._use_weak_refs = use_weak_refs
 
-        # Semaphore for concurrency control
         self._semaphore = asyncio.Semaphore(max_concurrent_observers)
-
-        # Thread pool for sync functions
         self._executor = ThreadPoolExecutor(max_workers=max_sync_workers)
         self._executor_shutdown = False
 
-        # Storage for observers (can be Observer or FunctionObserver)
         self._handlers: dict[str, Any] = {}
-
-        # Event type filtering
         self._event_filters: dict[str, set[type] | None] = {}
 
-        # Weak reference support
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-            self._strong_refs: dict[str, Any] = {}  # Keep alive certain observers
-            # Track observer IDs for cleanup callback
+            self._strong_refs: dict[str, Any] = {}
             self._observer_refs: dict[str, weakref.ref] = {}
 
     def _on_observer_deleted(self, observer_id: str) -> None:
         """Cleanup callback when observer is garbage collected."""
-        # Remove event filter for dead observer to prevent memory leak
         self._event_filters.pop(observer_id, None)
 
     def _store_observer(self, observer_id: str, observer: Any, keep_alive: bool) -> None:
         """Store observer with appropriate reference type."""
         if self._use_weak_refs:
             try:
-                # Try to create weak reference
                 self._weak_handlers[observer_id] = observer
-                # Create weak ref with cleanup callback
                 self._observer_refs[observer_id] = weakref.ref(
                     observer, lambda _: self._on_observer_deleted(observer_id)
                 )
-                # Keep strong ref if requested
                 if keep_alive:
                     self._strong_refs[observer_id] = observer
             except TypeError:
-                # Some objects can't be weakly referenced - fall back to strong ref
                 self._handlers[observer_id] = observer
                 self._strong_refs[observer_id] = observer
         else:
-            # Normal strong reference when weak refs disabled
             self._handlers[observer_id] = observer
 
     def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
@@ -180,30 +166,22 @@ class LocalObserverManager:
         observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
         event_types = kwargs.get("event_types")
 
-        # Wrap function if needed
         if hasattr(handler, "handle"):
-            # Already implements Observer protocol
             observer = handler
             keep_alive = kwargs.get("keep_alive", False)
         elif callable(handler):
-            # Wrap function to implement the protocol
             observer = FunctionObserver(handler, self._executor)
-            # Functions need to be kept alive since they're wrapped
             keep_alive = True
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
 
-        # Store the observer with appropriate reference type
         self._store_observer(observer_id, observer, keep_alive)
 
-        # Store event type filter
         if event_types is not None:
-            # Convert to set for O(1) lookup
             self._event_filters[observer_id] = set(event_types)
         else:
-            # None means accept all events
             self._event_filters[observer_id] = None
 
         return str(observer_id)
@@ -221,7 +199,6 @@ class LocalObserverManager:
         """
         found = False
 
-        # Remove from all storage locations
         if handler_id in self._handlers:
             del self._handlers[handler_id]
             found = True
@@ -235,7 +212,6 @@ class LocalObserverManager:
                 del self._strong_refs[handler_id]
                 found = True
 
-        # Also remove event filter
         if handler_id in self._event_filters:
             del self._event_filters[handler_id]
 
@@ -252,30 +228,33 @@ class LocalObserverManager:
         ----
             event: The event to distribute to observers
         """
-        # Check both strong and weak handlers
         if not self._handlers and (not self._use_weak_refs or not self._weak_handlers):
             return
 
-        # Build tasks directly without creating intermediate lists
-        # This is the HOT PATH - every event goes through here
-        tasks = []
+        # Pre-allocate buffer to avoid repeated list resizing (hot path optimization)
+        max_tasks = len(self._handlers)
+        if self._use_weak_refs:
+            max_tasks += len(self._weak_handlers)
+
+        tasks_buffer: list[Any] = [None] * max_tasks
+        task_count = 0
 
         if self._use_weak_refs:
-            # Iterate weak handlers directly without materializing list(keys())
             for obs_id, observer in self._weak_handlers.items():
                 if observer is not None and self._should_notify(obs_id, event):
-                    tasks.append(self._limited_invoke(observer, event))
+                    tasks_buffer[task_count] = self._limited_invoke(observer, event)
+                    task_count += 1
 
-        # Add strong references
         for obs_id, observer in self._handlers.items():
             if self._should_notify(obs_id, event):
-                tasks.append(self._limited_invoke(observer, event))
+                tasks_buffer[task_count] = self._limited_invoke(observer, event)
+                task_count += 1
+
+        tasks = tasks_buffer[:task_count]
 
         if not tasks:
             return
 
-        # Wait for all with timeout
-        # Fixed timeout buffer since observers run concurrently, not sequentially
         total_timeout = self._timeout + 1.0
 
         try:
@@ -316,7 +295,6 @@ class LocalObserverManager:
         count = len(self._handlers)
 
         if self._use_weak_refs:
-            # Count weak handlers that are still alive
             for handler_id in list(self._weak_handlers.keys()):
                 if (
                     handler_id not in self._handlers
@@ -368,17 +346,13 @@ class LocalObserverManager:
         """
         await self.close()
 
-    # Private helper methods
-
     def _should_notify(self, observer_id: str, event: Event) -> bool:
         """Check if observer should be notified of this event type."""
         event_filter = self._event_filters.get(observer_id)
 
-        # None means accept all events
         if event_filter is None:
             return True
 
-        # Check if event type is in the filter
         return type(event) in event_filter
 
     async def _limited_invoke(self, observer: Observer, event: Event) -> None:
@@ -389,7 +363,6 @@ class LocalObserverManager:
     async def _safe_invoke(self, observer: Observer, event: Event) -> None:
         """Safely invoke an observer with timeout."""
         try:
-            # Apply timeout to individual observer
             await asyncio.wait_for(
                 observer.handle(event),
                 timeout=self._timeout,
@@ -405,7 +378,6 @@ class LocalObserverManager:
                 },
             )
         except Exception as e:
-            # Get appropriate name for logging
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(
                 e,

@@ -233,19 +233,14 @@ class RateLimitPolicy:
         if not isinstance(context.event, NodeStarted):
             return PolicyResponse(signal=PolicySignal.PROCEED)
 
-        # Use wall-clock time for rate limiting (not event timestamp)
-        # This is intentional - rate limiting is about real-time constraints
         current_time = time.time()
 
-        # Only clean old executions if needed (avoid unconditional list rebuild)
-        # Clean when: list is getting full OR oldest entry is outside window
         if self.executions and (
             len(self.executions) >= self.max_executions
             or current_time - self.executions[0] >= self.window_seconds
         ):
             self.executions = [t for t in self.executions if current_time - t < self.window_seconds]
 
-        # Check if limit exceeded
         if len(self.executions) >= self.max_executions:
             return PolicyResponse(
                 signal=PolicySignal.SKIP,
@@ -256,7 +251,6 @@ class RateLimitPolicy:
                 },
             )
 
-        # Record this execution
         self.executions.append(current_time)
         return PolicyResponse(signal=PolicySignal.PROCEED)
 

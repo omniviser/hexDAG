@@ -462,9 +462,7 @@ class DirectedGraph:
         SchemaCompatibilityError
             If connected nodes have incompatible types.
         """
-        # Skip structural validation if already validated and graph hasn't changed
         if not self._validation_cache:
-            # Check for missing dependencies
             missing_deps: list[str] = []
             for node_name, node_spec in self.nodes.items():
                 for dep in node_spec.deps:
@@ -475,15 +473,12 @@ class DirectedGraph:
             if missing_deps:
                 raise MissingDependencyError("; ".join(missing_deps))
 
-            # Check for cycles using DFS
             cycle_message = self._detect_cycles()
             if cycle_message:
                 raise CycleDetectedError(cycle_message)
 
-            # Cache structural validation result
             self._validation_cache = True
 
-        # Check type compatibility between connected nodes (not cached - less frequent)
         if check_type_compatibility:
             incompatibilities = self._validate_type_compatibility()
             if incompatibilities:
@@ -571,36 +566,29 @@ class DirectedGraph:
         if not self.nodes:
             return []
 
-        # Calculate in-degrees (number of dependencies)
         in_degrees = {node: len(self.nodes[node].deps) for node in self.nodes}
         waves = []
 
         while in_degrees:
-            # Find nodes with no remaining dependencies (avoid temp list comprehension)
             current_wave = []
             for node, degree in in_degrees.items():
                 if degree == 0:
                     current_wave.append(node)
 
             if not current_wave:
-                # This shouldn't happen if the graph is acyclic and validate() passed
                 remaining_nodes = list(in_degrees.keys())
                 raise CycleDetectedError(
                     f"No nodes with zero in-degree found. Remaining nodes: {remaining_nodes}"
                 )
 
-            waves.append(sorted(current_wave))  # Sort for deterministic output
+            waves.append(sorted(current_wave))
 
-            # Remove current wave nodes and update in-degrees
             for node in current_wave:
                 del in_degrees[node]
-
-                # Reduce in-degree for all dependents
                 for dependent in self._forward_edges.get(node, _EMPTY_SET):
                     if dependent in in_degrees:
                         in_degrees[dependent] -= 1
 
-        # Cache the result
         self._waves_cache = waves
         return waves
 

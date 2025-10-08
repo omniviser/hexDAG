@@ -40,17 +40,14 @@ def _extract_variables_cached(template: str) -> tuple[str, ...]:
     tuple[str, ...]
         Tuple of unique root variable names found in template
     """
-    # Extract variables from {{ variable }} patterns
     pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
     matches = re.findall(pattern, template)
 
-    # Extract root variable names (before any dots) - use set for O(1) dedup instead of O(n)
     root_vars_set = set()
     for match in matches:
         root_var = match.split(".")[0]
         root_vars_set.add(root_var)
 
-    # Convert to sorted tuple for deterministic ordering
     return tuple(sorted(root_vars_set))
 
 
