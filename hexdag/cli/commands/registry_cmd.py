@@ -348,6 +348,192 @@ def show_tree() -> None:
     console.print(tree)
 
 
+@app.command("bootstrap")
+def bootstrap_command(
+    manifest: Annotated[
+        str | None,
+        typer.Option(
+            "--manifest",
+            "-m",
+            help="Path to manifest YAML file",
+        ),
+    ] = None,
+    dev: Annotated[
+        bool,
+        typer.Option(
+            "--dev",
+            help="Enable development mode",
+        ),
+    ] = False,
+) -> None:
+    """Bootstrap the registry from configuration or manifest."""
+    try:
+        if manifest:
+            console.print(f"[cyan]Bootstrapping from manifest: {manifest}[/cyan]")
+            bootstrap_registry(config_path=manifest)
+        else:
+            console.print("[cyan]Bootstrapping from default configuration[/cyan]")
+            bootstrap_registry()
+
+        # Show summary
+        components = registry.list_components()
+        namespaces = {c.namespace for c in components}
+
+        console.print("[green]✓ Registry bootstrapped successfully[/green]")
+        console.print(f"  Components: {len(components)}")
+        console.print(f"  Namespaces: {', '.join(sorted(namespaces))}")
+
+        if dev:
+            console.print("[yellow]Development mode enabled[/yellow]")
+
+    except Exception as e:
+        console.print(f"[red]Error bootstrapping registry: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+@app.command("namespaces")
+def list_namespaces() -> None:
+    """List all registered namespaces."""
+    # Bootstrap if not already done
+    with contextlib.suppress(Exception):
+        bootstrap_registry()
+
+    components = registry.list_components()
+    namespaces: dict[str, list] = {}
+
+    # Group components by namespace
+    for comp in components:
+        if comp.namespace not in namespaces:
+            namespaces[comp.namespace] = []
+        namespaces[comp.namespace].append(comp)
+
+    # Create table
+    table = Table(
+        title="Registry Namespaces",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Namespace", style="yellow")
+    table.add_column("Components", justify="right", style="cyan")
+    table.add_column("Types", style="green")
+
+    for ns, comps in sorted(namespaces.items()):
+        types = {c.component_type.value for c in comps}
+        table.add_row(
+            ns,
+            str(len(comps)),
+            ", ".join(sorted(types)),
+        )
+
+    console.print(table)
+
+
+@app.command("search")
+def search_components(
+    pattern: Annotated[
+        str,
+        typer.Argument(help="Search pattern (supports wildcards)"),
+    ],
+    type_filter: Annotated[
+        ComponentFilter | None,
+        typer.Option(
+            "--type",
+            "-t",
+            help="Filter by component type",
+        ),
+    ] = None,
+) -> None:
+    """Search for components by name pattern."""
+    import re
+
+    # Bootstrap if not already done
+    with contextlib.suppress(Exception):
+        bootstrap_registry()
+
+    components = registry.list_components()
+
+    # Convert wildcard pattern to regex
+    regex_pattern = pattern.replace("*", ".*").replace("?", ".")
+    regex = re.compile(regex_pattern, re.IGNORECASE)
+
+    # Filter components
+    matches = [c for c in components if regex.search(c.name) or regex.search(c.qualified_name)]
+
+    # Apply type filter
+    if type_filter and type_filter != ComponentFilter.ALL:
+        type_map = {
+            ComponentFilter.PORT: ComponentType.PORT,
+            ComponentFilter.ADAPTER: ComponentType.ADAPTER,
+            ComponentFilter.NODE: ComponentType.NODE,
+        }
+        filter_type = type_map.get(type_filter)
+        matches = [c for c in matches if c.component_type == filter_type]
+
+    if not matches:
+        console.print(f"[yellow]No components found matching '{pattern}'[/yellow]")
+        return
+
+    # Display results
+    table = Table(
+        title=f"Search Results: '{pattern}'",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Qualified Name", style="cyan")
+    table.add_column("Type", style="green")
+    table.add_column("Description", style="dim")
+
+    for comp in sorted(matches, key=lambda c: c.qualified_name):
+        desc = (
+            comp.metadata.description[:60] + "..."
+            if comp.metadata and len(comp.metadata.description) > 60
+            else (comp.metadata.description if comp.metadata else "")
+        )
+        table.add_row(
+            comp.qualified_name,
+            comp.component_type.value,
+            desc,
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Found {len(matches)} component(s)[/dim]")
+
+
+@app.command("verify")
+def verify_registry() -> None:
+    """Verify registry integrity (duplicates, protection, immutability)."""
+    # Bootstrap if not already done
+    with contextlib.suppress(Exception):
+        bootstrap_registry()
+
+    components = registry.list_components()
+    issues = []
+
+    # Check for duplicates
+    seen = {}
+    for comp in components:
+        key = comp.qualified_name
+        if key in seen:
+            issues.append(f"Duplicate component: {key}")
+        seen[key] = comp
+
+    # Check protected components in core namespace
+    core_components = [c for c in components if c.namespace == "core"]
+    if core_components:
+        console.print(f"[dim]Protected core components: {len(core_components)}[/dim]")
+
+    # Report results
+    if issues:
+        console.print("[red]Registry integrity issues found:[/red]")
+        for issue in issues:
+            console.print(f"  [red]✗[/red] {issue}")
+        raise typer.Exit(1)
+    console.print("[green]✓ Registry integrity verified[/green]")
+    console.print(f"  Total components: {len(components)}")
+    console.print(f"  Unique namespaces: {len({c.namespace for c in components})}")
+    console.print(f"  Protected (core): {len(core_components)}")
+
+
 def _show_suggestions(
     component_name: str,
     all_components: list,

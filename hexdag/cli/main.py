@@ -18,6 +18,8 @@ from hexdag.cli.commands import (
     config_cmd,
     docs_cmd,
     init_cmd,
+    manifest_cmd,
+    pipeline_cmd,
     plugin_dev_cmd,
     plugins_cmd,
     registry_cmd,
@@ -41,6 +43,8 @@ app.add_typer(config_cmd.app, name="config", help="Configuration management")
 app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters")
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
 app.add_typer(registry_cmd.app, name="registry", help="Inspect the component registry")
+app.add_typer(manifest_cmd.app, name="manifest", help="Manifest file management")
+app.add_typer(pipeline_cmd.app, name="pipeline", help="Pipeline validation and execution planning")
 app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
 
 # Add build command directly
