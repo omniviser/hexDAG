@@ -23,9 +23,9 @@ import os
 # This must be done BEFORE importing hexai modules
 os.environ.setdefault("HEXDAG_LOG_LEVEL", "DEBUG")
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.bootstrap import ensure_bootstrapped
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.bootstrap import ensure_bootstrapped
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 # Ensure registry is loaded
 ensure_bootstrapped()

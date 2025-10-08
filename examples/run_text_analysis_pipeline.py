@@ -10,9 +10,9 @@ This example demonstrates how to:
 import asyncio
 from pathlib import Path
 
-from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.bootstrap import ensure_bootstrapped
+from hexdag.core.bootstrap import ensure_bootstrapped
+from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 # Ensure registry is bootstrapped
 ensure_bootstrapped()
@@ -162,7 +162,7 @@ async def main():
     builder = YamlPipelineBuilder()
 
     print(f"\n📄 Loading pipeline from: {yaml_path}")
-    with open(yaml_path) as f:
+    with Path.open(yaml_path) as f:
         graph, metadata = builder.build_from_yaml_string(f.read())
 
     print(f"✓ Loaded pipeline: {metadata['name']}")

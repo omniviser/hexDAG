@@ -43,8 +43,8 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
     """
 
     try:
-        from hexai.core.bootstrap import ensure_bootstrapped
-        from hexai.core.registry import registry
+        from hexdag.core.bootstrap import ensure_bootstrapped
+        from hexdag.core.registry import registry
 
         # Get custom config path from environment variable
         custom_config = os.environ.get("HEXDAG_CONFIG_PATH")

@@ -11,7 +11,7 @@ The logging system provides:
 
 import tempfile
 
-from hexai.core.logging import configure_logging, get_logger, get_logger_for_component
+from hexdag.core.logging import configure_logging, get_logger, get_logger_for_component
 
 
 def example_basic_logging():
@@ -163,7 +163,7 @@ def main():
    configure_logging(level="WARNING", format="console")
 
 4. Usage in Code:
-   from hexai.core.logging import get_logger
+   from hexdag.core.logging import get_logger
    logger = get_logger(__name__)
    logger.info("Message", extra={"context": "value"})
 """

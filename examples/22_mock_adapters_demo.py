@@ -7,8 +7,8 @@ and can be used in workflows for testing and development.
 
 import asyncio
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.registry import registry
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.registry import registry
 
 
 async def demo_mock_adapters():
@@ -18,7 +18,7 @@ async def demo_mock_adapters():
     print("=" * 60)
 
     # Bootstrap registry with mock config to load mock adapters for testing
-    bootstrap_registry("hexai/adapters/mock/hexdag.toml")
+    bootstrap_registry("hexdag/builtin/adapters/mock/hexdag.toml")
 
     print("\n📦 Loaded Components:")
     components = registry.list_components()
@@ -30,9 +30,9 @@ async def demo_mock_adapters():
     print("\n🔌 Using Mock Adapters:")
 
     # 1. Mock LLM
-    llm = registry.get("mock_llm", namespace="plugin")
+    llm = registry.get("mock_llm", namespace="core")
     print("\n1. Mock LLM:")
-    from hexai.core.ports.llm import Message
+    from hexdag.core.ports.llm import Message
 
     messages = [Message(role="user", content="Hello, how are you?")]
     response = await llm.aresponse(messages)
@@ -40,7 +40,7 @@ async def demo_mock_adapters():
     print(f"   Assistant: {response}")
 
     # 2. Mock Database
-    db = registry.get("mock_database", namespace="plugin")
+    db = registry.get("mock_database", namespace="core")
     print("\n2. Mock Database:")
     schemas = await db.aget_table_schemas()
     print(f"   Available tables: {list(schemas.keys())}")
@@ -49,14 +49,14 @@ async def demo_mock_adapters():
     print(f"   Sample query results: {results}")
 
     # 3. In-Memory Memory
-    memory = registry.get("in_memory_memory", namespace="plugin")
+    memory = registry.get("in_memory_memory", namespace="core")
     print("\n3. In-Memory Memory:")
     await memory.aset("user_preference", {"theme": "dark", "language": "en"})
     pref = await memory.aget("user_preference")
     print(f"   Stored preference: {pref}")
 
     # 4. Mock Tool Router
-    router = registry.get("mock_tool_router", namespace="plugin")
+    router = registry.get("mock_tool_router", namespace="core")
     print("\n4. Mock Tool Router:")
     tools = router.get_available_tools()
     print(f"   Available tools: {tools}")
@@ -74,12 +74,12 @@ async def demo_workflow_with_mocks():
     print("=" * 60)
 
     # This would typically be done in a DAG node
-    from hexai.core.application.nodes import FunctionNode
+    from hexdag.builtin.nodes import FunctionNode
 
     # Create a node that uses multiple mock adapters
     async def process_customer_query(input_data, **kwargs):
         """Process a customer query using mock adapters."""
-        from hexai.core.context import get_port
+        from hexdag.core.context import get_port
 
         llm = get_port("llm")
         db = get_port("database")
@@ -104,7 +104,7 @@ async def demo_workflow_with_mocks():
         )
 
         # Generate response with LLM
-        from hexai.core.ports.llm import Message
+        from hexdag.core.ports.llm import Message
 
         messages = [
             Message(
@@ -137,10 +137,10 @@ async def demo_workflow_with_mocks():
     )
 
     # Get mock adapters directly from their modules for creating new instances
-    from hexai.adapters.memory import InMemoryMemory
-    from hexai.adapters.mock.mock_database import MockDatabaseAdapter
-    from hexai.adapters.mock.mock_llm import MockLLM
-    from hexai.adapters.mock.mock_tool_router import MockToolRouter
+    from hexdag.builtin.adapters.memory import InMemoryMemory
+    from hexdag.builtin.adapters.mock.mock_database import MockDatabaseAdapter
+    from hexdag.builtin.adapters.mock.mock_llm import MockLLM
+    from hexdag.builtin.adapters.mock.mock_tool_router import MockToolRouter
 
     # Create adapter instances
     ports = {
@@ -162,7 +162,7 @@ async def demo_workflow_with_mocks():
     print(f"   {input_data}")
 
     # Use ExecutionContext to make ports available to the function
-    from hexai.core.context import ExecutionContext
+    from hexdag.core.context import ExecutionContext
 
     async with ExecutionContext(ports=ports):
         result = await node.fn(input_data)

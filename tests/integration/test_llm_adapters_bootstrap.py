@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hexai.core.bootstrap import bootstrap_registry, ensure_bootstrapped
-from hexai.core.config.models import HexDAGConfig
-from hexai.core.ports.llm import Message, MessageList
-from hexai.core.registry import registry as global_registry
+from hexdag.core.bootstrap import bootstrap_registry, ensure_bootstrapped
+from hexdag.core.config.models import HexDAGConfig
+from hexdag.core.ports.llm import Message, MessageList
+from hexdag.core.registry import registry as global_registry
 
 
 class TestLLMAdaptersBootstrap:
@@ -29,16 +29,16 @@ class TestLLMAdaptersBootstrap:
     def test_bootstrap_loads_llm_adapters(self):
         """Test that bootstrap loads LLM adapter plugins."""
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.anthropic_adapter",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.llm.anthropic_adapter",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
         # Mock both API keys as available
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(
                 os.environ,
                 {"ANTHROPIC_API_KEY": "test-anthropic-key", "OPENAI_API_KEY": "test-openai-key"},
@@ -56,15 +56,15 @@ class TestLLMAdaptersBootstrap:
     def test_get_llm_adapters_after_bootstrap(self):
         """Test retrieving LLM adapters from registry after bootstrap."""
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.anthropic_adapter",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.llm.anthropic_adapter",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -84,23 +84,23 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.anthropic_adapter",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.llm.anthropic_adapter",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
 
         # Mock the API clients
         with (
-            patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
-            patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
+            patch("hexdag.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
+            patch("hexdag.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
         ):
             mock_anthropic.return_value = AsyncMock()
             mock_openai.return_value = AsyncMock()
@@ -133,17 +133,17 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.anthropic_adapter"]
+            modules=["hexdag.core.ports"], plugins=["hexdag.adapters.llm.anthropic_adapter"]
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
 
         # Mock Anthropic client
-        with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic:
+        with patch("hexdag.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic:
             mock_client = AsyncMock()
             mock_response = MagicMock()
             mock_content = MagicMock()
@@ -177,23 +177,23 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.anthropic_adapter",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.llm.anthropic_adapter",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key", "OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
 
         # Mock both clients
         with (
-            patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
-            patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
+            patch("hexdag.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
+            patch("hexdag.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
         ):
             # Setup Anthropic mock
             anthropic_client = AsyncMock()
@@ -243,11 +243,11 @@ class TestLLMAdaptersBootstrap:
     def test_ensure_bootstrapped_with_llm_adapters(self):
         """Test that ensure_bootstrapped works with LLM adapters."""
         config = HexDAGConfig(
-            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.openai_adapter"]
+            modules=["hexdag.core.ports"], plugins=["hexdag.adapters.llm.openai_adapter"]
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
             # First call bootstraps
@@ -271,17 +271,17 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.openai_adapter"]
+            modules=["hexdag.core.ports"], plugins=["hexdag.adapters.llm.openai_adapter"]
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
 
         # Mock OpenAI client to simulate error
-        with patch("hexai.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
+        with patch("hexdag.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_client.chat.completions.create = AsyncMock(
                 side_effect=Exception("API Error: Invalid key")
@@ -309,16 +309,16 @@ class TestLLMAdaptersBootstrap:
     def test_bootstrap_without_api_keys_skips_adapters(self):
         """Test that bootstrap skips LLM adapters when API keys are missing."""
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.anthropic_adapter",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.llm.anthropic_adapter",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
         # No API keys in environment
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {}, clear=True),
         ):
             bootstrap_registry()
@@ -333,16 +333,16 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"], plugins=["hexai.adapters.llm.anthropic_adapter"]
+            modules=["hexdag.core.ports"], plugins=["hexdag.adapters.llm.anthropic_adapter"]
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
 
-        with patch("hexai.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic:
+        with patch("hexdag.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic:
             mock_anthropic.return_value = AsyncMock()
 
             # Try to get adapter info
@@ -386,10 +386,10 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.anthropic_adapter",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.llm.anthropic_adapter",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
@@ -398,7 +398,7 @@ class TestLLMAdaptersBootstrap:
         fake_openai_key = "sk-fake-test-key-xxxxxxxxxxxxx"
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(
                 os.environ,
                 {"ANTHROPIC_API_KEY": fake_anthropic_key, "OPENAI_API_KEY": fake_openai_key},

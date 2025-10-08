@@ -79,7 +79,7 @@ from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
 
 # Build pipeline from YAML
 builder = YamlPipelineBuilder()
-with open("examples/manifests/text-analysis-pipeline.yaml") as f:
+with Path.open("examples/manifests/text-analysis-pipeline.yaml") as f:
     graph, metadata = builder.build_from_yaml_string(f.read())
 
 # Execute pipeline

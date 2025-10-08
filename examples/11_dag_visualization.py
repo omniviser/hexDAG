@@ -14,11 +14,11 @@ Run: python examples/11_dag_visualization.py
 import asyncio
 from typing import Any
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 try:
-    from hexai.visualization import DAGVisualizer
+    from hexdag.visualization import DAGVisualizer
 except ImportError:
     print("Error: Visualization requires graphviz. Install with:")
     print("  pip install hexdag[viz]")

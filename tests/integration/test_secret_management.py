@@ -13,15 +13,15 @@ import os
 import pytest
 from pydantic import SecretStr
 
-from hexai.adapters.llm.anthropic_adapter import AnthropicAdapter
-from hexai.adapters.llm.openai_adapter import OpenAIAdapter
-from hexai.adapters.memory.in_memory_memory import InMemoryMemory
-from hexai.adapters.secret.local_secret_adapter import LocalSecretAdapter
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
-from hexai.core.orchestration.hooks import HookConfig, PostDagHookConfig
-from hexai.core.types import Secret
+from hexdag.builtin.adapters.llm.anthropic_adapter import AnthropicAdapter
+from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
+from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
+from hexdag.builtin.adapters.secret.local_secret_adapter import LocalSecretAdapter
+from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig
+from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.core.types import Secret
 
 # ===================================================================
 # Test Adapters Using SecretField()
@@ -286,7 +286,7 @@ async def test_orchestrator_with_local_secret_adapter():
 
         def capture_secrets(x=None, **kwargs):
             """Capture secrets from Memory during execution."""
-            from hexai.core.context import get_port
+            from hexdag.core.context import get_port
 
             memory = get_port("memory")
             if memory:
@@ -415,7 +415,7 @@ async def test_end_to_end_secret_lifecycle():
 
         def use_secret(x=None, **kwargs):
             """Use secret during pipeline execution."""
-            from hexai.core.context import get_port
+            from hexdag.core.context import get_port
 
             memory = get_port("memory")
             if memory:
@@ -464,7 +464,7 @@ async def test_secret_isolation_between_pipelines():
         captured_values = []
 
         def capture(x=None, **kwargs):
-            from hexai.core.context import get_port
+            from hexdag.core.context import get_port
 
             memory = get_port("memory")
             if memory:

@@ -11,8 +11,8 @@ This example demonstrates the hexagonal architecture pattern with ports and adap
 import asyncio
 from typing import Any, Protocol
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 # Ports (Interfaces)
@@ -89,7 +89,7 @@ class MockLoggerAdapter:
 async def process_user_data(input_data: dict, **kwargs) -> dict:
     """Process user data using ports."""
     # Get ports from execution context
-    from hexai.core.context import get_port
+    from hexdag.core.context import get_port
 
     db = get_port("database")
     email = get_port("email")
@@ -122,7 +122,7 @@ async def process_user_data(input_data: dict, **kwargs) -> dict:
 
 async def generate_report(input_data: Any, **kwargs) -> dict:
     """Generate report using database port."""
-    from hexai.core.context import get_port
+    from hexdag.core.context import get_port
 
     db = get_port("database")
     logger = get_port("logger")

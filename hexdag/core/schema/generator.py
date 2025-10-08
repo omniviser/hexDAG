@@ -1,0 +1,516 @@
+"""Schema generator - converts Python signatures to JSON Schema."""
+
+import inspect
+import json
+from collections.abc import Callable
+from typing import Any, get_args
+
+import yaml
+
+from hexdag.core.logging import get_logger
+from hexdag.core.types import (
+    get_annotated_metadata,
+    is_annotated_type,
+    is_dict_type,
+    is_list_type,
+    is_literal_type,
+    is_union_type,
+)
+
+logger = get_logger(__name__)
+
+
+class SchemaGenerator:
+    """Generate JSON Schema from Python callables.
+
+    This class introspects Python functions/methods to automatically generate
+    JSON Schema definitions. It supports:
+    - Basic types (str, int, float, bool)
+    - Literal types → enum
+    - Union types → anyOf
+    - List/Dict types → array/object
+    - Annotated types with Pydantic Field constraints
+    - Docstring extraction for descriptions
+
+    Examples
+    --------
+    >>> def my_func(name: str, count: int = 10):
+    ...     '''Example function.'''
+    ...     pass
+    >>> schema = SchemaGenerator.from_callable(my_func)
+    >>> schema['properties']['count']['default']
+    10
+    """
+
+    # Basic type mapping from Python to JSON Schema
+    BASIC_TYPE_MAP = {
+        str: {"type": "string"},
+        int: {"type": "integer"},
+        float: {"type": "number"},
+        bool: {"type": "boolean"},
+        dict: {"type": "object"},
+        list: {"type": "array"},
+        None: {"type": "null"},
+        type(None): {"type": "null"},
+    }
+
+    @staticmethod
+    def from_callable(factory: Callable, format: str = "dict") -> dict | str:
+        """Generate schema from factory __call__ signature.
+
+        Args
+        ----
+            factory: Callable (function, method, or callable class) to introspect
+            format: Output format - "dict", "yaml", or "json"
+
+        Returns
+        -------
+            dict | str: JSON Schema in requested format
+
+        Raises
+        ------
+        ValueError
+            If format is not one of: dict, yaml, json
+
+        Examples
+        --------
+        >>> def factory(name: str, count: int, enabled: bool = True):
+        ...     pass
+        >>> schema = SchemaGenerator.from_callable(factory)
+        >>> schema['properties']['enabled']['default']
+        True
+        >>> schema['required']
+        ['count']
+        """
+        if format not in ("dict", "yaml", "json"):
+            raise ValueError(f"Invalid format: {format}. Must be one of: dict, yaml, json")
+
+        # Get signature
+        try:
+            sig = inspect.signature(factory)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not get signature for {factory}: {e}")
+            return SchemaGenerator._format_output({}, format)
+
+        properties = {}
+        required = []
+
+        # Extract parameter documentation from docstring
+        param_docs = SchemaGenerator._extract_param_docs(factory)
+
+        # Get parameter list to check if 'name' is first
+        param_list = list(sig.parameters.items())
+        first_non_self_param = None
+        for pname, _ in param_list:
+            if pname not in ("self", "cls"):
+                first_non_self_param = pname
+                break
+
+        for param_name, param in sig.parameters.items():
+            # Skip special parameters
+            if param_name in ("self", "cls", "args", "kwargs"):
+                continue
+
+            # Skip 'name' if it's the first parameter (node factory convention)
+            if param_name == "name" and param_name == first_non_self_param:
+                continue
+
+            # Skip *args and **kwargs
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
+                continue
+
+            # Get type annotation
+            param_type = param.annotation
+
+            # Skip if no type annotation
+            if param_type == inspect.Parameter.empty:
+                # Default to string type
+                param_type = str
+
+            # Generate property schema
+            prop_schema = SchemaGenerator._type_to_json_schema(param_type)
+
+            # Add description from docstring
+            if param_name in param_docs:
+                prop_schema["description"] = param_docs[param_name]
+
+            # Add default if present
+            if param.default != inspect.Parameter.empty:
+                prop_schema["default"] = param.default
+            else:
+                # Required if no default
+                required.append(param_name)
+
+            properties[param_name] = prop_schema
+
+        # Build final schema
+        schema = {
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": False,
+        }
+
+        if required:
+            schema["required"] = required
+
+        return SchemaGenerator._format_output(schema, format)
+
+    @staticmethod
+    def _type_to_json_schema(type_hint: Any) -> dict:
+        """Convert Python type hint to JSON Schema type.
+
+        Handles:
+        - Basic types: str, int, float, bool
+        - Literal types: Literal["a", "b"] → enum
+        - Union types: str | int → anyOf
+        - List types: list[str] → array
+        - Dict types: dict[str, Any] → object
+        - Annotated types: Annotated[int, Field(ge=0)] → min/max
+
+        Args
+        ----
+            type_hint: Python type annotation
+
+        Returns
+        -------
+            dict: JSON Schema definition for the type
+
+        Examples
+        --------
+        >>> from typing import Literal
+        >>> SchemaGenerator._type_to_json_schema(Literal["a", "b"])
+        {'type': 'string', 'enum': ['a', 'b']}
+        """
+        # Handle Annotated types (Pydantic Field constraints)
+        if is_annotated_type(type_hint):
+            base_type, metadata = get_annotated_metadata(type_hint)
+
+            # Recursively process base type
+            schema = SchemaGenerator._type_to_json_schema(base_type)
+
+            # Add constraints from Field
+            # In Pydantic v2, Field stores metadata as FieldInfo with .metadata attribute
+            for constraint in metadata:
+                # Check if it's a FieldInfo object (Pydantic v2)
+                if hasattr(constraint, "metadata") and constraint.metadata:
+                    # Extract constraints from metadata (Ge, Le, etc.)
+                    for meta_item in constraint.metadata:
+                        # Ge, Le, Gt, Lt objects
+                        if hasattr(meta_item, "ge"):
+                            schema["minimum"] = meta_item.ge
+                        if hasattr(meta_item, "le"):
+                            schema["maximum"] = meta_item.le
+                        if hasattr(meta_item, "gt"):
+                            schema["exclusiveMinimum"] = meta_item.gt
+                        if hasattr(meta_item, "lt"):
+                            schema["exclusiveMaximum"] = meta_item.lt
+                        # MinLen, MaxLen objects
+                        if hasattr(meta_item, "min_length"):
+                            schema["minLength"] = meta_item.min_length
+                        if hasattr(meta_item, "max_length"):
+                            schema["maxLength"] = meta_item.max_length
+
+                # Also check for description on the Field itself
+                if hasattr(constraint, "description") and constraint.description:
+                    schema["description"] = constraint.description
+
+            return schema
+
+        # Handle Literal types
+        if is_literal_type(type_hint):
+            args = get_args(type_hint)
+            # Determine type from first value
+            first_val = args[0] if args else ""
+            val_type = type(first_val)
+
+            # Determine JSON Schema type from Python type
+            if val_type in SchemaGenerator.BASIC_TYPE_MAP:
+                json_type = SchemaGenerator.BASIC_TYPE_MAP[val_type]["type"]
+            else:
+                json_type = "string"
+
+            # Build schema with type first (for doctest consistency)
+            literal_schema: dict[str, Any] = {"type": json_type, "enum": list(args)}
+
+            return literal_schema
+
+        # Handle Union types (including | syntax)
+        if is_union_type(type_hint):
+            args = get_args(type_hint)
+
+            # Filter out None for Optional types
+            non_none_args = [arg for arg in args if arg is not type(None)]
+
+            if len(non_none_args) == 1:
+                # Optional[T] → make nullable
+                schema = SchemaGenerator._type_to_json_schema(non_none_args[0])
+                # Allow null
+                if "type" in schema:
+                    if isinstance(schema["type"], list):
+                        schema["type"].append("null")
+                    else:
+                        schema["type"] = [schema["type"], "null"]
+                return schema
+            # Multiple types → anyOf
+            return {"anyOf": [SchemaGenerator._type_to_json_schema(arg) for arg in non_none_args]}
+
+        # Handle List types
+        if is_list_type(type_hint):
+            args = get_args(type_hint)
+            item_type = args[0] if args else Any
+
+            return {
+                "type": "array",
+                "items": SchemaGenerator._type_to_json_schema(item_type),
+            }
+
+        # Handle Dict types
+        if is_dict_type(type_hint):
+            return {"type": "object"}
+
+        # Handle basic types
+        if type_hint in SchemaGenerator.BASIC_TYPE_MAP:
+            return SchemaGenerator.BASIC_TYPE_MAP[type_hint].copy()
+
+        # Default to string for unknown types
+        return {"type": "string"}
+
+    @staticmethod
+    def _extract_param_docs(func: Callable) -> dict[str, str]:
+        """Extract parameter descriptions from function docstring.
+
+        Supports multiple docstring formats:
+        - Google style
+        - NumPy style
+        - Sphinx style
+
+        Args
+        ----
+            func: Function to extract docs from
+
+        Returns
+        -------
+            dict[str, str]: Mapping of parameter name to description
+
+        Examples
+        --------
+        >>> def func(name: str, count: int):
+        ...     '''Function description.
+        ...
+        ...     Args:
+        ...         name: The name parameter
+        ...         count: The count parameter
+        ...     '''
+        ...     pass
+        >>> docs = SchemaGenerator._extract_param_docs(func)
+        >>> docs['name']
+        'The name parameter'
+        """
+        docstring = inspect.getdoc(func)
+        if not docstring:
+            return {}
+
+        param_docs = {}
+        lines = docstring.split("\n")
+
+        # Look for Args/Parameters section
+        in_params_section = False
+        current_param = None
+
+        for line in lines:
+            line_stripped = line.strip()
+
+            # Skip separator lines (NumPy style: "----------")
+            if (
+                in_params_section
+                and line_stripped
+                and all(c in ("-", "=", "_") for c in line_stripped)
+            ):
+                continue
+
+            # Detect start of parameters section (case insensitive)
+            if line_stripped.lower() in (
+                "args:",
+                "arguments:",
+                "parameters:",
+                "params:",
+                "args",
+                "arguments",
+                "parameters",
+                "params",
+            ):
+                in_params_section = True
+                continue
+
+            # Exit parameters section when we hit another section header (ends with :)
+            # or non-indented text
+            if in_params_section:
+                # Check if this is a section header (e.g., "Returns:", "Raises:")
+                if line_stripped and line_stripped.endswith(":") and not line.startswith(" "):
+                    break
+                # Check if we're back to non-indented content (but allow blank lines)
+                if (
+                    line
+                    and not line.startswith((" ", "\t"))
+                    and line_stripped
+                    and any(
+                        keyword in line_stripped.lower()
+                        for keyword in ["return", "raise", "yield", "example", "note"]
+                    )
+                ):
+                    break
+
+            # Process parameter lines (either indented or not, since inspect.getdoc normalizes)
+            if in_params_section:
+                # Google/NumPy style: "    param_name: description" or "param_name: description"
+                # Sphinx style: "    :param param_name: description"
+                if ":" in line_stripped:
+                    # Try to extract param name and description
+                    if line_stripped.startswith(":param"):
+                        # Sphinx style
+                        parts = line_stripped.split(":", 3)
+                        if len(parts) >= 3:
+                            param_name = parts[1].replace("param", "").strip()
+                            description = parts[2].strip()
+                            param_docs[param_name] = description
+                            current_param = param_name
+                    else:
+                        # Google/NumPy style
+                        parts = line_stripped.split(":", 1)
+                        if len(parts) == 2:
+                            param_name = parts[0].strip()
+                            description = parts[1].strip()
+                            # Make sure it's not a section header
+                            if (
+                                param_name
+                                and description
+                                and not any(
+                                    keyword in param_name.lower()
+                                    for keyword in ["return", "raise", "yield", "example", "note"]
+                                )
+                            ):
+                                param_docs[param_name] = description
+                                current_param = param_name
+                elif current_param and line_stripped:
+                    # Continuation of previous parameter description
+                    param_docs[current_param] += " " + line_stripped
+
+        return param_docs
+
+    @staticmethod
+    def _format_output(schema: dict, format: str) -> dict | str:
+        """Format schema output as dict, YAML, or JSON.
+
+        Args
+        ----
+            schema: JSON Schema dict
+            format: Output format - "dict", "yaml", or "json"
+
+        Returns
+        -------
+            dict | str: Schema in requested format
+        """
+        if format == "dict":
+            return schema
+        if format == "yaml":
+            yaml_str: str = yaml.dump(schema, sort_keys=False, default_flow_style=False)
+            return yaml_str
+        if format == "json":
+            return json.dumps(schema, indent=2)
+        return schema
+
+    @staticmethod
+    def generate_example_yaml(node_type: str, schema: dict) -> str:
+        """Generate example YAML from schema.
+
+        Creates a complete YAML example with:
+        - K8s-style structure (kind, metadata, spec)
+        - Default values where available
+        - Placeholders for required fields
+        - Comments for optional fields
+
+        Args
+        ----
+            node_type: Node type name (e.g., "llm_node")
+            schema: JSON Schema dict
+
+        Returns
+        -------
+            str: Example YAML string
+
+        Examples
+        --------
+        >>> schema = {
+        ...     "properties": {
+        ...         "template": {"type": "string"},
+        ...         "model": {"type": "string", "default": "gpt-4"}
+        ...     },
+        ...     "required": ["template"]
+        ... }
+        >>> example = SchemaGenerator.generate_example_yaml("llm_node", schema)
+        >>> "kind: llm_node" in example
+        True
+        """
+        example: dict[str, Any] = {
+            "kind": node_type,
+            "metadata": {"name": f"my_{node_type}"},
+            "spec": {},
+        }
+
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+
+        # Add fields to spec
+        spec: dict[str, Any] = example["spec"]
+        for prop_name, prop_schema in properties.items():
+            if "default" in prop_schema:
+                # Use default value
+                spec[prop_name] = prop_schema["default"]
+            elif "examples" in prop_schema:
+                # Use first example
+                spec[prop_name] = prop_schema["examples"][0]
+            elif prop_name in required:
+                # Required field - add placeholder
+                spec[prop_name] = SchemaGenerator._placeholder_for_type(prop_schema.get("type"))
+            # Optional fields without defaults are omitted
+
+        yaml_output: str = yaml.dump(example, sort_keys=False, default_flow_style=False)
+        return yaml_output
+
+    @staticmethod
+    def _placeholder_for_type(json_type: str | list | None) -> Any:
+        """Get placeholder value for a JSON Schema type.
+
+        Args
+        ----
+            json_type: JSON Schema type string or list
+
+        Returns
+        -------
+            Any: Appropriate placeholder value
+
+        Examples
+        --------
+        >>> SchemaGenerator._placeholder_for_type("string")
+        'value'
+        >>> SchemaGenerator._placeholder_for_type("integer")
+        0
+        """
+        # Handle list of types (e.g., ["string", "null"])
+        if isinstance(json_type, list):
+            json_type = json_type[0] if json_type else "string"
+
+        placeholders = {
+            "string": "value",
+            "integer": 0,
+            "number": 0.0,
+            "boolean": False,
+            "array": [],
+            "object": {},
+            "null": None,
+        }
+
+        return placeholders.get(json_type if isinstance(json_type, str) else "string", "value")

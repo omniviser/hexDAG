@@ -10,9 +10,9 @@ Shows how to use TOML files to configure:
 import tempfile
 from pathlib import Path
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.config import load_config
-from hexai.core.registry import registry
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.config import load_config
+from hexdag.core.registry import registry
 
 
 def main():
@@ -29,12 +29,12 @@ def main():
     basic_config = """
 # Modules to load into the registry
 modules = [
-    "hexai.core.ports",  # Load ports first
-    "hexai.core.application.nodes",
+    "hexdag.core.ports",  # Load ports first
+    "hexdag.builtin.nodes",
 ]
 
 plugins = [
-    "hexai.adapters.mock",  # Load adapters as plugins
+    "hexdag.adapters.mock",  # Load adapters as plugins
 ]
 
 # Enable development mode
@@ -72,8 +72,8 @@ dev_mode = true
     print("-" * 40)
 
     full_config = """
-modules = ["hexai.core.ports", "hexai.core.application.nodes"]
-plugins = ["hexai.adapters.mock"]
+modules = ["hexdag.core.ports", "hexdag.builtin.nodes"]
+plugins = ["hexdag.adapters.mock"]
 dev_mode = false
 
 # Application settings
@@ -138,7 +138,7 @@ max_tokens = 1000
 
     pyproject_content = """
 [tool.hexdag]
-modules = ["hexai.core.application.nodes"]
+modules = ["hexdag.builtin.nodes"]
 plugins = ["my_plugin.components"]
 
 [tool.hexdag.settings]

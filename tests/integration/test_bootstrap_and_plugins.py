@@ -26,9 +26,9 @@ from unittest.mock import patch
 
 import pytest
 
-from hexai.core.bootstrap import bootstrap_registry, ensure_bootstrapped
-from hexai.core.config.models import HexDAGConfig
-from hexai.core.registry import registry as global_registry
+from hexdag.core.bootstrap import bootstrap_registry, ensure_bootstrapped
+from hexdag.core.config.models import HexDAGConfig
+from hexdag.core.registry import registry as global_registry
 
 
 class TestSystemBootstrap:
@@ -47,13 +47,13 @@ class TestSystemBootstrap:
         """Test that bootstrap loads all core components."""
         config = HexDAGConfig(
             modules=[
-                "hexai.core.ports",
-                "hexai.core.application.nodes",
+                "hexdag.core.ports",
+                "hexdag.builtin.nodes",
             ],
             plugins=[],
         )
 
-        with patch("hexai.core.bootstrap.load_config", return_value=config):
+        with patch("hexdag.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         # Verify core components are loaded
@@ -74,16 +74,16 @@ class TestSystemBootstrap:
     def test_bootstrap_with_plugins(self):
         """Test bootstrap with plugins that have met requirements."""
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.mock",
-                "hexai.adapters.llm.openai_adapter",
+                "hexdag.adapters.mock",
+                "hexdag.adapters.llm.openai_adapter",
             ],
         )
 
         # Mock OpenAI as available
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
         ):
             bootstrap_registry()
@@ -98,9 +98,9 @@ class TestSystemBootstrap:
 
     def test_ensure_bootstrapped_idempotent(self):
         """Test that ensure_bootstrapped can be called multiple times safely."""
-        config = HexDAGConfig(modules=["hexai.core.ports"], plugins=["hexai.adapters.mock"])
+        config = HexDAGConfig(modules=["hexdag.core.ports"], plugins=["hexdag.adapters.mock"])
 
-        with patch("hexai.core.bootstrap.load_config", return_value=config):
+        with patch("hexdag.core.bootstrap.load_config", return_value=config):
             # First call bootstraps
             ensure_bootstrapped()
             first_count = len(global_registry.list_components())
@@ -124,15 +124,15 @@ class TestPluginSystemIntegration:
             global_registry._reset_for_testing()
 
         config = HexDAGConfig(
-            modules=["hexai.core.ports"],
+            modules=["hexdag.core.ports"],
             plugins=[
-                "hexai.adapters.llm.openai_adapter",
-                "hexai.adapters.mock",
+                "hexdag.adapters.llm.openai_adapter",
+                "hexdag.adapters.mock",
             ],
         )
 
         with (
-            patch("hexai.core.bootstrap.load_config", return_value=config),
+            patch("hexdag.core.bootstrap.load_config", return_value=config),
             patch.dict(os.environ, {}, clear=True),
         ):
             bootstrap_registry()
@@ -145,7 +145,7 @@ class TestPluginSystemIntegration:
 
         # Get adapter and test it works
         mock_adapter = global_registry.get("mock_llm", namespace="plugin")
-        from hexai.core.ports.llm import Message
+        from hexdag.core.ports.llm import Message
 
         response = await mock_adapter.aresponse([Message(role="user", content="What is 2+2?")])
         assert "Mock response" in response
@@ -156,16 +156,16 @@ class TestPluginSystemIntegration:
         if global_registry.ready:
             global_registry._reset_for_testing()
 
-        config = HexDAGConfig(modules=["hexai.core.ports"], plugins=["hexai.adapters.mock"])
+        config = HexDAGConfig(modules=["hexdag.core.ports"], plugins=["hexdag.adapters.mock"])
 
-        with patch("hexai.core.bootstrap.load_config", return_value=config):
+        with patch("hexdag.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         # Create multiple mock adapter instances
         adapter1 = global_registry.get("mock_llm", namespace="plugin")
         adapter2 = global_registry.get("mock_llm", namespace="plugin")
 
-        from hexai.core.ports.llm import Message
+        from hexdag.core.ports.llm import Message
 
         # Run concurrent requests
         async def make_request(adapter, query):
@@ -185,14 +185,14 @@ class TestPluginSystemIntegration:
         # Import MySQL adapter if available
         config = HexDAGConfig(
             modules=[
-                "hexai.core.ports",
+                "hexdag.core.ports",
             ],
             plugins=[
-                "hexai.adapters.database.sqlite",  # SQLite database adapter
+                "hexdag.adapters.database.sqlite",  # SQLite database adapter
             ],
         )
 
-        with patch("hexai.core.bootstrap.load_config", return_value=config):
+        with patch("hexdag.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         components = global_registry.list_components()
@@ -215,14 +215,14 @@ class TestPluginSystemIntegration:
 
         config = HexDAGConfig(
             modules=[
-                "hexai.core.ports",
+                "hexdag.core.ports",
             ],
             plugins=[
-                "hexai.adapters.database.sqlite",
+                "hexdag.adapters.database.sqlite",
             ],
         )
 
-        with patch("hexai.core.bootstrap.load_config", return_value=config):
+        with patch("hexdag.core.bootstrap.load_config", return_value=config):
             bootstrap_registry()
 
         # Get SQLite adapter

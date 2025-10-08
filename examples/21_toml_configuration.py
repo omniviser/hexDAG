@@ -12,9 +12,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.config import config_to_manifest_entries, load_config
-from hexai.core.registry import registry
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.config import config_to_manifest_entries, load_config
+from hexdag.core.registry import registry
 
 
 async def main() -> None:
@@ -30,7 +30,7 @@ async def main() -> None:
     basic_config = """
 # Core modules to load
 modules = [
-    "hexai.core.application.nodes",
+    "hexdag.builtin.nodes",
 ]
 
 # Enable development mode
@@ -75,8 +75,8 @@ enable_metrics = true
     module_config = """
 # Core modules
 modules = [
-    "hexai.core.application.nodes",
-    "hexai.core.adapters",
+    "hexdag.builtin.nodes",
+    "hexdag.core.adapters",
     "my_app.components",
 ]
 
@@ -142,7 +142,7 @@ max_workers = 10
 
     var_config = """
 modules = [
-    "hexai.core.application.nodes",
+    "hexdag.builtin.nodes",
     "${TEST_MODULE}",
 ]
 
@@ -192,7 +192,7 @@ api_endpoint = "https://api.example.com"
     print("-" * 50)
 
     settings_config = """
-modules = ["hexai.core.application.nodes"]
+modules = ["hexdag.builtin.nodes"]
 
 dev_mode = false
 

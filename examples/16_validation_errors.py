@@ -16,8 +16,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 class StrictUserModel(BaseModel):

@@ -2,9 +2,9 @@
 
 from typing import Any
 
-from hexai.core.domain.dag import NodeSpec
-from hexai.core.registry import node
-from hexai.core.registry.models import NodeSubtype
+from hexdag.core.domain.dag import NodeSpec
+from hexdag.core.registry import node
+from hexdag.core.registry.models import NodeSubtype
 
 try:
     from transformers import pipeline

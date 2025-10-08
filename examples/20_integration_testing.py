@@ -8,9 +8,9 @@ import asyncio
 import time
 from typing import Any
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.context import get_port
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.context import get_port
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 class MockEmailAdapter:

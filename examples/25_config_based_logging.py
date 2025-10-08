@@ -13,9 +13,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.config import load_config
-from hexai.core.logging import get_logger
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.config import load_config
+from hexdag.core.logging import get_logger
 
 
 def example_toml_logging():
@@ -174,8 +174,8 @@ export HEXDAG_LOG_TIMESTAMP=true
 
 ## Usage in Code:
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.logging import get_logger
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.logging import get_logger
 
 # Bootstrap automatically configures logging from config file
 bootstrap_registry()

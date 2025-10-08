@@ -4,9 +4,9 @@ This example demonstrates how to use the text processing nodes
 programmatically without YAML manifests.
 """
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.domain.dag import DirectedGraph
-from hexai.core.orchestration import Orchestrator
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.domain.dag import DirectedGraph
+from hexdag.core.orchestration import Orchestrator
 
 # Bootstrap the registry to load plugins
 bootstrap_registry()
@@ -26,7 +26,7 @@ async def main():
     graph = DirectedGraph()
 
     # Add sentiment analysis node
-    from hexai.core.registry import registry
+    from hexdag.core.registry import registry
 
     sentiment_factory = registry.get_node("sentiment_analyzer_node", namespace="textproc")
     sentiment_node = sentiment_factory(

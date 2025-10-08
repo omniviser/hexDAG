@@ -2,14 +2,14 @@
 
 import asyncio
 
-from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
-from hexai.core.application.events import (
+from hexdag.builtin.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexdag.core.orchestration.events import (
     Event,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
 )
-from hexai.core.application.policies.models import (
+from hexdag.core.orchestration.policies.models import (
     PolicyContext,
     PolicyResponse,
     PolicySignal,
@@ -71,7 +71,7 @@ async def main():
 
     # Register policies
     # Create simple policy objects
-    from hexai.core.application.policies.models import SubscriberType
+    from hexdag.core.orchestration.policies.models import SubscriberType
 
     class SkipTestPolicy:
         priority = 0

@@ -15,8 +15,8 @@ import asyncio
 import time
 from typing import Any
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 async def data_loader(input_data: str) -> dict:

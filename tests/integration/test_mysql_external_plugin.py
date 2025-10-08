@@ -18,8 +18,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hexai.core.config.models import ManifestEntry
-from hexai.core.registry import registry as global_registry
+from hexdag.core.config.models import ManifestEntry
+from hexdag.core.registry import registry as global_registry
 
 
 class TestMySQLExternalPlugin:
@@ -52,8 +52,8 @@ class TestMySQLExternalPlugin:
             sys.path.insert(0, "hexai_plugins/mysql_adapter")
 
         manifest = [
-            ManifestEntry(namespace="core", module="hexai.core.ports"),
-            ManifestEntry(namespace="plugin", module="hexai.adapters.database.sqlite"),
+            ManifestEntry(namespace="core", module="hexdag.core.ports"),
+            ManifestEntry(namespace="plugin", module="hexdag.adapters.database.sqlite"),
             ManifestEntry(namespace="plugin", module="mysql_adapter"),
         ]
 
@@ -80,7 +80,7 @@ class TestMySQLExternalPlugin:
             sys.path.insert(0, "hexai_plugins/mysql_adapter")
 
         manifest = [
-            ManifestEntry(namespace="core", module="hexai.core.ports"),
+            ManifestEntry(namespace="core", module="hexdag.core.ports"),
             ManifestEntry(namespace="plugin", module="mysql_adapter"),
         ]
 

@@ -13,8 +13,8 @@ Run: python examples/01_basic_dag.py
 
 import asyncio
 
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 async def step_one(input_data: str) -> dict:

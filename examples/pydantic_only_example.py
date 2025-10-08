@@ -11,10 +11,9 @@ import asyncio
 
 from pydantic import BaseModel, Field
 
-from hexai.core.application.orchestrator import Orchestrator
-
 # Use the refactored imports with Pydantic support
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 # Define Pydantic models for data contracts

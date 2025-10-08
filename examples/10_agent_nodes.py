@@ -11,16 +11,16 @@ This example demonstrates integration with the existing tool architecture:
 import asyncio
 from typing import Any
 
-from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.adapters.unified_tool_router import UnifiedToolRouter
-from hexai.core.application.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.config.models import ManifestEntry
-from hexai.core.domain.dag import DirectedGraph
-from hexai.core.exceptions import ResourceNotFoundError
-from hexai.core.registry import registry
-from hexai.core.registry.decorators import tool
-from hexai.core.registry.models import ComponentType
+from hexdag.builtin.adapters.mock.mock_llm import MockLLM
+from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
+from hexdag.builtin.nodes.agent_node import AgentConfig, AgentState, ReActAgentNode
+from hexdag.core.config.models import ManifestEntry
+from hexdag.core.domain.dag import DirectedGraph
+from hexdag.core.exceptions import ResourceNotFoundError
+from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.core.registry import registry
+from hexdag.core.registry.decorators import tool
+from hexdag.core.registry.models import ComponentType
 
 
 # Define real tool functions with proper type hints
@@ -92,7 +92,7 @@ async def main() -> None:
     # Bootstrap registry if needed
     try:
         registry.bootstrap(
-            manifest=[ManifestEntry(namespace="core", module="hexai.tools.builtin_tools")],
+            manifest=[ManifestEntry(namespace="core", module="hexdag.tools.builtin_tools")],
             dev_mode=True,
         )
     except Exception:

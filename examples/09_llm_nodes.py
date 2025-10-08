@@ -11,10 +11,10 @@ This example demonstrates LLM nodes in hexAI:
 
 import asyncio
 
-from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.core.application.nodes.llm_node import LLMNode
-from hexai.core.application.orchestrator import Orchestrator
-from hexai.core.domain.dag import DirectedGraph
+from hexdag.builtin.adapters.mock.mock_llm import MockLLM
+from hexdag.builtin.nodes.llm_node import LLMNode
+from hexdag.core.domain.dag import DirectedGraph
+from hexdag.core.orchestration.orchestrator import Orchestrator
 
 
 async def main():

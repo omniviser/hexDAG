@@ -13,7 +13,7 @@ def test_core_functionality():
     print("=" * 60)
 
     # Core imports should always work
-    from hexai import (
+    from hexdag import (
         DirectedGraph,
         NodeSpec,
         registry,
@@ -38,18 +38,18 @@ def test_visualization_lazy():
     print("=" * 60)
 
     # Check if graphviz is available without importing
-    from hexai.visualization import GRAPHVIZ_AVAILABLE
+    from hexdag.visualization import GRAPHVIZ_AVAILABLE
 
     print(f"Graphviz available: {GRAPHVIZ_AVAILABLE}")
 
     if GRAPHVIZ_AVAILABLE:
         # Only import when needed
-        from hexai.visualization import DAGVisualizer
+        from hexdag.visualization import DAGVisualizer
 
         print("✅ DAGVisualizer imported successfully")
 
         # Create a visualizer
-        from hexai import DirectedGraph, NodeSpec
+        from hexdag import DirectedGraph, NodeSpec
 
         graph = DirectedGraph()
         graph.add(NodeSpec(name="test", fn=lambda x: x))
@@ -62,7 +62,7 @@ def test_visualization_lazy():
 
         # Try to import anyway to show the error
         try:
-            from hexai.visualization import DAGVisualizer
+            from hexdag.visualization import DAGVisualizer
 
             print("❌ This shouldn't happen!")
         except ImportError as e:
@@ -76,13 +76,13 @@ def test_yaml_lazy():
     print("=" * 60)
 
     # Check if YAML is available without importing
-    from hexai.agent_factory import YAML_AVAILABLE
+    from hexdag.core.pipeline_builder import YAML_AVAILABLE
 
     print(f"YAML available: {YAML_AVAILABLE}")
 
     if YAML_AVAILABLE:
         # Only import when needed
-        from hexai.agent_factory import YamlPipelineBuilder
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
 
         print("✅ YamlPipelineBuilder imported successfully")
 
@@ -94,7 +94,7 @@ def test_yaml_lazy():
 
         # Try to import anyway to show the error
         try:
-            from hexai.agent_factory import YamlPipelineBuilder  # noqa: F401
+            from hexdag.core.pipeline_builder import YamlPipelineBuilder  # noqa: F401
 
             print("❌ This shouldn't happen!")
         except ImportError as e:
@@ -108,21 +108,21 @@ def test_lazy_getattr():
     print("=" * 60)
 
     # Import hexai module
-    import hexai
+    import hexdag
 
     print("✅ hexai module imported")
 
     # Try to access visualization (may or may not be available)
     try:
         # This triggers __getattr__ in hexai/__init__.py
-        visualizer_class = hexai.DAGVisualizer
+        visualizer_class = hexdag.DAGVisualizer
         print(f"✅ Got DAGVisualizer class: {visualizer_class}")
     except ImportError as e:
         print(f"⚠️  DAGVisualizer not available: {e}")
 
     # Mock adapters should always work (they're included in core)
     try:
-        mock_llm = hexai.MockLLM
+        mock_llm = hexdag.MockLLM
         print(f"✅ Got MockLLM class: {mock_llm}")
     except ImportError as e:
         print(f"❌ MockLLM should be available: {e}")
@@ -145,14 +145,14 @@ def test_performance():
     # Time optional import (only if available)
     try:
         start = time.time()
-        from hexai.visualization import GRAPHVIZ_AVAILABLE
+        from hexdag.visualization import GRAPHVIZ_AVAILABLE
 
         check_time = time.time() - start
         print(f"Availability check time: {check_time:.4f}s")
 
         if GRAPHVIZ_AVAILABLE:
             start = time.time()
-            from hexai.visualization import DAGVisualizer  # noqa: F401
+            from hexdag.visualization import DAGVisualizer  # noqa: F401
 
             viz_time = time.time() - start
             print(f"Visualization import time: {viz_time:.4f}s")

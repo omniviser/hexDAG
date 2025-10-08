@@ -66,7 +66,7 @@ Repository = "https://dev.azure.com/omniviser/_git/hexDAG"
 Documentation = "https://dev.azure.com/omniviser/hexDAG"
 
 [project.scripts]
-hexdag = "hexai.cli:main"
+hexdag = "hexdag.cli:main"
 
 [dependency-groups]
 dev = [
@@ -120,22 +120,22 @@ dev = [
 
 
 [tool.hatch.build.targets.sdist]
-include = ["hexai"]
+include = ["hexdag"]
 
 [tool.hatch.build.targets.wheel]
-include = ["hexai"]
+include = ["hexdag"]
 
 [tool.hexdag]
 # Core modules to load - these are the essential framework components
 modules = [
-    "hexai.core.ports",               # Core port definitions (must load before adapters)
-    "hexai.core.application.nodes",  # Core node factories
-    "hexai.tools.builtin_tools",     # Built-in tools (tool_end, change_phase)
+    "hexdag.core.ports",               # Core port definitions (must load before adapters)
+    "hexdag.builtin.nodes",            # Core node factories
+    "hexdag.builtin.tools.builtin_tools",     # Built-in tools (tool_end, change_phase)
 ]
 
 # Default plugins - mock and local adapters for testing and development
 plugins = [
-    "hexai.adapters.local",  # Local in-process implementations
+    "hexdag.builtin.adapters.local",  # Local in-process implementations
 ]
 
 # Development mode enabled by default
@@ -168,7 +168,7 @@ doctest_optionflags = [
 ]
 
 [tool.coverage.run]
-source = ["hexai"]
+source = ["hexdag"]
 omit = [
     "*/tests/*",
     "*/test_*",
@@ -176,7 +176,7 @@ omit = [
     "*/__pycache__/*",
     "*/examples/*",
     "*_plugins/*",
-    "hexai/cli/*"  # CLI has separate test suite with 67% coverage
+    "hexdag/cli/*"  # CLI has separate test suite with 67% coverage
 ]
 
 [tool.coverage.report]
@@ -224,7 +224,7 @@ exclude = ["tests/", "examples/", ".mutmut-config.py", "docs/"]
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
-module = ["tests.*", "hexai_plugins.*"]
+module = ["tests.*", "hexdag_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
@@ -232,14 +232,14 @@ module = ["openai", "anthropic", "graphviz", "orjson"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["hexai.cli.*"]
+module = ["hexdag.cli.*"]
 disallow_untyped_decorators = false
 
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-exclude = ["tests/**", "examples/**", "hexai_plugins/**", ".venv", "build", "dist", ".mutmut-config.py", "docs/**"]
-include = ["hexai"]
+exclude = ["tests/**", "examples/**", "hexdag_plugins/**", ".venv", "build", "dist", ".mutmut-config.py", "docs/**"]
+include = ["hexdag"]
 
 # Type checking settings
 reportMissingImports = true
@@ -267,7 +267,7 @@ reportUndefinedVariable = true
 reportIncompatibleMethodOverride = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples", "hexai_plugins"]
+exclude_dirs = ["tests", "examples", "hexdag_plugins"]
 skips = ["B101", "B601"]
 
 [tool.ruff]
@@ -332,13 +332,13 @@ convention = "numpy"
 "tests/*" = ["UP", "SIM117", "SIM102", "SIM105", "PERF401"]
 "examples/*" = ["UP", "E501", "PTH123"]
 "examples/demo/*" = ["E501"]
-"hexai_plugins/*" = ["UP", "TCH", "FA"]
-"hexai/core/application/events/observers.py" = ["SIM115"]
-"hexai/core/registry/discovery.py" = ["TC003", "TC001"]
-"hexai/cli/*" = ["DOC501", "PTH123", "B008", "B904", "SIM102"]  # CLI: typer patterns
+"hexdag_plugins/*" = ["UP", "TCH", "FA"]
+"hexdag/core/orchestration/events/observers.py" = ["SIM115"]
+"hexdag/core/registry/discovery.py" = ["TC003", "TC001"]
+"hexdag/cli/*" = ["DOC501", "PTH123", "B008", "B904", "SIM102"]  # CLI: typer patterns
 
 [tool.ruff.lint.isort]
-known-first-party = ["hexai"]
+known-first-party = ["hexdag"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
@@ -350,12 +350,12 @@ version_files = [
 
 [tool.vulture]
 min_confidence = 90
-paths = ["hexai", ".vulture_whitelist.py"]
-exclude = ["tests/", "examples/", "hexai/core/ports/", "hexai_plugins/"]
+paths = ["hexdag", ".vulture_whitelist.py"]
+exclude = ["tests/", "examples/", "hexdag/core/ports/", "hexdag_plugins/"]
 
 
 [tool.radon]
-exclude = "tests/*,examples/*,hexai_plugins/*"
+exclude = "tests/*,examples/*,hexdag_plugins/*"
 cc_min = "B"  # Minimum complexity grade (A, B, C, D, E, F)
 show_complexity = true
 
@@ -372,7 +372,7 @@ ignore-nested-functions = false
 ignore-nested-classes = false
 ignore-setters = false
 fail-under = 95.0
-exclude = ["tests", "examples", "hexai_plugins", ".git", ".tox"]
+exclude = ["tests", "examples", "hexdag_plugins", ".git", ".tox"]
 ignore-regex = ["^get$", "^set$", "^main$"]
 verbose = 0
 quiet = false
@@ -405,7 +405,7 @@ exclude = [
     "examples/run_text_analysis_pipeline.py",  # Uses plugin-specific transformers
     "examples/simple_text_analysis.py",  # Uses plugin-specific transformers
     "tests",  # Test files use dev dependencies
-    "hexai_plugins",  # External plugin directories
+    "hexdag_plugins",  # External plugin directories
 ]
 
 # Per-rule ignores for specific packages

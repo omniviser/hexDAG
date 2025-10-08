@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from hexai.agent_factory.yaml_builder import YamlPipelineBuilder
-from hexai.core.bootstrap import ensure_bootstrapped
+from hexdag.core.bootstrap import ensure_bootstrapped
+from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 
 @pytest.fixture(autouse=True)

@@ -9,3 +9,25 @@ from collections.abc import Callable as CallableType
 
 # Dummy usage to satisfy vulture
 _ = CallableType
+
+
+# Protocol abstract method parameters (intentionally unused - define interface)
+# hexdag/core/ports/api_call.py - APICallPort protocol
+def aget(url: str, headers: dict, params: dict, **kwargs: object) -> None:
+    """Whitelist for APICallPort.aget parameters."""
+    _ = (url, headers, params, kwargs)
+
+
+def apost(url: str, json: dict, data: dict, headers: dict, **kwargs: object) -> None:
+    """Whitelist for APICallPort.apost parameters."""
+    _ = (url, json, data, headers, kwargs)
+
+
+def aput(url: str, json: dict, data: dict, headers: dict, **kwargs: object) -> None:
+    """Whitelist for APICallPort.aput parameters."""
+    _ = (url, json, data, headers, kwargs)
+
+
+def adelete(url: str, headers: dict, **kwargs: object) -> None:
+    """Whitelist for APICallPort.adelete parameters."""
+    _ = (url, headers, kwargs)

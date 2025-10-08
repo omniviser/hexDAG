@@ -17,8 +17,8 @@ This example shows:
 
 import asyncio
 
-from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
-from hexai.core.application.events import (
+from hexdag.builtin.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexdag.core.orchestration.events import (
     ALL_EXECUTION_EVENTS,
     NODE_LIFECYCLE_EVENTS,
     AlertingObserver,
@@ -33,7 +33,7 @@ from hexai.core.application.events import (
     ResourceMonitorObserver,
     SimpleLoggingObserver,
 )
-from hexai.core.application.policies import (
+from hexdag.core.orchestration.policies import (
     CircuitBreakerPolicy,
     ConditionalSkipPolicy,
     ExponentialBackoffPolicy,
@@ -67,7 +67,7 @@ class PriorityNodePolicy:
 
     async def evaluate(self, context: PolicyContext) -> PolicyResponse:
         """Give priority to specific nodes."""
-        from hexai.core.application.events import NodeStarted
+        from hexdag.core.orchestration.events import NodeStarted
 
         if isinstance(context.event, NodeStarted) and context.node_id in self.priority_nodes:
             # In real impl, this would signal to scheduler

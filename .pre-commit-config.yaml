@@ -9,11 +9,11 @@ repos:
       # Run the linter with auto-fix (main code)
       - id: ruff-check
         args: [--config=pyproject.toml]
-        exclude: ^hexai_plugins/
+        exclude: ^hexdag_plugins/
       # Run the formatter with auto-formatting (main code)
       - id: ruff-format
         args: [--config=pyproject.toml]
-        exclude: ^hexai_plugins/
+        exclude: ^hexdag_plugins/
 
   # Pyupgrade - Automatically upgrade Python syntax
   - repo: https://github.com/asottile/pyupgrade
@@ -61,7 +61,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
-        exclude: ^(tests/|examples/|hexai_plugins/)
+        exclude: ^(tests/|examples/|hexdag_plugins/)
 
   - repo: local
     hooks:
@@ -70,12 +70,12 @@ repos:
         entry: uv run pyright
         language: system
         types: [python]
-        exclude: ^(tests/|examples/|hexai_plugins/)
+        exclude: ^(tests/|examples/|hexdag_plugins/)
         pass_filenames: false
 
 
   # ============================================================================
-  # Plugin-specific hooks (only run on hexai_plugins/ files)
+  # Plugin-specific hooks (only run on hexdag_plugins/ files)
   # ============================================================================
 
   # Plugin linting - uses each plugin's own pyproject.toml
@@ -85,12 +85,12 @@ repos:
       - id: ruff
         name: ruff-plugins
         args: [--fix]  # Will use plugin's own pyproject.toml
-        files: ^hexai_plugins/
-        exclude: ^hexai_plugins/.*\.venv/
+        files: ^hexdag_plugins/
+        exclude: ^hexdag_plugins/.*\.venv/
       - id: ruff-format
         name: ruff-format-plugins
-        files: ^hexai_plugins/
-        exclude: ^hexai_plugins/.*\.venv/
+        files: ^hexdag_plugins/
+        exclude: ^hexdag_plugins/.*\.venv/
 
   # Plugin type checking - with plugin dependencies
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -99,9 +99,9 @@ repos:
       - id: mypy
         name: mypy-plugins
         additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]  # Add plugin deps here
-        args: [--ignore-missing-imports, --python-version=3.12, hexai_plugins/]
-        files: ^hexai_plugins/.*\.py$
-        exclude: ^hexai_plugins/.*\.venv/
+        args: [--ignore-missing-imports, --python-version=3.12, hexdag_plugins/]
+        files: ^hexdag_plugins/.*\.py$
+        exclude: ^hexdag_plugins/.*\.venv/
         pass_filenames: false
 
   # ============================================================================
@@ -113,7 +113,7 @@ repos:
     hooks:
       - id: bandit
         args: [-ll]  # Only report Medium and High severity
-        exclude: ^(tests/|hexai_plugins/)
+        exclude: ^(tests/|hexdag_plugins/)
 
   # Security - Dependency vulnerabilities
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
@@ -167,7 +167,7 @@ repos:
 
       - id: doctest
         name: Run doctest
-        entry: uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on-failure
+        entry: uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure
         language: system
         types: [python]
         stages: [pre-commit]
@@ -175,7 +175,7 @@ repos:
 
       - id: pytest
         name: Run pytest with coverage
-        entry: uv run pytest tests/hexai/ --ignore=tests/hexai/cli -x --tb=short --cov=hexai --cov-config=pyproject.toml --cov-fail-under=70 --cov-report=term-missing:skip-covered
+        entry: uv run pytest tests/hexdag/ --ignore=tests/hexdag/cli -x --tb=short --cov=hexdag --cov-config=pyproject.toml --cov-fail-under=70 --cov-report=term-missing:skip-covered
         language: system
         types: [python]
         stages: [pre-commit]
@@ -199,7 +199,7 @@ repos:
 
       - id: vulture
         name: vulture - dead code detection
-        entry: uv run vulture hexai/ .vulture_whitelist.py --min-confidence 90
+        entry: uv run vulture hexdag/ .vulture_whitelist.py --min-confidence 90
         language: system
         types: [python]
         stages: [pre-commit]
@@ -207,7 +207,7 @@ repos:
 
       - id: radon-complexity
         name: radon - code complexity analysis
-        entry: uv run radon cc hexai/ --min B --show-complexity
+        entry: uv run radon cc hexdag/ --min B --show-complexity
         language: system
         types: [python]
         stages: [pre-commit]
@@ -215,7 +215,7 @@ repos:
 
       - id: interrogate
         name: interrogate - docstring coverage
-        entry: uv run interrogate hexai/ --fail-under 95 --quiet
+        entry: uv run interrogate hexdag/ --fail-under 95 --quiet
         language: system
         types: [python]
         stages: [pre-commit]
