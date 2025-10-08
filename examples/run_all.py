@@ -46,6 +46,9 @@ EXAMPLE_CATEGORIES = {
         "24_logging_configuration.py",
         "25_config_based_logging.py",
     ],
+    "observability": [
+        "26_observers_and_policies.py",
+    ],
     "utilities": [
         "pydantic_only_example.py",
         "toml_config_example.py",
@@ -77,6 +80,9 @@ ALL_EXAMPLES = [
     "21_toml_configuration.py",
     "22_mock_adapters_demo.py",
     "23_lazy_loading_demo.py",
+    "24_logging_configuration.py",
+    "25_config_based_logging.py",
+    "26_observers_and_policies.py",
     "pydantic_only_example.py",
     "toml_config_example.py",
 ]

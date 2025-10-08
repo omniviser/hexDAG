@@ -2,6 +2,7 @@
 
 Clean, simplified event system with clear separation of concerns:
 - events.py: Event data classes (just data, no behavior)
+- observers/: Observer implementations for monitoring and observability
 """
 
 # Event classes
@@ -30,6 +31,31 @@ from .events import (
     WaveStarted,
 )
 
+# Observer implementations
+from .observers import (
+    AlertingObserver,
+    DataQualityObserver,
+    ExecutionTracerObserver,
+    PerformanceMetricsObserver,
+    ResourceMonitorObserver,
+    SimpleLoggingObserver,
+)
+
+# Event taxonomy - grouped event types for observer filtering
+NODE_LIFECYCLE_EVENTS = (NodeStarted, NodeCompleted, NodeFailed, NodeCancelled)
+WAVE_EVENTS = (WaveStarted, WaveCompleted)
+PIPELINE_EVENTS = (PipelineStarted, PipelineCompleted, PipelineCancelled)
+LLM_EVENTS = (LLMPromptSent, LLMResponseReceived)
+TOOL_EVENTS = (ToolCalled, ToolCompleted)
+POLICY_EVENTS = (PolicyEvaluated, PolicyTriggered, PolicyRetry, PolicySkipped, PolicyFallback)
+CHECKPOINT_EVENTS = (CheckpointSaved, CheckpointRestored)
+HEALTH_EVENTS = (HealthCheckCompleted,)
+
+# Commonly used combinations
+ALL_NODE_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS
+ALL_EXECUTION_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS + PIPELINE_EVENTS
+ALL_MONITORING_EVENTS = NODE_LIFECYCLE_EVENTS + LLM_EVENTS + TOOL_EVENTS + POLICY_EVENTS
+
 __all__ = [
     # Events
     "Event",
@@ -54,4 +80,23 @@ __all__ = [
     "CheckpointSaved",
     "CheckpointRestored",
     "HealthCheckCompleted",
+    # Core Observers
+    "PerformanceMetricsObserver",
+    "AlertingObserver",
+    "ExecutionTracerObserver",
+    "SimpleLoggingObserver",
+    "ResourceMonitorObserver",
+    "DataQualityObserver",
+    # Event Taxonomy
+    "NODE_LIFECYCLE_EVENTS",
+    "WAVE_EVENTS",
+    "PIPELINE_EVENTS",
+    "LLM_EVENTS",
+    "TOOL_EVENTS",
+    "POLICY_EVENTS",
+    "CHECKPOINT_EVENTS",
+    "HEALTH_EVENTS",
+    "ALL_NODE_EVENTS",
+    "ALL_EXECUTION_EVENTS",
+    "ALL_MONITORING_EVENTS",
 ]
