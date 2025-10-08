@@ -237,8 +237,13 @@ class RateLimitPolicy:
         # This is intentional - rate limiting is about real-time constraints
         current_time = time.time()
 
-        # Clean old executions outside window
-        self.executions = [t for t in self.executions if current_time - t < self.window_seconds]
+        # Only clean old executions if needed (avoid unconditional list rebuild)
+        # Clean when: list is getting full OR oldest entry is outside window
+        if self.executions and (
+            len(self.executions) >= self.max_executions
+            or current_time - self.executions[0] >= self.window_seconds
+        ):
+            self.executions = [t for t in self.executions if current_time - t < self.window_seconds]
 
         # Check if limit exceeded
         if len(self.executions) >= self.max_executions:

@@ -467,11 +467,10 @@ class DirectedGraph:
             # Check for missing dependencies
             missing_deps: list[str] = []
             for node_name, node_spec in self.nodes.items():
-                missing_deps.extend(
-                    f"Node '{node_name}' depends on missing node '{dep}'"
-                    for dep in node_spec.deps
-                    if dep not in self.nodes
-                )
+                for dep in node_spec.deps:
+                    if dep not in self.nodes:
+                        msg = f"Node '{node_name}' depends on missing node '{dep}'"
+                        missing_deps.append(msg)
 
             if missing_deps:
                 raise MissingDependencyError("; ".join(missing_deps))
@@ -577,8 +576,11 @@ class DirectedGraph:
         waves = []
 
         while in_degrees:
-            # Find nodes with no remaining dependencies
-            current_wave = [node for node, degree in in_degrees.items() if degree == 0]
+            # Find nodes with no remaining dependencies (avoid temp list comprehension)
+            current_wave = []
+            for node, degree in in_degrees.items():
+                if degree == 0:
+                    current_wave.append(node)
 
             if not current_wave:
                 # This shouldn't happen if the graph is acyclic and validate() passed

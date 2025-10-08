@@ -54,10 +54,14 @@ class LocalPolicyManager(PolicyManagerPort):
             weakref.WeakValueDictionary()
         )
 
+        # Cache for priority queue to avoid rebuilding on every evaluate() call
+        self._priority_queue_cache: list[tuple[int, int, Policy]] | None = None
+        self._cache_generation: int = 0
+
     async def evaluate(self, context: PolicyContext) -> PolicyResponse:
         """Evaluate all policies in priority order.
 
-        Uses a heap-based priority queue for efficient ordering.
+        Uses a cached heap-based priority queue for efficient ordering.
         First non-PROCEED response wins (veto pattern).
 
         Args:
@@ -68,15 +72,19 @@ class LocalPolicyManager(PolicyManagerPort):
         -------
             PolicyResponse with signal and optional data
         """
-        # Build priority queue from active policies
-        pq: list[tuple[int, int, Policy]] = []
-
-        for idx, policy in enumerate(self._policies):
-            if policy in self._policy_metadata:
-                metadata = self._policy_metadata[policy]
-                priority = metadata.get("priority", policy.priority)
-                # Use idx for stable sort when priorities are equal
-                heapq.heappush(pq, (priority, idx, policy))
+        # Use cached priority queue if available (avoid rebuilding on every call)
+        if self._priority_queue_cache is None:
+            pq: list[tuple[int, int, Policy]] = []
+            for idx, policy in enumerate(self._policies):
+                if policy in self._policy_metadata:
+                    metadata = self._policy_metadata[policy]
+                    priority = metadata.get("priority", policy.priority)
+                    # Use idx for stable sort when priorities are equal
+                    heapq.heappush(pq, (priority, idx, policy))
+            self._priority_queue_cache = pq
+        else:
+            # Clone cached queue for consumption (heap is mutated during pop)
+            pq = self._priority_queue_cache.copy()
 
         # Process in priority order
         while pq:
@@ -130,6 +138,9 @@ class LocalPolicyManager(PolicyManagerPort):
         # Store subscription mapping
         self._subscriptions[subscription_id] = policy
 
+        # Invalidate cache when policies change
+        self._priority_queue_cache = None
+
         return subscription_id
 
     def unsubscribe(self, subscription_id: str) -> bool:
@@ -163,6 +174,9 @@ class LocalPolicyManager(PolicyManagerPort):
         if subscription_id in self._subscriptions:
             del self._subscriptions[subscription_id]
 
+        # Invalidate cache when policies change
+        self._priority_queue_cache = None
+
         return True
 
     def clear(self, subscriber_type: SubscriberType | None = None) -> None:
@@ -180,6 +194,8 @@ class LocalPolicyManager(PolicyManagerPort):
             for refs in self._strong_refs.values():
                 refs.clear()
             self._subscriptions.clear()
+            # Invalidate cache
+            self._priority_queue_cache = None
         else:
             # Clear specific type
             policies_to_remove = list(self._by_type[subscriber_type])

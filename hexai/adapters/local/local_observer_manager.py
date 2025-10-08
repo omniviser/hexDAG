@@ -256,31 +256,23 @@ class LocalObserverManager:
         if not self._handlers and (not self._use_weak_refs or not self._weak_handlers):
             return
 
-        # Collect all active observers
-        all_observers = {}
+        # Build tasks directly without creating intermediate lists
+        # This is the HOT PATH - every event goes through here
+        tasks = []
 
         if self._use_weak_refs:
-            # Get observers from weak references (auto-cleaned)
-            for obs_id in list(self._weak_handlers.keys()):
-                observer = self._weak_handlers.get(obs_id)
-                if observer is not None:
-                    all_observers[obs_id] = observer
+            # Iterate weak handlers directly without materializing list(keys())
+            for obs_id, observer in self._weak_handlers.items():
+                if observer is not None and self._should_notify(obs_id, event):
+                    tasks.append(self._limited_invoke(observer, event))
 
         # Add strong references
-        all_observers.update(self._handlers)
+        for obs_id, observer in self._handlers.items():
+            if self._should_notify(obs_id, event):
+                tasks.append(self._limited_invoke(observer, event))
 
-        # Filter observers based on event type
-        interested_observers = [
-            observer
-            for obs_id, observer in all_observers.items()
-            if self._should_notify(obs_id, event)
-        ]
-
-        if not interested_observers:
+        if not tasks:
             return
-
-        # Notify observers with limited concurrency
-        tasks = [self._limited_invoke(observer, event) for observer in interested_observers]
 
         # Wait for all with timeout
         # Fixed timeout buffer since observers run concurrently, not sequentially

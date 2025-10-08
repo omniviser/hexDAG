@@ -136,13 +136,17 @@ class PerformanceMetricsObserver:
             - total_failures: Total failures across all nodes
             - overall_success_rate: Overall success rate percentage
         """
-        # Single-pass computation using NodeMetrics properties
-        avg_timings = {node: m.average_ms for node, m in self.metrics.items()}
-        min_timings = {node: m.min_ms for node, m in self.metrics.items()}
-        max_timings = {node: m.max_ms for node, m in self.metrics.items()}
-        node_executions = {node: m.executions for node, m in self.metrics.items()}
-        failures = {node: m.failures for node, m in self.metrics.items()}
-        success_rates = {node: m.success_rate for node, m in self.metrics.items()}
+        # Single-pass computation: build all dicts in one iteration (O(n) instead of O(6n))
+        avg_timings, min_timings, max_timings = {}, {}, {}
+        node_executions, failures, success_rates = {}, {}, {}
+
+        for node, m in self.metrics.items():
+            avg_timings[node] = m.average_ms
+            min_timings[node] = m.min_ms
+            max_timings[node] = m.max_ms
+            node_executions[node] = m.executions
+            failures[node] = m.failures
+            success_rates[node] = m.success_rate
 
         total_failures = sum(failures.values())
         overall_success_rate = (
@@ -294,15 +298,13 @@ class AlertingObserver:
         list[Alert]
             List of Alert objects matching the criteria
         """
-        filtered = self.alerts
-
-        if alert_type is not None:
-            filtered = [a for a in filtered if a.type == alert_type]
-
-        if severity is not None:
-            filtered = [a for a in filtered if a.severity == severity]
-
-        return filtered
+        # Single-pass filtering (avoid creating intermediate lists)
+        return [
+            a
+            for a in self.alerts
+            if (alert_type is None or a.type == alert_type)
+            and (severity is None or a.severity == severity)
+        ]
 
     def clear_alerts(self) -> None:
         """Clear all alerts."""

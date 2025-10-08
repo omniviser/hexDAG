@@ -44,14 +44,14 @@ def _extract_variables_cached(template: str) -> tuple[str, ...]:
     pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}"
     matches = re.findall(pattern, template)
 
-    # Extract root variable names (before any dots) and deduplicate
-    root_vars = []
+    # Extract root variable names (before any dots) - use set for O(1) dedup instead of O(n)
+    root_vars_set = set()
     for match in matches:
         root_var = match.split(".")[0]
-        if root_var not in root_vars:
-            root_vars.append(root_var)
+        root_vars_set.add(root_var)
 
-    return tuple(root_vars)
+    # Convert to sorted tuple for deterministic ordering
+    return tuple(sorted(root_vars_set))
 
 
 # ---------------------------------------------------------------------------

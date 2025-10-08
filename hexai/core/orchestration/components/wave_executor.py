@@ -152,13 +152,15 @@ class WaveExecutor:
         # manager (__aexit__) to properly release resources even on cancellation.
         wave_outputs = await asyncio.gather(*coros, return_exceptions=True)
 
-        # Process results and handle exceptions
+        # Process results and handle exceptions (lazy list creation)
         wave_results = {}
-        exceptions: list[tuple[str | None, Exception]] = []
+        exceptions: list[tuple[str | None, Exception]] | None = None
 
         for output in wave_outputs:
             if isinstance(output, Exception):
-                # Collect exception with node name if available
+                # Lazy create exception list only when first exception found
+                if exceptions is None:
+                    exceptions = []
                 exceptions.append((None, output))
             elif isinstance(output, BaseException):
                 # For non-Exception BaseExceptions (KeyboardInterrupt, SystemExit),
