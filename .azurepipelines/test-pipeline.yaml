@@ -245,7 +245,7 @@ jobs:
       curl -LsSf https://astral.sh/uv/install.sh | sh
       export PATH="$HOME/.local/bin:$PATH"
       uv venv
-      uv sync --group dev --group docs
+      uv sync --group dev --group docs 
     displayName: "Install dependencies with uv"
 
   - script: |
@@ -259,6 +259,6 @@ jobs:
 
   - task: PublishBuildArtifacts@1
     inputs:
-      pathToPublish: "docs/_build/html"
+      pathToPublish: "docs/build/html"
       artifactName: "docs"
     displayName: "Publish documentation artifact"
