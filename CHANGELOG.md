@@ -1,3 +1,9 @@
+## v0.3.0-a1 (2025-10-09)
+
+### Features
+
+- Added the version
+
 ## v0.2.0 (2025-10-09)
 
 ### Bug Fixes

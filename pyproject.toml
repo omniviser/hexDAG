@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.2.0"
+version = "0.3.0-a1"
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
 authors = [{ name = "hexDAG Team" }]
 requires-python = "~=3.12.0"
@@ -341,14 +341,22 @@ known-first-party = ["hexdag"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.2.0"
+version = "0.3.0-a1"
 tag_format = "v$version"
+version_scheme = "semver"
 version_files = [
     "pyproject.toml:version",
     "hexdag/__init__.py:__version__"
 ]
 update_changelog_on_bump = true
 bump_message = "chore(release): bump version $current_version → $new_version"
+# Keep major version at 0 for pre-1.0 releases
+# Breaking changes will bump minor (0.2.0 → 0.3.0)
+# Features/fixes will bump patch (0.2.0 → 0.2.1)
+major_version_zero = true
+# Pre-release support: alpha, beta, rc
+# Example versions: 0.3.0-a1-alpha.1, 0.3.0-a1-beta.1, 0.3.0-a1-rc.1
+prerelease_offset = 1
 
 # Changelog configuration
 [tool.commitizen.change_type_map]
