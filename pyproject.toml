@@ -344,7 +344,8 @@ name = "cz_conventional_commits"
 version = "0.2.0"
 tag_format = "v$version"
 version_files = [
-    "pyproject.toml:version"
+    "pyproject.toml:version",
+    "hexdag/__init__.py:__version__"
 ]
 update_changelog_on_bump = true
 bump_message = "chore(release): bump version $current_version → $new_version"

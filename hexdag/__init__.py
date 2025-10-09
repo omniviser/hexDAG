@@ -6,6 +6,8 @@ traditional code with YAML pipeline configuration.
 
 from typing import TYPE_CHECKING, Any
 
+__version__ = "0.2.0"
+
 # Core framework exports
 from hexdag.builtin.nodes import (
     ConditionalNode,
@@ -90,6 +92,8 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    # Version
+    "__version__",
     # Registry System
     "registry",
     "ComponentType",
