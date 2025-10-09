@@ -1,10 +1,12 @@
 """Pipeline management commands for HexDAG CLI."""
 
+import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 app = typer.Typer()
 console = Console()
@@ -355,3 +357,148 @@ def _calculate_waves(nodes: list) -> list[list[str]]:
                     in_degree[other_id] -= 1
 
     return waves
+
+
+@app.command("run")
+def run_pipeline(
+    pipeline_path: Annotated[
+        Path,
+        typer.Argument(help="Path to pipeline YAML file"),
+    ],
+    input_data: Annotated[
+        str | None,
+        typer.Option(
+            "--input",
+            "-i",
+            help='Input data as JSON string (e.g., \'{"key": "value"}\')',
+        ),
+    ] = None,
+    input_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--input-file",
+            "-f",
+            help="Input data from JSON file",
+        ),
+    ] = None,
+    output_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Save output to JSON file",
+        ),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Show detailed execution information",
+        ),
+    ] = False,
+) -> None:
+    """Execute a pipeline with optional input data."""
+    import asyncio
+
+    if not pipeline_path.exists():
+        console.print(f"[red]Error: Pipeline file not found: {pipeline_path}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        # Parse input data
+        inputs = {}
+        if input_data:
+            try:
+                inputs = json.loads(input_data)
+            except json.JSONDecodeError as e:
+                console.print(f"[red]Error: Invalid JSON in --input: {e}[/red]")
+                raise typer.Exit(1)
+        elif input_file:
+            if not input_file.exists():
+                console.print(f"[red]Error: Input file not found: {input_file}[/red]")
+                raise typer.Exit(1)
+            try:
+                with open(input_file) as f:
+                    inputs = json.load(f)
+            except json.JSONDecodeError as e:
+                console.print(f"[red]Error: Invalid JSON in input file: {e}[/red]")
+                raise typer.Exit(1)
+
+        # Import hexdag components
+        from hexdag import Orchestrator, YamlPipelineBuilder
+
+        # Build pipeline
+        if verbose:
+            console.print(f"[cyan]Loading pipeline: {pipeline_path}[/cyan]")
+
+        builder = YamlPipelineBuilder()
+        graph, metadata = builder.build_from_yaml_file(str(pipeline_path))
+
+        if verbose:
+            console.print(f"[dim]Pipeline: {metadata.get('name', 'unnamed')}[/dim]")
+            console.print(f"[dim]Nodes: {len(graph.nodes)}[/dim]\n")
+
+        # Execute pipeline
+        console.print("[cyan]Executing pipeline...[/cyan]")
+
+        orchestrator = Orchestrator()
+        result = asyncio.run(orchestrator.run(graph, inputs))
+
+        # Display results
+        if verbose:
+            console.print("\n[green]✓ Pipeline execution completed[/green]\n")
+
+            # Show results in a table
+            table = Table(title="Pipeline Results", show_header=True, header_style="bold magenta")
+            table.add_column("Node", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Output", style="dim")
+
+            for node_id, node_result in result.items():
+                status = "✓" if node_result else "✗"
+                output_preview = (
+                    str(node_result)[:50] + "..."
+                    if len(str(node_result)) > 50
+                    else str(node_result)
+                )
+                table.add_row(node_id, status, output_preview)
+
+            console.print(table)
+        else:
+            console.print("[green]✓ Pipeline execution completed[/green]")
+
+        # Save output if requested
+        if output_file:
+            # Convert result to JSON-serializable format
+            output_data = {}
+            for k, v in result.items():
+                try:
+                    # Try to serialize directly
+                    json.dumps({k: v})
+                    output_data[k] = v
+                except (TypeError, ValueError):
+                    # Fall back to string representation
+                    output_data[k] = str(v)
+
+            with open(output_file, "w") as f:
+                json.dump(output_data, f, indent=2)
+            console.print(f"[dim]Output saved to: {output_file}[/dim]")
+
+        # Print final result
+        if not verbose and not output_file:
+            console.print("\n[bold]Results:[/bold]")
+            for node_id, node_result in result.items():
+                console.print(f"  {node_id}: {node_result}")
+
+    except ImportError as e:
+        console.print(f"[red]Error: Missing dependency - {e}[/red]")
+        console.print("Install with: uv pip install hexdag[all]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error executing pipeline: {e}[/red]")
+        if verbose:
+            import traceback
+
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        raise typer.Exit(1)

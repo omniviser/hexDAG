@@ -16,6 +16,7 @@ except ImportError:
 from hexdag.cli.commands import (
     build_cmd,
     config_cmd,
+    create_cmd,
     docs_cmd,
     init_cmd,
     manifest_cmd,
@@ -23,6 +24,8 @@ from hexdag.cli.commands import (
     plugin_dev_cmd,
     plugins_cmd,
     registry_cmd,
+    schema_cmd,
+    validate_cmd,
 )
 
 # Create the main Typer app
@@ -44,11 +47,14 @@ app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
 app.add_typer(registry_cmd.app, name="registry", help="Inspect the component registry")
 app.add_typer(manifest_cmd.app, name="manifest", help="Manifest file management")
-app.add_typer(pipeline_cmd.app, name="pipeline", help="Pipeline validation and execution planning")
+app.add_typer(pipeline_cmd.app, name="pipeline", help="Pipeline validation and execution")
+app.add_typer(create_cmd.app, name="create", help="Create pipeline templates from schemas")
+app.add_typer(schema_cmd.app, name="schema", help="Inspect component schemas")
 app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
 
-# Add build command directly
+# Add standalone commands
 app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
+app.command(name="validate", help="Validate YAML pipeline files")(validate_cmd.validate)
 
 
 @app.callback(invoke_without_command=True)
