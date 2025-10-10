@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -199,3 +200,34 @@ def parse_sanitization_config(raw: dict[str, Any] | None) -> SanitizationConfig:
         )
     except ValueError as e:
         raise ValueError(f"Invalid sanitization config: {e}") from e
+
+
+# Recursive sanitization of nested inputs
+EXCLUDED_KEYS: set[str] = {"_sanitization_cfg", "context_history"}
+
+
+def sanitize_mapping(value: Any, cfg: SanitizationConfig) -> Any:
+    """
+    Recursively sanitize all string leaves in nested dicts/lists/tuples,
+    skipping values under EXCLUDED_KEYS.
+
+    This is an integration helper. Use it in BaseLLMNode/AgentNode right
+    before rendering to ensure every string that reaches the template
+    is sanitized consistently.
+    """
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            if isinstance(k, str) and k in EXCLUDED_KEYS:
+                out[k] = v
+            else:
+                out[k] = sanitize_mapping(v, cfg)
+        return out
+
+    if isinstance(value, (list, tuple)):
+        return type(value)(sanitize_mapping(v, cfg) for v in value)
+
+    if isinstance(value, str):
+        return sanitize_text(value, cfg)
+
+    return value

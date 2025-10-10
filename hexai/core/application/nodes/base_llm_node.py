@@ -2,14 +2,14 @@
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 from hexai.core.application.prompt import PromptInput, TemplateType
 from hexai.core.application.prompt.security.prompt_sanitizer import (
     SanitizationConfig,
-    sanitize_text,
+    sanitize_mapping,
 )
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
@@ -144,10 +144,8 @@ class BaseLLMNode(BaseNodeFactory):
     ) -> dict[str, Any]:
         if not cfg.use_sanitizer:
             return validated_input
-        return {
-            k: sanitize_text(v, cfg) if isinstance(v, str) else v
-            for k, v in validated_input.items()
-        }
+        sanitized = sanitize_mapping(validated_input, cfg)
+        return cast("dict[str, Any]", sanitized)
 
     def _generate_messages(
         self, template: TemplateType, validated_input: dict[str, Any]
