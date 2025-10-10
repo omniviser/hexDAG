@@ -291,13 +291,12 @@ class YamlValidator:
 
         # Otherwise, lazily get from registry and cache
         if self._cached_node_types is None:
-            # Get all node factories from registry (e.g., "function_node", "llm_node")
-            # and extract node types with namespace (e.g., "core:function", "user:etl_pipeline")
+            # Get all node factories from registry (e.g., "function_node", "custom_processor")
+            # Extract node types with namespace (e.g., "core:function", "plugin:custom")
+            # Note: Core nodes follow "_node" suffix, but plugins may not
             node_components = registry.list_components(component_type=ComponentType.NODE)
             node_types = {
-                f"{comp.namespace}:{comp.name.removesuffix('_node')}"
-                for comp in node_components
-                if comp.name.endswith("_node")
+                f"{comp.namespace}:{comp.name.removesuffix('_node')}" for comp in node_components
             }
 
             # If registry is empty (not bootstrapped yet), use core node types as fallback
