@@ -1,3 +1,18 @@
+"""Secure prompt sanitization for hexAI.
+
+Features:
+
+Unicode normalization and removal of control/BIDI marks
+Escaping template-breaking chars: { } < > [ ]
+Length validation with graceful truncation
+API:
+
+SanitizationConfig: pipeline settings
+sanitize_text(text, cfg): sanitize single string
+parse_sanitization_config(raw): parse YAML 'sanitization' section
+sanitize_mapping(value, cfg): recursively sanitize nested dict/list/tuple (strings only)
+"""
+
 from __future__ import annotations
 
 import re
