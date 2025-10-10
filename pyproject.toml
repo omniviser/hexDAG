@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "pydantic~=2.0",
     "orjson>=3.10.0",
+    "commitizen>=4.8.3",
 ]
 
 [project.optional-dependencies]
