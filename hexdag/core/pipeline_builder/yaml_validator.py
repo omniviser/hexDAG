@@ -292,17 +292,24 @@ class YamlValidator:
         # Otherwise, lazily get from registry and cache
         if self._cached_node_types is None:
             # Get all node factories from registry (e.g., "function_node", "llm_node")
-            # and extract the node type (e.g., "function", "llm")
+            # and extract node types with namespace (e.g., "core:function", "user:etl_pipeline")
             node_components = registry.list_components(component_type=ComponentType.NODE)
             node_types = {
-                comp.name.removesuffix("_node")
+                f"{comp.namespace}:{comp.name.removesuffix('_node')}"
                 for comp in node_components
                 if comp.name.endswith("_node")
             }
 
             # If registry is empty (not bootstrapped yet), use core node types as fallback
             if not node_types:
-                node_types = {"function", "llm", "agent", "loop", "conditional", "passthrough"}
+                node_types = {
+                    "core:function",
+                    "core:llm",
+                    "core:agent",
+                    "core:loop",
+                    "core:conditional",
+                    "core:passthrough",
+                }
 
             self._cached_node_types = frozenset(node_types)
 
@@ -429,6 +436,9 @@ class YamlValidator:
             # Remove '_node' suffix if present
             node_type = node_kind[:-5] if node_kind.endswith("_node") else node_kind
 
+            # Build fully qualified node type for validation
+            qualified_node_type = f"{namespace}:{node_type}"
+
             # Get params from spec
             params = node.get("spec", {})
 
@@ -437,11 +447,45 @@ class YamlValidator:
                 result.add_error(f"Duplicate node ID: '{node_id}'")
             node_ids.add(node_id)
 
-            # Validate node type
-            if node_type not in self.valid_node_types:
+            # Validate node type (check if registered in registry)
+            # Support both qualified (namespace:type) and simple (type) formats
+            if (
+                qualified_node_type not in self.valid_node_types
+                and node_type not in self.valid_node_types
+            ):
+                # Show available types grouped by namespace
+                by_namespace: dict[str, list[str]] = {}
+                simple_types: list[str] = []
+                has_namespaced = False
+
+                for valid_type in sorted(self.valid_node_types):
+                    if ":" in valid_type:
+                        has_namespaced = True
+                        ns, nt = valid_type.split(":", 1)
+                        by_namespace.setdefault(ns, []).append(nt)
+                    else:
+                        # Legacy format without namespace
+                        simple_types.append(valid_type)
+
+                parts = []
+                if by_namespace:
+                    parts.append(
+                        ", ".join(
+                            f"{ns}:[{', '.join(types)}]"
+                            for ns, types in sorted(by_namespace.items())
+                        )
+                    )
+                if simple_types:
+                    parts.append(", ".join(sorted(simple_types)))
+
+                valid_types_str = ", ".join(parts) if parts else "none"
+
+                # Use simple node_type in error if no valid types have namespaces (legacy mode)
+                invalid_type_str = node_type if not has_namespaced else qualified_node_type
+
                 result.add_error(
-                    f"Node '{node_id}': Invalid type '{node_type}'. "
-                    f"Valid types: {', '.join(sorted(self.valid_node_types))}"
+                    f"Node '{node_id}': Invalid type '{invalid_type_str}'. "
+                    f"Valid types: {valid_types_str}"
                 )
 
             # Validate node-specific requirements and schema

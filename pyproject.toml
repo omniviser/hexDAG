@@ -219,7 +219,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-exclude = ["tests/", "examples/", ".mutmut-config.py", "docs/"]
+exclude = ["tests/", "examples/", "scripts/", ".mutmut-config.py", "docs/"]
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]

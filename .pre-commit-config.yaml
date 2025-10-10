@@ -61,7 +61,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
-        exclude: ^(tests/|examples/|hexdag_plugins/)
+        exclude: ^(tests/|examples/|scripts/|hexdag_plugins/)
 
   - repo: local
     hooks:
@@ -141,6 +141,22 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-schemas
+        name: Check JSON schemas are auto-generated
+        entry: uv run python scripts/check_schemas.py
+        language: system
+        files: ^schemas/.*\.json$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: generate-schemas
+        name: Generate JSON schemas
+        entry: uv run python scripts/generate_schemas.py
+        language: system
+        files: ^(hexdag/builtin/nodes/|hexdag/core/config/models\.py|hexdag/core/orchestration/policies/models\.py)
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: check-async-io
         name: Check for sync I/O in async code
         entry: uv run python scripts/check_async_io.py

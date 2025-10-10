@@ -37,6 +37,10 @@ class YamlPipelineBuilder:
         ----
             event_manager: Optional event manager for observer pattern
         """
+        # Ensure registry is bootstrapped before creating validator
+        # This allows the validator to discover all registered node types including plugins
+        ensure_bootstrapped()
+
         self.registered_functions: dict[str, Any] = {}
 
         self.event_manager = event_manager  # Now expects a port implementation

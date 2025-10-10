@@ -1,0 +1,104 @@
+{
+    "$defs": {
+        "LoggingConfig": {
+            "properties": {
+                "backtrace": {
+                    "default": true,
+                    "type": "boolean"
+                },
+                "diagnose": {
+                    "default": true,
+                    "type": "boolean"
+                },
+                "dual_sink": {
+                    "default": false,
+                    "type": "boolean"
+                },
+                "enable_stdlib_bridge": {
+                    "default": false,
+                    "type": "boolean"
+                },
+                "format": {
+                    "default": "structured",
+                    "enum": [
+                        "console",
+                        "json",
+                        "structured",
+                        "dual",
+                        "rich"
+                    ],
+                    "type": "string"
+                },
+                "include_timestamp": {
+                    "default": true,
+                    "type": "boolean"
+                },
+                "level": {
+                    "default": "INFO",
+                    "enum": [
+                        "DEBUG",
+                        "INFO",
+                        "WARNING",
+                        "ERROR",
+                        "CRITICAL"
+                    ],
+                    "type": "string"
+                },
+                "output_file": {
+                    "default": null,
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "use_color": {
+                    "default": true,
+                    "type": "boolean"
+                },
+                "use_rich": {
+                    "default": false,
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        }
+    },
+    "$id": "https://hexdag.dev/schemas/hexdag-config.json",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "JSON Schema for [tool.hexdag] in pyproject.toml (auto-generated)",
+    "properties": {
+        "dev_mode": {
+            "default": false,
+            "type": "boolean"
+        },
+        "logging": {
+            "$ref": "#/$defs/LoggingConfig"
+        },
+        "modules": {
+            "default": [
+                "hexdag.core.ports",
+                "hexdag.builtin.nodes",
+                "hexdag.builtin.tools.builtin_tools"
+            ],
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "plugins": {
+            "default": [
+                "hexdag.builtin.adapters.local"
+            ],
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "settings": {
+            "additionalProperties": true,
+            "type": "object"
+        }
+    },
+    "title": "HexDAG Configuration",
+    "type": "object"
+}
