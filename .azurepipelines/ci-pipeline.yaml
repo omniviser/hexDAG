@@ -141,7 +141,8 @@ stages:
 
                 # Try bumping
                 echo "Trying cz bump..."
-                uv sync
+                python -m pip install --upgrade pip uv
+                uv sync --all-extras
                 uv run cz --config pyproject.toml bump --files-only --yes
 
                 NEW_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml | head -n 1)
