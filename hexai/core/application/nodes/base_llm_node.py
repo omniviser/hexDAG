@@ -2,14 +2,14 @@
 
 import json
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 from pydantic import BaseModel
 
 from hexai.core.application.prompt import PromptInput, TemplateType
 from hexai.core.application.prompt.security.prompt_sanitizer import (
     SanitizationConfig,
-    sanitize_mapping,
+    sanitize_inputs_for_render,
 )
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
@@ -135,17 +135,14 @@ class BaseLLMNode(BaseNodeFactory):
                 return result
 
             except Exception as e:
-                raise e
+                raise RuntimeError(f"LLM execution failed: {e}") from e
 
         return llm_wrapper
 
     def _apply_sanitization(
         self, validated_input: dict[str, Any], cfg: SanitizationConfig
     ) -> dict[str, Any]:
-        if not cfg.use_sanitizer:
-            return validated_input
-        sanitized = sanitize_mapping(validated_input, cfg)
-        return cast("dict[str, Any]", sanitized)
+        return sanitize_inputs_for_render(validated_input, cfg)
 
     def _generate_messages(
         self, template: TemplateType, validated_input: dict[str, Any]

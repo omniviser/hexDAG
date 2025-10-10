@@ -27,7 +27,7 @@ def test_parse_sanitization_yes_no_and_defaults():
     assert cfg.normalization_form == "NFKD"
 
     cfg2 = parse_sanitization_config(None)
-    assert cfg2.use_sanitizer is False
+    assert cfg2.use_sanitizer is True
     assert cfg2.max_input_length == 1000
 
 

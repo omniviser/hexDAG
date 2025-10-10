@@ -38,6 +38,7 @@ FORMAT_CHARACTERS = [
 ]
 FORMAT_CHARACTERS_PATTERN = re.compile("[" + "".join(FORMAT_CHARACTERS) + "]")
 
+_ESCAPE_PATTERN = re.compile(r"[{}\[\]<>]")
 ESCAPE_CHARACTERS = {
     "{": r"\{",
     "}": r"\}",
@@ -48,6 +49,18 @@ ESCAPE_CHARACTERS = {
 }
 
 NormalizationForm = Literal["NFC", "NFD", "NFKC", "NFKD"]
+
+
+def sanitize_inputs_for_render(data: dict[str, Any], cfg: SanitizationConfig) -> dict[str, Any]:
+    """
+    Sanitize validated input dict before template rendering.
+    Returns original data if sanitizer disabled. Preserves structure.
+    """
+    if not cfg.use_sanitizer:
+        return data
+    from typing import cast
+
+    return cast("dict[str, Any]", sanitize_mapping(data, cfg))
 
 
 @dataclass
@@ -102,10 +115,15 @@ def _remove_control_and_bidi(text: str) -> str:
 
 
 def _escape_template_chars(text: str) -> str:
-    """Escape characters that could break template."""
-    if not any(ch in text for ch in ESCAPE_CHARACTERS):
+    """Escape template-breaking chars in user input only: { } < > [ ]."""
+    if not text:
         return text
-    return "".join(ESCAPE_CHARACTERS.get(ch, ch) for ch in text)
+
+    def _repl(m: re.Match[str]) -> str:
+        return ESCAPE_CHARACTERS[m.group(0)]
+
+    escaped = _ESCAPE_PATTERN.sub(_repl, text)
+    return escaped if escaped != text else text
 
 
 def _truncate(text: str, max_len: int | None) -> str:
@@ -191,7 +209,13 @@ def parse_sanitization_config(raw: dict[str, Any] | None) -> SanitizationConfig:
     Raises ValueError with descriptive messages on invalid input.
     """
     if not raw:
-        return SanitizationConfig(use_sanitizer=False, max_input_length=1000)
+        return SanitizationConfig(
+            use_sanitizer=True,
+            max_input_length=1000,
+            escape_template_chars=True,
+            normalize_unicode=True,
+            normalization_form="NFKC",
+        )
 
     try:
         use = _coerce_bool(raw.get("use_sanitizer", True), "sanitization.use_sanitizer")

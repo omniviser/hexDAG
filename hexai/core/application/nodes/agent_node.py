@@ -12,7 +12,7 @@ from hexai.adapters.unified_tool_router import UnifiedToolRouter
 from hexai.core.application.prompt import PromptInput
 from hexai.core.application.prompt.security.prompt_sanitizer import (
     SanitizationConfig,
-    sanitize_mapping,
+    sanitize_inputs_for_render,
 )
 from hexai.core.application.prompt.template import PromptTemplate
 from hexai.core.domain.dag import NodeSpec
@@ -467,7 +467,7 @@ carried_data={'key': 'value'})"""
         llm_input.setdefault("_sanitization_cfg", SanitizationConfig())
         cfg = llm_input["_sanitization_cfg"]
         if isinstance(cfg, SanitizationConfig) and cfg.use_sanitizer:
-            llm_input = sanitize_mapping(llm_input, cfg)
+            llm_input = sanitize_inputs_for_render(llm_input, cfg)
         # Get LLM response
         response = await self._get_llm_response(enhanced_prompt, llm_input, ports, node_step_name)
 
