@@ -2,40 +2,19 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 import os
 import re
+import tomllib  # Python 3.11+
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from hexai.core.config.models import HexDAGConfig, ManifestEntry
 
-_toml_import_error: BaseException | None = None
-_tomllib_module: Any | None = None
-
-for module_name in ("tomllib", "tomli"):
-    try:  # pragma: no cover - depends on interpreter and environment
-        _tomllib_module = importlib.import_module(module_name)
-        _toml_import_error = None
-        break
-    except ModuleNotFoundError as exc:
-        _toml_import_error = exc
-        _tomllib_module = None
-
-
-_TOML_IMPORT_MESSAGE = (
-    "TOML support requires 'tomllib' (Python 3.11+) or 'tomli'. Install with: pip install tomli"
+TOML_IMPORT_MESSAGE = (
+    "TOML support requires 'tomli' for Python < 3.11. Install with: pip install tomli"
 )
-
-
-def _require_tomllib() -> Any:
-    """Return the TOML module, raising ImportError if unavailable."""
-
-    if _tomllib_module is None:
-        raise ImportError(_TOML_IMPORT_MESSAGE) from _toml_import_error
-    return _tomllib_module
 
 
 # Type alias for configuration data that can be recursively substituted
@@ -59,7 +38,8 @@ class ConfigLoader:
     def __init__(self) -> None:
         """Initialize the config loader."""
 
-        _require_tomllib()
+        if tomllib is None:
+            raise ImportError(TOML_IMPORT_MESSAGE)
 
     def load_from_toml(self, path: str | Path | None = None) -> HexDAGConfig:
         """Load configuration from TOML file.
@@ -86,10 +66,8 @@ class ConfigLoader:
         logger.info("Loading configuration from %s", config_path)
 
         # Load TOML
-        toml_loader = _require_tomllib()
-
         with config_path.open("rb") as f:
-            data = toml_loader.load(f)
+            data = tomllib.load(f)
 
         # Extract hexdag configuration
         if config_path.name == "pyproject.toml":
@@ -157,9 +135,8 @@ class ConfigLoader:
         while current != current.parent:
             pyproject = current / "pyproject.toml"
             if pyproject.exists():
-                toml_loader = _require_tomllib()
                 with pyproject.open("rb") as f:
-                    data = toml_loader.load(f)
+                    data = tomllib.load(f)
                     if "tool" in data and "hexdag" in data["tool"]:
                         return pyproject
             current = current.parent
