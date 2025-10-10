@@ -3,7 +3,9 @@
 This module provides:
 1. ConfigurableComponent - Protocol for components with configuration
 2. ConfigurableAdapter - Base class that implements the protocol and eliminates boilerplate
-3. SecretField - Helper for declaring secret configuration fields
+3. ConfigurableNode - Base class for node factories with configuration
+4. ConfigurablePolicy - Base class for policies with configuration
+5. SecretField - Helper for declaring secret configuration fields
 """
 
 from __future__ import annotations
@@ -37,6 +39,46 @@ class AdapterConfig(BaseModel):
     30.0
     >>> config.timeout = 60  # doctest: +SKIP
     ValidationError: Instance is frozen
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
+class NodeConfig(BaseModel):
+    """Base configuration class for all node factories.
+
+    Node factories should define a nested Config class inheriting from this.
+    This enables:
+    - Type-safe configuration
+    - YAML schema generation
+    - Runtime validation
+
+    Examples
+    --------
+    >>> class LLMNodeConfig(NodeConfig):
+    ...     template: str
+    ...     max_tokens: int = 1000
+    >>> config = LLMNodeConfig(template="Analyze: {{input}}")
+    >>> config.max_tokens
+    1000
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
+class PolicyConfig(BaseModel):
+    """Base configuration class for all policies.
+
+    Policies should define a nested Config class inheriting from this.
+
+    Examples
+    --------
+    >>> class RetryPolicyConfig(PolicyConfig):
+    ...     max_retries: int = 3
+    ...     backoff: str = "exponential"
+    >>> config = RetryPolicyConfig(max_retries=5)
+    >>> config.backoff
+    'exponential'
     """
 
     model_config = ConfigDict(frozen=True)
@@ -248,14 +290,27 @@ class ConfigurableAdapter:
             # Try environment variable
             env_var = extras.get("env_var")
             if env_var and isinstance(env_var, str):
-                value = os.getenv(env_var)
-                if value and value != "":
-                    kwargs[field_name] = SecretStr(value)
-                    logger.debug(f"✓ Resolved {field_name} from env: {env_var}")
-                else:
-                    logger.debug(f"✗ {field_name} not found in env: {env_var}")
+                env_value = os.getenv(env_var)
+                if env_value:
+                    kwargs[field_name] = SecretStr(env_value)
+                    logger.debug(
+                        "Resolved secret field '{field}' from env var {env}",
+                        field=field_name,
+                        env=env_var,
+                    )
 
         return kwargs
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Get the configuration model class.
+
+        Returns
+        -------
+        type[BaseModel]
+            The Config class defined in this adapter
+        """
+        return cls.Config
 
     def get_extra_kwarg(self, key: str, default: Any = None) -> Any:
         """Get extra kwarg not in config schema.
@@ -328,15 +383,114 @@ class ConfigurableAdapter:
         config_str = ", ".join(config_items)
         return f"{self.__class__.__name__}({config_str})"
 
+
+class ConfigurableNode:
+    """Base class for node factories with configuration support.
+
+    Similar to ConfigurableAdapter but for node factories. Enables:
+    - Type-safe configuration via nested Config class
+    - YAML schema generation
+    - Runtime validation
+
+    Subclasses must:
+    - Define a nested Config class inheriting from NodeConfig
+    - Implement __call__() method that returns NodeSpec
+
+    Examples
+    --------
+    >>> from hexdag.core.configurable import ConfigurableNode, NodeConfig
+    >>> class MyNodeConfig(NodeConfig):
+    ...     template: str
+    ...     max_tokens: int = 1000
+    >>> class MyNode(ConfigurableNode):
+    ...     Config = MyNodeConfig
+    ...     def __call__(self, name: str, **kwargs):
+    ...         # Access self.config.template, self.config.max_tokens
+    ...         pass
+    """
+
+    Config: type[NodeConfig]
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize node factory with configuration.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Configuration options matching Config schema fields
+        """
+        if not hasattr(self.__class__, "Config"):
+            raise AttributeError(
+                f"{self.__class__.__name__} must define a nested Config class (NodeConfig)"
+            )
+
+        # Extract config fields
+        config_data = {
+            field_name: kwargs[field_name]
+            for field_name in self.Config.model_fields
+            if field_name in kwargs
+        }
+
+        self.config = self.Config(**config_data)
+        self._extra_kwargs = {k: v for k, v in kwargs.items() if k not in self.Config.model_fields}
+
     @classmethod
     def get_config_class(cls) -> type[BaseModel]:
-        """Return configuration schema class.
+        """Get the configuration model class."""
+        return cls.Config
 
-        Required by ConfigurableComponent protocol for CLI config generation.
 
-        Returns
-        -------
-        type[BaseModel]
-            The Pydantic Config model class
+class ConfigurablePolicy:
+    """Base class for policies with configuration support.
+
+    Similar to ConfigurableAdapter but for policies. Enables:
+    - Type-safe configuration via nested Config class
+    - YAML schema generation
+    - Runtime validation
+
+    Subclasses must:
+    - Define a nested Config class inheriting from PolicyConfig
+    - Implement evaluate() method
+
+    Examples
+    --------
+    >>> from hexdag.core.configurable import ConfigurablePolicy, PolicyConfig
+    >>> class RetryConfig(PolicyConfig):
+    ...     max_retries: int = 3
+    ...     backoff: str = "exponential"
+    >>> class RetryPolicy(ConfigurablePolicy):
+    ...     Config = RetryConfig
+    ...     async def evaluate(self, context):
+    ...         # Access self.config.max_retries, self.config.backoff
+    ...         pass
+    """
+
+    Config: type[PolicyConfig]
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize policy with configuration.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Configuration options matching Config schema fields
         """
+        if not hasattr(self.__class__, "Config"):
+            raise AttributeError(
+                f"{self.__class__.__name__} must define a nested Config class (PolicyConfig)"
+            )
+
+        # Extract config fields
+        config_data = {
+            field_name: kwargs[field_name]
+            for field_name in self.Config.model_fields
+            if field_name in kwargs
+        }
+
+        self.config = self.Config(**config_data)
+        self._extra_kwargs = {k: v for k, v in kwargs.items() if k not in self.Config.model_fields}
+
+    @classmethod
+    def get_config_class(cls) -> type[BaseModel]:
+        """Get the configuration model class."""
         return cls.Config

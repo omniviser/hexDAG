@@ -17,7 +17,15 @@ Example usage:
 """
 
 from hexdag.core.bootstrap import bootstrap_registry, ensure_bootstrapped
-from hexdag.core.configurable import ConfigurableAdapter
+from hexdag.core.configurable import (
+    AdapterConfig,
+    ConfigurableAdapter,
+    ConfigurableNode,
+    ConfigurablePolicy,
+    NodeConfig,
+    PolicyConfig,
+    SecretField,
+)
 from hexdag.core.context import (
     ExecutionContext,
     clear_execution_context,
@@ -59,6 +67,13 @@ __all__ = [
     "ensure_bootstrapped",
     # Base Classes
     "ConfigurableAdapter",
+    "ConfigurableNode",
+    "ConfigurablePolicy",
+    # Config Base Classes
+    "AdapterConfig",
+    "NodeConfig",
+    "PolicyConfig",
+    "SecretField",
     # Execution Context
     "ExecutionContext",
     "clear_execution_context",
