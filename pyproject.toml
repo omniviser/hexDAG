@@ -321,12 +321,15 @@ convention = "numpy"
 known-first-party = ["hexai"]
 
 [tool.commitizen]
-name = "cz_conventional_commits"
+name = "cz_customize"
 version = "0.1.0"
-tag_format = "v$version"
-version_files = [
-    "pyproject.toml:version"
-]
+version_files = ["pyproject.toml:^version"]
+bump_message = "release $current_version -> $new_version [skip ci]"
+changelog_file = "CHANGELOG.md"
+
+[tool.commitizen.customize]
+bump_pattern = '^(?:Merged PR \d+:) (ci!?|docs!?|experiment!?|feat!?|fix!?|refactor!?|test!?)'
+bump_map = { ".*!" = "MAJOR", "ci" = "PATCH", "docs" = "PATCH", "experiment" = "PATCH", "feat" = "MINOR", "fix" = "PATCH", "refactor" = "PATCH", "test" = "PATCH" }
 
 [tool.vulture]
 min_confidence = 90
