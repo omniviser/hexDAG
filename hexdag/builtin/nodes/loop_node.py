@@ -10,6 +10,7 @@ This module provides the LoopNode factory that creates nodes capable of:
 from collections.abc import Callable
 from typing import Any
 
+from hexdag.core.configurable import ConfigurableNode
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.exceptions import ValidationError
 from hexdag.core.logging import get_logger
@@ -21,12 +22,12 @@ from .base_node_factory import BaseNodeFactory
 
 
 @node(name="loop_node", subtype=NodeSubtype.LOOP, namespace="core")
-class LoopNode(BaseNodeFactory):
-    """Factory class for creating loop control nodes with iteration management."""
+class LoopNode(BaseNodeFactory, ConfigurableNode):
+    """Factory class for creating loop control nodes with iteration management.
 
-    def __init__(self) -> None:
-        """Initialize LoopNode factory."""
-        super().__init__()
+    Loop nodes are dynamic - max_iterations and success_condition are passed via __call__()
+    parameters at node creation time. No static Config needed (follows YAGNI principle).
+    """
 
     def __call__(
         self,
@@ -139,12 +140,12 @@ class LoopNode(BaseNodeFactory):
 
 
 @node(name="conditional_node", subtype=NodeSubtype.CONDITIONAL, namespace="core")
-class ConditionalNode(BaseNodeFactory):
-    """Factory class for creating conditional routing nodes."""
+class ConditionalNode(BaseNodeFactory, ConfigurableNode):
+    """Factory class for creating conditional routing nodes.
 
-    def __init__(self) -> None:
-        """Initialize ConditionalNode factory."""
-        super().__init__()
+    Conditional nodes are dynamic - condition_key and actions are passed via __call__()
+    parameters at node creation time. No static Config needed (follows YAGNI principle).
+    """
 
     def __call__(
         self,

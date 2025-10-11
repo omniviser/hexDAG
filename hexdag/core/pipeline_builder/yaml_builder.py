@@ -3,6 +3,7 @@
 Simple pipeline builder that focuses on basic YAML processing with simple data mapping.
 """
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +15,33 @@ from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt.template import ChatPromptTemplate
+from hexdag.core.pipeline_builder.component_instantiator import ComponentInstantiator
+from hexdag.core.pipeline_builder.pipeline_config import PipelineConfig
 from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
 from hexdag.core.registry import registry
 from hexdag.core.registry.models import NAMESPACE_SEPARATOR
 
 logger = get_logger(__name__)
+
+
+@lru_cache(maxsize=32)
+def _parse_yaml_cached(yaml_content: str) -> Any:
+    """Parse and validate YAML content with caching.
+
+    This is a module-level function so lru_cache doesn't cause memory leaks.
+    Cache key is the YAML content string itself.
+
+    Parameters
+    ----------
+    yaml_content : str
+        Raw YAML content to parse
+
+    Returns
+    -------
+    Any
+        Parsed YAML content (typically dict, but could be list, str, etc.)
+    """
+    return yaml.safe_load(yaml_content)
 
 
 class YamlPipelineBuilderError(Exception):
@@ -46,49 +69,68 @@ class YamlPipelineBuilder:
         self.event_manager = event_manager  # Now expects a port implementation
         self.field_mapping_registry = FieldMappingRegistry()
         self.validator = YamlValidator()
+        self.component_instantiator = ComponentInstantiator()
 
     def register_function(self, name: str, func: Any) -> None:
         """Register a function for use in YAML pipelines."""
         self.registered_functions[name] = func
 
-    def build_from_yaml_file(self, yaml_file_path: str) -> tuple[DirectedGraph, dict[str, Any]]:
-        """Build DirectedGraph from YAML file.
+    def build_from_yaml_file(
+        self, yaml_file_path: str, use_cache: bool = True
+    ) -> tuple[DirectedGraph, PipelineConfig]:
+        """Build DirectedGraph and PipelineConfig from YAML file with caching.
 
         Parameters
         ----------
         yaml_file_path : str
             Path to the YAML file to build from
+        use_cache : bool
+            Whether to use LRU caching (default: True)
 
         Returns
         -------
-        tuple[DirectedGraph, dict[str, Any]]
-            Tuple of (DirectedGraph, pipeline_metadata)
+        tuple[DirectedGraph, PipelineConfig]
+            Tuple of (DirectedGraph, PipelineConfig with ports and policies)
 
         Raises
         ------
         YamlPipelineBuilderError
             If the YAML file cannot be loaded or parsed
+
+        Notes
+        -----
+        Caching is based on file content hash, so changes to the YAML file
+        will automatically invalidate the cache. The cache is in-memory (LRU)
+        with a maximum of 32 entries.
         """
         try:
             yaml_path = Path(yaml_file_path)
-            with yaml_path.open(encoding="utf-8") as file:
-                yaml_content = file.read()
-            return self.build_from_yaml_string(yaml_content)
+            yaml_content = yaml_path.read_text(encoding="utf-8")
+
+            # Use cached or uncached version based on flag
+            return self.build_from_yaml_string(yaml_content, use_cache=use_cache)
+
         except OSError as e:
             raise YamlPipelineBuilderError(
                 f"Failed to load YAML file '{yaml_file_path}': {e}"
             ) from e
 
-    def build_from_yaml_string(self, yaml_content: str) -> tuple[DirectedGraph, dict[str, Any]]:
-        """Convert declarative YAML manifest to DirectedGraph.
+    def build_from_yaml_string(
+        self, yaml_content: str, use_cache: bool = True
+    ) -> tuple[DirectedGraph, PipelineConfig]:
+        """Convert declarative YAML manifest to DirectedGraph and PipelineConfig.
 
         Expects declarative manifest format with K8s-style structure:
         ```yaml
-        apiVersion: v1
+        apiVersion: hexdag.omniviser.io/v1alpha1
         kind: Pipeline
         metadata:
           name: my-pipeline
         spec:
+          ports:
+            llm: core:openai(model=gpt-4)
+          policies:
+            retry: core:retry(max_retries=3)
           nodes:
             - kind: llm_node
               metadata:
@@ -102,28 +144,44 @@ class YamlPipelineBuilder:
         ----------
         yaml_content : str
             YAML content string to parse
+        use_cache : bool
+            Whether to use cached YAML parsing (default: True)
 
         Returns
         -------
-        tuple[DirectedGraph, dict[str, Any]]
-            Tuple of (DirectedGraph, pipeline_metadata)
+        tuple[DirectedGraph, PipelineConfig]
+            Tuple of (DirectedGraph, PipelineConfig with ports and policies)
         """
-        config = self._parse_and_validate_yaml(yaml_content)
-        pipeline_metadata = self._extract_pipeline_metadata(config)
+        config = self._parse_and_validate_yaml(yaml_content, use_cache=use_cache)
+
+        # Extract pipeline configuration including ports and policies
+        pipeline_config = self._extract_pipeline_config(config)
+
+        # Register common mappings for backward compatibility
         self._register_common_mappings(config)
 
+        # Build the graph
         graph = self._build_graph_from_config(config)
 
-        logger.info("✅ Built pipeline with {count} nodes", count=len(graph.nodes))
-        return graph, pipeline_metadata
+        logger.info(
+            "✅ Built pipeline '{name}' with {nodes} nodes, {ports} ports, {policies} policies",
+            name=pipeline_config.metadata.get("name", "unknown"),
+            nodes=len(graph.nodes),
+            ports=len(pipeline_config.ports),
+            policies=len(pipeline_config.policies),
+        )
 
-    def _parse_and_validate_yaml(self, yaml_content: str) -> dict[str, Any]:
+        return graph, pipeline_config
+
+    def _parse_and_validate_yaml(self, yaml_content: str, use_cache: bool = True) -> dict[str, Any]:
         """Parse YAML content and validate the configuration.
 
         Parameters
         ----------
         yaml_content : str
             YAML content string to parse
+        use_cache : bool
+            Whether to use cached parsing (default: True)
 
         Returns
         -------
@@ -136,7 +194,8 @@ class YamlPipelineBuilder:
             If YAML parsing or validation fails
         """
         try:
-            config = yaml.safe_load(yaml_content)
+            # Use cached function (module-level) or direct parsing
+            config = _parse_yaml_cached(yaml_content) if use_cache else yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
             raise YamlPipelineBuilderError(f"Invalid YAML content: {e}") from e
 
@@ -372,9 +431,60 @@ class YamlPipelineBuilder:
 
         return node_type, namespace
 
+    def _extract_pipeline_config(self, config: dict[str, Any]) -> PipelineConfig:
+        """Extract complete pipeline configuration including ports and policies.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Raw YAML configuration
+
+        Returns
+        -------
+        PipelineConfig
+            Complete pipeline configuration with ports, policies, and metadata
+        """
+        metadata_section = config.get("metadata", {})
+        spec = config.get("spec", {})
+
+        # Extract ports configuration
+        ports = spec.get("ports", {})
+        type_ports = spec.get("type_ports", {})
+        policies = spec.get("policies", {})
+
+        # Build metadata dict
+        metadata = {
+            "name": metadata_section.get("name"),
+            "description": metadata_section.get("description"),
+        }
+
+        # Extract other metadata fields
+        for key in ["version", "author", "tags", "environment"]:
+            if key in metadata_section:
+                metadata[key] = metadata_section[key]
+
+        # Create PipelineConfig
+        pipeline_config = PipelineConfig(
+            ports=ports,
+            type_ports=type_ports,
+            policies=policies,
+            metadata=metadata,
+            nodes=spec.get("nodes", []),
+        )
+
+        logger.debug(
+            "Extracted pipeline config: {ports} ports, {policies} policies",
+            ports=len(ports),
+            policies=len(policies),
+        )
+
+        return pipeline_config
+
     @staticmethod
     def _extract_pipeline_metadata(config: dict[str, Any]) -> dict[str, Any]:
         """Extract pipeline-wide metadata from declarative YAML manifest.
+
+        DEPRECATED: Use _extract_pipeline_config instead.
 
         Returns
         -------

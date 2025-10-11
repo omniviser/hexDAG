@@ -81,12 +81,12 @@ spec:
         yaml_builder.register_function("multiply", multiply)
 
         # Build DirectedGraph from YAML
-        graph, metadata = yaml_builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = yaml_builder.build_from_yaml_string(yaml_content)
 
         # Verify metadata
-        assert metadata["name"] == "math-pipeline"
-        assert metadata["description"] == "Simple math operations"
-        assert metadata["version"] == "1.0"
+        assert pipeline_config.metadata["name"] == "math-pipeline"
+        assert pipeline_config.metadata["description"] == "Simple math operations"
+        assert pipeline_config.metadata["version"] == "1.0"
 
         # Verify graph structure
         assert len(graph.nodes) == 2
@@ -195,15 +195,15 @@ spec:
         yaml_builder.register_function("test_func", test_func)
 
         # Build graph
-        graph, metadata = yaml_builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = yaml_builder.build_from_yaml_string(yaml_content)
 
         # Verify metadata
-        assert metadata["name"] == "metadata-test"
-        assert metadata["description"] == "Test metadata preservation"
-        assert metadata["version"] == "2.0"
-        assert metadata["author"] == "Test Author"
-        assert "test" in metadata["tags"]
-        assert "integration" in metadata["tags"]
+        assert pipeline_config.metadata["name"] == "metadata-test"
+        assert pipeline_config.metadata["description"] == "Test metadata preservation"
+        assert pipeline_config.metadata["version"] == "2.0"
+        assert pipeline_config.metadata["author"] == "Test Author"
+        assert "test" in pipeline_config.metadata["tags"]
+        assert "integration" in pipeline_config.metadata["tags"]
 
     def test_field_mapping_in_yaml(self, yaml_builder):
         """Test that field mappings are correctly parsed from YAML."""
@@ -361,11 +361,13 @@ spec:
         yaml_builder.register_function("process_data", process_data)
 
         # Build graph with common mappings
-        graph, metadata = yaml_builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = yaml_builder.build_from_yaml_string(yaml_content)
 
-        # Verify common mappings were registered
-        assert "common_field_mappings" in metadata
-        assert "user_input" in metadata["common_field_mappings"]
+        # Verify common mappings were registered with the builder
+        user_input_mapping = yaml_builder.field_mapping_registry.get("user_input")
+        assert user_input_mapping is not None
+        assert user_input_mapping["query"] == "input.user_query"
+        assert user_input_mapping["context"] == "input.context"
 
         # Verify node was created
         assert len(graph.nodes) == 1
@@ -383,8 +385,8 @@ spec:
 """
 
         # Should complete with warning, not error
-        graph, metadata = yaml_builder.build_from_yaml_string(yaml_content)
-        assert metadata["name"] == "no-version"
+        graph, pipeline_config = yaml_builder.build_from_yaml_string(yaml_content)
+        assert pipeline_config.metadata["name"] == "no-version"
         assert len(graph.nodes) == 0
 
     def test_missing_kind_field(self, yaml_builder):
@@ -415,9 +417,9 @@ spec:
   nodes: []
 """
 
-        graph, metadata = yaml_builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = yaml_builder.build_from_yaml_string(yaml_content)
 
-        assert metadata["name"] == "empty-pipeline"
+        assert pipeline_config.metadata["name"] == "empty-pipeline"
         assert len(graph.nodes) == 0
 
     def test_parallel_node_dependencies(self, yaml_builder):

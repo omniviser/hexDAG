@@ -7,6 +7,7 @@ from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
+from hexdag.core.configurable import ConfigurableNode
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.protocols import is_schema_type
 from hexdag.core.registry import node
@@ -17,8 +18,13 @@ from .mapped_input import MappedInput
 
 
 @node(name="function_node", subtype=NodeSubtype.FUNCTION, namespace="core")
-class FunctionNode(BaseNodeFactory):
-    """Simple factory for creating function-based nodes with optional Pydantic validation."""
+class FunctionNode(BaseNodeFactory, ConfigurableNode):
+    """Simple factory for creating function-based nodes with optional Pydantic validation.
+
+    Function nodes are highly dynamic - the function itself defines configuration via its
+    signature and parameters. No static Config class needed (follows YAGNI principle).
+    All configuration is passed dynamically through __call__() parameters.
+    """
 
     def __call__(
         self,

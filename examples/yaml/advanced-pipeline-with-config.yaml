@@ -1,0 +1,190 @@
+apiVersion: hexdag.omniviser.io/v1alpha1
+kind: Pipeline
+metadata:
+  name: advanced-research-pipeline
+  description: Advanced pipeline demonstrating ports, policies, and node configuration
+  version: "1.0.0"
+  author: hexDAG Team
+  tags:
+    - example
+    - advanced
+    - configuration
+
+spec:
+  # ============================================================================
+  # GLOBAL PORTS (Adapters) - Native YAML Dict Format
+  # ============================================================================
+  # These adapters are available to all nodes unless overridden
+  ports:
+    # LLM adapter - uses mock LLM with GPT-4 config
+    llm:
+      namespace: core
+      name: mock_llm
+      params:
+        model: gpt-4
+        temperature: 0.7
+
+    # Database adapter - PostgreSQL with connection from env
+    # database:
+    #   namespace: core
+    #   name: postgres
+    #   params:
+    #     connection_string: ${DATABASE_URL}
+
+    # Observer manager for events
+    observer_manager:
+      namespace: plugin
+      name: local_observer_manager
+
+    # Policy manager for orchestration policies
+    policy_manager:
+      namespace: plugin
+      name: local_policy_manager
+
+  # ============================================================================
+  # PER-TYPE PORT DEFAULTS - Native YAML Dict Format
+  # ============================================================================
+  # Override ports for specific node types
+  type_ports:
+    agent:  # All agent nodes use Anthropic Claude
+      llm:
+        namespace: core
+        name: mock_llm
+        params:
+          model: claude-3-5-sonnet
+          temperature: 0.5
+
+  # ============================================================================
+  # GLOBAL POLICIES - Native YAML Dict Format
+  # ============================================================================
+  # These policies apply to all nodes in the pipeline
+  policies:
+    # Retry failed nodes up to 3 times
+    retry:
+      name: retry
+      params:
+        max_retries: 3
+
+    # Timeout nodes after 5 minutes
+    timeout:
+      name: timeout
+      params:
+        timeout_seconds: 300
+
+    # Circuit breaker - stop trying after 5 failures
+    circuit_breaker:
+      name: circuit_breaker
+      params:
+        failure_threshold: 5
+
+  # ============================================================================
+  # NODES
+  # ============================================================================
+  nodes:
+    # ------------------------------------------------------------------------
+    # Node 1: Research Agent with Custom Configuration
+    # ------------------------------------------------------------------------
+    - kind: core:agent_node
+      metadata:
+        name: researcher
+        description: AI agent that researches topics
+      spec:
+        # Node-specific configuration (maps to AgentNodeConfig)
+        max_steps: 15  # Allow more steps for research
+        tool_call_style: mixed
+
+        initial_prompt_template: |
+          You are a research assistant. Research the following topic thoroughly:
+
+          Topic: {{topic}}
+
+          Provide comprehensive findings with sources.
+
+        # Node-level port override - use GPT-4o for this specific node
+        ports:
+          llm:
+            namespace: core
+            name: mock_llm
+            params:
+              model: gpt-4o
+              temperature: 0.3
+
+        # Node-level policy override - longer timeout for research
+        policies:
+          timeout:
+            name: timeout
+            params:
+              timeout_seconds: 600
+
+        dependencies: []
+
+    # ------------------------------------------------------------------------
+    # Node 2: Loop Node with Configuration
+    # ------------------------------------------------------------------------
+    - kind: core:loop_node
+      metadata:
+        name: analysis_loop
+        description: Iteratively analyze research findings
+      spec:
+        # LoopNodeConfig fields
+        max_iterations: 5
+        iteration_key: analysis_iteration
+
+        condition: "{{should_continue}}"
+
+        dependencies:
+          - researcher
+
+    # ------------------------------------------------------------------------
+    # Node 3: Summary LLM Node
+    # ------------------------------------------------------------------------
+    - kind: core:llm_node
+      metadata:
+        name: summarizer
+        description: Summarize research findings
+      spec:
+        prompt_template: |
+          Summarize the following research findings:
+
+          {{researcher.result}}
+
+          Provide a concise executive summary.
+
+        # This node uses global LLM port (gpt-4)
+        dependencies:
+          - analysis_loop
+
+    # ------------------------------------------------------------------------
+    # Node 4: Conditional Node
+    # ------------------------------------------------------------------------
+    - kind: core:conditional_node
+      metadata:
+        name: quality_check
+        description: Check if summary meets quality standards
+      spec:
+        # ConditionalNodeConfig fields
+        condition_key: quality_score
+        true_action: proceed
+        false_action: retry
+
+        condition: "{{quality_score}} > 0.8"
+
+        dependencies:
+          - summarizer
+
+    # ------------------------------------------------------------------------
+    # Node 5: Final Report Generation
+    # ------------------------------------------------------------------------
+    - kind: core:function_node
+      metadata:
+        name: generate_report
+        description: Generate final report
+      spec:
+        fn: generate_final_report
+
+        input_mapping:
+          summary: summarizer.result
+          metadata: researcher.metadata
+
+        dependencies:
+          - quality_check

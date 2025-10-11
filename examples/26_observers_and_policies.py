@@ -18,6 +18,14 @@ This example shows:
 import asyncio
 
 from hexdag.builtin.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexdag.builtin.policies import (
+    CircuitBreakerPolicy,
+    ConditionalSkipPolicy,
+    ExponentialBackoffPolicy,
+    FallbackPolicy,
+    RateLimitPolicy,
+    RetryPolicy,
+)
 from hexdag.core.orchestration.events import (
     ALL_EXECUTION_EVENTS,
     NODE_LIFECYCLE_EVENTS,
@@ -33,16 +41,10 @@ from hexdag.core.orchestration.events import (
     ResourceMonitorObserver,
     SimpleLoggingObserver,
 )
-from hexdag.core.orchestration.policies import (
-    CircuitBreakerPolicy,
-    ConditionalSkipPolicy,
-    ExponentialBackoffPolicy,
-    FallbackPolicy,
+from hexdag.core.orchestration.policies.models import (
     PolicyContext,
     PolicyResponse,
     PolicySignal,
-    RateLimitPolicy,
-    RetryPolicy,
     SubscriberType,
 )
 

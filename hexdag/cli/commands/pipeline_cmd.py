@@ -433,10 +433,10 @@ def run_pipeline(
             console.print(f"[cyan]Loading pipeline: {pipeline_path}[/cyan]")
 
         builder = YamlPipelineBuilder()
-        graph, metadata = builder.build_from_yaml_file(str(pipeline_path))
+        graph, pipeline_config = builder.build_from_yaml_file(str(pipeline_path))
 
         if verbose:
-            console.print(f"[dim]Pipeline: {metadata.get('name', 'unnamed')}[/dim]")
+            console.print(f"[dim]Pipeline: {pipeline_config.metadata.get('name', 'unnamed')}[/dim]")
             console.print(f"[dim]Nodes: {len(graph.nodes)}[/dim]\n")
 
         # Execute pipeline

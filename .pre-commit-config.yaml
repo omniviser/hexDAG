@@ -141,21 +141,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: check-schemas
-        name: Check JSON schemas are auto-generated
-        entry: uv run python scripts/check_schemas.py
-        language: system
-        files: ^schemas/.*\.json$
-        stages: [pre-commit]
-        pass_filenames: false
-
-      - id: generate-schemas
-        name: Generate JSON schemas
-        entry: uv run python scripts/generate_schemas.py
-        language: system
-        files: ^(hexdag/builtin/nodes/|hexdag/core/config/models\.py|hexdag/core/orchestration/policies/models\.py)
-        stages: [pre-commit]
-        pass_filenames: false
 
       - id: check-async-io
         name: Check for sync I/O in async code

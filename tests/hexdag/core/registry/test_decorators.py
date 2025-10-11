@@ -152,18 +152,18 @@ class TestComponentDecorator:
     def test_basic_decoration(self):
         """Test basic component decoration adds metadata."""
 
-        @component(ComponentType.NODE, namespace="test")
-        class TestComponent:
+        # Use TOOL type for testing metadata since tools don't require Config
+        @component(ComponentType.TOOL, namespace="test")
+        def test_component():
             """Test component."""
-
             pass
 
-        # Decorator should add attributes to the class
-        assert hasattr(TestComponent, "_hexdag_type")
-        assert TestComponent._hexdag_type == ComponentType.NODE
-        assert TestComponent._hexdag_name == "test_component"
-        assert TestComponent._hexdag_namespace == "test"
-        assert TestComponent._hexdag_description == "Test component."
+        # Decorator should add attributes to the function
+        assert hasattr(test_component, "_hexdag_type")
+        assert test_component._hexdag_type == ComponentType.TOOL
+        assert test_component._hexdag_name == "test_component"
+        assert test_component._hexdag_namespace == "test"
+        assert test_component._hexdag_description == "Test component."
 
     def test_custom_name(self):
         """Test decoration with custom name."""

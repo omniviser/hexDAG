@@ -162,6 +162,64 @@ def component(
         cls._hexdag_description = component_description  # type: ignore[attr-defined]
         cls._hexdag_required_ports = required_ports or []  # type: ignore[attr-defined]
 
+        # Enforce Config class requirement for nodes and policies
+        # Skip enforcement for test modules
+        if inspect.isclass(cls):
+            module_name = getattr(cls, "__module__", "")
+            is_test = "test" in module_name or namespace == "test"
+
+            if not is_test:
+                try:
+                    # Import here to avoid circular dependency
+                    from hexdag.core.configurable import (
+                        ConfigurableNode,
+                        ConfigurablePolicy,
+                    )
+
+                    # Check nodes
+                    if validated_type == ComponentType.NODE:
+                        has_configurable_node = any(
+                            issubclass(base, ConfigurableNode)
+                            for base in cls.__mro__
+                            if base is not cls and base is not object
+                        )
+                        has_config = hasattr(cls, "Config")
+
+                        if not has_configurable_node:
+                            raise ValidationError(
+                                f"Node '{cls.__name__}'",
+                                "must inherit from ConfigurableNode. See CLAUDE.md for examples.",
+                            )
+                        if not has_config:
+                            raise ValidationError(
+                                f"Node '{cls.__name__}'",
+                                "must define a Config class attribute. See CLAUDE.md for examples.",
+                            )
+
+                    # Check policies
+                    elif validated_type == ComponentType.POLICY:
+                        has_configurable_policy = any(
+                            issubclass(base, ConfigurablePolicy)
+                            for base in cls.__mro__
+                            if base is not cls and base is not object
+                        )
+                        has_config = hasattr(cls, "Config")
+
+                        if not has_configurable_policy:
+                            raise ValidationError(
+                                f"Policy '{cls.__name__}'",
+                                "must inherit from ConfigurablePolicy. See CLAUDE.md for examples.",
+                            )
+                        if not has_config:
+                            raise ValidationError(
+                                f"Policy '{cls.__name__}'",
+                                "must define a Config class attribute. See CLAUDE.md for examples.",
+                            )
+
+                except (ImportError, TypeError):
+                    # ConfigurableNode/ConfigurablePolicy not available yet (bootstrap phase)
+                    pass
+
         return cls
 
     return decorator

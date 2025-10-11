@@ -710,59 +710,16 @@ class DAGVisualizer:
             Tuple of (node_schemas_dict, pipeline_input_schema)
         """
         try:
-            from pathlib import Path
-
-            # Try to import the compiler
-            try:
-                from hexdag.core.pipeline_builder.compiler import compile_pipeline
-            except ImportError:
-                # Compiler not available, return empty schemas
-                logger.debug("Pipeline compiler not available, skipping schema enhancement")
-                return {}, None
-
-            # Find the pipeline YAML file
-            current_dir = Path.cwd()
-            possible_paths = [
-                current_dir
-                / f"src/pipelines/{pipeline_name.replace('_pipeline', '')}/pipeline.yaml",
-                current_dir / f"src/pipelines/{pipeline_name}/pipeline.yaml",
-                current_dir / f"{pipeline_name}.yaml",
-            ]
-
-            yaml_file = None
-            for path in possible_paths:
-                if path.exists():
-                    yaml_file = path
-                    break
-
-            if not yaml_file:
-                logger.debug("Pipeline YAML not found for %s", pipeline_name)
-                return {}, None
-
-            # Compile on-the-fly to get all schemas
-            try:
-                compiled_data = compile_pipeline(yaml_file)
-            except Exception as e:
-                logger.debug("Failed to compile pipeline %s: %s", pipeline_name, e)
-                return {}, None
-
-            # Extract node schemas from compiled data
-            node_schemas = {}
-            if compiled_data:
-                for node_config in compiled_data.node_configs:
-                    node_id = node_config["id"]
-                    params = node_config.get("params", {})
-                    node_schemas[node_id] = {
-                        "input_schema": params.get("input_schema"),
-                        "output_schema": params.get("output_schema"),
-                        "type": node_config.get("type", "unknown"),
-                    }
-
-            # Return schemas and pipeline input
-            return node_schemas, compiled_data.input_schema if compiled_data else None
+            # Note: Pipeline compiler has been removed in favor of simple caching.
+            # Schema information should be provided via basic_node_schemas parameter
+            # or extracted from runtime Config classes.
+            logger.debug(
+                "Schema visualization - compiler removed, use basic_node_schemas parameter"
+            )
+            return {}, None
 
         except Exception as e:
-            # Silently fail - compiled schemas are optional for visualization
+            # Silently fail - schemas are optional for visualization
             logger.debug("Exception in schema loading: %s", e)
             return {}, None
 

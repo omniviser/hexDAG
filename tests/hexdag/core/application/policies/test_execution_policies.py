@@ -5,19 +5,18 @@ import time
 
 import pytest
 
-from hexdag.core.orchestration.events import NodeCompleted, NodeFailed, NodeStarted
-from hexdag.core.orchestration.policies import (
+from hexdag.builtin.policies import (
     CircuitBreakerPolicy,
     ConditionalSkipPolicy,
     ExponentialBackoffPolicy,
     FallbackPolicy,
-    PolicyContext,
-    PolicySignal,
     RateLimitPolicy,
     ResourceThrottlePolicy,
     RetryPolicy,
     TimeoutPolicy,
 )
+from hexdag.core.orchestration.events import NodeCompleted, NodeFailed, NodeStarted
+from hexdag.core.orchestration.policies.models import PolicyContext, PolicySignal
 
 # ==============================================================================
 # RETRY POLICY TESTS

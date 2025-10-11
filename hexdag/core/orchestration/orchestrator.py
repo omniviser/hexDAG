@@ -9,7 +9,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 if TYPE_CHECKING:
     from hexdag.core.ports.observer_manager import ObserverManagerPort
@@ -36,6 +36,7 @@ from hexdag.core.orchestration.hooks import (
     PostDagHookManager,
     PreDagHookManager,
 )
+from hexdag.core.orchestration.models import PortsConfiguration
 from hexdag.core.ports_builder import PortsBuilder
 
 from .events import (
@@ -111,7 +112,7 @@ class Orchestrator:
     def __init__(
         self,
         max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
-        ports: dict[str, Any] | None = None,
+        ports: Union[dict[str, Any], "PortsConfiguration", None] = None,
         strict_validation: bool = False,
         default_node_timeout: float | None = None,
         pre_hook_config: HookConfig | None = None,
@@ -122,16 +123,30 @@ class Orchestrator:
         Args
         ----
             max_concurrent_nodes: Maximum number of nodes to execute concurrently
-            ports: Shared ports/dependencies for all pipeline executions
+            ports: Shared ports/dependencies for all pipeline executions.
+                Can be either a flat dict (backward compatible) or a PortsConfiguration
+                for advanced type-specific and node-level port customization.
             strict_validation: If True, raise errors on validation failure
             default_node_timeout: Default timeout in seconds for each node (None = no timeout)
             pre_hook_config: Configuration for pre-DAG hooks (health checks, secrets, etc.)
             post_hook_config: Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
         """
+
         self.max_concurrent_nodes = max_concurrent_nodes
-        self.ports = ports or {}
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
+
+        # Handle both dict and PortsConfiguration
+        self.ports_config: PortsConfiguration | None
+        if isinstance(ports, PortsConfiguration):
+            self.ports_config = ports
+            # Extract global ports for backward compatibility
+            self.ports = (
+                {k: v.port for k, v in ports.global_ports.items()} if ports.global_ports else {}
+            )
+        else:
+            self.ports_config = None
+            self.ports = ports or {}
 
         # Validate known port types
         self._validate_port_types(self.ports)
@@ -527,6 +542,36 @@ class Orchestrator:
             **kwargs,
         )
 
+    def _resolve_ports_for_node(self, node_name: str, node_spec: Any) -> dict[str, Any]:
+        """Resolve ports for a specific node.
+
+        Uses PortsConfiguration if available, otherwise returns global ports.
+        Resolution order: per-node > per-type > global
+
+        Args
+        ----
+            node_name: Name of the node
+            node_spec: NodeSpec containing node metadata
+
+        Returns
+        -------
+            dict[str, Any]: Resolved ports for this node
+        """
+        if self.ports_config is None:
+            # No PortsConfiguration, use global ports
+            return self.ports
+
+        # Get node type from spec (if available)
+        node_type = getattr(node_spec, "subtype", None)
+        if node_type:
+            node_type = node_type.value if hasattr(node_type, "value") else str(node_type)
+
+        # Resolve ports using PortsConfiguration
+        resolved_ports = self.ports_config.resolve_ports(node_name, node_type)
+
+        # Convert PortConfig to actual port instances
+        return {k: v.port for k, v in resolved_ports.items()}
+
     async def _execute_node(
         self,
         node_name: str,
@@ -542,6 +587,9 @@ class Orchestrator:
 
         Note: all_ports, observer_manager, policy_manager are filtered out from kwargs
         since they're accessed via ExecutionContext, not passed to node functions.
+
+        If PortsConfiguration is available, ports are resolved per-node based on
+        node name and type, allowing type-specific and node-level port customization.
         """
         # Create node context early so it's available in exception handler
         _ = context.with_node(node_name, wave_index)  # For future use
@@ -560,6 +608,13 @@ class Orchestrator:
             node_input = self._input_mapper.prepare_node_input(
                 node_spec, node_results, initial_input
             )
+
+            # Resolve ports for this specific node
+            if self.ports_config is not None:
+                from hexdag.core.context import set_ports
+
+                node_ports = self._resolve_ports_for_node(node_name, node_spec)
+                set_ports(node_ports)  # Update context for this node
 
             # Delegate execution to NodeExecutor
             return await self._node_executor.execute_node(

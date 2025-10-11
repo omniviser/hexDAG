@@ -130,6 +130,7 @@ modules = [
     "hexdag.core.ports",               # Core port definitions (must load before adapters)
     "hexdag.builtin.nodes",            # Core node factories
     "hexdag.builtin.tools.builtin_tools",     # Built-in tools (tool_end, change_phase)
+    "hexdag.builtin.policies.execution_policies",  # Built-in execution policies
 ]
 
 # Default plugins - mock and local adapters for testing and development

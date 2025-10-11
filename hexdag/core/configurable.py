@@ -385,59 +385,79 @@ class ConfigurableAdapter:
 
 
 class ConfigurableNode:
-    """Base class for node factories with configuration support.
+    """Base class for node factories with optional configuration support.
 
     Similar to ConfigurableAdapter but for node factories. Enables:
-    - Type-safe configuration via nested Config class
+    - Type-safe configuration via nested Config class (optional)
     - YAML schema generation
     - Runtime validation
+    - Cooperative multiple inheritance via super().__init__()
+
+    Subclasses should use cooperative multiple inheritance by calling super().__init__(**kwargs)
+    which will properly initialize all parent classes in MRO order.
+
+    Config class is OPTIONAL - only define it if you have actual configuration fields.
+    Don't create empty Config classes for "future extensibility" (YAGNI principle).
 
     Subclasses must:
-    - Define a nested Config class inheriting from NodeConfig
     - Implement __call__() method that returns NodeSpec
+    - Call super().__init__(**kwargs) if they define custom __init__
+    - Optionally define a Config class if they have configuration fields
 
     Examples
     --------
     >>> from hexdag.core.configurable import ConfigurableNode, NodeConfig
+    >>> # Node WITH configuration
     >>> class MyNodeConfig(NodeConfig):
     ...     template: str
     ...     max_tokens: int = 1000
-    >>> class MyNode(ConfigurableNode):
+    >>> class ConfiguredNode(ConfigurableNode):  # doctest: +SKIP
     ...     Config = MyNodeConfig
     ...     def __call__(self, name: str, **kwargs):
     ...         # Access self.config.template, self.config.max_tokens
     ...         pass
+    >>> # Node WITHOUT configuration (dynamic nodes)
+    >>> class DynamicNode(ConfigurableNode):  # doctest: +SKIP
+    ...     # No Config class needed!
+    ...     def __call__(self, name: str, **kwargs):
+    ...         # All config passed via kwargs to __call__
+    ...         pass
     """
 
-    Config: type[NodeConfig]
+    Config: type[NodeConfig] | None = None
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initialize node factory with configuration.
+        """Initialize node factory with optional configuration.
 
         Parameters
         ----------
         **kwargs : Any
-            Configuration options matching Config schema fields
+            Configuration options matching Config schema fields (if Config is defined)
         """
-        if not hasattr(self.__class__, "Config"):
-            raise AttributeError(
-                f"{self.__class__.__name__} must define a nested Config class (NodeConfig)"
-            )
+        # Check if Config class is defined
+        if not hasattr(self.__class__, "Config") or self.__class__.Config is None:
+            # No Config class - node is dynamic, all config via __call__ kwargs
+            self.config = None
+            self._extra_kwargs = kwargs
+            return
+
+        # Type narrowing: Config is not None at this point
+        config_class = self.__class__.Config
 
         # Extract config fields
         config_data = {
             field_name: kwargs[field_name]
-            for field_name in self.Config.model_fields
+            for field_name in config_class.model_fields
             if field_name in kwargs
         }
 
-        self.config = self.Config(**config_data)
-        self._extra_kwargs = {k: v for k, v in kwargs.items() if k not in self.Config.model_fields}
+        self.config = config_class(**config_data)
+        self._extra_kwargs = {k: v for k, v in kwargs.items() if k not in config_class.model_fields}
 
     @classmethod
-    def get_config_class(cls) -> type[BaseModel]:
-        """Get the configuration model class."""
-        return cls.Config
+    def get_config_class(cls) -> type[BaseModel] | None:
+        """Get the configuration model class, or None if no config."""
+        return cls.Config if hasattr(cls, "Config") else None
 
 
 class ConfigurablePolicy:

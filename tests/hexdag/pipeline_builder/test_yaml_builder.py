@@ -50,7 +50,7 @@ spec:
         dependencies: []
 """
 
-        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
         assert len(graph.nodes) == 1
         assert "processor" in graph.nodes
@@ -60,7 +60,7 @@ spec:
         assert len(node.deps) == 0
 
         # Check metadata
-        assert metadata["name"] == "simple-pipeline"
+        assert pipeline_config.metadata["name"] == "simple-pipeline"
 
     def test_build_k8s_style_graph(self):
         """Test building a graph with declarative manifest YAML format."""
@@ -80,7 +80,7 @@ spec:
         dependencies: []
 """
 
-        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
         assert len(graph.nodes) == 1
         assert "processor" in graph.nodes
@@ -90,8 +90,8 @@ spec:
         assert len(node.deps) == 0
 
         # Check metadata from declarative manifest format
-        assert metadata["name"] == "test-pipeline"
-        assert metadata["description"] == "Test declarative manifest pipeline"
+        assert pipeline_config.metadata["name"] == "test-pipeline"
+        assert pipeline_config.metadata["description"] == "Test declarative manifest pipeline"
 
     def test_build_k8s_style_with_dependencies(self):
         """Test declarative manifest YAML with dependencies."""
@@ -117,7 +117,7 @@ spec:
         dependencies: [node1]
 """
 
-        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
         assert len(graph.nodes) == 2
         assert graph.nodes["node1"].deps == set()
@@ -140,7 +140,7 @@ spec:
         dependencies: []
 """
 
-        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
         assert len(graph.nodes) == 1
         assert "processor" in graph.nodes
@@ -179,7 +179,7 @@ spec:
         dependencies: [node1, node2]
 """
 
-        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
         assert len(graph.nodes) == 3
         assert graph.nodes["node1"].deps == set()
@@ -213,7 +213,7 @@ spec:
         dependencies: [node1]
 """
 
-        graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+        graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
         assert len(graph.nodes) == 2
 
@@ -336,11 +336,17 @@ spec:
         import yaml
 
         config = yaml.safe_load(yaml_content_valid)
-        metadata = self.builder._extract_pipeline_metadata(config)
+        self.builder._extract_pipeline_metadata(config)
 
-        assert metadata["field_mapping_mode"] == "custom"
-        assert metadata["custom_field_mappings"]["text"] == ["content", "data"]
-        assert metadata["custom_field_mappings"]["result"] == ["output", "response"]
+        assert self.builder.pipeline_config.metadata["field_mapping_mode"] == "custom"
+        assert self.builder.pipeline_config.metadata["custom_field_mappings"]["text"] == [
+            "content",
+            "data",
+        ]
+        assert self.builder.pipeline_config.metadata["custom_field_mappings"]["result"] == [
+            "output",
+            "response",
+        ]
 
     @pytest.mark.skip(reason="input_mapping validation not implemented")
     def test_input_mapping_validation_error(self):
@@ -432,7 +438,7 @@ spec:
             mock_registry.get.return_value = mock_factory
 
             # Should successfully build
-            graph, metadata = self.builder.build_from_yaml_string(yaml_content)
+            graph, pipeline_config = self.builder.build_from_yaml_string(yaml_content)
 
             # Verify registry.get was called with the correct namespace
             mock_registry.get.assert_called_once_with("dalle_node", namespace="my-plugin")
