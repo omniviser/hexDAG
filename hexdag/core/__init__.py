@@ -22,6 +22,7 @@ from hexdag.core.configurable import (
     ConfigurableAdapter,
     ConfigurableNode,
     ConfigurablePolicy,
+    ExecutorConfig,
     NodeConfig,
     PolicyConfig,
     SecretField,
@@ -71,6 +72,7 @@ __all__ = [
     "ConfigurablePolicy",
     # Config Base Classes
     "AdapterConfig",
+    "ExecutorConfig",
     "NodeConfig",
     "PolicyConfig",
     "SecretField",

@@ -2,6 +2,12 @@
 
 from hexdag.core.ports.api_call import APICall
 from hexdag.core.ports.database import DatabasePort
+from hexdag.core.ports.executor import (
+    ExecutionResult,
+    ExecutionTask,
+    ExecutorCapabilities,
+    ExecutorPort,
+)
 from hexdag.core.ports.healthcheck import HealthStatus
 from hexdag.core.ports.llm import LLM
 from hexdag.core.ports.memory import Memory
@@ -13,6 +19,10 @@ from hexdag.core.ports.tool_router import ToolRouter
 __all__ = [
     "APICall",
     "DatabasePort",
+    "ExecutionResult",
+    "ExecutionTask",
+    "ExecutorCapabilities",
+    "ExecutorPort",
     "HealthStatus",
     "LLM",
     "Memory",

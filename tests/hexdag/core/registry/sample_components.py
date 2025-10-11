@@ -84,7 +84,6 @@ def register_components(registry, namespace):
                 component=component,
                 component_type=component_type,
                 namespace=namespace,
-                privileged=(namespace == "core"),
                 subtype=component_subtype,
                 description=component_description,
             )

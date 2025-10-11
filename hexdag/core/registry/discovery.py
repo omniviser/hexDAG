@@ -129,7 +129,6 @@ def _register_component_direct(
     subtype = getattr(component, "_hexdag_subtype", None)
     description = getattr(component, "_hexdag_description", "")
 
-    privileged = namespace == "core"
     count = 0
 
     for name in names_to_register:
@@ -139,7 +138,6 @@ def _register_component_direct(
                 component=component,
                 component_type=component_type,
                 namespace=namespace,
-                privileged=privileged,
                 subtype=subtype,
                 description=description,
             )

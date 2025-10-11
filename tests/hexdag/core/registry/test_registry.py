@@ -16,7 +16,6 @@ from hexdag.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
     ComponentNotFoundError,
     InvalidComponentError,
-    NamespacePermissionError,
 )
 from hexdag.core.registry.models import (
     ClassComponent,
@@ -164,7 +163,6 @@ class TestSchemaForCustomComponents:
                 TestSchemaNode,
                 "node",
                 namespace="test",
-                privileged=False,
             )
         except Exception:
             pass  # Already registered
@@ -231,9 +229,7 @@ class TestComponentRegistry:
             pass
 
         # Register in core namespace
-        registry.register(
-            "my_node", CoreNode, ComponentType.NODE, namespace="core", privileged=True
-        )
+        registry.register("my_node", CoreNode, ComponentType.NODE, namespace="core")
 
         # Attempting to register same name in different namespace should fail
         with pytest.raises(ComponentAlreadyRegisteredError) as exc_info:
@@ -287,22 +283,19 @@ class TestComponentRegistry:
         with pytest.raises(ComponentAlreadyRegisteredError):
             registry.register("comp", Replacement, ComponentType.NODE, namespace="test")
 
-    def test_core_protection(self):
-        """Test that core namespace is protected."""
+    def test_core_namespace_registration(self):
+        """Test that any namespace can be used (protection removed)."""
 
         class MyNode:
             pass
 
-        # Should fail without privilege
-        with pytest.raises(NamespacePermissionError):
-            registry.register("my_node", MyNode, ComponentType.NODE, namespace="core")
+        # Any namespace can be used - protection removed
+        registry.register("my_node", MyNode, ComponentType.NODE, namespace="core")
 
-        # Should work with privilege
-        registry.register("my_node", MyNode, ComponentType.NODE, namespace="core", privileged=True)
-        # Verify it was registered in core namespace
+        # Verify it was registered
         info = registry.get_info("my_node", "core")
         assert info.namespace == "core"
-        assert info.is_protected
+        assert not info.is_protected  # Protection feature removed
 
 
 class TestDecorators:
@@ -471,9 +464,7 @@ class TestPluginShadowing:
         class CoreNode:
             pass
 
-        registry.register(
-            "processor", CoreNode, ComponentType.NODE, namespace="core", privileged=True
-        )
+        registry.register("processor", CoreNode, ComponentType.NODE, namespace="core")
 
         yield
 
@@ -567,9 +558,7 @@ class TestImprovedAPI:
     def test_different_namespaces_allow_same_name(self):
         """Test that different namespaces can have same component name."""
         # Register a core component
-        self.registry.register(
-            "important", lambda: "core", "tool", namespace="core", privileged=True
-        )
+        self.registry.register("important", lambda: "core", "tool", namespace="core")
 
         # Register same name in plugin namespace (no error)
         self.registry.register(
@@ -1225,7 +1214,6 @@ class TestConventionIntegration:
             component=MessagingPort,
             component_type="port",
             namespace="test",
-            privileged=True,
         )
 
         # Create a full adapter with all features
@@ -1262,7 +1250,6 @@ class TestConventionIntegration:
             component=FullMessenger,
             component_type="adapter",
             namespace="test",
-            privileged=True,
         )
 
         # Get adapters for the port

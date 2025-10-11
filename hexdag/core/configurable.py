@@ -84,6 +84,28 @@ class PolicyConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class ExecutorConfig(BaseModel):
+    """Base configuration class for all executors.
+
+    Executors should define a nested Config class inheriting from this.
+    This enables:
+    - Type-safe configuration
+    - YAML schema generation
+    - Runtime validation
+
+    Examples
+    --------
+    >>> class LocalExecutorConfig(ExecutorConfig):
+    ...     max_concurrent_nodes: int = 10
+    ...     strict_validation: bool = False
+    >>> config = LocalExecutorConfig(max_concurrent_nodes=5)
+    >>> config.max_concurrent_nodes
+    5
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
 def SecretField(
     env_var: str,
     memory_key: str | None = None,

@@ -12,7 +12,6 @@ from hexdag.core.registry.discovery import register_components as default_regist
 from hexdag.core.registry.exceptions import (
     ComponentAlreadyRegisteredError,
     ComponentNotFoundError,
-    NamespacePermissionError,
     RegistryAlreadyBootstrappedError,
     RegistryImmutableError,
 )
@@ -54,11 +53,10 @@ class ComponentRegistry:
     Component names must be globally unique across all namespaces.
     """
 
-    def __init__(self, _search_priority: tuple[str, ...] | None = None) -> None:
+    def __init__(self) -> None:
         """Initialize an empty registry."""
         # Flat storage - namespace is metadata only, not used for lookup
         self._components: dict[str, ComponentMetadata] = {}
-        self._protected_components: set[str] = set()
 
         # Bootstrap state (was BootstrapManager)
         self._ready = False
@@ -148,14 +146,10 @@ class ComponentRegistry:
                             )
                             raise
                         logger.warning(f"Optional module {entry.module} not available: {e}")
-                    except (
-                        ComponentAlreadyRegisteredError,
-                        NamespacePermissionError,
-                    ) as e:
+                    except ComponentAlreadyRegisteredError:
                         logger.error(
                             "Failed to register components from {module}: {error}",
                             module=entry.module,
-                            error=e,
                         )
                         raise
 
@@ -169,7 +163,6 @@ class ComponentRegistry:
             except Exception:
                 # Clean up on failure
                 self._components.clear()
-                self._protected_components.clear()
                 self._ready = False
                 self._manifest = None
                 raise
@@ -240,7 +233,6 @@ class ComponentRegistry:
         component: object,
         component_type: str,
         namespace: str = "user",
-        privileged: bool = False,
         subtype: NodeSubtype | str | None = None,
         description: str = "",
     ) -> ComponentMetadata:
@@ -263,8 +255,6 @@ class ComponentRegistry:
         ------
         RegistryImmutableError
             If registry is read-only and not in dev mode
-        NamespacePermissionError
-            If namespace permission is denied
         ComponentAlreadyRegisteredError
             If component name already exists (collision detected)
         """
@@ -284,10 +274,6 @@ class ComponentRegistry:
         component_type_enum = RegistryValidator.validate_component_type(component_type)
         wrapped_component = RegistryValidator.wrap_component(component)
         RegistryValidator.validate_component_name(clean_name)
-
-        # Check namespace permissions
-        if RegistryValidator.is_protected_namespace(namespace_str) and not privileged:
-            raise NamespacePermissionError(clean_name, namespace_str)
 
         # Extract metadata from component attributes
         implements_port_str = (
@@ -317,10 +303,6 @@ class ComponentRegistry:
 
         # Store component in flat dict
         self._components[clean_name] = metadata
-
-        is_protected = RegistryValidator.is_protected_namespace(namespace_str)
-        if is_protected:
-            self._protected_components.add(clean_name)
 
         # Track configurable components
         self._track_configurable_component(
@@ -429,7 +411,7 @@ class ComponentRegistry:
             qualified_name=qualified_name,
             component_type=metadata.component_type,
             metadata=metadata,
-            is_protected=metadata.namespace == "core",
+            is_protected=False,  # Protection removed - kept for API compatibility
         )
 
     def get_configurable_components(self) -> dict[str, dict[str, Any]]:
@@ -537,30 +519,11 @@ class ComponentRegistry:
                     qualified_name=qualified_name,
                     component_type=metadata.component_type,
                     metadata=metadata,
-                    is_protected=metadata.namespace == "core",
+                    is_protected=False,  # Protection removed - kept for API compatibility
                 )
             )
 
         return results
-
-    def list_namespaces(self) -> list[str]:
-        """List all registered namespaces.
-
-        Note
-        ----
-        Namespaces are extracted from component metadata, not dict keys.
-        """
-        namespaces = {metadata.namespace for metadata in self._components.values()}
-        return sorted(namespaces)
-
-    def is_namespace_empty(self, namespace: str) -> bool:
-        """Check if namespace has no components.
-
-        Note
-        ----
-        Checks namespace field in metadata, not dict structure.
-        """
-        return not any(metadata.namespace == namespace for metadata in self._components.values())
 
     def get_adapters_for_port(self, port_name: str) -> list[ComponentMetadata]:
         """Get all adapters implementing a specific port."""
@@ -605,7 +568,6 @@ class ComponentRegistry:
     def _reset_for_testing(self) -> None:
         """Reset registry state (for testing only)."""
         self._components.clear()
-        self._protected_components.clear()
         self._configurable_components.clear()
         self._schema_cache.clear()
         self._ready = False

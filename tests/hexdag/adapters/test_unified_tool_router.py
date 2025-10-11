@@ -483,11 +483,7 @@ class TestUnifiedToolRouterWithPorts:
 
         # Manual registration
         registry.register(
-            name="db_tool",
-            component=DatabaseTool,
-            component_type="tool",
-            namespace="test",
-            privileged=True,
+            name="db_tool", component=DatabaseTool, component_type="tool", namespace="test"
         )
 
         return registry

@@ -18,7 +18,13 @@ else:
     ObserverManagerPort = Any
     PolicyManagerPort = Any
 
-from hexdag.core.context import ExecutionContext, get_policy_manager
+from hexdag.core.context import (
+    ExecutionContext,
+    get_observer_manager,
+    get_policy_manager,
+    get_ports,
+    set_ports,
+)
 from hexdag.core.domain.dag import DirectedGraph, DirectedGraphError
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration import NodeExecutionContext
@@ -30,6 +36,7 @@ from hexdag.core.orchestration.components import (
     PolicyCoordinator,
     WaveExecutor,
 )
+from hexdag.core.orchestration.events import WaveCompleted, WaveStarted
 from hexdag.core.orchestration.hooks import (
     HookConfig,
     PostDagHookConfig,
@@ -37,6 +44,7 @@ from hexdag.core.orchestration.hooks import (
     PreDagHookManager,
 )
 from hexdag.core.orchestration.models import PortsConfiguration
+from hexdag.core.ports.executor import ExecutionTask, ExecutorPort
 from hexdag.core.ports_builder import PortsBuilder
 
 from .events import (
@@ -55,16 +63,41 @@ DEFAULT_MAX_CONCURRENT_NODES = 10
 
 @asynccontextmanager
 async def _managed_ports(
-    base_ports: dict[str, Any], additional_ports: dict[str, Any] | None = None
+    base_ports: dict[str, Any],
+    additional_ports: dict[str, Any] | None = None,
+    executor: ExecutorPort | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Manage port lifecycle with automatic cleanup.
+    """Manage port and executor lifecycle with automatic cleanup.
 
-    Ports that implement asetup()/aclose() methods will be automatically
-    initialized and cleaned up.
+    Ports and executors that implement asetup()/aclose() methods will be
+    automatically initialized and cleaned up.
+
+    Parameters
+    ----------
+    base_ports : dict[str, Any]
+        Base ports to manage
+    additional_ports : dict[str, Any] | None
+        Additional ports to merge with base ports
+    executor : ExecutorPort | None
+        Optional executor to manage lifecycle for
     """
     all_ports = {**base_ports}
     if additional_ports:
         all_ports.update(additional_ports)
+
+    # Setup executor first (if provided)
+    executor_initialized = False
+    if (
+        executor is not None
+        and hasattr(executor, "asetup")
+        and asyncio.iscoroutinefunction(executor.asetup)
+    ):
+        try:
+            await executor.asetup()
+            executor_initialized = True
+        except Exception as e:
+            logger.error(f"Executor setup failed: {e}")
+            raise
 
     # Setup ports
     initialized: list[str] = []
@@ -83,12 +116,21 @@ async def _managed_ports(
                     ):
                         with suppress(Exception):
                             await cleanup_port.aclose()
+                # Cleanup executor if initialized
+                if (
+                    executor_initialized
+                    and executor is not None
+                    and hasattr(executor, "aclose")
+                    and asyncio.iscoroutinefunction(executor.aclose)
+                ):
+                    with suppress(Exception):
+                        await executor.aclose()
                 raise
 
     try:
         yield all_ports
     finally:
-        # Cleanup
+        # Cleanup ports
         for name in initialized:
             port = all_ports[name]
             if hasattr(port, "aclose") and asyncio.iscoroutinefunction(port.aclose):
@@ -96,6 +138,18 @@ async def _managed_ports(
                     await port.aclose()
                 except Exception as e:
                     logger.warning(f"Port cleanup failed: {name}: {e}")
+
+        # Cleanup executor last
+        if (
+            executor_initialized
+            and executor is not None
+            and hasattr(executor, "aclose")
+            and asyncio.iscoroutinefunction(executor.aclose)
+        ):
+            try:
+                await executor.aclose()
+            except Exception as e:
+                logger.warning(f"Executor cleanup failed: {e}")
 
 
 class Orchestrator:
@@ -117,6 +171,7 @@ class Orchestrator:
         default_node_timeout: float | None = None,
         pre_hook_config: HookConfig | None = None,
         post_hook_config: PostDagHookConfig | None = None,
+        executor: ExecutorPort | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -130,11 +185,17 @@ class Orchestrator:
             default_node_timeout: Default timeout in seconds for each node (None = no timeout)
             pre_hook_config: Configuration for pre-DAG hooks (health checks, secrets, etc.)
             post_hook_config: Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
+            executor: Optional executor port for pluggable execution strategies.
+                If None (default), uses built-in in-process execution via
+                NodeExecutor/WaveExecutor. Set to a custom ExecutorPort implementation
+                (e.g., CeleryExecutor, AzureFunctionsExecutor) to enable distributed or
+                serverless execution.
         """
 
         self.max_concurrent_nodes = max_concurrent_nodes
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
+        self.executor = executor
 
         # Handle both dict and PortsConfiguration
         self.ports_config: PortsConfiguration | None
@@ -154,16 +215,18 @@ class Orchestrator:
         # Initialize collaborators (dependency injection)
         self._policy_coordinator = PolicyCoordinator()
         self._input_mapper = InputMapper()
+
+        # Built-in executors for in-process execution (used when executor=None)
+        # These are only used if no custom executor is provided
         self._node_executor = NodeExecutor(
             strict_validation=strict_validation,
             default_node_timeout=default_node_timeout,
         )
+        self._wave_executor = WaveExecutor(max_concurrent_nodes=max_concurrent_nodes)
 
         # Initialize hook managers
-
         self._pre_hook_manager = PreDagHookManager(pre_hook_config)
         self._post_hook_manager = PostDagHookManager(post_hook_config, self._pre_hook_manager)
-        self._wave_executor = WaveExecutor(max_concurrent_nodes=max_concurrent_nodes)
 
     async def _notify_observer(
         self, observer_manager: ObserverManagerPort | None, event: Any
@@ -270,6 +333,7 @@ class Orchestrator:
         builder: PortsBuilder,
         max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
         strict_validation: bool = False,
+        executor: ExecutorPort | None = None,
     ) -> "Orchestrator":
         """Create an Orchestrator using a PortsBuilder.
 
@@ -281,6 +345,7 @@ class Orchestrator:
             builder: Configured PortsBuilder instance
             max_concurrent_nodes: Maximum number of nodes to execute concurrently
             strict_validation: If True, raise errors on validation failure
+            executor: Optional executor port for pluggable execution strategies
 
         Returns
         -------
@@ -303,6 +368,7 @@ class Orchestrator:
             max_concurrent_nodes=max_concurrent_nodes,
             ports=builder.build(),
             strict_validation=strict_validation,
+            executor=executor,
         )
 
     async def run(
@@ -363,7 +429,7 @@ class Orchestrator:
                 additional_ports_dict = additional_ports
 
         # Use managed_ports context manager for automatic lifecycle management
-        async with _managed_ports(self.ports, additional_ports_dict) as all_ports:
+        async with _managed_ports(self.ports, additional_ports_dict, self.executor) as all_ports:
             return await self._execute_with_ports(
                 graph, initial_input, all_ports, validate, **kwargs
             )
@@ -449,22 +515,37 @@ class Orchestrator:
             cancelled = False
 
             try:
-                # Execute all waves with optional timeout (delegate to WaveExecutor)
-                cancelled = await self._wave_executor.execute_all_waves(
-                    waves=waves,
-                    node_executor_fn=self._execute_node,
-                    graph=graph,
-                    node_results=node_results,
-                    initial_input=initial_input,
-                    all_ports=all_ports,
-                    context=context,
-                    observer_manager=observer_manager,
-                    policy_manager=policy_manager,
-                    policy_coordinator=self._policy_coordinator,
-                    timeout=timeout,
-                    validate=validate,
-                    **kwargs,
-                )
+                # Execute all waves with optional timeout
+                # If custom executor provided, use it; otherwise use built-in WaveExecutor
+                if self.executor is not None:
+                    # Custom executor path - delegate to executor
+                    cancelled = await self._execute_with_custom_executor(
+                        waves=waves,
+                        graph=graph,
+                        node_results=node_results,
+                        initial_input=initial_input,
+                        context=context,
+                        timeout=timeout,
+                        validate=validate,
+                        **kwargs,
+                    )
+                else:
+                    # Default path - use built-in WaveExecutor
+                    cancelled = await self._wave_executor.execute_all_waves(
+                        waves=waves,
+                        node_executor_fn=self._execute_node,
+                        graph=graph,
+                        node_results=node_results,
+                        initial_input=initial_input,
+                        all_ports=all_ports,
+                        context=context,
+                        observer_manager=observer_manager,
+                        policy_manager=policy_manager,
+                        policy_coordinator=self._policy_coordinator,
+                        timeout=timeout,
+                        validate=validate,
+                        **kwargs,
+                    )
             except BaseException as e:
                 # Track error for post-hooks (do NOT modify state in handler!)
                 pipeline_error = e
@@ -516,6 +597,105 @@ class Orchestrator:
 
         # Return results (outside ExecutionContext - it's cleaned up automatically)
         return node_results
+
+    async def _execute_with_custom_executor(
+        self,
+        waves: list[list[str]],
+        graph: DirectedGraph,
+        node_results: dict[str, Any],
+        initial_input: Any,
+        context: NodeExecutionContext,
+        timeout: float | None,
+        validate: bool,
+        **kwargs: Any,
+    ) -> bool:
+        """Execute all waves using custom executor.
+
+        This method delegates execution to the custom executor (e.g., LocalExecutor,
+        CeleryExecutor, AzureFunctionsExecutor) instead of using the built-in
+        NodeExecutor/WaveExecutor.
+
+        Parameters
+        ----------
+        waves : list[list[str]]
+            List of execution waves
+        graph : DirectedGraph
+            The DAG to execute
+        node_results : dict[str, Any]
+            Accumulated results from previous waves
+        initial_input : Any
+            Initial input to the pipeline
+        context : NodeExecutionContext
+            Execution context
+        timeout : float | None
+            Optional timeout for entire execution
+        validate : bool
+            Whether to perform validation
+        **kwargs : Any
+            Additional parameters
+
+        Returns
+        -------
+        bool
+            True if cancelled (timeout), False if completed
+        """
+        # Store graph, node_results, and initial_input in ports context for executor
+        current_ports = dict(get_ports() or {})
+        current_ports["_hexdag_graph"] = graph
+        current_ports["_hexdag_node_results"] = node_results
+        current_ports["_hexdag_initial_input"] = initial_input
+        set_ports(current_ports)
+
+        try:
+            async with asyncio.timeout(timeout):
+                for wave_idx, wave in enumerate(waves, 1):
+                    wave_start_time = time.time()
+
+                    # Fire wave started event
+                    wave_event = WaveStarted(wave_index=wave_idx, nodes=wave)
+                    await self._notify_observer(get_observer_manager(), wave_event)
+
+                    # Create tasks for this wave
+                    tasks = []
+                    for node_name in wave:
+                        task = ExecutionTask(
+                            node_name=node_name,
+                            node_input=None,  # Executor will prepare input from graph
+                            wave_index=wave_idx,
+                            should_validate=validate,
+                            context_data={
+                                "dag_id": context.dag_id,
+                                "run_id": context.metadata.get("run_id"),
+                                "attempt": context.attempt,
+                            },
+                            params=kwargs,
+                        )
+                        tasks.append(task)
+
+                    # Execute wave using custom executor
+                    assert self.executor is not None  # Type narrowing for mypy/pyright
+                    wave_results = await self.executor.aexecute_wave(tasks)
+
+                    # Update node_results with wave results
+                    for node_name, result in wave_results.items():
+                        if result.status == "success":
+                            node_results[node_name] = result.output
+                        else:
+                            # Handle failure
+                            error_msg = f"Node '{node_name}' failed: {result.error}"
+                            raise OrchestratorError(error_msg)
+
+                    # Fire wave completed event
+                    wave_completed = WaveCompleted(
+                        wave_index=wave_idx,
+                        duration_ms=(time.time() - wave_start_time) * 1000,
+                    )
+                    await self._notify_observer(get_observer_manager(), wave_completed)
+
+            return False  # Not cancelled
+
+        except TimeoutError:
+            return True  # Cancelled due to timeout
 
     async def _execute_all_waves(
         self,

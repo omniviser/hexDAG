@@ -165,15 +165,6 @@ class NodeSubtype(StrEnum):
     PASSTHROUGH = "passthrough"  # Simple passthrough node
 
 
-class Namespace(StrEnum):
-    """Standard namespaces for component organization."""
-
-    CORE = "core"  # Protected core components
-    USER = "user"  # Default for user-defined components
-    TEST = "test"  # For testing purposes
-    PLUGIN = "plugin"  # For plugin components
-
-
 class ComponentMetadata(BaseModel):
     """Metadata for registered components.
 
@@ -286,11 +277,7 @@ class RegistryValidator:
     - Component type, name, and namespace validation
     - Component wrapping (class/function/instance)
     - Attribute extraction (ports, requirements)
-    - Namespace protection checking
     """
-
-    # Protected namespaces that require privileged registration
-    PROTECTED_NAMESPACES = {Namespace.CORE}
 
     # Attribute extraction methods
 
@@ -362,7 +349,7 @@ class RegistryValidator:
             If namespace contains invalid characters.
         """
         if namespace is None or namespace == "":
-            return Namespace.USER  # Default namespace
+            return "user"  # Default namespace
 
         if not re.match(r"^[a-zA-Z0-9_]+$", namespace):
             raise InvalidComponentError(
@@ -381,8 +368,3 @@ class RegistryValidator:
         if inspect.isfunction(component) or inspect.ismethod(component):
             return FunctionComponent(value=component)
         return InstanceComponent(value=component)
-
-    @classmethod
-    def is_protected_namespace(cls, namespace: str) -> bool:
-        """Check if namespace is protected and requires privileges."""
-        return namespace in cls.PROTECTED_NAMESPACES
