@@ -52,11 +52,16 @@ class ComponentInstantiator:
         ComponentInstantiationError
             If specification format is invalid
 
+
         Examples
         --------
         >>> spec = self._parse_component_spec({  # doctest: +SKIP
         ...     "namespace": "core",
         ...     "name": "retry",
+        ...     "params": {"max_retries": 3}
+        ... })
+        >>> spec = self._parse_component_spec({  # doctest: +SKIP
+        ...     "name": "core:retry",  # Namespace stripped from name
         ...     "params": {"max_retries": 3}
         ... })
         """
@@ -75,7 +80,10 @@ class ComponentInstantiator:
                 f"Component specification requires 'name' field. Got: {spec}"
             )
 
-        return ComponentSpec(namespace=namespace, name=name, params=params)
+        # Strip namespace from name if present (e.g., "core:retry" -> "retry")
+        clean_name = name.split(":")[-1] if ":" in name else name
+
+        return ComponentSpec(namespace=namespace, name=clean_name, params=params)
 
     def instantiate_adapter(self, spec: dict[str, Any], port_name: str | None = None) -> Any:
         """Instantiate an adapter from native YAML dict specification.
@@ -111,14 +119,12 @@ class ComponentInstantiator:
             # Parse the specification
             component_spec = self._parse_component_spec(spec)
 
-            # Get adapter from registry
+            # Get adapter from registry (namespace parameter ignored in flat registry)
             try:
-                adapter_or_class = registry.get(
-                    component_spec.name, namespace=component_spec.namespace
-                )
+                adapter_or_class = registry.get(component_spec.name)
             except Exception as e:
                 raise ComponentInstantiationError(
-                    f"Adapter '{component_spec.namespace}:{component_spec.name}' "
+                    f"Adapter '{component_spec.name}' "
                     f"not found in registry. "
                     f"Make sure it's registered in pyproject.toml. Error: {e}"
                 ) from e
@@ -130,27 +136,27 @@ class ComponentInstantiator:
                 try:
                     adapter_instance = adapter_or_class(**component_spec.params)
                     logger.info(
-                        f"Instantiated adapter {component_spec.namespace}:{component_spec.name} "
+                        f"Instantiated adapter '{component_spec.name}' "
                         f"for port '{port_name}' with params: {component_spec.params}"
                     )
                     return adapter_instance
                 except Exception as e:
                     raise ComponentInstantiationError(
                         f"Failed to instantiate adapter "
-                        f"'{component_spec.namespace}:{component_spec.name}' "
+                        f"'{component_spec.name}' "
                         f"with params {component_spec.params}. Error: {e}"
                     ) from e
             else:
                 # It's already an instance, check if params were provided
                 if component_spec.params:
                     logger.warning(
-                        f"Adapter '{component_spec.namespace}:{component_spec.name}' "
+                        f"Adapter '{component_spec.name}' "
                         f"is registered as an instance. Parameters {component_spec.params} "
                         f"will be ignored."
                     )
                 logger.info(
                     f"Using registered adapter instance "
-                    f"{component_spec.namespace}:{component_spec.name} "
+                    f"'{component_spec.name}' "
                     f"for port '{port_name}'"
                 )
                 return adapter_or_class
@@ -196,21 +202,21 @@ class ComponentInstantiator:
             # Parse the specification
             component_spec = self._parse_component_spec(spec)
 
-            # Get policy class from registry (policies added to bootstrap in pyproject.toml)
-            policy_class = self._get_policy_class(component_spec.namespace, component_spec.name)
+            # Get policy class from registry (namespace parameter ignored in flat registry)
+            policy_class = self._get_policy_class(component_spec.name)
 
             # Instantiate with parameters
             try:
                 policy_instance = policy_class(**component_spec.params)
                 logger.info(
-                    f"Instantiated policy {component_spec.namespace}:{component_spec.name} "
+                    f"Instantiated policy '{component_spec.name}' "
                     f"('{policy_name}') with params: {component_spec.params}"
                 )
                 return policy_instance
             except Exception as e:
                 raise ComponentInstantiationError(
                     f"Failed to instantiate policy "
-                    f"'{component_spec.namespace}:{component_spec.name}' "
+                    f"'{component_spec.name}' "
                     f"with params {component_spec.params}. Error: {e}"
                 ) from e
 
@@ -221,13 +227,11 @@ class ComponentInstantiator:
                 f"Failed to instantiate policy '{policy_name}': {e}"
             ) from e
 
-    def _get_policy_class(self, namespace: str, name: str) -> type:
-        """Get policy class by namespace and name from registry.
+    def _get_policy_class(self, name: str) -> type:
+        """Get policy class by name from registry.
 
         Parameters
         ----------
-        namespace : str
-            Policy namespace (e.g., "core")
         name : str
             Policy name (e.g., "retry")
 
@@ -240,12 +244,11 @@ class ComponentInstantiator:
         ------
         ComponentInstantiationError
             If policy not found in registry
+
         """
         try:
             # Use get_metadata() to get the class, not get() which instantiates
-            metadata = registry.get_metadata(
-                name, namespace=namespace, component_type=ComponentType.POLICY
-            )
+            metadata = registry.get_metadata(name, component_type=ComponentType.POLICY)
             component = metadata.component
 
             # Extract the actual class from the ClassComponent wrapper
@@ -253,14 +256,14 @@ class ComponentInstantiator:
 
             if not isinstance(policy_class, type):
                 raise ComponentInstantiationError(
-                    f"Policy '{namespace}:{name}' is registered as an instance, not a class. "
+                    f"Policy '{name}' is registered as an instance, not a class. "
                     f"Cannot instantiate from instance."
                 )
 
             return policy_class
         except Exception as e:
             raise ComponentInstantiationError(
-                f"Policy '{namespace}:{name}' not found in registry. "
+                f"Policy '{name}' not found in registry. "
                 f"Ensure policies are registered via @policy decorator "
                 f"and the policy module is in bootstrap config. Error: {e}"
             ) from e

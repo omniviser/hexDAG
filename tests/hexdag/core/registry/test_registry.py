@@ -221,8 +221,8 @@ class TestComponentRegistry:
         instance = registry.get("test_comp", namespace="test", init_params={"value": 100})
         assert instance.value == 100
 
-    def test_namespace_searching(self):
-        """Test that get() searches namespaces correctly."""
+    def test_namespace_collision_detection(self):
+        """Test that duplicate names are rejected (flat registry)."""
 
         class CoreNode:
             pass
@@ -230,19 +230,22 @@ class TestComponentRegistry:
         class UserNode:
             pass
 
-        # Register in different namespaces
+        # Register in core namespace
         registry.register(
             "my_node", CoreNode, ComponentType.NODE, namespace="core", privileged=True
         )
-        registry.register("my_node", UserNode, ComponentType.NODE, namespace="user")
 
-        # Without namespace, should get core first
+        # Attempting to register same name in different namespace should fail
+        with pytest.raises(ComponentAlreadyRegisteredError) as exc_info:
+            registry.register("my_node", UserNode, ComponentType.NODE, namespace="user")
+
+        # Error should mention the collision
+        assert "my_node" in str(exc_info.value)
+        assert "already registered" in str(exc_info.value)
+
+        # Verify only the first registration exists
         instance = registry.get("my_node")
         assert isinstance(instance, CoreNode)
-
-        # With explicit namespace
-        instance = registry.get("my_node", namespace="user")
-        assert isinstance(instance, UserNode)
 
     def test_list_components(self):
         """Test listing components with filters."""
@@ -453,6 +456,9 @@ class TestValidation:
         assert "must be a non-empty string" in str(exc_info.value)
 
 
+@pytest.mark.skip(
+    reason="Namespace shadowing removed - registry now uses flat storage with unique names"
+)
 class TestPluginShadowing:
     """Test plugin component shadowing behavior."""
 
@@ -516,6 +522,9 @@ class TestPluginShadowing:
         assert not hasattr(default_instance, "is_plugin")
 
 
+@pytest.mark.skip(
+    reason="Namespace priority and searching removed - registry now uses flat storage"
+)
 class TestImprovedAPI:
     """Test the improved API features."""
 
@@ -656,14 +665,14 @@ class TestAdapterRegistration:
             def tokenize(self, text: str) -> list[str]:
                 return text.split()
 
-        # Register the port using the internal store
+        # Register the port using the internal store (flat dict structure)
         port_meta = ComponentMetadata(
             name="llm_port",
             component_type=ComponentType.PORT,
             component=ClassComponent(value=LLMPort),
             namespace="core",
         )
-        test_registry._components.setdefault("core", {})["llm_port"] = port_meta
+        test_registry._components["llm_port"] = port_meta
         return test_registry
 
     def test_valid_adapter_registration(self, setup_test_port):
@@ -685,8 +694,8 @@ class TestAdapterRegistration:
             namespace="test",
         )
 
-        assert "test" in reg._components
-        assert "valid_adapter" in reg._components["test"]
+        # Flat registry - component name is key
+        assert "valid_adapter" in reg._components
 
     def test_adapter_missing_required_method(self, setup_test_port):
         """Test adapter registration succeeds - validation happens at runtime/type-check time."""

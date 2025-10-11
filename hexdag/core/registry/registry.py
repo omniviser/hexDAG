@@ -46,17 +46,19 @@ class ComponentRegistry:
     3. Read-only after bootstrap (unless dev_mode)
 
     This merges what was previously split across ComponentStore and BootstrapManager.
-    """
 
-    # Default namespace search priority
-    DEFAULT_SEARCH_PRIORITY = ("core", "user", "plugin")
+    Note
+    ----
+    Registry now uses flat storage - namespace is stripped from component names.
+    Format "namespace:name" is allowed but namespace prefix is removed during registration.
+    Component names must be globally unique across all namespaces.
+    """
 
     def __init__(self, _search_priority: tuple[str, ...] | None = None) -> None:
         """Initialize an empty registry."""
-        # Storage (was ComponentStore)
-        self._components: dict[str, dict[str, ComponentMetadata]] = {}
+        # Flat storage - namespace is metadata only, not used for lookup
+        self._components: dict[str, ComponentMetadata] = {}
         self._protected_components: set[str] = set()
-        self._search_priority = _search_priority or self.DEFAULT_SEARCH_PRIORITY
 
         # Bootstrap state (was BootstrapManager)
         self._ready = False
@@ -246,6 +248,12 @@ class ComponentRegistry:
 
         After bootstrap, registration only allowed in dev mode.
 
+        Note
+        ----
+        Namespace is stored as metadata but stripped from the component name.
+        If name contains "namespace:component_name", the namespace prefix is removed.
+        Component names must be globally unique.
+
         Returns
         -------
         ComponentMetadata
@@ -258,7 +266,7 @@ class ComponentRegistry:
         NamespacePermissionError
             If namespace permission is denied
         ComponentAlreadyRegisteredError
-            If component already exists
+            If component name already exists (collision detected)
         """
         # Check if we can register
         if not self._can_register():
@@ -268,15 +276,18 @@ class ComponentRegistry:
                 f"Use dev_mode=True in bootstrap() for development."
             )
 
+        # Strip namespace from name if present (e.g., "core:retry" -> "retry")
+        clean_name = name.split(NAMESPACE_SEPARATOR)[-1] if NAMESPACE_SEPARATOR in name else name
+
         # Validate inputs
         namespace_str = RegistryValidator.validate_namespace(namespace)
         component_type_enum = RegistryValidator.validate_component_type(component_type)
         wrapped_component = RegistryValidator.wrap_component(component)
-        RegistryValidator.validate_component_name(name)
+        RegistryValidator.validate_component_name(clean_name)
 
         # Check namespace permissions
         if RegistryValidator.is_protected_namespace(namespace_str) and not privileged:
-            raise NamespacePermissionError(name, namespace_str)
+            raise NamespacePermissionError(clean_name, namespace_str)
 
         # Extract metadata from component attributes
         implements_port_str = (
@@ -288,7 +299,7 @@ class ComponentRegistry:
 
         # Create metadata
         metadata = ComponentMetadata(
-            name=name,
+            name=clean_name,
             component_type=component_type_enum,
             component=wrapped_component,
             namespace=namespace_str,
@@ -298,24 +309,27 @@ class ComponentRegistry:
             port_requirements=port_requirements_list,
         )
 
-        # Store component (inline from ComponentStore)
-        if namespace_str in self._components and name in self._components[namespace_str]:
-            raise ComponentAlreadyRegisteredError(name, namespace_str)
+        # Collision detection - component names must be globally unique
+        if clean_name in self._components:
+            existing = self._components[clean_name]
+            # ComponentAlreadyRegisteredError expects (name, namespace) signature
+            raise ComponentAlreadyRegisteredError(clean_name, existing.namespace)
 
-        if namespace_str not in self._components:
-            self._components[namespace_str] = {}
-        self._components[namespace_str][name] = metadata
+        # Store component in flat dict
+        self._components[clean_name] = metadata
 
         is_protected = RegistryValidator.is_protected_namespace(namespace_str)
         if is_protected:
-            self._protected_components.add(f"{namespace_str}:{name}")
+            self._protected_components.add(clean_name)
 
         # Track configurable components
         self._track_configurable_component(
-            name, component, component_type_enum, namespace_str, implements_port_str
+            clean_name, component, component_type_enum, namespace_str, implements_port_str
         )
 
-        logger.debug("Registered {name}", name=metadata.qualified_name)
+        logger.debug(
+            "Registered {name} (namespace: {namespace})", name=clean_name, namespace=namespace_str
+        )
         return metadata
 
     def _track_configurable_component(
@@ -354,15 +368,19 @@ class ComponentRegistry:
     def get_metadata(
         self, name: str, namespace: str | None = None, component_type: ComponentType | None = None
     ) -> ComponentMetadata:
-        """Get component metadata without instantiation."""
-        # Parse qualified names like "core:my_component"
-        component_name, resolved_namespace = self._resolve_component_location(name, namespace)
+        """Get component metadata without instantiation.
 
-        # Get metadata
-        if resolved_namespace:
-            metadata = self._get_from_namespace(component_name, resolved_namespace)
-        else:
-            metadata = self._search_component(component_name)
+        Note
+        ----
+        Namespace parameter is ignored - kept for API compatibility.
+        Component names are unique and stored in flat dict.
+        If name contains "namespace:component", the namespace prefix is stripped.
+        """
+        # Strip namespace if present in name (e.g., "core:retry" -> "retry")
+        clean_name = name.split(NAMESPACE_SEPARATOR)[-1] if NAMESPACE_SEPARATOR in name else name
+
+        # Direct lookup in flat dict
+        metadata = self._components.get(clean_name)
 
         if not metadata:
             raise ComponentNotFoundError(name, namespace, self._get_available_components())
@@ -381,36 +399,37 @@ class ComponentRegistry:
     def get(
         self, name: str, namespace: str | None = None, init_params: dict[str, object] | None = None
     ) -> object:
-        """Get and instantiate a component."""
+        """Get and instantiate a component.
+
+        Note
+        ----
+        Namespace parameter is ignored - kept for API compatibility.
+        """
         metadata = self.get_metadata(name, namespace)
         return InstanceFactory.create_instance(metadata.component, init_params)
 
     def get_info(self, name: str, namespace: str | None = None) -> ComponentInfo:
-        """Get detailed component information."""
-        if NAMESPACE_SEPARATOR in name:
-            namespace_str, component_name = name.split(NAMESPACE_SEPARATOR, 1)
-        else:
-            if namespace:
-                namespace_str = namespace
-            else:
-                found_namespace = self._find_namespace(name)
-                if found_namespace is None:
-                    raise ComponentNotFoundError(name, None, self._get_available_components())
-                namespace_str = found_namespace
-            component_name = name
+        """Get detailed component information.
 
-        metadata = self._get_from_namespace(component_name, namespace_str)
+        Note
+        ----
+        Namespace parameter is ignored - kept for API compatibility.
+        """
+        # Strip namespace if present in name
+        clean_name = name.split(NAMESPACE_SEPARATOR)[-1] if NAMESPACE_SEPARATOR in name else name
+
+        metadata = self._components.get(clean_name)
         if not metadata:
-            raise ComponentNotFoundError(name, namespace)
+            raise ComponentNotFoundError(name, namespace, self._get_available_components())
 
-        qualified_name = f"{namespace_str}.{component_name}" if namespace_str else component_name
+        qualified_name = f"{metadata.namespace}.{clean_name}" if metadata.namespace else clean_name
         return ComponentInfo(
-            name=component_name,
-            namespace=namespace_str,
+            name=clean_name,
+            namespace=metadata.namespace,
             qualified_name=qualified_name,
             component_type=metadata.component_type,
             metadata=metadata,
-            is_protected=namespace_str == "core",
+            is_protected=metadata.namespace == "core",
         )
 
     def get_configurable_components(self) -> dict[str, dict[str, Any]]:
@@ -494,104 +513,79 @@ class ComponentRegistry:
         namespace: str | None = None,
         subtype: NodeSubtype | None = None,
     ) -> list[ComponentInfo]:
-        """List components matching criteria."""
+        """List components matching criteria.
+
+        Note
+        ----
+        Namespace filtering still works - namespace is stored in metadata.
+        """
         results = []
 
-        for ns_str, components in self._components.items():
-            if namespace and ns_str != namespace:
+        for name, metadata in self._components.items():
+            if namespace and metadata.namespace != namespace:
+                continue
+            if component_type and metadata.component_type != component_type:
+                continue
+            if subtype and metadata.subtype != subtype:
                 continue
 
-            for name, metadata in components.items():
-                if component_type and metadata.component_type != component_type:
-                    continue
-                if subtype and metadata.subtype != subtype:
-                    continue
-
-                qualified_name = f"{ns_str}.{name}" if ns_str else name
-                results.append(
-                    ComponentInfo(
-                        name=name,
-                        namespace=ns_str,
-                        qualified_name=qualified_name,
-                        component_type=metadata.component_type,
-                        metadata=metadata,
-                        is_protected=ns_str == "core",
-                    )
+            qualified_name = f"{metadata.namespace}.{name}" if metadata.namespace else name
+            results.append(
+                ComponentInfo(
+                    name=name,
+                    namespace=metadata.namespace,
+                    qualified_name=qualified_name,
+                    component_type=metadata.component_type,
+                    metadata=metadata,
+                    is_protected=metadata.namespace == "core",
                 )
+            )
 
         return results
 
     def list_namespaces(self) -> list[str]:
-        """List all registered namespaces."""
-        return sorted(self._components.keys())
+        """List all registered namespaces.
+
+        Note
+        ----
+        Namespaces are extracted from component metadata, not dict keys.
+        """
+        namespaces = {metadata.namespace for metadata in self._components.values()}
+        return sorted(namespaces)
 
     def is_namespace_empty(self, namespace: str) -> bool:
-        """Check if namespace has no components."""
-        return namespace not in self._components or len(self._components[namespace]) == 0
+        """Check if namespace has no components.
+
+        Note
+        ----
+        Checks namespace field in metadata, not dict structure.
+        """
+        return not any(metadata.namespace == namespace for metadata in self._components.values())
 
     def get_adapters_for_port(self, port_name: str) -> list[ComponentMetadata]:
         """Get all adapters implementing a specific port."""
         adapters = []
 
-        for components in self._components.values():
-            for metadata in components.values():
-                if metadata.component_type != ComponentType.ADAPTER:
-                    continue
+        for metadata in self._components.values():
+            if metadata.component_type != ComponentType.ADAPTER:
+                continue
 
-                implements = metadata.implements_port or RegistryValidator.get_implements_port(
-                    metadata.component
-                )
+            implements = metadata.implements_port or RegistryValidator.get_implements_port(
+                metadata.component
+            )
 
-                if implements and self._port_names_match(port_name, implements):
-                    adapters.append(metadata)
+            if implements and self._port_names_match(port_name, implements):
+                adapters.append(metadata)
 
         return adapters
 
     # ========================================================================
-    # Private Helpers (inline from ComponentStore)
+    # Private Helpers
     # ========================================================================
-
-    def _resolve_component_location(
-        self, name: str, namespace: str | None = None
-    ) -> tuple[str, str | None]:
-        """Resolve component name and namespace from input."""
-        if NAMESPACE_SEPARATOR in name:
-            namespace_str, component_name = name.split(NAMESPACE_SEPARATOR, 1)
-            return component_name, namespace_str
-        if namespace:
-            return name, namespace
-        return name, None
-
-    def _get_from_namespace(self, name: str, namespace: str) -> ComponentMetadata | None:
-        """Get metadata from specific namespace."""
-        return self._components.get(namespace, {}).get(name)
-
-    def _search_component(self, name: str) -> ComponentMetadata | None:
-        """Search for component with priority order."""
-        namespace = self._find_namespace(name)
-        if namespace:
-            return self._components[namespace][name]
-        return None
-
-    def _find_namespace(self, name: str) -> str | None:
-        """Find namespace containing a component."""
-        # Check priority namespaces first
-        for ns in self._search_priority:
-            if ns in self._components and name in self._components[ns]:
-                return ns
-
-        # Then check other namespaces
-        for ns, components in self._components.items():
-            if ns not in self._search_priority and name in components:
-                return ns
-        return None
 
     def _get_available_components(self) -> list[str]:
         """Get list of all available component names."""
-        available: list[str] = []
-        for ns, components in self._components.items():
-            available.extend(f"{ns}:{name}" for name in components)
-        return available
+        return list(self._components.keys())
 
     def _port_names_match(self, requested: str, implemented: str) -> bool:
         """Check if port names match (handling qualified names)."""
