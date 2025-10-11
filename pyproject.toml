@@ -31,7 +31,7 @@ yaml = [
     "pyyaml~=6.0",  # For YAML pipeline support
 ]
 diff = [
-    "deepdiff>=6.0.0,<7.0.0", # Used in CLI manifest
+    "deepdiff>=8.6.1,<9.0.0", # Used in CLI manifest
 ]
 viz = [
     "graphviz>=0.20.0,<0.21",  # For DAG visualization
@@ -43,7 +43,7 @@ anthropic = [
     "anthropic>=0.25.0",  # Anthropic Claude LLM adapter
 ]
 all = [
-    "deepdiff>=6.0.0,<7.0.0", # CLI manifest
+    "deepdiff>=8.6.1,<9.0.0", # CLI manifest
     "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
