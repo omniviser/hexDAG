@@ -5,7 +5,6 @@ from hexdag.core.ports.database import DatabasePort
 from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
-    ExecutorCapabilities,
     ExecutorPort,
 )
 from hexdag.core.ports.healthcheck import HealthStatus
@@ -21,7 +20,6 @@ __all__ = [
     "DatabasePort",
     "ExecutionResult",
     "ExecutionTask",
-    "ExecutorCapabilities",
     "ExecutorPort",
     "HealthStatus",
     "LLM",

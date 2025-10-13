@@ -5,7 +5,6 @@ import pytest
 from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
-    ExecutorCapabilities,
     ExecutorPort,
 )
 
@@ -139,48 +138,6 @@ class TestExecutionResult:
         assert result_dict["status"] == "success"
 
 
-class TestExecutorCapabilities:
-    """Tests for ExecutorCapabilities model."""
-
-    def test_default_capabilities(self):
-        """Test default executor capabilities."""
-        caps = ExecutorCapabilities()
-
-        assert caps.supports_timeout is True
-        assert caps.supports_cancellation is True
-        assert caps.max_concurrent is None
-        assert caps.is_distributed is False
-        assert caps.requires_serialization is False
-
-    def test_local_executor_capabilities(self):
-        """Test capabilities for a local in-process executor."""
-        caps = ExecutorCapabilities(
-            supports_timeout=True,
-            supports_cancellation=True,
-            max_concurrent=10,
-            is_distributed=False,
-            requires_serialization=False,
-        )
-
-        assert caps.supports_timeout is True
-        assert caps.max_concurrent == 10
-        assert caps.is_distributed is False
-
-    def test_distributed_executor_capabilities(self):
-        """Test capabilities for a distributed executor (e.g., Celery)."""
-        caps = ExecutorCapabilities(
-            supports_timeout=True,
-            supports_cancellation=False,
-            max_concurrent=None,  # Unlimited workers
-            is_distributed=True,
-            requires_serialization=True,
-        )
-
-        assert caps.is_distributed is True
-        assert caps.requires_serialization is True
-        assert caps.supports_cancellation is False
-
-
 class MockExecutor:
     """Mock executor for testing ExecutorPort protocol."""
 
@@ -206,16 +163,6 @@ class MockExecutor:
             result = await self.aexecute_node(task)
             results[task.node_name] = result
         return results
-
-    def get_capabilities(self) -> ExecutorCapabilities:
-        """Report executor capabilities (mock implementation)."""
-        return ExecutorCapabilities(
-            supports_timeout=True,
-            supports_cancellation=True,
-            max_concurrent=5,
-            is_distributed=False,
-            requires_serialization=False,
-        )
 
     async def asetup(self) -> None:
         """Initialize executor resources."""
@@ -274,16 +221,6 @@ class TestExecutorPort:
         assert "node_c" in results
         assert results["node_a"].status == "success"
         assert len(executor.executed_tasks) == 3
-
-    def test_get_capabilities(self):
-        """Test getting executor capabilities."""
-        executor = MockExecutor()
-
-        caps = executor.get_capabilities()
-
-        assert caps.supports_timeout is True
-        assert caps.max_concurrent == 5
-        assert caps.is_distributed is False
 
     @pytest.mark.asyncio
     async def test_executor_lifecycle(self):

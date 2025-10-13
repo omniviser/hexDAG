@@ -13,14 +13,9 @@ else:
     ObserverManagerPort = Any
     PolicyManagerPort = Any
 
+from hexdag.core.exceptions import OrchestratorError
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.orchestration.policies.models import PolicyContext, PolicyResponse, PolicySignal
-
-
-class OrchestratorError(Exception):
-    """Base exception for orchestrator errors."""
-
-    pass
 
 
 class PolicyCoordinator:

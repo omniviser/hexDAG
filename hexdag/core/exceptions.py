@@ -186,6 +186,27 @@ class TypeMismatchError(HexDAGError):
         self.value = value
 
 
+# ============================================================================
+# Orchestration Errors
+# ============================================================================
+
+
+class OrchestratorError(HexDAGError):
+    """Raised when orchestrator execution encounters an error.
+
+    This includes node execution failures, wave execution problems,
+    and other orchestration-level issues.
+
+    Examples
+    --------
+    Example usage::
+
+        raise OrchestratorError("Node 'fetch_data' failed: timeout")
+    """
+
+    pass
+
+
 __all__ = [
     "HexDAGError",
     "ConfigurationError",
@@ -193,4 +214,5 @@ __all__ = [
     "ResourceNotFoundError",
     "DependencyError",
     "TypeMismatchError",
+    "OrchestratorError",
 ]

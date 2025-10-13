@@ -9,11 +9,8 @@ from pydantic import BaseModel
 from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.context import get_port
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import (
-    NodeExecutionError,
-    Orchestrator,
-    OrchestratorError,
-)
+from hexdag.core.orchestration.components import NodeExecutionError
+from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.registry import registry
 
 
@@ -213,6 +210,9 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_invalid_dag_error(self, orchestrator, observers):
         """Test handling of invalid DAG structures."""
+        # Import OrchestratorError for DAG validation errors
+        from hexdag.core.exceptions import OrchestratorError
+
         # Create DAG with cycle
         graph = DirectedGraph()
         graph.add(NodeSpec("a", async_add_one).after("b"))

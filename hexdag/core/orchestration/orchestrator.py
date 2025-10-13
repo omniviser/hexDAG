@@ -9,9 +9,11 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from typing import TYPE_CHECKING, Any, Literal, Union
+from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
+    from types import MappingProxyType
+
     from hexdag.core.ports.observer_manager import ObserverManagerPort
     from hexdag.core.ports.policy_manager import PolicyManagerPort
 else:
@@ -21,22 +23,24 @@ else:
 from hexdag.core.context import (
     ExecutionContext,
     get_observer_manager,
-    get_policy_manager,
     get_ports,
     set_ports,
 )
 from hexdag.core.domain.dag import DirectedGraph, DirectedGraphError
+from hexdag.core.exceptions import OrchestratorError
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration import NodeExecutionContext
 from hexdag.core.orchestration.components import (
     InputMapper,
-    NodeExecutionError,
-    NodeExecutor,
-    OrchestratorError,
     PolicyCoordinator,
-    WaveExecutor,
+)
+from hexdag.core.orchestration.constants import (
+    EXECUTOR_CONTEXT_GRAPH,
+    EXECUTOR_CONTEXT_INITIAL_INPUT,
+    EXECUTOR_CONTEXT_NODE_RESULTS,
 )
 from hexdag.core.orchestration.events import WaveCompleted, WaveStarted
+from hexdag.core.orchestration.hook_context import PipelineStatus
 from hexdag.core.orchestration.hooks import (
     HookConfig,
     PostDagHookConfig,
@@ -48,14 +52,34 @@ from hexdag.core.ports.executor import ExecutionTask, ExecutorPort
 from hexdag.core.ports_builder import PortsBuilder
 
 from .events import (
-    NodeFailed,
     PipelineCancelled,
     PipelineCompleted,
     PipelineStarted,
 )
-from .policies.models import PolicyResponse, PolicySignal
+from .policies.models import PolicyResponse
 
 logger = get_logger(__name__)
+
+
+def _has_async_lifecycle(obj: Any, method_name: str) -> bool:
+    """Check if object has an async lifecycle method (asetup/aclose).
+
+    Parameters
+    ----------
+    obj : Any
+        Object to check
+    method_name : str
+        Method name to check (e.g., "asetup", "aclose")
+
+    Returns
+    -------
+    bool
+        True if object has the method and it's a coroutine function
+    """
+    return hasattr(obj, method_name) and asyncio.iscoroutinefunction(
+        getattr(obj, method_name, None)
+    )
+
 
 # Default configuration constants
 DEFAULT_MAX_CONCURRENT_NODES = 10
@@ -87,11 +111,7 @@ async def _managed_ports(
 
     # Setup executor first (if provided)
     executor_initialized = False
-    if (
-        executor is not None
-        and hasattr(executor, "asetup")
-        and asyncio.iscoroutinefunction(executor.asetup)
-    ):
+    if executor is not None and _has_async_lifecycle(executor, "asetup"):
         try:
             await executor.asetup()
             executor_initialized = True
@@ -102,7 +122,7 @@ async def _managed_ports(
     # Setup ports
     initialized: list[str] = []
     for name, port in all_ports.items():
-        if hasattr(port, "asetup") and asyncio.iscoroutinefunction(port.asetup):
+        if _has_async_lifecycle(port, "asetup"):
             try:
                 await port.asetup()
                 initialized.append(name)
@@ -111,17 +131,14 @@ async def _managed_ports(
                 # Cleanup initialized ports
                 for cleanup_name in initialized:
                     cleanup_port = all_ports[cleanup_name]
-                    if hasattr(cleanup_port, "aclose") and asyncio.iscoroutinefunction(
-                        cleanup_port.aclose
-                    ):
+                    if _has_async_lifecycle(cleanup_port, "aclose"):
                         with suppress(Exception):
                             await cleanup_port.aclose()
                 # Cleanup executor if initialized
                 if (
                     executor_initialized
                     and executor is not None
-                    and hasattr(executor, "aclose")
-                    and asyncio.iscoroutinefunction(executor.aclose)
+                    and _has_async_lifecycle(executor, "aclose")
                 ):
                     with suppress(Exception):
                         await executor.aclose()
@@ -133,7 +150,7 @@ async def _managed_ports(
         # Cleanup ports
         for name in initialized:
             port = all_ports[name]
-            if hasattr(port, "aclose") and asyncio.iscoroutinefunction(port.aclose):
+            if _has_async_lifecycle(port, "aclose"):
                 try:
                     await port.aclose()
                 except Exception as e:
@@ -143,8 +160,7 @@ async def _managed_ports(
         if (
             executor_initialized
             and executor is not None
-            and hasattr(executor, "aclose")
-            and asyncio.iscoroutinefunction(executor.aclose)
+            and _has_async_lifecycle(executor, "aclose")
         ):
             try:
                 await executor.aclose()
@@ -186,15 +202,32 @@ class Orchestrator:
             pre_hook_config: Configuration for pre-DAG hooks (health checks, secrets, etc.)
             post_hook_config: Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
             executor: Optional executor port for pluggable execution strategies.
-                If None (default), uses built-in in-process execution via
-                NodeExecutor/WaveExecutor. Set to a custom ExecutorPort implementation
-                (e.g., CeleryExecutor, AzureFunctionsExecutor) to enable distributed or
-                serverless execution.
+                If None (default), creates LocalExecutor with the provided configuration.
+                Set to a custom ExecutorPort implementation (e.g., CeleryExecutor,
+                AzureFunctionsExecutor) for distributed or serverless execution.
+
+        Notes
+        -----
+        ARCHITECTURAL EXCEPTION: This is the ONLY place in hexdag/core that imports
+        from hexdag/adapters (lazy import of LocalExecutor). This exception is
+        enforced by pre-commit hooks to ensure it remains isolated.
         """
 
         self.max_concurrent_nodes = max_concurrent_nodes
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
+
+        # Default to LocalExecutor if no executor provided
+        # ARCHITECTURAL EXCEPTION: Lazy import to avoid core -> adapters dependency at module level
+        if executor is None:
+            from hexdag.adapters.executors import LocalExecutor  # noqa: PLC0415
+
+            executor = LocalExecutor(
+                max_concurrent_nodes=max_concurrent_nodes,
+                strict_validation=strict_validation,
+                default_node_timeout=default_node_timeout,
+            )
+
         self.executor = executor
 
         # Handle both dict and PortsConfiguration
@@ -215,14 +248,6 @@ class Orchestrator:
         # Initialize collaborators (dependency injection)
         self._policy_coordinator = PolicyCoordinator()
         self._input_mapper = InputMapper()
-
-        # Built-in executors for in-process execution (used when executor=None)
-        # These are only used if no custom executor is provided
-        self._node_executor = NodeExecutor(
-            strict_validation=strict_validation,
-            default_node_timeout=default_node_timeout,
-        )
-        self._wave_executor = WaveExecutor(max_concurrent_nodes=max_concurrent_nodes)
 
         # Initialize hook managers
         self._pre_hook_manager = PreDagHookManager(pre_hook_config)
@@ -510,42 +535,22 @@ class Orchestrator:
 
             # Track pipeline status for post-DAG hooks
 
-            pipeline_status: Literal["success", "failed", "cancelled"] = "success"
+            pipeline_status: PipelineStatus = PipelineStatus.SUCCESS
             pipeline_error: BaseException | None = None
             cancelled = False
 
             try:
-                # Execute all waves with optional timeout
-                # If custom executor provided, use it; otherwise use built-in WaveExecutor
-                if self.executor is not None:
-                    # Custom executor path - delegate to executor
-                    cancelled = await self._execute_with_custom_executor(
-                        waves=waves,
-                        graph=graph,
-                        node_results=node_results,
-                        initial_input=initial_input,
-                        context=context,
-                        timeout=timeout,
-                        validate=validate,
-                        **kwargs,
-                    )
-                else:
-                    # Default path - use built-in WaveExecutor
-                    cancelled = await self._wave_executor.execute_all_waves(
-                        waves=waves,
-                        node_executor_fn=self._execute_node,
-                        graph=graph,
-                        node_results=node_results,
-                        initial_input=initial_input,
-                        all_ports=all_ports,
-                        context=context,
-                        observer_manager=observer_manager,
-                        policy_manager=policy_manager,
-                        policy_coordinator=self._policy_coordinator,
-                        timeout=timeout,
-                        validate=validate,
-                        **kwargs,
-                    )
+                # Execute all waves using executor (always uses executor now)
+                cancelled = await self._execute_with_executor(
+                    waves=waves,
+                    graph=graph,
+                    node_results=node_results,
+                    initial_input=initial_input,
+                    context=context,
+                    timeout=timeout,
+                    validate=validate,
+                    **kwargs,
+                )
             except BaseException as e:
                 # Track error for post-hooks (do NOT modify state in handler!)
                 pipeline_error = e
@@ -553,11 +558,11 @@ class Orchestrator:
             else:
                 # Success path - determine status after execution
                 if cancelled:
-                    pipeline_status = "cancelled"
+                    pipeline_status = PipelineStatus.CANCELLED
             finally:
                 # Update status based on what happened (outside try/except)
                 if pipeline_error is not None:
-                    pipeline_status = "failed"
+                    pipeline_status = PipelineStatus.FAILED
                 # Fire appropriate completion/cancellation event
                 duration_ms = (time.time() - pipeline_start_time) * 1000
 
@@ -569,7 +574,7 @@ class Orchestrator:
                         partial_results=node_results,
                     )
                     await self._notify_observer(observer_manager, pipeline_cancelled)
-                elif pipeline_status == "success":
+                elif pipeline_status == PipelineStatus.SUCCESS:
                     pipeline_completed = PipelineCompleted(
                         name=pipeline_name,
                         duration_ms=duration_ms,
@@ -582,7 +587,7 @@ class Orchestrator:
                     post_hook_results = await self._post_hook_manager.execute_hooks(
                         context=context,
                         pipeline_name=pipeline_name,
-                        pipeline_status=pipeline_status,
+                        pipeline_status=pipeline_status.value,
                         node_results=node_results,
                         error=pipeline_error,
                     )
@@ -598,7 +603,7 @@ class Orchestrator:
         # Return results (outside ExecutionContext - it's cleaned up automatically)
         return node_results
 
-    async def _execute_with_custom_executor(
+    async def _execute_with_executor(
         self,
         waves: list[list[str]],
         graph: DirectedGraph,
@@ -609,11 +614,10 @@ class Orchestrator:
         validate: bool,
         **kwargs: Any,
     ) -> bool:
-        """Execute all waves using custom executor.
+        """Execute all waves using the configured executor.
 
-        This method delegates execution to the custom executor (e.g., LocalExecutor,
-        CeleryExecutor, AzureFunctionsExecutor) instead of using the built-in
-        NodeExecutor/WaveExecutor.
+        This method delegates execution to the executor (LocalExecutor by default,
+        or CeleryExecutor, AzureFunctionsExecutor, etc. if provided).
 
         Parameters
         ----------
@@ -640,11 +644,16 @@ class Orchestrator:
             True if cancelled (timeout), False if completed
         """
         # Store graph, node_results, and initial_input in ports context for executor
-        current_ports = dict(get_ports() or {})
-        current_ports["_hexdag_graph"] = graph
-        current_ports["_hexdag_node_results"] = node_results
-        current_ports["_hexdag_initial_input"] = initial_input
-        set_ports(current_ports)
+        # Note: We extend the existing ports with executor-specific context.
+        # This is safe because set_ports() wraps in MappingProxyType (immutable).
+        existing_ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
+        executor_ports = {
+            **existing_ports,
+            EXECUTOR_CONTEXT_GRAPH: graph,
+            EXECUTOR_CONTEXT_NODE_RESULTS: node_results,
+            EXECUTOR_CONTEXT_INITIAL_INPUT: initial_input,
+        }
+        set_ports(executor_ports)
 
         try:
             async with asyncio.timeout(timeout):
@@ -672,18 +681,14 @@ class Orchestrator:
                         )
                         tasks.append(task)
 
-                    # Execute wave using custom executor
-                    assert self.executor is not None  # Type narrowing for mypy/pyright
+                    # Execute wave using executor
                     wave_results = await self.executor.aexecute_wave(tasks)
 
                     # Update node_results with wave results
+                    # Note: Failures propagate as NodeExecutionError from executor,
+                    # so we only see SUCCESS results here
                     for node_name, result in wave_results.items():
-                        if result.status == "success":
-                            node_results[node_name] = result.output
-                        else:
-                            # Handle failure
-                            error_msg = f"Node '{node_name}' failed: {result.error}"
-                            raise OrchestratorError(error_msg)
+                        node_results[node_name] = result.output
 
                     # Fire wave completed event
                     wave_completed = WaveCompleted(
@@ -696,31 +701,6 @@ class Orchestrator:
 
         except TimeoutError:
             return True  # Cancelled due to timeout
-
-    async def _execute_all_waves(
-        self,
-        waves: list[list[str]],
-        graph: DirectedGraph,
-        node_results: dict[str, Any],
-        initial_input: Any,
-        context: NodeExecutionContext,
-        timeout: float | None,
-        validate: bool,
-        **kwargs: Any,
-    ) -> bool:
-        """Execute all waves with optional timeout (delegates to WaveExecutor)."""
-        return await self._wave_executor.execute_all_waves(
-            waves=waves,
-            node_executor_fn=self._execute_node,
-            graph=graph,
-            node_results=node_results,
-            initial_input=initial_input,
-            context=context,
-            policy_coordinator=self._policy_coordinator,
-            timeout=timeout,
-            validate=validate,
-            **kwargs,
-        )
 
     def _resolve_ports_for_node(self, node_name: str, node_spec: Any) -> dict[str, Any]:
         """Resolve ports for a specific node.
@@ -751,100 +731,3 @@ class Orchestrator:
 
         # Convert PortConfig to actual port instances
         return {k: v.port for k, v in resolved_ports.items()}
-
-    async def _execute_node(
-        self,
-        node_name: str,
-        graph: DirectedGraph,
-        node_results: dict[str, Any],
-        initial_input: Any,
-        context: NodeExecutionContext,
-        wave_index: int = 0,
-        validate: bool = True,
-        **kwargs: Any,
-    ) -> Any:
-        """Execute a single node (delegates to NodeExecutor with retry logic).
-
-        Note: all_ports, observer_manager, policy_manager are filtered out from kwargs
-        since they're accessed via ExecutionContext, not passed to node functions.
-
-        If PortsConfiguration is available, ports are resolved per-node based on
-        node name and type, allowing type-specific and node-level port customization.
-        """
-        # Create node context early so it's available in exception handler
-        _ = context.with_node(node_name, wave_index)  # For future use
-
-        # Filter out orchestrator-level kwargs that shouldn't be passed to nodes
-        # These are available via ExecutionContext instead
-        node_kwargs = {
-            k: v
-            for k, v in kwargs.items()
-            if k not in {"all_ports", "observer_manager", "policy_manager"}
-        }
-
-        try:
-            # Prepare input using InputMapper
-            node_spec = graph.nodes[node_name]
-            node_input = self._input_mapper.prepare_node_input(
-                node_spec, node_results, initial_input
-            )
-
-            # Resolve ports for this specific node
-            if self.ports_config is not None:
-                from hexdag.core.context import set_ports
-
-                node_ports = self._resolve_ports_for_node(node_name, node_spec)
-                set_ports(node_ports)  # Update context for this node
-
-            # Delegate execution to NodeExecutor
-            return await self._node_executor.execute_node(
-                node_name=node_name,
-                node_spec=node_spec,
-                node_input=node_input,
-                context=context,
-                policy_coordinator=self._policy_coordinator,
-                wave_index=wave_index,
-                validate=validate,
-                **node_kwargs,
-            )
-
-        except NodeExecutionError as e:
-            # Check if this is a RETRY signal from the policy
-            # The orchestrator handles retries at this level
-            if hasattr(e, "__cause__") and isinstance(e.__cause__, Exception):
-                # Try to get retry signal from policy
-                fail_event = NodeFailed(
-                    name=node_name,
-                    wave_index=wave_index,
-                    error=e.__cause__,
-                )
-                fail_response = await self._evaluate_policy(
-                    get_policy_manager(),
-                    fail_event,
-                    context,
-                    node_id=node_name,
-                    wave_index=wave_index,
-                )
-
-                if fail_response.signal == PolicySignal.FALLBACK:
-                    return fail_response.data
-                if fail_response.signal == PolicySignal.RETRY:
-                    retry_data = fail_response.data if isinstance(fail_response.data, dict) else {}
-                    delay = retry_data.get("delay", 0)
-
-                    if delay > 0:
-                        await asyncio.sleep(delay)
-
-                    # Retry
-                    return await self._execute_node(
-                        node_name=node_name,
-                        graph=graph,
-                        node_results=node_results,
-                        initial_input=initial_input,
-                        context=context.with_attempt(context.attempt + 1),
-                        wave_index=wave_index,
-                        validate=validate,
-                        **kwargs,
-                    )
-            # Default: propagate
-            raise

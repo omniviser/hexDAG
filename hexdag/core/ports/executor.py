@@ -6,11 +6,36 @@ allowing the same DAG to run locally (in-process), with Celery
 """
 
 from abc import abstractmethod
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from hexdag.core.registry.decorators import port
+
+
+class ExecutionStatus(StrEnum):
+    """Node execution status enumeration.
+
+    This follows the same pattern as PipelineStatus, AlertType, and AlertSeverity
+    from the codebase, providing type-safe status values.
+
+    Attributes
+    ----------
+    SUCCESS : str
+        Node executed successfully
+    FAILED : str
+        Node failed with an error
+    TIMEOUT : str
+        Node execution timed out
+    CANCELLED : str
+        Node execution was cancelled
+    """
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
 
 
 class ExecutionTask(BaseModel):
@@ -24,7 +49,7 @@ class ExecutionTask(BaseModel):
     node_name : str
         Unique identifier for the node within the DAG
     node_input : Any
-        Input data for the node (must be serializable for distributed executors)
+        Input data for the node (None = executor should prepare from context)
     wave_index : int
         Wave number in the DAG execution sequence
     should_validate : bool
@@ -38,7 +63,7 @@ class ExecutionTask(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     node_name: str
-    node_input: Any
+    node_input: Any | None = None
     wave_index: int = 0
     should_validate: bool = Field(default=True, validation_alias="validate")
     context_data: dict[str, Any] = Field(default_factory=dict)
@@ -56,8 +81,8 @@ class ExecutionResult(BaseModel):
         Result data from the node execution
     duration_ms : float
         Execution time in milliseconds
-    status : str
-        Execution status: "success", "failed", "timeout", "cancelled"
+    status : ExecutionStatus
+        Execution status (SUCCESS, FAILED, TIMEOUT, CANCELLED)
     error : str | None
         Error message if execution failed, None otherwise
     error_type : str | None
@@ -69,33 +94,9 @@ class ExecutionResult(BaseModel):
     node_name: str
     output: Any = None
     duration_ms: float = 0.0
-    status: str = "success"
+    status: ExecutionStatus = ExecutionStatus.SUCCESS
     error: str | None = None
     error_type: str | None = None
-
-
-class ExecutorCapabilities(BaseModel):
-    """Describes capabilities and limits of an executor implementation.
-
-    Attributes
-    ----------
-    supports_timeout : bool
-        Whether the executor can enforce per-node timeouts
-    supports_cancellation : bool
-        Whether the executor supports task cancellation
-    max_concurrent : int | None
-        Maximum number of concurrent tasks (None = unlimited)
-    is_distributed : bool
-        Whether execution happens across multiple processes/machines
-    requires_serialization : bool
-        Whether tasks/results must be serializable
-    """
-
-    supports_timeout: bool = True
-    supports_cancellation: bool = True
-    max_concurrent: int | None = None
-    is_distributed: bool = False
-    requires_serialization: bool = False
 
 
 @port(name="executor", namespace="core")
@@ -204,31 +205,6 @@ class ExecutorPort(Protocol):
             assert "fetch_a" in results
             assert "fetch_b" in results
             assert "fetch_c" in results
-        """
-        ...
-
-    @abstractmethod
-    def get_capabilities(self) -> ExecutorCapabilities:
-        """Report executor capabilities and limits.
-
-        This method allows the orchestrator to adapt its behavior based
-        on executor capabilities (e.g., skip timeout handling if executor
-        doesn't support it).
-
-        Returns
-        -------
-        ExecutorCapabilities
-            Capability flags and limits for this executor
-
-        Examples
-        --------
-        Check if executor supports distributed execution::
-
-            caps = executor.get_capabilities()
-            if caps.is_distributed:
-                print(f"Distributed executor with max {caps.max_concurrent} workers")
-            else:
-                print("Local in-process executor")
         """
         ...
 

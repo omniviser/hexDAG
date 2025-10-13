@@ -142,6 +142,14 @@ repos:
   - repo: local
     hooks:
 
+      - id: check-core-imports
+        name: Check core doesn't import from adapters/builtin
+        entry: uv run python scripts/check_core_imports.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: check-async-io
         name: Check for sync I/O in async code
         entry: uv run python scripts/check_async_io.py

@@ -9,7 +9,6 @@ from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
-    ExecutorCapabilities,
     ExecutorPort,
 )
 from hexdag.core.ports_builder import PortsBuilder
@@ -98,16 +97,6 @@ class MockExecutor:
                 raise result
 
         return results
-
-    def get_capabilities(self) -> ExecutorCapabilities:
-        """Report executor capabilities (mock implementation)."""
-        return ExecutorCapabilities(
-            supports_timeout=True,
-            supports_cancellation=True,
-            max_concurrent=5,
-            is_distributed=False,
-            requires_serialization=False,
-        )
 
     async def asetup(self) -> None:
         """Initialize executor resources."""
@@ -202,17 +191,6 @@ class TestOrchestratorWithExecutor:
         assert orchestrator.max_concurrent_nodes == 5
 
     @pytest.mark.asyncio
-    async def test_executor_capabilities_accessible(self):
-        """Test that executor capabilities can be queried."""
-        executor = MockExecutor()
-
-        caps = executor.get_capabilities()
-
-        assert caps.supports_timeout is True
-        assert caps.max_concurrent == 5
-        assert caps.is_distributed is False
-
-    @pytest.mark.asyncio
     async def test_executor_setup_failure_propagates(self):
         """Test that executor setup failures are propagated."""
 
@@ -224,9 +202,6 @@ class TestOrchestratorWithExecutor:
 
             async def aexecute_wave(self, tasks: list[ExecutionTask]) -> dict[str, ExecutionResult]:
                 return {}
-
-            def get_capabilities(self) -> ExecutorCapabilities:
-                return ExecutorCapabilities()
 
             async def asetup(self) -> None:
                 raise RuntimeError("Setup failed!")
@@ -261,10 +236,10 @@ class TestOrchestratorWithExecutor:
 
         orchestrator = Orchestrator(executor=executor)
 
-        # Execution should fail (wrapped in OrchestratorError from custom executor path)
-        from hexdag.core.orchestration.orchestrator import OrchestratorError
+        # Execution should fail with NodeExecutionError (propagated from executor)
+        from hexdag.core.orchestration.components import NodeExecutionError
 
-        with pytest.raises(OrchestratorError):
+        with pytest.raises(NodeExecutionError):
             await orchestrator.run(graph, 0)
 
         # Executor was cleaned up (context manager closed it)
@@ -294,7 +269,5 @@ class TestOrchestratorWithExecutor:
         # Verify all required methods exist
         assert hasattr(executor, "aexecute_node")
         assert hasattr(executor, "aexecute_wave")
-        assert hasattr(executor, "get_capabilities")
         assert callable(executor.aexecute_node)
         assert callable(executor.aexecute_wave)
-        assert callable(executor.get_capabilities)

@@ -10,18 +10,24 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from hexdag.core.configurable import ConfigurableAdapter, ExecutorConfig
+from hexdag.core.context import get_port
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components import (
     InputMapper,
+    NodeExecutionError,
     NodeExecutor,
     PolicyCoordinator,
-    WaveExecutor,
+)
+from hexdag.core.orchestration.constants import (
+    EXECUTOR_CONTEXT_GRAPH,
+    EXECUTOR_CONTEXT_INITIAL_INPUT,
+    EXECUTOR_CONTEXT_NODE_RESULTS,
 )
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.ports.executor import (
     ExecutionResult,
+    ExecutionStatus,
     ExecutionTask,
-    ExecutorCapabilities,
 )
 from hexdag.core.registry.decorators import adapter
 
@@ -29,6 +35,22 @@ if TYPE_CHECKING:
     from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 
 logger = get_logger(__name__)
+
+
+def _calculate_duration_ms(start_time: float) -> float:
+    """Calculate duration in milliseconds from start time.
+
+    Parameters
+    ----------
+    start_time : float
+        Start time from time.time()
+
+    Returns
+    -------
+    float
+        Duration in milliseconds
+    """
+    return (time.time() - start_time) * 1000
 
 
 class LocalExecutorConfig(ExecutorConfig):
@@ -107,7 +129,6 @@ class LocalExecutor(ConfigurableAdapter):
             strict_validation=config.strict_validation,
             default_node_timeout=config.default_node_timeout,
         )
-        self._wave_executor = WaveExecutor(max_concurrent_nodes=config.max_concurrent_nodes)
         self._input_mapper = InputMapper()
         self._policy_coordinator = PolicyCoordinator()
 
@@ -127,22 +148,28 @@ class LocalExecutor(ConfigurableAdapter):
         ExecutionResult
             Result of the execution with output or error information
 
+        Raises
+        ------
+        RuntimeError
+            If executor not initialized via asetup()
+
         Notes
         -----
         This method expects that the orchestrator has set up the execution
         context with the graph and ports. The task.context_data should contain
         the necessary execution context information.
         """
+        if not self._initialized:
+            raise RuntimeError("LocalExecutor not initialized - call asetup() first")
+
         start_time = time.time()
 
         try:
             # Get graph and node from execution context (stored in ports)
-            # The orchestrator stores these with _hexdag_ prefix
-            from hexdag.core.context import get_port
-
-            graph: DirectedGraph = get_port("_hexdag_graph")
-            node_results: dict[str, Any] = get_port("_hexdag_node_results")
-            initial_input: Any = get_port("_hexdag_initial_input")
+            # Note: Uses ContextVar pattern consistent with rest of codebase
+            graph: DirectedGraph = get_port(EXECUTOR_CONTEXT_GRAPH)
+            node_results: dict[str, Any] = get_port(EXECUTOR_CONTEXT_NODE_RESULTS)
+            initial_input: Any = get_port(EXECUTOR_CONTEXT_INITIAL_INPUT)
 
             if graph is None:
                 raise RuntimeError(
@@ -154,10 +181,10 @@ class LocalExecutor(ConfigurableAdapter):
             if task.node_name not in graph.nodes:
                 return ExecutionResult(
                     node_name=task.node_name,
-                    status="failed",
+                    status=ExecutionStatus.FAILED,
                     error=f"Node '{task.node_name}' not found in graph",
                     error_type="KeyError",
-                    duration_ms=(time.time() - start_time) * 1000,
+                    duration_ms=_calculate_duration_ms(start_time),
                 )
 
             node_spec: NodeSpec = graph.nodes[task.node_name]
@@ -191,18 +218,32 @@ class LocalExecutor(ConfigurableAdapter):
             return ExecutionResult(
                 node_name=task.node_name,
                 output=output,
-                status="success",
-                duration_ms=(time.time() - start_time) * 1000,
+                status=ExecutionStatus.SUCCESS,
+                duration_ms=_calculate_duration_ms(start_time),
             )
 
-        except Exception as e:
+        except NodeExecutionError:
+            # NodeExecutionError should propagate directly (orchestrator will handle)
+            raise
+        except (ValueError, TypeError, KeyError, AttributeError, RuntimeError) as e:
+            # Catch expected execution errors (validation, type issues, missing data)
             logger.error(f"LocalExecutor: Node '{task.node_name}' failed: {e}")
             return ExecutionResult(
                 node_name=task.node_name,
-                status="failed",
+                status=ExecutionStatus.FAILED,
                 error=str(e),
                 error_type=type(e).__name__,
-                duration_ms=(time.time() - start_time) * 1000,
+                duration_ms=_calculate_duration_ms(start_time),
+            )
+        except Exception as e:
+            # Catch unexpected errors but log with higher severity
+            logger.exception(f"LocalExecutor: Unexpected error in node '{task.node_name}': {e}")
+            return ExecutionResult(
+                node_name=task.node_name,
+                status=ExecutionStatus.FAILED,
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_ms=_calculate_duration_ms(start_time),
             )
 
     async def aexecute_wave(self, tasks: list[ExecutionTask]) -> dict[str, ExecutionResult]:
@@ -218,14 +259,31 @@ class LocalExecutor(ConfigurableAdapter):
         dict[str, ExecutionResult]
             Map of node_name -> execution result
 
+        Raises
+        ------
+        RuntimeError
+            If executor not initialized via asetup()
+
         Notes
         -----
         This method uses asyncio.gather to execute all tasks concurrently,
         respecting the max_concurrent_nodes limit via semaphore.
         """
-        # Execute all tasks concurrently
+        if not self._initialized:
+            raise RuntimeError("LocalExecutor not initialized - call asetup() first")
+
+        # Create semaphore to limit concurrent execution
+        config: LocalExecutorConfig = self.config  # type: ignore[assignment]
+        semaphore = asyncio.Semaphore(config.max_concurrent_nodes)
+
+        async def execute_with_limit(task: ExecutionTask) -> ExecutionResult:
+            """Execute task with semaphore-based concurrency control."""
+            async with semaphore:
+                return await self.aexecute_node(task)
+
+        # Execute all tasks concurrently with semaphore limit
         results_list = await asyncio.gather(
-            *[self.aexecute_node(task) for task in tasks],
+            *[execute_with_limit(task) for task in tasks],
             return_exceptions=True,
         )
 
@@ -235,29 +293,11 @@ class LocalExecutor(ConfigurableAdapter):
             if isinstance(result, ExecutionResult):
                 results[result.node_name] = result
             elif isinstance(result, Exception):
-                # Shouldn't happen as we handle exceptions in aexecute_node
-                # but handle gracefully
-                logger.error(f"Unexpected exception in wave execution: {result}")
+                # Can happen if task is cancelled during gather()
+                logger.error(f"Exception during wave execution: {result}")
                 raise result
 
         return results
-
-    def get_capabilities(self) -> ExecutorCapabilities:
-        """Report executor capabilities.
-
-        Returns
-        -------
-        ExecutorCapabilities
-            Capability flags for this executor
-        """
-        config: LocalExecutorConfig = self.config  # type: ignore[assignment]
-        return ExecutorCapabilities(
-            supports_timeout=True,
-            supports_cancellation=True,
-            max_concurrent=config.max_concurrent_nodes,
-            is_distributed=False,
-            requires_serialization=False,
-        )
 
     async def asetup(self) -> None:
         """Initialize executor resources.

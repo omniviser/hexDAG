@@ -44,6 +44,7 @@ from hexdag.core.exceptions import (
     ConfigurationError,
     DependencyError,
     HexDAGError,
+    OrchestratorError,
     ResourceNotFoundError,
     TypeMismatchError,
     ValidationError,
@@ -95,6 +96,7 @@ __all__ = [
     "ResourceNotFoundError",
     "DependencyError",
     "TypeMismatchError",
+    "OrchestratorError",
     # Protocols
     "ComponentWithExecute",
     "ConfigurablePort",

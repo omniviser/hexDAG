@@ -38,18 +38,6 @@ class TestLocalExecutor:
         assert executor.config.strict_validation is False
         assert executor.config.default_node_timeout is None
 
-    def test_local_executor_capabilities(self):
-        """Test that LocalExecutor reports correct capabilities."""
-        executor = LocalExecutor(max_concurrent_nodes=10)
-
-        caps = executor.get_capabilities()
-
-        assert caps.supports_timeout is True
-        assert caps.supports_cancellation is True
-        assert caps.max_concurrent == 10
-        assert caps.is_distributed is False
-        assert caps.requires_serialization is False
-
     @pytest.mark.asyncio
     async def test_local_executor_lifecycle(self):
         """Test LocalExecutor setup and cleanup."""
@@ -221,10 +209,10 @@ class TestLocalExecutor:
 
         orchestrator = Orchestrator(executor=executor)
 
-        # Should raise OrchestratorError
-        from hexdag.core.orchestration.orchestrator import OrchestratorError
+        # Should raise NodeExecutionError for node failures
+        from hexdag.core.orchestration.components import NodeExecutionError
 
-        with pytest.raises(OrchestratorError, match="failed"):
+        with pytest.raises(NodeExecutionError, match="failed"):
             await orchestrator.run(graph, 0)
 
     @pytest.mark.asyncio

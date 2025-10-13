@@ -72,6 +72,10 @@ stages:
           displayName: 'Additional quality checks'
 
         - script: |
+            uv run python scripts/check_core_imports.py
+          displayName: 'Check core architecture (no adapters/builtin imports)'
+
+        - script: |
             uv run python scripts/check_async_io.py
           displayName: 'Check async I/O compliance'
 
