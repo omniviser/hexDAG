@@ -111,16 +111,18 @@ class TestExecutionResult:
         assert result.error_type == "ZeroDivisionError"
 
     def test_create_timeout_result(self):
-        """Test creating a timeout execution result."""
+        """Test creating a timeout/cancelled execution result."""
+        from hexdag.core.orchestration.hook_context import PipelineStatus
+
         result = ExecutionResult(
             node_name="timeout_node",
             duration_ms=30000.0,
-            status="timeout",
+            status=PipelineStatus.CANCELLED,
             error="Task exceeded timeout of 30s",
             error_type="TimeoutError",
         )
 
-        assert result.status == "timeout"
+        assert result.status == PipelineStatus.CANCELLED
         assert "timeout" in result.error.lower()
 
     def test_result_serialization(self):

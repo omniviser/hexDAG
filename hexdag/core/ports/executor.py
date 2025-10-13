@@ -6,36 +6,12 @@ allowing the same DAG to run locally (in-process), with Celery
 """
 
 from abc import abstractmethod
-from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from hexdag.core.orchestration.hook_context import PipelineStatus
 from hexdag.core.registry.decorators import port
-
-
-class ExecutionStatus(StrEnum):
-    """Node execution status enumeration.
-
-    This follows the same pattern as PipelineStatus, AlertType, and AlertSeverity
-    from the codebase, providing type-safe status values.
-
-    Attributes
-    ----------
-    SUCCESS : str
-        Node executed successfully
-    FAILED : str
-        Node failed with an error
-    TIMEOUT : str
-        Node execution timed out
-    CANCELLED : str
-        Node execution was cancelled
-    """
-
-    SUCCESS = "success"
-    FAILED = "failed"
-    TIMEOUT = "timeout"
-    CANCELLED = "cancelled"
 
 
 class ExecutionTask(BaseModel):
@@ -81,8 +57,8 @@ class ExecutionResult(BaseModel):
         Result data from the node execution
     duration_ms : float
         Execution time in milliseconds
-    status : ExecutionStatus
-        Execution status (SUCCESS, FAILED, TIMEOUT, CANCELLED)
+    status : PipelineStatus
+        Execution status (SUCCESS, FAILED, CANCELLED)
     error : str | None
         Error message if execution failed, None otherwise
     error_type : str | None
@@ -94,7 +70,7 @@ class ExecutionResult(BaseModel):
     node_name: str
     output: Any = None
     duration_ms: float = 0.0
-    status: ExecutionStatus = ExecutionStatus.SUCCESS
+    status: PipelineStatus = PipelineStatus.SUCCESS
     error: str | None = None
     error_type: str | None = None
 
@@ -158,7 +134,7 @@ class ExecutorPort(Protocol):
                 validate=True
             )
             result = await executor.aexecute_node(task)
-            if result.status == "success":
+            if result.status == PipelineStatus.SUCCESS:
                 print(result.output)
 
         Distributed execution (same interface)::

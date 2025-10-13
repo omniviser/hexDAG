@@ -23,10 +23,10 @@ from hexdag.core.orchestration.constants import (
     EXECUTOR_CONTEXT_INITIAL_INPUT,
     EXECUTOR_CONTEXT_NODE_RESULTS,
 )
+from hexdag.core.orchestration.hook_context import PipelineStatus
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.ports.executor import (
     ExecutionResult,
-    ExecutionStatus,
     ExecutionTask,
 )
 from hexdag.core.registry.decorators import adapter
@@ -181,7 +181,7 @@ class LocalExecutor(ConfigurableAdapter):
             if task.node_name not in graph.nodes:
                 return ExecutionResult(
                     node_name=task.node_name,
-                    status=ExecutionStatus.FAILED,
+                    status=PipelineStatus.FAILED,
                     error=f"Node '{task.node_name}' not found in graph",
                     error_type="KeyError",
                     duration_ms=_calculate_duration_ms(start_time),
@@ -218,7 +218,7 @@ class LocalExecutor(ConfigurableAdapter):
             return ExecutionResult(
                 node_name=task.node_name,
                 output=output,
-                status=ExecutionStatus.SUCCESS,
+                status=PipelineStatus.SUCCESS,
                 duration_ms=_calculate_duration_ms(start_time),
             )
 
@@ -230,7 +230,7 @@ class LocalExecutor(ConfigurableAdapter):
             logger.error(f"LocalExecutor: Node '{task.node_name}' failed: {e}")
             return ExecutionResult(
                 node_name=task.node_name,
-                status=ExecutionStatus.FAILED,
+                status=PipelineStatus.FAILED,
                 error=str(e),
                 error_type=type(e).__name__,
                 duration_ms=_calculate_duration_ms(start_time),
@@ -240,7 +240,7 @@ class LocalExecutor(ConfigurableAdapter):
             logger.exception(f"LocalExecutor: Unexpected error in node '{task.node_name}': {e}")
             return ExecutionResult(
                 node_name=task.node_name,
-                status=ExecutionStatus.FAILED,
+                status=PipelineStatus.FAILED,
                 error=str(e),
                 error_type=type(e).__name__,
                 duration_ms=_calculate_duration_ms(start_time),
