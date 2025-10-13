@@ -26,7 +26,7 @@ class TestPromptTemplate:
     def test_basic_template_rendering(self):
         """Test basic template creation and rendering."""
         template = PromptTemplate("Hello {{name}}!")
-        result = template._render(name="Alice")
+        result = template.generate(name="Alice")
         assert result == "Hello Alice!"
 
     def test_auto_variable_extraction(self):
@@ -43,7 +43,7 @@ class TestPromptTemplate:
         assert template.input_vars == ["name", "optional_var"]
 
         with pytest.raises(MissingVariableError) as exc_info:
-            template._render(name="Alice")
+            template.generate(name="Alice")
 
         assert "optional_var" in str(exc_info.value)
 
@@ -64,7 +64,7 @@ class TestPromptTemplate:
             "contact": {"email": "alice@techcorp.com"},
         }
 
-        result = template._render(user=user_data)
+        result = template.generate(user=user_data)
         expected = (
             "User: Alice Johnson (Senior Developer)\n"
             "Company: Tech Corp\n"
@@ -76,7 +76,7 @@ class TestPromptTemplate:
         """Test error handling for missing variables."""
         template = PromptTemplate("Hello {{name}}!")
         with pytest.raises(MissingVariableError):
-            template._render()
+            template.generate()
 
     def test_complex_template_with_conditionals(self):
         """Test template with nested variable access (simplified from Jinja2 version)."""
@@ -92,7 +92,7 @@ class TestPromptTemplate:
             "department": "Engineering",
         }
 
-        result = template._render(user=user_data)
+        result = template.generate(user=user_data)
         assert result == "User: Alice Smith\nRole: Admin\nDepartment: Engineering"
 
     def test_whitespace_handling(self):
@@ -101,14 +101,14 @@ class TestPromptTemplate:
 
         assert set(template.input_vars) == {"name", "role", "department"}
 
-        result = template._render(name="Eve", role="Engineer", department="AI")
+        result = template.generate(name="Eve", role="Engineer", department="AI")
         assert result == "Eve\nEngineer\nAI"
 
     def test_special_characters_in_variables(self):
         """Test templates with special characters and escaping."""
         template = PromptTemplate("Message: {{message}}\nQuote: '{{quote}}'")
 
-        result = template._render(message='Hello "World"!', quote="She said 'Hello'")
+        result = template.generate(message='Hello "World"!', quote="She said 'Hello'")
         assert result == "Message: Hello \"World\"!\nQuote: 'She said 'Hello''"
 
     def test_empty_template(self):
@@ -116,14 +116,14 @@ class TestPromptTemplate:
         template = PromptTemplate("")
 
         assert template.input_vars == []
-        assert template._render() == ""
+        assert template.generate() == ""
 
     def test_template_without_variables(self):
         """Test template with no variables."""
         template = PromptTemplate("This is a static template.")
 
         assert template.input_vars == []
-        result = template._render()
+        result = template.generate()
         assert result == "This is a static template."
 
     def test_variable_extraction_edge_cases(self):
@@ -155,7 +155,7 @@ class TestPromptTemplate:
         template = PromptTemplate("{{user.profile.name}}", ["user"])
 
         with pytest.raises(MissingVariableError) as exc_info:
-            template._render(user={"name": "Alice"})
+            template.generate(user={"name": "Alice"})
 
         error_msg = str(exc_info.value)
         assert "Cannot access variable" in error_msg
@@ -166,7 +166,7 @@ class TestPromptTemplate:
         template = PromptTemplate("{{a}} {{b}} {{c}}", ["a", "b", "c"])
 
         with pytest.raises(MissingVariableError) as exc_info:
-            template._render(a="value_a")
+            template.generate(a="value_a")
 
         error_msg = str(exc_info.value)
         assert "Missing required template variables: ['b', 'c']" in error_msg
@@ -177,7 +177,7 @@ class TestPromptTemplate:
         """Test that providing extra variables doesn't cause errors."""
         template = PromptTemplate("Hello {{name}}!")
 
-        result = template._render(name="Alice", extra_var="ignored", another="also_ignored")
+        result = template.generate(name="Alice", extra_var="ignored", another="also_ignored")
         assert result == "Hello Alice!"
 
     def test_simple_nested_data_structures(self):
@@ -198,7 +198,7 @@ class TestPromptTemplate:
             "status": {"current": "In Progress"},
         }
 
-        result = template._render(project=project_data)
+        result = template.generate(project=project_data)
         expected = "Project: AI Platform\nTeam Lead: Alice\nStatus: In Progress"
         assert result == expected
 
@@ -227,7 +227,7 @@ class TestFewShotPromptTemplate:
         ]
         template = FewShotPromptTemplate("Respond to: {{greeting}}", examples=examples)
 
-        result = template._render(greeting="Good morning")
+        result = template.generate(greeting="Good morning")
 
         # Should contain both examples and the rendered question
         assert "Input: Hello" in result
@@ -246,7 +246,7 @@ class TestFewShotPromptTemplate:
             "Task: {{task}}", examples=examples, example_separator="\n---\n"
         )
 
-        result = template._render(task="New task")
+        result = template.generate(task="New task")
         assert "\n---\n" in result
 
     def test_custom_example_formatter(self):
@@ -260,14 +260,14 @@ class TestFewShotPromptTemplate:
             "Question: {{question}}", examples=examples, format_example=custom_formatter
         )
 
-        result = template._render(question="How are you?")
+        result = template.generate(question="How are you?")
         assert "Q: What's your name?" in result
         assert "A: I'm an AI" in result
 
     def test_empty_examples(self):
         """Test few-shot template with no examples."""
         template = FewShotPromptTemplate("Task: {{task}}", examples=[])
-        result = template._render(task="Do something")
+        result = template.generate(task="Do something")
         assert result == "Task: Do something"
 
     def test_add_example_method(self):
@@ -277,7 +277,7 @@ class TestFewShotPromptTemplate:
         # Add an example
         template.add_example({"input": "Test", "output": "Success"})
 
-        result = template._render(task="New task")
+        result = template.generate(task="New task")
         assert "Input: Test" in result
         assert "Output: Success" in result
         assert "Task: New task" in result
@@ -299,7 +299,7 @@ class TestFewShotPromptTemplate:
         ]
         template = FewShotPromptTemplate("Task: {{task}}", examples=examples)
 
-        result = template._render(task="Do it")
+        result = template.generate(task="Do it")
         # Should handle missing keys gracefully (empty strings)
         assert "Input: Test" in result
         assert "Output: Result" in result
@@ -326,7 +326,7 @@ class TestFewShotPromptTemplate:
 
         template = FewShotPromptTemplate("Task: {{goal}}\nUse tools as needed.", examples=examples)
 
-        result = template._render(goal="Find information about AI")
+        result = template.generate(goal="Find information about AI")
 
         # Should contain tool usage examples
         assert "INVOKE_TOOL: search_tool" in result

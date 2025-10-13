@@ -212,6 +212,23 @@ class PromptTemplate:
         rendered = self._render(**kwargs)
         return self.parse_output(rendered)
 
+    def generate(self, **kwargs: Any) -> str:
+        r"""Public API to render and post-process the template.
+
+        This wraps the internal formatting pipeline to keep `_render`/`_format`
+        private while exposing a stable method for consumers and tests.
+
+        Args
+        ----
+            **kwargs: Variable values to substitute in the template
+
+        Returns
+        -------
+        str
+            Rendered and parsed template string
+        """
+        return self._format(**kwargs)
+
     def to_messages(self, system_prompt: str | None = None, **kwargs: Any) -> list[dict[str, str]]:
         r"""Convert template to role-based messages for LLMFactory.
 
