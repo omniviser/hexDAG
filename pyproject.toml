@@ -44,12 +44,16 @@ anthropic = [
 sqlalchemy = [
     "sqlalchemy>=2.0,<3.0",  # SQLAlchemy adapter
 ]
+ws = [
+    "websockets>=12.0",
+]
 all = [
     "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
     "sqlalchemy>=2.0,<3.0",  # SQLAlchemy adapter
+    "websockets>=12.0",
 ]
 
 [project.urls]
@@ -111,7 +115,7 @@ dev = [
     "radon>=6.0.1",
     "twine>=6.1.0",
 ]
-  
+
 docs = [
     "sphinx==7.2.6",
     "sphinx-rtd-theme==3.0.2",

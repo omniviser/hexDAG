@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>hexDAG Live Events</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 20px; }
+  #status { margin-bottom: 12px; }
+  #controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  #log { white-space: pre; background: #111; color: #ddd; padding: 10px; border-radius: 6px; height: 65vh; overflow: auto; }
+  .ok { color: #2ecc71; }
+  .err { color: #e74c3c; }
+  select, input { padding: 4px 6px; }
+  button { padding: 4px 8px; }
+</style>
+
+<h2>hexDAG Live Events</h2>
+<div id="status">Status: <span id="conn" class="err">disconnected</span></div>
+
+<div id="controls">
+  <label>
+    Type:
+    <select id="typeSelect">
+      <option value="">(any)</option>
+      <option>pipeline:started</option>
+      <option>pipeline:completed</option>
+      <option>wave:started</option>
+      <option>wave:completed</option>
+      <option>node:started</option>
+      <option>node:completed</option>
+      <option>node:failed</option>
+    </select>
+  </label>
+  <span>or custom:</span>
+  <input id="typeCustom" placeholder="e.g. node:started" />
+  <button id="apply">Apply</button>
+  <button id="clear">Clear log</button>
+</div>
+
+<pre id="log"></pre>
+
+<script>
+  const log = document.getElementById('log');
+  const conn = document.getElementById('conn');
+  const typeSelect = document.getElementById('typeSelect');
+  const typeCustom = document.getElementById('typeCustom');
+  const applyBtn = document.getElementById('apply');
+  const clearBtn = document.getElementById('clear');
+
+  let activeTypeFilter = "";
+
+  function append(line) {
+    const atBottom = (log.scrollTop + log.clientHeight) >= (log.scrollHeight - 4);
+    log.textContent += line + "\n";
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  }
+
+  function getFilter() {
+    const custom = typeCustom.value.trim();
+    if (custom) return custom;
+    return typeSelect.value;
+  }
+
+  function connect() {
+    const ws = new WebSocket("ws://127.0.0.1:8081");
+    ws.onopen = () => { conn.textContent = 'connected'; conn.className = 'ok'; };
+    ws.onclose = () => { conn.textContent = 'disconnected'; conn.className = 'err'; setTimeout(connect, 1000); };
+    ws.onerror = () => { conn.textContent = 'error'; conn.className = 'err'; };
+
+    ws.onmessage = (e) => {
+      try {
+        const o = JSON.parse(e.data);
+        if (activeTypeFilter && o.type !== activeTypeFilter) return;
+        const env = o.envelope ? " " + JSON.stringify(o.envelope) : "";
+        append(`[${o.timestamp}] ${o.type}${env}`);
+      } catch (err) {
+        append("[parse error] " + err);
+      }
+    };
+  }
+
+  applyBtn.onclick = () => { activeTypeFilter = getFilter(); };
+  clearBtn.onclick = () => { log.textContent = ""; };
+  connect();
+</script>

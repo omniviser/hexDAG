@@ -1,0 +1,146 @@
+{"timestamp": "2025-10-14T10:26:25.899081", "name": "demo", "total_waves": 1, "total_nodes": 1, "type": "pipeline:started", "envelope": {"pipeline": "demo"}}
+{"timestamp": "2025-10-14T10:26:25.899140", "name": "nodeA", "wave_index": 1, "dependencies": [], "type": "node:started", "envelope": {"node": "nodeA", "wave": 1}}
+{"timestamp": "2025-10-14T10:28:00.112335", "name": "demo", "total_waves": 1, "total_nodes": 1, "type": "pipeline:started", "envelope": {"pipeline": "demo"}}
+{"timestamp": "2025-10-14T10:28:00.112427", "name": "nodeA", "wave_index": 1, "dependencies": [], "type": "node:started", "envelope": {"node": "nodeA", "wave": 1}}
+{"timestamp": "2025-10-14T10:30:42.994328", "name": "demo", "total_waves": 3, "total_nodes": 2, "type": "pipeline:started", "envelope": {"pipeline": "demo"}}
+{"timestamp": "2025-10-14T10:30:42.994643", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:42.994694", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:30:43.995838", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:43.996129", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:44.997635", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:44.998083", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:30:45.999341", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:45.999844", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:47.001605", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:47.002154", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:30:48.004159", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:48.004701", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:51.939241", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:51.939440", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:30:52.939951", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:52.940132", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:53.941147", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:53.941321", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:30:54.942888", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:54.943313", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:55.944568", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:55.944752", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:30:56.946025", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:56.946202", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:57.947361", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:30:57.947664", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:30:58.949179", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:58.949682", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:30:59.951346", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:30:59.951773", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:00.952845", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:00.953079", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:01.954488", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:01.954993", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:02.956338", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:02.956539", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:03.958122", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:03.958622", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:04.960453", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:04.960883", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:05.962432", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:05.963006", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:06.966818", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:06.967697", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:07.969196", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:07.969353", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:08.970502", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:08.971173", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:09.972447", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:09.972702", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:10.973633", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:10.973933", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:11.975016", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:11.975177", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:12.976487", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:12.976693", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:13.978115", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:13.978753", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:14.980132", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:14.980657", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:15.981811", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:15.982283", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:16.983890", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:16.984069", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:17.985527", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:17.985752", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:18.987113", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:18.987506", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:19.989221", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:19.990020", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:20.991279", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:20.991476", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:21.993340", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:21.993643", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:22.995048", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:22.995265", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:26.929887", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:26.930163", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:27.931260", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:27.931626", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:28.932650", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:28.932839", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:29.937108", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:29.937554", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:30.938679", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:30.938991", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:31.939833", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:31.939998", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:32.941075", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:32.941304", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:33.942171", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:33.942883", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:34.944022", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:34.944242", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:35.945117", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:35.945326", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:36.946435", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:36.946633", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:37.947413", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:37.947594", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:38.948841", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:38.949012", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:31:39.950191", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:39.950382", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:40.951388", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:40.951549", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:31:41.952415", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:41.952622", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:31:42.953682", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:31:42.953861", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:31:43.954523", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:31:43.954704", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:19.854102", "name": "demo", "total_waves": 3, "total_nodes": 2, "type": "pipeline:started", "envelope": {"pipeline": "demo"}}
+{"timestamp": "2025-10-14T10:50:19.854517", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:19.854557", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:50:20.855294", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:20.855459", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:21.856469", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:50:21.856565", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:50:22.857307", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:22.857404", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:23.858131", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:23.858237", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:50:24.858791", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:50:24.858969", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:50:25.859858", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:25.859963", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:50:26.860674", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:26.860959", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:27.862559", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:50:27.862840", "name": "A", "wave_index": 3, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 3}}
+{"timestamp": "2025-10-14T10:50:28.864142", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:28.864463", "wave_index": 1, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:29.865568", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:29.865789", "name": "A", "wave_index": 2, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 2}}
+{"timestamp": "2025-10-14T10:50:30.868471", "wave_index": 3, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:50:30.868648", "wave_index": 3, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 3}}
+{"timestamp": "2025-10-14T10:50:31.870256", "wave_index": 1, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 1}}
+{"timestamp": "2025-10-14T10:50:31.870733", "name": "A", "wave_index": 1, "dependencies": ["B"], "type": "node:started", "envelope": {"node": "A", "wave": 1}}
+{"timestamp": "2025-10-14T10:50:32.871795", "wave_index": 2, "nodes": ["A", "B"], "type": "wave:started", "envelope": {"wave": 2}}
+{"timestamp": "2025-10-14T10:50:32.872072", "wave_index": 2, "duration_ms": 123.0, "type": "wave:completed", "envelope": {"wave": 2}}
