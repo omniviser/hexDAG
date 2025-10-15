@@ -5,14 +5,17 @@ interface with all safety features including weak references, event filtering,
 concurrency control, and fault isolation.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import logging
 import uuid
 import weakref
-from collections.abc import Awaitable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from hexai.core.application.events.batching import (
     BatchingConfig,
@@ -20,7 +23,13 @@ from hexai.core.application.events.batching import (
     EventBatchEnvelope,
     EventBatcher,
 )
-from hexai.core.application.events.events import Event
+from hexai.core.application.events.decorators import (
+    EVENT_METADATA_ATTR,
+    EventDecoratorMetadata,
+    EventType,
+    EventTypesInput,
+    normalize_event_types,
+)
 from hexai.core.ports.observer_manager import (
     AsyncObserverFunc,
     Observer,
@@ -28,6 +37,11 @@ from hexai.core.ports.observer_manager import (
     ObserverManagerPort,
 )
 from hexai.core.registry import adapter
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Sequence
+
+    from hexai.core.application.events.events import Event
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +101,23 @@ DEFAULT_MAX_SYNC_WORKERS = 4
 DEFAULT_CLEANUP_INTERVAL = 0.1
 
 
+class ObserverRegistrationConfig(BaseModel):
+    """Validated configuration for observer registration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    observer_id: str | None = None
+    event_types: set[EventType] | None = None
+    timeout: float | None = Field(None, gt=0)
+    max_concurrency: int | None = Field(None, ge=1)
+    keep_alive: bool = False
+
+    @field_validator("event_types", mode="before")
+    @classmethod
+    def validate_event_types(cls, value: EventTypesInput) -> set[EventType] | None:
+        return normalize_event_types(value)
+
+
 @adapter(implements_port=ObserverManagerPort, namespace="core")
 class LocalObserverManager:
     """Local standalone implementation of observer manager.
@@ -99,6 +130,14 @@ class LocalObserverManager:
     - Timeout handling for slow observers
     - Thread pool for sync observers to avoid blocking
     """
+
+    @staticmethod
+    def _get_observer_metadata(handler: Any) -> EventDecoratorMetadata | None:
+        """Return observer metadata if present."""
+        metadata = getattr(handler, EVENT_METADATA_ATTR, None)
+        if isinstance(metadata, EventDecoratorMetadata) and metadata.kind == "observer":
+            return metadata
+        return None
 
     def __init__(
         self,
@@ -138,8 +177,10 @@ class LocalObserverManager:
         # Storage for observers (can be Observer or FunctionObserver)
         self._handlers: dict[str, Any] = {}
 
-        # Event type filtering
-        self._event_filters: dict[str, set[type] | None] = {}
+        # Event type filtering and per-observer config
+        self._event_filters: dict[str, set[EventType] | None] = {}
+        self._observer_timeouts: dict[str, float | None] = {}
+        self._observer_semaphores: dict[str, asyncio.Semaphore] = {}
 
         # Weak reference support
         if use_weak_refs:
@@ -171,56 +212,85 @@ class LocalObserverManager:
             # Normal strong reference when weak refs disabled
             self._handlers[observer_id] = observer
 
-    def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
-        """Register an observer with optional event type filtering.
+    def register(
+        self,
+        handler: Observer | ObserverFunc | AsyncObserverFunc,
+        *,
+        observer_id: str | None = None,
+        event_types: EventTypesInput = None,
+        timeout: float | None = None,
+        max_concurrency: int | None = None,
+        keep_alive: bool = False,
+    ) -> str:
+        """Register an observer with optional event type filtering."""
 
-        Args
-        ----
-            handler: Either an Observer protocol implementation or
-                    a function (sync/async) that takes an event
-            **kwargs: Can include:
-                - 'observer_id': Optional ID for the observer
-                - 'event_types': List of event types to observe (None = all events)
-                - 'keep_alive': Whether to keep strong reference (for weak-referenceable objects)
+        metadata = self._get_observer_metadata(handler)
 
-        Returns
-        -------
-            str: The ID of the registered observer
+        raw_event_types: EventTypesInput = (
+            event_types if event_types is not None else (metadata.event_types if metadata else None)
+        )
+        normalized_event_types = (
+            normalize_event_types(raw_event_types) if raw_event_types is not None else None
+        )
 
-        Raises
-        ------
-            TypeError: If handler is not callable or doesn't implement Observer protocol
-        """
-        observer_id = kwargs.get("observer_id", str(uuid.uuid4()))
-        event_types = kwargs.get("event_types")
+        config = ObserverRegistrationConfig(
+            observer_id=(
+                observer_id
+                if observer_id is not None
+                else (metadata.id if metadata and metadata.id else None)
+            ),
+            event_types=normalized_event_types,
+            timeout=(timeout if timeout is not None else (metadata.timeout if metadata else None)),
+            max_concurrency=(
+                max_concurrency
+                if max_concurrency is not None
+                else (metadata.max_concurrency if metadata else None)
+            ),
+            keep_alive=keep_alive,
+        )
 
-        # Wrap function if needed
+        resolved_id = config.observer_id or str(uuid.uuid4())
+
+        if resolved_id in self._event_filters:
+            raise ValueError(f"Observer '{resolved_id}' already registered")
+
+        if resolved_id in self._handlers:
+            raise ValueError(f"Observer '{resolved_id}' already registered")
+
+        if (
+            self._use_weak_refs
+            and hasattr(self, "_weak_handlers")
+            and resolved_id in self._weak_handlers
+        ):
+            raise ValueError(f"Observer '{resolved_id}' already registered")
+
+        keep_alive_flag = config.keep_alive
+
         if hasattr(handler, "handle"):
-            # Already implements Observer protocol
-            observer = handler
-            keep_alive = kwargs.get("keep_alive", False)
+            observer = cast("Observer", handler)
         elif callable(handler):
-            # Wrap function to implement the protocol
             observer = FunctionObserver(handler, self._executor)
-            # Functions need to be kept alive since they're wrapped
-            keep_alive = True
+            keep_alive_flag = True
         else:
             raise TypeError(
                 f"Observer must be callable or implement Observer protocol, got {type(handler)}"
             )
 
-        # Store the observer with appropriate reference type
-        self._store_observer(observer_id, observer, keep_alive)
+        self._store_observer(resolved_id, observer, keep_alive_flag)
 
-        # Store event type filter
-        if event_types is not None:
-            # Convert to set for O(1) lookup
-            self._event_filters[observer_id] = set(event_types)
+        self._event_filters[resolved_id] = config.event_types
+
+        if config.timeout is not None:
+            self._observer_timeouts[resolved_id] = config.timeout
         else:
-            # None means accept all events
-            self._event_filters[observer_id] = None
+            self._observer_timeouts.pop(resolved_id, None)
 
-        return str(observer_id)
+        if config.max_concurrency is not None:
+            self._observer_semaphores[resolved_id] = asyncio.Semaphore(config.max_concurrency)
+        else:
+            self._observer_semaphores.pop(resolved_id, None)
+
+        return resolved_id
 
     def unregister(self, handler_id: str) -> bool:
         """Unregister an observer by ID.
@@ -252,6 +322,9 @@ class LocalObserverManager:
         # Also remove event filter
         if handler_id in self._event_filters:
             del self._event_filters[handler_id]
+
+        self._observer_timeouts.pop(handler_id, None)
+        self._observer_semaphores.pop(handler_id, None)
 
         return found
 
@@ -293,6 +366,8 @@ class LocalObserverManager:
         """Remove all registered observers."""
         self._handlers.clear()
         self._event_filters.clear()
+        self._observer_timeouts.clear()
+        self._observer_semaphores.clear()
 
         if self._use_weak_refs:
             self._weak_handlers.clear()
@@ -336,7 +411,7 @@ class LocalObserverManager:
             return None
         return self._batcher.metrics
 
-    def __enter__(self) -> "LocalObserverManager":
+    def __enter__(self) -> LocalObserverManager:
         """Context manager entry.
 
         Returns
@@ -358,7 +433,7 @@ class LocalObserverManager:
             self._executor.shutdown(wait=True)
             self._executor_shutdown = True
 
-    async def __aenter__(self) -> "LocalObserverManager":
+    async def __aenter__(self) -> LocalObserverManager:
         """Async context manager entry.
 
         Returns
@@ -450,14 +525,22 @@ class LocalObserverManager:
     ) -> None:
         """Dispatch one or more events to an observer under concurrency control."""
 
-        _ = observer_id  # kept for potential future logging
+        per_observer_semaphore = self._observer_semaphores.get(observer_id)
 
-        async with self._semaphore:
+        async def _execute() -> None:
             if envelope is not None and self._supports_batch(observer):
-                await self._safe_invoke_batch(observer, envelope, events)
+                await self._safe_invoke_batch(observer_id, observer, envelope, events)
             else:
                 for event in events:
-                    await self._safe_invoke(observer, event)
+                    await self._safe_invoke(observer_id, observer, event)
+
+        if per_observer_semaphore is None:
+            async with self._semaphore:
+                await _execute()
+            return
+
+        async with self._semaphore, per_observer_semaphore:
+            await _execute()
 
     def _filter_events_for_observer(
         self, observer_id: str, events: Sequence[Event]
@@ -529,32 +612,31 @@ class LocalObserverManager:
         if event_filter is None:
             return True
 
-        # Check if event type is in the filter
-        return type(event) in event_filter
+        # Check if event type matches any allowed type (supports subclassing)
+        return isinstance(event, tuple(event_filter))
 
-    async def _safe_invoke(self, observer: Observer, event: Event) -> None:
+    async def _safe_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
         """Safely invoke an observer with timeout."""
+        timeout_value = self._observer_timeouts.get(observer_id, self._timeout)
         try:
-            # Apply timeout to individual observer
-            await asyncio.wait_for(
-                observer.handle(event),
-                timeout=self._timeout,
-            )
-        except TimeoutError as e:
+            if timeout_value is None:
+                await observer.handle(event)
+            else:
+                await asyncio.wait_for(observer.handle(event), timeout=timeout_value)
+        except TimeoutError as exc:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(
-                e,
+                exc,
                 {
                     "handler_name": name,
                     "event_type": type(event).__name__,
                     "is_critical": self._is_priority_event(event),
                 },
             )
-        except Exception as e:
-            # Get appropriate name for logging
+        except Exception as exc:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(
-                e,
+                exc,
                 {
                     "handler_name": name,
                     "event_type": type(event).__name__,
@@ -563,26 +645,37 @@ class LocalObserverManager:
             )
 
     async def _safe_invoke_batch(
-        self, observer: Observer, envelope: EventBatchEnvelope, events: Sequence[Event]
+        self,
+        observer_id: str,
+        observer: Observer,
+        envelope: EventBatchEnvelope,
+        events: Sequence[Event],
     ) -> None:
         """Safely invoke an observer's batch handler."""
 
         handler = getattr(observer, "handle_batch", None)
         if handler is None:
             for event in events:
-                await self._safe_invoke(observer, event)
+                await self._safe_invoke(observer_id, observer, event)
             return
 
+        timeout_value = self._observer_timeouts.get(observer_id, self._timeout)
+
+        loop = asyncio.get_running_loop()
+
         try:
-            result = handler(envelope)
-            if inspect.isawaitable(result):
-                await asyncio.wait_for(result, timeout=self._timeout)
+            if inspect.iscoroutinefunction(handler):
+                coroutine = handler(envelope)
+                if timeout_value is None:
+                    await coroutine
+                else:
+                    await asyncio.wait_for(coroutine, timeout=timeout_value)
             else:
-                loop = asyncio.get_running_loop()
-                await asyncio.wait_for(
-                    loop.run_in_executor(self._executor, lambda: result),
-                    timeout=self._timeout,
-                )
+                task = loop.run_in_executor(self._executor, handler, envelope)
+                if timeout_value is None:
+                    await task
+                else:
+                    await asyncio.wait_for(task, timeout=timeout_value)
         except TimeoutError as e:
             name = getattr(observer, "__name__", observer.__class__.__name__)
             self._error_handler.handle_error(

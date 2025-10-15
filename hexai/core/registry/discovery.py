@@ -38,7 +38,7 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
     Parameters
     ----------
     module : ModuleType
-        The module to scan for components.
+        Module object to scan for components.
 
     Returns
     -------
@@ -48,15 +48,16 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
     Raises
     ------
     TypeError
-        If module is not a ModuleType instance.
+        If ``module`` is not a :class:`types.ModuleType` instance.
     """
-    if not isinstance(module, ModuleType):
+
+    if not isinstance(module, ModuleType):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(
             f"Expected ModuleType, got {type(module).__name__}. "
             "Pass a module object, not a string or path."
         )
 
-    components = []
+    components: list[tuple[str, type | Callable | object]] = []
 
     for name in dir(module):
         if name.startswith("_"):

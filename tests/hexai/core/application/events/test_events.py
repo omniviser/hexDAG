@@ -1,7 +1,17 @@
-"""Tests for event data classes."""
+"""Tests for event data classes and decorator integrations."""
 
+import asyncio
 from datetime import datetime
+from typing import Any, cast
 
+import pytest
+
+from hexai.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexai.core.application.events.decorators import (
+    EVENT_METADATA_ATTR,
+    control_handler,
+    observer,
+)
 from hexai.core.application.events.events import (
     LLMPromptSent,
     LLMResponseReceived,
@@ -15,6 +25,7 @@ from hexai.core.application.events.events import (
     WaveCompleted,
     WaveStarted,
 )
+from hexai.core.application.policies.models import PolicyContext, PolicyResponse, PolicySignal
 
 
 class TestNodeEvents:
@@ -197,3 +208,145 @@ class TestEventComparison:
         assert hasattr(event, "result")
         assert hasattr(event, "duration_ms")
         assert hasattr(event, "timestamp")
+
+
+class RecordingErrorHandler:
+    """Error handler used to capture manager error calls in tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[Exception, dict[str, Any]]] = []
+
+    def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
+        self.calls.append((error, context))
+
+
+class TestDecoratorIntegrations:
+    """Tests covering function-level decorator metadata usage."""
+
+    def test_control_handler_metadata_used_by_policy_manager(self):
+        """Policy manager should respect decorator metadata when registering functions."""
+
+        events_seen: list[str] = []
+
+        @control_handler(
+            "retry_on_fail",
+            priority=10,
+            event_types={NodeFailed},
+            description="Retry when nodes fail",
+        )
+        def retry_policy(event, context) -> PolicyResponse:
+            events_seen.append(type(event).__name__)
+            return PolicyResponse(signal=PolicySignal.RETRY)
+
+        metadata = getattr(retry_policy, EVENT_METADATA_ATTR)
+        assert metadata.name == "retry_on_fail"
+        assert metadata.priority == 10
+        assert metadata.event_types == {NodeFailed}
+        assert metadata.description == "Retry when nodes fail"
+
+        manager = LocalPolicyManager()
+        subscription_id = manager.register(retry_policy)
+
+        policy = manager._subscriptions[subscription_id]
+        stored_metadata = manager._policy_metadata[policy]
+
+        assert stored_metadata["priority"] == 10
+        assert stored_metadata["name"] == "retry_on_fail"
+        assert stored_metadata["description"] == "Retry when nodes fail"
+        assert stored_metadata["event_types"] == {NodeFailed}
+        assert stored_metadata["keep_alive"] is True
+
+        context = PolicyContext(
+            event=NodeFailed(name="node", wave_index=0, error=RuntimeError("boom")),
+            dag_id="demo",
+        )
+        result = asyncio.run(policy.evaluate(context))
+
+        assert isinstance(result, PolicyResponse)
+        assert result.signal is PolicySignal.RETRY
+        assert events_seen == ["NodeFailed"]
+
+        assert manager.unsubscribe(subscription_id) is True
+
+    def test_control_handler_requires_policy_response_annotation(self):
+        """Registering a function without PolicyResponse return annotation fails."""
+
+        @control_handler("bad_return")
+        def bad_policy(event, context) -> str:
+            return "not-a-response"
+
+        manager = LocalPolicyManager()
+
+        with pytest.raises(TypeError):
+            manager.register(bad_policy)
+
+    def test_control_handler_runtime_must_return_policy_response(self):
+        """Function policies must return PolicyResponse instances at runtime."""
+
+        @control_handler("bad_runtime")
+        def bad_runtime(event, context) -> PolicyResponse:
+            return cast("PolicyResponse", "not-a-response")
+
+        manager = LocalPolicyManager()
+        subscription_id = manager.register(bad_runtime)
+        policy = manager._subscriptions[subscription_id]
+
+        context = PolicyContext(
+            event=NodeFailed(name="n", wave_index=0, error=RuntimeError()),
+            dag_id="demo",
+        )
+
+        with pytest.raises(TypeError):
+            asyncio.run(policy.evaluate(context))
+
+        assert manager.unsubscribe(subscription_id)
+
+    @pytest.mark.asyncio
+    async def test_observer_metadata_filters_and_respects_timeout(self):
+        """Observer manager should use decorator metadata for filtering and timeouts."""
+
+        events_seen: list[str] = []
+
+        @observer(event_types={NodeStarted}, timeout=0.01, max_concurrency=2, id="observer-1")
+        async def record_node_started(event) -> None:
+            events_seen.append(type(event).__name__)
+
+        error_handler = RecordingErrorHandler()
+        manager = LocalObserverManager(error_handler=error_handler, batching_enabled=False)
+
+        observer_id = manager.register(record_node_started)
+
+        assert observer_id == "observer-1"
+        assert manager._event_filters[observer_id] == {NodeStarted}
+        assert manager._observer_timeouts[observer_id] == 0.01
+        per_observer_semaphore = manager._observer_semaphores[observer_id]
+        assert isinstance(per_observer_semaphore, asyncio.Semaphore)
+        assert per_observer_semaphore._value == 2  # noqa: SLF001 - inspect concurrency budget
+
+        await manager.notify(NodeFailed(name="fail", wave_index=1, error=RuntimeError("x")))
+        await manager.notify(NodeStarted(name="start", wave_index=1))
+
+        assert events_seen == ["NodeStarted"]
+
+        @observer(event_types={NodeStarted}, timeout=0.01, id="slow-observer")
+        async def slow_observer(event) -> None:
+            await asyncio.sleep(0.05)
+
+        slow_id = manager.register(slow_observer)
+        assert slow_id == "slow-observer"
+
+        await manager.notify(NodeStarted(name="slow", wave_index=3))
+
+        assert events_seen == ["NodeStarted", "NodeStarted"]
+
+        assert any(isinstance(error, TimeoutError) for error, _ in error_handler.calls)
+        timeout_call = next(
+            (call for call in error_handler.calls if isinstance(call[0], TimeoutError)),
+            None,
+        )
+        assert timeout_call is not None
+        error, context = timeout_call
+        assert context["handler_name"] == "slow_observer"
+        assert context["event_type"] == "NodeStarted"
+
+        await manager.close()
