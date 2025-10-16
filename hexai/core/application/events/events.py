@@ -416,3 +416,82 @@ class PolicyRetry(Event):
             f"🔁 Policy '{self.policy_name}' retrying node "
             f"'{self.node_name}'{attempt_info}{delay_info}"
         )
+
+
+# Lifecycle instrumentation events
+@dataclass
+class LifecycleEvent(Event):
+    """Base instrumentation event emitted by @emits_events."""
+
+    component_type: str
+    component_name: str | None
+    function_name: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] | None = None
+    duration_ms: float | None = None
+    result: Any | None = None
+    error: str | None = None
+    exception_type: str | None = None
+    phase: str = field(init=False)
+    event_type_override: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Populate derived fields after initialization."""
+        # Ensure phase is provided by subclasses
+        if not getattr(self, "phase", None):
+            raise ValueError("LifecycleEvent subclasses must define a phase value")
+        self.event_type_override = f"{self.component_type}:{self.phase}"
+
+    def log_message(self, log_level: int = logging.INFO) -> str:
+        """Basic log message describing the lifecycle transition."""
+        _ = log_level
+        component = self.component_name or "unknown"
+        return f"{self.component_type} '{component}' {self.phase}"
+
+
+@dataclass
+class LifecycleEventStarted(LifecycleEvent):
+    """Lifecycle event emitted when an instrumented function starts."""
+
+    phase: str = field(init=False, default="started")
+
+
+@dataclass
+class LifecycleEventCompleted(LifecycleEvent):
+    """Lifecycle event emitted when an instrumented function completes."""
+
+    phase: str = field(init=False, default="completed")
+
+
+@dataclass
+class LifecycleEventFailed(LifecycleEvent):
+    """Lifecycle event emitted when an instrumented function fails."""
+
+    phase: str = field(init=False, default="failed")
+
+
+# Register lifecycle events in registry metadata
+EVENT_REGISTRY.update({
+    "LifecycleEventStarted": EventSpec(
+        "component:started",
+        {"component": "component_name", "function": "function_name"},
+        ("component_type", "metadata", "payload"),
+    ),
+    "LifecycleEventCompleted": EventSpec(
+        "component:completed",
+        {"component": "component_name", "function": "function_name"},
+        ("component_type", "metadata", "payload", "duration_ms", "result"),
+    ),
+    "LifecycleEventFailed": EventSpec(
+        "component:failed",
+        {"component": "component_name", "function": "function_name"},
+        (
+            "component_type",
+            "metadata",
+            "payload",
+            "duration_ms",
+            "error",
+            "exception_type",
+        ),
+    ),
+})

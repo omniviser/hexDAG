@@ -29,6 +29,7 @@ APPROVED_ACTIONS: dict[str, set[str]] = {
     "llm": {"prompt", "response"},
     "port": set(),
     "memory": set(),
+    "component": {"started", "completed", "failed"},
 }
 
 
@@ -177,13 +178,15 @@ def build_envelope(event: Event, context: EventContext) -> dict[str, Any]:
     except KeyError as exc:
         raise KeyError(f"unmapped event class: {class_name}") from exc
 
+    event_type_value = getattr(event, "event_type_override", spec.event_type)
+
     payload: dict[str, Any] = {
-        "event_type": spec.event_type,
+        "event_type": event_type_value,
         "event_id": generate_event_id(getattr(event, "event_id", None)),
         "timestamp": _now_rfc3339_ms(),
         "pipeline": context.pipeline,
         "pipeline_run_id": context.pipeline_run_id,
-        "severity": _infer_severity(spec.event_type).value,
+        "severity": _infer_severity(event_type_value).value,
         "attrs": {},
     }
 

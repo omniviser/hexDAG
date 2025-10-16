@@ -28,6 +28,7 @@ from .events import (
     WaveCompleted,
     WaveStarted,
 )
+from .events.context import reset_observer_manager, set_observer_manager
 from .policies.models import PolicyContext, PolicyResponse, PolicySignal
 from .ports_builder import PortsBuilder
 
@@ -248,53 +249,61 @@ class Orchestrator:
         policy_response = await self._evaluate_policy(policy_manager, event, context)
         self._check_policy_signal(policy_response, "Pipeline start")
 
-        for wave_idx, wave in enumerate(waves, 1):
-            wave_start_time = time.time()
+        token = None
+        if observer_manager is not None:
+            token = set_observer_manager(observer_manager)
 
-            # Fire wave started event and check control
-            wave_event = WaveStarted(
-                wave_index=wave_idx,
-                nodes=wave,
+        try:
+            for wave_idx, wave in enumerate(waves, 1):
+                wave_start_time = time.time()
+
+                # Fire wave started event and check control
+                wave_event = WaveStarted(
+                    wave_index=wave_idx,
+                    nodes=wave,
+                )
+                await self._notify_observer(observer_manager, wave_event)
+
+                # Evaluate policy for wave
+                wave_response = await self._evaluate_policy(
+                    policy_manager, wave_event, context, wave_index=wave_idx
+                )
+                self._check_policy_signal(wave_response, f"Wave {wave_idx}")
+
+                wave_results = await self._execute_wave(
+                    wave,
+                    graph,
+                    node_results,
+                    initial_input,
+                    all_ports,
+                    context=context,
+                    observer_manager=observer_manager,
+                    policy_manager=policy_manager,
+                    wave_index=wave_idx,
+                    validate=validate,
+                    **kwargs,
+                )
+                node_results.update(wave_results)
+
+                # Fire wave completed event (observation only)
+                wave_completed = WaveCompleted(
+                    wave_index=wave_idx,
+                    duration_ms=(time.time() - wave_start_time) * 1000,
+                )
+                await self._notify_observer(observer_manager, wave_completed)
+
+            # Fire pipeline completed event (observation only)
+            pipeline_completed = PipelineCompleted(
+                name=pipeline_name,
+                duration_ms=(time.time() - pipeline_start_time) * 1000,
+                node_results=node_results,
             )
-            await self._notify_observer(observer_manager, wave_event)
+            await self._notify_observer(observer_manager, pipeline_completed)
 
-            # Evaluate policy for wave
-            wave_response = await self._evaluate_policy(
-                policy_manager, wave_event, context, wave_index=wave_idx
-            )
-            self._check_policy_signal(wave_response, f"Wave {wave_idx}")
-
-            wave_results = await self._execute_wave(
-                wave,
-                graph,
-                node_results,
-                initial_input,
-                all_ports,
-                context=context,
-                observer_manager=observer_manager,
-                policy_manager=policy_manager,
-                wave_index=wave_idx,
-                validate=validate,
-                **kwargs,
-            )
-            node_results.update(wave_results)
-
-            # Fire wave completed event (observation only)
-            wave_completed = WaveCompleted(
-                wave_index=wave_idx,
-                duration_ms=(time.time() - wave_start_time) * 1000,
-            )
-            await self._notify_observer(observer_manager, wave_completed)
-
-        # Fire pipeline completed event (observation only)
-        pipeline_completed = PipelineCompleted(
-            name=pipeline_name,
-            duration_ms=(time.time() - pipeline_start_time) * 1000,
-            node_results=node_results,
-        )
-        await self._notify_observer(observer_manager, pipeline_completed)
-
-        return node_results
+            return node_results
+        finally:
+            if token is not None:
+                reset_observer_manager(token)
 
     async def _execute_wave(
         self,

@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import cast
 
-from .events import Event, NodeFailed, PipelineCompleted
+from .events import Event, LifecycleEventFailed, NodeFailed, PipelineCompleted
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +50,11 @@ class BatchingConfig:
     max_batch_window_ms: float = 50.0
     max_buffer_events: int = 4096
     overload_policy: OverloadPolicy = OverloadPolicy.DROP_OLDEST
-    priority_event_types: tuple[type[Event], ...] = (NodeFailed, PipelineCompleted)
+    priority_event_types: tuple[type[Event], ...] = (
+        NodeFailed,
+        PipelineCompleted,
+        LifecycleEventFailed,
+    )
 
 
 @dataclass(slots=True)

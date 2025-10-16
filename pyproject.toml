@@ -111,7 +111,7 @@ dev = [
     "radon>=6.0.1",
     "twine>=6.1.0",
 ]
-  
+
 docs = [
     "sphinx==7.2.6",
     "sphinx-rtd-theme==3.0.2",

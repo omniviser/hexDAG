@@ -3,8 +3,9 @@
 
 import argparse
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -22,16 +23,27 @@ def find_project_root() -> Path:
 PROJECT_ROOT = find_project_root()
 
 
+def _run_sphinx(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    """Execute sphinx-build with a trusted executable path."""
+    sphinx_executable = shutil.which("sphinx-build")
+    if sphinx_executable is None:
+        raise FileNotFoundError(
+            "sphinx-build executable not found. Install Sphinx to build documentation."
+        )
+    return subprocess.run(  # nosec B603
+        [sphinx_executable, *args],
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+        check=False,
+    )
+
+
 def build_docs() -> int:
     """Build the documentation."""
     source_dir = PROJECT_ROOT / "docs" / "source"
     build_dir = PROJECT_ROOT / "docs" / "build" / "html"
-    result = subprocess.run(
-        ["sphinx-build", "-b", "html", str(source_dir), str(build_dir)],
-        capture_output=True,
-        text=True,
-        cwd=PROJECT_ROOT,
-    )
+    result = _run_sphinx(["-b", "html", str(source_dir), str(build_dir)])
     print(result.stdout)
     if result.stderr:
         print(result.stderr, file=sys.stderr)
@@ -59,12 +71,7 @@ def check_docs() -> int:
     """Build docs with warnings as errors."""
     source_dir = PROJECT_ROOT / "docs" / "source"
     build_dir = PROJECT_ROOT / "docs" / "build" / "html"
-    result = subprocess.run(
-        ["sphinx-build", "-W", "-b", "html", str(source_dir), str(build_dir)],
-        capture_output=True,
-        text=True,
-        cwd=PROJECT_ROOT,
-    )
+    result = _run_sphinx(["-W", "-b", "html", str(source_dir), str(build_dir)])
     print(result.stdout)
     if result.stderr:
         print(result.stderr, file=sys.stderr)

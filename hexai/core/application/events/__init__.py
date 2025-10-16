@@ -8,6 +8,9 @@ Clean, simplified event system with clear separation of concerns:
 from .events import (
     EVENT_REGISTRY,
     Event,
+    LifecycleEventCompleted,
+    LifecycleEventFailed,
+    LifecycleEventStarted,
     LLMPromptSent,
     LLMResponseReceived,
     NodeCompleted,
@@ -45,5 +48,8 @@ __all__ = [
     "PolicySkipped",
     "PolicyFallback",
     "PolicyRetry",
+    "LifecycleEventStarted",
+    "LifecycleEventCompleted",
+    "LifecycleEventFailed",
     "EVENT_REGISTRY",
 ]

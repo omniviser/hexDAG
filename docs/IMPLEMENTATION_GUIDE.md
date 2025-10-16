@@ -207,6 +207,32 @@ manager.register(log_node_started)
 
 The `observer` decorator does not auto-register the function. Use `ObserverManager.register`, and opt in to filtering with `event_types`, timeouts with `timeout=None` for no limit, or set per-observer concurrency via `max_concurrency`.
 
+### 3. Automatic Lifecycle Events
+
+Use `@emits_events` to instrument functions with start/completed/failed events without hand-written boilerplate. The decorator inspects existing metadata (registry decorators, function decorators, method names) to determine the component type and name, and it sends events through the active `ObserverManager` stored in context.
+
+```python
+from hexai.core.application.events.context import set_observer_manager, reset_observer_manager
+from hexai.core.application.events.decorators import emits_events
+from hexai.adapters.local import LocalObserverManager
+
+observer_manager = LocalObserverManager()
+token = set_observer_manager(observer_manager)
+try:
+
+    @emits_events(include_args=("node_id",), include_result=True)
+    async def execute_node(node_id: str) -> str:
+        return f"node:{node_id}"
+
+    await execute_node("planner")
+finally:
+    reset_observer_manager(token)
+```
+
+* Component information is inferred automatically (`node`, `policy`, `observer`, `adapter`, or `function`).
+* `include_args` captures a safe subset of arguments, `include_result=True` opt-in collects return values, and `arg_transformer` lets you build custom payloads.
+* Failures automatically emit a priority event that bypasses batching so alerts arrive immediately.
+
 The framework integrates deeply with Pydantic for automatic validation, schema inference, and type safety.
 
 **Essential Type Safety Example:**
