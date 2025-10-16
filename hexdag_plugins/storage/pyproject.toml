@@ -1,0 +1,68 @@
+[project]
+name = "hexdag-storage"
+version = "0.1.0"
+description = "Storage infrastructure for hexDAG - SQL, vector stores, and file storage"
+authors = [{name = "hexDAG Team"}]
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+# SQL databases
+postgresql = ["asyncpg", "pgvector"]
+mysql = ["aiomysql"]
+sqlite = ["aiosqlite"]
+
+# Vector stores
+pgvector = ["asyncpg", "pgvector"]
+chromadb = ["chromadb"]
+
+# File storage (cloud providers - future)
+s3 = ["aioboto3"]
+azure = ["azure-storage-blob"]
+gcs = ["google-cloud-storage"]
+
+# Development
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+
+# All optional dependencies
+all = [
+    "asyncpg",
+    "pgvector",
+    "aiomysql",
+    "aiosqlite",
+    "chromadb",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = ".."}
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["hexdag_plugins.storage*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]

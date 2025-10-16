@@ -136,6 +136,7 @@ modules = [
 # Default plugins - mock and local adapters for testing and development
 plugins = [
     "hexdag.builtin.adapters.local",  # Local in-process implementations
+    "hexdag_plugins.rag_plugin",      # RAG plugin (document processing, vector stores)
 ]
 
 # Development mode enabled by default

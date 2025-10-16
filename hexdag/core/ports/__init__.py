@@ -7,6 +7,7 @@ from hexdag.core.ports.executor import (
     ExecutionTask,
     ExecutorPort,
 )
+from hexdag.core.ports.file_storage import FileStoragePort
 from hexdag.core.ports.healthcheck import HealthStatus
 from hexdag.core.ports.llm import LLM
 from hexdag.core.ports.memory import Memory
@@ -21,6 +22,7 @@ __all__ = [
     "ExecutionResult",
     "ExecutionTask",
     "ExecutorPort",
+    "FileStoragePort",
     "HealthStatus",
     "LLM",
     "Memory",
