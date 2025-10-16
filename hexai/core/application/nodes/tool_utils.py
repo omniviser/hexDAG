@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from hexai.core.validation.secure_json import SafeJSON
+
 
 class ToolCallFormat(Enum):
     """Tool calling formats supported by INVOKE_TOOL: prefix."""
@@ -156,7 +158,7 @@ class ToolParser:
         for match in cls.INVOKE_TOOL_JSON_PATTERN.finditer(text):
             try:
                 json_str = match.group(1)
-                data = json.loads(json_str)
+                data = SafeJSON().loads(json_str)
 
                 # Check if it's a tool call
                 if isinstance(data, dict) and "tool" in data:

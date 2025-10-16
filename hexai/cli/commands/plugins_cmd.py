@@ -101,9 +101,9 @@ def install_plugin(
         help="Plugin name or extra to install (e.g., 'openai', 'viz')",
     ),
     use_uv: bool = typer.Option(
-        None,
+        True,
         "--uv/--pip",
-        help="Force use of uv or pip (auto-detects by default)",
+        help="Prefer uv when available; use --pip to force pip",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -143,9 +143,9 @@ def install_plugin(
 
     # Determine which package manager to use
     has_uv = shutil.which("uv") is not None
-    use_uv_final = use_uv if use_uv is not None else has_uv
+    use_uv_final = use_uv and has_uv
 
-    if use_uv_final and not has_uv:
+    if use_uv and not has_uv:
         console.print("[yellow]Warning: uv requested but not found. Using pip instead.[/yellow]")
         use_uv_final = False
 

@@ -12,8 +12,13 @@ from typing import Any
 
 from hexai.core.config.models import HexDAGConfig, ManifestEntry
 
+TOML_IMPORT_MESSAGE = (
+    "TOML support requires 'tomli' for Python < 3.11. Install with: pip install tomli"
+)
+
+
 # Type alias for configuration data that can be recursively substituted
-type ConfigData = str | dict[str, ConfigData] | list[ConfigData] | int | float | bool | None
+ConfigData = str | dict[str, "ConfigData"] | list["ConfigData"] | int | float | bool | None
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +36,10 @@ class ConfigLoader:
     ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
     def __init__(self) -> None:
-        """Initialize the config loader.
+        """Initialize the config loader."""
 
-        Raises
-        ------
-        ImportError
-            If tomllib is not available
-        """
         if tomllib is None:
-            raise ImportError(
-                "TOML support requires 'tomli' for Python < 3.11. Install with: pip install tomli"
-            )
+            raise ImportError(TOML_IMPORT_MESSAGE)
 
     def load_from_toml(self, path: str | Path | None = None) -> HexDAGConfig:
         """Load configuration from TOML file.

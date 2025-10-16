@@ -1,4 +1,4 @@
-"""Simple event data classes - just data, no behavior."""
+"""Simple event data classes and registry metadata."""
 
 from __future__ import annotations
 
@@ -6,6 +6,15 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+
+@dataclass(frozen=True)
+class EventSpec:
+    """Specification defining taxonomy metadata for an event class."""
+
+    event_type: str
+    envelope_fields: dict[str, str]
+    attr_fields: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -30,6 +39,65 @@ class Event:
         """
         _ = log_level  # Mark as intentionally unused in base class
         return f"{self.__class__.__name__} at {self.timestamp.isoformat()}"
+
+
+EVENT_REGISTRY: dict[str, EventSpec] = {
+    "PipelineStarted": EventSpec(
+        "pipeline:started",
+        {"pipeline": "name"},
+        ("total_waves", "total_nodes"),
+    ),
+    "PipelineCompleted": EventSpec(
+        "pipeline:completed",
+        {"pipeline": "name"},
+        ("duration_ms", "node_results"),
+    ),
+    "NodeStarted": EventSpec(
+        "node:started",
+        {"node": "name", "wave": "wave_index"},
+        ("dependencies",),
+    ),
+    "NodeCompleted": EventSpec(
+        "node:completed",
+        {"node": "name", "wave": "wave_index"},
+        ("result", "duration_ms"),
+    ),
+    "NodeFailed": EventSpec(
+        "node:failed",
+        {"node": "name", "wave": "wave_index"},
+        ("error",),
+    ),
+    "WaveStarted": EventSpec(
+        "wave:started",
+        {"wave": "wave_index"},
+        ("nodes",),
+    ),
+    "WaveCompleted": EventSpec(
+        "wave:completed",
+        {"wave": "wave_index"},
+        ("duration_ms",),
+    ),
+    "LLMPromptSent": EventSpec(
+        "llm:prompt",
+        {"node": "node_name"},
+        ("messages",),
+    ),
+    "LLMResponseReceived": EventSpec(
+        "llm:response",
+        {"node": "node_name"},
+        ("response", "duration_ms"),
+    ),
+    "ToolCalled": EventSpec(
+        "tool:called",
+        {"node": "node_name"},
+        ("tool_name", "params"),
+    ),
+    "ToolCompleted": EventSpec(
+        "tool:completed",
+        {"node": "node_name"},
+        ("tool_name", "result", "duration_ms"),
+    ),
+}
 
 
 # Node events

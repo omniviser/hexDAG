@@ -20,7 +20,7 @@ _LAZY_MAP: dict[str, tuple[str, str]] = {
     ),
 }
 
-__all__ = list(_LAZY_MAP.keys())
+__all__: tuple[str, ...] = tuple(_LAZY_MAP)
 
 
 def __getattr__(name: str) -> Any:

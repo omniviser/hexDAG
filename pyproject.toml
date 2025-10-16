@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
 authors = [{ name = "hexDAG Team" }]
 requires-python = "~=3.12.0"
@@ -25,6 +25,8 @@ classifiers = [
 dependencies = [
     "pydantic~=2.0",
     "deepdiff>=8.6.1,<9.0.0",
+    "orjson>=3.10.0",
+    "commitizen>=4.8.3",
 ]
 [project.optional-dependencies]
 yaml = [
@@ -39,11 +41,15 @@ openai = [
 anthropic = [
     "anthropic>=0.25.0",  # Anthropic Claude LLM adapter
 ]
+sqlalchemy = [
+    "sqlalchemy>=2.0,<3.0",  # SQLAlchemy adapter
+]
 all = [
     "pyyaml~=6.0",  # YAML support
     "graphviz>=0.20.0,<0.21",  # Visualization
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
+    "sqlalchemy>=2.0,<3.0",  # SQLAlchemy adapter
 ]
 
 [project.urls]
@@ -53,6 +59,14 @@ Documentation = "https://dev.azure.com/omniviser/hexDAG"
 
 [project.scripts]
 hexdag = "hexai.cli:main"
+# Documentation commands (inline Python)
+docs-build = "scripts.docs:build"
+docs-clean = "scripts.docs:clean"
+docs-rebuild = "scripts.docs:rebuild"
+docs-check = "scripts.docs:check"
+docs-autobuild = "scripts.docs:autobuild"
+run-check-examples = "scripts.check_examples:main"
+run-check-tests = "scripts.check_test_structure:main"
 
 [dependency-groups]
 dev = [
@@ -96,7 +110,14 @@ dev = [
     "vulture>=2.11",
     "radon>=6.0.1",
     "twine>=6.1.0",
+]
 
+docs = [
+    "sphinx==7.2.6",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinx-autodoc-typehints==2.0.0",
+    "pydocstyle==6.3.0",
+    "doc8==2.0.0"
 ]
 
 
@@ -174,15 +195,20 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-exclude = ["tests/", "examples/"]
 disable_error_code = ["import-untyped"]
+exclude = [
+    "tests/",
+    "scripts/",
+    "examples/",
+    "docs/"
+]
 
 [[tool.mypy.overrides]]
 module = ["tests.*", "hexai_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["openai", "anthropic", "graphviz"]
+module = ["openai", "anthropic", "graphviz", "orjson"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -221,7 +247,7 @@ reportUndefinedVariable = true
 reportIncompatibleMethodOverride = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples", "hexai_plugins"]
+exclude_dirs = ["tests", "examples", "docs", "scripts", "hexai_plugins"]
 skips = ["B101", "B601"]
 
 [tool.ruff]
@@ -296,12 +322,15 @@ convention = "numpy"
 known-first-party = ["hexai"]
 
 [tool.commitizen]
-name = "cz_conventional_commits"
-version = "0.1.0"
-tag_format = "v$version"
-version_files = [
-    "pyproject.toml:version"
-]
+name = "cz_customize"
+version = "0.2.0"
+version_files = ["pyproject.toml:^version"]
+bump_message = "release $current_version -> $new_version [skip ci]"
+changelog_file = "CHANGELOG.md"
+
+[tool.commitizen.customize]
+bump_pattern = '^(?:Merged PR \d+:) (ci!?|docs!?|experiment!?|feat!?|fix!?|refactor!?|test!?)'
+bump_map = { ".*!" = "MAJOR", "ci" = "PATCH", "docs" = "PATCH", "experiment" = "PATCH", "feat" = "MINOR", "fix" = "PATCH", "refactor" = "PATCH", "test" = "PATCH" }
 
 [tool.vulture]
 min_confidence = 90
