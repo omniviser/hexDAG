@@ -7,12 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from pydantic import Field
 
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexdag.core.logging import get_logger
 from hexdag.core.registry.decorators import adapter
-from hexdag.core.types import TimeoutSeconds
 from hexdag.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
@@ -23,37 +20,13 @@ logger = get_logger(__name__)
     implements_port="database",
     description="Async SQLite database adapter for SQL query execution and schema introspection",
 )
-class SQLiteAdapter(ConfigurableAdapter):
+class SQLiteAdapter:
     """Async SQLite adapter for database port.
 
     Provides a lightweight, file-based database solution that implements
     the DatabasePort interface for SQL execution and schema introspection.
     All operations are fully async using aiosqlite.
     """
-
-    # Configuration schema for TOML generation
-    class Config(AdapterConfig):
-        """Configuration schema for SQLite adapter."""
-
-        db_path: str = Field(
-            default="hexdag.db",
-            description="Path to SQLite database file (use ':memory:' for in-memory)",
-        )
-        check_same_thread: bool = Field(
-            default=False,
-            description="SQLite check_same_thread parameter (False for async compatibility)",
-        )
-        timeout: TimeoutSeconds = 5.0
-        journal_mode: str = Field(
-            default="WAL", description="Journal mode (WAL for better concurrency)"
-        )
-        foreign_keys: bool = True
-        read_only: bool = Field(
-            default=False, description="Open database in read-only mode (prevents modifications)"
-        )
-
-    # Type hint for mypy to understand self.config has Config fields
-    config: Config
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize SQLite adapter.
@@ -62,16 +35,14 @@ class SQLiteAdapter(ConfigurableAdapter):
         ----
             **kwargs: Configuration options (db_path, timeout, etc.)
         """
-        # Initialize config (accessible via self.config.field_name)
-        super().__init__(**kwargs)
-        self.db_path = (
-            Path(self.config.db_path) if self.config.db_path != ":memory:" else self.config.db_path
-        )
-        self.check_same_thread = self.config.check_same_thread
-        self.timeout = self.config.timeout
-        self.journal_mode = self.config.journal_mode
-        self.foreign_keys = self.config.foreign_keys
-        self.read_only = self.config.read_only
+        # Store configuration
+        db_path = kwargs.get("db_path", ":memory:")
+        self.db_path = Path(db_path) if db_path != ":memory:" else db_path
+        self.check_same_thread = kwargs.get("check_same_thread", False)
+        self.timeout = kwargs.get("timeout", 5.0)
+        self.journal_mode = kwargs.get("journal_mode", "WAL")
+        self.foreign_keys = kwargs.get("foreign_keys", True)
+        self.read_only = kwargs.get("read_only", False)
 
         self.connection: aiosqlite.Connection | None = None
 

@@ -31,7 +31,6 @@ class TestMainApp:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         assert "init" in result.stdout
-        assert "config" in result.stdout
         assert "plugins" in result.stdout
         assert "plugin" in result.stdout
         assert "registry" in result.stdout

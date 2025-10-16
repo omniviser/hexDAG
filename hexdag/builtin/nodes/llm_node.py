@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from hexdag.core.configurable import ConfigurableNode
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.prompt import PromptInput
 from hexdag.core.registry import node
@@ -14,7 +13,7 @@ from .base_llm_node import BaseLLMNode
 
 
 @node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core", required_ports=["llm"])
-class LLMNode(BaseLLMNode, ConfigurableNode):
+class LLMNode(BaseLLMNode):
     """Simple factory for creating LLM-based nodes with rich template support.
 
     Inherits all common LLM functionality from BaseLLMNode. LLM nodes are highly dynamic -

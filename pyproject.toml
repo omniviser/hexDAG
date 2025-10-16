@@ -44,6 +44,31 @@ anthropic = [
 database = [
     "aiosqlite>=0.19.0",  # Async SQLite database adapter
 ]
+# Storage plugin extras (bundled with main package)
+storage-postgresql = [
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.3.0",
+]
+storage-mysql = [
+    "sqlalchemy>=2.0.0",
+    "aiomysql>=0.2.0",
+]
+storage-sqlite = [
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.20.0",
+]
+storage-chromadb = [
+    "chromadb>=0.4.0",
+]
+storage-all = [
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.3.0",
+    "aiomysql>=0.2.0",
+    "aiosqlite>=0.20.0",
+    "chromadb>=0.4.0",
+]
 docs = [
     "mkdocs>=1.6.0",  # Documentation site generator
     "mkdocs-material>=9.6.0",  # Material theme for MkDocs
@@ -55,6 +80,11 @@ all = [
     "openai>=1.0.0",  # OpenAI adapter
     "anthropic>=0.25.0",  # Anthropic adapter
     "aiosqlite>=0.19.0",  # Async SQLite adapter
+    "sqlalchemy>=2.0.0",  # Storage plugin - SQL base
+    "asyncpg>=0.29.0",  # Storage plugin - PostgreSQL
+    "pgvector>=0.3.0",  # Storage plugin - pgvector
+    "aiomysql>=0.2.0",  # Storage plugin - MySQL
+    "chromadb>=0.4.0",  # Storage plugin - ChromaDB
 ]
 
 [project.urls]
@@ -119,10 +149,10 @@ dev = [
 
 
 [tool.hatch.build.targets.sdist]
-include = ["hexdag"]
+packages = ["hexdag", "hexdag_plugins"]
 
 [tool.hatch.build.targets.wheel]
-include = ["hexdag"]
+packages = ["hexdag", "hexdag_plugins"]
 
 [tool.hexdag]
 # Core modules to load - these are the essential framework components

@@ -2,9 +2,6 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from hexdag.core.configurable import ConfigurableAdapter
 from hexdag.core.ports.tool_router import ToolRouter
 from hexdag.core.registry import adapter
 
@@ -15,7 +12,7 @@ from hexdag.core.registry import adapter
     namespace="plugin",
     description="Simple mock tool adapter with predefined responses",
 )
-class MockToolAdapter(ToolRouter, ConfigurableAdapter):
+class MockToolAdapter(ToolRouter):
     """Mock tool adapter that returns predefined responses.
 
     This is a simpler alternative to MockToolRouter, designed for
@@ -32,19 +29,11 @@ class MockToolAdapter(ToolRouter, ConfigurableAdapter):
         }
     """
 
-    # Configuration schema for TOML generation
-    class Config(BaseModel):
-        model_config = ConfigDict(frozen=True)
-
-        """Configuration schema for Mock Tool Adapter."""
-
-        default_response: Any = Field(
-            default=None, description="Default response for unmapped tools"
-        )
-        raise_on_unknown: bool = Field(default=False, description="Raise error for unknown tools")
-
-    # Type hint for mypy to understand self.config has Config fields
-    config: Config
+    # Type annotations for attributes
+    default_response: Any | None
+    raise_on_unknown: bool
+    mock_responses: dict[str, Any]
+    call_history: list[dict[str, Any]]
 
     def __init__(
         self,
@@ -58,10 +47,9 @@ class MockToolAdapter(ToolRouter, ConfigurableAdapter):
             mock_responses: Dictionary mapping tool names to their predefined responses.
             **kwargs: Configuration options (default_response, raise_on_unknown)
         """
-        # Initialize config (accessible via self.config.field_name)
-        ConfigurableAdapter.__init__(self, **kwargs)
-
-        # Store configuration and custom parameters
+        # Store configuration
+        self.default_response = kwargs.get("default_response")
+        self.raise_on_unknown = kwargs.get("raise_on_unknown", False)
         self.mock_responses = mock_responses or {}
 
         # Track call history for testing
@@ -98,13 +86,13 @@ class MockToolAdapter(ToolRouter, ConfigurableAdapter):
             return response
 
         # Handle unknown tools
-        if self.config.raise_on_unknown:
+        if self.raise_on_unknown:
             available = ", ".join(self.mock_responses.keys())
             raise ValueError(f"Unknown tool: '{tool_name}'. Available tools: {available or 'none'}")
 
         # Return default response
-        if self.config.default_response is not None:
-            return self.config.default_response
+        if self.default_response is not None:
+            return self.default_response
 
         return {
             "status": "success",

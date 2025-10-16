@@ -3,30 +3,17 @@
 import asyncio
 from typing import Any
 
-from pydantic import Field
-
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexdag.core.ports.database import DatabasePort
 from hexdag.core.registry import adapter
 
 
 @adapter(name="mock_database", implements_port="database", namespace="plugin")
-class MockDatabaseAdapter(DatabasePort, ConfigurableAdapter):
+class MockDatabaseAdapter(DatabasePort):
     """Mock implementation of DatabasePort for testing and demos."""
 
-    # Configuration schema for TOML generation
-    class Config(AdapterConfig):
-        """Configuration schema for Mock Database adapter."""
-
-        enable_sample_data: bool = Field(
-            default=True, description="Whether to initialize with sample database schema"
-        )
-        delay_seconds: float = Field(
-            default=0.0, ge=0.0, description="Artificial delay to simulate database query latency"
-        )
-
-    # Type hint for mypy to understand self.config has Config fields
-    config: Config
+    # Type annotations for attributes
+    enable_sample_data: bool
+    delay_seconds: float
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize with configuration.
@@ -35,10 +22,11 @@ class MockDatabaseAdapter(DatabasePort, ConfigurableAdapter):
         ----
             **kwargs: Configuration options (enable_sample_data, delay_seconds)
         """
-        # Initialize config (accessible via self.config.field_name)
-        ConfigurableAdapter.__init__(self, **kwargs)
+        # Store configuration
+        self.enable_sample_data = kwargs.get("enable_sample_data", True)
+        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
 
-        if not self.config.enable_sample_data:
+        if not self.enable_sample_data:
             self._table_schemas: dict[str, dict[str, Any]] = {}
             self._relationships: list[dict[str, Any]] = []
             self._indexes: list[dict[str, Any]] = []
@@ -196,16 +184,16 @@ class MockDatabaseAdapter(DatabasePort, ConfigurableAdapter):
     # Required methods from DatabasePort
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables."""
-        if self.config.delay_seconds > 0:
-            await asyncio.sleep(self.config.delay_seconds)
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._table_schemas.copy()
 
     async def aexecute_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Execute a SQL query and return results."""
-        if self.config.delay_seconds > 0:
-            await asyncio.sleep(self.config.delay_seconds)
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
 
         # Mock implementation - returns sample data based on query keywords
         if "customers" in query.lower():
@@ -223,18 +211,18 @@ class MockDatabaseAdapter(DatabasePort, ConfigurableAdapter):
     # Optional methods from DatabasePort
     async def aget_relationships(self) -> list[dict[str, Any]]:
         """Get foreign key relationships between tables."""
-        if self.config.delay_seconds > 0:
-            await asyncio.sleep(self.config.delay_seconds)
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._relationships.copy()
 
     async def aget_indexes(self) -> list[dict[str, Any]]:
         """Get index information for performance optimization."""
-        if self.config.delay_seconds > 0:
-            await asyncio.sleep(self.config.delay_seconds)
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._indexes.copy()
 
     async def aget_table_statistics(self) -> dict[str, dict[str, Any]]:
         """Get table statistics for query optimization."""
-        if self.config.delay_seconds > 0:
-            await asyncio.sleep(self.config.delay_seconds)
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
         return self._table_statistics.copy()

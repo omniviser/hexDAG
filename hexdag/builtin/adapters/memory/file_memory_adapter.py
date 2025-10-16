@@ -14,9 +14,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
-
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexdag.core.logging import get_logger
 from hexdag.core.registry.decorators import adapter
 
@@ -44,7 +41,7 @@ class FileFormat(StrEnum):
     implements_port="memory",
     description="File-based memory storage supporting JSON, pickle, and text formats",
 )
-class FileMemoryAdapter(ConfigurableAdapter):
+class FileMemoryAdapter:
     """Memory adapter backed by file system.
 
     Provides persistent key-value storage using files, with support for
@@ -76,23 +73,6 @@ class FileMemoryAdapter(ConfigurableAdapter):
         memory = FileMemoryAdapter(base_path="./cache", format="pickle")
     """
 
-    class Config(AdapterConfig):
-        """Configuration schema for File Memory adapter."""
-
-        base_path: str = Field(default="./memory_store", description="Base directory path")
-        format: FileFormat = Field(
-            default=FileFormat.JSON, description="File format (json, pickle, text)"
-        )
-        create_dirs: bool = Field(
-            default=True, description="Automatically create directory if it doesn't exist"
-        )
-        extension: str | None = Field(
-            default=None, description="Custom file extension (defaults to format name)"
-        )
-
-    # Type hint for mypy to understand self.config has Config fields
-    config: Config
-
     def __init__(
         self,
         base_path: str | Path = "./memory_store",
@@ -113,19 +93,11 @@ class FileMemoryAdapter(ConfigurableAdapter):
         extension : str | None
             Custom file extension (defaults to format name)
         """
-        # Initialize config via ConfigurableAdapter
-        ConfigurableAdapter.__init__(
-            self,
-            base_path=str(base_path),
-            format=FileFormat(format) if isinstance(format, str) else format,
-            create_dirs=create_dirs,
-            extension=extension,
-        )
-
-        self.base_path = Path(self.config.base_path)
-        self.format = FileFormat(self.config.format)
-        self.create_dirs = self.config.create_dirs
-        self.extension = self.config.extension or self.format.value
+        # Store configuration
+        self.base_path = Path(base_path)
+        self.format = FileFormat(format) if isinstance(format, str) else format
+        self.create_dirs = create_dirs
+        self.extension = extension or self.format.value
 
         if self.create_dirs:
             self.base_path.mkdir(parents=True, exist_ok=True)

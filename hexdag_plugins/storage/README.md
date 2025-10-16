@@ -18,21 +18,33 @@ Low-level storage infrastructure for hexDAG - SQL databases, vector stores, and 
 
 ## Installation
 
+**Note:** The storage plugin is bundled with the main hexdag package. Install hexdag with storage extras:
+
 ```bash
-# Install with all storage backends
-uv pip install -e 'hexdag_plugins/storage[all]'
+# Install hexdag with all storage backends
+pip install hexdag[storage-all]
 
-# Or install specific backends:
-uv pip install -e 'hexdag_plugins/storage[postgresql]'  # PostgreSQL + pgvector
-uv pip install -e 'hexdag_plugins/storage[mysql]'       # MySQL
-uv pip install -e 'hexdag_plugins/storage[chromadb]'    # ChromaDB
-uv pip install -e 'hexdag_plugins/storage[pgvector]'    # pgvector only
+# Or install specific storage backends:
+pip install hexdag[storage-postgresql]  # PostgreSQL + pgvector
+pip install hexdag[storage-mysql]       # MySQL
+pip install hexdag[storage-sqlite]      # SQLite
+pip install hexdag[storage-chromadb]    # ChromaDB
 
-# Basic installation (no optional dependencies)
-uv pip install -e hexdag_plugins/storage
+# Basic hexdag installation (no storage backends)
+pip install hexdag
 ```
 
-**Note:** Quotes around the package path with extras are required for zsh to prevent glob expansion.
+### Development Installation
+
+For local development from this repository:
+
+```bash
+# Install hexdag with all storage dependencies
+uv sync --all-extras
+
+# Or install specific storage extras
+uv pip install -e '.[storage-postgresql]'
+```
 
 ## Usage
 

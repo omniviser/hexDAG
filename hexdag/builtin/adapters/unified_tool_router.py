@@ -5,7 +5,6 @@ import inspect
 from typing import Any
 
 from hexdag.builtin.nodes.tool_utils import ToolDefinition, ToolParameter
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexdag.core.exceptions import ResourceNotFoundError
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.tool_router import ToolRouter
@@ -20,7 +19,7 @@ __all__ = ["UnifiedToolRouter"]
 
 
 @adapter(implements_port="tool_router")
-class UnifiedToolRouter(ToolRouter, ConfigurableAdapter):
+class UnifiedToolRouter(ToolRouter):
     """ToolRouter adapter that uses the global registry singleton.
 
     This adapter is a thin wrapper around the global ComponentRegistry that:
@@ -40,13 +39,6 @@ class UnifiedToolRouter(ToolRouter, ConfigurableAdapter):
         tool_defs = router.get_tool_definitions()
     """
 
-    # Configuration schema for TOML generation
-    class Config(AdapterConfig):
-        """Configuration schema for Unified Tool Router."""
-
-        # No configuration needed for this adapter as it uses the global registry
-        pass
-
     def __init__(self, **kwargs: Any) -> None:
         """Initialize the router - uses the global registry singleton.
 
@@ -54,8 +46,7 @@ class UnifiedToolRouter(ToolRouter, ConfigurableAdapter):
         ----
             **kwargs: Configuration options (none needed for this adapter)
         """
-        # Initialize config (accessible via self.config.field_name)
-        ConfigurableAdapter.__init__(self, **kwargs)
+        # Initialize config (accessible via self.field_name).__init__(self, **kwargs)
 
         # No other initialization needed - we use get_registry() when needed
 

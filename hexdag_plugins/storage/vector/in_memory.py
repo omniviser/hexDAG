@@ -6,8 +6,7 @@ from typing import Any
 
 from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexdag.core.registry.decorators import adapter
-
-from ..ports import VectorStorePort
+from hexdag_plugins.storage.ports import VectorStorePort
 
 
 class VectorStoreConfig(AdapterConfig):

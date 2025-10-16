@@ -11,8 +11,6 @@ import re
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
-# Import from configurable module to avoid circular dependency with hexdag.core.__init__
-from hexdag.core.configurable import ConfigurableAdapter
 from hexdag.core.context import get_observer_manager
 from hexdag.core.exceptions import ValidationError
 from hexdag.core.logging import get_logger
@@ -165,60 +163,12 @@ def component(
         # Enforce Config class requirement for nodes and policies
         # Skip enforcement for test modules
         if inspect.isclass(cls):
-            module_name = getattr(cls, "__module__", "")
-            is_test = "test" in module_name or namespace == "test"
+            getattr(cls, "__module__", "")
 
-            if not is_test:
-                try:
-                    # Import here to avoid circular dependency
-                    from hexdag.core.configurable import (
-                        ConfigurableNode,
-                        ConfigurablePolicy,
-                    )
-
-                    # Check nodes
-                    if validated_type == ComponentType.NODE:
-                        has_configurable_node = any(
-                            issubclass(base, ConfigurableNode)
-                            for base in cls.__mro__
-                            if base is not cls and base is not object
-                        )
-                        has_config = hasattr(cls, "Config")
-
-                        if not has_configurable_node:
-                            raise ValidationError(
-                                f"Node '{cls.__name__}'",
-                                "must inherit from ConfigurableNode. See CLAUDE.md for examples.",
-                            )
-                        if not has_config:
-                            raise ValidationError(
-                                f"Node '{cls.__name__}'",
-                                "must define a Config class attribute. See CLAUDE.md for examples.",
-                            )
-
-                    # Check policies
-                    elif validated_type == ComponentType.POLICY:
-                        has_configurable_policy = any(
-                            issubclass(base, ConfigurablePolicy)
-                            for base in cls.__mro__
-                            if base is not cls and base is not object
-                        )
-                        has_config = hasattr(cls, "Config")
-
-                        if not has_configurable_policy:
-                            raise ValidationError(
-                                f"Policy '{cls.__name__}'",
-                                "must inherit from ConfigurablePolicy. See CLAUDE.md for examples.",
-                            )
-                        if not has_config:
-                            raise ValidationError(
-                                f"Policy '{cls.__name__}'",
-                                "must define a Config class attribute. See CLAUDE.md for examples.",
-                            )
-
-                except (ImportError, TypeError):
-                    # ConfigurableNode/ConfigurablePolicy not available yet (bootstrap phase)
-                    pass
+            # Config classes are now OPTIONAL!
+            # No enforcement - components can use plain __init__ signatures
+            # Secret resolution happens automatically via @adapter decorator
+            pass
 
         return cls
 
@@ -258,6 +208,7 @@ def adapter(
     *,
     namespace: str = "user",
     description: str | None = None,
+    secrets: dict[str, str] | None = None,
     warn_sync_io: bool = True,
 ) -> Callable[[T], T]:
     """Adapter decorator with convention over configuration.
@@ -273,6 +224,10 @@ def adapter(
         Defaults to 'user' for adapters.
     description : str | None
         If None, uses class docstring.
+    secrets : dict[str, str] | None
+        Mapping of __init__ parameter names to environment variable names.
+        Example: {"api_key": "OPENAI_API_KEY", "password": "DB_PASSWORD"}
+        These secrets will be auto-resolved from environment or memory.
     warn_sync_io : bool
         If True, wrap async methods to warn about synchronous I/O operations.
         Defaults to True. Set to False for adapters that intentionally use sync I/O
@@ -289,6 +244,12 @@ def adapter(
         @adapter("llm", name="gpt4")  # Explicit name
         class OpenAIAdapter:
         pass
+
+        @adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
+        class OpenAIAdapter:
+        '''Secrets are declared in decorator and auto-resolved.'''
+        def __init__(self, api_key: str, model: str = "gpt-4"):
+            self.api_key = api_key
     """
 
     def decorator(cls: T) -> T:
@@ -296,20 +257,6 @@ def adapter(
         cls = component(ComponentType.ADAPTER, name, namespace=namespace, description=description)(
             cls
         )
-
-        # Validate adapter uses ConfigurableAdapter (best practice)
-        # Check if cls is a class and has __mro__ attribute
-        if inspect.isclass(cls):
-            try:
-                if not any(
-                    issubclass(base, ConfigurableAdapter) for base in cls.__mro__ if base != cls
-                ):
-                    logger.warning(
-                        f"Adapter '{cls.__name__}' does not inherit from ConfigurableAdapter. "
-                        f"Consider using ConfigurableAdapter to eliminate config boilerplate. "
-                    )
-            except (ImportError, TypeError):
-                pass  # ConfigurableAdapter not available or comparison failed
 
         # Normalize the port reference to a string
         port_name = implements_port
@@ -329,6 +276,13 @@ def adapter(
         # Store the normalized port name
         cls._hexdag_implements_port = port_name  # type: ignore[attr-defined]
 
+        # Store secrets metadata on class
+        cls._hexdag_secrets = secrets or {}  # type: ignore[attr-defined]
+
+        # Wrap __init__ to auto-resolve secrets from decorator metadata or signature
+        if inspect.isclass(cls):
+            _wrap_adapter_init_for_secrets(cls)
+
         # Optionally wrap async methods to detect sync I/O
         if warn_sync_io:
             _wrap_adapter_async_methods(cls)  # type: ignore[arg-type]
@@ -336,6 +290,97 @@ def adapter(
         return cls
 
     return decorator
+
+
+def _wrap_adapter_init_for_secrets(cls: type) -> None:
+    """Wrap __init__ to automatically resolve secrets from decorator or signature.
+
+    This enables two patterns:
+
+    Pattern 1: Decorator-based (preferred):
+        @adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
+        class OpenAIAdapter:
+            def __init__(self, api_key: str, model: str = "gpt-4"):
+                self.api_key = api_key
+
+    Pattern 2: Signature-based (backward compatible):
+        @adapter("llm", name="openai")
+        class OpenAIAdapter:
+            def __init__(self, api_key: str = secret(env="OPENAI_API_KEY")):
+                self.api_key = api_key
+
+    The decorator will automatically resolve secrets from environment
+    or Memory port before calling the original __init__.
+
+    Parameters
+    ----------
+    cls : type
+        The adapter class to wrap
+    """
+    import os
+
+    # Import here to avoid circular dependency
+    from hexdag.core.secrets import resolve_secrets_in_kwargs
+
+    original_init = cls.__init__  # type: ignore[misc]
+
+    @wraps(original_init)
+    def wrapped_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Resolve secrets from environment or memory
+        # Memory port might be passed via kwargs
+        memory = kwargs.pop("memory", None)
+
+        # First, try decorator-based secrets (preferred)
+        if hasattr(cls, "_hexdag_secrets") and cls._hexdag_secrets:
+            for param_name, env_var in cls._hexdag_secrets.items():
+                # Skip if already provided explicitly
+                if param_name in kwargs and kwargs[param_name] is not None:
+                    logger.debug(f"Secret '{param_name}' provided explicitly")
+                    continue
+
+                # Try environment variable
+                if value := os.getenv(env_var):
+                    kwargs[param_name] = value
+                    logger.debug(f"Resolved secret '{param_name}' from env: {env_var}")
+                    continue
+
+                # Try memory port
+                if memory:
+                    memory_key = f"secret:{env_var}"
+                    try:
+                        if hasattr(memory, "get"):
+                            value = memory.get(memory_key)
+                        elif hasattr(memory, "aget"):
+                            logger.warning(
+                                f"Memory port is async, cannot resolve {memory_key} in __init__. "
+                                "Consider using environment variable."
+                            )
+                            value = None
+                        else:
+                            value = None
+
+                        if value:
+                            kwargs[param_name] = value
+                            logger.debug(
+                                f"Resolved secret '{param_name}' from memory: {memory_key}"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(f"Failed to read from memory: {e}")
+
+                # Required secret not found
+                raise ValueError(
+                    f"Required secret '{param_name}' not found. "
+                    f"Set environment variable {env_var} or provide in memory."
+                )
+
+        # Fallback: signature-based resolution (backward compatible)
+        kwargs = resolve_secrets_in_kwargs(cls, kwargs, memory=memory)
+
+        # Call original __init__ with resolved secrets
+        original_init(self, *args, **kwargs)
+
+    cls.__init__ = wrapped_init  # type: ignore[misc]
 
 
 def _wrap_adapter_async_methods(cls: type) -> None:
@@ -470,3 +515,95 @@ def agent_node(
         subtype=NodeSubtype.AGENT,
         description=description,
     )
+
+
+def macro(
+    name: str | None = None,
+    *,
+    namespace: str = "core",
+    description: str | None = None,
+) -> Callable[[T], T]:
+    """Decorator for registering macros in the component registry.
+
+    Macros are reusable pipeline templates that expand into DirectedGraph subgraphs.
+    They enable composition and reusability at the pipeline level.
+
+    Parameters
+    ----------
+    name : str | None
+        Macro name. If None, uses class name converted to snake_case.
+    namespace : str
+        Component namespace. Defaults to 'core'.
+    description : str | None
+        Macro description. If None, uses class docstring.
+
+    Returns
+    -------
+    Callable[[T], T]
+        Decorator function that adds metadata and validates the macro class.
+
+    Examples
+    --------
+    Basic macro definition:
+
+    >>> from hexdag.core.registry import macro
+    >>> from hexdag.core.configurable import ConfigurableMacro, MacroConfig
+    >>> from hexdag.core.domain.dag import DirectedGraph
+    >>>
+    >>> class ResearchMacroConfig(MacroConfig):
+    ...     depth: int = 3
+    >>>
+    >>> @macro(name="research", namespace="core")
+    ... class ResearchMacro(ConfigurableMacro):
+    ...     Config = ResearchMacroConfig
+    ...
+    ...     def expand(self, instance_name, inputs, dependencies):
+    ...         return DirectedGraph([...])
+
+    Usage in YAML:
+
+    >>> # nodes:
+    >>> #   - kind: macro_invocation
+    >>> #     metadata:
+    >>> #       name: deep_research
+    >>> #     spec:
+    >>> #       macro: core:research
+    >>> #       config:
+    >>> #         depth: 5
+    >>> #       inputs:
+    >>> #         topic: "AI safety"
+    """
+
+    def decorator(cls: T) -> T:
+        # Apply base component decorator
+        cls = component(
+            ComponentType.MACRO,
+            name,
+            namespace=namespace,
+            description=description,
+        )(cls)
+
+        # Validate that the class is a ConfigurableMacro
+        try:
+            # Import here to avoid circular dependency
+            from hexdag.core.configurable import ConfigurableMacro
+
+            if not issubclass(cls, ConfigurableMacro):  # type: ignore[arg-type]
+                raise ValidationError(
+                    f"Macro '{cls.__name__}'",  # type: ignore[attr-defined]
+                    "must inherit from ConfigurableMacro. See CLAUDE.md for examples.",
+                )
+
+            if not hasattr(cls, "Config"):
+                raise ValidationError(
+                    f"Macro '{cls.__name__}'",  # type: ignore[attr-defined]
+                    "must define a Config class attribute. See CLAUDE.md for examples.",
+                )
+
+        except (ImportError, TypeError):
+            # ConfigurableMacro not available yet (bootstrap phase)
+            pass
+
+        return cls
+
+    return decorator

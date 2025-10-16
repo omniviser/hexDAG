@@ -341,8 +341,8 @@ async def test_anthropic_adapter_secret_auto_resolution():
         # Verify API key was resolved (client should be initialized)
         assert adapter.client is not None
 
-        # Verify API key is hidden
-        assert str(adapter.config.api_key) == "**********"
+        # Verify API key was set
+        assert adapter.api_key == "sk-ant-test-key-123"
 
     finally:
         del os.environ["ANTHROPIC_API_KEY"]
@@ -354,7 +354,7 @@ async def test_anthropic_adapter_explicit_api_key():
     adapter = AnthropicAdapter(api_key="sk-ant-explicit-key")
 
     assert adapter.client is not None
-    assert str(adapter.config.api_key) == "**********"
+    assert adapter.api_key == "sk-ant-explicit-key"
 
 
 @pytest.mark.asyncio
@@ -363,7 +363,7 @@ async def test_anthropic_adapter_missing_api_key_raises():
     # Make sure env var is not set
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
-    with pytest.raises(ValueError, match="API key required"):
+    with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
         AnthropicAdapter()
 
 
@@ -376,7 +376,7 @@ async def test_openai_adapter_secret_auto_resolution():
         adapter = OpenAIAdapter()
 
         assert adapter.client is not None
-        assert str(adapter.config.api_key) == "**********"
+        assert adapter.api_key == "sk-openai-test-key-123"
 
     finally:
         del os.environ["OPENAI_API_KEY"]
@@ -388,7 +388,7 @@ async def test_openai_adapter_explicit_api_key():
     adapter = OpenAIAdapter(api_key="sk-openai-explicit-key")
 
     assert adapter.client is not None
-    assert str(adapter.config.api_key) == "**********"
+    assert adapter.api_key == "sk-openai-explicit-key"
 
 
 @pytest.mark.asyncio
@@ -396,7 +396,7 @@ async def test_openai_adapter_missing_api_key_raises():
     """Test OpenAIAdapter raises when API key is missing."""
     os.environ.pop("OPENAI_API_KEY", None)
 
-    with pytest.raises(ValueError, match="API key required"):
+    with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
         OpenAIAdapter()
 
 

@@ -207,8 +207,10 @@ class _SchemaValidator:
         if field_type == "string":
             # Check min length
             if "minLength" in field_schema and len(value) < field_schema["minLength"]:
-                return f"Field '{field_name}' must have at least {field_schema['minLength']} \
-                        characters"
+                return (
+                    f"Field '{field_name}' must have at least "
+                    f"{field_schema['minLength']} characters"
+                )
 
             # Check max length
             if "maxLength" in field_schema and len(value) > field_schema["maxLength"]:
@@ -341,11 +343,11 @@ class YamlValidator:
         spec = config.get("spec", {})
         nodes = spec.get("nodes", [])
 
-        # Validate nodes and cache the IDs for reuse
-        node_ids = self._validate_nodes(nodes, result)
+        # Validate nodes and cache the IDs and macro instances for reuse
+        node_ids, macro_instances = self._validate_nodes(nodes, result)
 
-        # Reuse cached node_ids for dependency validation
-        self._validate_dependencies_with_cache(nodes, result, node_ids)
+        # Reuse cached node_ids and macro_instances for dependency validation
+        self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
 
         return result
 
@@ -396,17 +398,20 @@ class YamlValidator:
         if common_mappings is not None and not isinstance(common_mappings, dict):
             result.add_error("'spec.common_field_mappings' must be a dictionary")
 
-    def _validate_nodes(self, nodes: list[dict[str, Any]], result: ValidationReport) -> set[str]:
-        """Validate individual nodes and return the set of node IDs for reuse.
+    def _validate_nodes(
+        self, nodes: list[dict[str, Any]], result: ValidationReport
+    ) -> tuple[set[str], set[str]]:
+        """Validate nodes and return node IDs and macro instance names.
 
         Expects declarative node format: {kind, metadata: {name}, spec: {dependencies}}
 
         Returns
         -------
-        set[str]
-            Set of valid node IDs for caching and reuse in dependency validation
+        tuple[set[str], set[str]]
+            Tuple of (node_ids, macro_instance_names) for caching and reuse in dependency validation
         """
         node_ids = set()
+        macro_instances = set()
 
         for i, node in enumerate(nodes):
             # Validate node has required fields
@@ -426,6 +431,24 @@ class YamlValidator:
 
             # Extract node type and namespace from kind (e.g., "llm_node" -> "llm")
             kind = node.get("kind", "")
+
+            # Check node ID uniqueness
+            if node_id in node_ids:
+                result.add_error(f"Duplicate node ID: '{node_id}'")
+            node_ids.add(node_id)
+
+            # Special case: macro_invocation is not a node type, skip node type validation
+            if kind == "macro_invocation":
+                # Validate macro invocation spec (macro reference required)
+                spec = node.get("spec", {})
+                if "macro" not in spec:
+                    result.add_error(
+                        f"Node '{node_id}': macro_invocation must specify 'spec.macro' field"
+                    )
+                # Track this as a macro instance for dependency validation
+                macro_instances.add(node_id)
+                continue
+
             if NAMESPACE_SEPARATOR in kind:
                 namespace, node_kind = kind.split(NAMESPACE_SEPARATOR, 1)
             else:
@@ -440,11 +463,6 @@ class YamlValidator:
 
             # Get params from spec
             params = node.get("spec", {})
-
-            # Check node ID uniqueness
-            if node_id in node_ids:
-                result.add_error(f"Duplicate node ID: '{node_id}'")
-            node_ids.add(node_id)
 
             # Validate node type (check if registered in registry)
             # Support both qualified (namespace:type) and simple (type) formats
@@ -490,7 +508,7 @@ class YamlValidator:
             # Validate node-specific requirements and schema
             self._validate_node_params(node_id, node_type, params, namespace, result)
 
-        return node_ids
+        return node_ids, macro_instances
 
     def _validate_node_params(
         self,
@@ -520,7 +538,11 @@ class YamlValidator:
             result.add_error(f"Node '{node_id}': {error}")
 
     def _validate_dependencies_with_cache(
-        self, nodes: list[dict[str, Any]], result: ValidationReport, node_ids: set[str]
+        self,
+        nodes: list[dict[str, Any]],
+        result: ValidationReport,
+        node_ids: set[str],
+        macro_instances: set[str],
     ) -> None:
         """Validate node dependencies using cached node IDs and check for cycles.
 
@@ -534,6 +556,8 @@ class YamlValidator:
             Report to add errors to
         node_ids : set[str]
             Cached set of valid node IDs from _validate_nodes
+        macro_instances : set[str]
+            Set of macro instance names (nodes will be generated at runtime)
         """
         dependency_graph = {}
 
@@ -550,10 +574,22 @@ class YamlValidator:
             # Check all dependencies exist using cached node_ids
             valid_deps = set()
             for dep in deps:
-                if dep not in node_ids:
-                    result.add_error(f"Node '{node_id}': Dependency '{dep}' does not exist")
-                else:
+                # Check if dependency is a known node
+                if dep in node_ids:
                     valid_deps.add(dep)
+                    continue
+
+                # Check if dependency matches a macro-generated node pattern (instance_name_*)
+                is_macro_generated = False
+                for macro_instance in macro_instances:
+                    if dep.startswith(f"{macro_instance}_"):
+                        is_macro_generated = True
+                        valid_deps.add(dep)
+                        break
+
+                # If not a known node and not macro-generated, it's an error
+                if not is_macro_generated:
+                    result.add_error(f"Node '{node_id}': Dependency '{dep}' does not exist")
 
             dependency_graph[node_id] = valid_deps
 

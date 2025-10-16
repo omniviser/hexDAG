@@ -9,7 +9,6 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.configurable import ConfigurableAdapter, ExecutorConfig
 from hexdag.core.context import get_port
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components import (
@@ -53,7 +52,7 @@ def _calculate_duration_ms(start_time: float) -> float:
     return (time.time() - start_time) * 1000
 
 
-class LocalExecutorConfig(ExecutorConfig):
+class Local:
     """Configuration for LocalExecutor.
 
     Attributes
@@ -72,7 +71,7 @@ class LocalExecutorConfig(ExecutorConfig):
 
 
 @adapter("executor", name="local", namespace="core")
-class LocalExecutor(ConfigurableAdapter):
+class LocalExecutor:
     """Local in-process executor using asyncio.
 
     This executor wraps the core NodeExecutor and WaveExecutor to provide
@@ -117,17 +116,27 @@ class LocalExecutor(ConfigurableAdapter):
             default_node_timeout: 60.0
     """
 
-    Config = LocalExecutorConfig
+    def __init__(
+        self, strict_validation: bool = True, default_node_timeout: float = 60.0, **kwargs: Any
+    ) -> None:
+        """Initialize local executor.
 
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        Parameters
+        ----------
+        strict_validation : bool, default=True
+            Enable strict validation
+        default_node_timeout : float, default=60.0
+            Default timeout for nodes in seconds
+        """
+        # Store configuration
+        self.strict_validation = strict_validation
+        self.default_node_timeout = default_node_timeout
+        self.max_concurrent_nodes = kwargs.get("max_concurrent_nodes", 10)
 
-        # Core execution components configured from self.config
-        # Type narrowing: self.config is LocalExecutorConfig after super().__init__
-        config: LocalExecutorConfig = self.config  # type: ignore[assignment]
+        # Core execution components
         self._node_executor = NodeExecutor(
-            strict_validation=config.strict_validation,
-            default_node_timeout=config.default_node_timeout,
+            strict_validation=strict_validation,
+            default_node_timeout=default_node_timeout,
         )
         self._input_mapper = InputMapper()
         self._policy_coordinator = PolicyCoordinator()
@@ -273,8 +282,7 @@ class LocalExecutor(ConfigurableAdapter):
             raise RuntimeError("LocalExecutor not initialized - call asetup() first")
 
         # Create semaphore to limit concurrent execution
-        config: LocalExecutorConfig = self.config  # type: ignore[assignment]
-        semaphore = asyncio.Semaphore(config.max_concurrent_nodes)
+        semaphore = asyncio.Semaphore(self.max_concurrent_nodes)
 
         async def execute_with_limit(task: ExecutionTask) -> ExecutionResult:
             """Execute task with semaphore-based concurrency control."""

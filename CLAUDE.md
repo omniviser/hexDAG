@@ -345,149 +345,129 @@ See `docs/async_io_enforcement.md` for complete documentation.
 - Maintain error context and node information
 - Event emission for error tracking
 
-## Configuration System (REQUIRED for All New Components)
+## Component Configuration (Simplified Pattern)
 
 ### Overview
-All registry entities (nodes, policies, adapters, tools) MUST have explicit Config classes for:
-- Type-safe configuration
-- YAML schema generation
-- Runtime validation
-- Self-documentation
 
-### Base Classes
+hexDAG uses a **simplified decorator-based pattern** for component configuration:
+- **No Config classes required** - just plain `__init__` signatures
+- **Secrets declared in decorator** - explicit and clean
+- **Automatic secret resolution** - from environment or memory
+- **Type-safe** - leverages Python type hints and Pydantic
+
+### Creating Adapters with Secrets
+
+**✅ CORRECT - Decorator-based (preferred):**
 ```python
-from hexdag.core import NodeConfig, PolicyConfig, AdapterConfig
-from hexdag.core import ConfigurableNode, ConfigurablePolicy, ConfigurableAdapter
-```
-
-### Creating Configurable Nodes (REQUIRED)
-
-**✅ CORRECT - Always do this:**
-```python
-from hexdag.core import NodeConfig, ConfigurableNode
-from hexdag.core.registry import node
-
-class MyNodeConfig(NodeConfig):
-    """Configuration for MyNode.
-
-    Attributes
-    ----------
-    timeout : float
-        Timeout in seconds (default: 30.0)
-    max_retries : int
-        Maximum retry attempts (default: 3)
-    """
-    timeout: float = 30.0
-    max_retries: int = 3
-
-@node(name="my_node", namespace="core")
-class MyNode(BaseNodeFactory, ConfigurableNode):
-    """My custom node implementation."""
-
-    Config = MyNodeConfig
-
-    def __init__(self, **kwargs):
-        # Initialize ConfigurableNode first
-        if hasattr(ConfigurableNode, '__init__'):
-            try:
-                ConfigurableNode.__init__(self, **kwargs)
-            except AttributeError:
-                pass
-        BaseNodeFactory.__init__(self)
-
-    def __call__(self, name: str, **kwargs):
-        # Access config via self.config.timeout, self.config.max_retries
-        ...
-```
-
-**❌ INCORRECT - Never do this:**
-```python
-@node(name="my_node", namespace="core")
-class MyNode(BaseNodeFactory):  # Missing ConfigurableNode
-    """My node without Config class."""  # WRONG!
-
-    def __call__(self, name: str, timeout: float = 30.0):  # Config in params - WRONG!
-        ...
-```
-
-### Creating Configurable Policies (REQUIRED)
-
-**✅ CORRECT:**
-```python
-from hexdag.core import PolicyConfig, ConfigurablePolicy
-from hexdag.core.registry import policy
-
-class MyPolicyConfig(PolicyConfig):
-    """Configuration for MyPolicy.
-
-    Attributes
-    ----------
-    threshold : int
-        Threshold value (default: 10)
-    """
-    threshold: int = 10
-
-@policy(name="my_policy", description="My policy")
-class MyPolicy(ConfigurablePolicy):
-    """My custom policy."""
-
-    Config = MyPolicyConfig
-
-    def __init__(self, threshold: int = 10, **kwargs):
-        super().__init__(threshold=threshold, **kwargs)
-        self.threshold = self.config.threshold
-
-    async def evaluate(self, context):
-        # Use self.config.threshold
-        ...
-```
-
-### Creating Configurable Adapters (REQUIRED)
-
-**✅ CORRECT:**
-```python
-from hexdag.core import AdapterConfig, ConfigurableAdapter, SecretField
 from hexdag.core.registry import adapter
-from pydantic import SecretStr
 
-class MyAdapterConfig(AdapterConfig):
-    """Configuration for MyAdapter.
+@adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
+class OpenAIAdapter:
+    """OpenAI adapter with automatic secret resolution."""
 
-    Attributes
-    ----------
-    api_key : SecretStr | None
-        API key for authentication
-    timeout : float
-        Request timeout in seconds (default: 30.0)
-    base_url : str
-        Base URL for API (default: "https://api.example.com")
-    """
-    api_key: SecretStr | None = SecretField(
-        env_var="MY_API_KEY",
-        description="API key for authentication"
-    )
-    timeout: float = 30.0
-    base_url: str = "https://api.example.com"
-
-@adapter("llm", name="my_adapter", namespace="custom")
-class MyAdapter(ConfigurableAdapter):
-    """My custom adapter implementation."""
-
-    Config = MyAdapterConfig
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Access config via self.config.api_key, self.config.timeout
-        # Secrets are auto-resolved from env vars
+    def __init__(
+        self,
+        api_key: str,  # ← Auto-resolved from OPENAI_API_KEY env var
+        model: str = "gpt-4",
+        temperature: float = 0.7
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.temperature = temperature
 
     async def aresponse(self, messages):
-        # Use self.config.timeout, self.config.base_url
+        # Use self.api_key, self.model, etc.
         ...
 ```
 
-### Creating Configurable Tools (REQUIRED)
+**Multiple secrets:**
+```python
+@adapter(
+    "database",
+    name="postgres",
+    secrets={
+        "username": "DB_USERNAME",
+        "password": "DB_PASSWORD"
+    }
+)
+class PostgresAdapter:
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        host: str = "localhost",
+        port: int = 5432
+    ):
+        self.connection = f"postgresql://{username}:{password}@{host}:{port}"
+```
 
-**✅ CORRECT - Tools are different:**
+### Creating Adapters without Secrets
+
+**✅ CORRECT:**
+```python
+@adapter("cache", name="memory_cache")
+class MemoryCacheAdapter:
+    """Simple adapter - no secrets needed."""
+
+    def __init__(
+        self,
+        max_size: int = 100,
+        ttl: int = 3600
+    ):
+        self.cache = {}
+        self.max_size = max_size
+        self.ttl = ttl
+
+    async def aget(self, key: str):
+        return self.cache.get(key)
+```
+
+### Creating Nodes
+
+**✅ CORRECT:**
+```python
+from hexdag.core.registry import node
+
+@node(name="my_node", namespace="core")
+class MyNode(BaseNodeFactory):
+    """Custom node - no Config class needed."""
+
+    def __init__(self):
+        super().__init__()
+
+    def __call__(
+        self,
+        name: str,
+        timeout: float = 30.0,
+        max_retries: int = 3,
+        **kwargs
+    ):
+        # Parameters are passed directly from YAML
+        ...
+```
+
+### Creating Policies
+
+**✅ CORRECT:**
+```python
+from hexdag.core.registry import policy
+
+@policy(name="retry_policy", description="Retry failed operations")
+class RetryPolicy:
+    """Simple policy - no Config class needed."""
+
+    def __init__(self, max_retries: int = 3, backoff: float = 1.0):
+        self.max_retries = max_retries
+        self.backoff = backoff
+
+    async def evaluate(self, context):
+        # Use self.max_retries, self.backoff
+        ...
+```
+
+### Creating Tools
+
+**✅ CORRECT:**
 ```python
 from hexdag.core.registry import tool
 
@@ -508,57 +488,64 @@ def my_tool(input_param: str, threshold: int = 10) -> str:
     return f"Processed: {input_param}"
 ```
 
-**Note**: Tools don't need explicit Config classes because:
-- Their function signature defines the schema
-- Type hints provide validation
-- Docstrings provide descriptions
-- This maintains the simplicity of tool definition
+### Secret Resolution
 
-### Why Config Classes Are Required
+Secrets are automatically resolved in this order:
+1. **Explicit kwargs** (highest priority)
+2. **Environment variables** (from decorator `secrets` mapping)
+3. **Memory port** (from orchestrator, with `secret:` prefix)
+4. **Error** (if parameter has no default value)
 
-1. **YAML Support**: Config classes enable declarative YAML configuration
-2. **Schema Generation**: Automatic JSON schema for IDE autocomplete and validation
-3. **Type Safety**: Pydantic validation catches errors at startup, not runtime
-4. **Documentation**: Config classes serve as self-documenting API
-5. **Consistency**: Uniform configuration interface across all components
+**Example:**
+```python
+# Set environment variable
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+# Secret auto-resolved from env
+adapter = OpenAIAdapter()  # ✅ api_key resolved
+
+# Explicit value overrides env
+adapter = OpenAIAdapter(api_key="explicit-key")  # ✅ Uses explicit value
+```
+
+### Benefits of the Simplified Pattern
+
+1. **70% Less Code** - From 13 lines to 4 lines per adapter
+2. **Explicit Configuration** - Secrets declared in decorator, visible at a glance
+3. **Clean Signatures** - `__init__` uses plain typed parameters
+4. **Type Safety** - Leverages Python type hints and runtime validation
+5. **Easy Testing** - Direct parameter passing, no Config mocking needed
+6. **YAML Compatible** - Full support for declarative pipelines
 
 ### Validation Rules
 
-❌ **Pull requests will be REJECTED if:**
-- New nodes don't inherit from `ConfigurableNode` and lack a `Config` class
-- New policies don't inherit from `ConfigurablePolicy` and lack a `Config` class
-- New adapters don't inherit from `ConfigurableAdapter` and lack a `Config` class
-- Config parameters are passed directly to methods instead of using Config
-- Adapters with secrets don't use `SecretField` helper
-
 ✅ **All new components MUST:**
 
+**Adapters with Secrets:**
+- Use `secrets` parameter in `@adapter` decorator
+- Declare secret mapping: `secrets={"param_name": "ENV_VAR"}`
+- Clean `__init__` signatures with typed parameters
+
+**Adapters without Secrets:**
+- Simple `@adapter` decorator without `secrets`
+- Plain `__init__` with typed parameters and defaults
+
 **Nodes:**
-- Inherit from both `BaseNodeFactory` (or similar) AND `ConfigurableNode`
-- Define a Config class inheriting from `NodeConfig`
-- Set `Config = MyNodeConfig` as class attribute
-- Initialize ConfigurableNode in `__init__`
-- Access configuration via `self.config.field_name`
+- Use `@node` decorator
+- Parameters passed directly from YAML to `__call__` method
 
 **Policies:**
-- Inherit from `ConfigurablePolicy`
-- Define a Config class inheriting from `PolicyConfig`
-- Set `Config = MyPolicyConfig` as class attribute
-- Call `super().__init__(**kwargs)` with config parameters
-- Access configuration via `self.config.field_name`
-
-**Adapters:**
-- Inherit from `ConfigurableAdapter`
-- Define a Config class inheriting from `AdapterConfig`
-- Set `Config = MyAdapterConfig` as class attribute
-- Use `SecretField()` for API keys and sensitive data
-- Call `super().__init__(**kwargs)` to handle config and secrets
-- Access configuration via `self.config.field_name`
+- Use `@policy` decorator
+- Simple `__init__` with typed parameters
 
 **Tools:**
-- Use typed function signatures (no Config class needed)
+- Use typed function signatures
 - Include comprehensive docstrings
-- Use type hints for automatic schema generation
+- Type hints for automatic schema generation
+
+### Legacy Code
+
+Some existing adapters use the old `ConfigurableAdapter` pattern with Config classes. These still work but are deprecated. New code should use the simplified decorator pattern. See [SIMPLIFIED_PATTERN.md](docs/SIMPLIFIED_PATTERN.md) for migration guide.
 
 ## Working with YAML Pipelines
 

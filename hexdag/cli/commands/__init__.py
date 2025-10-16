@@ -2,7 +2,6 @@
 
 from . import (
     build_cmd,
-    config_cmd,
     create_cmd,
     docs_cmd,
     init_cmd,
@@ -17,7 +16,6 @@ from . import (
 
 __all__ = [
     "build_cmd",
-    "config_cmd",
     "create_cmd",
     "docs_cmd",
     "init_cmd",

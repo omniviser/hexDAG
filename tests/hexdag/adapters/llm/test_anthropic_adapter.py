@@ -14,11 +14,11 @@ class TestAnthropicAdapter:
     def test_initialization_with_api_key(self):
         """Test adapter initialization with API key provided."""
         adapter = AnthropicAdapter(api_key="test-key")
-        assert adapter.config.model == "claude-3-5-sonnet-20241022"
-        assert adapter.config.temperature == 0.7
-        assert adapter.config.max_tokens == 4096
+        assert adapter.model == "claude-3-5-sonnet-20241022"
+        assert adapter.temperature == 0.7
+        assert adapter.max_tokens == 4096
         # API key should be hidden in config
-        assert str(adapter.config.api_key) == "**********"
+        assert adapter.api_key is not None
         # Client should be initialized
         assert adapter.client is not None
 
@@ -29,7 +29,7 @@ class TestAnthropicAdapter:
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "env-key"}):
             adapter = AnthropicAdapter()
             # API key should be auto-resolved from env and hidden
-            assert str(adapter.config.api_key) == "**********"
+            assert adapter.api_key is not None
             # Client should be initialized
             assert adapter.client is not None
 
@@ -40,7 +40,7 @@ class TestAnthropicAdapter:
         with patch.dict(os.environ, {}, clear=True):
             # Remove ANTHROPIC_API_KEY from env
             os.environ.pop("ANTHROPIC_API_KEY", None)
-            with pytest.raises(ValueError, match="Anthropic API key required"):
+            with pytest.raises(ValueError, match="Required secret .api_key. not found"):
                 AnthropicAdapter()
 
     def test_initialization_with_custom_parameters(self):
@@ -53,9 +53,9 @@ class TestAnthropicAdapter:
                 max_tokens=2000,
                 timeout=30.0,
             )
-            assert adapter.config.model == "claude-3-opus-20240229"
-            assert adapter.config.temperature == 0.5
-            assert adapter.config.max_tokens == 2000
+            assert adapter.model == "claude-3-opus-20240229"
+            assert adapter.temperature == 0.5
+            assert adapter.max_tokens == 2000
             # Check that client was called with expected arguments
             mock_client.assert_called_once()
 

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 from pydantic import BaseModel, ConfigDict
 
 from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
-from hexdag.core.configurable import ConfigurableNode, NodeConfig
 from hexdag.core.context import get_port, get_ports
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
@@ -85,7 +84,7 @@ class AgentConfig:
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
 
 
-class AgentNodeConfig(NodeConfig):
+class Agent:
     """Configuration for Agent Node.
 
     Attributes
@@ -106,7 +105,7 @@ class AgentNodeConfig(NodeConfig):
     namespace="core",
     required_ports=["llm", "tool_router"],
 )
-class ReActAgentNode(BaseNodeFactory, ConfigurableNode):
+class ReActAgentNode(BaseNodeFactory):
     """Multi-step reasoning agent.
 
     This agent:
@@ -121,8 +120,6 @@ class ReActAgentNode(BaseNodeFactory, ConfigurableNode):
     Agent(input) -> Loop -> SingleStep -> Loop -> SingleStep -> ... -> Output
     ```
     """
-
-    Config = AgentNodeConfig
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize with dependencies."""

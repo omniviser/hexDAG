@@ -4,7 +4,6 @@ import asyncio
 import time
 from typing import Any
 
-from hexdag.core.configurable import ConfigurablePolicy, PolicyConfig
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.events.events import NodeCompleted, NodeFailed, NodeStarted
 from hexdag.core.orchestration.policies.models import PolicyContext, PolicyResponse, PolicySignal
@@ -13,7 +12,7 @@ from hexdag.core.registry.decorators import policy
 logger = get_logger(__name__)
 
 
-class RetryPolicyConfig(PolicyConfig):
+class Retry:
     """Configuration for Retry Policy.
 
     Attributes
@@ -26,20 +25,17 @@ class RetryPolicyConfig(PolicyConfig):
 
 
 @policy(name="retry", description="Retry failed operations up to a maximum number of attempts")
-class RetryPolicy(ConfigurablePolicy):
+class RetryPolicy:
     """Simple retry policy."""
-
-    Config = RetryPolicyConfig
-    config: RetryPolicyConfig  # Type hint for mypy
 
     def __init__(self, max_retries: int = 3, **kwargs: Any):
         """Initialize retry policy with configuration."""
-        super().__init__(max_retries=max_retries, **kwargs)
+        self.max_retries = max_retries
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return f"retry_{self.config.max_retries}"
+        return f"retry_{self.max_retries}"
 
     @property
     def priority(self) -> int:
@@ -48,16 +44,16 @@ class RetryPolicy(ConfigurablePolicy):
 
     async def evaluate(self, context: PolicyContext) -> PolicyResponse:
         """Evaluate retry decision."""
-        if context.error and context.attempt <= self.config.max_retries:
+        if context.error and context.attempt <= self.max_retries:
             return PolicyResponse(
                 signal=PolicySignal.RETRY,
                 data={"attempt": context.attempt},
-                metadata={"max_retries": self.config.max_retries},
+                metadata={"max_retries": self.max_retries},
             )
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class CircuitBreakerPolicyConfig(PolicyConfig):
+class CircuitBreaker:
     """Configuration for Circuit Breaker Policy.
 
     Attributes
@@ -73,22 +69,19 @@ class CircuitBreakerPolicyConfig(PolicyConfig):
     name="circuit_breaker",
     description="Fail fast after reaching failure threshold to prevent cascading failures",
 )
-class CircuitBreakerPolicy(ConfigurablePolicy):
+class CircuitBreakerPolicy:
     """Simple circuit breaker."""
-
-    Config = CircuitBreakerPolicyConfig
-    config: CircuitBreakerPolicyConfig  # Type hint for mypy
 
     def __init__(self, failure_threshold: int = 5, **kwargs: Any):
         """Initialize circuit breaker policy with configuration."""
-        super().__init__(failure_threshold=failure_threshold, **kwargs)
+        self.failure_threshold = failure_threshold
         self.failure_count = 0
         self.is_open = False
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return f"circuit_breaker_{self.config.failure_threshold}"
+        return f"circuit_breaker_{self.failure_threshold}"
 
     @property
     def priority(self) -> int:
@@ -102,7 +95,7 @@ class CircuitBreakerPolicy(ConfigurablePolicy):
 
         if context.error:
             self.failure_count += 1
-            if self.failure_count >= self.config.failure_threshold:
+            if self.failure_count >= self.failure_threshold:
                 self.is_open = True
                 return PolicyResponse(
                     signal=PolicySignal.FAIL,
@@ -115,7 +108,7 @@ class CircuitBreakerPolicy(ConfigurablePolicy):
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class FallbackPolicyConfig(PolicyConfig):
+class Fallback:
     """Configuration for Fallback Policy.
 
     Attributes
@@ -128,15 +121,12 @@ class FallbackPolicyConfig(PolicyConfig):
 
 
 @policy(name="fallback", description="Provide fallback value when operations fail")
-class FallbackPolicy(ConfigurablePolicy):
+class FallbackPolicy:
     """Simple fallback policy."""
-
-    Config = FallbackPolicyConfig
-    config: FallbackPolicyConfig  # Type hint for mypy
 
     def __init__(self, fallback_value: Any, **kwargs: Any):
         """Initialize fallback policy with configuration."""
-        super().__init__(fallback_value=fallback_value, **kwargs)
+        self.fallback_value = fallback_value
 
     @property
     def name(self) -> str:
@@ -151,7 +141,7 @@ class FallbackPolicy(ConfigurablePolicy):
     async def evaluate(self, context: PolicyContext) -> PolicyResponse:
         """Provide fallback on error."""
         if context.error:
-            return PolicyResponse(signal=PolicySignal.FALLBACK, data=self.config.fallback_value)
+            return PolicyResponse(signal=PolicySignal.FALLBACK, data=self.fallback_value)
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
@@ -160,7 +150,7 @@ class FallbackPolicy(ConfigurablePolicy):
 # ==============================================================================
 
 
-class TimeoutPolicyConfig(PolicyConfig):
+class Timeout:
     """Configuration for Timeout Policy.
 
     Attributes
@@ -173,7 +163,7 @@ class TimeoutPolicyConfig(PolicyConfig):
 
 
 @policy(name="timeout", description="Enforce time limits on node execution")
-class TimeoutPolicy(ConfigurablePolicy):
+class TimeoutPolicy:
     """Policy that enforces execution time limits.
 
     Prevents nodes from running indefinitely by signaling failure
@@ -193,18 +183,15 @@ class TimeoutPolicy(ConfigurablePolicy):
         >>> policy_manager.subscribe(timeout_policy, SubscriberType.USER)  # doctest: +SKIP
     """
 
-    Config = TimeoutPolicyConfig
-    config: TimeoutPolicyConfig  # Type hint for mypy
-
     def __init__(self, timeout_seconds: float = 30.0, **kwargs: Any):
         """Initialize timeout policy with configuration."""
-        super().__init__(timeout_seconds=timeout_seconds, **kwargs)
+        self.timeout_seconds = timeout_seconds
         self.start_times: dict[str, float] = {}
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return f"timeout_{self.config.timeout_seconds}s"
+        return f"timeout_{self.timeout_seconds}s"
 
     @property
     def priority(self) -> int:
@@ -234,20 +221,20 @@ class TimeoutPolicy(ConfigurablePolicy):
         start_time = self.start_times.get(context.node_id) if context.node_id else None
         if start_time and context.event:
             elapsed = context.event.timestamp.timestamp() - start_time
-            if elapsed > self.config.timeout_seconds:
+            if elapsed > self.timeout_seconds:
                 return PolicyResponse(
                     signal=PolicySignal.FAIL,
                     data={
                         "reason": "timeout",
                         "elapsed_seconds": elapsed,
-                        "limit_seconds": self.config.timeout_seconds,
+                        "limit_seconds": self.timeout_seconds,
                     },
                 )
 
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class RateLimitPolicyConfig(PolicyConfig):
+class RateLimit:
     """Configuration for Rate Limit Policy."""
 
     max_executions: int = 10
@@ -255,7 +242,7 @@ class RateLimitPolicyConfig(PolicyConfig):
 
 
 @policy(name="rate_limit", description="Enforce rate limits on node execution")
-class RateLimitPolicy(ConfigurablePolicy):
+class RateLimitPolicy:
     """Policy that enforces rate limiting on node execution.
 
     Prevents too many executions within a time window by tracking
@@ -274,18 +261,16 @@ class RateLimitPolicy(ConfigurablePolicy):
         >>> policy_manager.subscribe(rate_limit, SubscriberType.USER)  # doctest: +SKIP
     """
 
-    Config = RateLimitPolicyConfig
-    config: RateLimitPolicyConfig  # Type hint for mypy
-
     def __init__(self, max_executions: int = 10, window_seconds: float = 60.0, **kwargs: Any):
         """Initialize rate limit policy."""
-        super().__init__(max_executions=max_executions, window_seconds=window_seconds, **kwargs)
+        self.max_executions = max_executions
+        self.window_seconds = window_seconds
         self.executions: list[float] = []
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return f"rate_limit_{self.config.max_executions}_{self.config.window_seconds}s"
+        return f"rate_limit_{self.max_executions}_{self.window_seconds}s"
 
     @property
     def priority(self) -> int:
@@ -311,20 +296,18 @@ class RateLimitPolicy(ConfigurablePolicy):
         current_time = time.time()
 
         if self.executions and (
-            len(self.executions) >= self.config.max_executions
-            or current_time - self.executions[0] >= self.config.window_seconds
+            len(self.executions) >= self.max_executions
+            or current_time - self.executions[0] >= self.window_seconds
         ):
-            self.executions = [
-                t for t in self.executions if current_time - t < self.config.window_seconds
-            ]
+            self.executions = [t for t in self.executions if current_time - t < self.window_seconds]
 
-        if len(self.executions) >= self.config.max_executions:
+        if len(self.executions) >= self.max_executions:
             return PolicyResponse(
                 signal=PolicySignal.SKIP,
                 data={
                     "reason": "rate_limit_exceeded",
                     "executions_in_window": len(self.executions),
-                    "limit": self.config.max_executions,
+                    "limit": self.max_executions,
                 },
             )
 
@@ -332,7 +315,7 @@ class RateLimitPolicy(ConfigurablePolicy):
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class ConditionalSkipPolicyConfig(PolicyConfig):
+class ConditionalSkip:
     """Configuration for Conditional Skip Policy."""
 
     policy_name: str = "conditional_skip"
@@ -341,7 +324,7 @@ class ConditionalSkipPolicyConfig(PolicyConfig):
 
 
 @policy(name="conditional_skip", description="Skip nodes based on custom conditions")
-class ConditionalSkipPolicy(ConfigurablePolicy):
+class ConditionalSkipPolicy:
     """Policy that skips nodes based on custom conditions.
 
     Provides flexible node filtering based on a user-defined predicate function.
@@ -360,18 +343,15 @@ class ConditionalSkipPolicy(ConfigurablePolicy):
         >>> policy_manager.subscribe(skip_policy, SubscriberType.USER)  # doctest: +SKIP
     """
 
-    Config = ConditionalSkipPolicyConfig
-    config: ConditionalSkipPolicyConfig  # Type hint for mypy
-
     def __init__(self, should_skip: Any, policy_name: str = "conditional_skip", **kwargs: Any):
         """Initialize conditional skip policy."""
-        super().__init__(policy_name=policy_name, **kwargs)
         self.should_skip = should_skip
+        self.policy_name = policy_name
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return self.config.policy_name
+        return self.policy_name
 
     @property
     def priority(self) -> int:
@@ -407,7 +387,7 @@ class ConditionalSkipPolicy(ConfigurablePolicy):
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class ResourceThrottlePolicyConfig(PolicyConfig):
+class ResourceThrottle:
     """Configuration for Resource Throttle Policy."""
 
     max_concurrent: int = 5
@@ -415,7 +395,7 @@ class ResourceThrottlePolicyConfig(PolicyConfig):
 
 
 @policy(name="resource_throttle", description="Throttle execution based on resource availability")
-class ResourceThrottlePolicy(ConfigurablePolicy):
+class ResourceThrottlePolicy:
     """Policy that throttles execution based on simulated resource limits.
 
     Prevents excessive concurrent execution by tracking "resource units"
@@ -434,18 +414,16 @@ class ResourceThrottlePolicy(ConfigurablePolicy):
         >>> policy_manager.subscribe(throttle, SubscriberType.USER)  # doctest: +SKIP
     """
 
-    Config = ResourceThrottlePolicyConfig
-    config: ResourceThrottlePolicyConfig  # Type hint for mypy
-
     def __init__(self, max_concurrent: int = 5, resource_cost: int = 1, **kwargs: Any):
         """Initialize resource throttle policy."""
-        super().__init__(max_concurrent=max_concurrent, resource_cost=resource_cost, **kwargs)
+        self.max_concurrent = max_concurrent
+        self.resource_cost = resource_cost
         self.current_usage = 0
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return f"resource_throttle_{self.config.max_concurrent}"
+        return f"resource_throttle_{self.max_concurrent}"
 
     @property
     def priority(self) -> int:
@@ -466,24 +444,24 @@ class ResourceThrottlePolicy(ConfigurablePolicy):
             SKIP if resources exhausted, PROCEED if available
         """
         if isinstance(context.event, NodeStarted):
-            if self.current_usage + self.config.resource_cost > self.config.max_concurrent:
+            if self.current_usage + self.resource_cost > self.max_concurrent:
                 return PolicyResponse(
                     signal=PolicySignal.SKIP,
                     data={
                         "reason": "resource_exhausted",
                         "current_usage": self.current_usage,
-                        "limit": self.config.max_concurrent,
+                        "limit": self.max_concurrent,
                     },
                 )
-            self.current_usage += self.config.resource_cost
+            self.current_usage += self.resource_cost
 
         elif isinstance(context.event, (NodeCompleted, NodeFailed)):
-            self.current_usage = max(0, self.current_usage - self.config.resource_cost)
+            self.current_usage = max(0, self.current_usage - self.resource_cost)
 
         return PolicyResponse(signal=PolicySignal.PROCEED)
 
 
-class ExponentialBackoffPolicyConfig(PolicyConfig):
+class ExponentialBackoff:
     """Configuration for Exponential Backoff Policy."""
 
     max_retries: int = 5
@@ -496,7 +474,7 @@ class ExponentialBackoffPolicyConfig(PolicyConfig):
     name="exponential_backoff",
     description="Retry with exponential backoff on failures",
 )
-class ExponentialBackoffPolicy(ConfigurablePolicy):
+class ExponentialBackoffPolicy:
     """Policy that implements exponential backoff retry strategy.
 
     Increases wait time exponentially between retries to reduce load
@@ -524,9 +502,6 @@ class ExponentialBackoffPolicy(ConfigurablePolicy):
         >>> policy_manager.subscribe(backoff, SubscriberType.USER)  # doctest: +SKIP
     """
 
-    Config = ExponentialBackoffPolicyConfig
-    config: ExponentialBackoffPolicyConfig  # Type hint for mypy
-
     def __init__(
         self,
         max_retries: int = 5,
@@ -536,18 +511,15 @@ class ExponentialBackoffPolicy(ConfigurablePolicy):
         **kwargs: Any,
     ):
         """Initialize exponential backoff policy."""
-        super().__init__(
-            max_retries=max_retries,
-            initial_delay_ms=initial_delay_ms,
-            backoff_factor=backoff_factor,
-            max_delay_ms=max_delay_ms,
-            **kwargs,
-        )
+        self.max_retries = max_retries
+        self.initial_delay_ms = initial_delay_ms
+        self.backoff_factor = backoff_factor
+        self.max_delay_ms = max_delay_ms
 
     @property
     def name(self) -> str:
         """Policy name."""
-        return f"exponential_backoff_{self.config.max_retries}"
+        return f"exponential_backoff_{self.max_retries}"
 
     @property
     def priority(self) -> int:
@@ -567,12 +539,11 @@ class ExponentialBackoffPolicy(ConfigurablePolicy):
         PolicyResponse
             RETRY with delay if attempts remaining, PROCEED otherwise
         """
-        if context.error and context.attempt <= self.config.max_retries:
+        if context.error and context.attempt <= self.max_retries:
             # Calculate delay with exponential backoff
             delay_ms = min(
-                self.config.initial_delay_ms
-                * (self.config.backoff_factor ** (context.attempt - 1)),
-                self.config.max_delay_ms,
+                self.initial_delay_ms * (self.backoff_factor ** (context.attempt - 1)),
+                self.max_delay_ms,
             )
 
             # Simulate delay (in real implementation, orchestrator would handle this)
@@ -583,13 +554,11 @@ class ExponentialBackoffPolicy(ConfigurablePolicy):
                 data={
                     "attempt": context.attempt,
                     "delay_ms": delay_ms,
-                    "next_delay_ms": min(
-                        delay_ms * self.config.backoff_factor, self.config.max_delay_ms
-                    ),
+                    "next_delay_ms": min(delay_ms * self.backoff_factor, self.max_delay_ms),
                 },
                 metadata={
                     "backoff_strategy": "exponential",
-                    "max_retries": self.config.max_retries,
+                    "max_retries": self.max_retries,
                 },
             )
 

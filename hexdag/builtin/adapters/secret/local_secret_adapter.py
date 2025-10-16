@@ -3,9 +3,6 @@
 import os
 from typing import TYPE_CHECKING, Any
 
-from pydantic import Field
-
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter
 from hexdag.core.logging import get_logger
 from hexdag.core.registry import adapter
 from hexdag.core.types import Secret
@@ -23,7 +20,7 @@ logger = get_logger(__name__)
     namespace="core",
     description="Local environment variable based secret management",
 )
-class LocalSecretAdapter(ConfigurableAdapter):
+class LocalSecretAdapter:
     """Local secret adapter that reads from environment variables.
 
     This adapter implements the SecretPort interface using local environment
@@ -60,18 +57,10 @@ class LocalSecretAdapter(ConfigurableAdapter):
         # Will look for MYAPP_OPENAI_API_KEY, etc.
     """
 
-    class Config(AdapterConfig):
-        """Configuration schema for Local Secret adapter."""
-
-        env_prefix: str = Field(
-            default="",
-            description="Optional prefix for environment variable names (e.g., 'MYAPP_')",
-        )
-        allow_empty: bool = Field(
-            default=False, description="Allow empty secret values (default: False)"
-        )
-
-    config: Config
+    # Type annotations for attributes
+    env_prefix: str
+    allow_empty: bool
+    _cache: dict[str, Secret]
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize local secret adapter.
@@ -80,8 +69,12 @@ class LocalSecretAdapter(ConfigurableAdapter):
         ----
             **kwargs: Configuration options (env_prefix, allow_empty)
         """
-        super().__init__(**kwargs)
-        self._cache: dict[str, Secret] = {}  # Cache for retrieved secrets
+        # Store configuration
+        self.env_prefix = kwargs.get("env_prefix", "")
+        self.allow_empty = kwargs.get("allow_empty", False)
+
+        # Cache for retrieved secrets
+        self._cache: dict[str, Secret] = {}
 
     async def aget_secret(self, key: str) -> Secret:
         """Retrieve a single secret from environment variables.
@@ -119,7 +112,7 @@ class LocalSecretAdapter(ConfigurableAdapter):
             return self._cache[key]
 
         # Cache miss - fetch from environment
-        env_var_name = f"{self.config.env_prefix}{key}"
+        env_var_name = f"{self.env_prefix}{key}"
 
         # Get from environment
         value = os.getenv(env_var_name)
@@ -129,7 +122,7 @@ class LocalSecretAdapter(ConfigurableAdapter):
                 f"Secret '{key}' not found in environment variables (looked for: {env_var_name})"
             )
 
-        if value == "" and not self.config.allow_empty:
+        if value == "" and not self.allow_empty:
             raise ValueError(
                 f"Secret '{key}' cannot be empty (set allow_empty=True to allow empty secrets)"
             )
@@ -180,9 +173,9 @@ class LocalSecretAdapter(ConfigurableAdapter):
         if keys is None:
             # Load all environment variables (with prefix if configured)
             keys = [
-                key.removeprefix(self.config.env_prefix)
+                key.removeprefix(self.env_prefix)
                 for key in os.environ
-                if key.startswith(self.config.env_prefix)
+                if key.startswith(self.env_prefix)
             ]
             logger.debug(f"Auto-discovered {len(keys)} environment variables")
 
@@ -222,9 +215,9 @@ class LocalSecretAdapter(ConfigurableAdapter):
         """
         # Get all env vars matching prefix
         names = [
-            key.removeprefix(self.config.env_prefix)
+            key.removeprefix(self.env_prefix)
             for key in os.environ
-            if key.startswith(self.config.env_prefix)
+            if key.startswith(self.env_prefix)
         ]
         logger.debug(f"Found {len(names)} environment variables")
         return names
@@ -255,7 +248,7 @@ class LocalSecretAdapter(ConfigurableAdapter):
                 port_name="secret",
                 details={
                     "env_vars_count": len(names),
-                    "env_prefix": self.config.env_prefix or "(none)",
+                    "env_prefix": self.env_prefix or "(none)",
                 },
             )
         except Exception as e:

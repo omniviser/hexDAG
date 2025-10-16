@@ -7,22 +7,23 @@ and the official pgvector Python library.
 import time
 from typing import Any
 
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
-from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.registry.decorators import adapter
-from hexdag.core.utils.sql_validation import validate_sql_identifier
 from pydantic import ConfigDict, SecretStr, field_validator
 from sqlalchemy import Column, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base
 
+from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
+from hexdag.core.ports.healthcheck import HealthStatus
+from hexdag.core.registry.decorators import adapter
+from hexdag.core.utils.sql_validation import validate_sql_identifier
+
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:
     Vector = None  # type: ignore[assignment,misc]
 
-from ..ports import VectorStorePort
+from hexdag_plugins.storage.ports import VectorStorePort
 
 Base = declarative_base()
 
@@ -263,9 +264,7 @@ class PgVectorAdapter(ConfigurableAdapter, VectorStorePort):
             await session.commit()
 
             # Get IDs of inserted records (need to refresh to get IDs)
-            for record in session.new:
-                if hasattr(record, "id"):
-                    inserted_ids.append(record.id)
+            inserted_ids.extend(record.id for record in session.new if hasattr(record, "id"))
 
         return {
             "added": len(documents),
@@ -321,14 +320,12 @@ class PgVectorAdapter(ConfigurableAdapter, VectorStorePort):
                     1 - distance if self.config.distance_metric in ["cosine", "l2"] else distance
                 )
 
-                formatted_results.append(
-                    {
-                        "id": record.id,
-                        "text": record.text,
-                        "metadata": record.metadata or {},
-                        "similarity_score": float(similarity),
-                    }
-                )
+                formatted_results.append({
+                    "id": record.id,
+                    "text": record.text,
+                    "metadata": record.metadata or {},
+                    "similarity_score": float(similarity),
+                })
 
         return formatted_results
 

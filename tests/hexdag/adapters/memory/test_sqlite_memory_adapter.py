@@ -107,7 +107,7 @@ class TestSQLiteMemoryAdapter:
         value = await memory.aget("key")
 
         assert value == "value"
-        assert memory.config.table_name == "custom_memory"
+        assert memory.table_name == "custom_memory"
 
     @pytest.mark.asyncio
     async def test_auto_init_disabled(self, database):

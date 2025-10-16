@@ -3,9 +3,7 @@
 from typing import Any
 
 from anthropic import AsyncAnthropic
-from pydantic import Field, SecretStr
 
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.llm import MessageList
 from hexdag.core.registry import adapter
@@ -25,8 +23,9 @@ logger = get_logger(__name__)
     implements_port="llm",
     namespace="core",
     description="Anthropic Claude adapter for language model interactions",
+    secrets={"api_key": "ANTHROPIC_API_KEY"},
 )
-class AnthropicAdapter(ConfigurableAdapter):
+class AnthropicAdapter:
     """Anthropic implementation of the LLM port.
 
     This adapter provides integration with Anthropic's Claude models through
@@ -36,65 +35,68 @@ class AnthropicAdapter(ConfigurableAdapter):
     Secret Management
     -----------------
     API key resolution order:
-    1. Explicit config: AnthropicAdapter(api_key="sk-...")
+    1. Explicit parameter: AnthropicAdapter(api_key="sk-...")
     2. Environment variable: ANTHROPIC_API_KEY
     3. Memory port (orchestrator): secret:ANTHROPIC_API_KEY
-
-    The API key is automatically hidden in logs and repr using Pydantic SecretStr.
     """
 
-    # Configuration schema for TOML generation
-    class Config(AdapterConfig):
-        """Configuration schema for Anthropic adapter."""
-
-        # Secret field - auto-resolved from env/memory, auto-hidden in logs
-        api_key: SecretStr | None = SecretField(
-            env_var="ANTHROPIC_API_KEY", description="Anthropic API key (auto-hidden in logs)"
-        )
-
-        # Regular configuration fields
-        model: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model to use")
-        temperature: Temperature01 = 0.7
-        max_tokens: PositiveInt = 4096
-        top_p: TopP = 1.0
-        top_k: PositiveInt | None = None
-        system_prompt: str | None = None
-        timeout: TimeoutSeconds = 60.0
-        max_retries: RetryCount = 2
-
-    # Type hint for mypy to understand self.config has Config fields
-    config: Config
-
-    def __init__(self, **kwargs: Any):
+    def __init__(
+        self,
+        api_key: str,  # ← Auto-resolved by @adapter decorator
+        model: str = "claude-3-5-sonnet-20241022",
+        temperature: Temperature01 = 0.7,
+        max_tokens: PositiveInt = 4096,
+        top_p: TopP = 1.0,
+        top_k: PositiveInt | None = None,
+        system_prompt: str | None = None,
+        timeout: TimeoutSeconds = 60.0,
+        max_retries: RetryCount = 2,
+        **kwargs: Any,  # ← For extra params like base_url
+    ):
         """Initialize Anthropic adapter.
 
-        Args
-        ----
-            **kwargs: Configuration options (api_key, model, temperature, etc.)
-                     Secrets are auto-resolved from environment or memory port.
+        Parameters
+        ----------
+        api_key : str
+            Anthropic API key (auto-resolved from ANTHROPIC_API_KEY env var)
+        model : str, default="claude-3-5-sonnet-20241022"
+            Claude model to use
+        temperature : float, default=0.7
+            Sampling temperature (0-1)
+        max_tokens : int, default=4096
+            Maximum tokens in response
+        top_p : float, default=1.0
+            Nucleus sampling parameter
+        top_k : int | None, default=None
+            Top-k sampling parameter
+        system_prompt : str | None, default=None
+            System prompt to use
+        timeout : float, default=60.0
+            Request timeout in seconds
+        max_retries : int, default=2
+            Maximum retry attempts
         """
-        # Initialize config - secrets are auto-resolved in super().__init__()
-        super().__init__(**kwargs)
-
-        # Extract API key from config (already resolved)
-        api_key = self.config.api_key.get_secret_value() if self.config.api_key else None
-        if not api_key:
-            raise ValueError(
-                "Anthropic API key required. Provide via:\n"
-                "1. api_key parameter\n"
-                "2. ANTHROPIC_API_KEY environment variable\n"
-                "3. Memory port (secret:ANTHROPIC_API_KEY) from orchestrator"
-            )
+        # Store configuration
+        self.api_key = api_key
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.top_p = top_p
+        self.top_k = top_k
+        self.system_prompt = system_prompt
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self._extra_kwargs = kwargs  # Store extra params
 
         # Initialize Anthropic client
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
-            "timeout": self.config.timeout,
-            "max_retries": self.config.max_retries,
+            "timeout": timeout,
+            "max_retries": max_retries,
         }
 
-        # Add base_url if provided as extra kwarg
-        if base_url := self.get_extra_kwarg("base_url"):
+        # Add base_url if provided
+        if base_url := kwargs.get("base_url"):
             client_kwargs["base_url"] = base_url
 
         self.client = AsyncAnthropic(**client_kwargs)
@@ -113,7 +115,7 @@ class AnthropicAdapter(ConfigurableAdapter):
         try:
             # Convert MessageList to Anthropic format
             # Anthropic requires system messages to be separate
-            system_message = self.config.system_prompt
+            system_message = self.system_prompt
             anthropic_messages = []
 
             for msg in messages:
@@ -129,21 +131,21 @@ class AnthropicAdapter(ConfigurableAdapter):
 
             # Build request parameters
             request_params: dict[str, Any] = {
-                "model": self.config.model,
+                "model": self.model,
                 "messages": anthropic_messages,
-                "temperature": self.config.temperature,
-                "max_tokens": self.config.max_tokens,
-                "top_p": self.config.top_p,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "top_p": self.top_p,
             }
 
             # Add optional parameters
             if system_message is not None:
                 request_params["system"] = system_message
 
-            if self.config.top_k is not None:
-                request_params["top_k"] = self.config.top_k
+            if self.top_k is not None:
+                request_params["top_k"] = self.top_k
 
-            if stop_sequences := self.get_extra_kwarg("stop_sequences"):
+            if stop_sequences := self._extra_kwargs.get("stop_sequences"):
                 request_params["stop_sequences"] = stop_sequences
 
             response = await self.client.messages.create(**request_params)

@@ -34,9 +34,9 @@ class TestLocalExecutor:
         """Test creating a LocalExecutor instance."""
         executor = LocalExecutor(max_concurrent_nodes=5)
 
-        assert executor.config.max_concurrent_nodes == 5
-        assert executor.config.strict_validation is False
-        assert executor.config.default_node_timeout is None
+        assert executor.max_concurrent_nodes == 5
+        assert executor.strict_validation is True  # Default changed to True
+        assert executor.default_node_timeout == 60.0  # Default value
 
     @pytest.mark.asyncio
     async def test_local_executor_lifecycle(self):

@@ -3,9 +3,7 @@
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
-from pydantic import Field, SecretStr
 
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.llm import MessageList
 from hexdag.core.registry import adapter
@@ -27,8 +25,9 @@ logger = get_logger(__name__)
     implements_port="llm",
     namespace="core",
     description="OpenAI GPT adapter for language model interactions",
+    secrets={"api_key": "OPENAI_API_KEY"},
 )
-class OpenAIAdapter(ConfigurableAdapter):
+class OpenAIAdapter:
     """OpenAI implementation of the LLM port.
 
     This adapter provides integration with OpenAI's GPT models through
@@ -38,72 +37,82 @@ class OpenAIAdapter(ConfigurableAdapter):
     Secret Management
     -----------------
     API key resolution order:
-    1. Explicit config: OpenAIAdapter(api_key="sk-...")
+    1. Explicit parameter: OpenAIAdapter(api_key="sk-...")
     2. Environment variable: OPENAI_API_KEY
     3. Memory port (orchestrator): secret:OPENAI_API_KEY
-
-    The API key is automatically hidden in logs and repr using Pydantic SecretStr.
     """
 
-    # Configuration schema for TOML generation
-    class Config(AdapterConfig):
-        """Configuration schema for OpenAI adapter."""
-
-        # Secret field - auto-resolved from env/memory, auto-hidden in logs
-        api_key: SecretStr | None = SecretField(
-            env_var="OPENAI_API_KEY", description="OpenAI API key (auto-hidden in logs)"
-        )
-
-        # Regular configuration fields
-        model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
-        temperature: Temperature02 = 0.7
-        max_tokens: TokenCount | None = None
-        response_format: Literal["text", "json_object"] = Field(
-            default="text", description="Output format (text or json_object)"
-        )
-        seed: int | None = None
-        top_p: TopP = 1.0
-        frequency_penalty: FrequencyPenalty = 0.0
-        presence_penalty: PresencePenalty = 0.0
-        system_prompt: str | None = None
-        timeout: TimeoutSeconds = 60.0
-        max_retries: RetryCount = 2
-
-    # Type hint for mypy to understand self.config has Config fields
-    config: Config
-
-    def __init__(self, **kwargs: Any):
+    def __init__(
+        self,
+        api_key: str,  # ← Auto-resolved by @adapter decorator
+        model: str = "gpt-4o-mini",
+        temperature: Temperature02 = 0.7,
+        max_tokens: TokenCount | None = None,
+        response_format: Literal["text", "json_object"] = "text",
+        seed: int | None = None,
+        top_p: TopP = 1.0,
+        frequency_penalty: FrequencyPenalty = 0.0,
+        presence_penalty: PresencePenalty = 0.0,
+        system_prompt: str | None = None,
+        timeout: TimeoutSeconds = 60.0,
+        max_retries: RetryCount = 2,
+        **kwargs: Any,  # ← For extra params like organization, base_url
+    ):
         """Initialize OpenAI adapter.
 
-        Args
-        ----
-            **kwargs: Configuration options (api_key, model, temperature, etc.)
-                     Secrets are auto-resolved from environment or memory port.
+        Parameters
+        ----------
+        api_key : str
+            OpenAI API key (auto-resolved from OPENAI_API_KEY env var)
+        model : str, default="gpt-4o-mini"
+            OpenAI model to use
+        temperature : float, default=0.7
+            Sampling temperature (0-2)
+        max_tokens : int | None, default=None
+            Maximum tokens in response
+        response_format : Literal["text", "json_object"], default="text"
+            Output format
+        seed : int | None, default=None
+            Random seed for deterministic responses
+        top_p : float, default=1.0
+            Nucleus sampling parameter
+        frequency_penalty : float, default=0.0
+            Frequency penalty (-2.0 to 2.0)
+        presence_penalty : float, default=0.0
+            Presence penalty (-2.0 to 2.0)
+        system_prompt : str | None, default=None
+            System prompt to prepend to messages
+        timeout : float, default=60.0
+            Request timeout in seconds
+        max_retries : int, default=2
+            Maximum retry attempts
         """
-        # Initialize config - secrets are auto-resolved in super().__init__()
-        super().__init__(**kwargs)
-
-        # Extract API key from config (already resolved)
-        api_key = self.config.api_key.get_secret_value() if self.config.api_key else None
-        if not api_key:
-            raise ValueError(
-                "OpenAI API key required. Provide via:\n"
-                "1. api_key parameter\n"
-                "2. OPENAI_API_KEY environment variable\n"
-                "3. Memory port (secret:OPENAI_API_KEY) from orchestrator"
-            )
+        # Store configuration
+        self.api_key = api_key
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.response_format = response_format
+        self.seed = seed
+        self.top_p = top_p
+        self.frequency_penalty = frequency_penalty
+        self.presence_penalty = presence_penalty
+        self.system_prompt = system_prompt
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self._extra_kwargs = kwargs  # Store extra params
 
         # Initialize OpenAI client
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
-            "timeout": self.config.timeout,
-            "max_retries": self.config.max_retries,
+            "timeout": timeout,
+            "max_retries": max_retries,
         }
 
-        # Add extra kwargs (organization, base_url) not in config schema
-        if org := self.get_extra_kwarg("organization"):
+        # Add extra kwargs (organization, base_url)
+        if org := kwargs.get("organization"):
             client_kwargs["organization"] = org
-        if base_url := self.get_extra_kwarg("base_url"):
+        if base_url := kwargs.get("base_url"):
             client_kwargs["base_url"] = base_url
 
         self.client = AsyncOpenAI(**client_kwargs)
@@ -124,34 +133,32 @@ class OpenAIAdapter(ConfigurableAdapter):
             openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
             # Add system prompt if configured
-            if self.config.system_prompt and not any(
-                msg["role"] == "system" for msg in openai_messages
-            ):
-                openai_messages.insert(0, {"role": "system", "content": self.config.system_prompt})
+            if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
+                openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
 
             # Build request parameters with modern API format
             request_params: dict[str, Any] = {
-                "model": self.config.model,
+                "model": self.model,
                 "messages": openai_messages,
-                "temperature": self.config.temperature,
-                "top_p": self.config.top_p,
-                "frequency_penalty": self.config.frequency_penalty,
-                "presence_penalty": self.config.presence_penalty,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "frequency_penalty": self.frequency_penalty,
+                "presence_penalty": self.presence_penalty,
             }
 
             # Add optional parameters only if set
-            if self.config.max_tokens is not None:
-                request_params["max_tokens"] = self.config.max_tokens
+            if self.max_tokens is not None:
+                request_params["max_tokens"] = self.max_tokens
 
-            if self.config.seed is not None:
-                request_params["seed"] = self.config.seed
+            if self.seed is not None:
+                request_params["seed"] = self.seed
 
-            # Stop sequences from extra kwargs (not in config schema)
-            if stop_seq := self.get_extra_kwarg("stop_sequences"):
+            # Stop sequences from extra kwargs
+            if stop_seq := self._extra_kwargs.get("stop_sequences"):
                 request_params["stop"] = stop_seq
 
             # Handle response_format for structured output
-            if self.config.response_format == "json_object":
+            if self.response_format == "json_object":
                 request_params["response_format"] = {"type": "json_object"}
 
             # Make API call with modern format

@@ -176,6 +176,43 @@ stages:
           displayName: 'Validate examples'
           continueOnError: true
 
+  - stage: BuildPackage
+    displayName: 'Build & Publish Package'
+    dependsOn: [Quality, Integration]
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/develop')))
+    jobs:
+      - job: BuildAndPublish
+        displayName: 'Build and Publish hexdag Package'
+        steps:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+          displayName: 'Use Python $(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip uv build twine
+          displayName: 'Install build tools'
+
+        - script: |
+            python -m build --wheel --sdist
+          displayName: 'Build hexdag package (includes bundled plugins)'
+
+        - task: TwineAuthenticate@1
+          inputs:
+            artifactFeed: 'hexdag/hexdag-packages'
+          displayName: 'Authenticate with Azure Artifacts'
+
+        - script: |
+            python -m twine upload -r hexdag-packages --config-file $(PYPIRC_PATH) dist/*
+          displayName: 'Publish to Azure Artifacts'
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: 'dist'
+            artifact: 'hexdag-dist'
+            publishLocation: 'pipeline'
+          displayName: 'Publish build artifacts to pipeline'
+
   - stage: MutationTesting
     displayName: 'Mutation Testing'
     dependsOn: [Quality, Integration]

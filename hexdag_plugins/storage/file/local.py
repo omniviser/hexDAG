@@ -1,5 +1,6 @@
 """Local filesystem storage adapter."""
 
+import contextlib
 import shutil
 import time
 from pathlib import Path
@@ -162,11 +163,10 @@ class LocalFileStorage(ConfigurableAdapter, FileStoragePort):
         file_path.unlink()
 
         # Clean up empty parent directories
-        try:
-            file_path.parent.rmdir()
-        except OSError:
-            # Directory not empty, that's fine
-            pass
+        with contextlib.suppress(FileNotFoundError):
+            parent = file_path.parent
+            if parent.is_dir():
+                parent.rmdir()
 
         return {
             "deleted": True,

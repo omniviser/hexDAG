@@ -12,11 +12,11 @@ Installation:
 
 from typing import Any
 
-from hexdag.core import AdapterConfig, ConfigurableAdapter
-from hexdag.core.registry.decorators import adapter
 from pydantic import Field
 
-from ..ports import VectorStorePort
+from hexdag.core import AdapterConfig, ConfigurableAdapter
+from hexdag.core.registry.decorators import adapter
+from hexdag_plugins.storage.ports import VectorStorePort
 
 
 class ChromaDBConfig(AdapterConfig):
@@ -175,18 +175,15 @@ class ChromaDBAdapter(ConfigurableAdapter, VectorStorePort):
             )
 
         # Format results
-        documents = []
-        for i in range(len(results["ids"][0])):
-            documents.append(
-                {
-                    "id": results["ids"][0][i],
-                    "text": results["documents"][0][i],
-                    "score": 1.0 - results["distances"][0][i],  # Convert distance to similarity
-                    "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                }
-            )
-
-        return documents
+        return [
+            {
+                "id": results["ids"][0][i],
+                "text": results["documents"][0][i],
+                "score": 1.0 - results["distances"][0][i],  # Convert distance to similarity
+                "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
+            }
+            for i in range(len(results["ids"][0]))
+        ]
 
     async def aclear(self) -> None:
         """Clear all documents from the collection."""

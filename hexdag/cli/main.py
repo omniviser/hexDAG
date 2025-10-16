@@ -15,7 +15,6 @@ except ImportError:
 
 from hexdag.cli.commands import (
     build_cmd,
-    config_cmd,
     create_cmd,
     docs_cmd,
     init_cmd,
@@ -42,7 +41,6 @@ console = Console()
 
 # Add subcommands
 app.add_typer(init_cmd.app, name="init", help="Initialize a new HexDAG project")
-app.add_typer(config_cmd.app, name="config", help="Configuration management")
 app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters")
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
 app.add_typer(registry_cmd.app, name="registry", help="Inspect the component registry")

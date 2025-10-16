@@ -14,12 +14,12 @@ class TestOpenAIAdapter:
     def test_initialization_with_api_key(self):
         """Test adapter initialization with API key provided."""
         adapter = OpenAIAdapter(api_key="test-key")
-        assert adapter.config.model == "gpt-4o-mini"
-        assert adapter.config.temperature == 0.7
-        assert adapter.config.max_tokens is None
-        assert adapter.config.response_format == "text"
-        # API key should be hidden in config
-        assert str(adapter.config.api_key) == "**********"
+        assert adapter.model == "gpt-4o-mini"
+        assert adapter.temperature == 0.7
+        assert adapter.max_tokens is None
+        assert adapter.response_format == "text"
+        # API key should be set
+        assert adapter.api_key == "test-key"
         # Client should be initialized
         assert adapter.client is not None
 
@@ -29,8 +29,8 @@ class TestOpenAIAdapter:
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}):
             adapter = OpenAIAdapter()
-            # API key should be auto-resolved from env and hidden
-            assert str(adapter.config.api_key) == "**********"
+            # API key should be auto-resolved from env
+            assert adapter.api_key == "env-key"
             # Client should be initialized
             assert adapter.client is not None
 
@@ -41,7 +41,7 @@ class TestOpenAIAdapter:
         with patch.dict(os.environ, {}, clear=True):
             # Remove OPENAI_API_KEY from env
             os.environ.pop("OPENAI_API_KEY", None)
-            with pytest.raises(ValueError, match="OpenAI API key required"):
+            with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
                 OpenAIAdapter()
 
     def test_initialization_with_custom_parameters(self):
@@ -54,9 +54,9 @@ class TestOpenAIAdapter:
                 max_tokens=2000,
                 timeout=30.0,
             )
-            assert adapter.config.model == "gpt-4o"
-            assert adapter.config.temperature == 0.5
-            assert adapter.config.max_tokens == 2000
+            assert adapter.model == "gpt-4o"
+            assert adapter.temperature == 0.5
+            assert adapter.max_tokens == 2000
             mock_client.assert_called_once_with(api_key="test-key", timeout=30.0, max_retries=2)
 
     @pytest.mark.asyncio

@@ -12,6 +12,7 @@ import yaml
 # ObserverManager is now a port - passed as dependency
 from hexdag.builtin.nodes.mapped_input import FieldMappingRegistry
 from hexdag.core.bootstrap import ensure_bootstrapped
+from hexdag.core.configurable import ConfigurableMacro
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt.template import ChatPromptTemplate
@@ -19,6 +20,7 @@ from hexdag.core.pipeline_builder.component_instantiator import ComponentInstant
 from hexdag.core.pipeline_builder.pipeline_config import PipelineConfig
 from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
 from hexdag.core.registry import registry
+from hexdag.core.registry.exceptions import ComponentNotFoundError
 from hexdag.core.registry.models import NAMESPACE_SEPARATOR
 
 logger = get_logger(__name__)
@@ -242,10 +244,145 @@ class YamlPipelineBuilder:
         nodes_list = config.get("spec", {}).get("nodes", [])
 
         for node_config in nodes_list:
-            node = self._build_node_from_config(node_config)
-            graph.add(node)
+            kind = node_config.get("kind", "")
+
+            if kind == "macro_invocation":
+                # Handle macro expansion
+                self._expand_macro_into_graph(graph, node_config)
+            else:
+                # Regular node creation
+                node = self._build_node_from_config(node_config)
+                graph.add(node)
 
         return graph
+
+    def _expand_macro_into_graph(self, graph: DirectedGraph, macro_config: dict[str, Any]) -> None:
+        """Expand a macro invocation and merge the resulting subgraph into the main graph.
+
+        Parameters
+        ----------
+        graph : DirectedGraph
+            Main graph to expand the macro into
+        macro_config : dict[str, Any]
+            Macro invocation configuration from YAML
+
+        Raises
+        ------
+        YamlPipelineBuilderError
+            If macro cannot be found or expanded
+        """
+        # Extract macro configuration
+        instance_name = macro_config.get("metadata", {}).get("name")
+        if not instance_name:
+            raise YamlPipelineBuilderError("macro_invocation must have metadata.name field")
+
+        spec = macro_config.get("spec", {})
+        macro_ref = spec.get("macro")
+        if not macro_ref:
+            raise YamlPipelineBuilderError(
+                f"macro_invocation '{instance_name}' must specify spec.macro field"
+            )
+
+        # Parse macro reference (e.g., "core:research" -> ("research", "core"))
+        macro_name, namespace = self._parse_macro_reference(macro_ref)
+
+        # Extract configuration and inputs
+        config_params = spec.get("config", {})
+        inputs = spec.get("inputs", {})
+        dependencies = spec.get("dependencies", [])
+
+        # Get and instantiate macro from registry, then expand
+        try:
+            # Registry automatically instantiates the macro with init_params
+            macro_instance = registry.get(
+                macro_name, namespace=namespace, init_params=config_params
+            )
+        except ComponentNotFoundError as e:
+            raise YamlPipelineBuilderError(
+                f"Macro '{namespace}:{macro_name}' not found in registry: {e}"
+            ) from e
+        except Exception as e:
+            raise YamlPipelineBuilderError(
+                f"Failed to instantiate macro '{macro_name}': {e}"
+            ) from e
+
+        # Validate it's actually a macro
+        if not isinstance(macro_instance, ConfigurableMacro):
+            type_name = type(macro_instance).__name__
+            raise YamlPipelineBuilderError(
+                f"Component '{macro_name}' is not a ConfigurableMacro (got {type_name})"
+            )
+
+        # Expand the macro into a subgraph
+        try:
+            subgraph = macro_instance.expand(
+                instance_name=instance_name, inputs=inputs, dependencies=dependencies
+            )
+        except Exception as e:
+            raise YamlPipelineBuilderError(
+                f"Failed to expand macro '{macro_name}' (instance '{instance_name}'): {e}"
+            ) from e
+
+        # Merge subgraph into main graph
+        self._merge_subgraph_into_graph(graph, subgraph, dependencies)
+
+        logger.info(
+            "✅ Expanded macro '{macro}' as '{instance}' ({nodes} nodes)",
+            macro=macro_ref,
+            instance=instance_name,
+            nodes=len(subgraph.nodes),
+        )
+
+    @staticmethod
+    def _parse_macro_reference(macro_ref: str) -> tuple[str, str]:
+        """Parse macro reference into (name, namespace).
+
+        Parameters
+        ----------
+        macro_ref : str
+            Macro reference like "core:research" or "research"
+
+        Returns
+        -------
+        tuple[str, str]
+            (macro_name, namespace)
+        """
+        if NAMESPACE_SEPARATOR in macro_ref:
+            namespace, macro_name = macro_ref.split(NAMESPACE_SEPARATOR, 1)
+        else:
+            namespace = "core"
+            macro_name = macro_ref
+
+        return macro_name, namespace
+
+    @staticmethod
+    def _merge_subgraph_into_graph(
+        graph: DirectedGraph, subgraph: DirectedGraph, external_dependencies: list[str]
+    ) -> None:
+        """Merge a subgraph into the main graph.
+
+        Parameters
+        ----------
+        graph : DirectedGraph
+            Main graph to merge into
+        subgraph : DirectedGraph
+            Subgraph to merge (from macro expansion)
+        external_dependencies : list[str]
+            List of node names in the main graph that the subgraph depends on
+        """
+        # Add all nodes from subgraph to main graph
+        for node in subgraph.nodes.values():
+            # If this is an entry node (no internal dependencies),
+            # add external dependencies
+            internal_deps = subgraph.get_dependencies(node.name)
+
+            if not internal_deps and external_dependencies:
+                # Entry node - add external dependencies
+                node_with_deps = node.after(*external_dependencies)
+                graph.add(node_with_deps)
+            else:
+                # Internal node - keep original dependencies
+                graph.add(node)
 
     def _build_node_from_config(self, node_config: dict[str, Any]) -> NodeSpec:
         """Build a single NodeSpec from node configuration.

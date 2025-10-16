@@ -34,6 +34,14 @@ _run_id_context: ContextVar[str | None] = ContextVar("run_id", default=None)
 # Ports stored as immutable MappingProxyType to prevent race conditions in concurrent execution
 _ports_context: ContextVar[MappingProxyType[str, Any] | None] = ContextVar("ports", default=None)
 
+# Dynamic graph context - for runtime expansion support
+_current_graph_context: ContextVar[Any | None] = ContextVar(
+    "current_graph", default=None
+)  # Any to avoid circular import
+
+# Node results context - for accessing intermediate results during execution
+_node_results_context: ContextVar[dict[str, Any] | None] = ContextVar("node_results", default=None)
+
 
 # ============================================================================
 # Observer Manager Context
@@ -307,3 +315,79 @@ def clear_execution_context() -> None:
     _policy_manager_context.set(None)
     _run_id_context.set(None)
     _ports_context.set(None)
+    _current_graph_context.set(None)
+    _node_results_context.set(None)
+
+
+# ============================================================================
+# Dynamic Graph Context (for runtime expansion)
+# ============================================================================
+
+
+def set_current_graph(graph: Any) -> None:
+    """Set current graph for dynamic expansion.
+
+    This allows expander nodes to access and modify the graph during execution.
+    Only used when executing DynamicDirectedGraph.
+
+    Parameters
+    ----------
+    graph : Any
+        The current graph being executed (typically DynamicDirectedGraph)
+    """
+    _current_graph_context.set(graph)
+
+
+def get_current_graph() -> Any | None:
+    """Get current graph from execution context.
+
+    Used by expander nodes to inject new nodes during runtime.
+
+    Returns
+    -------
+    Any | None
+        Current graph, or None if not in dynamic execution context
+
+    Examples
+    --------
+    >>> # In an expander node
+    >>> graph = get_current_graph()
+    >>> if graph and hasattr(graph, 'add'):
+    ...     new_node = create_next_step()
+    ...     graph.add(new_node)
+    """
+    return _current_graph_context.get()
+
+
+def set_node_results(results: dict[str, Any]) -> None:
+    """Set accumulated node results for dynamic expansion.
+
+    This allows expander nodes to inspect previous results when deciding
+    whether to expand the graph.
+
+    Parameters
+    ----------
+    results : dict[str, Any]
+        Dictionary mapping node names to their execution results
+    """
+    _node_results_context.set(results)
+
+
+def get_node_results() -> dict[str, Any] | None:
+    """Get accumulated node results from execution context.
+
+    Returns
+    -------
+    dict[str, Any] | None
+        Node results dictionary, or None if not in execution context
+
+    Examples
+    --------
+    >>> # In an expander node
+    >>> results = get_node_results()
+    >>> if results:
+    ...     previous_step = results.get("step_1")
+    ...     if should_continue(previous_step):
+    ...         inject_next_step()
+    """
+    return _node_results_context.get()

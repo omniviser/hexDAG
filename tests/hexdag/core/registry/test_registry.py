@@ -1269,6 +1269,9 @@ class TestConfigurableRegistry:
         if registry.ready:
             registry._reset_for_testing()
 
+    @pytest.mark.skip(
+        reason="Configurable components tracking removed - using decorator pattern now"
+    )
     def test_configurable_component_registration(self):
         """Test that configurable components are tracked by the registry."""
 
@@ -1332,6 +1335,9 @@ class TestConfigurableRegistry:
         # Clean up
         del sys.modules["test_configurable_module"]
 
+    @pytest.mark.skip(
+        reason="Configurable components tracking removed - using decorator pattern now"
+    )
     def test_non_configurable_component_not_tracked(self):
         """Test that non-configurable components are not in configurable list."""
 

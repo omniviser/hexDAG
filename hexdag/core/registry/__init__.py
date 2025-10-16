@@ -55,6 +55,7 @@ from hexdag.core.registry.decorators import (
     component,
     function_node,
     llm_node,
+    macro,
     memory,
     node,
     observer,
@@ -79,6 +80,7 @@ __all__ = [
     "memory",
     "observer",
     "port",
+    "macro",
     # Node subtype decorators
     "function_node",
     "llm_node",

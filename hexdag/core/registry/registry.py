@@ -64,9 +64,6 @@ class ComponentRegistry:
         self._dev_mode = False
         self._bootstrap_context = False
 
-        # Configurable components tracking
-        self._configurable_components: dict[str, dict[str, Any]] = {}
-
         # Schema cache for performance
         self._schema_cache: dict[str, dict | str] = {}
 
@@ -304,44 +301,10 @@ class ComponentRegistry:
         # Store component in flat dict
         self._components[clean_name] = metadata
 
-        # Track configurable components
-        self._track_configurable_component(
-            clean_name, component, component_type_enum, namespace_str, implements_port_str
-        )
-
         logger.debug(
             "Registered {name} (namespace: {namespace})", name=clean_name, namespace=namespace_str
         )
         return metadata
-
-    def _track_configurable_component(
-        self,
-        name: str,
-        component: object,
-        component_type: ComponentType,
-        namespace: str,
-        implements_port: str | None,
-    ) -> None:
-        """Track components that implement ConfigurableComponent protocol."""
-        if hasattr(component, "get_config_class"):
-            try:
-                get_config_method = getattr(component, "get_config_class")  # noqa: B009
-                config_class = get_config_method()
-                self._configurable_components[name] = {
-                    "component_class": component,
-                    "config_class": config_class,
-                    "namespace": namespace,
-                    "name": name,
-                    "type": component_type,
-                    "port": implements_port,
-                }
-                logger.debug("Registered configurable component: {name}", name=name)
-            except Exception as e:
-                logger.debug(
-                    "Component {name} does not implement ConfigurableComponent: {error}",
-                    name=name,
-                    error=e,
-                )
 
     # ========================================================================
     # Component Retrieval (inline from ComponentStore)
@@ -413,10 +376,6 @@ class ComponentRegistry:
             metadata=metadata,
             is_protected=False,  # Protection removed - kept for API compatibility
         )
-
-    def get_configurable_components(self) -> dict[str, dict[str, Any]]:
-        """Get all registered configurable components."""
-        return self._configurable_components.copy()
 
     def get_schema(
         self, name: str, namespace: str | None = None, format: str = "dict"
@@ -568,7 +527,6 @@ class ComponentRegistry:
     def _reset_for_testing(self) -> None:
         """Reset registry state (for testing only)."""
         self._components.clear()
-        self._configurable_components.clear()
         self._schema_cache.clear()
         self._ready = False
         self._manifest = None

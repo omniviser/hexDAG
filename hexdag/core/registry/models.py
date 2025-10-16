@@ -152,6 +152,7 @@ class ComponentType(StrEnum):
     MEMORY = "memory"
     OBSERVER = "observer"
     CONTROLLER = "controller"
+    MACRO = "macro"  # Pipeline templates that expand to subgraphs
 
 
 class NodeSubtype(StrEnum):

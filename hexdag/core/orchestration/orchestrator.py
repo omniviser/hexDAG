@@ -12,8 +12,6 @@ from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
-    from types import MappingProxyType
-
     from hexdag.core.ports.observer_manager import ObserverManagerPort
     from hexdag.core.ports.policy_manager import PolicyManagerPort
 else:
@@ -24,6 +22,8 @@ from hexdag.core.context import (
     ExecutionContext,
     get_observer_manager,
     get_ports,
+    set_current_graph,
+    set_node_results,
     set_ports,
 )
 from hexdag.core.domain.dag import DirectedGraph, DirectedGraphError
@@ -222,11 +222,17 @@ class Orchestrator:
         if executor is None:
             from hexdag.adapters.executors import LocalExecutor  # noqa: PLC0415
 
-            executor = LocalExecutor(
-                max_concurrent_nodes=max_concurrent_nodes,
-                strict_validation=strict_validation,
-                default_node_timeout=default_node_timeout,
-            )
+            if default_node_timeout is not None:
+                executor = LocalExecutor(
+                    max_concurrent_nodes=max_concurrent_nodes,
+                    strict_validation=strict_validation,
+                    default_node_timeout=default_node_timeout,
+                )
+            else:
+                executor = LocalExecutor(
+                    max_concurrent_nodes=max_concurrent_nodes,
+                    strict_validation=strict_validation,
+                )
 
         self.executor = executor
 
@@ -508,6 +514,10 @@ class Orchestrator:
             run_id=run_id,
             ports=all_ports,
         ):
+            # Set graph and node_results in context for dynamic expansion
+            set_current_graph(graph)
+            set_node_results(node_results)
+
             # PRE-DAG HOOKS: Execute before pipeline starts
             pre_hook_results = await self._pre_hook_manager.execute_hooks(
                 context=context,
@@ -593,8 +603,9 @@ class Orchestrator:
                     )
                     # Store post-hook results in context (for debugging/logging)
                     context.metadata["post_dag_hooks"] = post_hook_results
-                except (RuntimeError, ValueError, KeyError) as post_hook_error:
-                    # Specific cleanup errors - log but don't fail pipeline
+                except Exception as post_hook_error:
+                    # Log all hook errors but don't fail the pipeline
+                    # (hooks are for cleanup/observability, not critical path)
                     logger.error(
                         f"Post-DAG hooks failed: {post_hook_error}",
                         exc_info=True,
@@ -646,7 +657,10 @@ class Orchestrator:
         # Store graph, node_results, and initial_input in ports context for executor
         # Note: We extend the existing ports with executor-specific context.
         # This is safe because set_ports() wraps in MappingProxyType (immutable).
-        existing_ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
+        existing_ports_result = get_ports()
+        existing_ports: dict[str, Any] = (
+            dict(existing_ports_result) if existing_ports_result else {}
+        )
         executor_ports = {
             **existing_ports,
             EXECUTOR_CONTEXT_GRAPH: graph,
@@ -657,11 +671,16 @@ class Orchestrator:
 
         try:
             async with asyncio.timeout(timeout):
-                for wave_idx, wave in enumerate(waves, 1):
+                # Dynamic wave execution - re-compute waves if graph expands
+                wave_idx = 0
+                previous_wave_count = len(waves)
+
+                while wave_idx < len(waves):
+                    wave = waves[wave_idx]
                     wave_start_time = time.time()
 
                     # Fire wave started event
-                    wave_event = WaveStarted(wave_index=wave_idx, nodes=wave)
+                    wave_event = WaveStarted(wave_index=wave_idx + 1, nodes=wave)
                     await self._notify_observer(get_observer_manager(), wave_event)
 
                     # Create tasks for this wave
@@ -670,7 +689,7 @@ class Orchestrator:
                         task = ExecutionTask(
                             node_name=node_name,
                             node_input=None,  # Executor will prepare input from graph
-                            wave_index=wave_idx,
+                            wave_index=wave_idx + 1,
                             should_validate=validate,
                             context_data={
                                 "dag_id": context.dag_id,
@@ -690,12 +709,31 @@ class Orchestrator:
                     for node_name, result in wave_results.items():
                         node_results[node_name] = result.output
 
+                    # Update node_results in context for expander nodes
+                    set_node_results(node_results)
+
                     # Fire wave completed event
                     wave_completed = WaveCompleted(
-                        wave_index=wave_idx,
+                        wave_index=wave_idx + 1,
                         duration_ms=(time.time() - wave_start_time) * 1000,
                     )
                     await self._notify_observer(get_observer_manager(), wave_completed)
+
+                    # Check if graph was dynamically expanded
+                    new_waves = graph.waves()
+                    if len(new_waves) != previous_wave_count:
+                        # Graph expanded! Re-compute waves
+                        logger.info(
+                            "Dynamic expansion detected: {old} → {new} waves",
+                            old=previous_wave_count,
+                            new=len(new_waves),
+                        )
+                        waves = new_waves
+                        previous_wave_count = len(new_waves)
+                        # Don't increment wave_idx - continue from where we are
+
+                    # Move to next wave
+                    wave_idx += 1
 
             return False  # Not cancelled
 
