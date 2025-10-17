@@ -124,7 +124,7 @@ my-project/
 
 Generate Docker containers for pipeline deployments, including Dockerfile, entrypoint script, docker-compose configuration, and documentation.
 
-⚠️ **Security Warning**: For development use only. See [Build Command Guide](CLI_BUILD_COMMAND.md) for full security details.
+⚠️ **Security Warning**: For development use only. See [Build Command Guide](#build---build-docker-containers) for full security details.
 
 ### Usage
 
@@ -926,14 +926,14 @@ Main configuration file. Auto-discovered in this order:
 [tool.hexdag]
 # Core modules
 modules = [
-    "hexai.core.ports",
-    "hexai.core.application.nodes",
-    "hexai.tools.builtin_tools",
+    "hexdag.core.ports",
+    "hexdag.core.application.nodes",
+    "hexdag.tools.builtin_tools",
 ]
 
 # Plugins
 plugins = [
-    "hexai.adapters.local",
+    "hexdag.adapters.local",
 ]
 
 # Development mode
@@ -1098,9 +1098,9 @@ unset HEXDAG_DISABLE_BUILD
 
 ## See Also
 
-- [Build Command Guide](CLI_BUILD_COMMAND.md) - Detailed `build` command documentation
-- [Configuration Reference](CONFIGURATION.md) - TOML configuration guide
-- [Plugin Development](PLUGIN_DEVELOPMENT.md) - Creating custom plugins
+- [Build Command Guide](#build---build-docker-containers) - Detailed `build` command documentation
+- [Configuration Reference](#configuration-files) - TOML configuration guide
+- [Plugin Development](PLUGIN_SYSTEM.md) - Creating custom plugins
 - [Main Documentation](../README.md) - Project overview
 
 ---

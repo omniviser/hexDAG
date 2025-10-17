@@ -1,13 +1,13 @@
-# 🗺️ Development Roadmap: hexAI Framework & Agent Factory
+# 🗺️ Development Roadmap: hexAI Framework & YAML Pipelines
 
-> **Strategic development plan separating the core hexAI framework from agent factory applications**
+> **Strategic development plan separating the core hexAI framework from YAML pipelines applications**
 
 ## 🎯 Vision & Architecture Separation
 
 ### Core Philosophy
 - **hexAI**: Lightweight, focused DAG orchestration framework
-- **Agent Factory**: YAML-based agent workflow builder with multi-agent coordination patterns
-- **Clear Boundaries**: Framework provides hooks, agent factory adds business workflow capabilities
+- **YAML Pipelines**: YAML-based agent workflow builder with multi-agent coordination patterns
+- **Clear Boundaries**: Framework provides hooks, YAML pipelines adds business workflow capabilities
 
 ```mermaid
 graph TD
@@ -18,8 +18,8 @@ graph TD
         D[Event Hooks]
     end
 
-    subgraph "Agent Factory Layer"
-        E[YAML Pipeline Builder]
+    subgraph "YAML Pipelines Layer"
+        E[YAML YAML Pipelines]
         F[Multi-Agent Coordination]
         G[Business Workflow Patterns]
         H[Agent Catalog System]
@@ -74,11 +74,11 @@ graph TD
 - [ ] **Extract JSON Parsing Strategies**
   - Remove regex duplication
   - Create pluggable parser interface
-  - Move to `hexai.parsing` module
+  - Move to `hexdag.parsing` module
   - Check the security of it
   - Create YAML Parsing Strategy
 
-- [ ] **Static Pipeline Linter (`hexai-lint`)**
+- [ ] **Static Pipeline Linter (`hexdag-lint`)**
   - CLI tool for validating pipelines before execution
   - Detect cycles, unused outputs, unknown parameters
   - Emit rule IDs (E100, W200, I300) for different error types
@@ -173,7 +173,7 @@ graph TD
 
 #### **Library Publication**
 - [ ] **PyPI Package Publication**
-  - Publish hexAI as standalone library: `pip install hexai`
+  - Publish hexDAG as standalone library: `pip install hexdag`
   - Semantic versioning and release automation
   - Comprehensive package metadata and documentation
   - Minimal dependencies (only Pydantic)
@@ -195,7 +195,7 @@ graph TD
 
 ---
 
-## 🏢 Track 2: Agent Factory Enhancement
+## 🏢 Track 2: YAML Pipelines Enhancement
 
 ### **Phase 1: Enterprise Features **
 
@@ -208,7 +208,7 @@ graph TD
 #### **Advanced Features**
 - [ ] **Deterministic Replay & Checkpointing**
   - Append-only checkpoint logs (`checkpoints/{session}.jsonl`)
-  - CLI replay command: `hexai replay --session {id} --from {node}`
+  - CLI replay command: `hexdag replay --session {id} --from {node}`
   - Input/output hash verification for consistency
 
 - [ ] **Reusable Sub-Graphs ("Macros")**
@@ -415,7 +415,7 @@ graph TD
 - < 100ms overhead per node
 - Successful PyPI publication with >1000 downloads
 
-### Agent Factory
+### YAML Pipelines
 - Support 1000+ concurrent pipelines
 - < 1s pipeline startup time
 - 99.9% uptime

@@ -403,6 +403,8 @@ class Orchestrator:
         initial_input: Any,
         additional_ports: dict[str, Any] | PortsBuilder | None = None,
         validate: bool = True,
+        dynamic: bool = False,
+        max_dynamic_iterations: int = 100,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute a DAG with concurrent processing and resource limits.
@@ -421,6 +423,13 @@ class Orchestrator:
             initial_input: Initial input data for the graph
             additional_ports: Either a dictionary of ports or a PortsBuilder instance
             validate: Whether to validate the graph before execution
+            dynamic: Enable dynamic graph expansion (for agent macros).
+                When True, supports:
+                - Runtime node injection via get_current_graph()
+                - Re-execution of nodes that return None
+                - Iterative expansion until all nodes complete
+            max_dynamic_iterations: Maximum number of expansion iterations (safety limit).
+                Prevents infinite loops in dynamic execution.
             **kwargs: Additional keyword arguments
 
         Returns
@@ -457,7 +466,7 @@ class Orchestrator:
         # Use managed_ports context manager for automatic lifecycle management
         async with _managed_ports(self.ports, additional_ports_dict, self.executor) as all_ports:
             return await self._execute_with_ports(
-                graph, initial_input, all_ports, validate, **kwargs
+                graph, initial_input, all_ports, validate, dynamic, max_dynamic_iterations, **kwargs
             )
 
     async def _execute_with_ports(
@@ -466,11 +475,23 @@ class Orchestrator:
         initial_input: Any,
         all_ports: dict[str, Any],
         validate: bool,
+        dynamic: bool,
+        max_dynamic_iterations: int,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute DAG with managed ports (internal method).
 
         This method is separated to work with the managed_ports context manager.
+
+        Args
+        ----
+            graph: DirectedGraph to execute
+            initial_input: Initial input data
+            all_ports: Merged ports dictionary
+            validate: Whether to validate graph
+            dynamic: Enable dynamic graph expansion
+            max_dynamic_iterations: Maximum dynamic expansion iterations
+            **kwargs: Additional arguments
         """
         if validate:
             # Validate DAG structure - catch specific DAG errors
@@ -536,17 +557,31 @@ class Orchestrator:
             cancelled = False
 
             try:
-                # Execute all waves using executor (always uses executor now)
-                cancelled = await self._execute_with_executor(
-                    waves=waves,
-                    graph=graph,
-                    node_results=node_results,
-                    initial_input=initial_input,
-                    context=context,
-                    timeout=timeout,
-                    validate=validate,
-                    **kwargs,
-                )
+                # Route to appropriate execution mode
+                if dynamic:
+                    # Dynamic execution with runtime node injection
+                    cancelled = await self._execute_dynamic(
+                        graph=graph,
+                        node_results=node_results,
+                        initial_input=initial_input,
+                        context=context,
+                        timeout=timeout,
+                        validate=validate,
+                        max_iterations=max_dynamic_iterations,
+                        **kwargs,
+                    )
+                else:
+                    # Static execution (traditional wave-based)
+                    cancelled = await self._execute_with_executor(
+                        waves=waves,
+                        graph=graph,
+                        node_results=node_results,
+                        initial_input=initial_input,
+                        context=context,
+                        timeout=timeout,
+                        validate=validate,
+                        **kwargs,
+                    )
             except BaseException as e:
                 pipeline_error = e
                 raise  # Re-raise immediately
@@ -716,6 +751,183 @@ class Orchestrator:
 
         except TimeoutError:
             return True  # Cancelled due to timeout
+
+    async def _execute_dynamic(
+        self,
+        graph: DirectedGraph,
+        node_results: dict[str, Any],
+        initial_input: Any,
+        context: NodeExecutionContext,
+        timeout: float | None,
+        validate: bool,
+        max_iterations: int,
+        **kwargs: Any,
+    ) -> bool:
+        """Execute graph with dynamic node injection support.
+
+        This method supports:
+        1. Runtime node injection via get_current_graph()
+        2. Re-execution of nodes that return None
+        3. Iterative expansion until completion
+
+        Parameters
+        ----------
+        graph : DirectedGraph
+            The graph being executed (may be modified at runtime)
+        node_results : dict[str, Any]
+            Dictionary to store node execution results
+        initial_input : Any
+            Initial input data for the pipeline
+        context : NodeExecutionContext
+            Execution context for the pipeline
+        timeout : float | None
+            Optional timeout for the entire execution
+        validate : bool
+            Whether to validate nodes
+        max_iterations : int
+            Maximum number of dynamic expansion iterations
+        **kwargs : Any
+            Additional arguments
+
+        Returns
+        -------
+        bool
+            True if execution was cancelled, False otherwise
+
+        Raises
+        ------
+        OrchestratorError
+            If max_iterations is exceeded (infinite loop protection)
+        """
+        executed_nodes: set[str] = set()
+        iteration = 0
+        start_time = time.time()
+
+        logger.info(f"Starting dynamic execution (max_iterations={max_iterations})")
+
+        while iteration < max_iterations:
+            iteration += 1
+
+            # Check timeout
+            if timeout and (time.time() - start_time) > timeout:
+                logger.warning("Dynamic execution timeout reached")
+                return True  # Cancelled
+
+            # Get current graph state (may have new nodes injected)
+            current_node_names = set(graph.nodes.keys())
+
+            # Find nodes ready to execute
+            ready_nodes = self._get_ready_nodes(
+                graph=graph,
+                all_node_names=current_node_names,
+                executed_nodes=executed_nodes,
+                node_results=node_results,
+            )
+
+            if not ready_nodes:
+                # No more nodes to execute - we're done
+                logger.info(
+                    f"Dynamic execution completed after {iteration} iterations "
+                    f"({len(executed_nodes)} nodes executed)"
+                )
+                break
+
+            logger.debug(
+                f"Dynamic iteration {iteration}: executing {len(ready_nodes)} nodes: {ready_nodes}"
+            )
+
+            # Execute wave of ready nodes
+            wave_cancelled = await self._execute_with_executor(
+                waves=[ready_nodes],  # Single wave
+                graph=graph,
+                node_results=node_results,
+                initial_input=initial_input,
+                context=context,
+                timeout=timeout,
+                validate=validate,
+                **kwargs,
+            )
+
+            if wave_cancelled:
+                return True  # Propagate cancellation
+
+            # Mark nodes as executed
+            # BUT: don't mark nodes that returned None (they need re-execution)
+            for node_name in ready_nodes:
+                result = node_results.get(node_name)
+                if result is not None:
+                    executed_nodes.add(node_name)
+                    logger.debug(f"Node {node_name} completed successfully")
+                else:
+                    logger.debug(
+                        f"Node {node_name} returned None, will re-execute after dependencies"
+                    )
+
+            # Update context for expander nodes
+            set_node_results(node_results)
+
+            # Check if new nodes were added to graph
+            new_nodes = current_node_names.symmetric_difference(set(graph.nodes.keys()))
+            if new_nodes:
+                logger.info(f"Detected {len(new_nodes)} newly injected nodes: {new_nodes}")
+
+        # Check if we exceeded max iterations
+        if iteration >= max_iterations:
+            unexecuted = set(graph.nodes.keys()) - executed_nodes
+            raise OrchestratorError(
+                f"Dynamic execution exceeded max_iterations={max_iterations}. "
+                f"Possible infinite loop. "
+                f"Executed {len(executed_nodes)} nodes, "
+                f"{len(unexecuted)} nodes remain: {unexecuted}"
+            )
+
+        return False  # Not cancelled
+
+    def _get_ready_nodes(
+        self,
+        graph: DirectedGraph,
+        all_node_names: set[str],
+        executed_nodes: set[str],
+        node_results: dict[str, Any],
+    ) -> list[str]:
+        """Get nodes that are ready to execute in dynamic mode.
+
+        A node is ready if:
+        1. It hasn't been executed successfully yet (not in executed_nodes)
+        2. All its dependencies have completed (results available)
+
+        Parameters
+        ----------
+        graph : DirectedGraph
+            The current graph
+        all_node_names : set[str]
+            All node names in the current graph
+        executed_nodes : set[str]
+            Names of nodes that have been executed successfully
+        node_results : dict[str, Any]
+            Current execution results
+
+        Returns
+        -------
+        list[str]
+            List of node names ready to execute
+        """
+        ready = []
+
+        for node_name in all_node_names:
+            # Skip if already executed successfully
+            if node_name in executed_nodes:
+                continue
+
+            node_spec = graph.nodes[node_name]
+
+            # Check if all dependencies are satisfied
+            deps_satisfied = all(dep in node_results for dep in node_spec.deps)
+
+            if deps_satisfied:
+                ready.append(node_name)
+
+        return ready
 
     def _resolve_ports_for_node(self, node_name: str, node_spec: Any) -> dict[str, Any]:
         """Resolve ports for a specific node.

@@ -103,26 +103,17 @@ Learn hexDAG through 3 comprehensive, working Jupyter notebooks:
 
 **All notebooks execute successfully:** `✅ All 3 notebook(s) validated successfully!`
 
+### 📚 Complete Documentation
+- **[📖 Documentation Hub](docs/README.md)** - Complete navigation with learning paths
+- **[🤔 Philosophy & Design](docs/PHILOSOPHY.md)** - Six pillars and design principles
+- **[🔧 Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Production-ready workflows
+- **[⌨️ CLI Reference](docs/CLI_REFERENCE.md)** - Complete CLI documentation
+- **[🔌 Plugin System](docs/PLUGIN_SYSTEM.md)** - Custom component development
+- **[🗺️ Roadmap](docs/ROADMAP.md)** - Future vision and features
+
 ### 📝 Examples & More
 - **[Examples Directory](examples/)** - 40+ working Python scripts
 - **[Integration Tests](tests/integration/)** - Production test scenarios
-
-### Core Concepts
-- **[🤔 Philosophy & Design](docs/PHILOSOPHY.md)** - The six pillars and design principles
-- **[🏗️ Framework Architecture](docs/HEXAI_FRAMEWORK.md)** - Technical architecture deep dive
-
-### Implementation
-- **[🔧 Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Build production-ready AI workflows
-- **[🎯 Agent Patterns](docs/PIPELINES_GUIDE.md)** - Multi-agent coordination patterns
-
-### CLI & Tools
-- **[⌨️ CLI Reference](docs/CLI_REFERENCE.md)** - Complete command-line interface documentation (includes Docker build guide)
-
-### Planning
-- **[🗺️ Roadmap](docs/ROADMAP.md)** - Our vision for the future of AI orchestration
-
-### Navigation
-- **[📚 Documentation Guide](docs/DOCUMENTATION_GUIDE.md)** - Navigate the documentation ecosystem
 
 ## 🎪 Examples
 

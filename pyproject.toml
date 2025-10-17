@@ -166,6 +166,7 @@ modules = [
     "hexdag.builtin.nodes",            # Core node factories
     "hexdag.builtin.tools.builtin_tools",     # Built-in tools (tool_end, change_phase)
     "hexdag.builtin.policies.execution_policies",  # Built-in execution policies
+    "hexdag.builtin.macros",           # Built-in macros (reasoning_agent, etc.)
 ]
 
 # Default plugins - mock and local adapters for testing and development

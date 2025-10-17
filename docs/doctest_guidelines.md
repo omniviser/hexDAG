@@ -71,7 +71,7 @@ def configure_openai():
     Examples
     --------
     >>> # doctest: +SKIP
-    >>> from hexai.adapters.openai import OpenAIAdapter
+    >>> from hexdag.adapters.openai import OpenAIAdapter
     >>> adapter = OpenAIAdapter(api_key="...")
     """
 ```
@@ -85,7 +85,7 @@ def create_llm_node():
     """
     Examples
     --------
-    >>> from hexai.adapters.mock import MockLLM
+    >>> from hexdag.adapters.mock import MockLLM
     >>> llm = MockLLM()
     >>> # Use llm in your example...
     """
@@ -102,7 +102,7 @@ def create_config():
     --------
     >>> config = PortConfig(port=MockLLM())
     >>> config.port  # doctest: +ELLIPSIS
-    <hexai.adapters.mock.mock_llm.MockLLM object at 0x...>
+    <hexdag.adapters.mock.mock_llm.MockLLM object at 0x...>
     """
 ```
 
@@ -115,8 +115,8 @@ def process_data():
     """
     Examples
     --------
-    >>> from hexai.adapters.mock import MockLLM
-    >>> from hexai.core.domain import NodeSpec
+    >>> from hexdag.adapters.mock import MockLLM
+    >>> from hexdag.core.domain import NodeSpec
     >>>
     >>> # Setup
     >>> llm = MockLLM()
@@ -134,13 +134,13 @@ def process_data():
 ### Locally
 ```bash
 # Run all doctests
-uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/
 
 # Run with verbose output
-uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ -v
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ -v
 
 # Continue on failure to see all errors
-uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on-failure
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure
 ```
 
 ### Pre-commit
@@ -162,7 +162,7 @@ Doctests run in the "Quality" stage before main tests, generating JUnit XML repo
 ### `SyntaxError: 'await' outside function`
 **Solution**: Add `# doctest: +SKIP` to async examples
 
-### `ModuleNotFoundError: No module named 'hexai.adapters.openai'`
+### `ModuleNotFoundError: No module named 'hexdag.adapters.openai'`
 **Solution**: Either skip the example or use mock adapters
 
 ### `NameError: name 'foo' is not defined`

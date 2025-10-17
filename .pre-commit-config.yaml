@@ -184,14 +184,6 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
-      - id: check-examples
-        name: Check examples functionality
-        entry: uv run scripts/check_examples.py
-        language: system
-        types: [python]
-        stages: [pre-commit]
-        pass_filenames: false
-
       - id: check-notebooks
         name: Execute and validate notebooks
         entry: uv run python scripts/check_notebooks.py

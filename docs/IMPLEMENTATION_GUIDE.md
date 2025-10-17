@@ -57,13 +57,13 @@ hexDAG is the core orchestration framework that enables building sophisticated A
 ### Module Architecture
 
 ```
-hexai/
+hexdag/
 ├── core/
 │   ├── domain/          # Core business logic (DAG, NodeSpec)
 │   ├── application/     # Use cases (Orchestrator, AgentBuilder)
 │   └── ports/           # Interface definitions (LLM, Database)
 ├── adapters/            # External service implementations
-└── agent_factory/       # YAML-based agent workflow builders
+└── pipeline_builder/       # YAML-based agent workflow builders
 ```
 
 hexDAG implements hexagonal architecture specifically designed for AI agent orchestration and data science workflows. It provides separation between business logic, external dependencies, and execution concerns through well-defined layers.
@@ -77,13 +77,13 @@ hexDAG implements hexagonal architecture specifically designed for AI agent orch
 
 hexDAG's hexagonal architecture creates clean boundaries between AI agent logic and external services, enabling true portability and testability.
 
-**Core Domain** (`hexai.core.domain`):
+**Core Domain** (`hexdag.core.domain`):
 The domain layer contains pure business logic for agent orchestration, DAG management, and workflow execution. It remains independent of any external AI services or infrastructure concerns.
 
-**Application Layer** (`hexai.core.application`):
+**Application Layer** (`hexdag.core.application`):
 This layer orchestrates agent workflows and manages execution flow. It handles event streaming, context management, and coordination between agents while maintaining separation from infrastructure.
 
-**Ports** (`hexai.core.ports`):
+**Ports** (`hexdag.core.ports`):
 Ports define abstract interfaces for external services like LLMs, vector databases, and tool providers. They establish contracts that ensure loose coupling between the framework and external dependencies.
 
 **Essential Port Example:**
@@ -102,7 +102,7 @@ class LLM(Protocol):
         ...
 ```
 
-**Adapters** (`hexai.adapters`):
+**Adapters** (`hexdag.adapters`):
 Adapters implement port interfaces to connect with actual AI services. They handle API translation, error handling, and service-specific concerns.
 
 **Essential Adapter Example:**
@@ -132,7 +132,7 @@ Workflows are represented as Directed Acyclic Graphs (DAGs), where nodes represe
 
 **Essential DAG Example:**
 ```python
-from hexai import DirectedGraph, NodeSpec
+from hexdag import DirectedGraph, NodeSpec
 
 # Create a directed acyclic graph
 graph = DirectedGraph()
@@ -209,7 +209,7 @@ The DirectedGraph is the core data structure that represents a workflow. It mana
 
 **Essential Graph Operations:**
 ```python
-from hexai.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 
 # Create and populate graph
 graph = DirectedGraph()
@@ -240,7 +240,7 @@ NodeSpec represents a single processing step in a workflow. It's an immutable sp
 
 **Essential NodeSpec Example:**
 ```python
-from hexai.core.domain.dag import NodeSpec
+from hexdag.core.domain.dag import NodeSpec
 
 # Create node specification
 node_spec = NodeSpec(
@@ -272,7 +272,7 @@ The Orchestrator is the execution engine that runs workflows. It manages the exe
 
 **Essential Orchestrator Usage:**
 ```python
-from hexai import Orchestrator, Context
+from hexdag import Orchestrator, Context
 
 # Create orchestrator
 orchestrator = Orchestrator(max_concurrent_nodes=5)
@@ -545,7 +545,7 @@ The framework provides a comprehensive event system for monitoring and debugging
 
 **Available Event Types:**
 ```python
-from hexai.core.application.events.base import EventType
+from hexdag.core.application.events.base import EventType
 
 # Pipeline events
 EventType.PIPELINE_STARTED
@@ -579,7 +579,7 @@ The event system uses the observer pattern to provide flexible monitoring capabi
 
 **Essential Observer Setup:**
 ```python
-from hexai.core.application.events.observers import (
+from hexdag.core.application.events.observers import (
     LoggingObserver,
     MetricsObserver,
     FileObserver
@@ -610,8 +610,8 @@ The event system provides comprehensive monitoring capabilities for production e
 
 **Essential Monitoring Setup:**
 ```python
-from hexai.core.application.events import ObserverManager
-from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
+from hexdag.core.application.events import ObserverManager
+from hexdag.core.application.events.observers import LoggingObserver, MetricsObserver
 import logging
 
 # Production monitoring
@@ -647,7 +647,7 @@ Unit testing focuses on testing individual components in isolation, ensuring the
 ```python
 import pytest
 from unittest.mock import AsyncMock
-from hexai import MockLLM, MockDatabaseAdapter
+from hexdag import MockLLM, MockDatabaseAdapter
 
 class TestMyFunction:
     """Test my function implementation."""
@@ -693,7 +693,7 @@ Integration testing focuses on testing how components work together, ensuring th
 **Essential Integration Test Pattern:**
 ```python
 import pytest
-from hexai import DirectedGraph, NodeSpec, Orchestrator
+from hexdag import DirectedGraph, NodeSpec, Orchestrator
 
 @pytest.mark.asyncio
 async def test_workflow_execution():
@@ -737,7 +737,7 @@ The framework provides comprehensive mock implementations for all ports, making 
 
 **Essential Mock Usage:**
 ```python
-from hexai.adapters.mock import (
+from hexdag.adapters.mock import (
     MockLLM,
     MockDatabaseAdapter,
     MockMemoryAdapter,
@@ -1029,7 +1029,7 @@ nodes:
 
 ### YAML Pipeline Development
 
-The agent factory enables **declarative agent workflow development** through YAML configuration:
+The YAML pipelines enables **declarative agent workflow development** through YAML configuration:
 
 **Key Features:**
 - **Auto-Discovery**: Automatic detection of pipeline implementations
@@ -1040,10 +1040,10 @@ The agent factory enables **declarative agent workflow development** through YAM
 **Development Workflow:**
 1. Define agents and dependencies in YAML
 2. Implement business logic functions
-3. Register functions with pipeline builder
+3. Register functions with YAML pipelines
 4. Compile for production deployment
 
-For detailed YAML pipeline implementation, see the [Agent Factory Implementation Guide](../hexai/agent_factory/PIPELINES_IMPLEMENTATION_GUIDE.md).
+For detailed YAML pipeline implementation, see the [YAML Pipelines Implementation Guide](../hexdag/pipeline_builder/PIPELINES_IMPLEMENTATION_GUIDE.md).
 
 ---
 

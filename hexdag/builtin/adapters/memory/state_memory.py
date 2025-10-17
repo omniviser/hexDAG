@@ -6,12 +6,12 @@ from typing import Any
 from hexdag.builtin.adapters.memory.schemas import BeliefState, EntityState
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.memory import Memory
-from hexdag.core.registry.decorators import adapter
+from hexdag.core.registry.decorators import memory
 
 logger = get_logger(__name__)
 
 
-@adapter(implements_port="memory")
+@memory(name="state_memory", namespace="core")
 class StateMemoryPlugin:
     """Memory plugin for structured state (entities, relationships, beliefs).
 

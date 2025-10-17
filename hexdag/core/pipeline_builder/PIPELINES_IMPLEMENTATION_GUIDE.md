@@ -1,10 +1,10 @@
 # 🚀 Pipelines Implementation Guide
 
-> **A comprehensive guide for implementing and compiling pipelines using the hexAI framework**
+> **A comprehensive guide for implementing and compiling pipelines using the hexDAG framework**
 
 ## 📖 Table of Contents
 
-1. [Pipelines vs hexAI Framework](#pipelines-vs-hexai-framework)
+1. [Pipelines vs hexDAG Framework](#pipelines-vs-hexdag-framework)
 2. [Pipeline Architecture](#pipeline-architecture)
 3. [Pipeline Definition](#pipeline-definition)
 4. [Pipeline Compilation](#pipeline-compilation)
@@ -16,10 +16,10 @@
 
 ---
 
-## 🔄 Pipelines vs hexAI Framework
+## 🔄 Pipelines vs hexDAG Framework
 
-### **hexAI Framework** (Core Orchestration Engine)
-The hexAI framework is the **core orchestration engine** that provides the fundamental building blocks for AI workflows:
+### **hexDAG Framework** (Core Orchestration Engine)
+The hexDAG framework is the **core orchestration engine** that provides the fundamental building blocks for AI workflows:
 
 **Core Components:**
 - **DirectedGraph**: Manages workflow structure and dependencies
@@ -29,7 +29,7 @@ The hexAI framework is the **core orchestration engine** that provides the funda
 - **Event System**: Handles observability and monitoring
 - **Ports & Adapters**: Manages external service integrations
 
-**hexAI Responsibilities:**
+**hexDAG Responsibilities:**
 - ✅ **Workflow Orchestration**: Managing DAG execution and dependencies
 - ✅ **Resource Management**: Handling concurrency, memory, and connections
 - ✅ **Event Handling**: Providing comprehensive observability
@@ -37,10 +37,10 @@ The hexAI framework is the **core orchestration engine** that provides the funda
 - ✅ **Error Handling**: Managing failures and recovery
 - ✅ **External Integration**: Managing LLMs, databases, tools via ports
 
-**hexAI is Framework-Agnostic:**
+**hexDAG is Framework-Agnostic:**
 ```python
-# hexAI doesn't know about specific pipelines
-from hexai import DirectedGraph, NodeSpec, Orchestrator
+# hexDAG doesn't know about specific pipelines
+from hexdag import DirectedGraph, NodeSpec, Orchestrator
 
 # Pure orchestration - no pipeline-specific logic
 graph = DirectedGraph()
@@ -50,7 +50,7 @@ results = await orchestrator.run(graph, input_data, context, ports)
 ```
 
 ### **Pipelines** (Domain-Specific Workflows)
-Pipelines are **domain-specific workflow implementations** built on top of the hexAI framework:
+Pipelines are **domain-specific workflow implementations** built on top of the hexDAG framework:
 
 **Pipeline Components:**
 - **PipelineDefinition**: Encapsulates a complete workflow
@@ -80,7 +80,7 @@ results = await pipeline.execute({
 
 ### **Key Differences Summary**
 
-| Aspect | hexAI Framework | Pipelines |
+| Aspect | hexDAG Framework | Pipelines |
 |--------|----------------|-----------|
 | **Purpose** | Core orchestration engine | Domain-specific workflows |
 | **Scope** | Framework-agnostic | Business domain specific |
@@ -98,7 +98,7 @@ results = await pipeline.execute({
 ```mermaid
 graph TD
     A[Pipeline Definition] --> B[Pipeline Builder]
-    B --> C[hexAI Framework]
+    B --> C[hexDAG Framework]
     C --> D[Execution Engine]
 
     E[YAML Config] --> B
@@ -354,7 +354,7 @@ pipelines/
 **Compiled Pipeline Features:**
 ```python
 # pipeline_compiled.py
-from hexai import DirectedGraph, NodeSpec
+from hexdag import DirectedGraph, NodeSpec
 from pydantic import BaseModel
 
 # Pre-built schemas
@@ -395,7 +395,7 @@ async def text2sql_agent_compiled(
 **Import and Execute:**
 ```python
 from pipelines.text2sql.pipeline_compiled import build_compiled_dag, Text2SQLInput
-from hexai import Orchestrator, Context
+from hexdag import Orchestrator, Context
 
 # Create orchestrator and context
 orchestrator = Orchestrator()
@@ -463,8 +463,8 @@ print(f"Results: {results}")
 ```python
 import asyncio
 from pipelines.text2sql.pipeline_compiled import build_compiled_dag, Text2SQLInput
-from hexai import Orchestrator, Context
-from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
+from hexdag import Orchestrator, Context
+from hexdag.core.application.events.observers import LoggingObserver, MetricsObserver
 
 class ProductionPipelineRunner:
     """Optimized pipeline runner for production."""
@@ -525,7 +525,7 @@ if __name__ == "__main__":
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pipelines.text2sql.pipeline_compiled import build_compiled_dag, Text2SQLInput
-from hexai import Orchestrator, Context
+from hexdag import Orchestrator, Context
 
 app = FastAPI()
 
@@ -839,7 +839,7 @@ output_schema:
 ```python
 import pytest
 from unittest.mock import AsyncMock
-from hexai import MockLLM
+from hexdag import MockLLM
 
 class TestMyFunction:
     """Test my function implementation."""
@@ -971,8 +971,8 @@ results = await pipeline.execute(input_data, ports=production_ports)
 
 **Event Observers:**
 ```python
-from hexai.core.application.events import ObserverManager
-from hexai.core.application.events.observers import LoggingObserver, MetricsObserver
+from hexdag.core.application.events import ObserverManager
+from hexdag.core.application.events.observers import LoggingObserver, MetricsObserver
 
 # Production monitoring
 event_manager = ObserverManager()
