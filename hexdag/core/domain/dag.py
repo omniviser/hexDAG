@@ -558,35 +558,19 @@ class DirectedGraph:
         -------
             List of incompatibility messages or empty list if no incompatibilities are found
         """
-        incompatibilities = []
-
-        for node_name, node_spec in self.nodes.items():
-            if not node_spec.deps:
-                continue
-
-            # Check if this node has input validation defined
-            if not node_spec.in_model:
-                # No input model means it accepts Any, so skip validation
-                continue
-
-            # For each dependency, check if output is compatible
-            for dep_name in node_spec.deps:
-                dep_node = self.nodes[dep_name]
-
-                # If dependency has no output model, we can't validate
-                if not dep_node.out_model:
-                    continue
-
-                # Check basic type compatibility
-                # For single dependencies only - multiple deps are handled by aggregation
-                if len(node_spec.deps) == 1 and dep_node.out_model != node_spec.in_model:
-                    # Types don't match exactly - report incompatibility
-                    incompatibilities.append(
-                        f"Node '{node_name}' expects {node_spec.in_model.__name__} "
-                        f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
-                    )
-
-        return incompatibilities
+        # Use list comprehension for more declarative validation
+        return [
+            (
+                f"Node '{node_name}' expects {node_spec.in_model.__name__} "
+                f"but dependency '{dep_name}' outputs {dep_node.out_model.__name__}"
+            )
+            for node_name, node_spec in self.nodes.items()
+            if node_spec.deps and node_spec.in_model  # Has dependencies and input validation
+            for dep_name in node_spec.deps
+            if (dep_node := self.nodes[dep_name]).out_model  # Dependency has output model
+            # Single dep type mismatch:
+            if len(node_spec.deps) == 1 and dep_node.out_model != node_spec.in_model
+        ]
 
     def waves(self) -> list[list[str]]:
         """Compute execution waves using topological sorting with caching.

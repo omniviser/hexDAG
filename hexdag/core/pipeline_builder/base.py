@@ -10,8 +10,11 @@ import yaml
 
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.exceptions import ConfigurationError
+from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+
+logger = get_logger(__name__)
 
 
 class PipelineDefinition(ABC):
@@ -186,7 +189,19 @@ class PipelineDefinition(ABC):
                 return first_node.params.get("input_schema")
 
             return None
-        except Exception:
+        except (KeyError, AttributeError, TypeError) as e:
+            logger.warning(
+                "Failed to extract input type information",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Unexpected error extracting input type",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
             return None
 
     def get_output_type(self) -> Any:
@@ -236,7 +251,19 @@ class PipelineDefinition(ABC):
                 return node.params.get("output_schema")
 
             return None
-        except Exception:
+        except (KeyError, AttributeError, TypeError) as e:
+            logger.warning(
+                "Failed to extract output type information",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Unexpected error extracting output type",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
             return None
 
     def get_node_types(self) -> dict[str, dict[str, Any]]:
@@ -265,7 +292,19 @@ class PipelineDefinition(ABC):
                     node_types[node_name]["function"] = node_spec.fn.__name__
 
             return node_types
-        except Exception:
+        except (KeyError, AttributeError, TypeError) as e:
+            logger.warning(
+                "Failed to extract node type information",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
+            return {}
+        except Exception as e:
+            logger.error(
+                "Unexpected error extracting node type information",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
             return {}
 
     def build_graph(self) -> DirectedGraph:
@@ -347,7 +386,12 @@ class PipelineDefinition(ABC):
             # Fallback
             return {"input": str(input_type)}
 
-        except Exception:
+        except (KeyError, AttributeError, TypeError) as e:
+            logger.warning(
+                "Failed to extract input primitives",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
             return {}
 
     def _extract_input_schema_from_yaml(self) -> dict[str, str]:
@@ -418,7 +462,19 @@ class PipelineDefinition(ABC):
 
             return parsed_schema
 
-        except Exception:
+        except (KeyError, AttributeError, TypeError, ValueError) as e:
+            logger.warning(
+                "Failed to parse input schema from YAML",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
+            return {}
+        except Exception as e:
+            logger.error(
+                "Unexpected error parsing input schema from YAML",
+                error=str(e),
+                pipeline=self._yaml_path,
+            )
             return {}
 
 

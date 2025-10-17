@@ -5,9 +5,12 @@ Simple pipeline builder that focuses on basic YAML processing with simple data m
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from hexdag.core.ports.observer_manager import ObserverManagerPort
 
 # ObserverManager is now a port - passed as dependency
 from hexdag.builtin.nodes.mapped_input import FieldMappingRegistry
@@ -55,7 +58,7 @@ class YamlPipelineBuilderError(Exception):
 class YamlPipelineBuilder:
     """Simple pipeline builder with basic data mapping support and intelligent auto-conversion."""
 
-    def __init__(self, event_manager: Any = None) -> None:
+    def __init__(self, event_manager: "ObserverManagerPort | None" = None) -> None:
         """Initialize the pipeline builder.
 
         Args
@@ -214,10 +217,8 @@ class YamlPipelineBuilder:
         validation_result = self.validator.validate(config)
 
         if not validation_result.is_valid:
-            error_msg = "YAML validation failed:\n"
-            for error in validation_result.errors:
-                error_msg += f"  ERROR: {error}\n"
-            raise YamlPipelineBuilderError(error_msg)
+            errors = "\n".join(f"  ERROR: {error}" for error in validation_result.errors)
+            raise YamlPipelineBuilderError(f"YAML validation failed:\n{errors}")
 
         # Log warnings and suggestions
         for warning in validation_result.warnings:
@@ -593,16 +594,13 @@ class YamlPipelineBuilder:
         type_ports = spec.get("type_ports", {})
         policies = spec.get("policies", {})
 
-        # Build metadata dict
-        metadata = {
-            "name": metadata_section.get("name"),
-            "description": metadata_section.get("description"),
-        }
+        # Build metadata dict using comprehension with merge
+        base_fields = ["name", "description"]
+        optional_fields = ["version", "author", "tags", "environment"]
 
-        # Extract other metadata fields
-        for key in ["version", "author", "tags", "environment"]:
-            if key in metadata_section:
-                metadata[key] = metadata_section[key]
+        metadata = {k: metadata_section.get(k) for k in base_fields} | {
+            k: metadata_section[k] for k in optional_fields if k in metadata_section
+        }
 
         # Create PipelineConfig
         pipeline_config = PipelineConfig(
@@ -620,35 +618,6 @@ class YamlPipelineBuilder:
         )
 
         return pipeline_config
-
-    @staticmethod
-    def _extract_pipeline_metadata(config: dict[str, Any]) -> dict[str, Any]:
-        """Extract pipeline-wide metadata from declarative YAML manifest.
-
-        DEPRECATED: Use _extract_pipeline_config instead.
-
-        Returns
-        -------
-            dict: Pipeline metadata
-        """
-        metadata_section = config.get("metadata", {})
-        spec = config.get("spec", {})
-
-        metadata = {
-            "name": metadata_section.get("name"),
-            "description": metadata_section.get("description"),
-        }
-
-        # Include common_field_mappings from spec
-        if "common_field_mappings" in spec:
-            metadata["common_field_mappings"] = spec["common_field_mappings"]
-
-        # Extract other metadata fields
-        for key in ["version", "author", "tags", "environment"]:
-            if key in metadata_section:
-                metadata[key] = metadata_section[key]
-
-        return metadata
 
     def _register_common_mappings(self, config: dict[str, Any]) -> None:
         """Register common field mappings from manifest config.

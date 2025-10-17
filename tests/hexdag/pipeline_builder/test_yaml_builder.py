@@ -253,13 +253,13 @@ spec:
             self.builder.build_from_yaml_string(yaml_content)
 
         config = yaml.safe_load(yaml_content)
-        metadata = self.builder._extract_pipeline_metadata(config)
+        pipeline_config = self.builder._extract_pipeline_config(config)
 
-        assert metadata["name"] == "test_pipeline"
-        assert metadata["description"] == "A test pipeline for validation"
-        assert metadata["version"] == "1.0.0"
-        assert metadata["author"] == "Test Author"
-        assert metadata["tags"] == ["test", "validation"]
+        assert pipeline_config.metadata["name"] == "test_pipeline"
+        assert pipeline_config.metadata["description"] == "A test pipeline for validation"
+        assert pipeline_config.metadata["version"] == "1.0.0"
+        assert pipeline_config.metadata["author"] == "Test Author"
+        assert pipeline_config.metadata["tags"] == ["test", "validation"]
 
     @pytest.mark.skip(reason="field_mapping_mode feature removed from yaml_builder")
     def test_field_mapping_mode_validation(self):

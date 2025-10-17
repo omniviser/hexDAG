@@ -7,6 +7,8 @@ Enhanced with per-node and per-type port configuration support for fine-grained
 control over port assignment across different node types and specific nodes.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
@@ -19,6 +21,21 @@ if TYPE_CHECKING:
         PolicyManagerPort,
         ToolRouter,
     )
+
+    # Type alias for all valid port types
+    PortType = (
+        LLM
+        | APICall
+        | DatabasePort
+        | Memory
+        | ObserverManagerPort
+        | PolicyManagerPort
+        | ToolRouter
+        | Any  # Allow Any for backward compatibility with custom ports
+    )
+else:
+    # At runtime, just use Any (backward compatible)
+    PortType = Any
 
 from hexdag.core.orchestration.models import PortConfig, PortsConfiguration
 
@@ -56,11 +73,11 @@ class PortsBuilder:
 
     def __init__(self) -> None:
         """Initialize an empty ports builder."""
-        self._ports: dict[str, Any] = {}
-        self._type_ports: dict[str, dict[str, Any]] = {}
-        self._node_ports: dict[str, dict[str, Any]] = {}
+        self._ports: dict[str, PortType] = {}
+        self._type_ports: dict[str, dict[str, PortType]] = {}
+        self._node_ports: dict[str, dict[str, PortType]] = {}
 
-    def _add_port(self, key: str, port: Any) -> Self:
+    def _add_port(self, key: str, port: PortType) -> Self:
         """Add a port to the internal registry.
 
         Args
@@ -78,7 +95,7 @@ class PortsBuilder:
     # Core AI Capabilities
     # --------------------
 
-    def with_llm(self, llm: "LLM") -> Self:
+    def with_llm(self, llm: LLM) -> Self:
         """Add a Language Model adapter.
 
         Args
@@ -91,7 +108,7 @@ class PortsBuilder:
         """
         return self._add_port("llm", llm)
 
-    def with_tool_router(self, router: "ToolRouter") -> Self:
+    def with_tool_router(self, router: ToolRouter) -> Self:
         """Add a tool router for function calling.
 
         Args
@@ -107,7 +124,7 @@ class PortsBuilder:
     # Storage & Persistence
     # ---------------------
 
-    def with_database(self, database: "DatabasePort") -> Self:
+    def with_database(self, database: DatabasePort) -> Self:
         """Add a database adapter.
 
         Args
@@ -120,7 +137,7 @@ class PortsBuilder:
         """
         return self._add_port("database", database)
 
-    def with_memory(self, memory: "Memory") -> Self:
+    def with_memory(self, memory: Memory) -> Self:
         """Add a memory system for agents.
 
         Args
@@ -136,7 +153,7 @@ class PortsBuilder:
     # Event & Control Systems
     # -----------------------
 
-    def with_observer_manager(self, manager: "ObserverManagerPort") -> Self:
+    def with_observer_manager(self, manager: ObserverManagerPort) -> Self:
         """Add an observer manager for event monitoring.
 
         Args
@@ -149,7 +166,7 @@ class PortsBuilder:
         """
         return self._add_port("observer_manager", manager)
 
-    def with_policy_manager(self, manager: "PolicyManagerPort") -> Self:
+    def with_policy_manager(self, manager: PolicyManagerPort) -> Self:
         """Add a policy manager for execution control.
 
         Args
@@ -165,7 +182,7 @@ class PortsBuilder:
     # External Integrations
     # ---------------------
 
-    def with_api_call(self, api_call: "APICall") -> Self:
+    def with_api_call(self, api_call: APICall) -> Self:
         """Add an API call adapter.
 
         Args
@@ -605,31 +622,26 @@ class PortsBuilder:
         --------
         build : For backward-compatible flat dictionary output
         """
-        # Wrap all ports in PortConfig
-        global_ports = (
-            {k: PortConfig(port=v) for k, v in self._ports.items()}  # noqa: E501
-            if self._ports
-            else None
-        )
 
-        # Wrap type ports
-        type_ports = None
-        if self._type_ports:
-            type_ports = {
-                node_type: {k: PortConfig(port=v) for k, v in ports.items()}
-                for node_type, ports in self._type_ports.items()
-            }
+        def _wrap_ports(ports_dict: dict[str, PortType] | None) -> dict[str, PortConfig] | None:
+            """Helper to wrap ports in PortConfig."""
+            return {k: PortConfig(port=v) for k, v in ports_dict.items()} if ports_dict else None
 
-        # Wrap node ports
-        node_ports = None
-        if self._node_ports:
-            node_ports = {
-                node_name: {k: PortConfig(port=v) for k, v in ports.items()}
-                for node_name, ports in self._node_ports.items()
-            }
+        def _wrap_nested_ports(
+            nested: dict[str, dict[str, PortType]] | None,
+        ) -> dict[str, dict[str, PortConfig]] | None:
+            """Helper to wrap nested ports in PortConfig."""
+            return (
+                {
+                    name: {k: PortConfig(port=v) for k, v in ports.items()}
+                    for name, ports in nested.items()
+                }
+                if nested
+                else None
+            )
 
         return PortsConfiguration(
-            global_ports=global_ports,
-            type_ports=type_ports,
-            node_ports=node_ports,
+            global_ports=_wrap_ports(self._ports),
+            type_ports=_wrap_nested_ports(self._type_ports),
+            node_ports=_wrap_nested_ports(self._node_ports),
         )
