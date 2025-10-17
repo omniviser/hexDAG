@@ -91,10 +91,8 @@ class PipelineDefinition(ABC):
             if not self._yaml_path:
                 raise ConfigurationError(self.name, "YAML path not configured")
 
-            # Build and execute
             graph, pipeline_metadata = self.builder.build_from_yaml_file(self._yaml_path)
 
-            # Create orchestrator
             orchestrator = Orchestrator()
             results = await orchestrator.run(
                 graph,
@@ -147,8 +145,7 @@ class PipelineDefinition(ABC):
             return None
 
         # First try YAML-based schema extraction (most reliable)
-        yaml_primitives = self._extract_input_schema_from_yaml()
-        if yaml_primitives:
+        if yaml_primitives := self._extract_input_schema_from_yaml():
             return yaml_primitives
 
         # Fallback to node introspection
@@ -159,7 +156,6 @@ class PipelineDefinition(ABC):
             if not waves or not waves[0]:
                 return None
 
-            # Get the first wave of nodes
             first_wave = waves[0]
 
             # If multiple first nodes, return dictionary
@@ -171,10 +167,12 @@ class PipelineDefinition(ABC):
                     if hasattr(node, "in_model") and node.in_model is not None:
                         input_types[node_name] = node.in_model
                     # Fallback to params.input_schema
-                    elif hasattr(node, "params") and node.params:
-                        input_schema = node.params.get("input_schema")
-                        if input_schema:
-                            input_types[node_name] = input_schema
+                    elif (
+                        hasattr(node, "params")
+                        and node.params
+                        and (input_schema := node.params.get("input_schema"))
+                    ):
+                        input_types[node_name] = input_schema
                 return input_types if input_types else None
 
             # Single first node - return its type directly
@@ -221,7 +219,6 @@ class PipelineDefinition(ABC):
             if not waves:
                 return None
 
-            # Get the last wave of nodes
             last_wave = waves[-1]
 
             # If multiple last nodes, return dictionary
@@ -233,10 +230,12 @@ class PipelineDefinition(ABC):
                     if hasattr(node, "out_model") and node.out_model:
                         output_types[node_name] = node.out_model
                     # Fallback to params.output_schema
-                    elif hasattr(node, "params") and node.params:
-                        output_schema = node.params.get("output_schema")
-                        if output_schema:
-                            output_types[node_name] = output_schema
+                    elif (
+                        hasattr(node, "params")
+                        and node.params
+                        and (output_schema := node.params.get("output_schema"))
+                    ):
+                        output_types[node_name] = output_schema
                 return output_types if output_types else None
 
             # Single last node - return its type directly
@@ -287,7 +286,6 @@ class PipelineDefinition(ABC):
                     "output_type": node_spec.out_model,
                 }
 
-                # Add function name if available
                 if hasattr(node_spec.fn, "__name__"):
                     node_types[node_name]["function"] = node_spec.fn.__name__
 
@@ -352,8 +350,7 @@ class PipelineDefinition(ABC):
         """
         try:
             # First try to get schema directly from YAML file
-            yaml_primitives = self._extract_input_schema_from_yaml()
-            if yaml_primitives:
+            if yaml_primitives := self._extract_input_schema_from_yaml():
                 return yaml_primitives
 
             # Fallback to original method using first node's input type
@@ -362,11 +359,9 @@ class PipelineDefinition(ABC):
             if input_type is None:
                 return {}
 
-            # Handle Pydantic models
             if hasattr(input_type, "model_fields"):
                 primitives = {}
                 for field_name, field_info in input_type.model_fields.items():
-                    # Get the field type
                     field_type = field_info.annotation
                     if hasattr(field_type, "__name__"):
                         type_name = field_type.__name__
@@ -375,11 +370,9 @@ class PipelineDefinition(ABC):
                     primitives[field_name] = type_name
                 return primitives
 
-            # Handle basic types
             if hasattr(input_type, "__name__"):
                 return {"input": input_type.__name__}
 
-            # Handle dict types with annotations
             if isinstance(input_type, dict):
                 return input_type
 
@@ -412,7 +405,6 @@ class PipelineDefinition(ABC):
             # Parse YAML
             config = yaml.safe_load(content)
 
-            # Get input_schema from pipeline level (preferred)
             input_schema = config.get("input_schema", {})
 
             # Fallback to first node's input_schema (legacy support)
@@ -445,7 +437,6 @@ class PipelineDefinition(ABC):
                         type_spec = type_spec.strip()
                         comment_part = comment_part.strip()
 
-                    # Check if field is marked as optional in comment
                     is_optional = "optional" in comment_part.lower()
 
                     # Clean up the type name (remove any leftover assignment syntax)
@@ -457,7 +448,6 @@ class PipelineDefinition(ABC):
                     else:
                         parsed_schema[field_name] = type_name
                 else:
-                    # Handle other formats (dict, etc.)
                     parsed_schema[field_name] = str(field_spec)
 
             return parsed_schema
@@ -545,8 +535,7 @@ class PipelineCatalog:
         dict[str, Any]
             Execution results with status and results or error
         """
-        pipeline = self.get_pipeline(name)
-        if pipeline:
+        if pipeline := self.get_pipeline(name):
             return await pipeline.execute(input_data, ports)
         return {"status": "error", "error": f"Pipeline '{name}' not found"}
 

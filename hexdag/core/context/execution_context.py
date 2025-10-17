@@ -88,8 +88,7 @@ def get_observer_manager() -> ObserverManagerPort | None:
     Example usage::
 
         # In any component
-        observer_manager = get_observer_manager()
-        if observer_manager:
+        if (observer_manager := get_observer_manager()):
             await observer_manager.notify(NodeStarted(...))
     """
     return _observer_manager_context.get()
@@ -202,8 +201,7 @@ def get_port(port_name: str) -> Any:
     Example usage::
 
         # In any component
-        llm = get_port("llm")
-        if llm:
+        if (llm := get_port("llm")):
             response = await llm.aresponse(messages)
     """
     ports = _ports_context.get()

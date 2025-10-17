@@ -65,9 +65,7 @@ def discover_components(module: ModuleType) -> list[tuple[str, type | Callable |
 
         obj = getattr(module, name)
 
-        # Check if object has our hexdag type marker and is a class or callable
         if hasattr(obj, "_hexdag_type") and (inspect.isclass(obj) or callable(obj)):
-            # Check if it's from this module or a submodule
             obj_module = getattr(obj, "__module__", None)
             if obj_module and (
                 obj_module == module.__name__ or obj_module.startswith(module.__name__ + ".")
@@ -123,7 +121,6 @@ def _register_component_direct(
     int
         Number of successful registrations
     """
-    # Extract attributes directly from component
     component_type = component._hexdag_type  # type: ignore[attr-defined]
     names_to_register = _get_component_names(component)
     subtype = getattr(component, "_hexdag_subtype", None)
@@ -206,7 +203,6 @@ def register_components(registry: RegistryProtocol, namespace: str, module_path:
         logger.error("Failed to import module '{module}': {error}", module=module_path, error=e)
         raise
 
-    # Check if module has a custom register_components function
     if hasattr(module, "register_components"):
         # Module has custom registration logic
         logger.debug("Using custom register_components from {module}", module=module_path)

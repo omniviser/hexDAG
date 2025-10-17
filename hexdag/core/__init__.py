@@ -9,7 +9,6 @@ The new bootstrap-based architecture:
 Example usage:
     from hexdag.core import bootstrap_registry, registry
 
-    # Initialize HexDAG
     bootstrap_registry(dev_mode=True)
 
     # Now use the registry
@@ -18,13 +17,6 @@ Example usage:
 
 from hexdag.core.bootstrap import bootstrap_registry, ensure_bootstrapped
 from hexdag.core.configurable import (
-    AdapterConfig,
-    ConfigurableAdapter,
-    ConfigurableNode,
-    ConfigurablePolicy,
-    ExecutorConfig,
-    NodeConfig,
-    PolicyConfig,
     SecretField,
 )
 from hexdag.core.context import (
@@ -67,15 +59,7 @@ __all__ = [
     "ComponentType",
     "bootstrap_registry",
     "ensure_bootstrapped",
-    # Base Classes
-    "ConfigurableAdapter",
-    "ConfigurableNode",
-    "ConfigurablePolicy",
-    # Config Base Classes
-    "AdapterConfig",
-    "ExecutorConfig",
-    "NodeConfig",
-    "PolicyConfig",
+    # Secret helper
     "SecretField",
     # Execution Context
     "ExecutionContext",

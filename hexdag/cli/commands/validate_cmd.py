@@ -148,8 +148,7 @@ def _explain_validation(config: dict, result: Any) -> None:
     console.print(manifest_table)
 
     # Show node validation
-    nodes = config.get("spec", {}).get("nodes", [])
-    if nodes:
+    if nodes := config.get("spec", {}).get("nodes", []):
         console.print("\n[bold cyan]2. Node Validation[/bold cyan]")
         node_table = Table(show_header=True, border_style="cyan")
         node_table.add_column("Node", style="green")
@@ -181,7 +180,6 @@ def _explain_validation(config: dict, result: Any) -> None:
             except (KeyError, ValueError):
                 schema_status = "[red]✗[/red] Not found"
 
-            # Check if node has errors
             node_has_error = any(node_name in str(error) for error in result.errors)
             status = "[red]✗[/red]" if node_has_error else "[green]✓[/green]"
 
@@ -209,9 +207,7 @@ def _explain_validation(config: dict, result: Any) -> None:
                 status = "[green]✓[/green]"
             else:
                 dep_str = ", ".join(str(d) for d in deps)
-                # Check if all dependencies exist
-                invalid_deps = [d for d in deps if d not in all_node_names]
-                if invalid_deps:
+                if invalid_deps := [d for d in deps if d not in all_node_names]:
                     status = f"[red]✗[/red] Invalid: {', '.join(invalid_deps)}"
                 else:
                     status = "[green]✓[/green]"

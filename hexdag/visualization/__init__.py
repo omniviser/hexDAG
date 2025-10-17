@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from hexdag.visualization.dag_visualizer import DAGVisualizer
 
 
-# Check if graphviz is available without importing at module level
 def _check_graphviz() -> bool:
     """Check if graphviz is available."""
     try:

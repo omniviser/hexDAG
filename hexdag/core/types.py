@@ -189,7 +189,6 @@ def is_union_type(type_hint: Any) -> bool:
     """
     origin = get_origin(type_hint)
 
-    # Handle Union type
     try:
         from typing import Union
 
@@ -198,7 +197,6 @@ def is_union_type(type_hint: Any) -> bool:
     except ImportError:
         pass
 
-    # Handle | syntax (Python 3.10+)
     try:
         from types import UnionType
 

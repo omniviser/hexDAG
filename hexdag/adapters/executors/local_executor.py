@@ -128,7 +128,6 @@ class LocalExecutor:
         default_node_timeout : float, default=60.0
             Default timeout for nodes in seconds
         """
-        # Store configuration
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
         self.max_concurrent_nodes = kwargs.get("max_concurrent_nodes", 10)
@@ -174,7 +173,6 @@ class LocalExecutor:
         start_time = time.time()
 
         try:
-            # Get graph and node from execution context (stored in ports)
             # Note: Uses ContextVar pattern consistent with rest of codebase
             graph: DirectedGraph = get_port(EXECUTOR_CONTEXT_GRAPH)
             node_results: dict[str, Any] = get_port(EXECUTOR_CONTEXT_NODE_RESULTS)
@@ -186,7 +184,6 @@ class LocalExecutor:
                     "Ensure orchestrator has set up context properly."
                 )
 
-            # Get the node spec
             if task.node_name not in graph.nodes:
                 return ExecutionResult(
                     node_name=task.node_name,
@@ -203,7 +200,6 @@ class LocalExecutor:
                 node_spec, node_results, initial_input
             )
 
-            # Create execution context
             execution_context = NodeExecutionContext(
                 dag_id=task.context_data.get("dag_id", "unnamed"),
                 node_id=task.node_name,
@@ -281,7 +277,6 @@ class LocalExecutor:
         if not self._initialized:
             raise RuntimeError("LocalExecutor not initialized - call asetup() first")
 
-        # Create semaphore to limit concurrent execution
         semaphore = asyncio.Semaphore(self.max_concurrent_nodes)
 
         async def execute_with_limit(task: ExecutionTask) -> ExecutionResult:
@@ -295,7 +290,6 @@ class LocalExecutor:
             return_exceptions=True,
         )
 
-        # Convert to dictionary
         results = {}
         for result in results_list:
             if isinstance(result, ExecutionResult):

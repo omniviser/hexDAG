@@ -175,7 +175,6 @@ class PreDagHookManager:
         """
         self.config = config or HookConfig()
 
-        # Initialize focused sub-managers
         self._health_check_manager = HealthCheckManager(
             fail_fast=self.config.health_check_fail_fast,
             warn_only=self.config.health_check_warn_only,
@@ -222,8 +221,7 @@ class PreDagHookManager:
             results["health_checks"] = health_results
 
             # Check for critical failures
-            unhealthy = self._health_check_manager.get_unhealthy_adapters(health_results)
-            if unhealthy:
+            if unhealthy := self._health_check_manager.get_unhealthy_adapters(health_results):
                 unhealthy_names = [h.adapter_name for h in unhealthy]
                 error_msg = f"Unhealthy adapters: {unhealthy_names}"
 
@@ -310,7 +308,6 @@ class PostDagHookManager:
         self.config = config or PostDagHookConfig()
         self._pre_hook_manager = pre_hook_manager
 
-        # Initialize focused sub-managers
         self._adapter_lifecycle_manager = AdapterLifecycleManager()
 
     async def execute_hooks(
@@ -332,7 +329,6 @@ class PostDagHookManager:
         ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
 
-        # Check if hooks should run based on pipeline status
         should_run = (
             (pipeline_status == "success" and self.config.run_on_success)
             or (pipeline_status == "failed" and self.config.run_on_failure)
@@ -422,7 +418,6 @@ class PostDagHookManager:
 
         checkpoint_mgr = CheckpointManager(storage=memory)
 
-        # Create final checkpoint
         from datetime import UTC, datetime
 
         state = CheckpointState(

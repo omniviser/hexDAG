@@ -174,8 +174,7 @@ class LocalPolicyManager(PolicyManagerPort):
             policies_to_remove = list(self._by_type[subscriber_type])
             for policy in policies_to_remove:
                 metadata = self._policy_metadata.get(policy, {})
-                sub_id = metadata.get("subscription_id")
-                if sub_id:
+                if sub_id := metadata.get("subscription_id"):
                     self.unsubscribe(sub_id)
 
     def get_subscriptions(self) -> dict[str, tuple[Policy, SubscriberType]]:

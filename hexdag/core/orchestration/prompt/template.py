@@ -255,11 +255,9 @@ class PromptTemplate:
         """
         messages = []
 
-        # Add system message if provided
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
-        # Add user message with rendered template
         user_content = self.format(**kwargs)
         messages.append({"role": "user", "content": user_content})
 
@@ -349,7 +347,6 @@ class FewShotPromptTemplate(PromptTemplate):
         self.example_separator = example_separator
         self.base_template = template
 
-        # Set default example formatter
         if format_example is None:
 
             def _default_formatter(ex: dict[str, Any]) -> str:
@@ -361,10 +358,8 @@ class FewShotPromptTemplate(PromptTemplate):
 
         self.format_example = format_example
 
-        # Build the full template with examples
         full_template = self._build_template()
 
-        # Initialize parent with the full template
         super().__init__(full_template, **kwargs)
 
     def _build_template(self) -> str:
@@ -477,9 +472,7 @@ class ChatPromptTemplate(PromptTemplate):
         self.human_message = human_message
         self.message_templates = messages or []
 
-        # Build combined template for variable extraction
         if not self.message_templates:
-            # Build from system + human messages
             if system_message and human_message:
                 combined_template = f"{system_message}\n{human_message}"
             elif human_message:
@@ -489,7 +482,6 @@ class ChatPromptTemplate(PromptTemplate):
             else:
                 combined_template = ""
         else:
-            # Extract content from message templates
             combined_template = "\n".join(msg.get("content", "") for msg in self.message_templates)
 
         super().__init__(combined_template, **kwargs)
@@ -515,7 +507,6 @@ class ChatPromptTemplate(PromptTemplate):
         """
         messages = []
 
-        # Add system message if provided
         if system_prompt:
             system_content = self._render_template(system_prompt, **kwargs)
             messages.append({"role": "system", "content": system_content})
@@ -523,11 +514,9 @@ class ChatPromptTemplate(PromptTemplate):
             system_content = self._render_template(self.system_message, **kwargs)
             messages.append({"role": "system", "content": system_content})
 
-        # Add conversation history from context
         if context_history:
             messages.extend(context_history)
 
-        # Add message templates or human message
         if self.message_templates:
             for msg_template in self.message_templates:
                 role = msg_template.get("role", "user")
@@ -632,11 +621,9 @@ class ChatFewShotTemplate(ChatPromptTemplate):
             format_example: Function to format each example (NEW)
             **kwargs: Additional arguments passed to ChatPromptTemplate
         """
-        # Store example-related attributes
         self.examples = examples or []
         self.example_separator = example_separator
 
-        # Set default example formatter
         if format_example is None:
 
             def _default_formatter(ex: dict[str, Any]) -> str:
@@ -659,7 +646,6 @@ class ChatFewShotTemplate(ChatPromptTemplate):
             else:
                 enhanced_system_message = examples_text
 
-        # Initialize parent with enhanced system message - EXACT same API otherwise
         super().__init__(
             messages=messages,
             system_message=enhanced_system_message,
@@ -667,7 +653,6 @@ class ChatFewShotTemplate(ChatPromptTemplate):
             **kwargs,
         )
 
-        # Store original system message for add_example functionality
         self._original_system_message = system_message
 
     def add_example(self, example: dict[str, Any]) -> None:
@@ -713,7 +698,6 @@ class ChatFewShotTemplate(ChatPromptTemplate):
             rendered_system = self._render_template(self.system_message, **kwargs)
             system_parts.append(rendered_system)
 
-        # Add additional system prompt if provided
         if system_prompt:
             rendered_additional = self._render_template(system_prompt, **kwargs)
             system_parts.append(rendered_additional)

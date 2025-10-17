@@ -97,7 +97,6 @@ class PerformanceMetricsObserver:
             self.pipeline_start_times[event.name] = event.timestamp.timestamp()
 
         elif isinstance(event, NodeStarted):
-            # Initialize metrics for new nodes
             if event.name not in self.metrics:
                 self.metrics[event.name] = NodeMetrics()
             self.metrics[event.name].executions += 1
@@ -269,7 +268,6 @@ class AlertingObserver:
             )
             logger.error(alert.message)
 
-        # Store and callback if alert was triggered
         if alert:
             self.alerts.append(alert)
             if self.on_alert:
@@ -329,7 +327,6 @@ class ExecutionTrace:
         """Add event to trace with elapsed time from first event."""
         event_timestamp = event.timestamp.timestamp()
 
-        # Set start time from first event
         if self.start_time is None:
             self.start_time = event_timestamp
 
@@ -393,8 +390,7 @@ class ExecutionTracerObserver:
 
         for elapsed_ms, event_type, event in events_to_print:
             # Type narrowing: check if event has 'name' attribute
-            event_name = getattr(event, "name", None)
-            if event_name:
+            if event_name := getattr(event, "name", None):
                 print(f"[{elapsed_ms:7.1f}ms] {event_type:25s} | {event_name}")
             else:
                 print(f"[{elapsed_ms:7.1f}ms] {event_type:25s}")
@@ -522,7 +518,6 @@ class ResourceMonitorObserver:
             self.max_concurrent = max(self.max_concurrent, self.concurrent_nodes)
             self.current_wave_nodes.add(event.name)
 
-            # Track wave transitions
             if event.wave_index != self.current_wave:
                 if self.current_wave_nodes and self.current_wave >= 0:
                     self.wave_sizes.append(len(self.current_wave_nodes))

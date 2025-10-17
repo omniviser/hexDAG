@@ -106,7 +106,6 @@ def _validate_pipeline_structure(pipeline_path: Path, data: dict) -> None:
         if "nodes" not in data and "spec" not in data:
             raise ValueError("Pipeline must have a 'nodes' or 'spec' field")
 
-        # Extract nodes based on format
         nodes = data.get("nodes") or data.get("spec", {}).get("nodes", [])
 
         if not isinstance(nodes, list):
@@ -168,10 +167,8 @@ RUN apt-get update && apt-get install -y \\
     git \\
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Create required directories
 RUN mkdir -p /app/pipelines /app/src
 
 """
@@ -194,7 +191,6 @@ RUN pip install --no-cache-dir hexdag{extras_str}
 
     dockerfile_content += "# Copy pipeline files\n"
 
-    # Add COPY commands for each pipeline
     for pipeline_file in pipeline_files:
         dockerfile_content += (
             f"COPY pipelines/{pipeline_file.name} /app/pipelines/{pipeline_file.name}\n"
@@ -209,10 +205,8 @@ COPY src/ /app/src/
 # Install custom requirements if not empty
 RUN if [ -s requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 
-# Set Python path
 ENV PYTHONPATH=/app:$PYTHONPATH
 
-# Create entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
@@ -243,7 +237,6 @@ set -e
 
 """
 
-    # Add pipeline options (safe - names are validated above)
     script_content += "# Available pipelines:\n"
     for name in pipeline_names:
         script_content += f"#   - {name}\n"
@@ -313,7 +306,6 @@ async def main():
         # Parse input - support both JSON string and file input
         input_str = """$PIPELINE_INPUT"""
 
-        # Check if input starts with @ for file input
         if input_str.startswith("@"):
             input_file = input_str[1:]  # Remove @ prefix
             try:
@@ -334,7 +326,6 @@ async def main():
                 print(f"Received: {input_str[:100]}...", file=sys.stderr)
                 sys.exit(1)
 
-        # Build and run pipeline
         dag = builder.build()
         results = await dag.aexecute(input_data)
 
@@ -371,7 +362,6 @@ def _generate_docker_compose(
         pipeline_name = pipeline_file.stem
         pipeline_data = _read_pipeline_yaml(pipeline_file)
 
-        # Extract environment variables from pipeline metadata if available
         env_vars = {}
         if "metadata" in pipeline_data:
             metadata = pipeline_data["metadata"]
@@ -387,7 +377,6 @@ def _generate_docker_compose(
             "restart": "unless-stopped",
         }
 
-        # Add environment variables if specified in pipeline metadata
         if env_vars:
             service_config["environment"] = env_vars
 
@@ -637,13 +626,10 @@ def build(
         )
         raise typer.Exit(1)
 
-    # Convert output to Path
     output_path = Path(output)
 
-    # Create output directory
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Create pipelines directory
     pipelines_dir = output_path / "pipelines"
     pipelines_dir.mkdir(exist_ok=True)
 
@@ -777,25 +763,21 @@ def build(
     readme = _generate_readme(output_path, [pipelines_dir / p.name for p in pipeline], image)
     console.print(f"  [green]✓[/green] Created: {readme.relative_to(output_path.parent)}")
 
-    # Create .dockerignore
     dockerignore = output_path / ".dockerignore"
     with Path.open(dockerignore, "w") as f:
         f.write("**/__pycache__\n**/*.pyc\n**/*.pyo\n**/.git\n**/.venv\n**/venv\n")
     console.print(f"  [green]✓[/green] Created: {dockerignore.relative_to(output_path.parent)}")
 
-    # Create empty requirements.txt if it doesn't exist
     requirements = output_path / "requirements.txt"
     if not requirements.exists():
         requirements.touch()
         console.print(f"  [green]✓[/green] Created: {requirements.relative_to(output_path.parent)}")
 
-    # Create src directory
     src_dir = output_path / "src"
     src_dir.mkdir(exist_ok=True)
     (src_dir / "__init__.py").touch()
     console.print(f"  [green]✓[/green] Created: {src_dir.relative_to(output_path.parent)}/")
 
-    # Create sample .env file for docker-compose
     env_file = output_path / ".env.example"
     with Path.open(env_file, "w") as f:
         f.write("""# HexDAG Environment Configuration
@@ -812,7 +794,6 @@ DATABASE_URL=sqlite:///app/data/hexdag.db
 LOG_LEVEL=INFO
 
 # Custom environment variables
-# Add any pipeline-specific configuration here
 """)
     console.print(f"  [green]✓[/green] Created: {env_file.relative_to(output_path.parent)}")
 

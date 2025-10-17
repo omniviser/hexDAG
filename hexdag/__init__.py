@@ -31,7 +31,6 @@ from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 # Port interfaces
 from hexdag.core.ports import LLM, APICall, DatabasePort, ToolRouter
 
-# Initialize the component registry early so it's available for all imports
 # This ensures core components are loaded and plugins are discovered
 from hexdag.core.registry import registry
 from hexdag.core.registry.models import ComponentType  # For internal framework use

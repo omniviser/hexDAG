@@ -51,9 +51,7 @@ from rich.logging import RichHandler
 LogLevel = Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LogFormat = Literal["console", "json", "structured", "rich", "dual"]
 
-# Store configured state to enable idempotent reconfiguration
 _CURRENT_CONFIG: dict | None = None
-# Track handler IDs added by configure_logging for safe cleanup
 _HANDLER_IDS: list[int] = []
 
 # Correlation ID context variable for request tracing
@@ -134,7 +132,6 @@ def configure_logging(
     """
     global _CURRENT_CONFIG, _HANDLER_IDS
 
-    # Check if already configured with same settings (idempotent)
     current_config = {
         "level": level,
         "format": format,
@@ -254,7 +251,6 @@ def configure_logging(
         )
         _HANDLER_IDS.append(handler_id)
 
-    # Add file handler if specified
     if output_file:
         output_path = Path(output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -366,7 +362,6 @@ def enable_stdlib_logging_bridge() -> None:
 
     class InterceptHandler(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:
-            # Get corresponding Loguru level if it exists
             level: str | int
             try:
                 level = logger.level(record.levelname).name

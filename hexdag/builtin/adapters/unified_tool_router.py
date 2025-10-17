@@ -29,13 +29,11 @@ class UnifiedToolRouter(ToolRouter):
 
     Example
     -------
-        # Create router - no parameters needed!
         router = UnifiedToolRouter()
 
         # Execute tools from registry
         result = await router.acall_tool("search_papers", {"query": "diabetes"})
 
-        # Get tool definitions for agent nodes
         tool_defs = router.get_tool_definitions()
     """
 
@@ -46,7 +44,6 @@ class UnifiedToolRouter(ToolRouter):
         ----
             **kwargs: Configuration options (none needed for this adapter)
         """
-        # Initialize config (accessible via self.field_name).__init__(self, **kwargs)
 
         # No other initialization needed - we use get_registry() when needed
 
@@ -70,7 +67,6 @@ class UnifiedToolRouter(ToolRouter):
         try:
             # Validate tool exists and is correct type
             registry.get_metadata(tool_name, component_type=ComponentType.TOOL)
-            # Get and execute tool
             tool = registry.get(tool_name)
         except Exception as e:
             available = self.get_available_tools()
@@ -88,7 +84,6 @@ class UnifiedToolRouter(ToolRouter):
             If tool is not executable
         """
         try:
-            # Handle different tool types
             if inspect.iscoroutinefunction(tool):
                 return await self._call_with_params(tool, params, is_async=True)
             if has_execute_method(tool):
@@ -120,7 +115,6 @@ class UnifiedToolRouter(ToolRouter):
         """
         sig = inspect.signature(func)
 
-        # Check if function accepts **kwargs
         has_var_keyword = any(
             p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
         )
@@ -186,8 +180,7 @@ class UnifiedToolRouter(ToolRouter):
         """Get schemas for all available tools from registry."""
         schemas = {}
         for tool_name in self.get_available_tools():
-            schema = self.get_tool_schema(tool_name)
-            if schema:
+            if schema := self.get_tool_schema(tool_name):
                 schemas[tool_name] = schema
         return schemas
 
@@ -223,7 +216,6 @@ class UnifiedToolRouter(ToolRouter):
         metadata = component_info.metadata
         component = metadata.component
 
-        # Extract function from component using pattern matching (Python 3.12+)
         match component:
             case FunctionComponent(value=func):
                 return self._generate_tool_definition_from_function(func, component_info.name)
@@ -232,7 +224,6 @@ class UnifiedToolRouter(ToolRouter):
                     cls.execute, component_info.name
                 )
             case _:
-                # Return minimal definition for other cases
                 return ToolDefinition(
                     name=component_info.name,
                     simplified_description=metadata.description or f"Tool {component_info.name}",
@@ -255,7 +246,6 @@ class UnifiedToolRouter(ToolRouter):
         """
         sig = inspect.signature(func)
 
-        # Extract parameters
         parameters: list[ToolParameter] = []
         for param_name, param in sig.parameters.items():
             if param_name == "self":  # Skip self parameter for methods
@@ -277,12 +267,10 @@ class UnifiedToolRouter(ToolRouter):
             )
             parameters.append(tool_param)
 
-        # Extract description from docstring
         doc = inspect.getdoc(func) or f"Execute {tool_name}"
         lines = doc.strip().split("\n")
         simplified_desc = lines[0] if lines else f"Execute {tool_name}"
 
-        # Build example
         example_args = []
         for p in parameters:
             if p.required:

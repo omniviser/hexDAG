@@ -112,11 +112,9 @@ class FieldExtractor:
         if data is None:
             return None
 
-        # Handle dict-like objects
         if isinstance(data, dict):
             return data.get(key)
 
-        # Handle Pydantic models using protocol
         if is_dict_convertible(data):
             return getattr(data, key, None)
 
@@ -224,20 +222,16 @@ class ModelFactory:
             Pydantic model class with automatic field extraction
 
         """
-        # Build field definitions with optional type inference
         field_definitions = ModelFactory._build_field_definitions(mapping, dependency_models)
 
-        # Create the extraction validator
         validator = ModelFactory._create_validator(mapping)
 
-        # Create the dynamic model
         model: type[BaseModel] = create_model(
             name,
             __validators__={"extract_mapped_fields": validator},
             **field_definitions,
         )
 
-        # Store mapping for introspection
         model._field_mapping = mapping  # type: ignore[attr-defined]
 
         return model
@@ -332,7 +326,6 @@ class MappedInput:
 
     Example
     -------
-        # Create a model that maps fields from dependencies
         ConsumerInput = MappedInput.create_model(
             "ConsumerInput",
             {
@@ -364,7 +357,6 @@ class MappedInput:
 
         Example
         -------
-            # Create a model that maps fields from dependencies
             ConsumerInput = MappedInput.create_model(
                 "ConsumerInput",
                 {
@@ -417,7 +409,6 @@ class AutoMappedInput(BaseModel):
             Mapped data dictionary
 
         """
-        # Get field mapping from class
         field_mapping = cls._get_field_mapping()
 
         if not field_mapping:
@@ -426,7 +417,6 @@ class AutoMappedInput(BaseModel):
         if not isinstance(data, dict):
             return {}
 
-        # Extract mapped fields
         result: dict[str, Any] = {}
         for target_field, source_path in field_mapping.items():
             value = FieldExtractor.extract(data, source_path)
@@ -449,7 +439,6 @@ class AutoMappedInput(BaseModel):
 
         mapping_attr = getattr(cls, "_field_mapping", None)
 
-        # Handle different ways the mapping might be stored
         if mapping_attr is None:
             return {}
 
@@ -462,7 +451,6 @@ class AutoMappedInput(BaseModel):
             default_value = getattr(mapping_attr, "default", {})
             if isinstance(default_value, dict):
                 return default_value
-            # Check if default is dict-like
             if hasattr(default_value, "items"):
                 try:
                     return dict(default_value.items())

@@ -102,7 +102,6 @@ class ConfigLoader:
         with config_path.open("rb") as f:
             data = tomllib.load(f)
 
-        # Extract hexdag configuration
         if config_path.name == "pyproject.toml":
             # Look for [tool.hexdag] section
             hexdag_data = data.get("tool", {}).get("hexdag", {})
@@ -149,8 +148,7 @@ class ConfigLoader:
             return config_path
 
         # Check environment variable first
-        env_path = os.getenv("HEXDAG_CONFIG_PATH")
-        if env_path:
+        if env_path := os.getenv("HEXDAG_CONFIG_PATH"):
             config_path = Path(env_path)
             if config_path.exists():
                 logger.debug(f"Using config from HEXDAG_CONFIG_PATH: {config_path}")
@@ -388,7 +386,6 @@ def _cached_load_config(path_str: str | None) -> HexDAGConfig:
     """
     try:
         loader = ConfigLoader()
-        # Handle special auto-discovery cache key
         if path_str and path_str.startswith("__auto__"):
             return loader.load_from_toml(None)
         return loader.load_from_toml(Path(path_str) if path_str else None)

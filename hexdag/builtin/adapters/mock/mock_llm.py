@@ -32,7 +32,6 @@ class MockLLM(LLM):
         ----
             **kwargs: Configuration options (responses, delay_seconds)
         """
-        # Store configuration
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
 
         # Process responses (convert to list if needed)
@@ -70,7 +69,6 @@ class MockLLM(LLM):
         """
         self.last_messages = messages
 
-        # Simulate delay if configured
         if self.delay_seconds > 0:
             await asyncio.sleep(self.delay_seconds)
 

@@ -85,7 +85,6 @@ class SchemaGenerator:
         if format not in ("dict", "yaml", "json"):
             raise ValueError(f"Invalid format: {format}. Must be one of: dict, yaml, json")
 
-        # Get signature
         try:
             sig = inspect.signature(factory)
         except (ValueError, TypeError) as e:
@@ -95,10 +94,8 @@ class SchemaGenerator:
         properties = {}
         required = []
 
-        # Extract parameter documentation from docstring
         param_docs = SchemaGenerator._extract_param_docs(factory)
 
-        # Get parameter list to check if 'name' is first
         param_list = list(sig.parameters.items())
         first_non_self_param = None
         for pname, _ in param_list:
@@ -122,7 +119,6 @@ class SchemaGenerator:
             ):
                 continue
 
-            # Get type annotation
             param_type = param.annotation
 
             # Skip if no type annotation
@@ -133,11 +129,9 @@ class SchemaGenerator:
             # Generate property schema
             prop_schema = SchemaGenerator._type_to_json_schema(param_type)
 
-            # Add description from docstring
             if param_name in param_docs:
                 prop_schema["description"] = param_docs[param_name]
 
-            # Add default if present
             if param.default != inspect.Parameter.empty:
                 prop_schema["default"] = param.default
             else:
@@ -146,7 +140,6 @@ class SchemaGenerator:
 
             properties[param_name] = prop_schema
 
-        # Build final schema
         schema = {
             "type": "object",
             "properties": properties,
@@ -184,19 +177,15 @@ class SchemaGenerator:
         >>> SchemaGenerator._type_to_json_schema(Literal["a", "b"])
         {'type': 'string', 'enum': ['a', 'b']}
         """
-        # Handle Annotated types (Pydantic Field constraints)
         if is_annotated_type(type_hint):
             base_type, metadata = get_annotated_metadata(type_hint)
 
             # Recursively process base type
             schema = SchemaGenerator._type_to_json_schema(base_type)
 
-            # Add constraints from Field
             # In Pydantic v2, Field stores metadata as FieldInfo with .metadata attribute
             for constraint in metadata:
-                # Check if it's a FieldInfo object (Pydantic v2)
                 if hasattr(constraint, "metadata") and constraint.metadata:
-                    # Extract constraints from metadata (Ge, Le, etc.)
                     for meta_item in constraint.metadata:
                         # Ge, Le, Gt, Lt objects
                         if hasattr(meta_item, "ge"):
@@ -219,7 +208,6 @@ class SchemaGenerator:
 
             return schema
 
-        # Handle Literal types
         if is_literal_type(type_hint):
             args = get_args(type_hint)
             # Determine type from first value
@@ -232,12 +220,10 @@ class SchemaGenerator:
             else:
                 json_type = "string"
 
-            # Build schema with type first (for doctest consistency)
             literal_schema: dict[str, Any] = {"type": json_type, "enum": list(args)}
 
             return literal_schema
 
-        # Handle Union types (including | syntax)
         if is_union_type(type_hint):
             args = get_args(type_hint)
 
@@ -257,7 +243,6 @@ class SchemaGenerator:
             # Multiple types → anyOf
             return {"anyOf": [SchemaGenerator._type_to_json_schema(arg) for arg in non_none_args]}
 
-        # Handle List types
         if is_list_type(type_hint):
             args = get_args(type_hint)
             item_type = args[0] if args else Any
@@ -267,11 +252,9 @@ class SchemaGenerator:
                 "items": SchemaGenerator._type_to_json_schema(item_type),
             }
 
-        # Handle Dict types
         if is_dict_type(type_hint):
             return {"type": "object"}
 
-        # Handle basic types
         if type_hint in SchemaGenerator.BASIC_TYPE_MAP:
             return SchemaGenerator.BASIC_TYPE_MAP[type_hint].copy()
 
@@ -348,10 +331,8 @@ class SchemaGenerator:
             # Exit parameters section when we hit another section header (ends with :)
             # or non-indented text
             if in_params_section:
-                # Check if this is a section header (e.g., "Returns:", "Raises:")
                 if line_stripped and line_stripped.endswith(":") and not line.startswith(" "):
                     break
-                # Check if we're back to non-indented content (but allow blank lines)
                 if (
                     line
                     and not line.startswith((" ", "\t"))
@@ -463,7 +444,6 @@ class SchemaGenerator:
         properties = schema.get("properties", {})
         required = schema.get("required", [])
 
-        # Add fields to spec
         spec: dict[str, Any] = example["spec"]
         for prop_name, prop_schema in properties.items():
             if "default" in prop_schema:
@@ -499,7 +479,6 @@ class SchemaGenerator:
         >>> SchemaGenerator._placeholder_for_type("integer")
         0
         """
-        # Handle list of types (e.g., ["string", "null"])
         if isinstance(json_type, list):
             json_type = json_type[0] if json_type else "string"
 

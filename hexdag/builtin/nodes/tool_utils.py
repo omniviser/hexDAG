@@ -158,7 +158,6 @@ class ToolParser:
                 json_str = match.group(1)
                 data = json.loads(json_str)
 
-                # Check if it's a tool call
                 if isinstance(data, dict) and "tool" in data:
                     calls.append(
                         ToolCall(
@@ -187,7 +186,6 @@ class ToolParser:
 
         for match in cls.PARAM_PATTERN.finditer(args_str):
             key = match.group(1)
-            # Get value from whichever group matched
             value = match.group(2) or match.group(3) or match.group(4)
 
             # Try to parse as JSON for complex types

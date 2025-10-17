@@ -47,12 +47,10 @@ class MockToolAdapter(ToolRouter):
             mock_responses: Dictionary mapping tool names to their predefined responses.
             **kwargs: Configuration options (default_response, raise_on_unknown)
         """
-        # Store configuration
         self.default_response = kwargs.get("default_response")
         self.raise_on_unknown = kwargs.get("raise_on_unknown", False)
         self.mock_responses = mock_responses or {}
 
-        # Track call history for testing
         self.call_history: list[dict[str, Any]] = []
 
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
@@ -71,13 +69,11 @@ class MockToolAdapter(ToolRouter):
         ------
             ValueError: If tool not found and raise_on_unknown is True
         """
-        # Record the call for testing/debugging
         self.call_history.append({
             "tool": tool_name,
             "params": params,
         })
 
-        # Return predefined response if available
         if tool_name in self.mock_responses:
             response = self.mock_responses[tool_name]
             # If response is callable, call it with params
@@ -85,12 +81,10 @@ class MockToolAdapter(ToolRouter):
                 return response(params)
             return response
 
-        # Handle unknown tools
         if self.raise_on_unknown:
             available = ", ".join(self.mock_responses.keys())
             raise ValueError(f"Unknown tool: '{tool_name}'. Available tools: {available or 'none'}")
 
-        # Return default response
         if self.default_response is not None:
             return self.default_response
 

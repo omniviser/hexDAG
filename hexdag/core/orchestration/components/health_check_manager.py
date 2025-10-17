@@ -83,7 +83,6 @@ class HealthCheckManager:
             if port_name in MANAGER_PORT_NAMES:
                 continue
 
-            # Check if adapter implements health check protocol
             if isinstance(adapter, HealthCheckable):
                 status = await self._check_single_adapter(port_name, adapter, observer_manager)
                 health_results.append(status)

@@ -119,7 +119,6 @@ class ComponentInstantiator:
             # Parse the specification
             component_spec = self._parse_component_spec(spec)
 
-            # Get adapter from registry (namespace parameter ignored in flat registry)
             try:
                 adapter_or_class = registry.get(component_spec.name)
             except Exception as e:
@@ -129,7 +128,6 @@ class ComponentInstantiator:
                     f"Make sure it's registered in pyproject.toml. Error: {e}"
                 ) from e
 
-            # Check if we got a class or an instance
             # Some adapters (like LocalObserverManager) are registered as instances
             if isinstance(adapter_or_class, type):
                 # It's a class, instantiate it with parameters
@@ -202,7 +200,6 @@ class ComponentInstantiator:
             # Parse the specification
             component_spec = self._parse_component_spec(spec)
 
-            # Get policy class from registry (namespace parameter ignored in flat registry)
             policy_class = self._get_policy_class(component_spec.name)
 
             # Instantiate with parameters
@@ -251,7 +248,6 @@ class ComponentInstantiator:
             metadata = registry.get_metadata(name, component_type=ComponentType.POLICY)
             component = metadata.component
 
-            # Extract the actual class from the ClassComponent wrapper
             policy_class = component.value if isinstance(component, ClassComponent) else component
 
             if not isinstance(policy_class, type):

@@ -76,7 +76,6 @@ class AnthropicAdapter:
         max_retries : int, default=2
             Maximum retry attempts
         """
-        # Store configuration
         self.api_key = api_key
         self.model = model
         self.temperature = temperature
@@ -88,14 +87,12 @@ class AnthropicAdapter:
         self.max_retries = max_retries
         self._extra_kwargs = kwargs  # Store extra params
 
-        # Initialize Anthropic client
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
             "timeout": timeout,
             "max_retries": max_retries,
         }
 
-        # Add base_url if provided
         if base_url := kwargs.get("base_url"):
             client_kwargs["base_url"] = base_url
 
@@ -113,7 +110,6 @@ class AnthropicAdapter:
             The generated response text, or None if failed
         """
         try:
-            # Convert MessageList to Anthropic format
             # Anthropic requires system messages to be separate
             system_message = self.system_prompt
             anthropic_messages = []
@@ -126,10 +122,8 @@ class AnthropicAdapter:
                     else:
                         system_message = msg.content
                 else:
-                    # Convert "user" and "assistant" messages
                     anthropic_messages.append({"role": msg.role, "content": msg.content})
 
-            # Build request parameters
             request_params: dict[str, Any] = {
                 "model": self.model,
                 "messages": anthropic_messages,
@@ -138,7 +132,6 @@ class AnthropicAdapter:
                 "top_p": self.top_p,
             }
 
-            # Add optional parameters
             if system_message is not None:
                 request_params["system"] = system_message
 
@@ -150,9 +143,7 @@ class AnthropicAdapter:
 
             response = await self.client.messages.create(**request_params)
 
-            # Extract content from response
             if response.content and len(response.content) > 0:
-                # Get the first text content block
                 first_content = response.content[0]
                 if hasattr(first_content, "text"):
                     return str(first_content.text)

@@ -158,7 +158,6 @@ class ReActAgentNode(BaseNodeFactory):
         # Infer input schema from prompt
         input_schema = self._infer_input_schema(main_prompt)
 
-        # Create models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         if input_model is None:
             input_model = type(f"{name}Input", (BaseModel,), {"__annotations__": {"input": str}})
@@ -166,7 +165,6 @@ class ReActAgentNode(BaseNodeFactory):
             f"{name}Output", (BaseModel,), {"__annotations__": {"output": str}}
         )
 
-        # Create the agent function with internal loop composition
         agent_fn = self._create_agent_with_loop(
             name, main_prompt, continuation_prompts or {}, output_model, config
         )
@@ -232,7 +230,6 @@ class ReActAgentNode(BaseNodeFactory):
 
             ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
 
-            # Initialize or update state from previous iteration
             state = self._initialize_or_update_state(input_data)
 
             # Execute single reasoning step
@@ -240,14 +237,12 @@ class ReActAgentNode(BaseNodeFactory):
                 state, name, main_prompt, continuation_prompts, config, dict(ports)
             )
 
-            # Check if we got a final output (tool_end was called)
             final_output = await self._check_for_final_output(
                 updated_state, output_model, get_port("event_manager")
             )
             if final_output is not None:
                 return final_output
 
-            # Return state as dict for loop compatibility
             return updated_state.model_dump()
 
         # Define success condition using loop concepts
@@ -277,7 +272,6 @@ class ReActAgentNode(BaseNodeFactory):
                 # Execute single step
                 step_result = await single_step_executor(current_result)
 
-                # Check if we got final output (structured model)
                 if not isinstance(step_result, dict):
                     return step_result
 
@@ -314,14 +308,12 @@ class ReActAgentNode(BaseNodeFactory):
             return state
 
         # Case 2: Fresh input (first iteration)
-        # Handle both dict and Pydantic model inputs
         try:
             raw_input = to_dict(input_data)
         except TypeError:
             # Fallback for non-dict types
             raw_input = {"input": str(input_data)}
 
-        # Create fresh AgentState
         return AgentState(input_data=raw_input)
 
     def _enhance_prompt_with_tools(
@@ -337,11 +329,9 @@ class ReActAgentNode(BaseNodeFactory):
         if not tool_router:
             return prompt
 
-        # Convert to template if needed
         if isinstance(prompt, str):
             prompt = PromptTemplate(prompt)
 
-        # Get tool instructions
         tool_instructions = self._build_tool_instructions(tool_router, config)
 
         # Use the template's enhance method
@@ -359,7 +349,6 @@ class ReActAgentNode(BaseNodeFactory):
         if not tool_schemas:
             return "\n## No tools available"
 
-        # Build simple tool list
         tool_list = []
         for name, schema in tool_schemas.items():
             params = ", ".join(p["name"] for p in schema.get("parameters", []))
@@ -430,7 +419,6 @@ carried_data={'key': 'value'})"""
         if isinstance(prompt, str):
             prompt = PromptTemplate(prompt)
 
-        # Create LLM node for this step
         llm_node_spec = self.llm_node.from_template(node_name, template=prompt)
 
         # Execute LLM with the prepared input (no ports passed - uses ExecutionContext)
@@ -455,7 +443,6 @@ carried_data={'key': 'value'})"""
         event_manager = ports.get("event_manager")
         tool_router = ports.get("tool_router", UnifiedToolRouter())
 
-        # Get current step info
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"
 
@@ -466,10 +453,8 @@ carried_data={'key': 'value'})"""
         # Enhance prompt with tools
         enhanced_prompt = self._enhance_prompt_with_tools(current_prompt, tool_router, config)
 
-        # Get LLM response - convert state to dict for template rendering
         state_dict = state.model_dump()
 
-        # Get current phase context if available
         current_phase_context = state.phase_contexts.get(state.current_phase, {})
 
         llm_input = {
@@ -481,7 +466,6 @@ carried_data={'key': 'value'})"""
             "phase_target": current_phase_context.get("target_output", ""),
         }
 
-        # Get LLM response
         response = await self._get_llm_response(enhanced_prompt, llm_input, ports, node_step_name)
 
         # Process tools and phase changes
@@ -489,7 +473,6 @@ carried_data={'key': 'value'})"""
             response, state, tool_router, continuation_prompts, config, event_manager
         )
 
-        # Update state with this step's results
         state.reasoning_steps.append(f"Step {current_step}: {response}")
         state.response = response
         state.step = current_step
@@ -527,24 +510,19 @@ carried_data={'key': 'value'})"""
                 # Execute tool
                 result = await tool_router.acall_tool(tool_call.name, tool_call.params)
 
-                # Store result
                 state.tool_results.append(f"{tool_call.name}: {result}")
                 state.tools_used.append(tool_call.name)
 
-                # Handle special tools
                 if tool_call.name == "change_phase" and isinstance(result, dict):
                     new_phase = result.get("new_phase")
                     context = result.get("context", {})
 
                     if new_phase and new_phase in continuation_prompts:
-                        # Store the previous phase in context if not already provided
                         if "previous_phase" not in context:
                             context["previous_phase"] = state.current_phase
 
-                        # Store context for this phase transition
                         state.phase_contexts[new_phase] = context
 
-                        # Update current phase
                         state.current_phase = new_phase
                         state.phase_history.append(new_phase)
 
@@ -627,7 +605,6 @@ carried_data={'key': 'value'})"""
                     # Emit metadata before returning final result
                     await self._emit_agent_metadata(state, event_manager)
 
-                    # Create and return the final output
                     return output_model.model_validate(parsed_data)
 
                 except (ValueError, TypeError) as e:

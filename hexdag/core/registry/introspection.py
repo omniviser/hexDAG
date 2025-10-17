@@ -70,7 +70,6 @@ def extract_port_methods(port_class: type) -> tuple[list[str], list[str]]:
         if name.startswith("_"):
             continue
 
-        # Check if method is abstract
         # For Protocol classes, check if method has __isabstractmethod__ attribute
         is_abstract = hasattr(method, "__isabstractmethod__") and getattr(
             method, "__isabstractmethod__", False

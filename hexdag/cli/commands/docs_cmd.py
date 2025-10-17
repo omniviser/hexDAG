@@ -49,7 +49,6 @@ def build_docs(
     import os
 
     try:
-        # Set environment variable for custom config path
         if config:
             if not config.exists():
                 console.print(f"[red]✗[/red] Config file not found: {config}")
@@ -140,7 +139,6 @@ def serve_docs(
     import os
 
     try:
-        # Set environment variable for custom config path
         if config:
             if not config.exists():
                 console.print(f"[red]✗[/red] Config file not found: {config}")
@@ -265,14 +263,12 @@ def new_page(
         console.print(f"[red]✗[/red] File already exists: {file_path}")
         raise typer.Exit(1)
 
-    # Create parent directories
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Generate title from filename if not provided
     if not title:
         title = file_path.stem.replace("-", " ").replace("_", " ").title()
 
-    # Create file with basic template
     content = f"""# {title}
 
 Add your content here.

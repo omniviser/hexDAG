@@ -226,7 +226,6 @@ class PortConfig:
     def __post_init__(self) -> None:
         """Ensure metadata is immutable if provided."""
         if self.metadata is not None:
-            # Convert to tuple of items for immutability
             object.__setattr__(self, "metadata", tuple(self.metadata.items()))
 
     def get_metadata(self) -> dict[str, Any]:
@@ -314,13 +313,11 @@ class PortsConfiguration:
         if self.global_ports is not None:
             object.__setattr__(self, "global_ports", tuple(self.global_ports.items()))
         if self.type_ports is not None:
-            # Convert nested dict to tuple of (key, tuple of items)
             type_items = tuple(
                 (node_type, tuple(ports.items())) for node_type, ports in self.type_ports.items()
             )
             object.__setattr__(self, "type_ports", type_items)
         if self.node_ports is not None:
-            # Convert nested dict to tuple of (key, tuple of items)
             node_items = tuple(
                 (node_name, tuple(ports.items())) for node_name, ports in self.node_ports.items()
             )
@@ -413,7 +410,6 @@ class PortsConfiguration:
             global_ports={"llm": PortConfig(MockLLM())}
             )
 
-            # Get flat dictionary for orchestrator
             ports = config.to_flat_dict("my_node")
             assert "llm" in ports
             assert isinstance(ports["llm"], MockLLM)  # Unwrapped

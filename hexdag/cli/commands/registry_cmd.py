@@ -54,7 +54,6 @@ def list_components(
     ] = None,
 ) -> None:
     """List all registered components."""
-    # Set defaults
     if type_filter is None:
         type_filter = ComponentFilter.ALL
     if format is None:
@@ -66,7 +65,6 @@ def list_components(
         # Auto-discovery happens during bootstrap
         bootstrap_registry()
 
-    # Get components
     components = registry.list_components()
 
     # Apply filters
@@ -197,7 +195,6 @@ def show_component(
             raise typer.Exit(0)
 
     try:
-        # Get component info with determined namespace
         component_info = registry.get_info(component_name, namespace=namespace)
 
         # Only get actual component for non-ports (ports are interfaces)
@@ -220,7 +217,6 @@ def show_component(
         # Show methods for ports
         if component_info.component_type == ComponentType.PORT:
             console.print("\n[bold]Interface Methods:[/bold]")
-            # Get the port class from registry
             import inspect
 
             port_metadata = registry.get_metadata(
@@ -314,7 +310,6 @@ def show_tree() -> None:
 
     components = registry.list_components()
 
-    # Build tree structure
     tree = Tree("[bold]Component Registry[/bold]")
 
     # Group by namespace
@@ -324,7 +319,6 @@ def show_tree() -> None:
             namespaces[comp.namespace] = []
         namespaces[comp.namespace].append(comp)
 
-    # Add to tree
     for ns_name, ns_components in namespaces.items():
         ns_branch = tree.add(f"[yellow]{ns_name}[/yellow]")
 
@@ -336,7 +330,6 @@ def show_tree() -> None:
                 by_type[type_name] = []
             by_type[type_name].append(comp)
 
-        # Add to namespace branch
         for type_name, type_components in by_type.items():
             type_branch = ns_branch.add(f"[green]{type_name}[/green]")
             for comp in type_components:
@@ -407,7 +400,6 @@ def list_namespaces() -> None:
             namespaces[comp.namespace] = []
         namespaces[comp.namespace].append(comp)
 
-    # Create table
     table = Table(
         title="Registry Namespaces",
         show_header=True,
@@ -452,7 +444,6 @@ def search_components(
 
     components = registry.list_components()
 
-    # Convert wildcard pattern to regex
     regex_pattern = pattern.replace("*", ".*").replace("?", ".")
     regex = re.compile(regex_pattern, re.IGNORECASE)
 
@@ -518,8 +509,7 @@ def verify_registry() -> None:
         seen[key] = comp
 
     # Check protected components in core namespace
-    core_components = [c for c in components if c.namespace == "core"]
-    if core_components:
+    if core_components := [c for c in components if c.namespace == "core"]:
         console.print(f"[dim]Protected core components: {len(core_components)}[/dim]")
 
     # Report results

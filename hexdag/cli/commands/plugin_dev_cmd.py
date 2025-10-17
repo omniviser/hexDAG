@@ -22,7 +22,6 @@ def get_plugin_dir() -> Path:
         if (current / "hexai_plugins").exists():
             return current / "hexai_plugins"
         if (current / "pyproject.toml").exists():
-            # Check if this is the hexdag project
             with Path.open(current / "pyproject.toml") as f:
                 if "hexdag" in f.read():
                     plugin_dir = current / "hexai_plugins"
@@ -57,11 +56,9 @@ def create_plugin(
 
     console.print(f"[green]Creating new plugin: {name}[/green]")
 
-    # Create directory structure
     plugin_path.mkdir(parents=True)
     (plugin_path / "tests").mkdir()
 
-    # Create __init__.py
     class_name = name.replace("_", " ").title().replace(" ", "")
     init_content = f'''"""${name} plugin for hexDAG."""
 
@@ -71,7 +68,6 @@ __all__ = ["{class_name}"]
 '''
     (plugin_path / "__init__.py").write_text(init_content)
 
-    # Create main adapter file
     class_name = name.replace("_", " ").title().replace(" ", "")
     adapter_content = f'''"""{class_name} implementation."""
 
@@ -94,7 +90,6 @@ class {class_name}:
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize {name}."""
-        # Initialize your adapter here
         pass
 
     # TODO: Implement the {port} port interface methods
@@ -106,7 +101,6 @@ class {class_name}:
 '''
     (plugin_path / f"{name}.py").write_text(adapter_content)
 
-    # Create pyproject.toml
     pyproject_content = f"""[project]
 name = "hexdag-{name.replace("_", "-")}"
 version = "0.1.0"
@@ -124,7 +118,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    # Add your plugin-specific dependencies here
     # Do not add hexdag as a dependency (it's the parent project)
 ]
 
@@ -150,7 +143,6 @@ check_untyped_defs = true
 """
     (plugin_path / "pyproject.toml").write_text(pyproject_content)
 
-    # Create README
     readme_content = f"""# {class_name}
 
 A hexDAG plugin that provides {name.replace("_", " ")} functionality.
@@ -200,7 +192,6 @@ hexdag plugin lint {name}
 """
     (plugin_path / "README.md").write_text(readme_content)
 
-    # Create test file
     test_content = f'''"""Tests for {name}."""
 
 import pytest
@@ -221,7 +212,6 @@ class Test{class_name}:
 '''
     (plugin_path / "tests" / f"test_{name}.py").write_text(test_content)
 
-    # Create LICENSE
     license_content = """MIT License
 
 Copyright (c) 2024 HexDAG Team
@@ -511,8 +501,7 @@ def check_all_plugins() -> None:
 
     console.print(table)
 
-    all_passed = all(lint_ok and test_ok for _, lint_ok, test_ok in results)
-    if all_passed:
+    if all(lint_ok and test_ok for _, lint_ok, test_ok in results):
         console.print("\n[green]✓ All plugins passed checks![/green]")
     else:
         console.print("\n[red]✗ Some plugins failed checks[/red]")

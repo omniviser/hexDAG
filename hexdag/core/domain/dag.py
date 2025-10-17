@@ -108,7 +108,6 @@ class NodeSpec:
             return data
 
         try:
-            # Check if data is dict-convertible using protocol
             if is_dict_convertible(data):
                 # Pydantic model or dict-like - convert to dict first
                 return model.model_validate(
@@ -306,11 +305,9 @@ class DirectedGraph:
             set
         )  # node -> set of dependencies
 
-        # Cache for expensive operations
         self._waves_cache: list[list[str]] | None = None
         self._validation_cache: bool = False
 
-        # Add nodes if provided
         if nodes:
             self.add_many(*nodes)
 
@@ -359,20 +356,16 @@ class DirectedGraph:
 
             # Visit all dependencies
             for dep in graph.get(node, set()):
-                if dep in colors:  # Only visit nodes that exist in graph
-                    result = dfs(dep, path)
-                    if result:  # If cycle found, propagate it up
-                        return result
+                if dep in colors and (result := dfs(dep, path)):
+                    return result
 
             path.pop()
             colors[node] = Color.BLACK
             return None
 
         for node in graph:
-            if colors[node] == Color.WHITE:
-                result = dfs(node, [])
-                if result:  # If cycle found, return it
-                    return result
+            if colors[node] == Color.WHITE and (result := dfs(node, [])):
+                return result
 
         return None  # No cycles found
 
@@ -399,7 +392,6 @@ class DirectedGraph:
         self._forward_edges[node_spec.name]  # Ensure key exists (defaultdict creates empty set)
         self._reverse_edges[node_spec.name] = set(node_spec.deps)
 
-        # Update forward edges from dependencies to this node
         for dep in node_spec.deps:
             self._forward_edges[dep].add(node_spec.name)
 
@@ -525,16 +517,13 @@ class DirectedGraph:
             if missing_deps:
                 raise MissingDependencyError("; ".join(missing_deps))
 
-            cycle_message = self._detect_cycles()
-            if cycle_message:
+            if cycle_message := self._detect_cycles():
                 raise CycleDetectedError(cycle_message)
 
             self._validation_cache = True
 
-        if check_type_compatibility:
-            incompatibilities = self._validate_type_compatibility()
-            if incompatibilities:
-                raise SchemaCompatibilityError("; ".join(incompatibilities))
+        if check_type_compatibility and (incompatibilities := self._validate_type_compatibility()):
+            raise SchemaCompatibilityError("; ".join(incompatibilities))
 
     def _detect_cycles(self) -> str | None:
         """Detect cycles using depth-first search with three states.
@@ -544,7 +533,6 @@ class DirectedGraph:
         str | None
             Cycle detected message or None if no cycle is detected
         """
-        # Build a simple dependency graph from NodeSpecs and use static method
         graph = {name: node_spec.deps for name, node_spec in self.nodes.items()}
         return DirectedGraph.detect_cycle(graph)
 
@@ -595,7 +583,6 @@ class DirectedGraph:
             # For DAG: A -> B -> D, A -> C -> D
             # Returns: [["A"], ["B", "C"], ["D"]]
         """
-        # Return cached result if available
         if self._waves_cache is not None:
             return self._waves_cache
 
@@ -872,7 +859,6 @@ class DirectedGraph:
             graph2 << (a >> b >> c)  # Add pipeline
         """
         if isinstance(other, tuple):
-            # Handle tuple of nodes (from parallel composition, future feature)
             for node in other:
                 self.add(node)
         else:

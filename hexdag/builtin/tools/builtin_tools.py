@@ -72,7 +72,6 @@ def change_phase(
     ...              iteration=2)
     {'action': 'change_phase', 'new_phase': 'synthesis', 'context': {...}}
     """
-    # Build PhaseContext-compatible dictionary
     context: PhaseContext = {}
 
     if previous_phase is not None:

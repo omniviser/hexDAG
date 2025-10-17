@@ -65,7 +65,6 @@ class LoopNode(BaseNodeFactory):
             logger = get_logger("hexdag.app.application.nodes.loop_node")
             logger.info("🔄 LOOP NODE: {name}", name=name)
 
-            # Get current iteration count from input state
             if isinstance(input_data, dict):
                 current_iteration = input_data.get(iteration_key, 0) + 1
                 loop_history = input_data.get(f"{name}_history", [])
@@ -81,7 +80,6 @@ class LoopNode(BaseNodeFactory):
                 max=max_iterations,
             )
 
-            # Extract relevant data for evaluation
             if isinstance(input_data, dict):
                 data_dict = input_data
             else:
@@ -114,7 +112,6 @@ class LoopNode(BaseNodeFactory):
             # Determine if we should continue looping
             should_continue = current_iteration < max_iterations and not success_criteria_met
 
-            # Update state
             state[iteration_key] = current_iteration
             state[f"{name}_history"] = loop_history + [data_dict]
             state["should_continue"] = should_continue
@@ -175,7 +172,6 @@ class ConditionalNode(BaseNodeFactory):
             logger = get_logger("hexdag.app.application.nodes.conditional_node")
             logger.info("🧭 CONDITIONAL NODE: {name}", name=name)
 
-            # Extract data using protocol
             if isinstance(input_data, dict):
                 data_dict = input_data
             elif is_dict_convertible(input_data):

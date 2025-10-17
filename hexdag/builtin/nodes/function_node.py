@@ -55,11 +55,9 @@ class FunctionNode(BaseNodeFactory):
         # Validate function can be used properly
         self._validate_function(fn)
 
-        # Store input_mapping in kwargs if provided
         if input_mapping is not None:
             kwargs["input_mapping"] = input_mapping
 
-        # Handle input_mapping: auto-generate input schema if mapping provided
         if input_mapping and not input_schema:
             # Auto-generate Pydantic model from field mapping
             input_schema = MappedInput.create_model(
@@ -74,10 +72,8 @@ class FunctionNode(BaseNodeFactory):
             input_schema = input_schema or inferred_input
             output_schema = output_schema or inferred_output
 
-        # Create Pydantic models for validation
         # For basic types like dict, list, str, etc., use them directly
 
-        # Handle input schema - check if it's a basic Python type
         if isinstance(input_schema, type) and input_schema.__name__ in {
             "dict",
             "list",
@@ -90,7 +86,6 @@ class FunctionNode(BaseNodeFactory):
         else:
             input_model = self.create_pydantic_model(f"{name}Input", input_schema)
 
-        # Handle output schema - check if it's a basic Python type
         if isinstance(output_schema, type) and output_schema.__name__ in {
             "dict",
             "list",
@@ -103,7 +98,6 @@ class FunctionNode(BaseNodeFactory):
         else:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
-        # Create the wrapped function
         wrapped_fn = self._create_wrapped_function(name, fn, input_model, output_model)
 
         return NodeSpec(
@@ -152,7 +146,6 @@ class FunctionNode(BaseNodeFactory):
             else:
                 result = fn(input_data, **call_kwargs)
 
-            # Return raw result - orchestrator will handle output validation
             return result
 
         # Preserve function metadata
@@ -180,7 +173,6 @@ class FunctionNode(BaseNodeFactory):
         if not params:
             raise ValueError("Function must have at least one parameter to receive input_data")
 
-        # Check if first parameter is suitable (not **kwargs only)
         first_param = params[0]
         if first_param.kind == inspect.Parameter.VAR_KEYWORD:
             raise ValueError("First parameter cannot be **kwargs - need parameter for input_data")
@@ -200,14 +192,12 @@ class FunctionNode(BaseNodeFactory):
             Tuple of (input_schema, output_schema) where each can be None if not inferrable
         """
         try:
-            # Get type hints
             type_hints = get_type_hints(fn)
             sig = inspect.signature(fn)
 
             # Infer input schema from first parameter (skip 'self' if present)
             input_schema = None
-            params = list(sig.parameters.values())
-            if params:
+            if params := list(sig.parameters.values()):
                 # Skip 'self' parameter if present
                 first_param = (
                     params[0]
@@ -216,7 +206,6 @@ class FunctionNode(BaseNodeFactory):
                 )
                 if first_param and first_param.name in type_hints:
                     param_type = type_hints[first_param.name]
-                    # Check if it's a Pydantic model using protocol
                     if is_schema_type(param_type):
                         input_schema = param_type
 
@@ -224,7 +213,6 @@ class FunctionNode(BaseNodeFactory):
             output_schema = None
             if "return" in type_hints:
                 return_type = type_hints["return"]
-                # Check if it's a Pydantic model using protocol
                 if is_schema_type(return_type):
                     output_schema = return_type
 
@@ -294,11 +282,9 @@ class FunctionNode(BaseNodeFactory):
         NodeSpec
             New NodeSpec with the input mapping applied
         """
-        # Create new params with the input_mapping
         new_params = dict(node.params) if node.params else {}
         new_params["input_mapping"] = input_mapping
 
-        # Create new node with updated params
         return NodeSpec(
             name=node.name,
             fn=node.fn,

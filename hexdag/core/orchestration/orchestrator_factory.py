@@ -33,7 +33,6 @@ class OrchestratorFactory:
     builder = YamlPipelineBuilder()
     graph, pipeline_config = builder.build_from_yaml_file("pipeline.yaml")
 
-    # Create orchestrator from config
     factory = OrchestratorFactory()
     orchestrator = factory.create_orchestrator(pipeline_config)
 
@@ -104,7 +103,6 @@ class OrchestratorFactory:
 
             from hexdag.core.ports_builder import PortsBuilder
 
-            # Build custom port configuration
             builder = (
                 PortsBuilder()
                 .with_llm(MockLLM())  # Global default
@@ -133,7 +131,6 @@ class OrchestratorFactory:
 
         if use_ports_config:
             ports_config = self._build_ports_configuration(pipeline_config, additional_ports)
-            # Extract global ports for policy manager subscription
             # Note: PortsConfiguration converts dicts to tuples for immutability
             global_ports = {k: v.port for k, v in (ports_config.global_ports or ())}
         else:
@@ -324,13 +321,11 @@ class OrchestratorFactory:
         ```python
         factory = OrchestratorFactory()
 
-        # Create ports builder from config
         builder = factory.create_ports_builder(pipeline_config)
 
         # Optionally add node-specific overrides
         builder.for_node("researcher", llm=custom_llm)
 
-        # Build final configuration
         ports = builder.build()
         ```
         """

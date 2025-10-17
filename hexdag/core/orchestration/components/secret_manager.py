@@ -104,7 +104,6 @@ class SecretManager:
                 memory=memory, prefix=self.secret_prefix, keys=self.secret_keys
             )
 
-            # Track loaded secret keys for cleanup
             memory_keys = list(mapping.values())
             self._loaded_secret_keys[dag_id] = memory_keys
 
@@ -163,7 +162,6 @@ class SecretManager:
         removed_count = 0
         for secret_key in secret_keys:
             try:
-                # Set to None to clear the secret
                 await memory.aset(secret_key, None)
                 removed_count += 1
                 logger.debug(f"Removed secret from memory: {secret_key}")

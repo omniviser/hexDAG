@@ -33,7 +33,6 @@ class InMemoryMemory(Memory):
         **kwargs : Any
             Configuration options (max_size, delay_seconds)
         """
-        # Store configuration
         self.max_size = kwargs.get("max_size", 1000)
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
 
@@ -174,7 +173,6 @@ class InMemoryMemory(Memory):
         """
         from hexdag.core.ports.healthcheck import HealthStatus
 
-        # Check if storage is functional
         try:
             # Test basic operations
             test_key = "__health_check__"
@@ -192,7 +190,6 @@ class InMemoryMemory(Memory):
                     error=Exception("Storage read/write verification failed"),
                 )
 
-            # Check if approaching size limit
             details: dict[str, Any] = {"size": len(self.storage)}
             if self.max_size is not None:
                 usage_percent = (len(self.storage) / self.max_size) * 100

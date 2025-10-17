@@ -52,7 +52,6 @@ def bootstrap_registry(
 
 
     """
-    # Check if already bootstrapped
     if registry.ready:
         logger.warning("Registry already bootstrapped, skipping")
         return
@@ -72,7 +71,6 @@ def bootstrap_registry(
     # Clear precedence: parameter > config > default(False)
     final_dev_mode = dev_mode if dev_mode is not None else config.dev_mode
 
-    # Convert config to manifest entries and bootstrap
     entries = config_to_manifest_entries(config)
     registry.bootstrap(entries, dev_mode=final_dev_mode)
 

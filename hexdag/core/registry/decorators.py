@@ -151,7 +151,6 @@ def component(
                 f"component_type must be ComponentType or str, not {type(component_type).__name__}"
             )
 
-        # Store everything as attributes (no metadata object)
         cls._hexdag_type = validated_type  # type: ignore[attr-defined]
         cls._hexdag_name = primary_name  # type: ignore[attr-defined]
         cls._hexdag_names = all_names  # type: ignore[attr-defined]
@@ -159,16 +158,6 @@ def component(
         cls._hexdag_subtype = subtype  # type: ignore[attr-defined]
         cls._hexdag_description = component_description  # type: ignore[attr-defined]
         cls._hexdag_required_ports = required_ports or []  # type: ignore[attr-defined]
-
-        # Enforce Config class requirement for nodes and policies
-        # Skip enforcement for test modules
-        if inspect.isclass(cls):
-            getattr(cls, "__module__", "")
-
-            # Config classes are now OPTIONAL!
-            # No enforcement - components can use plain __init__ signatures
-            # Secret resolution happens automatically via @adapter decorator
-            pass
 
         return cls
 
@@ -263,7 +252,6 @@ def adapter(
         if not isinstance(implements_port, str):
             # It's a Protocol class - extract its name
             if hasattr(implements_port, "__name__"):
-                # Convert class name like 'PolicyManagerPort' to 'policy_manager'
                 class_name = implements_port.__name__
                 # Remove 'Port' suffix if present
                 if class_name.endswith("Port"):
@@ -273,10 +261,8 @@ def adapter(
             else:
                 port_name = str(implements_port)
 
-        # Store the normalized port name
         cls._hexdag_implements_port = port_name  # type: ignore[attr-defined]
 
-        # Store secrets metadata on class
         cls._hexdag_secrets = secrets or {}  # type: ignore[attr-defined]
 
         # Wrap __init__ to auto-resolve secrets from decorator metadata or signature
@@ -392,7 +378,6 @@ def _wrap_adapter_async_methods(cls: type) -> None:
         The adapter class to wrap
     """
 
-    # Get all methods from the class
     for attr_name in dir(cls):
         # Skip private methods and special methods except async protocol methods
         if attr_name.startswith("_") and not attr_name.startswith((
@@ -409,7 +394,6 @@ def _wrap_adapter_async_methods(cls: type) -> None:
         except AttributeError:
             continue
 
-        # Check if it's an async method (coroutine function)
         if inspect.iscoroutinefunction(attr):
             # Skip if already wrapped (prevent double wrapping)
             if hasattr(attr, _ASYNC_IO_WRAPPER_MARKER):

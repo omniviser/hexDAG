@@ -68,7 +68,6 @@ def _generate_example_from_schema(schema: dict[str, Any]) -> dict[str, Any]:
             elif prop_schema.get("type") == "object":
                 example[prop_name] = _generate_example_from_schema(prop_schema)
             else:
-                # Handle anyOf, oneOf, etc.
                 if "anyOf" in prop_schema:
                     # Use first option
                     first_option = prop_schema["anyOf"][0]
@@ -118,7 +117,6 @@ def list_schemas(
     """
     _ensure_bootstrapped()
 
-    # Get all node components
     components = registry.list_components(component_type=ComponentType.NODE)
 
     # Apply namespace filter
@@ -274,7 +272,6 @@ def explain_schema(
 
     try:
         schema = registry.get_schema(node_type, namespace=namespace)
-        # Get component info for description
         components = registry.list_components(component_type=ComponentType.NODE)
         comp_info = next(
             (c for c in components if c.name == node_type and c.namespace == namespace), None
@@ -289,7 +286,6 @@ def explain_schema(
         console.print(f"[red]Error:[/red] Schema is a string, not a dict: {schema}")
         raise typer.Exit(1)
 
-    # Build explanation
     console.print(f"\n[bold cyan]{namespace}:{node_type}[/bold cyan]")
 
     if comp_info and comp_info.metadata.description:
@@ -313,10 +309,8 @@ def explain_schema(
             if isinstance(field_type, list):
                 field_type = " | ".join(str(t) for t in field_type)
 
-            # Check if required
             is_required = "✓" if field_name in required_fields else ""
 
-            # Get default
             default = field_schema.get("default", "")
             if default == "":
                 default = "-"
@@ -325,18 +319,15 @@ def explain_schema(
                 if len(default) > 30:
                     default = default[:27] + "..."
 
-            # Get description
             description = field_schema.get("description", "")
             if len(description) > 60:
                 description = description[:57] + "..."
 
-            # Handle enum
             if "enum" in field_schema:
                 field_type = f"enum: {', '.join(str(v) for v in field_schema['enum'][:3])}"
                 if len(field_schema["enum"]) > 3:
                     field_type += "..."
 
-            # Handle anyOf
             if "anyOf" in field_schema:
                 types = [option.get("type", "any") for option in field_schema["anyOf"][:2]]
                 field_type = " | ".join(types)

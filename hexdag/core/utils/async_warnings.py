@@ -53,7 +53,6 @@ def warn_sync_io(operation: str, suggestion: str | None = None) -> None:
     if not _is_in_async_context():
         return
 
-    # Get caller information
     frame = inspect.currentframe()
     if frame and frame.f_back:
         caller_frame = frame.f_back

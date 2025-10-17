@@ -101,13 +101,11 @@ def create_pipeline(
     if output is None:
         output = Path(f"{name}.yaml")
 
-    # Check if file exists
     if output.exists():
         if not Confirm.ask(f"[yellow]File {output} already exists. Overwrite?[/yellow]"):
             console.print("[red]Aborted.[/red]")
             raise typer.Exit(1)
 
-    # Create pipeline template
     if template == "minimal":
         pipeline = {
             "apiVersion": "v1",
@@ -282,7 +280,6 @@ def create_from_schema(
     """
     _ensure_bootstrapped()
 
-    # Get schema
     try:
         schema = registry.get_schema(node_type, namespace=namespace)
     except (KeyError, ValueError) as e:
@@ -300,7 +297,6 @@ def create_from_schema(
     if output is None:
         output = Path(f"{name}.yaml")
 
-    # Check if file exists
     if output.exists():
         if not Confirm.ask(f"[yellow]File {output} already exists. Overwrite?[/yellow]"):
             console.print("[red]Aborted.[/red]")
@@ -314,7 +310,6 @@ def create_from_schema(
     # Generate example spec from schema
     example_spec = _generate_minimal_example(schema)
 
-    # Create pipeline
     node_name = f"{node_type.replace('_node', '')}_1"
     pipeline = {
         "apiVersion": "v1",

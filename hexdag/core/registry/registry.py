@@ -107,7 +107,6 @@ class ComponentRegistry:
                     )
                 seen.add(key)
 
-            # Store configuration
             self._manifest = manifest
             self._dev_mode = dev_mode
             logger.info("Bootstrapping registry with {count} entries", count=len(manifest))
@@ -120,12 +119,11 @@ class ComponentRegistry:
                 for entry in manifest:
                     is_core = self._is_core_module(entry)
 
-                    # Check if optional plugin exists
-                    if not is_core:
-                        skip_reason = self._check_plugin_requirements(entry.module)
-                        if skip_reason:
-                            logger.info(f"Skipping optional module {entry.module}: {skip_reason}")
-                            continue
+                    if not is_core and (
+                        skip_reason := self._check_plugin_requirements(entry.module)
+                    ):
+                        logger.info(f"Skipping optional module {entry.module}: {skip_reason}")
+                        continue
 
                     try:
                         count = default_register_components(self, entry.namespace, entry.module)
@@ -189,10 +187,8 @@ class ComponentRegistry:
         total = 0
         for entry in manifest:
             is_core = self._is_core_module(entry)
-            if not is_core:
-                skip_reason = self._check_plugin_requirements(entry.module)
-                if skip_reason:
-                    continue
+            if not is_core and self._check_plugin_requirements(entry.module):
+                continue
             try:
                 count = register_fn(self, entry.namespace, entry.module)  # type: ignore[operator]
                 total += count
@@ -255,7 +251,6 @@ class ComponentRegistry:
         ComponentAlreadyRegisteredError
             If component name already exists (collision detected)
         """
-        # Check if we can register
         if not self._can_register():
             raise RegistryImmutableError(
                 f"Cannot register component '{name}' after bootstrap. "
@@ -272,7 +267,6 @@ class ComponentRegistry:
         wrapped_component = RegistryValidator.wrap_component(component)
         RegistryValidator.validate_component_name(clean_name)
 
-        # Extract metadata from component attributes
         implements_port_str = (
             RegistryValidator.get_implements_port(component)
             if component_type_enum == ComponentType.ADAPTER
@@ -280,7 +274,6 @@ class ComponentRegistry:
         )
         port_requirements_list = RegistryValidator.get_required_ports(component)
 
-        # Create metadata
         metadata = ComponentMetadata(
             name=clean_name,
             component_type=component_type_enum,
@@ -298,7 +291,6 @@ class ComponentRegistry:
             # ComponentAlreadyRegisteredError expects (name, namespace) signature
             raise ComponentAlreadyRegisteredError(clean_name, existing.namespace)
 
-        # Store component in flat dict
         self._components[clean_name] = metadata
 
         logger.debug(
@@ -410,17 +402,14 @@ class ComponentRegistry:
             type: string
         ...
         """
-        # Create cache key
         cache_key = f"{namespace or 'auto'}:{name}:{format}"
 
         # Check cache
         if cache_key in self._schema_cache:
             return self._schema_cache[cache_key]
 
-        # Get component metadata
         metadata = self.get_metadata(name, namespace)
 
-        # Extract callable from component
         import inspect
         from typing import cast
 
@@ -428,7 +417,6 @@ class ComponentRegistry:
 
         # If it's a class, get the __call__ method
         if inspect.isclass(component) and callable(component):
-            # Get __call__ method from an instance
             try:
                 instance = component()
                 component = instance.__call__
@@ -439,7 +427,6 @@ class ComponentRegistry:
         # Generate schema (component is now guaranteed to be callable)
         schema = SchemaGenerator.from_callable(cast("CallableType", component), format=format)
 
-        # Cache the result
         self._schema_cache[cache_key] = schema
 
         return schema

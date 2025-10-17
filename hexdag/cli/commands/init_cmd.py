@@ -40,13 +40,11 @@ def init(
     if ctx.invoked_subcommand is not None:
         return
 
-    # Set default path if not provided
     if path is None:
         path = Path.cwd()
 
     config_path = path / "hexdag.toml"
 
-    # Check if config already exists
     if (
         config_path.exists()
         and not force
@@ -98,10 +96,8 @@ def _generate_config(adapters: list[str]) -> str:
         '    "hexdag.adapters.local",  # Local in-process adapters',
     ]
 
-    # Add mock adapter by default for testing
     lines.append('    "hexdag.adapters.mock",   # Mock adapters for testing')
 
-    # Add other requested adapters
     if "openai" in adapters:
         lines.append('    # "hexdag.adapters.openai",  # OpenAI adapter (requires api key)')
     if "anthropic" in adapters:
@@ -118,7 +114,6 @@ def _generate_config(adapters: list[str]) -> str:
         "enable_metrics = true",
     ])
 
-    # Add adapter-specific configurations
     if "openai" in adapters:
         lines.extend([
             "",

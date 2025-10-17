@@ -97,7 +97,6 @@ class SecretDescriptor:
 
                 if value:
                     logger.debug(f"Resolved secret from memory: {memory_key}")
-                    # Handle SecretStr from Pydantic or plain string
                     if hasattr(value, "get_secret_value"):
                         return value.get_secret_value()  # type: ignore[no-any-return]
                     return str(value)
@@ -188,7 +187,6 @@ def resolve_secrets_in_kwargs(
         if param_name in ("self", "cls"):
             continue
 
-        # Check if default value is a SecretDescriptor
         if isinstance(param.default, SecretDescriptor):
             secret_desc = param.default
 

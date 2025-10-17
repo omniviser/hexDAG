@@ -11,120 +11,19 @@ Tests the end-to-end secret management flow including:
 import os
 
 import pytest
-from pydantic import SecretStr
 
 from hexdag.builtin.adapters.llm.anthropic_adapter import AnthropicAdapter
 from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
 from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
 from hexdag.builtin.adapters.secret.local_secret_adapter import LocalSecretAdapter
-from hexdag.core.configurable import AdapterConfig, ConfigurableAdapter, SecretField
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig
 from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.types import Secret
 
-# ===================================================================
-# Test Adapters Using SecretField()
-# ===================================================================
-
-
-class SecretTestAdapter(ConfigurableAdapter):
-    """Test adapter demonstrating SecretField() usage."""
-
-    class Config(AdapterConfig):
-        api_key: SecretStr | None = SecretField(env_var="TEST_API_KEY", description="Test API key")
-        api_secret: SecretStr | None = SecretField(
-            env_var="TEST_API_SECRET", description="Test API secret"
-        )
-        service_url: str = "https://api.example.com"
-
-    config: Config
-
-    def get_api_key_value(self) -> str | None:
-        """Get the raw API key value (for testing)."""
-        return self.config.api_key.get_secret_value() if self.config.api_key else None
-
-    def get_api_secret_value(self) -> str | None:
-        """Get the raw API secret value (for testing)."""
-        return self.config.api_secret.get_secret_value() if self.config.api_secret else None
-
-
-# ===================================================================
-# SecretField() Auto-Resolution Tests
-# ===================================================================
-
-
-@pytest.mark.asyncio
-async def test_secret_field_resolves_from_env():
-    """Test SecretField automatically resolves from environment variables."""
-    # Set environment variables
-    os.environ["TEST_API_KEY"] = "sk-test-key-123"
-    os.environ["TEST_API_SECRET"] = "secret-value-456"
-
-    try:
-        # Create adapter - secrets should auto-resolve
-        adapter = SecretTestAdapter()
-
-        # Verify secrets were resolved
-        assert adapter.get_api_key_value() == "sk-test-key-123"
-        assert adapter.get_api_secret_value() == "secret-value-456"
-
-        # Verify secrets are hidden in string representation
-        assert str(adapter.config.api_key) == "**********"
-        assert str(adapter.config.api_secret) == "**********"
-
-    finally:
-        # Cleanup
-        del os.environ["TEST_API_KEY"]
-        del os.environ["TEST_API_SECRET"]
-
-
-@pytest.mark.asyncio
-async def test_secret_field_explicit_value_override():
-    """Test explicit values override environment variables."""
-    os.environ["TEST_API_KEY"] = "env-key-123"
-
-    try:
-        # Provide explicit value
-        adapter = SecretTestAdapter(api_key="explicit-key-456")
-
-        # Explicit value should win
-        assert adapter.get_api_key_value() == "explicit-key-456"
-
-    finally:
-        del os.environ["TEST_API_KEY"]
-
-
-@pytest.mark.asyncio
-async def test_secret_field_missing_optional():
-    """Test missing optional secret fields don't cause errors."""
-    # Don't set any environment variables
-    adapter = SecretTestAdapter()
-
-    # Optional secrets should be None
-    assert adapter.config.api_key is None
-    assert adapter.config.api_secret is None
-
-
-@pytest.mark.asyncio
-async def test_secret_field_with_pydantic_secret_str():
-    """Test SecretField works with Pydantic SecretStr."""
-    os.environ["TEST_API_KEY"] = "sk-hidden-key"
-
-    try:
-        adapter = SecretTestAdapter()
-
-        # Verify it's a SecretStr
-        assert isinstance(adapter.config.api_key, SecretStr)
-
-        # Verify repr is hidden
-        assert repr(adapter.config.api_key) == "SecretStr('**********')"
-
-        # Verify actual value accessible
-        assert adapter.config.api_key.get_secret_value() == "sk-hidden-key"
-
-    finally:
-        del os.environ["TEST_API_KEY"]
+# Note: Tests for deprecated ConfigurableAdapter pattern have been removed.
+# Secret management now uses the simplified decorator-based pattern.
+# See OpenAIAdapter and AnthropicAdapter for examples of modern secret handling.
 
 
 # ===================================================================

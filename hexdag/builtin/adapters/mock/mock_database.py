@@ -22,7 +22,6 @@ class MockDatabaseAdapter(DatabasePort):
         ----
             **kwargs: Configuration options (enable_sample_data, delay_seconds)
         """
-        # Store configuration
         self.enable_sample_data = kwargs.get("enable_sample_data", True)
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
 

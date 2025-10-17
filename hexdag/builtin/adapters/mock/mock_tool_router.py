@@ -27,7 +27,6 @@ class MockToolRouter(ToolRouter):
         ----
             **kwargs: Configuration options
         """
-        # Store configuration
         self.available_tools = kwargs.get("available_tools", [])
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
         self.raise_on_unknown_tool = kwargs.get("raise_on_unknown_tool", False)
@@ -57,7 +56,6 @@ class MockToolRouter(ToolRouter):
             },
         }
 
-        # Add configured tools
         for tool_name in self.available_tools:
             if tool_name not in self.tools:
                 self.tools[tool_name] = {
@@ -66,7 +64,6 @@ class MockToolRouter(ToolRouter):
                     "parameters": {},
                 }
 
-        # Track call history for testing
         self.call_history: list[dict[str, Any]] = []
 
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
@@ -86,24 +83,20 @@ class MockToolRouter(ToolRouter):
         ResourceNotFoundError
             If tool not found and raise_on_unknown_tool is True
         """
-        # Simulate delay
         if self.delay_seconds > 0:
             await asyncio.sleep(self.delay_seconds)
 
-        # Record the call
         self.call_history.append({
             "tool": tool_name,
             "params": params,
             "timestamp": asyncio.get_event_loop().time(),
         })
 
-        # Check if tool exists
         if tool_name not in self.tools:
             if self.raise_on_unknown_tool:
                 raise ResourceNotFoundError("tool", tool_name, list(self.tools.keys()))
             return {"error": f"Unknown tool: {tool_name}"}
 
-        # Return mock results based on tool
         if tool_name == "search":
             query = params.get("query", "")
             return {

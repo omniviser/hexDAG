@@ -159,13 +159,11 @@ class YamlPipelineBuilder:
         """
         config = self._parse_and_validate_yaml(yaml_content, use_cache=use_cache)
 
-        # Extract pipeline configuration including ports and policies
         pipeline_config = self._extract_pipeline_config(config)
 
         # Register common mappings for backward compatibility
         self._register_common_mappings(config)
 
-        # Build the graph
         graph = self._build_graph_from_config(config)
 
         logger.info(
@@ -248,7 +246,6 @@ class YamlPipelineBuilder:
             kind = node_config.get("kind", "")
 
             if kind == "macro_invocation":
-                # Handle macro expansion
                 self._expand_macro_into_graph(graph, node_config)
             else:
                 # Regular node creation using += operator
@@ -271,7 +268,6 @@ class YamlPipelineBuilder:
         YamlPipelineBuilderError
             If macro cannot be found or expanded
         """
-        # Extract macro configuration
         instance_name = macro_config.get("metadata", {}).get("name")
         if not instance_name:
             raise YamlPipelineBuilderError("macro_invocation must have metadata.name field")
@@ -286,12 +282,10 @@ class YamlPipelineBuilder:
         # Parse macro reference (e.g., "core:research" -> ("research", "core"))
         macro_name, namespace = self._parse_macro_reference(macro_ref)
 
-        # Extract configuration and inputs
         config_params = spec.get("config", {})
         inputs = spec.get("inputs", {})
         dependencies = spec.get("dependencies", [])
 
-        # Get and instantiate macro from registry, then expand
         try:
             # Registry automatically instantiates the macro with init_params
             macro_instance = registry.get(
@@ -402,7 +396,6 @@ class YamlPipelineBuilder:
         NodeSpec
             Constructed node specification
         """
-        # Extract node configuration
         node_id = node_config.get("metadata", {}).get("name")
         node_type, namespace = self._parse_kind(node_config["kind"])
         params = node_config.get("spec", {}).copy()  # Copy to avoid modifying original
@@ -411,10 +404,8 @@ class YamlPipelineBuilder:
         # Process parameters
         params = self._process_node_params(node_id, node_type, params)
 
-        # Create node using factory
         node = self._create_node_from_factory(node_id, node_type, namespace, params)
 
-        # Add dependencies
         if deps:
             node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
 
@@ -439,9 +430,7 @@ class YamlPipelineBuilder:
         dict[str, Any]
             Processed parameters
         """
-        # Handle field_mapping parameter
-        field_mapping = params.get("field_mapping")
-        if field_mapping:
+        if field_mapping := params.get("field_mapping"):
             resolved_mapping = self.field_mapping_registry.get(field_mapping)
             params["field_mapping"] = resolved_mapping
             logger.debug(
@@ -589,12 +578,10 @@ class YamlPipelineBuilder:
         metadata_section = config.get("metadata", {})
         spec = config.get("spec", {})
 
-        # Extract ports configuration
         ports = spec.get("ports", {})
         type_ports = spec.get("type_ports", {})
         policies = spec.get("policies", {})
 
-        # Build metadata dict using comprehension with merge
         base_fields = ["name", "description"]
         optional_fields = ["version", "author", "tags", "environment"]
 
@@ -602,7 +589,6 @@ class YamlPipelineBuilder:
             k: metadata_section[k] for k in optional_fields if k in metadata_section
         }
 
-        # Create PipelineConfig
         pipeline_config = PipelineConfig(
             ports=ports,
             type_ports=type_ports,
@@ -650,7 +636,6 @@ class YamlPipelineBuilder:
         -------
             Updated parameters with auto-conversions applied
         """
-        # Create a copy to avoid modifying the original
         params = params.copy()
 
         # Check for incompatible prompt_template + output_schema combination
@@ -668,7 +653,6 @@ class YamlPipelineBuilder:
             if "parse_as_json" in params:
                 del params["parse_as_json"]
 
-            # Convert the string template to ChatPromptTemplate object
             # Keep the prompt_template parameter name but change the value type
             chat_template = ChatPromptTemplate(human_message=original_template)
             params["prompt_template"] = chat_template

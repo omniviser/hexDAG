@@ -128,7 +128,6 @@ class NodeExecutor:
         """
         node_start_time = time.time()
 
-        # Cache context lookups once at start (performance optimization)
         observer_mgr = get_observer_manager()
         policy_mgr = get_policy_manager()
 
@@ -162,7 +161,6 @@ class NodeExecutor:
                 policy_mgr, start_event, context, node_id=node_name, wave_index=wave_index
             )
 
-            # Handle control signals
             if start_response.signal == PolicySignal.SKIP:
                 return start_response.data
             if start_response.signal == PolicySignal.FAIL:
@@ -244,7 +242,6 @@ class NodeExecutor:
                 policy_mgr, fail_event, context, node_id=node_name, wave_index=wave_index
             )
 
-            # Handle policy response
             if fail_response.signal == PolicySignal.RETRY:
                 raise  # Let orchestrator retry
 

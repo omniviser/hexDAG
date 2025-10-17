@@ -35,10 +35,8 @@ class LocalSecretAdapter:
     --------
     Basic usage::
 
-        # Create adapter
         secrets = LocalSecretAdapter()
 
-        # Get single secret
         api_key = await secrets.aget_secret("OPENAI_API_KEY")
         print(api_key)  # <SECRET> (hidden)
         print(api_key.get())  # "sk-..." (actual value)
@@ -69,11 +67,9 @@ class LocalSecretAdapter:
         ----
             **kwargs: Configuration options (env_prefix, allow_empty)
         """
-        # Store configuration
         self.env_prefix = kwargs.get("env_prefix", "")
         self.allow_empty = kwargs.get("allow_empty", False)
 
-        # Cache for retrieved secrets
         self._cache: dict[str, Secret] = {}
 
     async def aget_secret(self, key: str) -> Secret:
@@ -111,10 +107,8 @@ class LocalSecretAdapter:
             logger.debug(f"Retrieved secret '{key}' from cache")
             return self._cache[key]
 
-        # Cache miss - fetch from environment
         env_var_name = f"{self.env_prefix}{key}"
 
-        # Get from environment
         value = os.getenv(env_var_name)
 
         if value is None:
@@ -130,7 +124,6 @@ class LocalSecretAdapter:
         logger.debug(f"Retrieved secret '{key}' from environment")
         secret = Secret(value)
 
-        # Store in cache for future access
         self._cache[key] = secret
 
         return secret
@@ -213,7 +206,6 @@ class LocalSecretAdapter:
         >>> await adapter.alist_secret_names()  # doctest: +SKIP
         ['OPENAI_API_KEY', 'DATABASE_PASSWORD', ...]
         """
-        # Get all env vars matching prefix
         names = [
             key.removeprefix(self.env_prefix)
             for key in os.environ

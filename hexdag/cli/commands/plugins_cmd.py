@@ -32,7 +32,6 @@ def list_plugins(
     ] = None,
 ) -> None:
     """List all available plugins and adapters."""
-    # Set default format if not provided
     if format is None:
         format = OutputFormat.TABLE
 
@@ -149,7 +148,6 @@ def install_plugin(
         console.print("[yellow]Warning: uv requested but not found. Using pip instead.[/yellow]")
         use_uv_final = False
 
-    # Build the command - using list format for security
     if use_uv_final:
         if editable:
             # For editable install with uv, need to install from current directory
@@ -232,7 +230,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
 
     plugins = []
 
-    # Get all adapters from registry
     components = registry.list_components()
     adapters = [c for c in components if c.component_type == ComponentType.ADAPTER]
 
@@ -246,9 +243,7 @@ def _get_available_plugins() -> list[dict[str, Any]]:
             by_namespace[ns] = []
         by_namespace[ns].append(adapter)
 
-    # Add discovered adapters as plugins
     for ns, ns_adapters in by_namespace.items():
-        # Get unique capabilities from all adapters
         capabilities = set()
         for adapter in ns_adapters:
             if adapter.metadata.implements_port:
@@ -264,7 +259,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                 cap = capability_map.get(port, port)
                 capabilities.add(cap)
 
-        # Create a plugin entry for each namespace group
         if ns == "plugin" and ns_adapters:
             # Group adapters by their prefix (e.g., "mock" from "mock_llm", "mock_database")
             prefix_groups: dict[str, list[ComponentInfo]] = {}
@@ -273,7 +267,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                 if adapter.name == "in_memory_memory":
                     prefix = "local"
                 elif "_" in adapter.name:
-                    # Extract prefix before underscore
                     prefix = adapter.name.split("_")[0]
                 else:
                     prefix = adapter.name
@@ -282,7 +275,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                     prefix_groups[prefix] = []
                 prefix_groups[prefix].append(adapter)
 
-            # Create plugin entry for each prefix group
             for prefix, group_adapters in prefix_groups.items():
                 # Collect capabilities from all adapters in this group
                 group_capabilities = set()
@@ -325,7 +317,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
     }
 
     for name, info in known_extras.items():
-        # Check if already in plugins
         if name not in [p["name"] for p in plugins]:
             # Try to import to check availability
             installed = False
@@ -348,7 +339,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
     try:
         from hexdag.visualization import GRAPHVIZ_AVAILABLE
 
-        # Update visualization status
         for plugin in plugins:
             if plugin["name"] == "visualization":
                 plugin["installed"] = GRAPHVIZ_AVAILABLE
@@ -440,7 +430,6 @@ def _check_dependencies() -> list[dict]:
             except ImportError:
                 pass
 
-        # Add check result
         if sdk_ok and adapter_ok:
             checks.append({"name": f"{info['display']} (SDK + Adapter)", "status": "ok"})
         elif sdk_ok:

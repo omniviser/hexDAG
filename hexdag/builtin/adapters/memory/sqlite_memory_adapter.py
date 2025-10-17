@@ -70,7 +70,6 @@ class SQLiteMemoryAdapter:
             Automatically create table if it doesn't exist
 
         """
-        # Store configuration
         self.table_name = table_name
         self.auto_init = auto_init
         self.database = database
@@ -170,7 +169,6 @@ class SQLiteMemoryAdapter:
         if self.auto_init:
             await self._ensure_table()
 
-        # Check if key exists first
         exists = await self.aget(key)
         if exists is None:
             return False

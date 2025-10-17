@@ -104,7 +104,6 @@ class BaseLLMNode(BaseNodeFactory):
                 if rich_features and output_model:
                     enhanced_template = self.enhance_template_with_schema(template, output_model)
 
-                # Convert validated_input to dict if needed
                 # Note: signature is dict[str, Any] but runtime may pass Pydantic models
                 try:
                     input_dict = to_dict(validated_input)
@@ -154,10 +153,8 @@ class BaseLLMNode(BaseNodeFactory):
         str
             Formatted schema instruction text
         """
-        # Get the JSON schema
         schema = output_model.model_json_schema()
 
-        # Extract field information
         fields_info = []
         if "properties" in schema:
             for field_name, field_schema in schema["properties"].items():
@@ -168,7 +165,6 @@ class BaseLLMNode(BaseNodeFactory):
 
         fields_text = "\n".join(fields_info) if fields_info else "  - (no specific fields defined)"
 
-        # Create example JSON separately to avoid indentation issues
         example_data = {field: f"<{field}_value>" for field in schema.get("properties", {})}
         example_json = json.dumps(example_data, indent=2)
 
@@ -204,7 +200,6 @@ Example: {example_json}
         # Infer input schema
         input_schema = self.infer_input_schema_from_template(prepared_template)
 
-        # Create models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = (
             self.create_pydantic_model(f"{name}Output", output_schema)
@@ -212,12 +207,10 @@ Example: {example_json}
             else None
         )
 
-        # Create LLM wrapper
         llm_wrapper = self.create_llm_wrapper(
             name, prepared_template, input_model, output_model, rich_features
         )
 
-        # Build NodeSpec using universal method
         return self.create_node_with_mapping(
             name=name,
             wrapped_fn=llm_wrapper,
@@ -247,5 +240,4 @@ Example: {example_json}
         try:
             return output_model.model_validate({"result": response})
         except Exception:
-            # Return raw response if all fails
             return response

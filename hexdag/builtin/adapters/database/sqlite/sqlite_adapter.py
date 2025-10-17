@@ -35,7 +35,6 @@ class SQLiteAdapter:
         ----
             **kwargs: Configuration options (db_path, timeout, etc.)
         """
-        # Store configuration
         db_path = kwargs.get("db_path", ":memory:")
         self.db_path = Path(db_path) if db_path != ":memory:" else db_path
         self.check_same_thread = kwargs.get("check_same_thread", False)
@@ -53,7 +52,6 @@ class SQLiteAdapter:
 
         db_path = str(self.db_path) if isinstance(self.db_path, Path) else self.db_path
 
-        # Add read-only mode support via URI
         if self.read_only and db_path != ":memory:":
             # Use URI mode for read-only access
             db_uri = f"file:{db_path}?mode=ro"
@@ -158,7 +156,6 @@ class SQLiteAdapter:
                 if not self._validate_identifier(table):
                     continue
 
-                # Get column info
                 await cursor.execute(f'PRAGMA table_info("{table}")')  # nosec B608 - validated
                 rows = await cursor.fetchall()
 
@@ -173,7 +170,6 @@ class SQLiteAdapter:
                     if is_pk:
                         primary_keys.append(col_name)
 
-                # Get foreign keys
                 # nosec B608 - validated
                 await cursor.execute(f'PRAGMA foreign_key_list("{table}")')
                 fk_rows = await cursor.fetchall()
@@ -222,10 +218,8 @@ class SQLiteAdapter:
         """
         try:
             async with self._get_cursor() as cursor:
-                # Handle parameterized queries
                 if params:
                     # SQLite uses ? placeholders, but we support :name format
-                    # Convert :name placeholders to ? for SQLite
                     param_names = []
 
                     def replacer(match: re.Match[str]) -> str:
@@ -234,7 +228,6 @@ class SQLiteAdapter:
 
                     converted_query = re.sub(r":(\w+)", replacer, query)
 
-                    # Build parameter values in the correct order
                     try:
                         param_values = [params[name] for name in param_names]
                         await cursor.execute(converted_query, param_values)
@@ -249,7 +242,6 @@ class SQLiteAdapter:
                 # For SELECT queries, fetch results
                 if query_type in ("SELECT", "PRAGMA", "WITH"):
                     rows = await cursor.fetchall()
-                    # Convert aiosqlite.Row objects to dicts
                     return [dict(row) for row in rows]
                 # For INSERT/UPDATE/DELETE operations
                 # Note: If database is opened in read-only mode, SQLite will
@@ -308,7 +300,6 @@ class SQLiteAdapter:
         indexes = []
 
         async with self._get_cursor() as cursor:
-            # Get all indexes
             await cursor.execute("""
                 SELECT name, tbl_name, sql FROM sqlite_master
                 WHERE type='index' AND sql IS NOT NULL
@@ -324,12 +315,10 @@ class SQLiteAdapter:
                 if not self._validate_identifier(table_name, "table"):
                     continue
 
-                # Get index info
                 await cursor.execute(f'PRAGMA index_info("{index_name}")')  # nosec B608 - validated
                 col_rows = await cursor.fetchall()
                 columns = [col_row[2] for col_row in col_rows]
 
-                # Check if unique
                 await cursor.execute(f'PRAGMA index_list("{table_name}")')  # nosec B608 - validated
                 idx_list = await cursor.fetchall()
                 is_unique = False
@@ -363,13 +352,11 @@ class SQLiteAdapter:
                 if not self._validate_identifier(table):
                     continue  # Skip invalid table names
 
-                # Get row count - use quote for identifier
                 # SQLite uses double quotes for identifiers
                 await cursor.execute(f'SELECT COUNT(*) FROM "{table}"')  # nosec B608 - validated
                 result = await cursor.fetchone()
                 row_count = result[0] if result else 0
 
-                # Get table size (approximate)
                 await cursor.execute(
                     "SELECT SUM(LENGTH(sql)) FROM sqlite_master WHERE tbl_name = ?", (table,)
                 )

@@ -104,7 +104,6 @@ class _SchemaValidator:
             List of validation error messages (empty if valid)
         """
 
-        # Get schema from registry
         factory_name = f"{node_type}_node"
         try:
             schema_dict = registry.get_schema(factory_name, namespace=namespace, format="dict")
@@ -116,7 +115,6 @@ class _SchemaValidator:
         if not isinstance(schema_dict, dict):
             return []
 
-        # Get properties from schema
         properties = schema_dict.get("properties", {})
         required = schema_dict.get("required", [])
 
@@ -131,7 +129,6 @@ class _SchemaValidator:
             if field_name in ("dependencies",):
                 continue
 
-            # Check if field exists in schema
             if field_name not in properties:
                 errors.append(
                     f"Unknown field '{field_name}'. "
@@ -139,12 +136,10 @@ class _SchemaValidator:
                 )
                 continue
 
-            # Get field schema
             field_schema = properties[field_name]
 
             # Validate field type
-            validation_error = self._validate_field(field_name, field_value, field_schema)
-            if validation_error:
+            if validation_error := self._validate_field(field_name, field_value, field_schema):
                 errors.append(validation_error)
 
         return errors
@@ -164,13 +159,11 @@ class _SchemaValidator:
         -------
             Error message if validation fails, None if valid
         """
-        # Get expected type(s)
         field_type = field_schema.get("type")
         if not field_type:
             # No type specified, skip validation
             return None
 
-        # Handle anyOf (union types)
         if "anyOf" in field_schema:
             # Try validating against each option
             errors = []
@@ -242,9 +235,7 @@ class _SchemaValidator:
             "null": type(None),
         }
 
-        # Handle array of types (e.g., ["object", "null"])
         if isinstance(expected_type, list):
-            # Check if value matches any of the types
             return any(self._check_type(value, t) for t in expected_type)
 
         expected_python_type = type_mapping.get(expected_type)
@@ -269,7 +260,6 @@ class YamlValidator:
         ----
             valid_node_types: Set of valid node type names. If None, uses registry.
         """
-        # Store the provided node types, or None to indicate we should use registry
         self._provided_node_types = (
             frozenset(valid_node_types) if valid_node_types is not None else None
         )
@@ -293,8 +283,6 @@ class YamlValidator:
 
         # Otherwise, lazily get from registry and cache
         if self._cached_node_types is None:
-            # Get all node factories from registry (e.g., "function_node", "custom_processor")
-            # Extract node types with namespace (e.g., "core:function", "plugin:custom")
             # Note: Core nodes follow "_node" suffix, but plugins may not
             node_components = registry.list_components(component_type=ComponentType.NODE)
             node_types = {
@@ -339,7 +327,6 @@ class YamlValidator:
         if not result.is_valid:
             return result
 
-        # Extract nodes from spec
         spec = config.get("spec", {})
         nodes = spec.get("nodes", [])
 
@@ -423,13 +410,11 @@ class YamlValidator:
                 result.add_error(f"Node {i}: Missing 'metadata' field")
                 continue
 
-            # Extract node ID
             node_id = node.get("metadata", {}).get("name")
             if not node_id:
                 result.add_error(f"Node {i}: Missing 'metadata.name'")
                 continue
 
-            # Extract node type and namespace from kind (e.g., "llm_node" -> "llm")
             kind = node.get("kind", "")
 
             # Check node ID uniqueness
@@ -445,7 +430,6 @@ class YamlValidator:
                     result.add_error(
                         f"Node '{node_id}': macro_invocation must specify 'spec.macro' field"
                     )
-                # Track this as a macro instance for dependency validation
                 macro_instances.add(node_id)
                 continue
 
@@ -458,10 +442,8 @@ class YamlValidator:
             # Remove '_node' suffix if present
             node_type = node_kind[:-5] if node_kind.endswith("_node") else node_kind
 
-            # Build fully qualified node type for validation
             qualified_node_type = f"{namespace}:{node_type}"
 
-            # Get params from spec
             params = node.get("spec", {})
 
             # Validate node type (check if registered in registry)
@@ -574,12 +556,10 @@ class YamlValidator:
             # Check all dependencies exist using cached node_ids
             valid_deps = set()
             for dep in deps:
-                # Check if dependency is a known node
                 if dep in node_ids:
                     valid_deps.add(dep)
                     continue
 
-                # Check if dependency matches a macro-generated node pattern (instance_name_*)
                 is_macro_generated = False
                 for macro_instance in macro_instances:
                     if dep.startswith(f"{macro_instance}_"):
@@ -594,6 +574,5 @@ class YamlValidator:
             dependency_graph[node_id] = valid_deps
 
         # Check for cycles using DirectedGraph's public static method
-        cycle_message = DirectedGraph.detect_cycle(dependency_graph)
-        if cycle_message:
+        if cycle_message := DirectedGraph.detect_cycle(dependency_graph):
             result.add_error(cycle_message)

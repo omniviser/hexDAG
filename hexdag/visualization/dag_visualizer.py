@@ -85,7 +85,6 @@ class DAGVisualizer:
         dot.attr("node", shape="box", style="filled,rounded", fontname="Arial")
         dot.attr("edge", fontname="Arial")
 
-        # Get compiled schema information
         compiled_schemas: dict[str, dict[str, Any]] = {}
         pipeline_input_schema = input_schema
 
@@ -102,7 +101,6 @@ class DAGVisualizer:
                 # Compilation failed, use basic node information if available
                 if basic_node_types:
                     compiled_schemas = {}
-                    # Convert basic node information to compatible format
                     for node_id, node_type in basic_node_types.items():
                         node_schema_info = (
                             basic_node_schemas.get(node_id, {}) if basic_node_schemas else {}
@@ -118,7 +116,6 @@ class DAGVisualizer:
                         ):
                             compiled_schemas[node_id]["output_schema"] = {"result": "str"}
 
-        # Handle input/output nodes with compiled schema information
         first_nodes, last_nodes = self._find_terminal_nodes()
 
         if show_io_nodes and first_nodes:
@@ -136,7 +133,6 @@ class DAGVisualizer:
                 if node_schemas.get("output_schema"):
                     pipeline_output_schemas[last_node] = node_schemas["output_schema"]
 
-            # Create pipeline output label
             if pipeline_output_schemas:
                 # If single output node, show its schema directly
                 if len(pipeline_output_schemas) == 1:
@@ -160,14 +156,12 @@ class DAGVisualizer:
             for last_node in last_nodes:
                 dot.edge(last_node, "__OUTPUT__")
 
-        # Add nodes with enhanced schema information
         for node_name, node_spec in self.graph.nodes.items():
             # Determine if this is an intermediate node
             is_first_node = node_name in first_nodes
             is_last_node = node_name in last_nodes
             is_intermediate = not (is_first_node and is_last_node)
 
-            # Get schema info for this node (compiled or basic)
             node_schemas = compiled_schemas.get(node_name, {})
 
             # Decide what schemas to show based on options and availability
@@ -185,7 +179,6 @@ class DAGVisualizer:
                 show_input_for_node = show_intermediate_input and is_intermediate
                 show_output_for_node = show_intermediate_output and is_intermediate
 
-            # Create enhanced node label
             if (show_node_schemas or show_input_for_node or show_output_for_node) and node_schemas:
                 input_schema_to_show = (
                     node_schemas.get("input_schema") if show_input_for_node else None
@@ -224,7 +217,6 @@ class DAGVisualizer:
             # Apply custom attributes if provided
             node_attrs = node_attributes.get(node_name, {}) if node_attributes else {}
 
-            # Get node type for styling (compiled or basic)
             styling_node_type: str | None = node_schemas.get("type") or (
                 basic_node_types.get(node_name) if basic_node_types else None
             )
@@ -233,7 +225,6 @@ class DAGVisualizer:
 
             dot.node(node_name, label, **default_attrs)
 
-        # Add edges
         for node_name, node_spec in self.graph.nodes.items():
             for dep in node_spec.deps:
                 # Apply custom edge attributes if provided
@@ -286,7 +277,6 @@ class DAGVisualizer:
         -------
             Dictionary of input schema fields or None
         """
-        # Check if node has input type information
         if hasattr(node_spec, "in_model") and node_spec.in_model:
             return self._convert_type_to_schema_dict(node_spec.in_model)
 
@@ -307,7 +297,6 @@ class DAGVisualizer:
         -------
             Dictionary of output schema fields or None
         """
-        # Check if node has output type information
         if hasattr(node_spec, "out_model") and node_spec.out_model:
             return self._convert_type_to_schema_dict(node_spec.out_model)
 
@@ -329,7 +318,6 @@ class DAGVisualizer:
             Dictionary representation of the type
         """
         try:
-            # Handle Pydantic models
             if hasattr(type_obj, "model_fields"):
                 schema = {}
                 for field_name, field_info in type_obj.model_fields.items():
@@ -346,13 +334,11 @@ class DAGVisualizer:
                     schema[field_name] = type_name
                 return schema
 
-            # Handle dict types
             if isinstance(type_obj, dict):
                 return type_obj
 
         except Exception:
             # Type conversion failed - this is expected for complex types
-            # Return None to indicate conversion failure
             pass  # nosec B110 - intentional silent failure for type conversion
         return None
 
@@ -382,7 +368,6 @@ class DAGVisualizer:
 
         except Exception:
             # Function signature analysis failed - this is expected for functions without type hints
-            # Return None to indicate extraction failure
             pass  # nosec B110 - intentional silent failure for function analysis
         return None
 
@@ -407,8 +392,6 @@ class DAGVisualizer:
                 return self._convert_type_to_schema_dict(return_type)
 
         except Exception:
-            # Return type analysis failed - this is expected for functions without return type hints
-            # Return None to indicate extraction failure
             pass  # nosec B110 - intentional silent failure for return type analysis
         return None
 
@@ -436,10 +419,8 @@ class DAGVisualizer:
         -------
             Formatted label string for Graphviz
         """
-        # Get node type (prefer compiled data)
         detected_type = node_type or getattr(node_spec, "type", "unknown")
 
-        # Create title with emoji based on type
         type_emoji = {
             "function": "⚙️",
             "llm": "🤖",
@@ -451,13 +432,11 @@ class DAGVisualizer:
         # Start with node name and type
         label_parts = [f"{type_emoji} {node_name}"]
 
-        # Add function name if available
         if function_name:
             label_parts.append(f"({detected_type}: {function_name})")
         elif detected_type:
             label_parts.append(f"({detected_type})")
 
-        # Add input schema if available
         if input_schema and input_schema != {"result": "Any"}:
             input_fields = []
             for field, field_type in input_schema.items():
@@ -474,7 +453,6 @@ class DAGVisualizer:
                     input_str = "\\n".join(input_fields[:4]) + "\\n..."
                 label_parts.append(f"⬇️ IN\\n{input_str}")
 
-        # Add output schema if available
         if output_schema and output_schema != {"result": "Any"}:
             output_fields = []
             for field, field_type in output_schema.items():
@@ -502,7 +480,6 @@ class DAGVisualizer:
         """
         node_type = getattr(node_spec, "type", "unknown")
 
-        # Add function name if it's a function node
         if hasattr(node_spec, "fn") and hasattr(node_spec.fn, "__name__"):
             return f"📦 {node_name}\\n({node_type}: {node_spec.fn.__name__})"
         return f"📦 {node_name}\\n({node_type})"
@@ -592,13 +569,11 @@ class DAGVisualizer:
         if schema is None:
             return label
 
-        # Handle Pydantic models (including auto-generated ones)
         if hasattr(schema, "__name__") and hasattr(schema, "model_fields"):
             model_fields = schema.model_fields
             field_lines = []
 
             for field_name, field_info in model_fields.items():
-                # Get field type and default
                 field_type = getattr(field_info.annotation, "__name__", str(field_info.annotation))
 
                 if hasattr(field_info, "default") and field_info.default is not ...:
@@ -619,7 +594,6 @@ class DAGVisualizer:
 
             return f"{label}\\n{schema.__name__}\\n{field_str}"
 
-        # Handle Pydantic model classes by name
         if hasattr(schema, "__name__"):
             return f"{label}\\n({schema.__name__})"
         if hasattr(schema, "model_fields"):
@@ -674,7 +648,6 @@ class DAGVisualizer:
                 schema_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(schema_module)
 
-                # Extract Pydantic models from the module
                 schemas = {}
                 for attr_name in dir(schema_module):
                     attr = getattr(schema_module, attr_name)
@@ -783,7 +756,6 @@ class DAGVisualizer:
             attrs["style"] = attrs.get("style", "filled") + ",bold"
             attrs["penwidth"] = "2"
 
-        # Add custom attributes if provided
         if custom_attributes and node_name in custom_attributes:
             attrs.update(custom_attributes[node_name])
 
@@ -802,7 +774,6 @@ class DAGVisualizer:
         """
         attrs = {"fontname": "Arial", "fontsize": "8"}
 
-        # Add custom attributes if provided
         if custom_attributes and edge in custom_attributes:
             attrs.update(custom_attributes[edge])
 
@@ -856,7 +827,6 @@ class DAGVisualizer:
 
         # Use subprocess to avoid Source.gv creation
         try:
-            # Create a temporary DOT file
             with tempfile.NamedTemporaryFile(mode="w", suffix=".dot", delete=False) as temp_file:
                 temp_file.write(dot_string)
                 temp_dot_path = temp_file.name
@@ -902,7 +872,6 @@ class DAGVisualizer:
 
         # Use subprocess to avoid Source.gv creation
         try:
-            # Create a temporary DOT file
             with tempfile.NamedTemporaryFile(mode="w", suffix=".dot", delete=False) as temp_file:
                 temp_file.write(dot_string)
                 temp_dot_path = temp_file.name
@@ -1028,7 +997,6 @@ def render_dag_to_image(
     -------
         Path to the rendered file
     """
-    # Extract pipeline name from title if possible
     if "Pipeline:" in title and not hasattr(graph, "_pipeline_name"):
         pipeline_name = title.split("Pipeline:")[-1].strip()
         object.__setattr__(graph, "_pipeline_name", pipeline_name)
@@ -1048,6 +1016,5 @@ def render_dag_to_image(
         basic_node_schemas=basic_node_schemas,
     )
 
-    # Create Graphviz source and render
     dot = graphviz.Source(dot_content)
     return str(dot.render(output_path, format=format, cleanup=True))

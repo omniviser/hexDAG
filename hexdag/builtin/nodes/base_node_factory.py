@@ -3,48 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from functools import lru_cache
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from pydantic import BaseModel, create_model
 
 from hexdag.core.domain.dag import NodeSpec
+from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.protocols import is_schema_type
-
-if TYPE_CHECKING:
-    from hexdag.core.orchestration.prompt.template import PromptTemplate
-
-
-@lru_cache(maxsize=256)
-def _create_cached_model(name: str, fields_tuple: tuple[tuple[str, Any], ...]) -> type[BaseModel]:
-    """Create and cache Pydantic models using lru_cache.
-
-    Uses hash-based lookup (faster than string keys) with automatic LRU eviction.
-    Thread-safe and prevents unbounded cache growth.
-
-    Cache key includes both name and fields_tuple to prevent collisions when
-    different schemas share the same model name.
-
-    Parameters
-    ----------
-    name : str
-        Model class name
-    fields_tuple : tuple[tuple[str, Any], ...]
-        Hashable field definitions (used in cache key to ensure uniqueness)
-
-    Returns
-    -------
-    type[BaseModel]
-        Cached Pydantic model class
-
-    Notes
-    -----
-    The cache key is the combination of (name, fields_tuple), so two different
-    field definitions with the same name will create separate cache entries.
-    This prevents cache collisions while still providing performance benefits.
-    """
-    fields_dict = dict(fields_tuple)
-    return create_model(name, **fields_dict)
 
 
 class BaseNodeFactory(ABC):
@@ -81,7 +46,6 @@ class BaseNodeFactory(ABC):
                 "Any": Any,
             }
 
-            # Create field definitions for create_model
             field_definitions: dict[str, Any] = {}
             for field_name, field_type in schema.items():
                 # Dispatch based on field_type's type using match pattern
@@ -100,11 +64,8 @@ class BaseNodeFactory(ABC):
                         # Unknown type specification - use Any
                         field_definitions[field_name] = (Any, ...)
 
-            # Convert to tuple for lru_cache (hashable)
-            fields_tuple = tuple(sorted(field_definitions.items()))
-            return _create_cached_model(name, fields_tuple)
+            return create_model(name, **field_definitions)
 
-        # Handle primitive types - create a simple wrapper model
         # At this point, schema should be a type
         try:
             return cast("type[Any] | None", create_model(name, value=(schema, ...)))
@@ -153,25 +114,18 @@ class BaseNodeFactory(ABC):
         >>> BaseNodeFactory.infer_input_schema_from_template("No variables")
         {'input': <class 'str'>}
         """
-        # Import here to avoid circular dependency
-        from hexdag.core.orchestration.prompt.template import PromptTemplate
 
-        # Convert string to PromptTemplate if needed
         if isinstance(template, str):
             template = PromptTemplate(template)
 
-        # Extract variables from template
         variables = getattr(template, "input_vars", [])
 
-        # Filter special parameters if provided
         if special_params:
             variables = [v for v in variables if v not in special_params]
 
-        # Return default schema if no variables
         if not variables:
             return {"input": str}
 
-        # Handle nested variables (e.g., "user.name" -> "user")
         schema: dict[str, Any] = {}
         for var in variables:
             base_var = var.split(".")[0]
@@ -203,7 +157,6 @@ class BaseNodeFactory(ABC):
         # Copy required_ports metadata to wrapper
         self._copy_required_ports_to_wrapper(wrapped_fn)
 
-        # Create Pydantic models
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 

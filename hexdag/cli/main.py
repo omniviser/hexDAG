@@ -27,7 +27,6 @@ from hexdag.cli.commands import (
     validate_cmd,
 )
 
-# Create the main Typer app
 app = typer.Typer(
     name="hexdag",
     help="HexDAG - Lightweight DAG orchestration framework with hexagonal architecture.",
@@ -36,10 +35,8 @@ app = typer.Typer(
     pretty_exceptions_enable=False,
 )
 
-# Create console for rich output
 console = Console()
 
-# Add subcommands
 app.add_typer(init_cmd.app, name="init", help="Initialize a new HexDAG project")
 app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters")
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
@@ -50,7 +47,6 @@ app.add_typer(create_cmd.app, name="create", help="Create pipeline templates fro
 app.add_typer(schema_cmd.app, name="schema", help="Inspect component schemas")
 app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
 
-# Add standalone commands
 app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
 app.command(name="validate", help="Validate YAML pipeline files")(validate_cmd.validate)
 

@@ -135,7 +135,6 @@ def build_manifest(
                 elif comp.namespace == "plugin":
                     plugins.add(module.rsplit(".", 1)[0])
 
-    # Build TOML content
     toml_lines = []
     if modules:
         toml_lines.append("modules = [")

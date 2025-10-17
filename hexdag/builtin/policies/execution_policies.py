@@ -212,12 +212,10 @@ class TimeoutPolicy:
             FAIL if timeout exceeded, PROCEED otherwise
         """
         if isinstance(context.event, NodeStarted):
-            # Track start time using event timestamp
             if context.node_id:
                 self.start_times[context.node_id] = context.event.timestamp.timestamp()
             return PolicyResponse(signal=PolicySignal.PROCEED)
 
-        # Check if execution time exceeds limit
         start_time = self.start_times.get(context.node_id) if context.node_id else None
         if start_time and context.event:
             elapsed = context.event.timestamp.timestamp() - start_time
@@ -546,7 +544,6 @@ class ExponentialBackoffPolicy:
                 self.max_delay_ms,
             )
 
-            # Simulate delay (in real implementation, orchestrator would handle this)
             await asyncio.sleep(delay_ms / 1000.0)
 
             return PolicyResponse(

@@ -101,8 +101,7 @@ def validate_pipeline(
                 # DAG validation - check for cycles
                 if not issues:
                     console.print("\n[cyan]Checking DAG for cycles...[/cyan]")
-                    cycles = _detect_cycles(nodes)
-                    if cycles:
+                    if cycles := _detect_cycles(nodes):
                         issues.append(f"DAG contains cycle(s): {cycles}")
                         console.print(f"[red]✗ Cycle detected: {' -> '.join(cycles)}[/red]")
                     else:
@@ -155,7 +154,6 @@ def generate_graph(
         raise typer.Exit(1)
 
     try:
-        # Check if graphviz is available
         try:
             import graphviz
         except ImportError:
@@ -169,7 +167,6 @@ def generate_graph(
 
         console.print(f"[cyan]Generating graph for: {pipeline_path}[/cyan]")
 
-        # Create graph
         pipeline_name = pipeline_data.get("name", "pipeline")
         dot = graphviz.Digraph(
             name=pipeline_name,
@@ -183,7 +180,6 @@ def generate_graph(
 
         nodes = pipeline_data.get("nodes", [])
 
-        # Add nodes
         for node in nodes:
             node_id = node.get("id", "unknown")
             node_type = node.get("type", "unknown")
@@ -202,7 +198,6 @@ def generate_graph(
 
             dot.node(node_id, label=label, fillcolor=color)
 
-        # Add edges
         for node in nodes:
             node_id = node.get("id")
             depends_on = node.get("depends_on", [])
@@ -279,7 +274,6 @@ def plan_execution(
 
 def _detect_cycles(nodes: list) -> list[str] | None:
     """Detect cycles in DAG using DFS."""
-    # Build adjacency list
     graph = {}
     for node in nodes:
         node_id = node.get("id")
@@ -320,7 +314,6 @@ def _detect_cycles(nodes: list) -> list[str] | None:
 
 def _calculate_waves(nodes: list) -> list[list[str]]:
     """Calculate execution waves using topological sort."""
-    # Build dependency graph
     graph = {}
     in_degree = {}
 
@@ -351,7 +344,6 @@ def _calculate_waves(nodes: list) -> list[list[str]]:
         # Remove processed nodes and update in-degrees
         for node_id in wave:
             remaining.remove(node_id)
-            # Update dependents
             for other_id in remaining:
                 if node_id in graph[other_id]:
                     in_degree[other_id] -= 1
@@ -428,7 +420,6 @@ def run_pipeline(
         # Import hexdag components
         from hexdag import Orchestrator, YamlPipelineBuilder
 
-        # Build pipeline
         if verbose:
             console.print(f"[cyan]Loading pipeline: {pipeline_path}[/cyan]")
 
@@ -470,7 +461,6 @@ def run_pipeline(
 
         # Save output if requested
         if output_file:
-            # Convert result to JSON-serializable format
             output_data = {}
             for k, v in result.items():
                 try:

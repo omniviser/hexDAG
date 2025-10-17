@@ -93,7 +93,6 @@ class FileMemoryAdapter:
         extension : str | None
             Custom file extension (defaults to format name)
         """
-        # Store configuration
         self.base_path = Path(base_path)
         self.format = FileFormat(format) if isinstance(format, str) else format
         self.create_dirs = create_dirs

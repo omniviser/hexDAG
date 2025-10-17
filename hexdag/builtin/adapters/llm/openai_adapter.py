@@ -87,7 +87,6 @@ class OpenAIAdapter:
         max_retries : int, default=2
             Maximum retry attempts
         """
-        # Store configuration
         self.api_key = api_key
         self.model = model
         self.temperature = temperature
@@ -102,14 +101,12 @@ class OpenAIAdapter:
         self.max_retries = max_retries
         self._extra_kwargs = kwargs  # Store extra params
 
-        # Initialize OpenAI client
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
             "timeout": timeout,
             "max_retries": max_retries,
         }
 
-        # Add extra kwargs (organization, base_url)
         if org := kwargs.get("organization"):
             client_kwargs["organization"] = org
         if base_url := kwargs.get("base_url"):
@@ -129,14 +126,11 @@ class OpenAIAdapter:
             The generated response text, or None if failed
         """
         try:
-            # Convert MessageList to OpenAI's message format
             openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
-            # Add system prompt if configured
             if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
                 openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
 
-            # Build request parameters with modern API format
             request_params: dict[str, Any] = {
                 "model": self.model,
                 "messages": openai_messages,
@@ -146,7 +140,6 @@ class OpenAIAdapter:
                 "presence_penalty": self.presence_penalty,
             }
 
-            # Add optional parameters only if set
             if self.max_tokens is not None:
                 request_params["max_tokens"] = self.max_tokens
 
@@ -157,14 +150,12 @@ class OpenAIAdapter:
             if stop_seq := self._extra_kwargs.get("stop_sequences"):
                 request_params["stop"] = stop_seq
 
-            # Handle response_format for structured output
             if self.response_format == "json_object":
                 request_params["response_format"] = {"type": "json_object"}
 
             # Make API call with modern format
             response = await self.client.chat.completions.create(**request_params)
 
-            # Extract content from response with better error handling
             if response.choices and len(response.choices) > 0:
                 message = response.choices[0].message
                 if message and message.content:
