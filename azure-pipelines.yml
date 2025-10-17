@@ -153,6 +153,37 @@ stages:
             testRunTitle: 'Integration Tests'
           displayName: 'Publish integration test results'
 
+  - stage: Notebooks
+    displayName: 'Execute Notebooks'
+    dependsOn: [Quality]
+    condition: succeeded()
+    jobs:
+      - job: ExecuteNotebooks
+        displayName: 'Execute and Validate Notebooks'
+        steps:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+          displayName: 'Use Python $(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip uv
+            uv sync --all-extras
+          displayName: 'Install dependencies with notebook support'
+
+        - script: |
+            uv run python scripts/check_notebooks.py
+          displayName: 'Execute and validate notebooks'
+          continueOnError: false
+
+        - task: PublishPipelineArtifact@1
+          condition: succeededOrFailed()
+          inputs:
+            targetPath: 'notebooks'
+            artifact: 'executed-notebooks'
+            publishLocation: 'pipeline'
+          displayName: 'Publish executed notebooks'
+
   - stage: Examples
     displayName: 'Test Examples'
     dependsOn: [Quality]

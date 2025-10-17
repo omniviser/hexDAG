@@ -92,7 +92,20 @@ graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
 orchestrator = Orchestrator()
 result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
 
-## 📚 Documentation
+## 📚 Documentation & Learning
+
+### 📓 Interactive Notebooks (Recommended Start)
+Learn hexDAG through 3 comprehensive, working Jupyter notebooks:
+
+- **[01. Introduction](notebooks/01_introduction.ipynb)** - Your first pipeline (15 min)
+- **[02. YAML Pipelines](notebooks/02_yaml_pipelines.ipynb)** - Declarative workflows (25 min)
+- **[03. Practical Workflow](notebooks/03_practical_workflow.ipynb)** - Real-world patterns (30 min)
+
+**All notebooks execute successfully:** `✅ All 3 notebook(s) validated successfully!`
+
+### 📝 Examples & More
+- **[Examples Directory](examples/)** - 40+ working Python scripts
+- **[Integration Tests](tests/integration/)** - Production test scenarios
 
 ### Core Concepts
 - **[🤔 Philosophy & Design](docs/PHILOSOPHY.md)** - The six pillars and design principles

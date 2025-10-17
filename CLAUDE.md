@@ -13,8 +13,27 @@ hexDAG is an enterprise-ready AI agent orchestration framework that transforms c
 # Install dependencies using uv (Python package manager)
 uv sync
 
+# Install with notebook support (for documentation)
+uv sync --all-extras
+
 # Install pre-commit hooks
 uv run pre-commit install
+```
+
+### Notebooks
+```bash
+# Start Jupyter for interactive development
+jupyter notebook notebooks/
+
+# Execute and validate all notebooks
+uv run python scripts/check_notebooks.py
+
+# Format notebooks
+uv run nbqa ruff notebooks/ --fix
+uv run nbqa pyupgrade notebooks/ --py312-plus
+
+# Strip notebook outputs (automatic via pre-commit)
+uv run nbstripout notebooks/**/*.ipynb
 ```
 
 ### Testing
@@ -585,3 +604,129 @@ The framework integrates with external services through ports:
 - **Tool Router**: Function calling and tool execution
 
 Use mock adapters in `hexai/adapters/mock/` for development and testing.
+
+## YAML-First Philosophy
+
+hexDAG emphasizes a **declarative, YAML-first approach** to workflow orchestration:
+
+### Why YAML-First?
+
+1. **Declarative** - Describe what you want, not how to build it
+2. **Version Control** - Git-friendly, reviewable configurations
+3. **Team Collaboration** - Non-developers can read and modify workflows
+4. **Environment Management** - Easy dev/staging/prod configurations
+5. **Infrastructure as Code** - Deploy workflows like infrastructure
+6. **Testable** - Validate YAML before execution
+7. **Maintainable** - Change workflows without code changes
+
+### YAML-First Development
+
+When creating examples or documentation:
+- ✅ **START with YAML** - Show YAML pipeline definition first
+- ✅ **Python API is secondary** - Only show for advanced use cases
+- ✅ **Emphasize declarative benefits** - Version control, collaboration, maintainability
+- ✅ **Save to .yaml files** - Show file-based workflow management
+- ✅ **Environment configs** - Demonstrate dev/staging/prod patterns
+- ❌ **Avoid Python-first** - Don't start with DirectedGraph code unless necessary
+
+### Example Structure
+
+```python
+# ✅ GOOD - YAML-first approach
+pipeline_yaml = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: my-workflow
+spec:
+  nodes:
+    - type: llm
+      id: analyzer
+      # ... config
+"""
+pipeline = YamlPipelineBuilder().build_from_string(pipeline_yaml)
+
+# ❌ AVOID - Python-first approach (unless teaching internals)
+graph = DirectedGraph()
+graph.add_node(NodeSpec(id="analyzer", ...))
+```
+
+## Notebook Development Guidelines
+
+hexDAG uses Jupyter notebooks for **interactive documentation and real-world use cases**.
+
+### Notebook Structure
+
+All notebooks follow this structure:
+
+```
+notebooks/
+├── 01_getting_started/       # YAML-first tutorials
+├── 02_real_world_use_cases/  # Production-ready examples
+└── 03_advanced_patterns/     # Enterprise patterns
+```
+
+### Writing Notebooks
+
+**✅ DO:**
+- Focus on **real-world business problems** with clear value
+- Use **YAML pipelines** as the primary interface
+- Include **comprehensive markdown** explaining concepts
+- Ensure **end-to-end execution** without errors
+- Use **mock adapters** to avoid external dependencies
+- Add **visualizations** (DAG graphs, metrics, results)
+- Follow the **standard structure** (Overview → Problem → Solution → Implementation → Analysis → Extensions)
+- **Strip outputs** before committing (automatic via pre-commit)
+
+**❌ DON'T:**
+- Create simple code examples (use integration tests instead)
+- Require external API keys when avoidable
+- Leave outputs in committed notebooks
+- Skip documentation in markdown cells
+- Focus on Python API over YAML
+
+### Notebook Categories
+
+1. **Getting Started (01/)** - YAML-first onboarding
+   - Introduction to YAML pipelines
+   - Component overview
+   - Validation and type safety
+
+2. **Real-World Use Cases (02/)** - Production scenarios
+   - Customer support automation
+   - Document intelligence
+   - Research assistants
+   - Data pipeline orchestration
+   - Code analysis and review
+
+3. **Advanced Patterns (03/)** - Enterprise techniques
+   - Multi-agent collaboration (YAML)
+   - Dynamic workflows (YAML)
+   - Production deployment patterns (YAML)
+   - Performance optimization
+   - Observability and monitoring
+
+### Notebook Quality Standards
+
+- **Validation**: Execute without errors via `scripts/check_notebooks.py`
+- **Formatting**: Auto-formatted via `nbqa-ruff` and `nbqa-pyupgrade`
+- **Outputs**: Stripped via `nbstripout` (pre-commit hook)
+- **CI/CD**: Executed in Azure pipelines to ensure freshness
+- **Structure**: Follow nbformat 4.4 specification
+
+### Creating New Notebooks
+
+```bash
+# Create notebook
+jupyter notebook notebooks/02_real_world_use_cases/new_use_case.ipynb
+
+# Validate
+uv run python scripts/check_notebooks.py
+
+# Format
+uv run nbqa ruff notebooks/ --fix
+
+# Commit (outputs automatically stripped)
+git add notebooks/
+git commit -m "docs: Add new use case notebook"
+```

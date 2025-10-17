@@ -75,16 +75,21 @@ docs = [
     "mkdocstrings[python]>=0.24.0",  # Auto-generate API docs
     "pymdown-extensions>=10.0",  # Markdown extensions
 ]
+notebooks = [
+    "jupyter>=1.0.0",  # Jupyter notebook support
+    "nbformat>=5.9.0",  # Notebook format library
+    "nbconvert>=7.0.0",  # Convert and execute notebooks
+    "ipykernel>=6.25.0",  # IPython kernel for Jupyter
+    "matplotlib>=3.8.0",  # Plotting for visualization
+    "pandas>=2.1.0",  # Data analysis (common in notebooks)
+]
 all = [
-    "graphviz>=0.20.0,<0.21",  # Visualization
-    "openai>=1.0.0",  # OpenAI adapter
-    "anthropic>=0.25.0",  # Anthropic adapter
-    "aiosqlite>=0.19.0",  # Async SQLite adapter
-    "sqlalchemy>=2.0.0",  # Storage plugin - SQL base
-    "asyncpg>=0.29.0",  # Storage plugin - PostgreSQL
-    "pgvector>=0.3.0",  # Storage plugin - pgvector
-    "aiomysql>=0.2.0",  # Storage plugin - MySQL
-    "chromadb>=0.4.0",  # Storage plugin - ChromaDB
+    "hexdag[viz]",
+    "hexdag[openai]",
+    "hexdag[anthropic]",
+    "hexdag[database]",
+    "hexdag[storage-all]",
+    "hexdag[notebooks]",
 ]
 
 [project.urls]
@@ -206,6 +211,7 @@ omit = [
     "*/conftest.py",
     "*/__pycache__/*",
     "*/examples/*",
+    "*/notebooks/*",
     "*_plugins/*",
     "hexdag/cli/*"  # CLI has separate test suite with 67% coverage
 ]
@@ -367,6 +373,7 @@ convention = "numpy"
 "hexdag/core/orchestration/events/observers.py" = ["SIM115"]
 "hexdag/core/registry/discovery.py" = ["TC003", "TC001"]
 "hexdag/cli/*" = ["DOC501", "PTH123", "B008", "B904", "SIM102"]  # CLI: typer patterns
+"notebooks/*" = ["E402", "F704"]  # Notebooks: allow top-level await and imports anywhere
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexdag"]

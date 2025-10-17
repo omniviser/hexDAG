@@ -39,6 +39,7 @@ repos:
         stages: [pre-commit]
       - id: pretty-format-json
         args: ["--autofix", "--indent", "4"]
+        exclude: "^notebooks/.*\\.ipynb$"
         stages: [pre-commit]
       - id: check-added-large-files
         stages: [pre-commit]
@@ -139,6 +140,23 @@ repos:
         types: [yaml]
         stages: [pre-commit]
 
+  # Jupyter notebook support
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.9.1
+    hooks:
+      - id: nbqa-ruff
+        args: [--fix]
+        additional_dependencies: [ruff==0.13.0]
+      - id: nbqa-pyupgrade
+        args: [--py312-plus]
+        additional_dependencies: [pyupgrade==3.20.0]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+        args: [--extra-keys, "metadata.kernelspec metadata.language_info"]
+
   - repo: local
     hooks:
 
@@ -171,6 +189,14 @@ repos:
         entry: uv run scripts/check_examples.py
         language: system
         types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-notebooks
+        name: Execute and validate notebooks
+        entry: uv run python scripts/check_notebooks.py
+        language: system
+        files: ^notebooks/.*\.ipynb$
         stages: [pre-commit]
         pass_filenames: false
 
