@@ -94,14 +94,14 @@ async def main():
     print("🔧 Example 02: Dependencies and Parallel Execution")
     print("=" * 55)
 
-    # Create graph
+    # Create graph using new += operator for cleaner syntax
     graph = DirectedGraph()
 
     print("\n📊 Building complex dependency graph...")
 
     # Wave 1: Single data loader
     loader = NodeSpec("data_loader", data_loader)
-    graph.add(loader)
+    graph += loader  # Using += operator
     print("   ✅ Wave 1: data_loader")
 
     # Wave 2: Three parallel data fetchers (fan-out pattern)
@@ -109,21 +109,20 @@ async def main():
     product_fetcher = NodeSpec("fetch_products", fetch_product_data).after("data_loader")
     analytics_fetcher = NodeSpec("fetch_analytics", fetch_analytics_data).after("data_loader")
 
-    graph.add(user_fetcher)
-    graph.add(product_fetcher)
-    graph.add(analytics_fetcher)
+    # Add all three at once using list
+    graph += [user_fetcher, product_fetcher, analytics_fetcher]
     print("   ✅ Wave 2: fetch_users, fetch_products, fetch_analytics (PARALLEL)")
 
     # Wave 3: Combine some results
     combiner = NodeSpec("combine_data", combine_user_product).after("fetch_users", "fetch_products")
-    graph.add(combiner)
+    graph += combiner
     print("   ✅ Wave 3: combine_data (waits for users + products)")
 
     # Wave 4: Final report (fan-in pattern)
     reporter = NodeSpec("final_report", final_report).after(
         "combine_data", "fetch_analytics", "data_loader"
     )
-    graph.add(reporter)
+    graph += reporter
     print("   ✅ Wave 4: final_report (waits for combined + analytics + original)")
 
     # Validate and show execution plan
@@ -165,6 +164,12 @@ async def main():
     print("   ✅ Waves: Parallel execution within each wave")
     print("   ✅ Dependencies: .after() with multiple nodes")
     print("   ✅ Performance: Parallel execution reduces total time")
+    print("   ✅ Operators: graph += node for cleaner syntax")
+
+    # Demonstrate iteration operator
+    print("\n🔄 Iterating over graph nodes:")
+    for node in graph:
+        print(f"   📦 {node.name}")
 
     print("\n🔗 Next: Run example 03 to learn about validation!")
 

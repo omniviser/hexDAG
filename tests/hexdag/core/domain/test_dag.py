@@ -1073,3 +1073,226 @@ class TestDirectedGraph:
         waves = graph.waves()
         assert len(waves) == 4
         assert len(graph.nodes) == 32  # 1 + 20 + 10 + 1
+
+
+class TestDirectedGraphOperators:
+    """Test cases for DirectedGraph operator overloading."""
+
+    def test_iadd_single_node(self):
+        """Test += operator with single node."""
+        graph = DirectedGraph()
+        node = NodeSpec("test", dummy_fn)
+
+        graph += node
+
+        assert "test" in graph
+        assert len(graph) == 1
+
+    def test_iadd_multiple_nodes_list(self):
+        """Test += operator with list of nodes."""
+        graph = DirectedGraph()
+        nodes = [NodeSpec("a", dummy_fn), NodeSpec("b", another_fn), NodeSpec("c", dummy_fn)]
+
+        graph += nodes
+
+        assert len(graph) == 3
+        assert "a" in graph
+        assert "b" in graph
+        assert "c" in graph
+
+    def test_iadd_chaining(self):
+        """Test that += operator returns self for fluent chaining."""
+        graph = DirectedGraph()
+
+        # += returns self, so we can chain calls
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn)
+
+        assert len(graph) == 2
+        assert "a" in graph
+        assert "b" in graph
+
+    def test_iadd_duplicate_raises(self):
+        """Test that += operator raises on duplicate node names."""
+        graph = DirectedGraph()
+        graph += NodeSpec("test", dummy_fn)
+
+        with pytest.raises(DuplicateNodeError):
+            graph += NodeSpec("test", another_fn)
+
+    def test_iadd_with_dependencies(self):
+        """Test += operator with nodes that have dependencies."""
+        graph = DirectedGraph()
+
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn).after("a")
+
+        assert len(graph) == 2
+        assert graph.get_dependencies("b") == frozenset(["a"])
+
+    def test_iter_empty_graph(self):
+        """Test iteration over empty graph."""
+        graph = DirectedGraph()
+        nodes = list(graph)
+        assert len(nodes) == 0
+
+    def test_iter_single_node(self):
+        """Test iteration over graph with single node."""
+        graph = DirectedGraph()
+        graph += NodeSpec("test", dummy_fn)
+
+        nodes = list(graph)
+
+        assert len(nodes) == 1
+        assert nodes[0].name == "test"
+        assert nodes[0].fn == dummy_fn
+
+    def test_iter_multiple_nodes(self):
+        """Test iteration over graph with multiple nodes."""
+        graph = DirectedGraph()
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn)
+        graph += NodeSpec("c", dummy_fn)
+
+        nodes = list(graph)
+        names = {node.name for node in nodes}
+
+        assert len(nodes) == 3
+        assert names == {"a", "b", "c"}
+
+    def test_iter_yields_nodespec(self):
+        """Test that iteration yields NodeSpec instances."""
+        graph = DirectedGraph()
+        graph += NodeSpec("test", dummy_fn)
+
+        for node in graph:
+            assert isinstance(node, NodeSpec)
+            assert hasattr(node, "name")
+            assert hasattr(node, "fn")
+
+    def test_contains_existing_node(self):
+        """Test __contains__ returns True for existing nodes."""
+        graph = DirectedGraph()
+        graph += NodeSpec("test", dummy_fn)
+
+        assert "test" in graph
+
+    def test_contains_missing_node(self):
+        """Test __contains__ returns False for missing nodes."""
+        graph = DirectedGraph()
+
+        assert "nonexistent" not in graph
+
+    def test_contains_after_removal_simulation(self):
+        """Test __contains__ works correctly throughout graph lifecycle."""
+        graph = DirectedGraph()
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn)
+
+        assert "a" in graph
+        assert "b" in graph
+        assert "c" not in graph
+
+    def test_keys_method(self):
+        """Test keys() returns node names."""
+        graph = DirectedGraph()
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn)
+
+        keys = list(graph.keys())
+
+        assert set(keys) == {"a", "b"}
+
+    def test_values_method(self):
+        """Test values() returns NodeSpec instances."""
+        graph = DirectedGraph()
+        node_a = NodeSpec("a", dummy_fn)
+        node_b = NodeSpec("b", another_fn)
+        graph += node_a
+        graph += node_b
+
+        values = list(graph.values())
+
+        assert len(values) == 2
+        assert all(isinstance(v, NodeSpec) for v in values)
+        assert {v.name for v in values} == {"a", "b"}
+
+    def test_items_method(self):
+        """Test items() returns (name, NodeSpec) tuples."""
+        graph = DirectedGraph()
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn)
+
+        items = list(graph.items())
+
+        assert len(items) == 2
+        assert all(isinstance(k, str) and isinstance(v, NodeSpec) for k, v in items)
+        assert dict(items).keys() == {"a", "b"}
+
+    def test_dict_like_iteration(self):
+        """Test dict-like iteration patterns."""
+        graph = DirectedGraph()
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn)
+
+        # Iterate like dict.items()
+        for name, spec in graph.items():
+            assert isinstance(name, str)
+            assert isinstance(spec, NodeSpec)
+            assert spec.name == name
+
+    def test_bool_empty_graph(self):
+        """Test __bool__ returns False for empty graph."""
+        graph = DirectedGraph()
+
+        assert not graph
+        assert bool(graph) is False
+
+    def test_bool_non_empty_graph(self):
+        """Test __bool__ returns True for non-empty graph."""
+        graph = DirectedGraph()
+        graph += NodeSpec("a", dummy_fn)
+
+        assert graph
+        assert bool(graph) is True
+
+    def test_bool_in_conditional(self):
+        """Test __bool__ works in if statements."""
+        empty_graph = DirectedGraph()
+        non_empty_graph = DirectedGraph()
+        non_empty_graph += NodeSpec("a", dummy_fn)
+
+        executed = False
+        if non_empty_graph:
+            executed = True
+        assert executed
+
+        executed = True
+        if empty_graph:
+            executed = False
+        assert executed
+
+    def test_combined_operators(self):
+        """Test combining multiple operators in realistic scenario."""
+        graph = DirectedGraph()
+
+        # Build graph using operators
+        graph += NodeSpec("start", dummy_fn)
+        graph += [
+            NodeSpec("process_a", another_fn).after("start"),
+            NodeSpec("process_b", dummy_fn).after("start"),
+        ]
+        graph += NodeSpec("end", another_fn).after("process_a", "process_b")
+
+        # Verify using operators
+        assert len(graph) == 4
+        assert "start" in graph
+        assert "end" in graph
+
+        # Iterate and check
+        for node in graph:
+            assert isinstance(node, NodeSpec)
+
+        # Dict-like access
+        assert "start" in graph
+        assert len(list(graph.values())) == 4

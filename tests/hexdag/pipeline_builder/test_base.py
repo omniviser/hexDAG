@@ -291,6 +291,8 @@ class TestPipelineDefinition:
             "input_processor": mock_node_spec1,
             "output_generator": mock_node_spec2,
         }
+        # Mock the items() method that DirectedGraph provides
+        mock_graph.items.return_value = mock_graph.nodes.items()
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):
@@ -324,6 +326,8 @@ class TestPipelineDefinition:
 
         mock_graph = Mock()
         mock_graph.nodes = {"test_node": mock_node_spec}
+        # Mock the items() method that DirectedGraph provides
+        mock_graph.items.return_value = mock_graph.nodes.items()
 
         pipeline._yaml_path = "/fake/path/pipeline.yaml"
         with patch.object(pipeline.builder, "build_from_yaml_file", return_value=(mock_graph, {})):

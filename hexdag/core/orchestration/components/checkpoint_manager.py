@@ -123,14 +123,12 @@ class CheckpointManager:
             New graph with only pending nodes and updated dependencies
         """
         pending = DirectedGraph()
-        for name, spec in graph.nodes.items():
-            if name not in completed:
-                pending.add(
-                    NodeSpec(
-                        name=spec.name,
-                        fn=spec.fn,
-                        deps=frozenset(d for d in spec.deps if d not in completed),
-                        timeout=spec.timeout,
-                    )
+        for spec in graph:  # Using iterator instead of .nodes.items()
+            if spec.name not in completed:
+                pending += NodeSpec(  # Using += operator instead of .add()
+                    name=spec.name,
+                    fn=spec.fn,
+                    deps=frozenset(d for d in spec.deps if d not in completed),
+                    timeout=spec.timeout,
                 )
         return pending

@@ -253,7 +253,7 @@ class PipelineDefinition(ABC):
             graph, metadata = self.builder.build_from_yaml_file(self._yaml_path)
             node_types = {}
 
-            for node_name, node_spec in graph.nodes.items():
+            for node_name, node_spec in graph.items():  # Using .items() instead of .nodes.items()
                 node_types[node_name] = {
                     "name": node_name,
                     "input_type": node_spec.in_model,

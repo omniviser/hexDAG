@@ -10,7 +10,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from types import MappingProxyType
-from typing import Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import ItemsView, Iterator, KeysView, ValuesView  # noqa: F401
 
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
@@ -174,6 +177,55 @@ class NodeSpec:
         """
         new_deps = self.deps | frozenset(node_names)
         return replace(self, deps=new_deps)
+
+    def __rshift__(self, other: "NodeSpec") -> "NodeSpec":
+        """Create dependency using >> operator: node_a >> node_b means "b depends on a".
+
+        This operator provides a visual, left-to-right data flow representation.
+        The node on the right depends on the node on the left.
+
+        Parameters
+        ----------
+        other : NodeSpec
+            The downstream node that will depend on this node
+
+        Returns
+        -------
+        NodeSpec
+            A new NodeSpec with the dependency added to 'other'
+
+        Examples
+        --------
+        >>> node_a = NodeSpec("a", lambda: "data")
+        >>> node_b = NodeSpec("b", lambda x: x.upper())
+        >>> node_b_with_dep = node_a >> node_b  # b depends on a
+        >>> "a" in node_b_with_dep.deps
+        True
+
+        Chain multiple dependencies:
+        >>> graph = DirectedGraph()
+        >>> dummy = lambda: None
+        >>> a = NodeSpec("a", dummy)
+        >>> b = NodeSpec("b", dummy)
+        >>> c = NodeSpec("c", dummy)
+        >>> graph += a
+        >>> b_with_dep = a >> b  # b depends on a
+        >>> graph += b_with_dep
+        >>> c_with_dep = b >> c  # c depends on b
+        >>> graph += c_with_dep
+        >>> len(graph)
+        3
+        >>> "a" in graph.nodes["b"].deps
+        True
+        >>> "b" in graph.nodes["c"].deps
+        True
+
+        Notes
+        -----
+        The >> operator reads naturally as "flows into" or "feeds into".
+        For multiple dependencies, use .after() method instead.
+        """
+        return replace(other, deps=other.deps | frozenset([self.name]))
 
     def __repr__(self) -> str:
         """Readable representation for debugging.
@@ -593,14 +645,54 @@ class DirectedGraph:
         return waves
 
     def __repr__(self) -> str:
-        """Readable representation for debugging.
+        """Developer-friendly representation for debugging.
+
+        Shows all node names for inspection in REPL and debugging.
 
         Returns
         -------
-            String representation of the DirectedGraph.
+        str
+            Debug representation like 'DirectedGraph(nodes={'a', 'b', 'c'})'
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> graph += NodeSpec("a", lambda: None)
+        >>> graph += NodeSpec("b", lambda: None)
+        >>> 'a' in repr(graph) and 'b' in repr(graph)
+        True
         """
+        if not self.nodes:
+            return "DirectedGraph(nodes=set())"
         node_names = sorted(self.nodes.keys())
-        return f"DirectedGraph(nodes={node_names})"
+        return f"DirectedGraph(nodes={set(node_names)!r})"
+
+    def __str__(self) -> str:
+        """User-friendly string representation.
+
+        Returns
+        -------
+        str
+            Readable string showing node names
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> graph += NodeSpec("a", lambda: None)
+        >>> graph += NodeSpec("b", lambda: None)
+        >>> str(graph)
+        'DirectedGraph(2 nodes: a, b)'
+        """
+        if not self.nodes:
+            return "DirectedGraph(empty)"
+
+        node_names = sorted(self.nodes.keys())
+        if len(node_names) <= 5:
+            names_str = ", ".join(node_names)
+            return f"DirectedGraph({len(node_names)} nodes: {names_str})"
+        # Show first 5 nodes if more than 5
+        names_str = ", ".join(node_names[:5])
+        return f"DirectedGraph({len(node_names)} nodes: {names_str}, ...)"
 
     def __len__(self) -> int:
         """Return the number of nodes in the graph."""
@@ -611,5 +703,194 @@ class DirectedGraph:
         return bool(self.nodes)
 
     def __contains__(self, node_name: str) -> bool:
-        """Check if a node exists in the graph."""
+        """Check if a node exists in the graph.
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> _ = graph.add(NodeSpec("a", lambda: None))
+        >>> "a" in graph
+        True
+        >>> "b" in graph
+        False
+        """
         return node_name in self.nodes
+
+    def __iadd__(self, other: NodeSpec | list[NodeSpec]) -> "DirectedGraph":
+        """Add node(s) to graph in-place using += operator.
+
+        This is a convenience operator that delegates to add() or add_many().
+        Provides a more Pythonic way to build graphs.
+
+        Parameters
+        ----------
+        other : NodeSpec | list[NodeSpec]
+            Single node or list of nodes to add
+
+        Returns
+        -------
+        DirectedGraph
+            Self for method chaining
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> node = NodeSpec("a", lambda: "result")
+        >>> graph += node  # Add single node
+        >>> len(graph)
+        1
+        >>> graph += [NodeSpec("b", lambda: None), NodeSpec("c", lambda: None)]
+        >>> len(graph)
+        3
+        """
+        if isinstance(other, list):
+            return self.add_many(*other)
+        return self.add(other)
+
+    def __iter__(self) -> "Iterator[NodeSpec]":
+        """Iterate over NodeSpec instances in the graph.
+
+        Returns
+        -------
+        Iterator[NodeSpec]
+            Iterator over node specifications in the graph
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> graph += NodeSpec("a", lambda: None)
+        >>> graph += NodeSpec("b", lambda: None)
+        >>> for node in graph:
+        ...     print(node.name)
+        a
+        b
+        """
+        return iter(self.nodes.values())
+
+    def keys(self) -> "KeysView[str]":
+        """Get an iterator over node names (dict-like interface).
+
+        Returns
+        -------
+        KeysView
+            View of node names in the graph
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> graph += NodeSpec("a", lambda: None)
+        >>> list(graph.keys())
+        ['a']
+        """
+        return self.nodes.keys()
+
+    def values(self) -> "ValuesView[NodeSpec]":
+        """Get an iterator over NodeSpec instances (dict-like interface).
+
+        Returns
+        -------
+        ValuesView
+            View of NodeSpec instances in the graph
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> graph += NodeSpec("a", lambda: None)
+        >>> nodes = list(graph.values())
+        >>> len(nodes)
+        1
+        """
+        return self.nodes.values()
+
+    def items(self) -> "ItemsView[str, NodeSpec]":
+        """Get an iterator over (name, NodeSpec) pairs (dict-like interface).
+
+        Returns
+        -------
+        ItemsView
+            View of (name, NodeSpec) tuples
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> graph += NodeSpec("a", lambda: None)
+        >>> for name, spec in graph.items():
+        ...     print(f"{name}: {spec.fn}")
+        a: <function...>
+        """
+        return self.nodes.items()
+
+    def __ior__(self, other: "DirectedGraph") -> "DirectedGraph":
+        """Merge another graph into this one using |= operator.
+
+        This operator provides in-place merging of graphs, useful for composing
+        subgraphs (especially from macro expansions) into a main graph.
+
+        Parameters
+        ----------
+        other : DirectedGraph
+            The graph to merge into this one
+
+        Returns
+        -------
+        DirectedGraph
+            Self, for method chaining
+
+        Examples
+        --------
+        Merge graphs:
+
+        .. code-block:: python
+
+            main_graph = DirectedGraph()
+            main_graph += NodeSpec("a", lambda: None)
+            subgraph = DirectedGraph()
+            subgraph += NodeSpec("b", lambda: None)
+            subgraph += NodeSpec("c", lambda: None)
+            main_graph |= subgraph  # Merge subgraph into main
+            assert len(main_graph) == 3
+        """
+        for node in other:  # Using iterator instead of .nodes.values()
+            self.add(node)
+        return self
+
+    def __lshift__(self, other: NodeSpec | tuple) -> "DirectedGraph":
+        """Fluent chaining with << operator: graph << node or graph << (a >> b).
+
+        This operator provides a fluent interface for building graphs with
+        a visual left-to-right flow.
+
+        Parameters
+        ----------
+        other : NodeSpec | tuple
+            Single node or tuple of nodes to add
+
+        Returns
+        -------
+        DirectedGraph
+            Self, for method chaining
+
+        Examples
+        --------
+        Fluent chaining:
+
+        .. code-block:: python
+
+            graph = DirectedGraph()
+            a = NodeSpec("a", lambda: None)
+            b = NodeSpec("b", lambda: None)
+            graph << a << b  # Fluent chaining
+            assert len(graph) == 2
+
+            # With pipeline operator:
+            graph2 = DirectedGraph()
+            c = NodeSpec("c", lambda: None)
+            graph2 << (a >> b >> c)  # Add pipeline
+        """
+        if isinstance(other, tuple):
+            # Handle tuple of nodes (from parallel composition, future feature)
+            for node in other:
+                self.add(node)
+        else:
+            self.add(other)
+        return self

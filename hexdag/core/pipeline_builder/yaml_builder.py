@@ -250,9 +250,8 @@ class YamlPipelineBuilder:
                 # Handle macro expansion
                 self._expand_macro_into_graph(graph, node_config)
             else:
-                # Regular node creation
-                node = self._build_node_from_config(node_config)
-                graph.add(node)
+                # Regular node creation using += operator
+                graph += self._build_node_from_config(node_config)
 
         return graph
 
@@ -370,19 +369,24 @@ class YamlPipelineBuilder:
         external_dependencies : list[str]
             List of node names in the main graph that the subgraph depends on
         """
-        # Add all nodes from subgraph to main graph
-        for node in subgraph.nodes.values():
-            # If this is an entry node (no internal dependencies),
-            # add external dependencies
-            internal_deps = subgraph.get_dependencies(node.name)
+        # Merge subgraph using |= operator for cleaner code
+        if not external_dependencies:
+            # Simple case: no external dependencies, direct merge
+            graph |= subgraph
+        else:
+            # Need to add external dependencies to entry nodes before merging
+            modified_subgraph = DirectedGraph()
+            for node in subgraph:  # Using iterator instead of .nodes.values()
+                internal_deps = subgraph.get_dependencies(node.name)
+                if not internal_deps:
+                    # Entry node - add external dependencies
+                    modified_subgraph += node.after(*external_dependencies)
+                else:
+                    # Internal node - keep original dependencies
+                    modified_subgraph += node
 
-            if not internal_deps and external_dependencies:
-                # Entry node - add external dependencies
-                node_with_deps = node.after(*external_dependencies)
-                graph.add(node_with_deps)
-            else:
-                # Internal node - keep original dependencies
-                graph.add(node)
+            # Merge the modified subgraph using |= operator
+            graph |= modified_subgraph
 
     def _build_node_from_config(self, node_config: dict[str, Any]) -> NodeSpec:
         """Build a single NodeSpec from node configuration.

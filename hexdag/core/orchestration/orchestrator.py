@@ -329,7 +329,7 @@ class Orchestrator:
         """
         missing_ports: dict[str, list[str]] = {}
 
-        for node_name, node_spec in graph.nodes.items():
+        for node_name, node_spec in graph.items():  # Using .items() instead of .nodes.items()
             # Check if node function has required_ports metadata
             fn = node_spec.fn
             required_ports: list[str] = []

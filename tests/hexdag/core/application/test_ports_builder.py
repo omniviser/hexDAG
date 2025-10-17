@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock
 
+import pytest
+
 from hexdag.core.ports_builder import PortsBuilder
 
 
@@ -392,3 +394,193 @@ class TestPortsBuilderEnhanced:
         config = builder.build_configuration()
         agent_ports = config.resolve_ports("my_agent", "agent")
         assert agent_ports["llm"].port is openai_llm
+
+
+class TestPortsBuilderOperators:
+    """Test cases for PortsBuilder operator overloading."""
+
+    def test_setitem_simple(self):
+        """Test __setitem__ with simple string key."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+
+        builder["llm"] = mock_llm
+
+        assert "llm" in builder
+        assert builder["llm"] is mock_llm
+
+    def test_getitem_simple(self):
+        """Test __getitem__ with simple string key."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+        builder.with_llm(mock_llm)
+
+        result = builder["llm"]
+
+        assert result is mock_llm
+
+    def test_getitem_missing_raises(self):
+        """Test __getitem__ raises KeyError for missing port."""
+        builder = PortsBuilder()
+
+        with pytest.raises(KeyError):
+            _ = builder["nonexistent"]
+
+    def test_setitem_tuple_two_elements(self):
+        """Test __setitem__ with 2-element tuple for type-level configuration."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+        openai_llm = Mock()
+
+        builder["llm"] = mock_llm  # Global
+        builder["agent", "llm"] = openai_llm  # Type-level
+
+        # Verify both are set
+        assert builder["llm"] is mock_llm
+        assert builder["agent", "llm"] is openai_llm
+
+    def test_getitem_tuple_two_elements_with_fallback(self):
+        """Test __getitem__ with 2-element tuple falls back to global."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+
+        builder["llm"] = mock_llm  # Global only
+
+        # Type-level access should fall back to global
+        result = builder["agent", "llm"]
+        assert result is mock_llm
+
+    def test_setitem_tuple_three_elements(self):
+        """Test __setitem__ with 3-element tuple for node-level configuration."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+        openai_llm = Mock()
+        claude_llm = Mock()
+
+        builder["llm"] = mock_llm  # Global
+        builder["agent", "llm"] = openai_llm  # Type-level
+        builder["researcher", "agent", "llm"] = claude_llm  # Node-level
+
+        # Verify all levels
+        assert builder["llm"] is mock_llm
+        assert builder["agent", "llm"] is openai_llm
+        assert builder["researcher", "agent", "llm"] is claude_llm
+
+    def test_getitem_tuple_three_elements_resolution(self):
+        """Test __getitem__ with 3-element tuple and inheritance."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+        openai_llm = Mock()
+        claude_llm = Mock()
+
+        builder["llm"] = mock_llm
+        builder["agent", "llm"] = openai_llm
+        builder["researcher", "agent", "llm"] = claude_llm
+
+        # Researcher should get node-level override
+        assert builder["researcher", "agent", "llm"] is claude_llm
+
+        # Other agents should get type-level
+        assert builder["analyzer", "agent", "llm"] is openai_llm
+
+        # Non-agent nodes should get global
+        assert builder["transformer", "function", "llm"] is mock_llm
+
+    def test_delitem(self):
+        """Test __delitem__ removes port."""
+        builder = PortsBuilder()
+        builder["llm"] = Mock()
+
+        assert "llm" in builder
+
+        del builder["llm"]
+
+        assert "llm" not in builder
+
+    def test_delitem_missing_raises(self):
+        """Test __delitem__ raises KeyError for missing port."""
+        builder = PortsBuilder()
+
+        with pytest.raises(KeyError):
+            del builder["nonexistent"]
+
+    def test_contains_operator(self):
+        """Test 'in' operator works correctly."""
+        builder = PortsBuilder()
+
+        assert "llm" not in builder
+
+        builder["llm"] = Mock()
+
+        assert "llm" in builder
+
+    def test_combined_operators(self):
+        """Test combining multiple operators in realistic scenario."""
+        builder = PortsBuilder()
+
+        # Configure using operators
+        global_llm = Mock()
+        global_db = Mock()
+        agent_llm = Mock()
+        researcher_llm = Mock()
+
+        builder["llm"] = global_llm
+        builder["database"] = global_db
+        builder["agent", "llm"] = agent_llm
+        builder["researcher", "agent", "llm"] = researcher_llm
+
+        # Verify resolution using operators
+        assert builder["llm"] is global_llm
+        assert builder["agent", "llm"] is agent_llm
+        assert builder["researcher", "agent", "llm"] is researcher_llm
+        assert builder["analyzer", "agent", "llm"] is agent_llm  # Falls back to type
+
+    def test_setitem_tuple_invalid_length(self):
+        """Test __setitem__ raises for invalid tuple length."""
+        builder = PortsBuilder()
+
+        with pytest.raises(KeyError, match="must have 2 or 3 elements"):
+            builder["a", "b", "c", "d"] = Mock()
+
+    def test_getitem_tuple_invalid_length(self):
+        """Test __getitem__ raises for invalid tuple length."""
+        builder = PortsBuilder()
+
+        with pytest.raises(KeyError, match="must have 2 or 3 elements"):
+            _ = builder["a", "b", "c", "d"]
+
+    def test_operators_integrate_with_build(self):
+        """Test that operator-configured ports work with build() method."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+        mock_db = Mock()
+
+        # Configure using operators
+        builder["llm"] = mock_llm
+        builder["database"] = mock_db
+
+        # Build should return correct dict
+        ports_dict = builder.build()
+
+        assert ports_dict["llm"] is mock_llm
+        assert ports_dict["database"] is mock_db
+
+    def test_operators_integrate_with_build_configuration(self):
+        """Test that operator-configured ports work with build_configuration()."""
+        builder = PortsBuilder()
+        mock_llm = Mock()
+        openai_llm = Mock()
+
+        # Configure using operators
+        builder["llm"] = mock_llm
+        builder["agent", "llm"] = openai_llm
+
+        # Build configuration
+        config = builder.build_configuration()
+
+        # Verify resolution works
+        agent_ports = config.resolve_ports("my_agent", "agent")
+        assert agent_ports["llm"].port is openai_llm
+
+        function_ports = config.resolve_ports("my_function", "function")
+        assert function_ports["llm"].port is mock_llm

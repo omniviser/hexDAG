@@ -5,6 +5,7 @@
 Your first hexAI pipeline! This example teaches:
 - Creating a DirectedGraph
 - Adding NodeSpec with simple functions
+- Using pipeline operators (+=, >>) for clean syntax
 - Running the orchestrator
 - Understanding execution results
 
@@ -54,19 +55,19 @@ async def main():
     # Step 2: Add nodes with simple functions
     print("➕ Adding nodes...")
 
-    # First node - no dependencies
+    # Create nodes
     node1 = NodeSpec("greeting", step_one)
-    graph.add(node1)
+    node2 = NodeSpec("enthusiasm", step_two)
+    node3 = NodeSpec("formatting", step_three)
+
+    # Add nodes with visual pipeline operator (>>)
+    # The >> operator creates dependencies: node1 >> node2 means "node2 depends on node1"
+    graph += node1
+    graph += node1 >> node2  # node2 depends on node1
+    graph += node2 >> node3  # node3 depends on node2
+
     print("   ✅ Added 'greeting' node")
-
-    # Second node - depends on first
-    node2 = NodeSpec("enthusiasm", step_two).after("greeting")
-    graph.add(node2)
     print("   ✅ Added 'enthusiasm' node (depends on greeting)")
-
-    # Third node - depends on second
-    node3 = NodeSpec("formatting", step_three).after("enthusiasm")
-    graph.add(node3)
     print("   ✅ Added 'formatting' node (depends on enthusiasm)")
 
     # Step 3: Validate the graph
@@ -100,7 +101,7 @@ async def main():
     print("\n🎯 Key Concepts Learned:")
     print("   ✅ DirectedGraph - Container for your workflow")
     print("   ✅ NodeSpec - Individual processing steps")
-    print("   ✅ Dependencies - .after() creates execution order")
+    print("   ✅ Pipeline Operators - >> creates dependencies, += adds to graph")
     print("   ✅ Orchestrator - Executes your DAG")
     print("   ✅ Results - Dictionary with node outputs")
 

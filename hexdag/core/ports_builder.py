@@ -291,6 +291,31 @@ class PortsBuilder:
         """
         return key in self._ports
 
+    def __contains__(self, key: str) -> bool:
+        """Check if a port is configured using 'in' operator.
+
+        Parameters
+        ----------
+        key : str
+            Port key to check
+
+        Returns
+        -------
+        bool
+            True if the port is configured at global level
+
+        Examples
+        --------
+        >>> builder = PortsBuilder()
+        >>> class MockPort: pass
+        >>> builder["llm"] = MockPort()
+        >>> "llm" in builder
+        True
+        >>> "database" in builder
+        False
+        """
+        return key in self._ports
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configured port by key.
 
@@ -332,6 +357,129 @@ class PortsBuilder:
         """
         configured = ", ".join(self._ports.keys()) if self._ports else "none"
         return f"PortsBuilder(configured: {configured})"
+
+    def __getitem__(self, key: str | tuple) -> Any:
+        """Get port(s) using dictionary-style access with tuple key support.
+
+        Supports simple and hierarchical access patterns:
+        - Simple: builder["llm"] - Get global port
+        - Tuple (2 elements): builder["agent", "llm"] - Get type-level port
+        - Tuple (3 elements): builder["researcher", "agent", "llm"] - Get node-level port
+
+        Parameters
+        ----------
+        key : str | tuple
+            Port key or tuple of (node, type, port) for hierarchical lookup
+
+        Returns
+        -------
+        Any
+            The port instance
+
+        Raises
+        ------
+        KeyError
+            If the port is not configured
+
+        Examples
+        --------
+        >>> builder = PortsBuilder()
+        >>> class MockLLM: pass
+        >>> class AgentLLM: pass
+        >>> builder["llm"] = MockLLM()
+        >>> port = builder["llm"]  # Simple access
+        >>> isinstance(port, MockLLM)
+        True
+        >>> result = builder.for_type("agent", llm=AgentLLM())  # Returns self
+        >>> port = builder["agent", "llm"]  # Type-level access
+        >>> isinstance(port, AgentLLM)
+        True
+        """
+        if isinstance(key, tuple):
+            if len(key) == 2:
+                # (type, port_name) - Get type-level port
+                node_type, port_name = key
+                if node_type in self._type_ports and port_name in self._type_ports[node_type]:
+                    return self._type_ports[node_type][port_name]
+                # Fall back to global
+                return self._ports.get(port_name)
+            if len(key) == 3:
+                # (node_name, type, port_name) - Get node-level port with resolution
+                node_name, node_type, port_name = key
+                # Try node-level first
+                if node_name in self._node_ports and port_name in self._node_ports[node_name]:
+                    return self._node_ports[node_name][port_name]
+                # Fall back to type-level
+                if node_type in self._type_ports and port_name in self._type_ports[node_type]:
+                    return self._type_ports[node_type][port_name]
+                # Fall back to global
+                return self._ports.get(port_name)
+            raise KeyError(f"Tuple key must have 2 or 3 elements, got {len(key)}")
+        return self._ports[key]
+
+    def __setitem__(self, key: str | tuple, value: Any) -> None:
+        """Set port(s) using dictionary-style access with tuple key support.
+
+        Supports simple and hierarchical configuration:
+        - Simple: builder["llm"] = adapter - Set global port
+        - Tuple (2 elements): builder["agent", "llm"] = adapter - Set type-level port
+        - Tuple (3 elements): builder["node", "agent", "llm"] = adapter - Set node-level port
+
+        Parameters
+        ----------
+        key : str | tuple
+            Port key or tuple of (node, type, port) for hierarchical configuration
+        value : Any
+            Port implementation to configure
+
+        Examples
+        --------
+        >>> builder = PortsBuilder()
+        >>> class MockLLM: pass
+        >>> class OpenAIAdapter: pass
+        >>> class ClaudeAdapter: pass
+        >>> builder["llm"] = MockLLM()  # Global
+        >>> builder["agent", "llm"] = OpenAIAdapter()  # Type-level
+        >>> builder["researcher", "agent", "llm"] = ClaudeAdapter()  # Node-level
+        >>> isinstance(builder["llm"], MockLLM)
+        True
+        >>> isinstance(builder["agent", "llm"], OpenAIAdapter)
+        True
+        >>> isinstance(builder["researcher", "agent", "llm"], ClaudeAdapter)
+        True
+        """
+        if isinstance(key, tuple):
+            if len(key) == 2:
+                # (type, port_name) - Set type-level port
+                node_type, port_name = key
+                self.for_type(node_type, **{port_name: value})
+            elif len(key) == 3:
+                # (node_name, type, port_name) - Set node-level port
+                node_name, _node_type, port_name = key
+                self.for_node(node_name, **{port_name: value})
+            else:
+                raise KeyError(f"Tuple key must have 2 or 3 elements, got {len(key)}")
+        else:
+            self._add_port(key, value)
+
+    def __delitem__(self, key: str) -> None:
+        """Remove a port from the builder.
+
+        Parameters
+        ----------
+        key : str
+            Port key to remove
+
+        Examples
+        --------
+        .. code-block:: python
+
+            builder = PortsBuilder()
+            builder["llm"] = MockLLM()
+            del builder["llm"]
+            assert "llm" not in builder
+        """
+        del self._ports[key]
 
     # Enhanced Configuration Methods
     # ------------------------------
