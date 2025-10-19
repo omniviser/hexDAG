@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "pydantic~=2.0",
     "pyyaml~=6.0",   # YAML pipeline support (core feature)
+    "jinja2>=3.1.0", # YAML templating support (enables dynamic configs)
     "orjson>=3.9.0", # Fast JSON serialization (2-5x faster than stdlib json)
     "loguru>=0.7.0",
     "typer>=0.9.0",  # CLI framework (previously optional)
@@ -172,6 +173,7 @@ modules = [
 # Default plugins - mock and local adapters for testing and development
 plugins = [
     "hexdag.builtin.adapters.local",  # Local in-process implementations
+    "hexdag.builtin.adapters.mock",   # Mock adapters for testing
     "hexdag_plugins.rag_plugin",      # RAG plugin (document processing, vector stores)
 ]
 
@@ -374,7 +376,9 @@ convention = "numpy"
 "hexdag/core/orchestration/events/observers.py" = ["SIM115"]
 "hexdag/core/registry/discovery.py" = ["TC003", "TC001"]
 "hexdag/cli/*" = ["DOC501", "PTH123", "B008", "B904", "SIM102"]  # CLI: typer patterns
-"notebooks/*" = ["E402", "F704"]  # Notebooks: allow top-level await and imports anywhere
+"notebooks/*" = ["E402", "F704", "E266", "W293", "E501", "W291"]  # Notebooks: allow top-level await, imports anywhere, markdown syntax, long lines, trailing whitespace
+"hexdag/builtin/prompts/*" = ["E501", "TC003"]  # Prompts: long template strings are ok, runtime Callable usage
+"hexdag/core/pipeline_builder/yaml_builder.py" = ["E501"]  # YAML examples can be long
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexdag"]

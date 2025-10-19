@@ -81,6 +81,22 @@ class ValidationError(HexDAGError):
         self.value = value
 
 
+class ParseError(HexDAGError):
+    """Raised when LLM output parsing fails.
+
+    Used by ParserNode when JSON/YAML/structured parsing fails.
+    Contains helpful retry hints for fixing the prompt.
+
+    Examples
+    --------
+    Example usage::
+
+        raise ParseError("Failed to parse JSON from LLM output. Retry hints: ...")
+    """
+
+    pass
+
+
 # ============================================================================
 # Resource & Dependency Errors
 # ============================================================================

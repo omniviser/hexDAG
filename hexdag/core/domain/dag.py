@@ -18,8 +18,6 @@ if TYPE_CHECKING:
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
-from hexdag.core.protocols import is_dict_convertible
-
 T = TypeVar("T", bound=BaseModel)
 
 # Performance optimization: reuse empty frozenset instead of creating new set() objects
@@ -103,17 +101,18 @@ class NodeSpec:
             # No validation needed
             return data
 
-        # If already the correct type, return as-is
+        # If already the correct type, return as-is (fast path)
         if isinstance(data, model):
             return data
 
         try:
-            if is_dict_convertible(data):
-                # Pydantic model or dict-like - convert to dict first
-                return model.model_validate(
-                    data.model_dump() if not isinstance(data, dict) else data
-                )
-            # Data is other type
+            # If data is a different Pydantic model, convert to dict first
+            # This allows schema transformation between incompatible models
+            if isinstance(data, BaseModel):
+                return model.model_validate(data.model_dump())
+
+            # For dict, primitives, and other types, validate directly
+            # Pydantic's model_validate handles these efficiently
             return model.model_validate(data)
         except PydanticValidationError as e:
             # Format Pydantic validation errors nicely

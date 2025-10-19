@@ -36,11 +36,18 @@ allowed_exceptions:
     - "from hexdag.builtin.adapters.openai import OpenAIAdapter"
     - "from hexdag.builtin.adapters.anthropic import AnthropicAdapter"
 
-  # YamlBuilder needs FieldMappingRegistry for YAML pipeline compilation
+  # YamlBuilder needs FieldMappingRegistry and ChatPromptTemplate for YAML pipeline compilation
   # This is a compile-time dependency for the YAML DSL.
   # Rationale: YAML builder is inherently tied to built-in node implementations.
   hexdag/core/pipeline_builder/yaml_builder.py:
     - "from hexdag.builtin.nodes.mapped_input import FieldMappingRegistry"
+    - "from hexdag.builtin.prompts.base import ChatPromptTemplate"
+
+  # Prompt __init__ re-exports advanced prompts for backward compatibility
+  # These were moved to builtin but are still part of core API surface.
+  # Rationale: Maintains public API while allowing modular organization.
+  hexdag/core/orchestration/prompt/__init__.py:
+    - "from hexdag.builtin.prompts.base import ("
 
   # Models.py has doctest examples that import adapters for demonstration
   # These are documentation/test imports, not runtime dependencies.

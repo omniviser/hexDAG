@@ -1041,7 +1041,7 @@ plugins = [
         assert any(c.name == "llm" and c.namespace == "core" for c in components)
 
         # Check that mock adapter is loaded (no requirements)
-        assert any(c.name == "mock_llm" and c.namespace == "plugin" for c in components)
+        assert any(c.name == "mock" and c.namespace == "plugin" for c in components)
 
         # Check that OpenAI/Anthropic ARE loaded (modules exist, env vars checked at runtime)
         assert any(c.name == "openai" for c in components)
@@ -1069,7 +1069,7 @@ plugins = [
         components = global_registry.list_components()
         adapter_names = [c.name for c in components if c.component_type.value == "adapter"]
 
-        assert "mock_llm" in adapter_names
+        assert "mock" in adapter_names  # MockLLM is registered as "mock"
         assert "openai" in adapter_names
         assert "anthropic" in adapter_names
 
@@ -1148,7 +1148,7 @@ class TestRegistryPluginScenarios:
 
         # Mock should be present, OpenAI should not
         adapter_names = [a.name for a in adapters]
-        assert "mock_llm" in adapter_names
+        assert "mock" in adapter_names  # MockLLM is registered as "mock"
         assert "openai" in adapter_names
 
         # Cleanup

@@ -1,5 +1,14 @@
-"""LLM node factory for creating LLM-based pipeline nodes."""
+"""LLM node factory for creating LLM-based pipeline nodes.
 
+.. deprecated:: 0.2.0
+   Use the new composable architecture instead:
+   - PromptNode for prompt building
+   - RawLLMNode for API calls
+   - ParserNode for output parsing
+   - Or use the LLM macro that combines all three with retry logic
+"""
+
+import warnings
 from typing import Any
 
 from pydantic import BaseModel
@@ -14,12 +23,50 @@ from .base_llm_node import BaseLLMNode
 
 @node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core", required_ports=["llm"])
 class LLMNode(BaseLLMNode):
-    """Simple factory for creating LLM-based nodes with rich template support.
+    """DEPRECATED: Use PromptNode + RawLLMNode + ParserNode instead.
+
+    This monolithic LLM node combines prompt building, API calls, and parsing.
+    The new architecture separates these concerns for better composability:
+
+    Old (monolithic)::
+
+        llm_node = LLMNode()
+        spec = llm_node(name="analyzer", template="Analyze {{data}}", output_schema=Result)
+
+    New (composable)::
+
+        # Option 1: Use the LLM macro (recommended)
+        from hexdag.builtin.macros import LLMMacro
+        macro = LLMMacro()
+        graph = macro.expand(
+            instance_name="analyzer",
+            inputs={"template": "Analyze {{data}}", "output_schema": Result}
+        )
+
+        # Option 2: Compose manually for full control
+        prompt_node = PromptNode()(name="prompt", template="Analyze {{data}}")
+        llm_node = RawLLMNode()(name="llm")
+        parser_node = ParserNode()(name="parser", output_schema=Result)
 
     Inherits all common LLM functionality from BaseLLMNode. LLM nodes are highly dynamic -
     templates and schemas are passed via __call__() parameters rather than static Config.
     No Config class needed (follows YAGNI principle).
+
+    .. deprecated:: 0.2.0
+       Will be removed in version 0.3.0. Use the new composable architecture.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize LLMNode with deprecation warning."""
+        warnings.warn(
+            "LLMNode is deprecated and will be removed in version 0.3.0. "
+            "Use the new composable architecture: PromptNode + RawLLMNode + ParserNode, "
+            "or use the LLM macro for automatic composition with retry logic. "
+            "See documentation for migration guide.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__()
 
     def __call__(
         self,

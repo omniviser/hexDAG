@@ -11,10 +11,12 @@ Tests cover:
 
 import pytest
 
-from hexdag.core.orchestration.prompt.template import (
+from hexdag.builtin.prompts.base import (
     FewShotPromptTemplate,
-    MissingVariableError,
     PromptTemplate,
+)
+from hexdag.core.orchestration.prompt.template import (
+    MissingVariableError,
 )
 
 # No initialization needed - framework is ready to use

@@ -460,6 +460,7 @@ node = partial(component, ComponentType.NODE)
 policy = partial(component, ComponentType.POLICY)
 memory = partial(component, ComponentType.MEMORY)
 observer = partial(component, ComponentType.OBSERVER)
+prompt = partial(component, ComponentType.PROMPT)
 
 
 def function_node(

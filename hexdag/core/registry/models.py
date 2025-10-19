@@ -153,6 +153,7 @@ class ComponentType(StrEnum):
     OBSERVER = "observer"
     CONTROLLER = "controller"
     MACRO = "macro"  # Pipeline templates that expand to subgraphs
+    PROMPT = "prompt"  # Reusable prompt templates (composable)
 
 
 class NodeSubtype(StrEnum):

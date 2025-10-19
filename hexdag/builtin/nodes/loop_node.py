@@ -10,10 +10,11 @@ This module provides the LoopNode factory that creates nodes capable of:
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import BaseModel
+
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.exceptions import ValidationError
 from hexdag.core.logging import get_logger
-from hexdag.core.protocols import is_dict_convertible
 from hexdag.core.registry import node
 from hexdag.core.registry.models import NodeSubtype
 
@@ -80,14 +81,13 @@ class LoopNode(BaseNodeFactory):
                 max=max_iterations,
             )
 
+            # Convert to dict only when necessary
             if isinstance(input_data, dict):
                 data_dict = input_data
+            elif isinstance(input_data, BaseModel):
+                data_dict = input_data.model_dump()
             else:
-                # Try to get model_dump if available, otherwise use as-is
-                try:
-                    data_dict = input_data.model_dump()
-                except (AttributeError, TypeError):
-                    data_dict = {"input": input_data}
+                data_dict = {"input": input_data}
 
             # Evaluate success condition
             success_criteria_met = False
@@ -172,9 +172,11 @@ class ConditionalNode(BaseNodeFactory):
             logger = get_logger("hexdag.app.application.nodes.conditional_node")
             logger.info("🧭 CONDITIONAL NODE: {name}", name=name)
 
+            # Convert to dict only when necessary
             if isinstance(input_data, dict):
                 data_dict = input_data
-            elif is_dict_convertible(input_data):
+            elif isinstance(input_data, BaseModel):
+                # Access field directly if possible, convert only when needed for dict operations
                 data_dict = input_data.model_dump()
             else:
                 data_dict = {"input": input_data}

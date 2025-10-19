@@ -61,6 +61,7 @@ from hexdag.core.registry.decorators import (
     observer,
     policy,
     port,
+    prompt,
     tool,
 )
 from hexdag.core.registry.registry import registry
@@ -81,6 +82,7 @@ __all__ = [
     "observer",
     "port",
     "macro",
+    "prompt",
     # Node subtype decorators
     "function_node",
     "llm_node",

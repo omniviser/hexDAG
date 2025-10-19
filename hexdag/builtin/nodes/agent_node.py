@@ -243,23 +243,22 @@ class ReActAgentNode(BaseNodeFactory):
             if final_output is not None:
                 return final_output
 
-            return updated_state.model_dump()
+            # Return AgentState directly (Pydantic-first design)
+            return updated_state
 
         # Define success condition using loop concepts
         def success_condition(result: Any) -> bool:
             """Check if agent should stop iterating."""
-            # Stop if we got the final structured output (not a dict)
-            if not isinstance(result, dict):
+            # Stop if we got the final structured output (not AgentState)
+            if not isinstance(result, AgentState):
                 return True
 
             # Stop if we reached max steps
-            step = result.get("step", 0)
-            if step >= config.max_steps:
+            if result.step >= config.max_steps:
                 return True
 
             # Stop if tool_end was detected
-            response = result.get("response", "")
-            return "tool_end" in response.lower()
+            return "tool_end" in result.response.lower()
 
         async def agent_with_internal_loop(input_data: Any) -> Any:
             """Agent executor with internal loop control."""
@@ -272,13 +271,14 @@ class ReActAgentNode(BaseNodeFactory):
                 # Execute single step
                 step_result = await single_step_executor(current_result)
 
-                if not isinstance(step_result, dict):
+                # If not AgentState, it's the final output
+                if not isinstance(step_result, AgentState):
                     return step_result
 
                 # Check success condition
                 if success_condition(step_result):
                     final_output = await self._check_for_final_output(
-                        self._initialize_or_update_state(step_result),
+                        step_result,
                         output_model,
                         get_port("event_manager"),
                     )
@@ -286,7 +286,7 @@ class ReActAgentNode(BaseNodeFactory):
                         return final_output
                     return step_result
 
-                # Continue with next iteration
+                # Continue with next iteration (pass AgentState directly)
                 current_result = step_result
 
             # If we reach here, return the last result
@@ -302,12 +302,16 @@ class ReActAgentNode(BaseNodeFactory):
         AgentState
             Initialized or updated agent state
         """
-        # Case 1: Continuing from previous iteration (loop passes AgentState dict)
+        # Case 1: Already AgentState (from previous iteration) - return as-is
+        if isinstance(input_data, AgentState):
+            return input_data
+
+        # Case 2: Dict with AgentState fields (legacy/backward compatibility)
         if isinstance(input_data, dict) and "reasoning_steps" in input_data:
             state: AgentState = AgentState.model_validate(input_data)
             return state
 
-        # Case 2: Fresh input (first iteration)
+        # Case 3: Fresh input (first iteration) - wrap in AgentState
         try:
             raw_input = to_dict(input_data)
         except TypeError:
@@ -453,13 +457,13 @@ carried_data={'key': 'value'})"""
         # Enhance prompt with tools
         enhanced_prompt = self._enhance_prompt_with_tools(current_prompt, tool_router, config)
 
-        state_dict = state.model_dump()
-
         current_phase_context = state.phase_contexts.get(state.current_phase, {})
 
+        # Build LLM input - only convert to dict when needed for template
+        # Merge state fields with template-specific overrides
         llm_input = {
-            **state_dict,
-            **state_dict.get("input_data", {}),
+            **state.model_dump(),  # Convert only once, at template boundary
+            **state.input_data,
             "reasoning_so_far": "\n".join(state.reasoning_steps) or "Starting reasoning...",
             "phase_context": current_phase_context,
             "phase_reason": current_phase_context.get("reason", ""),

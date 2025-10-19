@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from hexdag.builtin.adapters.mock.mock_llm import MockLLM
 from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
-from hexdag.builtin.nodes.agent_node import AgentConfig
+from hexdag.builtin.nodes.agent_node import AgentConfig, AgentState
 from hexdag.builtin.nodes.tool_utils import ToolCallFormat
 from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.context import ExecutionContext
@@ -116,11 +116,11 @@ class TestReActAgentNode:
         ):
             result = await node_spec.fn(input_data)
 
-        # Agent returns state dict
-        assert isinstance(result, dict)
-        assert "reasoning_steps" in result
-        assert "response" in result
-        assert "input_data" in result
+        # Agent returns AgentState (Pydantic-first design)
+        assert isinstance(result, AgentState)
+        assert result.reasoning_steps
+        assert result.response
+        assert result.input_data == {"input": "Test input"}
 
     @pytest.mark.asyncio
     async def test_agent_with_tool_end(self, agent_node, mock_llm, mock_tool_router):
