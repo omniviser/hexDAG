@@ -82,8 +82,7 @@ nodes:
 Run it with Python:
 
 ```python
-from hexai import Orchestrator
-from hexai.agent_factory import YamlPipelineBuilder
+from hexdag import Orchestrator, YamlPipelineBuilder
 
 # Load and execute the workflow
 builder = YamlPipelineBuilder()

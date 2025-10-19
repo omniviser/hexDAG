@@ -1,16 +1,26 @@
-"""Pipeline Builder - Converts YAML configurations to DirectedGraphs.
+"""Simplified YAML Pipeline Builder with Plugin Architecture.
 
-Simple pipeline builder that focuses on basic YAML processing with simple data mapping.
+Philosophy:
+- Core builder: Minimal YAML → DirectedGraph parser
+- Preprocessing plugins: Environment variables, templating, validation
+- Entity plugins: Macros, nodes (each entity type handles its own YAML)
+
+Plugins provide clear value:
+- EnvironmentVariablePlugin: Resolve ${VAR} and ${VAR:default}
+- TemplatePlugin: Jinja2 templating in YAML values
+- SchemaValidationPlugin: Validate schemas before execution
 """
 
-from functools import lru_cache
+import os
+import re
+from contextlib import suppress
+from functools import lru_cache, singledispatch
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import yaml
+from jinja2 import Environment, TemplateSyntaxError, UndefinedError
 
-from hexdag.builtin.nodes.mapped_input import FieldMappingRegistry
-from hexdag.builtin.prompts.base import ChatPromptTemplate
 from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.configurable import ConfigurableMacro
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
@@ -21,257 +31,123 @@ from hexdag.core.registry import registry
 from hexdag.core.registry.exceptions import ComponentNotFoundError
 from hexdag.core.registry.models import NAMESPACE_SEPARATOR
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 logger = get_logger(__name__)
 
 
-@lru_cache(maxsize=32)
-def _parse_yaml_cached(yaml_content: str) -> Any:
-    """Parse and validate YAML content with caching.
-
-    This is a module-level function so lru_cache doesn't cause memory leaks.
-    Cache key is the YAML content string itself.
-
-    Parameters
-    ----------
-    yaml_content : str
-        Raw YAML content to parse
-
-    Returns
-    -------
-    Any
-        Parsed YAML content (typically dict, but could be list, str, etc.)
-    """
-    return yaml.safe_load(yaml_content)
-
-
-def _convert_schema_types(schema: dict[str, Any] | Any) -> dict[str, type] | Any:
-    """Convert YAML string type names to actual Python types with recursive support.
-
-    Converts schema dictionaries with string type names (e.g., {"name": "str"})
-    to actual type objects (e.g., {"name": str}) using Python's builtins.
-
-    Handles nested schemas recursively.
-
-    Parameters
-    ----------
-    schema : dict[str, Any] | Any
-        Schema dict with string type names or actual types, or nested schemas
-
-    Returns
-    -------
-    dict[str, type] | Any
-        Schema with actual type objects, or unchanged if not a dict
-
-    Examples
-    --------
-    >>> _convert_schema_types({"name": "str", "age": "int"})
-    {'name': <class 'str'>, 'age': <class 'int'>}
-    >>> _convert_schema_types({"user": {"name": "str", "age": "int"}})
-    {'user': {'name': <class 'str'>, 'age': <class 'int'>}}
-
-    Raises
-    ------
-    YamlPipelineBuilderError
-        If an invalid type name is used (e.g., typos like "stringg")
-    """
-    if not isinstance(schema, dict):
-        return schema
-
-    # Explicit mapping of supported types - fail fast on typos
-    VALID_TYPES: dict[str, Any] = {
-        "str": str,
-        "int": int,
-        "float": float,
-        "bool": bool,
-        "list": list,
-        "dict": dict,
-        "Any": Any,
-    }
-
-    converted = {}
-    for key, value in schema.items():
-        if isinstance(value, str):
-            if value not in VALID_TYPES:
-                valid_type_names = ", ".join(sorted(VALID_TYPES.keys()))
-                raise YamlPipelineBuilderError(
-                    f"Invalid type '{value}' for schema field '{key}'. "
-                    f"Supported types: {valid_type_names}"
-                )
-            converted[key] = VALID_TYPES[value]
-        elif isinstance(value, dict):
-            # Nested schema - recurse
-            converted[key] = _convert_schema_types(value)
-        elif isinstance(value, type):
-            # Already a type object - keep as-is
-            converted[key] = value
-        else:
-            # Neither string nor type nor dict - invalid
-            raise YamlPipelineBuilderError(
-                f"Schema field '{key}' has invalid value: {value!r}. "
-                f"Expected type name string, type object, or nested schema dict."
-            )
-
-    return converted
-
-
 class YamlPipelineBuilderError(Exception):
-    """Custom exception for YAML pipeline building errors."""
+    """YAML pipeline building errors."""
 
     pass
 
 
+# ============================================================================
+# Plugin Protocol
+# ============================================================================
+
+
+class PreprocessPlugin(Protocol):
+    """Plugin for preprocessing YAML before building (env vars, templating, etc.)."""
+
+    def process(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Process entire config, returning modified version."""
+        ...
+
+
+class EntityPlugin(Protocol):
+    """Plugin for building specific entity types (macros, nodes, etc.)."""
+
+    def can_handle(self, node_config: dict[str, Any]) -> bool:
+        """Return True if this plugin can handle the node config."""
+        ...
+
+    def build(
+        self, node_config: dict[str, Any], builder: "YamlPipelineBuilder", graph: DirectedGraph
+    ) -> NodeSpec | None:
+        """Build entity from config.
+
+        Args
+        -----
+            node_config: The node configuration dictionary.
+            builder: The YamlPipelineBuilder instance.
+            graph: The DirectedGraph instance.
+
+        Return NodeSpec or None if handled (e.g., macro merged into graph)."""
+        ...
+
+
+# ============================================================================
+# Core Builder
+# ============================================================================
+
+
 class YamlPipelineBuilder:
-    """Simple pipeline builder with basic data mapping support and intelligent auto-conversion."""
+    """YAML → DirectedGraph builder with plugin support.
+
+    Workflow:
+    1. Parse YAML
+    2. Select environment
+    3. Validate structure
+    4. Run preprocessing plugins (env vars, templates)
+    5. Build graph using entity plugins
+    6. Extract pipeline config
+    """
 
     def __init__(self) -> None:
-        """Initialize the pipeline builder."""
-        # Ensure registry is bootstrapped before creating validator
-        # This allows the validator to discover all registered node types including plugins
+        """Initialize builder."""
         ensure_bootstrapped()
 
-        self.registered_functions: dict[str, Any] = {}
-        self.field_mapping_registry = FieldMappingRegistry()
         self.validator = YamlValidator()
 
-    def register_function(self, name: str, func: Any) -> None:
-        """Register a function for use in YAML pipelines."""
-        self.registered_functions[name] = func
+        # Plugins
+        self.preprocess_plugins: list[PreprocessPlugin] = []
+        self.entity_plugins: list[EntityPlugin] = []
+
+        self._register_default_plugins()
+
+    def _register_default_plugins(self) -> None:
+        """Register default plugins for common use cases."""
+        # Preprocessing plugins (run before building)
+        self.preprocess_plugins.append(EnvironmentVariablePlugin())
+        self.preprocess_plugins.append(TemplatePlugin())
+
+        # Entity plugins (build specific entity types)
+        self.entity_plugins.append(MacroEntityPlugin())
+        self.entity_plugins.append(NodeEntityPlugin(self))
+
+    # --- Public API ---
 
     def build_from_yaml_file(
-        self, yaml_file_path: str, use_cache: bool = True
+        self, yaml_path: str, use_cache: bool = True
     ) -> tuple[DirectedGraph, PipelineConfig]:
-        """Build DirectedGraph and PipelineConfig from YAML file with caching.
-
-        Parameters
-        ----------
-        yaml_file_path : str
-            Path to the YAML file to build from
-        use_cache : bool
-            Whether to use LRU caching (default: True)
-
-        Returns
-        -------
-        tuple[DirectedGraph, PipelineConfig]
-            Tuple of (DirectedGraph, PipelineConfig with ports and policies)
-
-        Raises
-        ------
-        YamlPipelineBuilderError
-            If the YAML file cannot be loaded or parsed
-
-        Notes
-        -----
-        Caching is based on file content hash, so changes to the YAML file
-        will automatically invalidate the cache. The cache is in-memory (LRU)
-        with a maximum of 32 entries.
-        """
-        try:
-            yaml_path = Path(yaml_file_path)
-            yaml_content = yaml_path.read_text(encoding="utf-8")
-
-            # Use cached or uncached version based on flag
-            return self.build_from_yaml_string(yaml_content, use_cache=use_cache)
-
-        except OSError as e:
-            raise YamlPipelineBuilderError(
-                f"Failed to load YAML file '{yaml_file_path}': {e}"
-            ) from e
+        """Build from YAML file."""
+        yaml_content = Path(yaml_path).read_text(encoding="utf-8")
+        return self.build_from_yaml_string(yaml_content, use_cache=use_cache)
 
     def build_from_yaml_string(
         self, yaml_content: str, use_cache: bool = True, environment: str | None = None
     ) -> tuple[DirectedGraph, PipelineConfig]:
-        """Convert declarative YAML manifest to DirectedGraph and PipelineConfig.
+        """Build DirectedGraph + PipelineConfig from YAML string."""
+        # Step 1: Parse YAML
+        documents = self._parse_yaml(yaml_content, use_cache=use_cache)
 
-        Expects declarative manifest format with K8s-style structure:
-        ```yaml
-        apiVersion: hexdag.omniviser.io/v1alpha1
-        kind: Pipeline
-        metadata:
-          name: my-pipeline
-        spec:
-          ports:
-            llm: core:openai(model=gpt-4)
-          policies:
-            retry: core:retry(max_retries=3)
-          nodes:
-            - kind: llm_node
-              metadata:
-                name: processor
-              spec:
-                prompt_template: "Process {{input}}"
-                dependencies: []
-        ```
+        # Step 2: Select environment
+        config = self._select_environment(documents, environment)
 
-        Supports multi-environment YAML with `---` separators:
-        ```yaml
-        # Dev environment
-        ---
-        apiVersion: v1
-        kind: Pipeline
-        metadata:
-          name: my-pipeline
-          namespace: dev
-        spec:
-          ports:
-            llm: core:mock(...)
-        # Prod environment
-        ---
-        apiVersion: v1
-        kind: Pipeline
-        metadata:
-          name: my-pipeline
-          namespace: prod
-        spec:
-          ports:
-            llm: core:openai(...)
-        ```
+        # Step 3: Validate structure
+        config = self._validate_config(config)
 
-        Parameters
-        ----------
-        yaml_content : str
-            YAML content string to parse
-        use_cache : bool
-            Whether to use cached YAML parsing (default: True)
-        environment : str | None
-            Environment/namespace to select from multi-document YAML.
-            If specified, will look for a document with matching metadata.namespace.
-            If None and multiple documents exist, uses the first document.
+        # Step 4: Preprocess (env vars, templating, etc.)
+        for plugin in self.preprocess_plugins:
+            config = plugin.process(config)
 
-        Returns
-        -------
-        tuple[DirectedGraph, PipelineConfig]
-            Tuple of (DirectedGraph, PipelineConfig with ports and policies)
-        """
-        # Parse YAML - use cache for single doc, parse fresh for multi-doc
-        if "---" in yaml_content:
-            # Multi-document: Always parse fresh (caching multiple docs is complex)
-            documents = list(yaml.safe_load_all(yaml_content))
-        else:
-            # Single document: Use cache if enabled
-            parsed = _parse_yaml_cached(yaml_content) if use_cache else yaml.safe_load(yaml_content)
-            documents = [parsed]
+        # Step 5: Build graph
+        graph = self._build_graph(config)
 
-        # Select document based on environment
-        if environment:
-            config = self._select_environment_config(documents, environment)
-        elif len(documents) > 1:
-            logger.warning(
-                f"Multi-document YAML detected ({len(documents)} documents) but no environment specified. "
-                f"Using first document. Specify environment parameter to select specific config."
-            )
-            config = documents[0]
-        else:
-            config = documents[0]
-
-        # Continue with validation
-        config = self._validate_yaml_config(config)
-
+        # Step 6: Extract pipeline config
         pipeline_config = self._extract_pipeline_config(config)
-
-        # Register common mappings for backward compatibility
-        self._register_common_mappings(config)
-
-        graph = self._build_graph_from_config(config)
 
         logger.info(
             "✅ Built pipeline '{name}' with {nodes} nodes, {ports} ports, {policies} policies",
@@ -283,486 +159,64 @@ class YamlPipelineBuilder:
 
         return graph, pipeline_config
 
-    def _select_environment_config(
-        self, documents: list[dict[str, Any]], environment: str
+    # --- Core Logic ---
+
+    def _parse_yaml(self, yaml_content: str, use_cache: bool) -> list[dict[str, Any]]:
+        """Parse YAML into list of documents."""
+        if "---" in yaml_content:
+            return list(yaml.safe_load_all(yaml_content))
+        parsed = _parse_yaml_cached(yaml_content) if use_cache else yaml.safe_load(yaml_content)
+        return [parsed]
+
+    def _select_environment(
+        self, documents: list[dict[str, Any]], environment: str | None
     ) -> dict[str, Any]:
-        """Select configuration document matching the specified environment.
+        """Select document by environment name."""
+        if environment:
+            for doc in documents:
+                if doc.get("metadata", {}).get("namespace") == environment:
+                    logger.info(f"Selected environment '{environment}' from multi-document YAML")
+                    return doc
 
-        Parameters
-        ----------
-        documents : list[dict[str, Any]]
-            List of parsed YAML documents
-        environment : str
-            Environment/namespace to match (e.g., 'dev', 'staging', 'prod')
+            available_envs = [
+                doc.get("metadata", {}).get("namespace", "default") for doc in documents
+            ]
+            raise YamlPipelineBuilderError(
+                f"Environment '{environment}' not found in YAML. "
+                f"Available environments: {', '.join(available_envs)}"
+            )
 
-        Returns
-        -------
-        dict[str, Any]
-            Selected configuration document
+        if len(documents) > 1:
+            logger.warning(
+                f"Multi-document YAML detected ({len(documents)} documents) "
+                "but no environment specified. "
+                "Using first document. Specify environment parameter to select specific config."
+            )
 
-        Raises
-        ------
-        YamlPipelineBuilderError
-            If no document matches the environment
-        """
-        for doc in documents:
-            metadata = doc.get("metadata", {})
-            namespace = metadata.get("namespace")
+        return documents[0]
 
-            if namespace == environment:
-                logger.info(f"Selected environment '{environment}' from multi-document YAML")
-                return doc
-
-        # Not found - provide helpful error message
-        available_envs = [doc.get("metadata", {}).get("namespace", "default") for doc in documents]
-        raise YamlPipelineBuilderError(
-            f"Environment '{environment}' not found in YAML. "
-            f"Available environments: {', '.join(available_envs)}"
-        )
-
-    def _validate_yaml_config(self, config: Any) -> dict[str, Any]:
-        """Validate a single YAML configuration document.
-
-        Parameters
-        ----------
-        config : Any
-            Configuration to validate (must be dict)
-
-        Returns
-        -------
-        dict[str, Any]
-            Validated configuration
-
-        Raises
-        ------
-        YamlPipelineBuilderError
-            If validation fails
-        """
-        # Ensure config is a dictionary
+    def _validate_config(self, config: Any) -> dict[str, Any]:
+        """Validate YAML structure."""
         if not isinstance(config, dict):
             raise YamlPipelineBuilderError(
                 f"YAML document must be a dictionary, got {type(config).__name__}"
             )
 
-        # Validate manifest format
         self._validate_manifest_format(config)
 
-        # Validate configuration
-        validation_result = self.validator.validate(config)
-
-        if not validation_result.is_valid:
-            errors = "\n".join(f"  ERROR: {error}" for error in validation_result.errors)
+        result = self.validator.validate(config)
+        if not result.is_valid:
+            errors = "\n".join(f"  ERROR: {error}" for error in result.errors)
             raise YamlPipelineBuilderError(f"YAML validation failed:\n{errors}")
 
-        # Log warnings
-        for warning in validation_result.warnings:
+        for warning in result.warnings:
             logger.warning(f"YAML validation warning: {warning}")
 
         return config
 
-    def _parse_and_validate_yaml(self, yaml_content: str, use_cache: bool = True) -> dict[str, Any]:
-        """Parse YAML content and validate the configuration.
-
-        Parameters
-        ----------
-        yaml_content : str
-            YAML content string to parse
-        use_cache : bool
-            Whether to use cached parsing (default: True)
-
-        Returns
-        -------
-        dict[str, Any]
-            Validated configuration dictionary
-
-        Raises
-        ------
-        YamlPipelineBuilderError
-            If YAML parsing or validation fails
-        """
-        try:
-            # Use cached function (module-level) or direct parsing
-            config = _parse_yaml_cached(yaml_content) if use_cache else yaml.safe_load(yaml_content)
-        except yaml.YAMLError as e:
-            raise YamlPipelineBuilderError(f"Invalid YAML content: {e}") from e
-
-        # Ensure config is a dictionary
-        if not isinstance(config, dict):
-            raise YamlPipelineBuilderError(
-                f"YAML root must be a dictionary, got {type(config).__name__}"
-            )
-
-        # Validate manifest format
-        self._validate_manifest_format(config)
-
-        # Validate configuration
-        validation_result = self.validator.validate(config)
-
-        if not validation_result.is_valid:
-            errors = "\n".join(f"  ERROR: {error}" for error in validation_result.errors)
-            raise YamlPipelineBuilderError(f"YAML validation failed:\n{errors}")
-
-        # Log warnings and suggestions
-        for warning in validation_result.warnings:
-            logger.warning("YAML validation warning: {msg}", msg=warning)
-        for suggestion in validation_result.suggestions:
-            logger.info("YAML validation suggestion: {msg}", msg=suggestion)
-
-        return config
-
-    def _build_graph_from_config(self, config: dict[str, Any]) -> DirectedGraph:
-        """Build DirectedGraph from validated configuration.
-
-        Parameters
-        ----------
-        config : dict[str, Any]
-            Validated YAML configuration
-
-        Returns
-        -------
-        DirectedGraph
-            Constructed graph with all nodes
-        """
-        graph = DirectedGraph()
-        nodes_list = config.get("spec", {}).get("nodes", [])
-
-        for node_config in nodes_list:
-            kind = node_config.get("kind", "")
-
-            if kind == "macro_invocation":
-                self._expand_macro_into_graph(graph, node_config)
-            else:
-                # Regular node creation using += operator
-                graph += self._build_node_from_config(node_config)
-
-        return graph
-
-    def _expand_macro_into_graph(self, graph: DirectedGraph, macro_config: dict[str, Any]) -> None:
-        """Expand a macro invocation and merge the resulting subgraph into the main graph.
-
-        Parameters
-        ----------
-        graph : DirectedGraph
-            Main graph to expand the macro into
-        macro_config : dict[str, Any]
-            Macro invocation configuration from YAML
-
-        Raises
-        ------
-        YamlPipelineBuilderError
-            If macro cannot be found or expanded
-        """
-        # Validate macro configuration structure
-        if "metadata" not in macro_config:
-            raise YamlPipelineBuilderError("macro_invocation must have 'metadata' section")
-
-        instance_name = macro_config["metadata"].get("name")
-        if not instance_name:
-            raise YamlPipelineBuilderError("macro_invocation must have metadata.name field")
-
-        if "spec" not in macro_config:
-            raise YamlPipelineBuilderError(
-                f"macro_invocation '{instance_name}' must have 'spec' section"
-            )
-
-        spec = macro_config["spec"]
-        macro_ref = spec.get("macro")
-        if not macro_ref:
-            raise YamlPipelineBuilderError(
-                f"macro_invocation '{instance_name}' must specify spec.macro field"
-            )
-
-        # Parse macro reference (e.g., "core:research" -> ("research", "core"))
-        macro_name, namespace = self._parse_macro_reference(macro_ref)
-
-        config_params = spec.get("config", {}).copy()  # Copy to avoid modifying original
-        inputs = spec.get("inputs", {})
-        dependencies = spec.get("dependencies", [])
-
-        # Convert schema types in macro config if present
-        if "output_schema" in config_params:
-            try:
-                config_params["output_schema"] = _convert_schema_types(
-                    config_params["output_schema"]
-                )
-                logger.debug(
-                    "Converted schema types for macro '{macro}'",
-                    macro=macro_ref,
-                )
-            except YamlPipelineBuilderError as e:
-                raise YamlPipelineBuilderError(
-                    f"Invalid output_schema in macro '{instance_name}': {e}"
-                ) from e
-
-        try:
-            # Registry automatically instantiates the macro with init_params
-            macro_instance = registry.get(
-                macro_name, namespace=namespace, init_params=config_params
-            )
-        except ComponentNotFoundError as e:
-            raise YamlPipelineBuilderError(
-                f"Macro '{namespace}:{macro_name}' not found in registry: {e}"
-            ) from e
-        except Exception as e:
-            raise YamlPipelineBuilderError(
-                f"Failed to instantiate macro '{macro_name}': {e}"
-            ) from e
-
-        # Validate it's actually a macro
-        if not isinstance(macro_instance, ConfigurableMacro):
-            type_name = type(macro_instance).__name__
-            raise YamlPipelineBuilderError(
-                f"Component '{macro_name}' is not a ConfigurableMacro (got {type_name})"
-            )
-
-        # Expand the macro into a subgraph
-        try:
-            subgraph = macro_instance.expand(
-                instance_name=instance_name, inputs=inputs, dependencies=dependencies
-            )
-        except Exception as e:
-            raise YamlPipelineBuilderError(
-                f"Failed to expand macro '{macro_name}' (instance '{instance_name}'): {e}"
-            ) from e
-
-        # Merge subgraph into main graph
-        self._merge_subgraph_into_graph(graph, subgraph, dependencies)
-
-        logger.info(
-            "✅ Expanded macro '{macro}' as '{instance}' ({nodes} nodes)",
-            macro=macro_ref,
-            instance=instance_name,
-            nodes=len(subgraph.nodes),
-        )
-
-    @staticmethod
-    def _parse_macro_reference(macro_ref: str) -> tuple[str, str]:
-        """Parse macro reference into (name, namespace).
-
-        Parameters
-        ----------
-        macro_ref : str
-            Macro reference like "core:research" or "research"
-
-        Returns
-        -------
-        tuple[str, str]
-            (macro_name, namespace)
-
-        Examples
-        --------
-        >>> YamlPipelineBuilder._parse_macro_reference("core:research")
-        ('research', 'core')
-        >>> YamlPipelineBuilder._parse_macro_reference("research")
-        ('research', 'core')
-        """
-        if NAMESPACE_SEPARATOR in macro_ref:
-            namespace, macro_name = macro_ref.split(NAMESPACE_SEPARATOR, 1)
-        else:
-            macro_name = macro_ref
-            namespace = "core"
-
-        return macro_name, namespace
-
-    @staticmethod
-    def _merge_subgraph_into_graph(
-        graph: DirectedGraph, subgraph: DirectedGraph, external_dependencies: list[str]
-    ) -> None:
-        """Merge a subgraph into the main graph.
-
-        Parameters
-        ----------
-        graph : DirectedGraph
-            Main graph to merge into
-        subgraph : DirectedGraph
-            Subgraph to merge (from macro expansion)
-        external_dependencies : list[str]
-            List of node names in the main graph that the subgraph depends on
-        """
-        # Merge subgraph using |= operator for cleaner code
-        if not external_dependencies:
-            # Simple case: no external dependencies, direct merge
-            graph |= subgraph
-        else:
-            # Need to add external dependencies to entry nodes before merging
-            modified_subgraph = DirectedGraph()
-            # Explicitly iterate over node values for safety
-            for node in subgraph.nodes.values():
-                internal_deps = subgraph.get_dependencies(node.name)
-                if not internal_deps:
-                    # Entry node - add external dependencies
-                    modified_subgraph += node.after(*external_dependencies)
-                else:
-                    # Internal node - keep original dependencies
-                    modified_subgraph += node
-
-            # Merge the modified subgraph using |= operator
-            graph |= modified_subgraph
-
-    def _build_node_from_config(self, node_config: dict[str, Any]) -> NodeSpec:
-        """Build a single NodeSpec from node configuration.
-
-        Parameters
-        ----------
-        node_config : dict[str, Any]
-            Node configuration from YAML
-
-        Returns
-        -------
-        NodeSpec
-            Constructed node specification
-
-        Raises
-        ------
-        YamlPipelineBuilderError
-            If node configuration is missing required fields
-        """
-        # Validate node structure
-        if "kind" not in node_config:
-            raise YamlPipelineBuilderError("Node configuration missing required 'kind' field")
-
-        if "metadata" not in node_config:
-            raise YamlPipelineBuilderError(
-                f"Node configuration for kind '{node_config['kind']}' missing 'metadata' section"
-            )
-
-        node_id = node_config["metadata"].get("name")
-        if not node_id:
-            raise YamlPipelineBuilderError(
-                f"Node configuration for kind '{node_config['kind']}' missing metadata.name"
-            )
-
-        node_type, namespace = self._parse_kind(node_config["kind"])
-        params = node_config.get("spec", {}).copy()  # Copy to avoid modifying original
-        deps = params.pop("dependencies", [])
-
-        # Process parameters
-        params = self._process_node_params(node_id, node_type, params)
-
-        node = self._create_node_from_factory(node_id, node_type, namespace, params)
-
-        if deps:
-            node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
-
-        return node
-
-    def _process_node_params(
-        self, node_id: str, node_type: str, params: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Process and transform node parameters.
-
-        Parameters
-        ----------
-        node_id : str
-            Node identifier
-        node_type : str
-            Type of node (e.g., "llm", "function")
-        params : dict[str, Any]
-            Raw node parameters
-
-        Returns
-        -------
-        dict[str, Any]
-            Processed parameters
-        """
-        if field_mapping := params.get("field_mapping"):
-            resolved_mapping = self.field_mapping_registry.get(field_mapping)
-            params["field_mapping"] = resolved_mapping
-            logger.debug(
-                "Node '{node_id}' using field mapping: {mapping}",
-                node_id=node_id,
-                mapping=resolved_mapping,
-            )
-
-        # Convert schema types for parser nodes
-        if node_type == "parser" and "output_schema" in params:
-            try:
-                params["output_schema"] = _convert_schema_types(params["output_schema"])
-                logger.debug(
-                    "Converted schema types for parser node '{node_id}'",
-                    node_id=node_id,
-                )
-            except YamlPipelineBuilderError as e:
-                raise YamlPipelineBuilderError(
-                    f"Invalid output_schema in parser node '{node_id}': {e}"
-                ) from e
-
-        # Auto-convert LLM nodes with incompatible template + schema combinations
-        if node_type == "llm":
-            logger.debug(
-                "📋 LLM node '{node_id}' original params: {params}",
-                node_id=node_id,
-                params=list(params.keys()),
-            )
-            params = self._auto_convert_llm_node(node_id, params)
-            logger.debug(
-                "📋 LLM node '{node_id}' final params: {params}",
-                node_id=node_id,
-                params=list(params.keys()),
-            )
-
-        # Resolve function references
-        if node_type == "function" and "fn" in params:
-            func_ref = params["fn"]
-            if isinstance(func_ref, str) and func_ref in self.registered_functions:
-                params["fn"] = self.registered_functions[func_ref]
-
-        return params
-
-    @staticmethod
-    def _create_node_from_factory(
-        node_id: str, node_type: str, namespace: str, params: dict[str, Any]
-    ) -> NodeSpec:
-        """Create NodeSpec using registry factory.
-
-        Parameters
-        ----------
-        node_id : str
-            Node identifier
-        node_type : str
-            Type of node
-        namespace : str
-            Component namespace
-        params : dict[str, Any]
-            Processed node parameters
-
-        Returns
-        -------
-        NodeSpec
-            Created node specification
-
-        Raises
-        ------
-        TypeError
-            If factory is not callable or doesn't return NodeSpec
-        """
-        ensure_bootstrapped()
-
-        factory_name = f"{node_type}_node"
-        factory = registry.get(factory_name, namespace=namespace)
-
-        if not callable(factory):
-            raise TypeError(f"Expected callable factory for {factory_name}, got {type(factory)}")
-
-        node = factory(node_id, **params)
-
-        if not isinstance(node, NodeSpec):
-            raise TypeError(f"Factory {factory_name} did not return a NodeSpec")
-
-        return node
-
     @staticmethod
     def _validate_manifest_format(config: dict[str, Any]) -> None:
-        """Validate that config uses declarative manifest format.
-
-        Args
-        ----
-            config: Raw YAML configuration
-
-        Raises
-        ------
-            YamlPipelineBuilderError: If config is not in manifest format
-        """
+        """Validate declarative manifest format."""
         if "kind" not in config:
             raise YamlPipelineBuilderError(
                 "YAML must use declarative manifest format with 'kind' field. "
@@ -781,137 +235,349 @@ class YamlPipelineBuilder:
         if "metadata" not in config:
             raise YamlPipelineBuilderError("Manifest YAML must have 'metadata' field")
 
+    def _build_graph(self, config: dict[str, Any]) -> DirectedGraph:
+        """Build DirectedGraph using entity plugins."""
+        graph = DirectedGraph()
+        nodes_list = config.get("spec", {}).get("nodes", [])
+
+        for node_config in nodes_list:
+            # Find plugin that can handle this entity
+            for plugin in self.entity_plugins:
+                if plugin.can_handle(node_config):
+                    result = plugin.build(node_config, self, graph)
+                    if result is not None:
+                        graph += result
+                    break
+            else:
+                # No plugin handled it - error
+                kind = node_config.get("kind", "unknown")
+                raise YamlPipelineBuilderError(f"No plugin can handle kind: {kind}")
+
+        return graph
+
     @staticmethod
-    def _parse_kind(kind: str) -> tuple[str, str]:
-        """Parse kind into (node_type, namespace).
-
-        Supports both simple kinds and namespace-qualified kinds:
-        - "llm_node" -> ("llm", "core")
-        - "my-plugin:dalle_node" -> ("dalle", "my-plugin")
-
-        Args
-        ----
-            kind: Kind string from YAML
-
-        Returns
-        -------
-            Tuple of (node_type, namespace)
-        """
-        if NAMESPACE_SEPARATOR in kind:
-            # Namespace-qualified kind
-            namespace, node_kind = kind.split(NAMESPACE_SEPARATOR, 1)
-        else:
-            # Simple kind - assume core namespace
-            namespace = "core"
-            node_kind = kind
-
-        # Remove '_node' suffix if present (e.g., "llm_node" -> "llm")
-        node_type = node_kind.removesuffix("_node")
-
-        return node_type, namespace
-
-    def _extract_pipeline_config(self, config: dict[str, Any]) -> PipelineConfig:
-        """Extract complete pipeline configuration including ports and policies.
-
-        Parameters
-        ----------
-        config : dict[str, Any]
-            Raw YAML configuration
-
-        Returns
-        -------
-        PipelineConfig
-            Complete pipeline configuration with ports, policies, and metadata
-        """
-        metadata_section = config.get("metadata", {})
+    def _extract_pipeline_config(config: dict[str, Any]) -> PipelineConfig:
+        """Extract PipelineConfig from YAML."""
         spec = config.get("spec", {})
+        metadata = config.get("metadata", {})
 
-        ports = spec.get("ports", {})
-        type_ports = spec.get("type_ports", {})
-        policies = spec.get("policies", {})
-
-        base_fields = ["name", "description"]
-        optional_fields = ["version", "author", "tags", "environment"]
-
-        metadata = {k: metadata_section.get(k) for k in base_fields} | {
-            k: metadata_section[k] for k in optional_fields if k in metadata_section
-        }
-
-        pipeline_config = PipelineConfig(
-            ports=ports,
-            type_ports=type_ports,
-            policies=policies,
+        return PipelineConfig(
+            ports=spec.get("ports", {}),
+            type_ports=spec.get("type_ports", {}),
+            policies=spec.get("policies", {}),
             metadata=metadata,
             nodes=spec.get("nodes", []),
         )
 
-        logger.debug(
-            "Extracted pipeline config: {ports} ports, {policies} policies",
-            ports=len(ports),
-            policies=len(policies),
+
+# ============================================================================
+# Entity Plugins - Each handles one entity type
+# ============================================================================
+
+
+class MacroEntityPlugin:
+    """Plugin for handling macro_invocation entities."""
+
+    def can_handle(self, node_config: dict[str, Any]) -> bool:
+        """Handle macro_invocation kind."""
+        return node_config.get("kind") == "macro_invocation"
+
+    def build(
+        self, node_config: dict[str, Any], builder: YamlPipelineBuilder, graph: DirectedGraph
+    ) -> NodeSpec | None:
+        """Expand macro into subgraph and merge into main graph."""
+        instance_name = node_config["metadata"]["name"]
+        spec = node_config.get("spec", {})
+        macro_ref = spec.get("macro")
+        if not macro_ref:
+            raise YamlPipelineBuilderError(f"Macro '{instance_name}' missing spec.macro field")
+
+        # Parse macro reference
+        macro_name, namespace = self._parse_macro_ref(macro_ref)
+
+        # Get config params for macro initialization
+        config_params = spec.get("config", {}).copy()
+        inputs = spec.get("inputs", {})
+        dependencies = spec.get("dependencies", [])
+
+        # Get macro from registry with init_params (macro handles schema conversion)
+        try:
+            macro_instance_obj: object = registry.get(
+                macro_name, namespace=namespace, init_params=config_params
+            )
+        except ComponentNotFoundError as e:
+            raise YamlPipelineBuilderError(
+                f"Macro '{namespace}:{macro_name}' not found: {e}"
+            ) from e
+        except Exception as e:
+            raise YamlPipelineBuilderError(
+                f"Failed to instantiate macro '{macro_name}': {e}"
+            ) from e
+
+        # Validate it's actually a macro
+        if not isinstance(macro_instance_obj, ConfigurableMacro):
+            type_name = type(macro_instance_obj).__name__
+            raise YamlPipelineBuilderError(
+                f"Component '{macro_name}' is not a ConfigurableMacro (got {type_name})"
+            )
+
+        macro_instance: ConfigurableMacro = macro_instance_obj
+
+        # Expand macro
+        try:
+            subgraph = macro_instance.expand(
+                instance_name=instance_name, inputs=inputs, dependencies=dependencies
+            )
+        except Exception as e:
+            raise YamlPipelineBuilderError(
+                f"Failed to expand macro '{macro_name}' (instance '{instance_name}'): {e}"
+            ) from e
+
+        # Merge subgraph into main graph
+        self._merge_subgraph(graph, subgraph, dependencies)
+
+        logger.info(
+            "✅ Expanded macro '{macro}' as '{instance}' ({nodes} nodes)",
+            macro=macro_ref,
+            instance=instance_name,
+            nodes=len(subgraph.nodes),
         )
 
-        return pipeline_config
-
-    def _register_common_mappings(self, config: dict[str, Any]) -> None:
-        """Register common field mappings from manifest config.
-
-        Args
-        ----
-            config: Pipeline configuration
-        """
-        common_mappings = config.get("spec", {}).get("common_field_mappings", {})
-
-        for name, mapping in common_mappings.items():
-            self.field_mapping_registry.register(name, mapping)
-            logger.debug(
-                "Registered common field mapping '{name}': {mapping}", name=name, mapping=mapping
-            )
+        # Return None - subgraph already merged into graph
+        return None
 
     @staticmethod
-    def _auto_convert_llm_node(node_id: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Auto-convert LLM node parameters to handle common configuration incompatibilities.
+    def _merge_subgraph(
+        graph: DirectedGraph, subgraph: DirectedGraph, external_deps: list[str]
+    ) -> None:
+        """Merge subgraph into main graph with external dependencies."""
+        if not external_deps:
+            graph |= subgraph
+        else:
+            # Add external deps to entry nodes
+            modified = DirectedGraph()
+            for node in subgraph.nodes.values():
+                if not subgraph.get_dependencies(node.name):
+                    # Entry node - add external dependencies
+                    modified += node.after(*external_deps)
+                else:
+                    # Internal node - keep original
+                    modified += node
+            graph |= modified
 
-        Specifically handles the case where prompt_template (string) is used with output_schema,
-        which requires structured templates. Automatically converts to ChatPromptTemplate.
+    @staticmethod
+    def _parse_macro_ref(ref: str) -> tuple[str, str]:
+        """Parse 'namespace:name' or 'name' into (name, namespace)."""
+        return _parse_namespaced_ref(ref)
 
-        Args
-        ----
-            node_id: Node identifier for logging
-            params: Original node parameters
 
-        Returns
-        -------
-            Updated parameters with auto-conversions applied
-        """
-        params = params.copy()
+class NodeEntityPlugin:
+    """Plugin for handling all node types (llm, function, agent, etc.)."""
 
-        # Check for incompatible prompt_template + output_schema combination
-        has_string_template = "prompt_template" in params and isinstance(
-            params["prompt_template"], str
-        )
-        has_output_schema = "output_schema" in params
-        has_parse_as_json = params.get("parse_as_json", False)
+    def __init__(self, builder: YamlPipelineBuilder):
+        """Initialize with reference to builder for shared state."""
+        self.builder = builder
 
-        if has_string_template and (has_output_schema or has_parse_as_json):
-            # Auto-convert string template to structured template
-            original_template = params["prompt_template"]
+    def can_handle(self, node_config: dict[str, Any]) -> bool:
+        """Handle everything except macro_invocation."""
+        return node_config.get("kind") != "macro_invocation"
 
-            # Warn about parse_as_json removal (semantic change)
-            if "parse_as_json" in params:
-                logger.warning(
-                    f"⚠️  LLM node '{node_id}': Removing 'parse_as_json' parameter. "
-                    f"ChatPromptTemplate handles JSON parsing automatically when output_schema is present."
-                )
-                del params["parse_as_json"]
-
-            # Keep the prompt_template parameter name but change the value type
-            chat_template = ChatPromptTemplate(human_message=original_template)
-            params["prompt_template"] = chat_template
-
-            logger.info(
-                f"🔄 Auto-converted LLM node '{node_id}': "
-                f"prompt_template (string) + output_schema → prompt_template (ChatPromptTemplate)"
+    def build(
+        self, node_config: dict[str, Any], builder: YamlPipelineBuilder, graph: DirectedGraph
+    ) -> NodeSpec:
+        """Build node from config."""
+        # Validate structure
+        if "kind" not in node_config:
+            raise YamlPipelineBuilderError("Node missing 'kind' field")
+        if "metadata" not in node_config or "name" not in node_config["metadata"]:
+            raise YamlPipelineBuilderError(
+                f"Node '{node_config.get('kind')}' missing metadata.name"
             )
 
-        return params
+        kind = node_config["kind"]
+        node_id = node_config["metadata"]["name"]
+        spec = node_config.get("spec", {}).copy()
+        deps = spec.pop("dependencies", [])
+
+        # Parse kind into (type, namespace)
+        node_type, namespace = self._parse_kind(kind)
+
+        # Get factory from registry
+        factory_obj: object = registry.get(f"{node_type}_node", namespace=namespace)
+
+        # Validate it's callable
+        if not callable(factory_obj):
+            raise YamlPipelineBuilderError(
+                f"Node factory for '{node_type}_node' "
+                f"is not callable (got {type(factory_obj).__name__})"
+            )
+
+        factory = cast("Callable[..., NodeSpec]", factory_obj)
+
+        # Create node
+        node: NodeSpec = factory(node_id, **spec)
+
+        # Add dependencies
+        if deps:
+            node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
+
+        return node
+
+    @staticmethod
+    def _parse_kind(kind: str) -> tuple[str, str]:
+        """Parse 'namespace:type' or 'type' into (type, namespace)."""
+        node_kind, namespace = _parse_namespaced_ref(kind)
+        node_type = node_kind.removesuffix("_node")
+        return node_type, namespace
+
+
+# ============================================================================
+# Preprocessing Plugins
+# ============================================================================
+
+
+class EnvironmentVariablePlugin:
+    """Resolve ${VAR} and ${VAR:default} in YAML."""
+
+    ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*?)(?::([^}]*))?\}")
+
+    def process(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Recursively resolve environment variables."""
+        result = _resolve_env_vars(config, self.ENV_VAR_PATTERN)
+        assert isinstance(result, dict)  # nosec B101 - type narrowing
+        return result
+
+
+@singledispatch
+def _resolve_env_vars(obj: Any, pattern: re.Pattern[str]) -> Any:
+    """Recursively resolve ${VAR} in any structure."""
+    return obj
+
+
+@_resolve_env_vars.register
+def _(obj: str, pattern: re.Pattern[str]) -> str | int | float | bool:
+    """Resolve ${VAR} in strings with type coercion."""
+
+    def replacer(match: re.Match[str]) -> str:
+        var_name, default = match.group(1), match.group(2)
+        env_value = os.environ.get(var_name)
+        if env_value is None:
+            if default is not None:
+                return default
+            raise YamlPipelineBuilderError(f"Environment variable '${{{var_name}}}' not set")
+        return env_value
+
+    resolved = pattern.sub(replacer, obj)
+    if resolved != obj:  # Type coercion if changed
+        if resolved.lower() in ("true", "yes", "1"):
+            return True
+        if resolved.lower() in ("false", "no", "0"):
+            return False
+        with suppress(ValueError):
+            return int(resolved)
+        with suppress(ValueError):
+            return float(resolved)
+    return resolved
+
+
+@_resolve_env_vars.register(dict)
+def _(obj: dict, pattern: re.Pattern[str]) -> dict[str, Any]:
+    """Resolve ${VAR} in dict values."""
+    return {k: _resolve_env_vars(v, pattern) for k, v in obj.items()}
+
+
+@_resolve_env_vars.register(list)
+def _(obj: list, pattern: re.Pattern[str]) -> list[Any]:
+    """Resolve ${VAR} in list items."""
+    return [_resolve_env_vars(item, pattern) for item in obj]
+
+
+class TemplatePlugin:
+    """Render Jinja2 templates in YAML (e.g., {{ variables.model }})."""
+
+    def __init__(self) -> None:
+        # YAML config templates don't contain HTML, so autoescape=False is safe
+        # This is for configuration files, not web content
+        self.env = Environment(autoescape=False, keep_trailing_newline=True)  # nosec B701
+
+    def process(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Render Jinja2 templates with config as context."""
+        result = _render_templates(config, config, self.env)
+        assert isinstance(result, dict)  # nosec B101 - type narrowing
+        return result
+
+
+@singledispatch
+def _render_templates(obj: Any, context: dict[str, Any], env: Any) -> Any:
+    """Recursively render Jinja2 templates."""
+    return obj
+
+
+@_render_templates.register
+def _(obj: str, context: dict[str, Any], env: Any) -> str | int | float | bool:
+    """Render Jinja2 template in string."""
+    if "{{" not in obj and "{%" not in obj:
+        return obj
+
+    try:
+        rendered: str = env.from_string(obj).render(context)
+        # Type coercion
+        with suppress(ValueError):
+            return int(rendered)
+        with suppress(ValueError):
+            return float(rendered)
+        if rendered.lower() in ("true", "yes"):
+            return True
+        if rendered.lower() in ("false", "no"):
+            return False
+        return rendered
+    except TemplateSyntaxError as e:
+        raise YamlPipelineBuilderError(
+            f"Invalid Jinja2 template syntax: {e}\nTemplate: {obj}"
+        ) from e
+    except UndefinedError as e:
+        raise YamlPipelineBuilderError(
+            f"Undefined variable in template: {e}\nTemplate: {obj}"
+        ) from e
+
+
+@_render_templates.register(dict)
+def _(obj: dict, context: dict[str, Any], env: Any) -> dict[str, Any]:
+    """Render templates in dict values."""
+    return {k: _render_templates(v, context, env) for k, v in obj.items()}
+
+
+@_render_templates.register(list)
+def _(obj: list, context: dict[str, Any], env: Any) -> list[Any]:
+    """Render templates in list items."""
+    return [_render_templates(item, context, env) for item in obj]
+
+
+# ============================================================================
+# Utilities
+# ============================================================================
+
+
+@lru_cache(maxsize=32)
+def _parse_yaml_cached(yaml_content: str) -> Any:
+    """Cached YAML parsing.
+
+    Returns dict[str, Any] in practice, but yaml.safe_load returns Any.
+    """
+    return yaml.safe_load(yaml_content)
+
+
+def _parse_namespaced_ref(ref: str, default_namespace: str = "core") -> tuple[str, str]:
+    """Parse 'namespace:name' or 'name' into (name, namespace).
+
+    Args:
+        ref: Reference string (e.g., "core:llm" or "llm")
+        default_namespace: Namespace to use if not specified
+
+    Returns:
+        Tuple of (name, namespace)
+    """
+    if NAMESPACE_SEPARATOR in ref:
+        namespace, name = ref.split(NAMESPACE_SEPARATOR, 1)
+        return name, namespace
+    return ref, default_namespace

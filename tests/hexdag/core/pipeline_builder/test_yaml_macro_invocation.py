@@ -183,13 +183,11 @@ metadata:
   name: test-pipeline
 spec:
   nodes:
-    - kind: function_node
+    - kind: prompt_node
       metadata:
         name: input_node
       spec:
-        fn: test_input_fn
-        dependencies: []
-
+        template: "Input data"
     - kind: macro_invocation
       metadata:
         name: processing
@@ -201,10 +199,6 @@ spec:
         dependencies: [input_node]
 """
         builder = YamlPipelineBuilder()
-
-        # Register a simple function for the function node
-        builder.register_function("test_input_fn", lambda _input: {"data": "test"})
-
         graph, config = builder.build_from_yaml_string(yaml_content, use_cache=False)
 
         # Should have 3 nodes total (1 regular + 2 from macro)
@@ -354,86 +348,8 @@ spec:
 """
         builder = YamlPipelineBuilder()
 
-        with pytest.raises(YamlPipelineBuilderError, match="not found in registry"):
+        with pytest.raises(YamlPipelineBuilderError, match="not found"):
             builder.build_from_yaml_string(yaml_content, use_cache=False)
-
-    def test_macro_reference_parsing(self):
-        """Test parsing of macro references with and without namespace."""
-        # With namespace
-        name, ns = YamlPipelineBuilder._parse_macro_reference("test:simple_macro")
-        assert name == "simple_macro"
-        assert ns == "test"
-
-        # Without namespace (defaults to core)
-        name, ns = YamlPipelineBuilder._parse_macro_reference("simple_macro")
-        assert name == "simple_macro"
-        assert ns == "core"
-
-    def test_mixed_nodes_and_macros(self):
-        """Test pipeline with both regular nodes and macro invocations."""
-        yaml_content = """
-apiVersion: hexdag.omniviser.io/v1alpha1
-kind: Pipeline
-metadata:
-  name: test-pipeline
-spec:
-  nodes:
-    - kind: function_node
-      metadata:
-        name: input
-      spec:
-        fn: test_input
-        dependencies: []
-
-    - kind: macro_invocation
-      metadata:
-        name: processing
-      spec:
-        macro: test:simple_test_macro
-        config:
-          steps: 2
-        inputs: {}
-        dependencies: [input]
-
-    - kind: function_node
-      metadata:
-        name: output
-      spec:
-        fn: test_output
-        dependencies: [processing_step1]
-"""
-        builder = YamlPipelineBuilder()
-        builder.register_function("test_input", lambda _input: {"data": "test"})
-        builder.register_function("test_output", lambda _input: {"result": "done"})
-
-        graph, config = builder.build_from_yaml_string(yaml_content, use_cache=False)
-
-        # Should have 4 nodes (2 regular + 2 from macro)
-        assert len(graph.nodes) == 4
-        assert "input" in graph.nodes
-        assert "processing_step0" in graph.nodes
-        assert "processing_step1" in graph.nodes
-        assert "output" in graph.nodes
-
-        # Check dependencies
-        assert "input" in graph.get_dependencies("processing_step0")
-        assert "processing_step1" in graph.get_dependencies("output")
-
-
-class TestMacroReferenceHelpers:
-    """Tests for macro reference parsing and loading helpers."""
-
-    def test_parse_macro_reference_with_namespace(self):
-        """Test parsing namespace-qualified macro references."""
-        name, ns = YamlPipelineBuilder._parse_macro_reference("custom:my_macro")
-        assert name == "my_macro"
-        assert ns == "custom"
-
-    def test_parse_macro_reference_without_namespace(self):
-        """Test parsing macro references without namespace."""
-        name, ns = YamlPipelineBuilder._parse_macro_reference("my_macro")
-        assert name == "my_macro"
-        assert ns == "core"
 
     def test_load_macro_from_registry_success(self):
         """Test successful macro loading from registry."""

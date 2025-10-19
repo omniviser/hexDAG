@@ -20,12 +20,7 @@ from hexdag.core.domain import DirectedGraph, NodeSpec
 from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.orchestration.prompt import FewShotPromptTemplate, PromptTemplate
 
-# Agent Factory system exports
-from hexdag.core.pipeline_builder import (
-    PipelineCatalog,
-    PipelineDefinition,
-    get_catalog,
-)
+# YAML Workflow Builder
 from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 # Port interfaces
@@ -119,8 +114,4 @@ __all__ = [
     "InMemoryMemory",
     "MockLLM",
     "MockDatabaseAdapter",
-    # Agent Factory System
-    "PipelineDefinition",
-    "PipelineCatalog",
-    "get_catalog",
 ]

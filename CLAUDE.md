@@ -45,9 +45,9 @@ uv run pytest
 uv run pytest --cov=hexai --cov-report=html --cov-report=term-missing
 
 # Run specific test areas
-uv run pytest tests/hexai/agent_factory/ -x --tb=short  # Agent factory tests
-uv run pytest tests/hexai/core/                        # Core framework tests
-uv run pytest tests/hexai/validation/                  # Validation tests
+uv run pytest tests/hexdag/pipeline_builder/ -x --tb=short  # Pipeline builder tests
+uv run pytest tests/hexdag/core/                        # Core framework tests
+uv run pytest tests/hexdag/validation/                  # Validation tests
 
 # Run doctests (tests embedded in docstrings)
 uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/
@@ -114,18 +114,17 @@ hexDAG follows hexagonal architecture with clear separation of concerns:
 
 ### Core Framework Structure
 ```
-hexai/
+hexdag/
 ├── core/
 │   ├── domain/          # Core business logic (DAG, NodeSpec, DirectedGraph)
-│   ├── application/     # Use cases (Orchestrator, NodeFactory)
-│   │   ├── nodes/       # Node implementations (LLMNode, AgentNode, etc.)
-│   │   ├── events/      # Event system for observability
-│   │   └── prompt/      # Prompt templating system
+│   ├── orchestration/   # Orchestrator and execution engine
+│   ├── pipeline_builder/# YAML pipeline building and compilation
 │   ├── ports/           # Interface definitions (LLM, Database, Memory)
 │   └── validation/      # Type validation and schema conversion
-├── adapters/            # External service implementations
-│   ├── mock/           # Mock implementations for testing
-├── agent_factory/       # YAML pipeline building and compilation
+├── builtin/
+│   ├── nodes/          # Node implementations (LLMNode, AgentNode, etc.)
+│   ├── adapters/       # Built-in adapter implementations
+│   └── macros/         # Reusable macro components
 └── cli/                # Command-line interface
 ```
 
@@ -568,7 +567,7 @@ Some existing adapters use the old `ConfigurableAdapter` pattern with Config cla
 
 ## Working with YAML Pipelines
 
-YAML pipelines are built using `YamlPipelineBuilder` in `hexai/agent_factory/`:
+YAML pipelines are built using `YamlPipelineBuilder` in `hexdag/core/pipeline_builder/`:
 
 ```yaml
 name: example_workflow
