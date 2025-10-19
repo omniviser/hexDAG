@@ -16,68 +16,236 @@
 
 **Every AI framework promises simplicity. Then you hit production.**
 
-You need parallel agents, memory persistence, compliance policies, error handling, and suddenly your "simple" LangChain app is 5,000 lines of spaghetti code.
+You need parallel agents, memory persistence, compliance policies, error handling, and suddenly your "simple" LangChain app is 5,000 lines of spaghetti code and breaks in production.
 
 ## 💡 What If Building Production AI Was This Simple?
 
+## Example 1: Investment Research Platform
+
+<details>
+<summary>📊 Click to see the complete YAML (yes, this is production code)</summary>
+
 ```yaml
-# A complete investment research assistant - actually running in hedge funds
 apiVersion: hexdag/v1
 kind: Pipeline
 metadata:
-  name: investment-research-prod
+  name: investment-research
+  description: AI-powered investment research with multi-agent collaboration
+
 spec:
-  adapters:
-    llm: openai        # Swap to Claude/Llama with ONE line
-    memory: redis      # Persistent memory across sessions
-    database: postgres # Production data storage
-
-  policies:
-    - type: risk_assessment
-      config:
-        risk_threshold: 0.8
-        require_approval: true  # Human-in-the-loop for high-risk trades
-
-    - type: compliance_check
-      config:
-        restricted_sectors: ["weapons", "tobacco"]
-        regulatory_framework: "SEC"
-
   nodes:
     - type: function
       id: market_data_fetch
       params:
-        function_name: fetch_bloomberg_data
+        function_name: fetch_market_data
+        module: __main__
+      depends_on: []
 
-    - type: reasoning_agent
+    - type: macro_invocation
       id: fundamental_analyst
+      macro: reasoning_agent
       params:
         initial_prompt: |
-          Analyze {{market_data_fetch.company_data}}
-          Focus on: Financial health, growth, competitive position
-        tools: [calculate_ratios, compare_to_sector]
+          Analyze company data: {{market_data_fetch.company_data}}
+
+          Provide detailed fundamental analysis:
+          1. Financial health (balance sheet, P&L, cash flow)
+          2. Growth prospects (revenue trends, market expansion)
+          3. Competitive positioning (market share, moat)
+          4. Valuation (P/E, P/B, DCF)
+          5. Investment recommendation (conviction 1-10)
+
+        max_steps: "{{env.max_analysis_steps | default(3)}}"
+        tools: [calculate_ratios, compare_to_sector, dcf_valuation]
       depends_on: [market_data_fetch]
 
-    - type: reasoning_agent
+    - type: macro_invocation
       id: technical_analyst
+      macro: reasoning_agent
       params:
         initial_prompt: |
-          Analyze price data: {{market_data_fetch.price_history}}
-          Identify: Trends, support/resistance, key indicators
-        tools: [calculate_indicators]
+          Analyze price/volume: {{market_data_fetch.price_history}}
+
+          Technical analysis required:
+          1. Trend identification (Dow Theory)
+          2. Support/resistance levels
+          3. Momentum indicators (RSI, MACD)
+          4. Volume analysis
+          5. Entry/exit points with stops
+
+        tools: [calculate_indicators, identify_patterns]
       depends_on: [market_data_fetch]
 
-    - type: conversation
+    - type: macro_invocation
+      id: risk_analyst
+      macro: reasoning_agent
+      params:
+        initial_prompt: |
+          Assess risks for {{market_data_fetch.symbol}}:
+          - Fundamental: {{fundamental_analyst.output}}
+          - Technical: {{technical_analyst.output}}
+
+          Analyze: Market risk, company risk, sector risk,
+          liquidity, black swans, Sharpe ratio, allocation %
+
+        tools: [calculate_var, stress_testing]
+      depends_on: [fundamental_analyst, technical_analyst]
+
+    - type: macro_invocation
       id: research_dialogue
+      macro: conversation
       params:
         system_prompt: |
-          Synthesize analysis from:
-          - Fundamental: {{fundamental_analyst.analysis}}
-          - Technical: {{technical_analyst.analysis}}
-        memory_key: "research_{{market_data_fetch.symbol}}"
-      depends_on: [fundamental_analyst, technical_analyst]
+          Synthesize all analysis into actionable guidance.
+          Be specific about entry, position size, and risk.
+
+        conversation_id: "research_{{market_data_fetch.symbol}}"
+        max_history: 20
+      depends_on: [fundamental_analyst, technical_analyst, risk_analyst]
+
+# Production environment with compliance
+---
+apiVersion: hexdag/v1
+kind: Environment
+metadata:
+  name: prod
+
+spec:
+  adapters:
+    llm: openai        # Or claude, llama, etc.
+    memory: sqlite     # Persistent conversation history
+    database: postgres # Market data storage
+
+  policies:
+    - type: compliance_check
+      config:
+        restricted_sectors: [cannabis, weapons, tobacco]
+        regulatory_framework: "SEC"
+        require_disclaimer: true
+
+    - type: market_hours
+      config:
+        market_open: "09:30"
+        market_close: "16:00"
+        timezone: "EST"
+
+    - type: position_sizing
+      config:
+        max_position_pct: 10
+        max_sector_exposure: 30
 ```
 
+</details>
+
+**Result:** Three AI agents analyze in parallel → Risk assessment → Synthesized report. All with compliance, audit trails, and position sizing built-in.
+
+### Example 2: Automated Code Review & Security Audit
+
+<details>
+<summary>🔒 Click to see the security audit pipeline</summary>
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: code-review-security
+  description: Automated code review with security and compliance
+
+spec:
+  nodes:
+    - type: function
+      id: code_loader
+      params:
+        function_name: load_code_for_review
+      depends_on: []
+
+    - type: function
+      id: static_analyzer
+      params:
+        function_name: run_static_analysis
+      depends_on: [code_loader]
+
+    - type: macro_invocation
+      id: security_scanner
+      macro: reasoning_agent
+      params:
+        initial_prompt: |
+          Security review for:
+          Code: {{code_loader.code}}
+          Static analysis: {{static_analyzer.results}}
+
+          Check for:
+          1. OWASP Top 10 vulnerabilities
+          2. Authentication/authorization issues
+          3. Data exposure risks
+          4. Injection vulnerabilities
+          5. Cryptographic practices
+          6. Supply chain risks
+
+          Provide line numbers and fixes.
+
+        tools: [scan_dependencies, check_cve_database, analyze_crypto]
+      depends_on: [code_loader, static_analyzer]
+
+    - type: macro_invocation
+      id: code_reviewer
+      macro: reasoning_agent
+      params:
+        initial_prompt: |
+          Review code for:
+          1. Architecture and patterns
+          2. Maintainability
+          3. Error handling
+          4. Performance
+          5. Test coverage
+          6. Documentation
+
+        tools: [calculate_complexity, check_test_coverage]
+      depends_on: [code_loader]
+
+    - type: macro_invocation
+      id: review_discussion
+      macro: conversation
+      params:
+        system_prompt: |
+          Help developer understand feedback from:
+          Security: {{security_scanner.output}}
+          Code Review: {{code_reviewer.output}}
+
+          Be constructive with specific examples.
+
+        conversation_id: "review_{{code_loader.pr_number}}"
+        tools: [suggest_fix, generate_test]
+      depends_on: [security_scanner, code_reviewer]
+
+# Production policies
+---
+apiVersion: hexdag/v1
+kind: Environment
+metadata:
+  name: prod
+
+spec:
+  policies:
+    - type: security_vulnerability
+      config:
+        block_critical: true
+        scan_depth: deep
+
+    - type: license_compliance
+      config:
+        allowed_licenses: [MIT, Apache-2.0, BSD]
+        blocked_licenses: [GPL-3.0, AGPL-3.0]
+
+    - type: performance
+      config:
+        warn_on_n_plus_one: true
+        max_db_queries: 10
+```
+
+</details>
+
+**Result:** Parallel security + code review → AI synthesis → Actionable feedback. Catches vulnerabilities, license issues, and performance problems automatically.
 **That's it.** No boilerplate. No complex orchestration code. Just declare what you want.
 
 ## 🔥 The Power of Dynamic Graphs
@@ -106,6 +274,27 @@ else:
 2. **Data Availability** → Alternative data sources
 3. **Compliance Rules** → Region-specific workflows
 4. **User Permissions** → Role-based processing paths
+
+## 🔥 Why This Changes Everything
+
+### 🎯 Multi-Agent Orchestration Made Simple
+```yaml
+# These agents run IN PARALLEL automatically
+- type: macro_invocation
+  id: fundamental_analyst
+  macro: reasoning_agent
+
+- type: macro_invocation
+  id: technical_analyst
+  macro: reasoning_agent
+
+- type: macro_invocation
+  id: risk_analyst
+  macro: reasoning_agent
+  depends_on: [fundamental_analyst, technical_analyst]  # Waits for both
+```
+
+No asyncio. No thread management. No race conditions. **It just works.**
 
 ## 🏗️ Hexagonal Architecture = True Flexibility
 
