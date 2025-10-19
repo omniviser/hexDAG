@@ -1,12 +1,10 @@
-"""LLM Macro - Composable LLM workflow with automatic retry on parse failures.
+"""LLM Macro - Composable LLM workflow with prompt, LLM call, and parsing.
 
 This macro combines PromptNode + RawLLMNode + ParserNode into a single
-workflow with intelligent retry logic when parsing fails.
+workflow for structured LLM interactions.
 
 Architecture:
-    PromptNode → RawLLMNode → ParserNode
-                      ↓ (on parse error)
-                 Retry with improved prompt
+    PromptNode → RawLLMNode → ParserNode (optional)
 """
 
 from typing import Any
@@ -36,18 +34,10 @@ class LLMMacroConfig(MacroConfig):
         Prompt output format: "messages" or "string"
     system_prompt : str | None
         Optional system prompt
-    model : str | None
-        LLM model override
-    temperature : float | None
-        Temperature override
-    max_tokens : int | None
-        Max tokens override
     parse_strategy : str
         Parsing strategy: "json", "json_in_markdown", "yaml"
     strict_parsing : bool
-        If True, raise errors on parse failure (no retry)
-    max_retries : int
-        Maximum retry attempts on parse failures
+        If True, raise errors on parse failure
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -56,12 +46,8 @@ class LLMMacroConfig(MacroConfig):
     output_schema: dict[str, type] | type[BaseModel] | None = None
     output_format: str = "messages"
     system_prompt: str | None = None
-    model: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
     parse_strategy: str = "json"
     strict_parsing: bool = False
-    max_retries: int = 2
 
     @field_validator("output_schema", mode="before")
     @classmethod
@@ -89,9 +75,8 @@ class LLMMacro(ConfigurableMacro):
     Benefits:
     1. **Separation of Concerns** - Each node has one responsibility
     2. **Composable** - Mix and match components
-    3. **Retry Logic** - Automatic retry on parse failures (future)
-    4. **Clear Errors** - Parser provides helpful retry hints
-    5. **Dynamic Graphs** - Runtime graph expansion (future)
+    3. **Clear Errors** - Parser provides helpful error messages
+    4. **Type Safety** - Automatic schema validation
 
     Examples
     --------
@@ -184,9 +169,6 @@ class LLMMacro(ConfigurableMacro):
         llm_node_factory = RawLLMNode()
         llm_spec = llm_node_factory(
             name=f"{instance_name}_llm",
-            model=config.model,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
             deps=[f"{instance_name}_prompt"],
         )
         graph += llm_spec
@@ -202,8 +184,5 @@ class LLMMacro(ConfigurableMacro):
                 deps=[f"{instance_name}_llm"],
             )
             graph += parser_spec
-
-        # NOTE: Retry logic for parse failures could be added in the future
-        # This will require DynamicDirectedGraph for runtime expansion
 
         return graph
