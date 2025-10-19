@@ -62,7 +62,7 @@ class ReasoningAgentConfig(MacroConfig):
     """
 
     main_prompt: str
-    max_steps: int = 3
+    max_steps: int = 5
     allowed_tools: list[str] = []
     tool_format: ToolCallFormat = ToolCallFormat.MIXED
 
@@ -157,7 +157,8 @@ class ReasoningAgentMacro(ConfigurableMacro):
             prev_step = f"{step_name_prefix}_result_merger"
 
         # Final consolidation using composable nodes
-        assert prev_step is not None
+        if prev_step is None:
+            raise ValueError("prev_step is None")
 
         # Prompt for final consolidation
         prompt_factory = PromptNode()

@@ -7,6 +7,10 @@ Architecture:
 - Maintains conversation state across turns
 - Automatic context window management
 
+Requirements:
+- Memory port must be configured in the pipeline for persistence
+- Without memory port, conversations start fresh each time
+
 Example:
     Turn 1: User → [system, user] → LLM → Response → Save history
     Turn 2: User → [system, user, assistant, user] → LLM → Response → Save
@@ -22,10 +26,9 @@ from typing import Any
 
 from pydantic import Field
 
+from hexdag.builtin.macros.reasoning_agent import ReasoningAgentMacro
 from hexdag.builtin.nodes.function_node import FunctionNode
-from hexdag.builtin.nodes.llm_node import LLMNode
-from hexdag.builtin.nodes.tool_utils import ToolCallFormat, ToolParser
-from hexdag.builtin.prompts.tool_prompts import get_tool_prompt_for_format
+from hexdag.builtin.nodes.tool_utils import ToolCallFormat
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.context import get_port
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
@@ -52,6 +55,9 @@ class ConversationConfig(MacroConfig):
         Tool calling format (default: MIXED)
     enable_tool_use : bool
         Whether to enable tool calling (default: True)
+    memory_adapter : str | None
+        Optional memory adapter to use (default: uses pipeline's memory port)
+        If None, will use the memory port configured at pipeline level
     """
 
     system_prompt: str = Field(default="You are a helpful assistant")
@@ -60,6 +66,10 @@ class ConversationConfig(MacroConfig):
     allowed_tools: list[str] = Field(default_factory=list)
     tool_format: ToolCallFormat = Field(default=ToolCallFormat.MIXED)
     enable_tool_use: bool = Field(default=True)
+    memory_adapter: str | None = Field(
+        default=None,
+        description="Optional memory adapter override (e.g., 'plugin:redis_memory')",
+    )
 
 
 @macro(name="conversation", namespace="core")
@@ -87,17 +97,34 @@ class ConversationMacro(ConfigurableMacro):
 
     Examples
     --------
-    YAML configuration:
+    YAML configuration with memory port:
 
-        macros:
-          - type: conversation
-            id: chatbot
-            config:
-              system_prompt: "You are a research assistant"
-              conversation_id: "{{session_id}}"
-              max_history: 20
-              allowed_tools: ["core:search", "core:calculate"]
-              enable_tool_use: true
+        apiVersion: v1
+        kind: Pipeline
+        metadata:
+          name: chatbot_pipeline
+        spec:
+          ports:
+            memory:
+              adapter: in_memory_memory
+              config:
+                max_size: 1000
+            llm:
+              adapter: plugin:openai
+              config:
+                model: gpt-4
+          nodes:
+            - kind: macro_invocation
+              metadata:
+                name: chatbot
+              spec:
+                macro: core:conversation
+                config:
+                  system_prompt: "You are a research assistant"
+                  conversation_id: "{{session_id}}"
+                  max_history: 20
+                  allowed_tools: ["core:search", "core:calculate"]
+                  enable_tool_use: true
 
     Multi-turn execution:
 
@@ -124,18 +151,17 @@ class ConversationMacro(ConfigurableMacro):
         inputs: dict[str, Any],
         dependencies: list[str],
     ) -> DirectedGraph:
-        """Expand into conversation nodes with dynamic expansion.
+        """Expand into conversation nodes using ReasoningAgent for core logic.
 
         Graph structure:
         ```
-        [deps] → load_history → format_messages → llm → parse_response → save_history
+        [deps] → load_history → format_prompt → reasoning_agent → save_history
         ```
 
-        During execution with dynamic=True:
+        During execution:
         - load_history: Gets conversation from Memory port
-        - format_messages: Adds new user message to history
-        - llm: Generates response (may include tool calls)
-        - parse_response: Parses response, injects ToolCallNodes if needed
+        - format_prompt: Formats conversation into prompt for reasoning agent
+        - reasoning_agent: Uses ReasoningAgent for multi-step reasoning with tools
         - save_history: Saves updated conversation to Memory port
 
         Args
@@ -153,26 +179,37 @@ class ConversationMacro(ConfigurableMacro):
         config: ConversationConfig = self.config  # type: ignore[assignment]
 
         fn_factory = FunctionNode()
-        llm_factory = LLMNode()
 
         # Node 1: Load conversation history from Memory
         load_node = self._create_load_history_node(fn_factory, instance_name, config, dependencies)
         graph += load_node
 
-        # Node 2: Format messages (add new user message)
-        format_node = self._create_format_messages_node(fn_factory, instance_name, config)
+        # Node 2: Format conversation into prompt for reasoning agent
+        format_node = self._create_format_prompt_node(fn_factory, instance_name, config)
         graph += format_node
 
-        # Node 3: LLM call with formatted messages
-        llm_node = self._create_llm_node(llm_factory, instance_name, config)
-        graph += llm_node
+        # Node 3: Use ReasoningAgent for core reasoning and tool execution
+        # Create ReasoningAgent with config from ConversationConfig
+        reasoning_macro = ReasoningAgentMacro(
+            main_prompt="{{conversation_prompt}}",  # Will be filled from format_prompt node
+            max_steps=3,  # Allow multi-step reasoning
+            allowed_tools=config.allowed_tools if config.enable_tool_use else [],
+            tool_format=config.tool_format,
+        )
 
-        # Node 4: Parse response and handle tool calls
-        parse_node = self._create_parse_response_node(fn_factory, instance_name, config)
-        graph += parse_node
+        # Expand reasoning agent with dependency on format_prompt
+        reasoning_graph = reasoning_macro.expand(
+            f"{instance_name}_reasoning", inputs, [f"{instance_name}_format_prompt"]
+        )
+        graph |= reasoning_graph
 
-        # Node 5: Save updated conversation history
-        save_node = self._create_save_history_node(fn_factory, instance_name, config)
+        # Node 4: Save updated conversation history
+        save_node = self._create_save_history_node(
+            fn_factory,
+            instance_name,
+            config,
+            f"{instance_name}_reasoning_final",  # Depend on reasoning agent's final output
+        )
         graph += save_node
 
         return graph
@@ -190,11 +227,20 @@ class ConversationMacro(ConfigurableMacro):
             """Load conversation history from memory."""
             conversation_id = input_data.get("conversation_id") or config.conversation_id
 
-            # Get Memory port
+            # Get Memory port (use configured adapter or default)
             try:
-                memory_port = get_port("memory")
-            except Exception:
-                logger.warning("Memory port not available, starting fresh conversation")
+                if config.memory_adapter:
+                    # Use specific adapter if configured
+                    from hexdag.core.registry import registry
+
+                    memory_port = registry.get(config.memory_adapter)
+                    # Verify it has the required methods
+                    assert hasattr(memory_port, "aget") and hasattr(memory_port, "aset")
+                else:
+                    # Use default memory port from pipeline
+                    memory_port = get_port("memory")
+            except Exception as e:
+                logger.warning(f"Memory port not available ({e}), starting fresh conversation")
                 # Return empty history with system message
                 return {
                     "conversation_id": conversation_id,
@@ -205,7 +251,7 @@ class ConversationMacro(ConfigurableMacro):
             # Load history from memory
             memory_key = f"conversation:{conversation_id}"
             try:
-                history_json = await memory_port.aget(memory_key)
+                history_json = await memory_port.aget(memory_key)  # pyright: ignore[reportAttributeAccessIssue]
                 if history_json:
                     import json
 
@@ -233,13 +279,13 @@ class ConversationMacro(ConfigurableMacro):
             deps=dependencies,
         )
 
-    def _create_format_messages_node(
+    def _create_format_prompt_node(
         self, fn_factory: FunctionNode, instance_name: str, config: ConversationConfig
     ) -> NodeSpec:
-        """Create node that adds new user message to history."""
+        """Create node that formats conversation history into a prompt for reasoning agent."""
 
-        async def format_messages(history_data: dict[str, Any]) -> dict[str, Any]:
-            """Add new user message to conversation history."""
+        async def format_prompt(history_data: dict[str, Any]) -> dict[str, Any]:
+            """Format conversation history into prompt for reasoning agent."""
             messages = history_data["messages"]
             user_message = history_data["user_message"]
 
@@ -256,90 +302,41 @@ class ConversationMacro(ConfigurableMacro):
                 messages = [system_msg] + recent_messages
                 logger.debug(f"Trimmed history to {len(messages)} messages")
 
+            # Format messages into a prompt for reasoning agent
+            # Include system prompt and conversation context
+            conversation_context = "\n".join([
+                f"{msg['role'].upper()}: {msg['content']}" for msg in messages
+            ])
+
+            prompt = f"""{config.system_prompt}
+
+## Conversation History:
+{conversation_context}
+
+Please provide a thoughtful response to continue this conversation."""
+
             return {
                 "conversation_id": history_data["conversation_id"],
                 "messages": messages,
+                "conversation_prompt": prompt,
             }
 
         return fn_factory(
-            name=f"{instance_name}_format_messages",
-            fn=format_messages,
+            name=f"{instance_name}_format_prompt",
+            fn=format_prompt,
             deps=[f"{instance_name}_load_history"],
         )
 
-    def _create_llm_node(
-        self, llm_factory: LLMNode, instance_name: str, config: ConversationConfig
-    ) -> NodeSpec:
-        """Create LLM node that processes conversation."""
-
-        # Build tool instructions if tools enabled
-        tool_instructions = ""
-        if config.enable_tool_use and config.allowed_tools:
-            tool_prompt_class = get_tool_prompt_for_format(config.tool_format)
-            # Tool prompt classes override __init__ to provide their own template
-            tool_prompt = tool_prompt_class()  # type: ignore[call-arg] # pyright: ignore[reportCallIssue]
-            tool_list = self._build_tool_list(config.allowed_tools)
-            tool_instructions = f"""
-
-## Available Tools
-{tool_list}
-
-{tool_prompt.template}"""
-
-        # Template that renders the conversation
-        # The format_messages node output becomes {{format_messages}}
-        template = f"""{{{{{{format_messages.messages}}}}}}
-{tool_instructions}"""
-
-        return llm_factory(
-            name=f"{instance_name}_llm",
-            template=template,
-            deps=[f"{instance_name}_format_messages"],
-        )
-
-    def _create_parse_response_node(
-        self, fn_factory: FunctionNode, instance_name: str, config: ConversationConfig
-    ) -> NodeSpec:
-        """Create node that parses LLM response and handles tool calls."""
-
-        async def parse_response(llm_output: str) -> dict[str, Any]:
-            """Parse LLM response and optionally expand tool calls."""
-            # Parse tool calls if enabled
-            tool_calls_data = []
-            if config.enable_tool_use:
-                tool_calls = ToolParser.parse_tool_calls(llm_output, format=config.tool_format)
-                if tool_calls:
-                    logger.debug(f"Parsed {len(tool_calls)} tool calls from LLM response")
-                    tool_calls_data = [
-                        {"name": tc.name, "arguments": tc.params, "id": f"call_{i}"}
-                        for i, tc in enumerate(tool_calls)
-                    ]
-
-                    # TODO(hexdag-team): Dynamic expansion of ToolMacro #noqa: TD003
-                    # This would require:
-                    # graph = get_current_graph()
-                    # tool_macro = ToolMacro(tool_calls=tool_calls_data, ...)
-                    # tool_graph = tool_macro.expand(...)
-                    # graph.merge(tool_graph)
-
-            return {
-                "llm_response": llm_output,
-                "tool_calls": tool_calls_data,
-                "has_tools": len(tool_calls_data) > 0,
-            }
-
-        return fn_factory(
-            name=f"{instance_name}_parse_response",
-            fn=parse_response,
-            deps=[f"{instance_name}_llm"],
-        )
-
     def _create_save_history_node(
-        self, fn_factory: FunctionNode, instance_name: str, config: ConversationConfig
+        self,
+        fn_factory: FunctionNode,
+        instance_name: str,
+        config: ConversationConfig,
+        reasoning_node: str,
     ) -> NodeSpec:
         """Create node that saves updated conversation history."""
 
-        async def save_history(response_data: dict[str, Any]) -> dict[str, Any]:
+        async def save_history(reasoning_response: Any) -> dict[str, Any]:
             """Save updated conversation history to memory."""
             # Get previous messages from context
             from hexdag.core.context import get_node_results
@@ -347,33 +344,44 @@ class ConversationMacro(ConfigurableMacro):
             node_results = get_node_results()
             if not node_results:
                 logger.warning("No node results available, cannot save history")
-                return response_data
+                return {"response": str(reasoning_response)}
 
-            format_node_result = node_results.get(f"{instance_name}_format_messages")
+            format_node_result = node_results.get(f"{instance_name}_format_prompt")
             if not format_node_result:
-                logger.warning("Format messages node result not found")
-                return response_data
+                logger.warning("Format prompt node result not found")
+                return {"response": str(reasoning_response)}
 
             messages = format_node_result.result.get("messages", [])
             conversation_id = format_node_result.result.get("conversation_id")
 
             # Add assistant response to history
-            llm_response = response_data.get("llm_response", "")
-            messages.append({"role": "assistant", "content": llm_response})
+            # ReasoningAgent returns a string response
+            assistant_response = str(reasoning_response) if reasoning_response else ""
+            messages.append({"role": "assistant", "content": assistant_response})
 
             # Save to memory
             try:
-                memory_port = get_port("memory")
+                if config.memory_adapter:
+                    # Use specific adapter if configured
+                    from hexdag.core.registry import registry
+
+                    memory_port = registry.get(config.memory_adapter)
+                    # Verify it has the required method
+                    assert hasattr(memory_port, "aset")
+                else:
+                    # Use default memory port from pipeline
+                    memory_port = get_port("memory")
+
                 import json
 
                 memory_key = f"conversation:{conversation_id}"
-                await memory_port.aset(memory_key, json.dumps(messages))
+                await memory_port.aset(memory_key, json.dumps(messages))  # pyright: ignore[reportAttributeAccessIssue]
                 logger.debug(f"Saved conversation with {len(messages)} messages")
             except Exception as e:
                 logger.warning(f"Failed to save conversation: {e}")
 
             return {
-                **response_data,
+                "response": assistant_response,
                 "conversation_id": conversation_id,
                 "message_count": len(messages),
             }
@@ -381,23 +389,5 @@ class ConversationMacro(ConfigurableMacro):
         return fn_factory(
             name=f"{instance_name}_save_history",
             fn=save_history,
-            deps=[f"{instance_name}_parse_response"],
+            deps=[reasoning_node],
         )
-
-    def _build_tool_list(self, allowed_tools: list[str]) -> str:
-        """Build formatted tool list for prompt."""
-        from hexdag.core.registry import registry
-
-        if not allowed_tools:
-            return "No tools available"
-
-        tool_lines = []
-        for tool_name in allowed_tools:
-            try:
-                metadata = registry.get_metadata(tool_name)
-                description = metadata.description or "No description"
-                tool_lines.append(f"  - {tool_name}: {description}")
-            except Exception:
-                tool_lines.append(f"  - {tool_name}: Tool description unavailable")
-
-        return "\n".join(tool_lines)
