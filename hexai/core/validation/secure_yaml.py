@@ -1,5 +1,6 @@
 import logging
 import re
+import textwrap
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -73,18 +74,41 @@ class SafeYAML:
         if not text:
             return None
 
-        # Prefer fenced code blocks first
-        match = re.search(r"```ya?ml\s*([\s\S]*?)```", text, re.IGNORECASE)
+        # Prefer fenced code blocks first. Capture the first content line's indentation
+        # by requiring a newline after the language tag so that textwrap.dedent can
+        # correctly normalize indentation across all lines inside the fence.
+        match = re.search(r"```ya?ml[^\n]*\n([\s\S]*?)```", text, re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            fenced = match.group(1)
+            # Dedent to handle markdown-indented code blocks
+            return textwrap.dedent(fenced).strip()
 
         # Generic fallback: content that looks like YAML (starts with key:)
-        match = re.search(r"(^|\n)([A-Za-z0-9_-]+:)", text)
-        if match:
-            # Try to take the block until triple backticks or EOF
-            segment = text[match.start() :]
-            cutoff = re.split(r"```", segment)[0]
-            return cutoff.strip()
+        start_match = re.search(r"^\s*[A-Za-z0-9_.\-]+\s*:\s*.*$", text, re.MULTILINE)
+        if start_match:
+            start_idx = start_match.start()
+            segment = text[start_idx:]
+            # Stop early if another fenced block appears later
+            if "```" in segment:
+                segment = segment.split("```", 1)[0]
+
+            # Collect only contiguous YAML-looking lines
+            yaml_lines: list[str] = []
+            for line in segment.splitlines():
+                stripped = line.lstrip()
+                if (
+                    stripped == ""
+                    or stripped.startswith("#")
+                    or re.match(r"^-\s+", stripped)
+                    or re.match(r"^[A-Za-z0-9_.\-\"']+\s*:(\s|$)", stripped)
+                ):
+                    yaml_lines.append(line)
+                else:
+                    break
+
+            if yaml_lines:
+                block = "\n".join(yaml_lines)
+                return textwrap.dedent(block).strip()
 
         return None
 
@@ -107,11 +131,26 @@ class SafeYAML:
     def _format_error_line(text: str, line_no: int, col_no: int, context: int = 1) -> str | None:
         """Return snippet of the line with a caret pointing to error column."""
         lines = text.splitlines()
-        if 1 <= line_no <= len(lines):
-            line = lines[line_no - 1]
-            caret_line = " " * (col_no - 1) + "^"
-            return f"{line}\n{caret_line}"
-        return None
+        if not lines:
+            return None
+
+        # Clamp line number into valid range. YAML marks may point one past the
+        # last line (EOF). In that case, show the last line and place the caret
+        # at the line end.
+        if line_no < 1:
+            line_no = 1
+        if line_no > len(lines):
+            line_no = len(lines)
+
+        line = lines[line_no - 1]
+        # Clamp column into [1, len(line) + 1] so caret always renders
+        if col_no < 1:
+            col_no = 1
+        if col_no > len(line) + 1:
+            col_no = len(line) + 1
+
+        caret_line = " " * (col_no - 1) + "^"
+        return f"{line}\n{caret_line}"
 
     def _handle_yaml_error(self, err: yaml.YAMLError, text: str) -> SafeYAMLResult:
         if isinstance(err, yaml.MarkedYAMLError) and err.problem_mark is not None:
