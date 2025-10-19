@@ -10,6 +10,7 @@ from hexdag.core.domain.dag import (
     MissingDependencyError,
     NodeSpec,
     SchemaCompatibilityError,
+    ValidationCacheState,
     ValidationError,
 )
 
@@ -1296,3 +1297,33 @@ class TestDirectedGraphOperators:
         # Dict-like access
         assert "start" in graph
         assert len(list(graph.values())) == 4
+
+    def test_validation_cache_state_transitions(self):
+        """Test that validation cache uses proper state transitions."""
+        graph = DirectedGraph()
+
+        # Initial state should be INVALID
+        assert graph._validation_cache == ValidationCacheState.INVALID
+
+        # Add valid nodes
+        graph += NodeSpec("a", dummy_fn)
+        graph += NodeSpec("b", another_fn).after("a")
+
+        # After adding nodes, cache should still be INVALID
+        assert graph._validation_cache == ValidationCacheState.INVALID
+
+        # Validate - cache should become VALID
+        graph.validate()
+        assert graph._validation_cache == ValidationCacheState.VALID
+
+        # Second validation should use cached result
+        graph.validate()
+        assert graph._validation_cache == ValidationCacheState.VALID
+
+        # Adding a new node should invalidate cache
+        graph += NodeSpec("c", dummy_fn).after("b")
+        assert graph._validation_cache == ValidationCacheState.INVALID
+
+        # Re-validate should set to VALID again
+        graph.validate()
+        assert graph._validation_cache == ValidationCacheState.VALID

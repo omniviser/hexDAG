@@ -11,6 +11,7 @@ from .loop_node import ConditionalNode, LoopNode
 from .parser_node import ParserNode
 from .prompt_node import PromptNode
 from .raw_llm_node import RawLLMNode
+from .tool_call_node import ToolCallNode
 
 __all__ = [
     "FunctionNode",
@@ -21,4 +22,5 @@ __all__ = [
     "ReActAgentNode",
     "LoopNode",
     "ConditionalNode",
+    "ToolCallNode",  # New: Tool execution wrapper
 ]

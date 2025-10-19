@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-@adapter(name="mock", implements_port="llm", namespace="core")
+@adapter(name="mock_llm", implements_port="llm", namespace="plugin")
 class MockLLM(LLM):
     """Mock implementation of the LLM interface for testing.
 
