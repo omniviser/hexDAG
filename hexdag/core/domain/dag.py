@@ -909,6 +909,8 @@ class DirectedGraph:
         >>> len(graph)
         3
         """
+        if isinstance(other, DirectedGraph):
+            return self.merge(other)
         if isinstance(other, list):
             return self.add_many(*other)
         return self.add(other)

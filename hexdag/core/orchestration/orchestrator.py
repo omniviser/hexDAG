@@ -48,6 +48,7 @@ from hexdag.core.orchestration.hooks import (
     PreDagHookManager,
 )
 from hexdag.core.orchestration.models import PortsConfiguration
+from hexdag.core.orchestration.port_wrappers import wrap_ports_with_observability
 from hexdag.core.ports.executor import ExecutionTask, ExecutorPort
 from hexdag.core.ports_builder import PortsBuilder
 
@@ -516,6 +517,8 @@ class Orchestrator:
         observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
         policy_manager: PolicyManagerPort | None = all_ports.get("policy_manager")
 
+        wrapped_ports = wrap_ports_with_observability(all_ports)
+
         pipeline_name = getattr(graph, "name", "unnamed")
         context = NodeExecutionContext(dag_id=pipeline_name)
         run_id = str(uuid.uuid4())
@@ -524,7 +527,7 @@ class Orchestrator:
             observer_manager=observer_manager,
             policy_manager=policy_manager,
             run_id=run_id,
-            ports=all_ports,
+            ports=wrapped_ports,
         ):
             set_current_graph(graph)
             set_node_results(node_results)

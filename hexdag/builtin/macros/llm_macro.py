@@ -11,7 +11,7 @@ Architecture:
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from hexdag.builtin.nodes.parser_node import ParserNode
 from hexdag.builtin.nodes.prompt_node import PromptNode
@@ -20,6 +20,7 @@ from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.orchestration.prompt import PromptInput
 from hexdag.core.registry import macro
+from hexdag.core.utils.schema_conversion import normalize_schema
 
 
 class LLMMacroConfig(MacroConfig):
@@ -61,6 +62,15 @@ class LLMMacroConfig(MacroConfig):
     parse_strategy: str = "json"
     strict_parsing: bool = False
     max_retries: int = 2
+
+    @field_validator("output_schema", mode="before")
+    @classmethod
+    def normalize_output_schema(cls, v: Any) -> Any:
+        """Convert YAML-friendly schema to Python types."""
+        if v is None:
+            return None
+        # Use the shared utility to convert string type names to actual types
+        return normalize_schema(v)
 
 
 @macro(

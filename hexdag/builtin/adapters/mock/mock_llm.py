@@ -83,6 +83,25 @@ class MockLLM(LLM):
         self.call_count += 1
         return response
 
+    async def aresponse_with_tools(
+        self,
+        messages: MessageList,
+        tools: list[dict[str, Any]],
+        tool_choice: str | dict[str, Any] = "auto",
+    ) -> Any:
+        """Mock implementation of tool calling - returns response without tools.
+
+        For testing purposes, this just returns a regular response without
+        actually calling any tools. Real adapters would parse and execute tools.
+        """
+        from hexdag.core.ports.llm import LLMResponse
+
+        # Get regular response
+        response_text = await self.aresponse(messages)
+
+        # Return as LLMResponse without tool calls
+        return LLMResponse(content=response_text, tool_calls=None, finish_reason="stop")
+
     async def ahealth_check(self) -> "HealthStatus":
         """Health check for Mock LLM (always healthy)."""
         from hexdag.core.ports.healthcheck import HealthStatus

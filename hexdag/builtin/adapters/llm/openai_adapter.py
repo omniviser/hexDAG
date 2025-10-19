@@ -1,11 +1,12 @@
 """OpenAI adapter for LLM interactions."""
 
+import json
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
 
 from hexdag.core.logging import get_logger
-from hexdag.core.ports.llm import MessageList
+from hexdag.core.ports.llm import LLMResponse, MessageList, ToolCall
 from hexdag.core.registry import adapter
 from hexdag.core.types import (
     FrequencyPenalty,
@@ -169,3 +170,84 @@ class OpenAIAdapter:
         except Exception as e:
             logger.error(f"OpenAI API error: {e}", exc_info=True)
             return None
+
+    async def aresponse_with_tools(
+        self,
+        messages: MessageList,
+        tools: list[dict[str, Any]],
+        tool_choice: str | dict[str, Any] = "auto",
+    ) -> LLMResponse:
+        """Generate response with native OpenAI tool calling.
+
+        Args
+        ----
+            messages: Conversation messages
+            tools: Tool definitions in OpenAI format
+            tool_choice: "auto", "none", "required", or specific tool dict
+
+        Returns
+        -------
+        LLMResponse
+            Response with content and tool calls
+
+        """
+        try:
+            openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+
+            if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
+                openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+            request_params: dict[str, Any] = {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "frequency_penalty": self.frequency_penalty,
+                "presence_penalty": self.presence_penalty,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+
+            if self.max_tokens is not None:
+                request_params["max_tokens"] = self.max_tokens
+
+            if self.seed is not None:
+                request_params["seed"] = self.seed
+
+            # Stop sequences from extra kwargs
+            if stop_seq := self._extra_kwargs.get("stop_sequences"):
+                request_params["stop"] = stop_seq
+
+            if self.response_format == "json_object":
+                request_params["response_format"] = {"type": "json_object"}
+
+            # Make API call
+            response = await self.client.chat.completions.create(**request_params)
+
+            if not response.choices or len(response.choices) == 0:
+                logger.warning("No choices in OpenAI response")
+                return LLMResponse(content=None, tool_calls=None)
+
+            message = response.choices[0].message
+            finish_reason = response.choices[0].finish_reason
+
+            # Extract content
+            content = str(message.content) if message.content else None
+
+            # Extract tool calls
+            tool_calls = None
+            if message.tool_calls:
+                tool_calls = [
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=json.loads(tc.function.arguments),
+                    )
+                    for tc in message.tool_calls
+                ]
+
+            return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=finish_reason)
+
+        except Exception as e:
+            logger.error(f"OpenAI API error with tools: {e}", exc_info=True)
+            raise

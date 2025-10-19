@@ -83,9 +83,9 @@ class ToolCall:
 class ToolParser:
     """Parse tool calls with INVOKE_TOOL: prefix for clear identification."""
 
-    # Function call pattern with INVOKE_TOOL: prefix
+    # Function call pattern with INVOKE_TOOL: prefix (supports namespace:tool_name)
     INVOKE_TOOL_PATTERN = re.compile(
-        r"INVOKE_TOOL:\s*(\w+)\s*\(\s*((?:[^()]*(?:\([^()]*\)[^()]*)*)*)\s*\)"
+        r"INVOKE_TOOL:\s*([\w:]+)\s*\(\s*((?:[^()]*(?:\([^()]*\)[^()]*)*)*)\s*\)"
     )
 
     # JSON pattern with INVOKE_TOOL: prefix
@@ -195,6 +195,109 @@ class ToolParser:
                 params[key] = value
 
         return params
+
+
+class ToolSchemaConverter:
+    """Convert ToolDefinition to various LLM provider formats."""
+
+    @staticmethod
+    def to_openai_schema(tool_def: ToolDefinition) -> dict[str, Any]:
+        """Convert ToolDefinition to OpenAI function calling format.
+
+        Args
+        ----
+            tool_def: Tool definition to convert
+
+        Returns
+        -------
+        dict[str, Any]
+            OpenAI-compatible tool schema
+        """
+        properties = {}
+        required = []
+
+        for param in tool_def.parameters:
+            # Map Python types to JSON Schema types
+            json_type = ToolSchemaConverter._python_type_to_json_type(param.param_type)
+
+            properties[param.name] = {"type": json_type, "description": param.description}
+
+            if param.required:
+                required.append(param.name)
+
+        return {
+            "type": "function",
+            "function": {
+                "name": tool_def.name,
+                "description": tool_def.detailed_description,
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            },
+        }
+
+    @staticmethod
+    def to_anthropic_schema(tool_def: ToolDefinition) -> dict[str, Any]:
+        """Convert ToolDefinition to Anthropic tool use format.
+
+        Args
+        ----
+            tool_def: Tool definition to convert
+
+        Returns
+        -------
+        dict[str, Any]
+            Anthropic-compatible tool schema
+        """
+        properties = {}
+        required = []
+
+        for param in tool_def.parameters:
+            json_type = ToolSchemaConverter._python_type_to_json_type(param.param_type)
+
+            properties[param.name] = {"type": json_type, "description": param.description}
+
+            if param.required:
+                required.append(param.name)
+
+        return {
+            "name": tool_def.name,
+            "description": tool_def.detailed_description,
+            "input_schema": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        }
+
+    @staticmethod
+    def _python_type_to_json_type(python_type: str) -> str:
+        """Map Python type strings to JSON Schema types.
+
+        Args
+        ----
+            python_type: Python type as string (e.g., "str", "int")
+
+        Returns
+        -------
+        str
+            JSON Schema type
+        """
+        type_mapping = {
+            "str": "string",
+            "int": "integer",
+            "float": "number",
+            "bool": "boolean",
+            "list": "array",
+            "dict": "object",
+        }
+
+        # Handle generic types like list[str], dict[str, int]
+        base_type = python_type.split("[")[0].strip()
+
+        return type_mapping.get(base_type, "string")
 
 
 class ToolDescriptionManager:

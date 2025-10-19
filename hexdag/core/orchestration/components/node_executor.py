@@ -16,7 +16,7 @@ else:
     ObserverManagerPort = Any
     PolicyManagerPort = Any
 
-from hexdag.core.context import get_observer_manager, get_policy_manager
+from hexdag.core.context import get_observer_manager, get_policy_manager, set_current_node_name
 from hexdag.core.domain.dag import NodeSpec, ValidationError
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components.policy_coordinator import (
@@ -148,6 +148,9 @@ class NodeExecutor:
             else:
                 validated_input = node_input
 
+            # Set current node name for port-level event attribution
+            set_current_node_name(node_name)
+
             # Fire node started event and check policy
             start_event = NodeStarted(
                 name=node_name,
@@ -212,6 +215,9 @@ class NodeExecutor:
             )
             await policy_coordinator.notify_observer(observer_mgr, complete_event)
 
+            # Clear current node name
+            set_current_node_name(None)
+
             return validated_output
 
         except NodeTimeoutError:
@@ -222,10 +228,12 @@ class NodeExecutor:
                 reason="timeout",
             )
             await policy_coordinator.notify_observer(observer_mgr, cancel_event)
+            set_current_node_name(None)  # Clear on timeout
             raise  # Re-raise original timeout error
 
         except NodeExecutionError:
             # Already wrapped - just re-raise
+            set_current_node_name(None)  # Clear on error
             raise
 
         except (ValidationError, ValueError, TypeError, KeyError, AttributeError) as validation_err:
@@ -246,6 +254,7 @@ class NodeExecutor:
                 raise  # Let orchestrator retry
 
             # Wrap and propagate
+            set_current_node_name(None)  # Clear on validation error
             raise NodeExecutionError(node_name, validation_err) from validation_err
 
         except RuntimeError as runtime_err:
@@ -265,6 +274,7 @@ class NodeExecutor:
             if fail_response.signal == PolicySignal.RETRY:
                 raise
 
+            set_current_node_name(None)  # Clear on runtime error
             raise NodeExecutionError(node_name, runtime_err) from runtime_err
 
     async def _execute_function(

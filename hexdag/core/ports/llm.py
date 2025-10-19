@@ -1,7 +1,7 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -21,6 +21,22 @@ class Message(BaseModel):
 MessageList = list[Message]
 
 
+class ToolCall(BaseModel):
+    """A tool call made by the LLM."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+class LLMResponse(BaseModel):
+    """Response from LLM with optional tool calls."""
+
+    content: str | None
+    tool_calls: list[ToolCall] | None = None
+    finish_reason: str | None = None
+
+
 @port(
     name="llm",
     namespace="core",
@@ -38,6 +54,7 @@ class LLM(Protocol):
     ----------------
     Adapters may optionally implement:
     - ahealth_check(): Verify LLM API connectivity and availability
+    - aresponse_with_tools(): Native tool calling support (OpenAI/Anthropic style)
     """
 
     @abstractmethod
@@ -53,6 +70,52 @@ class LLM(Protocol):
             The generated response as a string, or None if failed.
         """
         pass
+
+    async def aresponse_with_tools(
+        self,
+        messages: MessageList,
+        tools: list[dict[str, Any]],
+        tool_choice: str | dict[str, Any] = "auto",
+    ) -> LLMResponse:
+        """Generate response with native tool calling support (optional).
+
+        This method enables native tool calling for LLM providers that support it
+        (OpenAI, Anthropic, Gemini, etc.). If not implemented, the framework will
+        fall back to text-based tool calling using INVOKE_TOOL: directives.
+
+        Args
+        ----
+            messages: Conversation messages
+            tools: Tool definitions in provider-specific format
+            tool_choice: Tool selection strategy ("auto", "none", or specific tool)
+
+        Returns
+        -------
+        LLMResponse
+            Response with content and optional tool calls
+
+        Examples
+        --------
+        OpenAI-style tool calling::
+
+            tools = [{
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "description": "Search the web",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"]
+                    }
+                }
+            }]
+
+            response = await llm.aresponse_with_tools(messages, tools)
+            # response.content: "Let me search for that"
+            # response.tool_calls: [{"id": "call_123", "name": "search", "arguments": {...}}]
+        """
+        ...
 
     async def ahealth_check(self) -> "HealthStatus":
         """Check LLM adapter health and connectivity (optional).

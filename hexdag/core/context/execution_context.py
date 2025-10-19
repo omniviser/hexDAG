@@ -42,6 +42,9 @@ _current_graph_context: ContextVar[Any | None] = ContextVar(
 # Node results context - for accessing intermediate results during execution
 _node_results_context: ContextVar[dict[str, Any] | None] = ContextVar("node_results", default=None)
 
+# Current node name context - for event emission with proper node attribution
+_current_node_name_context: ContextVar[str | None] = ContextVar("current_node_name", default=None)
+
 
 # ============================================================================
 # Observer Manager Context
@@ -208,6 +211,33 @@ def get_port(port_name: str) -> Any:
     if ports is None:
         return None
     return ports.get(port_name)
+
+
+# ============================================================================
+# Current Node Name Context
+# ============================================================================
+
+
+def set_current_node_name(node_name: str | None) -> None:
+    """Set current node name for event attribution.
+
+    Parameters
+    ----------
+    node_name : str | None
+        Name of the currently executing node, or None to clear
+    """
+    _current_node_name_context.set(node_name)
+
+
+def get_current_node_name() -> str | None:
+    """Get current node name from execution context.
+
+    Returns
+    -------
+    str | None
+        Name of currently executing node, or None if not set
+    """
+    return _current_node_name_context.get()
 
 
 # ============================================================================

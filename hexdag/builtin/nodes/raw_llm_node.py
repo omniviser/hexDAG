@@ -38,6 +38,12 @@ class RawLLMOutput(BaseModel):
     text: str
     """Raw LLM response text"""
 
+    tool_calls: list[dict[str, Any]] | None = None
+    """Tool calls from native function calling (if supported)"""
+
+    finish_reason: str | None = None
+    """Finish reason from LLM response"""
+
 
 @node(name="raw_llm_node", subtype=NodeSubtype.LLM, namespace="core", required_ports=["llm"])
 class RawLLMNode(BaseNodeFactory):
@@ -111,9 +117,8 @@ class RawLLMNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
-        model: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] = "auto",
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
@@ -122,11 +127,10 @@ class RawLLMNode(BaseNodeFactory):
         Args
         ----
             name: Node name
-            model: Optional model override (otherwise uses LLM port default)
-            temperature: Optional temperature override
-            max_tokens: Optional max tokens override
+            tools: Optional tools for native function calling
+            tool_choice: Tool choice strategy ("auto", "none", or specific tool)
             deps: Dependencies
-            **kwargs: Additional LLM parameters
+            **kwargs: Additional parameters
 
         Returns
         -------
@@ -135,7 +139,9 @@ class RawLLMNode(BaseNodeFactory):
         """
         # Create the LLM calling function
         llm_fn = self._create_llm_caller(
-            model=model, temperature=temperature, max_tokens=max_tokens, **kwargs
+            node_name=name,
+            tools=tools,
+            tool_choice=tool_choice,
         )
 
         # Input accepts either messages or text
@@ -156,19 +162,17 @@ class RawLLMNode(BaseNodeFactory):
 
     def _create_llm_caller(
         self,
-        model: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        **llm_kwargs: Any,
+        node_name: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] = "auto",
     ) -> Any:
         """Create the LLM calling function.
 
         Args
         ----
-            model: Optional model override
-            temperature: Optional temperature
-            max_tokens: Optional max tokens
-            **llm_kwargs: Additional LLM parameters
+            node_name: Name of the node (for logging)
+            tools: Optional tools for native function calling
+            tool_choice: Tool choice strategy
 
         Returns
         -------
@@ -176,8 +180,8 @@ class RawLLMNode(BaseNodeFactory):
             Async function that calls LLM
         """
 
-        async def call_llm(input_data: Any) -> dict[str, str]:
-            """Call LLM with messages or text."""
+        async def call_llm(input_data: Any) -> dict[str, Any]:
+            """Call LLM with messages or text, optionally with tools."""
             # Extract input
             if isinstance(input_data, dict):
                 messages = input_data.get("messages")
@@ -202,24 +206,50 @@ class RawLLMNode(BaseNodeFactory):
             if not llm_port:
                 raise RuntimeError("LLM port not available in execution context")
 
-            # Prepare LLM call parameters
-            call_params: dict[str, Any] = {"messages": messages}
+            # Try native tool calling if tools are provided and adapter actually implements it
+            has_tool_support = False
+            if tools and hasattr(llm_port, "aresponse_with_tools"):
+                for cls in llm_port.__class__.__mro__:
+                    if (
+                        cls.__name__ not in ["LLM", "Protocol", "object"]
+                        and "aresponse_with_tools" in cls.__dict__
+                    ):
+                        has_tool_support = True
+                        break
 
-            if model:
-                call_params["model"] = model
-            if temperature is not None:
-                call_params["temperature"] = temperature
-            if max_tokens is not None:
-                call_params["max_tokens"] = max_tokens
+            if tools and has_tool_support:
+                logger.debug(f"Using native tool calling with {len(tools)} tools")
 
-            # Add any additional kwargs
-            call_params.update(llm_kwargs)
+                # Call with tools
+                response = await llm_port.aresponse_with_tools(
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                )
 
-            # Call LLM
-            logger.debug(f"Calling LLM with {len(messages)} messages")
-            response = await llm_port.aresponse(**call_params)
+                # Return structured response
+                return {
+                    "text": response.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                        }
+                        for tc in (response.tool_calls or [])
+                    ]
+                    if response.tool_calls
+                    else None,
+                    "finish_reason": response.finish_reason,
+                }
+
+            # Fallback to standard aresponse
+            logger.debug(f"Using standard LLM call with {len(messages)} messages")
+
+            # Call LLM with messages as positional argument
+            response = await llm_port.aresponse(messages)
 
             # Return raw text response
-            return {"text": response}
+            return {"text": response or "", "tool_calls": None, "finish_reason": None}
 
         return call_llm
