@@ -237,22 +237,13 @@ class TestEventSystemIntegration:
             priority = 0
 
             async def evaluate(self, context: PolicyContext) -> PolicyResponse:
-                # Debug: print what we're checking
-                print(f"DEBUG: Evaluating policy for event: {context.event}")
-                print(f"DEBUG: Event type: {type(context.event)}")
-                print(f"DEBUG: Is NodeStarted: {isinstance(context.event, NodeStarted)}")
-                if hasattr(context.event, "name"):
-                    print(f"DEBUG: Event name: {context.event.name}")
-
                 if isinstance(context.event, NodeStarted) and context.event.name == "skip_me":
-                    print("DEBUG: Returning SKIP")
                     return PolicyResponse(signal=PolicySignal.SKIP)
-                print("DEBUG: Returning PROCEED")
                 return PolicyResponse(signal=PolicySignal.PROCEED)
 
         observer_manager.register(tracking_observer)
-        policy = SkipPolicy()
-        policy_manager.subscribe(policy, SubscriberType.CORE)
+        skip_policy = SkipPolicy()  # Keep strong reference throughout test
+        policy_manager.subscribe(skip_policy, SubscriberType.CORE)
 
         # Normal node
         event1 = NodeStarted(name="normal", wave_index=1, dependencies=[])

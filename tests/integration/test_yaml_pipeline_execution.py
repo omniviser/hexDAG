@@ -62,8 +62,10 @@ async def sentiment_analyzer(input_data: dict) -> dict:
     }
 
 
-async def report_generator(text_data: dict, sentiment_data: dict) -> dict:
+async def report_generator(inputs: dict) -> dict:
     """Generate comprehensive report."""
+    text_data = inputs.get("text_processor", {})
+    sentiment_data = inputs.get("sentiment_analyzer", {})
     return {
         "report": {
             "text_summary": {

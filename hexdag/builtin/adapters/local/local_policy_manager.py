@@ -72,6 +72,8 @@ class LocalPolicyManager(PolicyManagerPort):
                     priority = metadata.get("priority", policy.priority)
                     heapq.heappush(pq, (priority, idx, policy))
             self._priority_queue_cache = pq
+            # Use a copy so we don't modify the cache
+            pq = pq.copy()
         else:
             pq = self._priority_queue_cache.copy()
 
