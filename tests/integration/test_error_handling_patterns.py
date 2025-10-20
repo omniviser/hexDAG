@@ -275,12 +275,18 @@ class TestErrorHandlingPatterns:
         assert summary["total_nodes"] == 3
 
     @pytest.mark.asyncio
-    async def test_circuit_breaker_recovery(self, unreliable_services, circuit_breaker):
+    async def test_circuit_breaker_recovery(self, circuit_breaker):
         """Test that circuit breaker can recover after timeout."""
         # Set a very short timeout for faster testing
         circuit_breaker.timeout = 0.1
 
-        ports = {**unreliable_services, "circuit_breaker": circuit_breaker}
+        # Use a service that always fails initially to trigger circuit opening
+        failing_service = UnreliableService(failure_rate=1.0)
+
+        ports = {
+            "circuit_service": failing_service,
+            "circuit_breaker": circuit_breaker,
+        }
         orchestrator = Orchestrator(ports=ports)
 
         graph = DirectedGraph()
@@ -298,10 +304,14 @@ class TestErrorHandlingPatterns:
         # Wait for timeout
         await asyncio.sleep(0.2)
 
-        # Circuit should transition to HALF_OPEN or CLOSED after timeout
+        # Make service succeed to allow recovery
+        # Change the failure rate to 0 so next call succeeds
+        failing_service.failure_rate = 0.0
+
+        # Circuit should transition to HALF_OPEN then CLOSED after successful call
         await orchestrator.run(graph, "test data")
-        # The is_open() call in the processor will trigger state transition
-        assert circuit_breaker.state in ["HALF_OPEN", "CLOSED"]
+        # The is_open() call transitions to HALF_OPEN, then success transitions to CLOSED
+        assert circuit_breaker.state == "CLOSED"
 
     @pytest.mark.asyncio
     async def test_retry_with_eventual_success(self):
