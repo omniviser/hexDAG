@@ -1,0 +1,96 @@
+# hexDAG Project Rules for Cursor AI
+
+# CRITICAL: Python 3.12+ Type Hints Only
+- Use lowercase built-ins: list[str], dict[str, int], set[int], tuple[str, ...]
+- Use pipe for unions: str | int | None (never Optional or Union)
+- Use type statement for aliases: type UserId = int
+- FORBIDDEN: List, Dict, Set, Tuple, Optional, Union, TypeAlias from typing
+- Only import from typing: Any, Protocol, TypeVar, Generic, Literal
+
+# Code Style
+- Line length: 100 characters maximum
+- Imports order: stdlib → third-party → local (blank line separated)
+- Naming: PascalCase (classes), snake_case (functions), UPPER_SNAKE_CASE (constants)
+- Strings: double quotes default, single only for escaping
+- Indentation: 4 spaces, no tabs
+
+# Pydantic Models Required
+- All data structures must be Pydantic BaseModel
+- Use Field() for all fields with constraints or descriptions
+- Use @field_validator for custom validation
+- Use @model_validator for cross-field validation
+- Set frozen=True for immutable models
+
+# Async-First Architecture
+- All I/O operations must be async
+- Use asyncio.gather() for parallel execution
+- Use async with for async context managers
+- Never use blocking operations in async functions
+
+# Hexagonal Architecture Layers
+- hexai/core/domain/: Pure logic, only Pydantic (no external deps)
+- hexai/core/application/: Use cases, orchestration logic
+- hexai/core/ports/: Protocol definitions only (no implementations)
+- hexai/adapters/: External service implementations
+- Dependency flow: adapters → ports ← application → domain
+
+# Error Handling
+- Create custom exception hierarchies from HexDAGError base
+- Include context in exceptions (node_id, operation, etc.)
+- Use structured logging with context
+- Emit events for all errors
+
+# Documentation
+- NumPy-style docstrings for all public APIs
+- Include Parameters, Returns, Raises sections
+- Add Examples for complex functions
+- Keep docstrings concise but complete
+
+# Testing
+- Use pytest with @pytest.mark.asyncio for async tests
+- Follow Arrange-Act-Assert pattern
+- One assertion focus per test
+- Mock external dependencies
+- Test edge cases and error conditions
+
+# Git Workflow
+- Branch naming: ^(ci|docs|feat|fix|refactor|test)/[A-Za-z0-9._-]+$
+- Commit format: Conventional Commits (feat:, fix:, docs:, refactor:, test:)
+
+# Performance
+- Use asyncio.gather() for concurrent operations
+- Implement caching with @functools.lru_cache where appropriate
+- Avoid N+1 patterns
+- Reuse connections to external services
+
+# Security
+- Never commit secrets or API keys
+- Validate all user input with Pydantic
+- Use parameterized queries
+- Sanitize LLM outputs before execution
+
+# Code Generation Rules (ALWAYS APPLY)
+When generating code:
+1. Use modern Python 3.12+ type hints (lowercase built-ins, pipe unions)
+2. Make all I/O functions async
+3. Use Pydantic for all data validation
+4. Include comprehensive NumPy-style docstrings
+5. Add type hints to ALL function signatures and class attributes
+6. Create custom exceptions with context
+7. Emit events for observability
+8. Write corresponding tests
+
+# Project Context
+- Framework: Enterprise AI agent orchestration via DAG
+- Key concepts: DirectedGraph, NodeSpec, Orchestrator, Event System
+- Tech stack: Python 3.12+, Pydantic, asyncio, YAML pipelines
+- Testing: pytest, pytest-asyncio, pytest-cov
+- Quality: ruff, mypy, pyright, bandit, pre-commit
+
+# Quick Reference
+Setup: uv sync && uv run pre-commit install
+Test: uv run pytest tests/hexai/core/ -x --tb=short
+Format: uv run ruff format hexai/
+Lint: uv run ruff check hexai/ --fix
+Type check: uv run mypy hexai/ && uv run pyright hexai/
+All checks: uv run pre-commit run --all-files

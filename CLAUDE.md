@@ -24,11 +24,6 @@ uv run pytest
 
 # Run tests with coverage
 uv run pytest --cov=hexai --cov-report=html --cov-report=term-missing
-
-# Run specific test areas
-uv run pytest tests/hexai/agent_factory/ -x --tb=short  # Agent factory tests
-uv run pytest tests/hexai/core/                        # Core framework tests
-uv run pytest tests/hexai/validation/                  # Validation tests
 ```
 
 ### Code Quality
@@ -37,34 +32,16 @@ uv run pytest tests/hexai/validation/                  # Validation tests
 uv run pre-commit run --all-files
 
 # Individual tools
-uv run black hexai/                    # Code formatting
-uv run isort hexai/                    # Import sorting
 uv run ruff check hexai/ --fix         # Linting with auto-fix
 uv run ruff format hexai/              # Ruff formatting
 uv run mypy hexai/                     # Type checking
-uv run bandit -r hexai                 # Security scanning
-uv run deptry .                        # Dependency analysis
 ```
 
 ### Examples
 ```bash
-# Run all examples
-uv run examples/run_all.py
-
 # Run specific examples
 uv run examples/01_basic_dag.py           # DAG fundamentals
 uv run examples/10_agent_nodes.py         # AI agents with tools
-uv run examples/13_yaml_pipelines.py      # Declarative workflows
-uv run examples/19_complex_workflow.py    # Enterprise patterns
-```
-
-### Utilities
-```bash
-# Check test structure consistency
-uv run scripts/check_test_structure.py
-
-# Check examples functionality
-uv run scripts/check_examples.py
 ```
 
 ## Architecture Overview
@@ -83,7 +60,6 @@ hexai/
 │   ├── ports/           # Interface definitions (LLM, Database, Memory)
 │   └── validation/      # Type validation and schema conversion
 ├── adapters/            # External service implementations
-│   ├── mock/           # Mock implementations for testing
 ├── agent_factory/       # YAML pipeline building and compilation
 └── cli/                # Command-line interface
 ```
@@ -115,16 +91,6 @@ hexai/
 - `LoopNode`: Iterative processing with custom conditions
 - `ConditionalNode`: Conditional execution paths
 
-### Event System
-- Comprehensive observability through events (NodeStarted, NodeCompleted, NodeFailed, etc.)
-- Event-driven memory and monitoring
-- Observer pattern for extensible monitoring
-
-### Validation Framework
-- Multi-strategy validation system supporting Pydantic, type checking, and custom converters
-- Automatic schema compatibility checking between connected nodes
-- Runtime type coercion and validation
-
 # Claude Development Guidelines
 
 ## Modern Python 3.12+ Type Hints
@@ -135,16 +101,12 @@ This project enforces modern Python 3.12+ type hint syntax and prohibits legacy 
 ```python
 # Built-in generics (Python 3.9+)
 def process_items(items: list[str]) -> dict[str, int]: ...
-def get_values() -> set[int]: ...
-def create_mapping() -> dict[str, list[int]]: ...
 
 # Union types with pipe operator (Python 3.10+)
-def parse_value(val: str | int | float) -> str: ...
 def find_user(id: int) -> User | None: ...
 
 # Type alias with 'type' statement (Python 3.12+)
 type UserId = int
-type UserDict = dict[str, User]
 ```
 
 ### ❌ DON'T USE (Legacy)
@@ -154,97 +116,18 @@ from typing import Dict, List, Set, Optional, Union
 
 # OLD: Capitalized generic types
 def process_items(items: List[str]) -> Dict[str, int]: ...
-
-# OLD: Union and Optional
-def parse_value(val: Union[str, int, float]) -> str: ...
-def find_user(id: int) -> Optional[User]: ...
-
-# OLD: TypeAlias
-from typing import TypeAlias
-UserId: TypeAlias = int
 ```
 
 ### Enforcement Tools
+- **Pyupgrade**: Automatically upgrades Python syntax (`--py312-plus` flag)
+- **Ruff**: Enforces modern type hints (UP006, UP007, UP035, UP037, UP040)
 
-#### 1. Pyupgrade
-- **Purpose**: Automatically upgrades Python syntax to use modern patterns
-- **Configuration**: `--py312-plus` flag ensures Python 3.12+ syntax
-- **Pre-commit**: Runs automatically to upgrade legacy type hints
-
-#### 2. Ruff
-- **Purpose**: Fast Python linter that enforces modern type hints
-- **Key Rules**:
-  - `UP006`: Use `list` instead of `List`
-  - `UP007`: Use `X | Y` instead of `Union[X, Y]`
-  - `UP035`: Use `dict` instead of `Dict`
-  - `UP037`: Use `X | None` instead of `Optional[X]`
-  - `UP040`: Use `type` alias syntax instead of `TypeAlias`
+_For detailed type hint patterns, see `.claude/type_hints_guide.md`_
 
 ## Type Checking
-
-This project uses modern Python 3.12+ type checkers to ensure code quality and type safety:
-
-### Pyright
-- **Description**: Fast, feature-rich type checker developed by Microsoft
-- **Python Support**: Full Python 3.12+ compatibility including latest typing features
-- **Configuration**: Runs in both pre-commit hooks and Azure pipelines
-- **Command**: `uv run pyright ./hexai`
-- **Key Features**:
-  - Excellent performance and speed
-  - Rich VS Code integration (Pylance)
-  - Comprehensive type inference
-  - Support for advanced typing patterns (TypeVars, Generics, Protocols)
-
-### MyPy
-- **Description**: Standard Python type checker with extensive ecosystem support
-- **Configuration**: Configured with pydantic and types-PyYAML support
-- **Command**: `uv run mypy ./hexai`
-
-## Running Type Checks
-
-### Local Development
-```bash
-# Run all pre-commit hooks including type checkers
-uv run pre-commit run --all-files
-
-# Run Pyright specifically
-uv run pyright ./hexai
-
-# Run MyPy specifically
-uv run mypy ./hexai
-```
-
-### Pre-commit Integration
-Both type checkers automatically run on:
-- Every commit (pre-commit stage)
-- Can be manually triggered with `uv run pre-commit run pyright --all-files`
-
-### CI/CD Pipeline
-Type checking is enforced in Azure DevOps pipelines:
-- Runs on all pull requests to main branch
-- Blocks merge if type errors are detected
-- Provides detailed error reporting
-
-## Type Checking Best Practices
-
-1. **Always add type hints** to function signatures and class attributes
-2. **Use modern typing features** from Python 3.12+ (e.g., `type` statement, improved generics)
-3. **Leverage Pydantic models** for data validation with automatic type inference
-4. **Fix type errors immediately** - don't use `# type: ignore` unless absolutely necessary
-5. **Run type checkers locally** before committing to catch issues early
-
-## Excluded Paths
-The following paths are excluded from type checking:
-- `tests/` - Test files often use dynamic mocking that confuses type checkers
-- `examples/` - Example code may intentionally show various usage patterns
-
-## Troubleshooting
-
-If you encounter type checking issues:
-1. Ensure you're using Python 3.12+: `python --version`
-2. Update dependencies: `uv sync`
-3. Clear pyright cache: `rm -rf .pyright`
-4. Check for conflicting type stubs: `uv pip list | grep types-`
+- **Pyright**: Fast type checker (`uv run pyright ./hexai`)
+- **MyPy**: Standard type checker (`uv run mypy ./hexai`)
+- Both run on every commit and in CI/CD pipelines
 
 ### Branch Naming Convention
 Branch names must match the pattern: `^(ci|dependabot\/pip|docs|experiment|feat|fix|refactor|test)\/[A-Za-z0-9._-]+$`
@@ -252,13 +135,11 @@ Branch names must match the pattern: `^(ci|dependabot\/pip|docs|experiment|feat|
 Examples:
 - `feat/yaml-pipeline-builder`
 - `fix/validation-error-handling`
-- `refactor/orchestrator-performance`
 
 ### Testing Approach
 - Unit tests for domain logic
 - Integration tests for orchestrator workflows
 - Mock adapters for external services
-- Example-based testing for user workflows
 
 ### Error Handling
 - Use custom exception hierarchies (e.g., `OrchestratorError`, `ValidationError`)
@@ -294,6 +175,8 @@ Key components:
 - **Parameters**: Node-specific configuration
 - **Template System**: Jinja2-style templating for dynamic content
 
+_For complete YAML syntax, see `.claude/yaml_guide.md`_
+
 ## External Dependencies
 
 The framework integrates with external services through ports:
@@ -303,3 +186,10 @@ The framework integrates with external services through ports:
 - **Tool Router**: Function calling and tool execution
 
 Use mock adapters in `hexai/adapters/mock/` for development and testing.
+
+## Additional Documentation
+
+For detailed information, see `.claude/` directory:
+- `architecture_detail.md` - Deep dive into hexagonal architecture
+- `type_hints_guide.md` - Comprehensive type checking guide
+- `yaml_guide.md` - Complete YAML pipeline syntax
