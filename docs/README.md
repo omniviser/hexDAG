@@ -7,10 +7,13 @@ Welcome to the hexDAG documentation! This guide will help you navigate the docum
 ## 🎯 Start Here
 
 ### New to hexDAG?
-1. **[📓 Interactive Notebooks](../notebooks/)** - Best way to learn! Three hands-on tutorials (1 hour total)
+1. **[📓 Interactive Notebooks](../notebooks/)** - Best way to learn! Comprehensive tutorials
    - [01. Introduction](../notebooks/01_introduction.ipynb) - Your first pipeline (15 min)
    - [02. YAML Pipelines](../notebooks/02_yaml_pipelines.ipynb) - Declarative workflows (25 min)
    - [03. Practical Workflow](../notebooks/03_practical_workflow.ipynb) - Real-world patterns (30 min)
+   - [06. Dynamic Reasoning Agent](../notebooks/06_dynamic_reasoning_agent.ipynb) - Advanced agent patterns
+   - [Advanced Few-shot & Retry](../notebooks/advanced_fewshot_and_retry.ipynb) - Error handling strategies
+   - [Composable LLM Architecture](../notebooks/composable_llm_architecture.ipynb) - Modular AI systems
 
 2. **[Getting Started Guide]()** - Quick setup and first steps
    - [Installation](installation.md) - Set up hexDAG
@@ -84,6 +87,14 @@ Command-line interface documentation:
 - Security best practices
 
 ### Advanced Topics
+
+#### **[🎭 Macro System](MACRO_SYSTEM.md)** ⭐ NEW
+Reusable pipeline templates and patterns:
+- **Built-in Macros**: ConversationMacro, LLMMacro, ToolMacro, ReasoningAgentMacro
+- **YAML Integration**: Use macros directly in YAML with `macro_invocation`
+- **Dynamic Expansion**: Macros expand at runtime into DAG subgraphs
+- **Configuration Inheritance**: Override defaults per invocation
+- **Custom Macros**: Build your own reusable patterns
 
 #### **[🔌 Plugin System](PLUGIN_SYSTEM.md)** (18KB)
 Extending hexDAG with custom components:

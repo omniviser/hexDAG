@@ -1,3 +1,59 @@
+## v0.3.0-a3 (2025-10-19) - Latest
+
+### Features
+
+#### Macro System
+- **ConversationMacro**: Multi-turn conversation support with configurable memory port
+- **LLMMacro**: Simplified LLM invocation with YAML schema conversion
+- **ToolMacro**: Tool integration macro for function calling
+- **ReasoningAgentMacro**: Advanced reasoning patterns for complex decision-making
+- Macro expansion strategies: STATIC, DYNAMIC, and LAZY
+- Full YAML integration with `macro_invocation` support
+- Smart dependency validation for macro-generated nodes
+
+#### Node Improvements
+- **ToolNode**: New node type for tool execution
+- **ConfigurableNode**: Base class for custom node development
+- **ConfigurablePolicy**: Base class for custom policies
+- Custom node support without `_node` suffix requirement
+
+#### YAML Pipeline Enhancements
+- Simplified YAML builder with better error messages
+- Plugin node support in YAML validator
+- Environment-based configuration management
+- Improved template system with Jinja2 support
+
+#### Infrastructure
+- Local executor support for simplified deployment
+- Storage plugin system with PostgreSQL support
+- Azure Pipelines CI/CD integration
+- Comprehensive notebook examples (6 interactive notebooks)
+- Improved test coverage (73+ tests for macro system alone)
+
+### Bug Fixes
+- Fixed YAML validator to accept plugin nodes without `_node` suffix
+- Added YAML schema conversion to LLMMacroConfig
+- Resolved namespace conflicts in registry
+
+### Code Refactoring
+- Simplified LLMMacroConfig by removing unnecessary overrides
+- Removed over-engineered registry patterns
+- Consolidated storage as part of main package
+- Code quality improvements and deduplication
+- Removed legacy namespace requirements
+
+### Documentation
+- Added comprehensive macro system documentation
+- Updated notebooks with advanced patterns
+- Enhanced YAML pipeline examples
+- Improved API documentation
+
+## v0.3.0-a2 (2025-10-10)
+
+### Features
+- Enhanced plugin system architecture
+- Improved registry patterns
+
 ## v0.3.0-a1 (2025-10-09)
 
 ### Features
