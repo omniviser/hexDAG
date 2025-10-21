@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import importlib.util
 from threading import Lock
 from typing import TYPE_CHECKING, Any
@@ -26,10 +27,6 @@ from hexdag.core.registry.models import (
 from hexdag.core.schema import SchemaGenerator
 
 if TYPE_CHECKING:
-    from collections.abc import (
-        Callable as CallableType,  # noqa: F401 - used in cast() string literal
-    )
-
     from hexdag.core.config import ManifestEntry
 
 logger = get_logger(__name__)
@@ -424,7 +421,9 @@ class ComponentRegistry:
                 component = component.__call__
 
         # Generate schema (component is now guaranteed to be callable)
-        schema = SchemaGenerator.from_callable(cast("CallableType", component), format=format)
+        schema = SchemaGenerator.from_callable(
+            cast("collections.abc.Callable", component), format=format
+        )
 
         self._schema_cache[cache_key] = schema
 
