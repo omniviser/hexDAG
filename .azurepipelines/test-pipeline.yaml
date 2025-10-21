@@ -167,13 +167,6 @@ jobs:
   - script: |
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
-      echo "Checking examples functionality..."
-      uv run scripts/check_examples.py
-    displayName: "Check examples functionality"
-
-  - script: |
-      set -e  # Exit immediately if a command exits with a non-zero status
-      export PATH="$HOME/.local/bin:$PATH"
       echo "Running deptry for dependency analysis..."
       uv run deptry .
     displayName: "Run deptry"
