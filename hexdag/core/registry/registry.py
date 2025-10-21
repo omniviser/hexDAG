@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import collections.abc
+import collections.abc  # noqa: TC003 # Used in cast() string literal at runtime
 import importlib.util
 from threading import Lock
 from typing import TYPE_CHECKING, Any
