@@ -175,8 +175,10 @@ jobs:
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Safety for dependency vulnerability scanning..."
-      # Safety reads configuration from pyproject.toml automatically
-      uv run safety check --output json > safety-report.json || {
+      # Ignore known non-applicable vulnerabilities:
+      # 77745,77744: urllib3 Pyodide issues (we don't use Pyodide)
+      # 51457: py package (transitive dependency, not directly used)
+      uv run safety check --ignore 77745 --ignore 77744 --ignore 51457 --output json > safety-report.json || {
           echo "Safety found vulnerabilities. See safety-report.json for details."
           cat safety-report.json
           exit 1

@@ -475,8 +475,12 @@ badge-format = "svg"
 
 
 [tool.safety]
-# Ignore specific vulnerability IDs if needed
-# ignore = ["12345"]
+# Ignore specific vulnerability IDs
+# urllib3 2.3.0 vulnerabilities - not applicable (we don't use Pyodide runtime)
+# 77745: CVE-2025-50182 - redirect control in Pyodide
+# 77744: CVE-2025-50181 - urllib3 Pyodide issue
+# 51457: CVE-2022-42969 - py package vulnerability (transitive, not directly used)
+ignore = ["77745", "77744", "51457"]
 audit-and-monitor = true
 
 [tool.deptry]
