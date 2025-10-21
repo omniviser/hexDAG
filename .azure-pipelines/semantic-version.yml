@@ -1,0 +1,82 @@
+# Semantic Versioning Pipeline
+# Automatically bumps version based on conventional commits and publishes to Azure Artifacts
+
+trigger:
+  branches:
+    include:
+    - main
+
+pr: none  # Don't run on PRs
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  python.version: '3.12'
+
+steps:
+- checkout: self
+  persistCredentials: true
+  displayName: 'Checkout repository'
+
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(python.version)'
+    addToPath: true
+  displayName: 'Use Python $(python.version)'
+
+- script: |
+    python -m pip install --upgrade pip uv
+    uv pip install --system commitizen build twine
+  displayName: 'Install dependencies'
+
+- script: |
+    git config --global user.email "azure-pipelines@hexdag.com"
+    git config --global user.name "Azure Pipelines"
+  displayName: 'Configure git'
+
+# Analyze commits and bump version
+- script: |
+    echo "Current version:"
+    cz version
+
+    echo "Bumping version based on commits..."
+    cz bump --yes --changelog
+
+    echo "New version:"
+    cz version
+  displayName: 'Bump version with commitizen'
+  continueOnError: false
+
+# Get the new version for tagging
+- script: |
+    NEW_VERSION=$(cz version)
+    echo "##vso[task.setvariable variable=newVersion]$NEW_VERSION"
+    echo "New version is: $NEW_VERSION"
+  displayName: 'Get new version'
+
+# Build the package
+- script: |
+    rm -rf dist/ build/ *.egg-info
+    python -m build
+  displayName: 'Build package'
+
+# Authenticate with Azure Artifacts
+- task: TwineAuthenticate@1
+  inputs:
+    artifactFeed: 'hexDAG/hexdag'
+  displayName: 'Authenticate with Azure Artifacts'
+
+# Upload to Azure Artifacts
+- script: |
+    python -m twine upload -r hexdag --config-file $(PYPIRC_PATH) dist/*
+  displayName: 'Publish to Azure Artifacts'
+
+# Push version bump commit and tag back to repo
+- script: |
+    git push origin HEAD:$(Build.SourceBranchName)
+    git push origin v$(newVersion)
+  displayName: 'Push version bump and tag'
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+  condition: succeeded()

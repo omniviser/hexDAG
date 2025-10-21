@@ -5,7 +5,7 @@ max-complexity = 10
 max-line-length = 100
 max-annotations-complexity = 4
 import-order-style = google
-application-import-names = hexai
+application-import-names = hexdag
 extend-ignore = S106
 per-file-ignores =
     tests/*:S101,D100,D101,D102,D103,D104

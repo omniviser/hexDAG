@@ -1,0 +1,139 @@
+{
+    "$defs": {
+        "Policy": {
+            "properties": {
+                "events": {
+                    "items": {
+                        "enum": [
+                            "node_started",
+                            "node_completed",
+                            "node_failed",
+                            "dag_started",
+                            "dag_completed",
+                            "dag_failed"
+                        ],
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "handler": {
+                    "type": "string"
+                },
+                "name": {
+                    "minLength": 1,
+                    "type": "string"
+                },
+                "priority": {
+                    "default": 0,
+                    "type": "integer"
+                },
+                "type": {
+                    "default": "user",
+                    "enum": [
+                        "core",
+                        "plugin",
+                        "user",
+                        "temporary"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "type",
+                "handler"
+            ],
+            "type": "object"
+        },
+        "PolicyContext": {
+            "description": "Context provided to policy handlers",
+            "properties": {
+                "attempt": {
+                    "default": 1,
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "dag_id": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": [
+                        "object",
+                        "null"
+                    ]
+                },
+                "event": {
+                    "type": "object"
+                },
+                "metadata": {
+                    "additionalProperties": true,
+                    "type": [
+                        "object",
+                        "null"
+                    ]
+                },
+                "node_id": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "wave_index": {
+                    "default": 0,
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "PolicyResponse": {
+            "properties": {
+                "data": {},
+                "metadata": {
+                    "additionalProperties": true,
+                    "type": [
+                        "object",
+                        "null"
+                    ]
+                },
+                "signal": {
+                    "default": "proceed",
+                    "enum": [
+                        "proceed",
+                        "retry",
+                        "skip",
+                        "fallback",
+                        "fail"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "signal"
+            ],
+            "type": "object"
+        },
+        "PolicySignals": {
+            "enum": [
+                "proceed",
+                "retry",
+                "skip",
+                "fallback",
+                "fail"
+            ],
+            "type": "string"
+        }
+    },
+    "$id": "https://hexdag.dev/schemas/policy.json",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "JSON Schema for HexDAG policy management (auto-generated)",
+    "properties": {
+        "policies": {
+            "items": {
+                "$ref": "#/$defs/Policy"
+            },
+            "type": "array"
+        }
+    },
+    "title": "HexDAG Policy Configuration",
+    "type": "object"
+}

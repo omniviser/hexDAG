@@ -3,16 +3,16 @@
 
 # Core modules to load - these are the essential framework components
 modules = [
-    "hexai.core.ports",               # Core port definitions (must load before adapters)
-    "hexai.core.application.nodes",  # Core node factories
+    "hexdag.core.ports",               # Core port definitions (must load before adapters)
+    "hexdag.builtin.nodes",  # Core node factories
 ]
 
 # Plugin modules - each plugin manages its own configuration
 plugins = [
-    "hexai.adapters.llm.openai_adapter",      # OpenAI GPT plugin
-    "hexai.adapters.llm.anthropic_adapter",   # Anthropic Claude plugin
-    "hexai.adapters.database.sqlite",         # SQLite database plugin
-    # "hexai.adapters.mock",                  # Mock implementations (for testing)
+    "hexdag.adapters.llm.openai_adapter",      # OpenAI GPT plugin
+    "hexdag.adapters.llm.anthropic_adapter",   # Anthropic Claude plugin
+    "hexdag.adapters.database.sqlite",         # SQLite database plugin
+    # "hexdag.adapters.mock",                  # Mock implementations (for testing)
 ]
 
 # Development mode - allows post-bootstrap registration for testing
