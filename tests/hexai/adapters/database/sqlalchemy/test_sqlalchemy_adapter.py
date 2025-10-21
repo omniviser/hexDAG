@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import Boolean, Column, Integer, MetaData, String, Table
 
-from hexdag.adapters.database.sqlalchemy.sqlalchemy_adapter import SQLAlchemyAdapter
+from hexdag.builtin.adapters.database.sqlalchemy.sqlalchemy_adapter import SQLAlchemyAdapter
 
 
 class AsyncIteratorMock:
@@ -73,7 +73,7 @@ async def adapter(mock_table):
 
     # 5️⃣ Patch create_async_engine so adapter uses our engine
     with patch(
-        "hexdag.adapters.database.sqlalchemy.sqlalchemy_adapter.create_async_engine",
+        "hexdag.builtin.adapters.database.sqlalchemy.sqlalchemy_adapter.create_async_engine",
         return_value=engine,
     ):
         adapter = SQLAlchemyAdapter("sqlite+aiosqlite:///:memory:")
