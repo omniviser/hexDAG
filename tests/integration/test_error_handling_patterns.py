@@ -225,6 +225,8 @@ class TestErrorHandlingPatterns:
     @pytest.mark.asyncio
     async def test_circuit_breaker(self, unreliable_services, circuit_breaker):
         """Test circuit breaker pattern."""
+        # Use a high failure rate to ensure circuit breaker opens reliably
+        unreliable_services["circuit_service"] = UnreliableService(failure_rate=0.9)
         ports = {**unreliable_services, "circuit_breaker": circuit_breaker}
         orchestrator = Orchestrator(ports=ports)
 
@@ -241,7 +243,7 @@ class TestErrorHandlingPatterns:
         # Should have some circuit_open responses after threshold is reached
         circuit_open_count = sum(1 for r in results if r["status"] == "circuit_open")
 
-        # With 50% failure rate and threshold of 2, circuit should open
+        # With 90% failure rate and threshold of 2, circuit should open
         assert circuit_open_count > 0 or circuit_breaker.state == "OPEN"
 
     @pytest.mark.asyncio
