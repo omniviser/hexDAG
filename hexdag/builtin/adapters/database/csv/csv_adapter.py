@@ -77,6 +77,62 @@ class CsvAdapter(DatabasePort):
             return "int"
         return "float"
 
+    async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
+        """
+        Get schema information for all CSV files in the adapter's directory.
+
+        Reads each CSV file to infer column types and builds corresponding
+        schema dictionaries.
+
+        Returns:
+            Dictionary mapping table names to schema information.
+        """
+        schemas = {}
+        for file_path in self.directory.glob("*.csv"):
+            async with aiofiles.open(file_path) as f:
+                content = await f.read()
+                # Process CSV content in memory
+                reader = csv.DictReader(content.splitlines())
+                if not reader.fieldnames:
+                    logging.warning(f"No headers found in CSV file {file_path}, skipping.")
+                    continue
+                data = list(reader)
+
+                # Build columns dict
+                columns = {}
+                primary_keys: list[str] = []
+                for name in reader.fieldnames:
+                    col_values = [row.get(name, "") for row in data]
+                    col_type = self._infer_type(col_values)
+                    columns[name] = col_type
+
+                schemas[file_path.stem] = {
+                    "table_name": file_path.stem,
+                    "columns": columns,
+                    "primary_keys": primary_keys,
+                    "foreign_keys": [],
+                }
+        return schemas
+
+    async def aexecute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Execute a query on CSV files.
+
+        Note: CSV adapter doesn't support SQL queries. This method is required
+        by DatabasePort but will raise NotImplementedError.
+
+        Args:
+            query: SQL query string (not supported)
+            params: Optional query parameters (not supported)
+
+        Raises:
+            NotImplementedError: CSV adapter doesn't support SQL queries
+        """
+        raise NotImplementedError(
+            "CSV adapter doesn't support SQL queries. Use query() method instead."
+        )
+
     async def get_table_schemas(self) -> list[TableSchema]:
         """
         Generate table schemas for all CSV files in the adapter's directory.

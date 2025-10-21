@@ -44,6 +44,66 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
             await self.engine.dispose()
             self.engine = None
 
+    async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
+        """
+        Get schema information for all tables in DatabasePort format.
+
+        Returns:
+            Dictionary mapping table names to schema information.
+        """
+        if not self.engine:
+            raise RuntimeError("Not connected to database")
+
+        schemas = {}
+        for table_name, table in self._metadata.tables.items():
+            columns = {}
+            primary_keys = []
+            foreign_keys = []
+
+            for col in table.columns:
+                columns[col.name] = str(col.type)
+
+                if col.primary_key:
+                    primary_keys.append(col.name)
+
+                if col.foreign_keys:
+                    fk = next(iter(col.foreign_keys))
+                    foreign_keys.append({
+                        "from_column": col.name,
+                        "to_table": fk.column.table.name,
+                        "to_column": fk.column.name,
+                    })
+
+            schemas[table_name] = {
+                "table_name": table_name,
+                "columns": columns,
+                "primary_keys": primary_keys,
+                "foreign_keys": foreign_keys,
+            }
+
+        return schemas
+
+    async def aexecute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Execute a SQL query and return results.
+
+        Args:
+            query: SQL query string
+            params: Optional query parameters for safe parameterized queries
+
+        Returns:
+            List of dictionaries representing query result rows
+        """
+        if not self.engine:
+            raise RuntimeError("Not connected to database")
+
+        results = []
+        async with self.engine.connect() as conn:
+            result = await conn.execute(text(query), params or {})
+            results.extend(dict(row._mapping) for row in result)
+        return results
+
     async def get_table_schemas(self) -> Sequence[TableSchema]:
         """
         Get schema information for all tables.
