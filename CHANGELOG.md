@@ -35,6 +35,8 @@ Merged PR 2101: feat: function-level decorators
 
 Related work items: #1902
 
+## v0.3.0 (2025-10-21)
+
 ## v0.3.0-a3 (2025-10-19) - Latest
 
 ### Features
@@ -142,3 +144,10 @@ Related work items: #1902
 - Added integration tests
 - Removed the god class for the registry.
 - initial hexDAG standalone repository
+
+## Version Release: 0.3.0
+Merged PR 2225: refactor
+
+Final refactor
+
+Related work items: #1655, #1656, #1657, #1658, #1667, #1673, #1716, #1909, #1910, #1913, #1936, #1966, #2006, #2011
