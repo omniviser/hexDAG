@@ -118,41 +118,26 @@ dev = [
     # Build and publish tools
     "build>=1.0.0",
     "twine>=6.1.0",
-    # Code quality tools
-    "deptry>=0.23.1",
-    "black==24.10.0",
-    "isort==5.13.2",
-    "ruff>=0.13.0",
-    "flake8==7.1.1",
-    "flake8-docstrings==1.7.0",
-    "flake8-import-order==0.18.2",
-    "flake8-bugbear==24.12.12",
-    "flake8-comprehensions==3.16.0",
-    "flake8-print==5.0.0",
-    "pep8-naming==0.14.1",
-    "mypy==1.17.1",
-    "pyright==1.1.405",
-    "bandit==1.7.10",
-    "pre-commit==3.8.0",
-    "commitizen==4.8.3",
-    "watchdog==6.0.0",
-    # Documentation (pinned versions for development)
-    "mkdocs==1.6.1",
-    "mkdocs-material==9.6.16",
-    "mkdocstrings[python]>=0.24.0",
-    "pymdown-extensions==10.13",
-    "mkdocs-mermaid2-plugin==1.2.1",
-    # Types and tools
+    # Code quality tools - linting and formatting
+    "ruff>=0.13.0",           # All-in-one linter and formatter (replaces black, isort, flake8)
+    "mypy==1.17.1",           # Type checking
+    "pyright==1.1.405",       # Alternative type checker
+    "bandit==1.7.10",         # Security linting
+    # Code quality tools - analysis
+    "deptry>=0.23.1",         # Dependency analysis
+    "vulture>=2.11",          # Dead code detection
+    "radon>=6.0.1",           # Code complexity analysis
+    "interrogate>=1.7.0",     # Docstring coverage
+    # Additional tools
+    "pre-commit==3.8.0",      # Git hooks
+    "commitizen==4.8.3",      # Conventional commits
+    "watchdog==6.0.0",        # File system monitoring
+    "safety>=3.0.0",          # Vulnerability scanning
+    "yamllint>=1.35.0",       # YAML linting
+    "licensecheck>=2024.3",   # License compliance
+    "pip-licenses>=5.0.0",    # License reporting
+    # Type stubs
     "types-pyyaml==6.0.12",
-    "safety>=3.0.0",
-    "yamllint>=1.35.0",
-    "vulture>=2.11",
-    "radon>=6.0.1",
-    "licensecheck>=2024.3",
-    "pip-licenses>=5.0.0",
-    "interrogate>=1.7.0",
-    "docstring-parser>=0.17.0",
-    "twine>=6.1.0",
 ]
 
 docs = [
