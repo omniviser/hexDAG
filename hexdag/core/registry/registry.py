@@ -1,7 +1,7 @@
 """Simplified component registry - storage and lifecycle merged inline."""
 
 from __future__ import annotations
- 
+
 import importlib
 from threading import Lock
 from typing import TYPE_CHECKING, Any
