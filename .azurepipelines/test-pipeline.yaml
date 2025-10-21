@@ -245,16 +245,14 @@ jobs:
     displayName: "Install dependencies with uv"
 
   - script: |
-      uv run pydocstyle src/
-      uv run python -m doc8 docs/
-    displayName: "Check docstrings & docs formatting"
-
-  - script: |
-      uv run docs-build
+      set -e
+      export PATH="$HOME/.local/bin:$PATH"
+      echo "Building documentation with MkDocs..."
+      uv run hexdag docs build --clean
     displayName: "Build documentation"
 
   - task: PublishBuildArtifacts@1
     inputs:
-      pathToPublish: "docs/build/html"
+      pathToPublish: "site"
       artifactName: "docs"
     displayName: "Publish documentation artifact"

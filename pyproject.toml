@@ -73,12 +73,6 @@ storage-all = [
     "aiosqlite>=0.20.0",
     "chromadb>=0.4.0",
 ]
-docs = [
-    "mkdocs>=1.6.0",  # Documentation site generator
-    "mkdocs-material>=9.6.0",  # Material theme for MkDocs
-    "mkdocstrings[python]>=0.24.0",  # Auto-generate API docs
-    "pymdown-extensions>=10.0",  # Markdown extensions
-]
 notebooks = [
     "jupyter>=1.0.0",  # Jupyter notebook support
     "nbformat>=5.9.0",  # Notebook format library
@@ -104,12 +98,7 @@ Documentation = "https://hexdag.ai/docs"
 
 [project.scripts]
 hexdag = "hexdag.cli:main"
-# Documentation commands (inline Python)
-docs-build = "scripts.docs:build"
-docs-clean = "scripts.docs:clean"
-docs-rebuild = "scripts.docs:rebuild"
-docs-check = "scripts.docs:check"
-docs-autobuild = "scripts.docs:autobuild"
+# Utility scripts
 run-check-examples = "scripts.check_examples:main"
 run-check-tests = "scripts.check_test_structure:main"
 
@@ -164,6 +153,15 @@ dev = [
     "interrogate>=1.7.0",
     "docstring-parser>=0.17.0",
     "twine>=6.1.0",
+]
+
+docs = [
+    # Documentation dependencies - MkDocs with Material theme
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.6.16",
+    "mkdocstrings[python]>=0.24.0",
+    "pymdown-extensions==10.13",
+    "mkdocs-mermaid2-plugin==1.2.1",
 ]
 
 
