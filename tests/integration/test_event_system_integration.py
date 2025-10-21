@@ -27,8 +27,8 @@ class TestEventSystemIntegration:
 
     @pytest.fixture
     def observer_manager(self):
-        """Create an observer manager."""
-        return LocalObserverManager()
+        """Create an observer manager with batching disabled for predictable testing."""
+        return LocalObserverManager(batching_enabled=False)
 
     @pytest.mark.asyncio
     async def test_observer_notification(self, observer_manager):

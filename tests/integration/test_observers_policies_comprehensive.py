@@ -37,11 +37,12 @@ from hexdag.core.orchestration.policies.models import (
 
 @pytest.fixture
 def observer_manager():
-    """Provide observer manager."""
+    """Provide observer manager with batching disabled for predictable testing."""
     return LocalObserverManager(
         max_concurrent_observers=20,
         observer_timeout=10.0,
         use_weak_refs=True,
+        batching_enabled=False,
     )
 
 
