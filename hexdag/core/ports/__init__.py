@@ -1,7 +1,14 @@
 """Port interfaces for the application."""
 
 from hexdag.core.ports.api_call import APICall
-from hexdag.core.ports.database import DatabasePort
+from hexdag.core.ports.database import (
+    ColumnSchema,
+    ColumnType,
+    DatabasePort,
+    SupportsRawSQL,
+    SupportsStreamingQuery,
+    TableSchema,
+)
 from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -18,6 +25,8 @@ from hexdag.core.ports.tool_router import ToolRouter
 
 __all__ = [
     "APICall",
+    "ColumnSchema",
+    "ColumnType",
     "DatabasePort",
     "ExecutionResult",
     "ExecutionTask",
@@ -29,5 +38,8 @@ __all__ = [
     "ObserverManagerPort",
     "PolicyManagerPort",
     "SecretPort",
+    "SupportsRawSQL",
+    "SupportsStreamingQuery",
+    "TableSchema",
     "ToolRouter",
 ]

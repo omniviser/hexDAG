@@ -1,4 +1,4 @@
-"""Node factories for the hexai framework.
+"""Node factories for the hexdag framework.
 
 This module exports all node factory classes that are automatically
 registered with the ComponentRegistry during bootstrap.

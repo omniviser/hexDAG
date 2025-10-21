@@ -138,7 +138,7 @@ The registry architecture is what makes hexDAG **extensible without modifying th
 
 **Official vs Unofficial Nodes**
 
-* Official: auto-verified at build-time from `hexdag.core.application.nodes`
+* Official: auto-verified at build-time from `hexdag.builtin.nodes`
 * Unofficial: user-registered through clean APIs
 * Metadata (`official: true/false`, tags, version) ensures traceability and governance
 

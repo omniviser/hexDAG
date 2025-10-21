@@ -126,7 +126,7 @@ class HexDAGConfig:
     ```toml
     [tool.hexdag]
     modules = ["myapp.adapters", "myapp.nodes"]
-    plugins = ["hexai-openai", "hexai-postgres"]
+    plugins = ["hexdag-openai", "hexdag-postgres"]
     dev_mode = true
 
     [tool.hexdag.logging]

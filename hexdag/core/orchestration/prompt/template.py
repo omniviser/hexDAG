@@ -1,4 +1,4 @@
-"""Simple and secure prompt template system for hexAI.
+"""Simple and secure prompt template system for hexdag.
 
 This module provides a lightweight template engine that handles variable substitution and nested
 object access without the security risks of full template engines like Jinja2.

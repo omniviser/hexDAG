@@ -9,7 +9,7 @@ Local, in-process adapter implementations that don't require external services.
 Simple in-memory key-value storage that implements the Memory port interface.
 
 ```python
-from hexai.adapters.local import InMemoryMemory
+from hexdag.builtin.adapters.local import InMemoryMemory
 
 # Create an instance
 memory = InMemoryMemory()

@@ -13,7 +13,7 @@ For SQLite tests:
   No special setup required - SQLite is a built-in adapter.
 
 For MySQL tests (if applicable):
-  uv pip install -e hexai_plugins/mysql_adapter/
+  uv pip install -e hexdag_plugins/mysql_adapter/
 
 For LLM adapter tests:
   - OpenAI: Set OPENAI_API_KEY environment variable

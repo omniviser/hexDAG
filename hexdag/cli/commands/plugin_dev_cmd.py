@@ -15,25 +15,25 @@ console = Console()
 
 
 def get_plugin_dir() -> Path:
-    """Get the hexai_plugins directory path."""
+    """Get the hexdag_plugins directory path."""
     # Try to find the project root
     current = Path.cwd()
     while current != current.parent:
-        if (current / "hexai_plugins").exists():
-            return current / "hexai_plugins"
+        if (current / "hexdag_plugins").exists():
+            return current / "hexdag_plugins"
         if (current / "pyproject.toml").exists():
             with Path.open(current / "pyproject.toml") as f:
                 if "hexdag" in f.read():
-                    plugin_dir = current / "hexai_plugins"
+                    plugin_dir = current / "hexdag_plugins"
                     if not plugin_dir.exists():
                         plugin_dir.mkdir(parents=True, exist_ok=True)
                     return plugin_dir
         current = current.parent
 
     # Default to current directory
-    plugin_dir = Path.cwd() / "hexai_plugins"
+    plugin_dir = Path.cwd() / "hexdag_plugins"
     if not plugin_dir.exists():
-        console.print("[yellow]Creating hexai_plugins directory in current location[/yellow]")
+        console.print("[yellow]Creating hexdag_plugins directory in current location[/yellow]")
         plugin_dir.mkdir(parents=True, exist_ok=True)
     return plugin_dir
 
@@ -93,7 +93,7 @@ class {class_name}:
         pass
 
     # TODO: Implement the {port} port interface methods
-    # Check hexai/core/ports/{port}.py for the interface definition
+    # Check hexdag/core/ports/{port}.py for the interface definition
 
     def __repr__(self) -> str:
         """String representation."""
@@ -127,7 +127,7 @@ build-backend = "hatchling.build"
 
 [tool.hexdag.plugin]
 name = "{name.replace("_adapter", "")}"
-module = "hexai_plugins.{name}"
+module = "hexdag_plugins.{name}"
 port = "{port}"
 description = "{class_name} for hexDAG"
 
@@ -151,7 +151,7 @@ A hexDAG plugin that provides {name.replace("_", " ")} functionality.
 
 ```bash
 # From the hexDAG root directory
-pip install -e hexai_plugins/{name}/
+pip install -e hexdag_plugins/{name}/
 ```
 
 ## Configuration
@@ -162,7 +162,7 @@ Add to your hexDAG configuration:
 # In hexdag.toml or pyproject.toml
 [tool.hexdag]
 plugins = [
-    "hexai_plugins.{name}",
+    "hexdag_plugins.{name}",
 ]
 ```
 
@@ -202,7 +202,7 @@ class Test{class_name}:
 
     def test_adapter_initialization(self):
         """{class_name} should initialize without errors."""
-        from hexai_plugins.{name}.{name} import {class_name}
+        from hexdag_plugins.{name}.{name} import {class_name}
 
         adapter = {class_name}()
         assert adapter is not None
@@ -242,7 +242,7 @@ SOFTWARE.
     table = Table(title="Next Steps", show_header=False, box=None)
     table.add_row("1.", f"Edit [cyan]{plugin_path / f'{name}.py'}[/cyan] to implement your adapter")
     table.add_row(
-        "2.", f"Update the port interface methods based on [cyan]hexai/core/ports/{port}.py[/cyan]"
+        "2.", f"Update the port interface methods based on [cyan]hexdag/core/ports/{port}.py[/cyan]"
     )
     table.add_row("3.", f"Add dependencies to [cyan]{plugin_path / 'pyproject.toml'}[/cyan]")
     table.add_row("4.", f"Run [yellow]hexdag plugin lint {name}[/yellow] to check your code")

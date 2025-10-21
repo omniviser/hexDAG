@@ -9,18 +9,18 @@ Mock adapters are **not loaded by default**. To use them, you have two options:
 ### Option 1: Load via Configuration File
 
 ```python
-from hexai.core.bootstrap import bootstrap_registry
+from hexdag.core.bootstrap import bootstrap_registry
 
 # Load mock adapters explicitly
-bootstrap_registry("hexai/adapters/mock/hexdag.toml")
+bootstrap_registry("hexdag/adapters/mock/hexdag.toml")
 ```
 
 ### Option 2: Direct Import
 
 ```python
-from hexai.adapters.mock.mock_llm import MockLLM
-from hexai.adapters.mock.mock_database import MockDatabaseAdapter
-from hexai.adapters.mock.mock_tool_router import MockToolRouter
+from hexdag.adapters.mock.mock_llm import MockLLM
+from hexdag.adapters.mock.mock_database import MockDatabaseAdapter
+from hexdag.adapters.mock.mock_tool_router import MockToolRouter
 
 # Create instances directly
 llm = MockLLM()
@@ -34,7 +34,7 @@ router = MockToolRouter()
 Simulates LLM responses without API calls.
 
 ```python
-from hexai.core.ports.llm import Message
+from hexdag.core.ports.llm import Message
 
 llm = registry.get("mock_llm", namespace="plugin")
 messages = [Message(role="user", content="Hello!")]

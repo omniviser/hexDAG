@@ -37,7 +37,7 @@ The registry follows a **bootstrap-based architecture** similar to Django's app 
 
 ```python
 # my_components.py
-from hexai.core.registry.decorators import node, tool
+from hexdag.core.registry.decorators import node, tool
 
 @node(name="data_processor", description="Processes data")
 class DataProcessor:
@@ -54,10 +54,10 @@ def utility_function(x):
 ### 2. Create Manifest
 
 ```yaml
-# hexdag_manifest.yaml or hexai/core/component_manifest.yaml
+# hexdag_manifest.yaml or hexdag/core/component_manifest.yaml
 components:
   - namespace: core
-    module: hexai.core.nodes
+    module: hexdag.core.nodes
   - namespace: user
     module: my_components
 
@@ -71,7 +71,7 @@ config:
 ### 3. Bootstrap and Use
 
 ```python
-from hexai.core import init_hexdag, registry
+from hexdag.core import init_hexdag, registry
 
 # Initialize registry from manifest
 init_hexdag()  # or bootstrap_registry(manifest_path="custom.yaml")
@@ -89,7 +89,7 @@ result = processor.execute(data)
 Simple one-liner initialization with defaults.
 
 ```python
-from hexai.core import init_hexdag
+from hexdag.core import init_hexdag
 init_hexdag(dev_mode=True)  # For development
 ```
 
@@ -97,7 +97,7 @@ init_hexdag(dev_mode=True)  # For development
 Full control over bootstrap process.
 
 ```python
-from hexai.core.bootstrap import bootstrap_registry
+from hexdag.core.bootstrap import bootstrap_registry
 bootstrap_registry(
     manifest_path="config/production.yaml",
     dev_mode=False
@@ -108,11 +108,11 @@ bootstrap_registry(
 Low-level bootstrap on registry instance.
 
 ```python
-from hexai.core.registry import registry
-from hexai.core.registry.manifest import ComponentManifest
+from hexdag.core.registry import registry
+from hexdag.core.registry.manifest import ComponentManifest
 
 manifest = ComponentManifest([
-    {"namespace": "core", "module": "hexai.core.nodes"}
+    {"namespace": "core", "module": "hexdag.core.nodes"}
 ])
 registry.bootstrap(manifest)
 ```
@@ -198,7 +198,7 @@ registry.reset(namespace="test")
 # Component declarations
 components:
   - namespace: core
-    module: hexai.core.nodes
+    module: hexdag.core.nodes
   - namespace: plugin
     module: my_plugin.components
   - namespace: user
@@ -219,15 +219,15 @@ config:
 ### Loading Manifests
 
 ```python
-from hexai.core.registry.manifest import load_manifest_from_yaml
+from hexdag.core.registry.manifest import load_manifest_from_yaml
 
 # From YAML file
 manifest = load_manifest_from_yaml("my_manifest.yaml")
 
 # From Python list
-from hexai.core.registry.manifest import ComponentManifest
+from hexdag.core.registry.manifest import ComponentManifest
 manifest = ComponentManifest([
-    {"namespace": "core", "module": "hexai.core.nodes"}
+    {"namespace": "core", "module": "hexdag.core.nodes"}
 ])
 ```
 
@@ -311,7 +311,7 @@ __init__.py       - Public API exports
 ## Testing
 
 ```bash
-pytest tests/hexai/core/registry/
+pytest tests/hexdag/core/registry/
 ```
 
 The bootstrap architecture makes testing much cleaner:

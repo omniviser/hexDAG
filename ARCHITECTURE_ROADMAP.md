@@ -21,22 +21,22 @@ Enable hexDAG to support:
 
 ### ✅ **What We Have**
 
-1. **Checkpoint System** ([models.py:70-100](hexai/core/orchestration/models.py#L70-L100))
+1. **Checkpoint System** ([models.py:70-100](hexdag/core/orchestration/models.py#L70-L100))
    - `CheckpointState` with `graph_snapshot`
    - Serialization/deserialization ready
    - Resume from checkpoint support
 
-2. **Event System** ([events.py](hexai/core/application/events/events.py))
+2. **Event System** ([events.py](hexdag/core/application/events/events.py))
    - Comprehensive observability
    - Observer pattern with async notifications
    - Already distributed-friendly
 
-3. **Context Propagation** ([execution_context.py](hexai/core/context/execution_context.py))
+3. **Context Propagation** ([execution_context.py](hexdag/core/context/execution_context.py))
    - `ContextVar` for async-safe state
    - Immutable `MappingProxyType` for thread safety
    - Ready for distributed context passing
 
-4. **Wave-Based Execution** ([wave_executor.py](hexai/core/orchestration/components/wave_executor.py))
+4. **Wave-Based Execution** ([wave_executor.py](hexdag/core/orchestration/components/wave_executor.py))
    - Natural parallelism boundaries
    - Semaphore-based concurrency control
    - Easy to map to worker pools

@@ -93,7 +93,7 @@ def _generate_config(adapters: list[str]) -> str:
         "",
         "# Plugins to load",
         "plugins = [",
-        '    "hexdag.adapters.local",  # Local in-process adapters',
+        '    "hexdag.builtin.adapters.local",  # Local in-process adapters',
     ]
 
     lines.append('    "hexdag.adapters.mock",   # Mock adapters for testing')

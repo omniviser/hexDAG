@@ -34,87 +34,87 @@ stages:
       - job: LintAndTest
         displayName: 'Lint and Test All Code'
         steps:
-        - task: UsePythonVersion@0
-          inputs:
-            versionSpec: '$(pythonVersion)'
-          displayName: 'Use Python $(pythonVersion)'
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
 
-        - task: Cache@2
-          inputs:
-            key: 'python | "$(Agent.OS)" | pyproject.toml'
-            restoreKeys: |
-              python | "$(Agent.OS)"
-            path: $(pipCacheDir)
-          displayName: Cache pip packages
+          - task: Cache@2
+            inputs:
+              key: 'python | "$(Agent.OS)" | pyproject.toml'
+              restoreKeys: |
+                python | "$(Agent.OS)"
+              path: $(pipCacheDir)
+            displayName: Cache pip packages
 
-        - script: |
-            python -m pip install --upgrade pip uv
-            uv sync --all-extras
-          displayName: 'Install dependencies'
+          - script: |
+              python -m pip install --upgrade pip uv
+              uv sync --all-extras
+            displayName: 'Install dependencies'
 
-        - script: |
-            uv run ruff check . --config=pyproject.toml --output-format=github
-            uv run ruff format . --check
-            uv run mypy hexdag/
-            uv run pyright hexdag/
-            uv run bandit -r hexdag/ -f json -o bandit-output.json || true
-          displayName: 'Lint and type check'
+          - script: |
+              uv run ruff check . --config=pyproject.toml --output-format=github
+              uv run ruff format . --check
+              uv run mypy hexdag/
+              uv run pyright hexdag/
+              uv run bandit -r hexdag/ -f json -o bandit-output.json || true
+            displayName: 'Lint and type check'
 
-        - script: |
-            uv run licensecheck --zero
-          displayName: 'Check dependency licenses'
+          - script: |
+              uv run licensecheck --zero
+            displayName: 'Check dependency licenses'
 
-        - script: |
-            uv run deptry .
-            uv run vulture hexdag/ --min-confidence 90
-            uv run radon cc hexdag/ --min B --show-complexity
-            uv run interrogate hexdag/ --fail-under 95 --quiet
-            uv run safety check --json
-          displayName: 'Additional quality checks'
+          - script: |
+              uv run deptry .
+              uv run vulture hexdag/ --min-confidence 90
+              uv run radon cc hexdag/ --min B --show-complexity
+              uv run interrogate hexdag/ --fail-under 95 --quiet
+              uv run safety check --json
+            displayName: 'Additional quality checks'
 
-        - script: |
-            uv run python scripts/check_core_imports.py
-          displayName: 'Check core architecture (no adapters/builtin imports)'
+          - script: |
+              uv run python scripts/check_core_imports.py
+            displayName: 'Check core architecture (no adapters/builtin imports)'
 
-        - script: |
-            uv run python scripts/check_async_io.py
-          displayName: 'Check async I/O compliance'
+          - script: |
+              uv run python scripts/check_async_io.py
+            displayName: 'Check async I/O compliance'
 
-        - script: |
-            uv run python scripts/check_test_structure.py
-          displayName: 'Check test structure consistency'
+          - script: |
+              uv run python scripts/check_test_structure.py
+            displayName: 'Check test structure consistency'
 
-        - script: |
-            # Run doctest first
-            uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ -v --junitxml=junit/test-results-doctest.xml --doctest-continue-on-failure
-          displayName: 'Run doctests'
+          - script: |
+              # Run doctest first
+              uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ -v --junitxml=junit/test-results-doctest.xml --doctest-continue-on-failure
+            displayName: 'Run doctests'
 
-        - script: |
-            # Run main tests (excluding CLI which has separate coverage)
-            uv run pytest tests/hexdag/ --ignore=tests/hexdag/cli -v --junitxml=junit/test-results-main.xml --cov=hexdag --cov-config=pyproject.toml --cov-report=xml --cov-report=html
+          - script: |
+              # Run main tests (excluding CLI which has separate coverage)
+              uv run pytest tests/hexdag/ --ignore=tests/hexdag/cli -v --junitxml=junit/test-results-main.xml --cov=hexdag --cov-config=pyproject.toml --cov-report=xml --cov-report=html
 
-            # Run plugin tests if they exist
-            for plugin_dir in hexdag_plugins/*/; do
-              if [ -d "$plugin_dir/tests" ]; then
-                plugin_name=$(basename "$plugin_dir")
-                uv run pytest "$plugin_dir/tests/" -v --junitxml=junit/test-results-$plugin_name.xml || true
-              fi
-            done
-          displayName: 'Run all tests'
+              # Run plugin tests if they exist
+              for plugin_dir in hexdag_plugins/*/; do
+                if [ -d "$plugin_dir/tests" ]; then
+                  plugin_name=$(basename "$plugin_dir")
+                  uv run pytest "$plugin_dir/tests/" -v --junitxml=junit/test-results-$plugin_name.xml || true
+                fi
+              done
+            displayName: 'Run all tests'
 
-        - task: PublishTestResults@2
-          condition: succeededOrFailed()
-          inputs:
-            testResultsFiles: '**/test-results-*.xml'
-            testRunTitle: 'Test Results'
-          displayName: 'Publish test results'
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFiles: '**/test-results-*.xml'
+              testRunTitle: 'Test Results'
+            displayName: 'Publish test results'
 
-        - task: PublishCodeCoverageResults@1
-          condition: succeededOrFailed()
-          inputs:
-            codeCoverageTool: Cobertura
-            summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
-          displayName: 'Publish code coverage'
+          - task: PublishCodeCoverageResults@1
+            condition: succeededOrFailed()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
+            displayName: 'Publish code coverage'
 
   - stage: Integration
     displayName: 'Integration Tests'
@@ -124,34 +124,35 @@ stages:
       - job: IntegrationTests
         displayName: 'Run Integration Tests'
         steps:
-        - task: UsePythonVersion@0
-          inputs:
-            versionSpec: '$(pythonVersion)'
-          displayName: 'Use Python $(pythonVersion)'
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
 
-        - script: |
-            python -m pip install --upgrade pip uv
-            uv sync --all-extras
-            # Install all plugins for integration testing if they exist
-            if [ -d "hexdag_plugins" ]; then
-              for plugin_dir in hexdag_plugins/*/; do
-                if [ -f "$plugin_dir/pyproject.toml" ]; then
-                  pip install -e "$plugin_dir"
-                fi
-              done
-            fi
-          displayName: 'Install everything'
+          - script: |
+              python -m pip install --upgrade pip uv
+              uv sync --all-extras
+              # Install all plugins for integration testing if they exist
+              if [ -d "hexdag_plugins" ]; then
+                for plugin_dir in hexdag_plugins/*/; do
+                  if [ -f "$plugin_dir/pyproject.toml" ]; then
+                    pip install -e "$plugin_dir"
+                  fi
+                done
+              fi
+            displayName: 'Install everything'
 
-        - script: |
-            uv run pytest tests/integration/ -v --junitxml=junit/test-results-integration.xml
-          displayName: 'Run integration tests'
+          - script: |
+              uv run pytest tests/integration/ -v \
+                --junitxml=junit/test-results-integration.xml
+            displayName: 'Run integration tests'
 
-        - task: PublishTestResults@2
-          condition: succeededOrFailed()
-          inputs:
-            testResultsFiles: '**/test-results-integration.xml'
-            testRunTitle: 'Integration Tests'
-          displayName: 'Publish integration test results'
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFiles: '**/test-results-integration.xml'
+              testRunTitle: 'Integration Tests'
+            displayName: 'Publish integration test results'
 
   - stage: Notebooks
     displayName: 'Execute Notebooks'
@@ -192,20 +193,20 @@ stages:
       - job: TestExamples
         displayName: 'Run Example Scripts'
         steps:
-        - task: UsePythonVersion@0
-          inputs:
-            versionSpec: '$(pythonVersion)'
-          displayName: 'Use Python $(pythonVersion)'
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
 
-        - script: |
-            python -m pip install --upgrade pip uv
-            uv sync --all-extras
-          displayName: 'Install dependencies'
+          - script: |
+              python -m pip install --upgrade pip uv
+              uv sync --all-extras
+            displayName: 'Install dependencies'
 
-        - script: |
-            python scripts/check_examples.py
-          displayName: 'Validate examples'
-          continueOnError: true
+          - script: |
+              python scripts/check_examples.py
+            displayName: 'Validate examples'
+            continueOnError: true
 
   - stage: BuildPackage
     displayName: 'Build & Publish Package'

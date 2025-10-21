@@ -17,7 +17,7 @@ def update_file(file_path: Path) -> tuple[bool, str]:
     original_content = content
 
     # Check if already using centralized logging
-    if "from hexai.core.logging import get_logger" in content:
+    if "from hexdag.core.logging import get_logger" in content:
         return False, "Already using centralized logging"
 
     # Check if file uses logging
@@ -43,7 +43,7 @@ def update_file(file_path: Path) -> tuple[bool, str]:
         last_import_idx = max(import_lines)
 
         # Insert after last import
-        lines.insert(last_import_idx + 1, "from hexai.core.logging import get_logger")
+        lines.insert(last_import_idx + 1, "from hexdag.core.logging import get_logger")
         content = "\n".join(lines)
 
     # Pattern 3: Replace logging.getLogger(__name__) with get_logger(__name__)
@@ -60,10 +60,10 @@ def update_file(file_path: Path) -> tuple[bool, str]:
 
 
 def main() -> None:
-    """Update all Python files in hexai/."""
-    hexai_dir = Path(__file__).parent.parent / "hexai"
+    """Update all Python files in hexdag/."""
+    hexdag_dir = Path(__file__).parent.parent / "hexdag"
 
-    python_files = list(hexai_dir.rglob("*.py"))
+    python_files = list(hexdag_dir.rglob("*.py"))
 
     # Exclude the logging.py module itself
     python_files = [f for f in python_files if f.name != "logging.py"]
@@ -75,7 +75,7 @@ def main() -> None:
         was_modified, message = update_file(file_path)
 
         if was_modified:
-            print(f"✓ {file_path.relative_to(hexai_dir)}: {message}")
+            print(f"✓ {file_path.relative_to(hexdag_dir)}: {message}")
             updated_count += 1
         else:
             skipped_count += 1

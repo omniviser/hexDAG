@@ -1,12 +1,50 @@
 """Database port interface for accessing database schema information."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
+from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from hexdag.core.registry.decorators import port
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from hexdag.core.ports.healthcheck import HealthStatus
+
+
+class ColumnType(Enum):
+    """Database column types."""
+
+    TEXT = "text"
+    INT = "int"
+    FLOAT = "float"
+    BOOLEAN = "boolean"
+    DATE = "date"
+    TIMESTAMP = "timestamp"
+    DECIMAL = "decimal"
+    BLOB = "blob"
+
+
+@dataclass
+class ColumnSchema:
+    """Schema information for a database column."""
+
+    name: str
+    type: ColumnType | str  # ColumnType enum or database-specific type string
+    nullable: bool = True
+    primary_key: bool = False
+    foreign_key: str | None = None  # Format: "table.column"
+
+
+@dataclass
+class TableSchema:
+    """Schema information for a database table."""
+
+    name: str
+    columns: list[ColumnSchema]
 
 
 @port(name="database", namespace="core")
@@ -22,6 +60,10 @@ class DatabasePort(Protocol):
     ----------------
     Adapters may optionally implement:
     - ahealth_check(): Verify database connectivity and query execution
+    - query(): Streaming query interface with filters
+    - aget_relationships(): Foreign key relationships
+    - aget_indexes(): Index information
+    - aget_table_statistics(): Table statistics
     """
 
     # Required methods
@@ -31,7 +73,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            Dictionary mapping table names to schema information:
+        Dictionary mapping table names to schema information with structure::
+
             {
                 "table_name": {
                     "table_name": str,
@@ -40,6 +83,7 @@ class DatabasePort(Protocol):
                     "foreign_keys": list[dict[str, str]]
                 }
             }
+
         """
         ...
 
@@ -66,7 +110,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            List of relationship dictionaries with structure:
+        List of relationship dictionaries with structure::
+
             {
                 "from_table": str,
                 "from_column": str,
@@ -74,6 +119,7 @@ class DatabasePort(Protocol):
                 "to_column": str,
                 "relationship_type": str  # "many_to_one", etc.
             }
+
         """
         ...
 
@@ -82,7 +128,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            List of index dictionaries with structure:
+        List of index dictionaries with structure::
+
             {
                 "index_name": str,
                 "table_name": str,
@@ -90,6 +137,7 @@ class DatabasePort(Protocol):
                 "index_type": str,  # "btree", "hash", etc.
                 "is_unique": bool
             }
+
         """
         ...
 
@@ -98,7 +146,8 @@ class DatabasePort(Protocol):
 
         Returns
         -------
-            Dictionary mapping table names to statistics:
+        Dictionary mapping table names to statistics with structure::
+
             {
                 "table_name": {
                     "row_count": int,
@@ -106,10 +155,11 @@ class DatabasePort(Protocol):
                     "last_updated": str
                 }
             }
+
         """
         ...
 
-    async def ahealth_check(self) -> "HealthStatus":
+    async def ahealth_check(self) -> HealthStatus:
         """Check database adapter health and connectivity (optional).
 
         Adapters should verify:
@@ -135,5 +185,109 @@ class DatabasePort(Protocol):
             status.status  # "healthy", "degraded", or "unhealthy"
             status.latency_ms  # Time taken for health check query
             status.details  # {"pool_size": 10, "active_connections": 3}
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsStreamingQuery(Protocol):
+    """Optional protocol for adapters that support streaming queries.
+
+    This protocol enables efficient handling of large result sets by streaming
+    rows one at a time rather than loading all results into memory.
+    """
+
+    def query(
+        self,
+        table: str,
+        filters: dict[str, Any] | None = None,
+        columns: list[str] | None = None,
+        limit: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Query rows from a table with optional filtering and column selection.
+
+        Args
+        ----
+            table: Name of the table to query
+            filters: Optional column-value pairs to filter by
+            columns: Optional list of columns to return (None = all)
+            limit: Optional maximum number of rows to return
+
+        Returns
+        -------
+            AsyncIterator[dict]: Stream of rows as dictionaries
+
+        Raises
+        ------
+        ValueError
+            If table doesn't exist or filters/columns are invalid
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsRawSQL(Protocol):
+    """Optional protocol for adapters that support raw SQL queries with streaming."""
+
+    async def query_raw(
+        self, sql: str, params: dict[str, Any] | None = None
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Execute a raw SQL query with streaming results.
+
+        Args
+        ----
+            sql: SQL query string
+            params: Optional query parameters
+
+        Returns
+        -------
+            AsyncIterator[dict]: Stream of result rows
+
+        Raises
+        ------
+        ValueError
+            If SQL is invalid
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsTableSchema(Protocol):
+    """Optional protocol for adapters that support table schema information."""
+
+    async def get_table_schema(self, table: str) -> TableSchema:
+        """Get schema information for a table.
+
+        Args
+        ----
+            table: Name of the table to get schema for
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsIndexes(Protocol):
+    """Optional protocol for adapters that support index information."""
+
+    async def get_indexes(self, table: str) -> list[dict[str, Any]]:
+        """Get index information for a table.
+
+        Args
+        ----
+            table: Name of the table to get index information for
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsStatistics(Protocol):
+    """Optional protocol for adapters that support table statistics."""
+
+    async def get_table_statistics(self, table: str) -> dict[str, Any]:
+        """Get table statistics for a table.
+
+        Args
+        ----
+            table: Name of the table to get statistics for
         """
         ...

@@ -1,7 +1,13 @@
 """Policy Manager Port - Clean interface for execution control policies."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
+from collections.abc import Awaitable, Callable, Iterable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from hexdag.core.orchestration.events.events import Event
 
 from hexdag.core.orchestration.policies.models import (
     PolicyContext,
@@ -9,6 +15,9 @@ from hexdag.core.orchestration.policies.models import (
     SubscriberType,
 )
 from hexdag.core.registry import port
+
+PolicyFunc = Callable[..., PolicyResponse]
+AsyncPolicyFunc = Callable[..., Awaitable[PolicyResponse]]
 
 
 class Policy(Protocol):
@@ -50,6 +59,21 @@ class PolicyManagerPort(Protocol):
         Returns:
             Aggregated policy response (first non-PROCEED or PROCEED)
         """
+        ...
+
+    @abstractmethod
+    def register(
+        self,
+        policy: Policy | PolicyFunc | AsyncPolicyFunc,
+        *,
+        priority: int | None = None,
+        name: str | None = None,
+        event_types: Iterable[type[Event]] | type[Event] | None = None,
+        description: str | None = None,
+        keep_alive: bool = False,
+        subscriber_type: SubscriberType = SubscriberType.USER,
+    ) -> str:
+        """Register a policy handler with optional filtering metadata."""
         ...
 
     @abstractmethod

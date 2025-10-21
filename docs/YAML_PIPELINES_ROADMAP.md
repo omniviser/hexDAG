@@ -11,7 +11,7 @@
 ### 1.1 Core Registry System (`hexdag.core.registry`)
 
 * **NodeTypeRegistry:** Framework node factories with build-time verification
-* **Build script:** Auto-generate official nodes list from `hexdag.core.application.nodes`
+* **Build script:** Auto-generate official nodes list from `hexdag.builtin.nodes`
 * **Official verification:** Simple module path comparison for security
 * **Extension API:** Clean registration interface for user nodes
 

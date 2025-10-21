@@ -109,8 +109,8 @@ asyncio.run(main())
 The adapter automatically registers with hexDAG's registry system:
 
 ```python
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.registry import registry
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.registry import registry
 
 # Bootstrap with MySQL plugin
 bootstrap_registry()

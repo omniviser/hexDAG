@@ -159,6 +159,15 @@ uv run pytest
 
 # Code quality checks
 uv run pre-commit run --all-files
+
+# Build documentation
+uv run docs-build        # Build HTML documentation
+uv run docs-clean        # Clean build directory
+uv run docs-rebuild      # Clean and rebuild
+uv run docs-check        # Build with warnings as errors
+uv run docs-autobuild    # Auto-rebuild on file changes
+
+# Documentation will be in docs/build/html/
 ```
 
 ## 🌟 Key Features

@@ -30,6 +30,8 @@ dependencies = [
     "loguru>=0.7.0",
     "typer>=0.9.0",  # CLI framework (previously optional)
     "rich>=13.0.0",  # Rich terminal output and logging (previously optional)
+    "orjson>=3.10.0",
+    "commitizen>=4.8.3",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +46,7 @@ anthropic = [
 ]
 database = [
     "aiosqlite>=0.19.0",  # Async SQLite database adapter
+    "aiofiles>=23.0.0",   # Async file I/O for CSV adapter
 ]
 # Storage plugin extras (bundled with main package)
 storage-postgresql = [
@@ -91,15 +94,24 @@ all = [
     "hexdag[database]",
     "hexdag[storage-all]",
     "hexdag[notebooks]",
+
 ]
 
 [project.urls]
-Homepage = "https://dev.azure.com/omniviser/_git/hexDAG"
-Repository = "https://dev.azure.com/omniviser/_git/hexDAG"
-Documentation = "https://dev.azure.com/omniviser/hexDAG"
+Homepage = "https://hexdag.ai"
+Repository = "https://github.com/omniviser/hexdag"
+Documentation = "https://hexdag.ai/docs"
 
 [project.scripts]
 hexdag = "hexdag.cli:main"
+# Documentation commands (inline Python)
+docs-build = "scripts.docs:build"
+docs-clean = "scripts.docs:clean"
+docs-rebuild = "scripts.docs:rebuild"
+docs-check = "scripts.docs:check"
+docs-autobuild = "scripts.docs:autobuild"
+run-check-examples = "scripts.check_examples:main"
+run-check-tests = "scripts.check_test_structure:main"
 
 [dependency-groups]
 dev = [
@@ -151,6 +163,7 @@ dev = [
     "pip-licenses>=5.0.0",
     "interrogate>=1.7.0",
     "docstring-parser>=0.17.0",
+    "twine>=6.1.0",
 ]
 
 
@@ -261,6 +274,7 @@ warn_unreachable = true
 strict_equality = true
 show_error_codes = true
 exclude = ["tests/", "examples/", "scripts/", ".mutmut-config.py", "docs/"]
+
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
@@ -307,7 +321,7 @@ reportUndefinedVariable = true
 reportIncompatibleMethodOverride = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples", "hexdag_plugins"]
+exclude_dirs = ["tests", "examples", "docs", "scripts", "hexdag_plugins"]
 skips = ["B101", "B601"]
 
 [tool.ruff]
@@ -362,6 +376,7 @@ ignore = [
 "DOC202", # (Optional) Don't require "Yields" section
 "DOC501", # Don't require documenting raised exceptions in docstrings
 "DOC402", # Don't require documenting yields in docstrings
+    "UP042"
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -414,6 +429,16 @@ test = "Tests"
 build = "Build System"
 ci = "Continuous Integration"
 chore = "Chores"
+name = "cz_customize"
+version = "0.2.0"
+version_files = ["pyproject.toml:^version"]
+bump_message = "release $current_version -> $new_version [skip ci]"
+changelog_file = "CHANGELOG.md"
+
+[tool.commitizen.customize]
+bump_pattern = '^(?:Merged PR \d+:) (ci!?|docs!?|experiment!?|feat!?|fix!?|refactor!?|test!?)'
+bump_map = { ".*!" = "MAJOR", "ci" = "PATCH", "docs" = "PATCH", "experiment" = "PATCH", "feat" = "MINOR", "fix" = "PATCH", "refactor" = "PATCH", "test" = "PATCH" }
+
 
 [tool.vulture]
 min_confidence = 90
@@ -435,7 +460,7 @@ ignore-semiprivate = false
 ignore-private = false
 ignore-property-decorators = false
 ignore-module = false
-ignore-nested-functions = false
+ignore-nested-functions = true  # Nested functions are implementation details
 ignore-nested-classes = false
 ignore-setters = false
 fail-under = 95.0

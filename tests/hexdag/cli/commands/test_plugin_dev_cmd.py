@@ -25,8 +25,8 @@ class TestGetPluginDir:
     """Test the get_plugin_dir helper function."""
 
     def test_get_plugin_dir_finds_existing(self, tmp_path):
-        """Test finding existing hexai_plugins directory."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        """Test finding existing hexdag_plugins directory."""
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("pathlib.Path.cwd", return_value=tmp_path):
@@ -34,17 +34,17 @@ class TestGetPluginDir:
             assert result == plugin_dir
 
     def test_get_plugin_dir_creates_new(self, tmp_path):
-        """Test creating new hexai_plugins directory."""
+        """Test creating new hexdag_plugins directory."""
         with patch("pathlib.Path.cwd", return_value=tmp_path):
             result = get_plugin_dir()
             assert result.exists()
-            assert result.name == "hexai_plugins"
+            assert result.name == "hexdag_plugins"
 
     def test_get_plugin_dir_from_project_root(self, tmp_path):
         """Test finding plugin dir from project with pyproject.toml."""
         # Create project structure
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "hexdag"\n')
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         subdir = tmp_path / "nested" / "dir"
@@ -60,7 +60,7 @@ class TestCreatePlugin:
 
     def test_create_plugin_success(self, runner, tmp_path):
         """Test creating a new plugin successfully."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -78,7 +78,7 @@ class TestCreatePlugin:
 
     def test_create_plugin_with_custom_port(self, runner, tmp_path):
         """Test creating plugin with custom port type."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -91,7 +91,7 @@ class TestCreatePlugin:
 
     def test_create_plugin_with_custom_author(self, runner, tmp_path):
         """Test creating plugin with custom author."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -104,7 +104,7 @@ class TestCreatePlugin:
 
     def test_create_plugin_already_exists(self, runner, tmp_path):
         """Test that creating existing plugin fails."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
         existing = plugin_dir / "existing_adapter"
         existing.mkdir()
@@ -116,7 +116,7 @@ class TestCreatePlugin:
 
     def test_create_plugin_creates_test_structure(self, runner, tmp_path):
         """Test that plugin creation includes test structure."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -130,7 +130,7 @@ class TestCreatePlugin:
 
     def test_create_plugin_creates_pyproject(self, runner, tmp_path):
         """Test that pyproject.toml is created with correct structure."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -158,7 +158,7 @@ class TestListPlugins:
 
     def test_list_plugins_empty_directory(self, runner, tmp_path):
         """Test listing when plugin directory is empty."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -168,7 +168,7 @@ class TestListPlugins:
 
     def test_list_plugins_with_plugins(self, runner, tmp_path):
         """Test listing existing plugins."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         # Create a plugin with pyproject.toml
@@ -190,7 +190,7 @@ description = "Test plugin"
 
     def test_list_plugins_skips_hidden_dirs(self, runner, tmp_path):
         """Test that hidden directories are skipped."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         # Create hidden dir
@@ -213,7 +213,7 @@ class TestLintCommand:
 
     def test_lint_plugin(self, runner, tmp_path):
         """Test linting a plugin."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
         test_plugin = plugin_dir / "test_plugin"
         test_plugin.mkdir()
@@ -228,7 +228,7 @@ class TestLintCommand:
 
     def test_lint_nonexistent_plugin(self, runner, tmp_path):
         """Test linting a plugin that doesn't exist."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
 
         with patch("hexdag.cli.commands.plugin_dev_cmd.get_plugin_dir", return_value=plugin_dir):
@@ -241,7 +241,7 @@ class TestTestCommand:
 
     def test_test_plugin(self, runner, tmp_path):
         """Test running tests for a plugin."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
         test_plugin = plugin_dir / "test_plugin"
         test_plugin.mkdir()
@@ -257,7 +257,7 @@ class TestTestCommand:
 
     def test_test_with_coverage(self, runner, tmp_path):
         """Test running tests with coverage."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
         test_plugin = plugin_dir / "test_plugin"
         test_plugin.mkdir()
@@ -276,7 +276,7 @@ class TestBuildCommand:
 
     def test_build_plugin(self, runner, tmp_path):
         """Test building a plugin."""
-        plugin_dir = tmp_path / "hexai_plugins"
+        plugin_dir = tmp_path / "hexdag_plugins"
         plugin_dir.mkdir()
         test_plugin = plugin_dir / "test_plugin"
         test_plugin.mkdir()

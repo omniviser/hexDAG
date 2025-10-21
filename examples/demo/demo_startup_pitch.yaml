@@ -1,6 +1,5 @@
 # hexDAG Demo: Customer Support Ticket Analyzer
 # "Because 80% of LLM workflows just need to work, not win a Turing test"
-
 apiVersion: v1
 kind: Pipeline
 metadata:
@@ -8,7 +7,6 @@ metadata:
   description: Analyze customer support tickets for sentiment, category, and priority
   tags: ["support", "automated", "llm"]
   version: "1.0"
-
 spec:
   # Input validation - because production systems need contracts
   input_schema:
@@ -54,7 +52,6 @@ spec:
               enum: ["angry", "frustrated", "neutral", "happy"]
           required: ["issue_type", "technical_details", "customer_emotion"]
         dependencies: []
-
     # Step 2: Conditional routing based on customer tier (enterprise gets special treatment)
     - kind: conditional_node
       metadata:
@@ -165,6 +162,7 @@ spec:
           message: "New {{response_generator.assigned_team}} ticket: {{response_generator.ticket_id}}"
         dependencies: [response_generator]
 
+
     - kind: function_node
       metadata:
         name: update_crm
@@ -189,6 +187,7 @@ spec:
           description: "{{response_generator.internal_notes}}"
           priority: "{{tier_router.result.priority}}"
         dependencies: [response_generator]
+
 
   # Event handlers for observability (know what's happening, when, and why)
   events:

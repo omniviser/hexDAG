@@ -42,7 +42,7 @@ uv run nbstripout notebooks/**/*.ipynb
 uv run pytest
 
 # Run tests with coverage
-uv run pytest --cov=hexai --cov-report=html --cov-report=term-missing
+uv run pytest --cov=hexdag --cov-report=html --cov-report=term-missing
 
 # Run specific test areas
 uv run pytest tests/hexdag/pipeline_builder/ -x --tb=short  # Pipeline builder tests
@@ -50,8 +50,8 @@ uv run pytest tests/hexdag/core/                        # Core framework tests
 uv run pytest tests/hexdag/validation/                  # Validation tests
 
 # Run doctests (tests embedded in docstrings)
-uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/
-uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on-failure  # See all failures
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure  # See all failures
 ```
 
 ### Code Quality
@@ -60,11 +60,11 @@ uv run pytest --doctest-modules hexai/ --ignore=hexai/cli/ --doctest-continue-on
 uv run pre-commit run --all-files
 
 # Linting and formatting
-uv run ruff check hexai/ --fix         # Linting with auto-fix
-uv run ruff format hexai/              # Code formatting
-uv run mypy hexai/                     # Type checking
-uv run pyright hexai/                  # Alternative type checker
-uv run bandit -r hexai                 # Security scanning
+uv run ruff check hexdag/ --fix         # Linting with auto-fix
+uv run ruff format hexdag/              # Code formatting
+uv run mypy hexdag/                     # Type checking
+uv run pyright hexdag/                  # Alternative type checker
+uv run bandit -r hexdag                 # Security scanning
 
 # Dependency analysis
 uv run deptry .                        # Unused dependencies
@@ -72,8 +72,8 @@ uv run safety check                    # Vulnerability scanning
 ./scripts/check_licenses.sh            # License compliance
 
 # Code quality metrics
-uv run vulture hexai/ --min-confidence 90    # Dead code detection
-uv run radon cc hexai/ --min B               # Complexity analysis
+uv run vulture hexdag/ --min-confidence 90    # Dead code detection
+uv run radon cc hexdag/ --min B               # Complexity analysis
 
 # Coverage and testing
 ./scripts/coverage_report.sh           # Full coverage report
@@ -228,7 +228,7 @@ This project uses modern Python 3.12+ type checkers to ensure code quality and t
 - **Description**: Fast, feature-rich type checker developed by Microsoft
 - **Python Support**: Full Python 3.12+ compatibility including latest typing features
 - **Configuration**: Runs in both pre-commit hooks and Azure pipelines
-- **Command**: `uv run pyright ./hexai`
+- **Command**: `uv run pyright ./hexdag`
 - **Key Features**:
   - Excellent performance and speed
   - Rich VS Code integration (Pylance)
@@ -238,7 +238,7 @@ This project uses modern Python 3.12+ type checkers to ensure code quality and t
 ### MyPy
 - **Description**: Standard Python type checker with extensive ecosystem support
 - **Configuration**: Configured with pydantic and types-PyYAML support
-- **Command**: `uv run mypy ./hexai`
+- **Command**: `uv run mypy ./hexdag`
 
 ## Running Type Checks
 
@@ -248,10 +248,10 @@ This project uses modern Python 3.12+ type checkers to ensure code quality and t
 uv run pre-commit run --all-files
 
 # Run Pyright specifically
-uv run pyright ./hexai
+uv run pyright ./hexdag
 
 # Run MyPy specifically
-uv run mypy ./hexai
+uv run mypy ./hexdag
 ```
 
 ### Pre-commit Integration
@@ -305,7 +305,7 @@ Examples:
 hexDAG enforces async-first architecture through:
 
 1. **Static Analysis** - `scripts/check_async_io.py` scans for blocking I/O in async functions
-2. **Runtime Warnings** - `hexai/core/utils/async_warnings.py` detects blocking operations at runtime
+2. **Runtime Warnings** - `hexdag/core/utils/async_warnings.py` detects blocking operations at runtime
 3. **Adapter Decorator Integration** - `@adapter` decorator automatically wraps async methods
 
 #### Running the Async I/O Checker
@@ -318,13 +318,13 @@ uv run python scripts/check_async_io.py
 uv run python scripts/check_async_io.py --verbose
 
 # Check specific paths
-uv run python scripts/check_async_io.py hexai/adapters/
+uv run python scripts/check_async_io.py hexdag/adapters/
 ```
 
 #### Using Runtime Warnings
 
 ```python
-from hexai.core.utils.async_warnings import warn_sync_io, warn_if_async
+from hexdag.core.utils.async_warnings import warn_sync_io, warn_if_async
 
 # In async functions
 async def my_function():
@@ -339,7 +339,7 @@ def sync_helper():
 #### Adapter Decorator with Async Monitoring
 
 ```python
-from hexai.core.registry.decorators import adapter
+from hexdag.core.registry.decorators import adapter
 
 # Default: warnings enabled
 @adapter("database", name="sqlite")
@@ -602,7 +602,7 @@ The framework integrates with external services through ports:
 - **Database Port**: Data persistence and retrieval
 - **Tool Router**: Function calling and tool execution
 
-Use mock adapters in `hexai/adapters/mock/` for development and testing.
+Use mock adapters in `hexdag/adapters/mock/` for development and testing.
 
 ## YAML-First Philosophy
 

@@ -64,6 +64,8 @@ class AsyncIOChecker(ast.NodeVisitor):
         "asyncio.wait",
         "asyncio.gather",
         "asyncio.create_task",
+        "aiofiles.open",  # Async file operations
+        "aiosqlite.connect",  # Async SQLite
     }
 
     # Allowed sync operations in specific contexts
@@ -315,7 +317,7 @@ def main() -> int:
     parser.add_argument(
         "paths",
         nargs="*",
-        default=["hexai"],
+        default=["hexdag"],
         help="Paths to check (files or directories)",
     )
     parser.add_argument(
@@ -337,7 +339,7 @@ def main() -> int:
     default_excludes = [
         r"tests/",
         r"examples/",
-        r"hexai_plugins/",
+        r"hexdag_plugins/",
         r"__pycache__/",
         r"\.venv/",
         r"build/",

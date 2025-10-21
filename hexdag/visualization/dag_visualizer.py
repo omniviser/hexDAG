@@ -1,4 +1,4 @@
-"""DAG visualization using Graphviz for hexAI pipelines.
+"""DAG visualization using Graphviz for hexdag pipelines.
 
 This module provides utilities to export DirectedGraph objects to Graphviz DOT format for
 visualization and debugging purposes.

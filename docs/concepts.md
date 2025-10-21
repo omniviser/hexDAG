@@ -37,7 +37,7 @@ spec = NodeSpec(
 The `Orchestrator` executes your DAG:
 
 ```python
-from hexdag.core.application import Orchestrator
+from hexdag.builtin import Orchestrator
 
 orchestrator = Orchestrator()
 results = await orchestrator.arun(graph, inputs={"key": "value"})
@@ -120,7 +120,7 @@ Conditional execution:
 Monitor workflow execution through events:
 
 ```python
-from hexdag.core.application.events import (
+from hexdag.builtin.events import (
     EventBus,
     NodeStarted,
     NodeCompleted,

@@ -927,13 +927,13 @@ Main configuration file. Auto-discovered in this order:
 # Core modules
 modules = [
     "hexdag.core.ports",
-    "hexdag.core.application.nodes",
+    "hexdag.builtin.nodes",
     "hexdag.tools.builtin_tools",
 ]
 
 # Plugins
 plugins = [
-    "hexdag.adapters.local",
+    "hexdag.builtin.adapters.local",
 ]
 
 # Development mode

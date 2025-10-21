@@ -9,7 +9,7 @@ Create a simple data processing workflow:
 ```python
 import asyncio
 from hexdag.core.domain import DirectedGraph, NodeSpec
-from hexdag.core.application import Orchestrator
+from hexdag.builtin import Orchestrator
 
 # Define processing functions
 def load_data(inputs: dict) -> dict:
@@ -88,7 +88,7 @@ results = await orchestrator.arun(graph, inputs={})
 Monitor your workflow execution with events:
 
 ```python
-from hexdag.core.application.events import EventBus, NodeStarted, NodeCompleted
+from hexdag.builtin.events import EventBus, NodeStarted, NodeCompleted
 
 # Subscribe to events
 event_bus = EventBus()

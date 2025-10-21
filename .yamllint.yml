@@ -1,0 +1,32 @@
+extends: default
+
+ignore: |
+  .venv/
+  node_modules/
+  __pycache__/
+  build/
+  dist/
+
+rules:
+  document-start:
+    present: false
+
+  line-length:
+    max: 120
+    level: warning
+
+  trailing-spaces:
+    level: error
+
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    level: error
+
+  empty-lines:
+    max: 2
+    level: warning
+
+  comments:
+    min-spaces-from-content: 1
+    level: warning

@@ -4,24 +4,24 @@ This port defines the complete contract for observer managers, including
 all safety features and configuration options from the concrete implementation.
 """
 
+from __future__ import annotations
+
 from abc import abstractmethod
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Protocol
+from collections.abc import Callable, Iterable
+from typing import Any, Protocol
 
-if TYPE_CHECKING:
-    from hexdag.core.orchestration.events.events import Event
-
+from hexdag.core.orchestration.events.events import Event
 from hexdag.core.registry import port
 
 # Type aliases for observer functions
-ObserverFunc = Callable[["Event"], None]
-AsyncObserverFunc = Callable[["Event"], Any]  # Returns awaitable
+ObserverFunc = Callable[[Event], None]
+AsyncObserverFunc = Callable[[Event], Any]  # Returns awaitable
 
 
 class Observer(Protocol):
     """Protocol for observers that monitor events."""
 
-    async def handle(self, event: "Event") -> None:
+    async def handle(self, event: Event) -> None:
         """Handle an event (read-only, no return value)."""
         ...
 
@@ -40,17 +40,27 @@ class ObserverManagerPort(Protocol):
     """
 
     @abstractmethod
-    def register(self, handler: Observer | ObserverFunc | AsyncObserverFunc, **kwargs: Any) -> str:
+    def register(
+        self,
+        handler: Observer | ObserverFunc | AsyncObserverFunc,
+        *,
+        observer_id: str | None = None,
+        event_types: Iterable[type[Event]] | type[Event] | None = None,
+        timeout: float | None = None,
+        max_concurrency: int | None = None,
+        keep_alive: bool = False,
+    ) -> str:
         """Register an observer with optional event type filtering.
 
         Args
         ----
             handler: Either an Observer protocol implementation or
                     a function (sync/async) that takes an event
-            **kwargs: Can include:
-                - 'observer_id': Optional ID for the observer
-                - 'event_types': List of event types to observe (None = all events)
-                - 'keep_alive': Whether to keep strong reference (for weak-referenceable objects)
+            observer_id: Optional ID for the observer
+            event_types: Event type or collection of types to observe (None = all events)
+            timeout: Optional timeout override for this observer
+            max_concurrency: Optional per-observer concurrency cap (>= 1)
+            keep_alive: Keep a strong reference even when using weak refs
 
         Returns
         -------
@@ -73,7 +83,7 @@ class ObserverManagerPort(Protocol):
         ...
 
     @abstractmethod
-    async def notify(self, event: "Event") -> None:
+    async def notify(self, event: Event) -> None:
         """Notify all interested observers of an event.
 
         Only observers registered for this event type will be notified.
@@ -102,7 +112,7 @@ class ObserverManagerPort(Protocol):
         ...
 
     @abstractmethod
-    def __enter__(self) -> "ObserverManagerPort":
+    def __enter__(self) -> ObserverManagerPort:
         """Context manager entry."""
         ...
 
@@ -112,7 +122,7 @@ class ObserverManagerPort(Protocol):
         ...
 
     @abstractmethod
-    async def __aenter__(self) -> "ObserverManagerPort":
+    async def __aenter__(self) -> ObserverManagerPort:
         """Async context manager entry."""
         ...
 

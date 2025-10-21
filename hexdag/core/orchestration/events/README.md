@@ -86,7 +86,7 @@ ControlSignal         # Enum: PROCEED, SKIP, RETRY, etc.
 
 ### Observer Pattern - Metrics Collection
 ```python
-from hexai.core.application.events import ObserverManager, NodeStarted
+from hexdag.builtin.events import ObserverManager, NodeStarted
 
 # Create observer manager with concurrency control
 observer_manager = ObserverManager(
@@ -112,7 +112,7 @@ await observer_manager.notify(NodeStarted(name="processor", wave_index=1))
 
 ### Control Pattern - Retry Policy
 ```python
-from hexai.core.application.events import (
+from hexdag.builtin.events import (
     ControlManager, ControlResponse, ControlSignal, NodeFailed
 )
 
@@ -217,7 +217,7 @@ Comprehensive test coverage with 40+ tests:
 
 ```bash
 # Run all event system tests
-uv run pytest tests/hexai/core/application/events/ -v
+uv run pytest tests/hexdag/core/application/events/ -v
 
 # Test files:
 test_observer_manager.py  # 13 tests - observation and filtering
@@ -304,8 +304,8 @@ manager.register(
 ## 📚 Related Documentation
 
 - [Orchestrator Integration](../orchestrator.py) - How events integrate with DAG execution
-- [Test Examples](../../../../../tests/hexai/core/application/events/) - Comprehensive test suite
-- [Performance Tests](../../../../../tests/hexai/core/application/events/test_performance.py) - Benchmark validations
+- [Test Examples](../../../../../tests/hexdag/core/application/events/) - Comprehensive test suite
+- [Performance Tests](../../../../../tests/hexdag/core/application/events/test_performance.py) - Benchmark validations
 
 ---
 

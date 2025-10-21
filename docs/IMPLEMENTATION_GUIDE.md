@@ -80,7 +80,7 @@ hexDAG's hexagonal architecture creates clean boundaries between AI agent logic 
 **Core Domain** (`hexdag.core.domain`):
 The domain layer contains pure business logic for agent orchestration, DAG management, and workflow execution. It remains independent of any external AI services or infrastructure concerns.
 
-**Application Layer** (`hexdag.core.application`):
+**Application Layer** (`hexdag.builtin`):
 This layer orchestrates agent workflows and manages execution flow. It handles event streaming, context management, and coordination between agents while maintaining separation from infrastructure.
 
 **Ports** (`hexdag.core.ports`):
@@ -545,7 +545,7 @@ The framework provides a comprehensive event system for monitoring and debugging
 
 **Available Event Types:**
 ```python
-from hexdag.core.application.events.base import EventType
+from hexdag.builtin.events.base import EventType
 
 # Pipeline events
 EventType.PIPELINE_STARTED
@@ -579,7 +579,7 @@ The event system uses the observer pattern to provide flexible monitoring capabi
 
 **Essential Observer Setup:**
 ```python
-from hexdag.core.application.events.observers import (
+from hexdag.builtin.events.observers import (
     LoggingObserver,
     MetricsObserver,
     FileObserver
@@ -610,8 +610,8 @@ The event system provides comprehensive monitoring capabilities for production e
 
 **Essential Monitoring Setup:**
 ```python
-from hexdag.core.application.events import ObserverManager
-from hexdag.core.application.events.observers import LoggingObserver, MetricsObserver
+from hexdag.builtin.events import ObserverManager
+from hexdag.builtin.events.observers import LoggingObserver, MetricsObserver
 import logging
 
 # Production monitoring

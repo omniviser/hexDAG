@@ -143,12 +143,12 @@ Components are organized in namespaces:
 # Core modules to load (ports and core components)
 modules = [
     "hexdag.core.ports",               # Port definitions
-    "hexdag.core.application.nodes",   # Core node types
+    "hexdag.builtin.nodes",   # Core node types
 ]
 
 # Default plugins to load
 plugins = [
-    "hexdag.adapters.local",  # Local in-process adapters
+    "hexdag.builtin.adapters.local",  # Local in-process adapters
 ]
 
 # Enable development mode for testing
