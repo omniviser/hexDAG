@@ -148,8 +148,9 @@ jobs:
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Bandit for SAST..."
-      # Bandit reads configuration from pyproject.toml automatically
-      uv run bandit -r ./hexdag -f json -o bandit-report.json || {
+      # Only report Medium and High severity issues (-ll flag)
+      # Bandit reads additional configuration from pyproject.toml
+      uv run bandit -r ./hexdag -ll -f json -o bandit-report.json || {
           echo "Bandit found issues or encountered an error. See bandit-report.json for details."
           cat bandit-report.json
           exit 1

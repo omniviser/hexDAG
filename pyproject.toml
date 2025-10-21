@@ -322,7 +322,7 @@ reportIncompatibleMethodOverride = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "examples", "docs", "scripts", "hexdag_plugins"]
-skips = ["B101", "B601"]
+skips = ["B101", "B404", "B601"]  # B404: subprocess import (legitimate use in CLI commands)
 
 [tool.ruff]
 line-length = 100
