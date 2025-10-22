@@ -1,4 +1,3 @@
-# parsers/yaml_parser.py
 from pydantic import BaseModel, ValidationError
 
 from hexai.core.validation.base_parser import (

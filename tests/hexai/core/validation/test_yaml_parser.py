@@ -25,7 +25,6 @@ def test_yaml_syntax_error(parser):
     bad_yaml = "name: Ala\n  age: 10"
     result = parser.parse_and_validate(bad_yaml, TestSchema)
     assert not result.ok
-    # Accept any descriptive error message; wording may vary by YAML library
     assert result.errors and len(result.errors) > 0
 
 

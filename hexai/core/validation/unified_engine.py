@@ -10,16 +10,23 @@ class UnifiedParsingEngine:
         self.parsers = [SecureJSONParser(), SecureYAMLParser()]
 
     def auto_detect_and_parse(self, content: str, schema: type[BaseModel]) -> ValidationResult:
+        errors: list[str] = []
+
         # Try to detect format (fenced blocks)
         for parser in self.parsers:
             extracted = parser.extract_from_response(content)
             if extracted:
-                return parser.parse_and_validate(extracted, schema)
+                res = parser.parse_and_validate(extracted, schema)
+                if res.ok:
+                    return res
+                if res.errors:
+                    errors += [f"[{parser.get_format_name()}][extracted] {e}" for e in res.errors]
 
-        # If nothing detected, try both sequentially
         for parser in self.parsers:
-            result = parser.parse_and_validate(content, schema)
-            if result.ok:
-                return result
+            res = parser.parse_and_validate(content, schema)
+            if res.ok:
+                return res
+            if res.errors:
+                errors += [f"[{parser.get_format_name()}][raw] {e}" for e in res.errors]
 
-        return ValidationResult(ok=False, errors=["Failed to detect format."])
+        return ValidationResult(ok=False, errors=errors or ["Failed to detect format."])
