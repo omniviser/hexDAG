@@ -1,13 +1,14 @@
 # 🤖 hexDAG - AI Agent Orchestration Framework
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12.*-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-0.3.0--a3-orange.svg)](https://github.com/hexdag/hexdag/releases)
 [![uv: Python package manager](https://img.shields.io/badge/uv-fastest--python--installer-blueviolet?logo=python&logoColor=white)](https://github.com/astral-sh/uv)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> **Enterprise-ready AI agent orchestration with low-code declarative workflows**
+> **Enterprise-ready AI agent orchestration with low-code declarative workflows and powerful macro system**
 
-hexDAG revolutionizes AI development by making agent orchestration and data science workflows accessible through declarative YAML configurations, while maintaining the power and flexibility needed for enterprise deployments.
+hexDAG revolutionizes AI development by making agent orchestration and data science workflows accessible through declarative YAML configurations, reusable macro templates, and advanced conversation patterns, while maintaining the power and flexibility needed for enterprise deployments.
 
 ## ✨ Why hexDAG?
 
@@ -18,6 +19,8 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 - **🌊 Real-Time Streaming**: See agent thoughts and memory operations as they happen
 - **🔧 Low-Code Development**: Non-technical users can create sophisticated workflows
 - **🏢 Enterprise Grade**: Production-ready with comprehensive monitoring and control
+- **🎭 Macro System**: Reusable pipeline templates that expand into full workflows
+- **💬 Conversation Patterns**: Built-in support for multi-turn conversations with memory
 
 ## 🎯 The Six Pillars
 
@@ -82,8 +85,7 @@ nodes:
 Run it with Python:
 
 ```python
-from hexai import Orchestrator
-from hexai.agent_factory import YamlPipelineBuilder
+from hexdag import Orchestrator, YamlPipelineBuilder
 
 # Load and execute the workflow
 builder = YamlPipelineBuilder()
@@ -92,35 +94,58 @@ graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
 orchestrator = Orchestrator()
 result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
 
-## 📚 Documentation
+## 📚 Documentation & Learning
 
-### Core Concepts
-- **[🤔 Philosophy & Design](docs/PHILOSOPHY.md)** - The six pillars and design principles
-- **[🏗️ Framework Architecture](docs/HEXAI_FRAMEWORK.md)** - Technical architecture deep dive
+### 📓 Interactive Notebooks (Recommended Start)
+Learn hexDAG through comprehensive, working Jupyter notebooks:
 
-### Implementation
-- **[🔧 Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Build production-ready AI workflows
-- **[🎯 Agent Patterns](docs/PIPELINES_GUIDE.md)** - Multi-agent coordination patterns
+**Core Concepts:**
+- **[01. Introduction](notebooks/01_introduction.ipynb)** - Your first pipeline (15 min)
+- **[02. YAML Pipelines](notebooks/02_yaml_pipelines.ipynb)** - Declarative workflows (25 min)
+- **[03. Practical Workflow](notebooks/03_practical_workflow.ipynb)** - Real-world patterns (30 min)
 
-### Planning
-- **[🗺️ Roadmap](docs/ROADMAP.md)** - Our vision for the future of AI orchestration
+**Advanced Features:**
+- **[06. Dynamic Reasoning Agent](notebooks/06_dynamic_reasoning_agent.ipynb)** - Advanced agent patterns
+- **[Advanced Few-shot & Retry](notebooks/advanced_fewshot_and_retry.ipynb)** - Error handling and examples
+- **[Composable LLM Architecture](notebooks/composable_llm_architecture.ipynb)** - Modular AI systems
 
-### Navigation
-- **[📚 Documentation Guide](docs/DOCUMENTATION_GUIDE.md)** - Navigate the documentation ecosystem
+**All notebooks execute successfully:** `✅ All notebook(s) validated successfully!`
 
-## 🎪 Examples
+### 📚 Complete Documentation
+- **[📖 Documentation Hub](docs/README.md)** - Complete navigation with learning paths
+- **[🤔 Philosophy & Design](docs/PHILOSOPHY.md)** - Six pillars and design principles
+- **[🔧 Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Production-ready workflows
+- **[⌨️ CLI Reference](docs/CLI_REFERENCE.md)** - Complete CLI documentation
+- **[🔌 Plugin System](docs/PLUGIN_SYSTEM.md)** - Custom component development
+- **[🗺️ Roadmap](docs/ROADMAP.md)** - Future vision and features
 
-Explore 20+ examples covering everything from basic to advanced patterns:
+### 📝 Additional Resources
+- **[Demo Directory](examples/demo/)** - Live demonstration scripts
+- **[Integration Tests](tests/integration/)** - Production test scenarios
+
+## 🎪 Interactive Notebooks
+
+Explore comprehensive Jupyter notebooks for hands-on learning:
 
 ```bash
-# Run all examples
-uv run examples/run_all.py
+# Start Jupyter to explore notebooks
+jupyter notebook notebooks/
 
-# Try specific examples
-uv run examples/01_basic_dag.py           # DAG fundamentals
-uv run examples/10_agent_nodes.py         # AI agents with tools
-uv run examples/13_yaml_pipelines.py      # Declarative workflows
-uv run examples/19_complex_workflow.py     # Enterprise patterns
+# Or run specific notebooks
+jupyter notebook notebooks/01_introduction.ipynb           # Getting started
+jupyter notebook notebooks/02_yaml_pipelines.ipynb         # YAML workflows
+jupyter notebook notebooks/03_practical_workflow.ipynb     # Real-world patterns
+jupyter notebook notebooks/06_dynamic_reasoning_agent.ipynb # Advanced agents
+```
+
+### Running the Demo
+
+```bash
+# Run the startup pitch demo
+uv run python examples/demo/run_demo_pitch.py
+
+# Or explore the YAML configuration
+cat examples/demo/demo_startup_pitch.yaml
 ```
 
 ## 🛠️ Development
@@ -134,6 +159,15 @@ uv run pytest
 
 # Code quality checks
 uv run pre-commit run --all-files
+
+# Build documentation
+uv run docs-build        # Build HTML documentation
+uv run docs-clean        # Clean build directory
+uv run docs-rebuild      # Clean and rebuild
+uv run docs-check        # Build with warnings as errors
+uv run docs-autobuild    # Auto-rebuild on file changes
+
+# Documentation will be in docs/build/html/
 ```
 
 ## 🌟 Key Features
@@ -165,6 +199,29 @@ uv run pre-commit run --all-files
 - **Type Inference**: Automatic type detection from Pydantic models
 - **Flexible Patterns**: Support for passthrough, rename, and prefixed mappings
 
+### 🎭 Powerful Macro System
+- **Reusable Templates**: Define pipeline patterns once, use everywhere
+- **Built-in Macros**: ConversationMacro, LLMMacro, ToolMacro, ReasoningAgentMacro
+- **YAML Integration**: Seamlessly use macros in declarative pipelines
+- **Dynamic Expansion**: Macros expand at runtime into full DAG subgraphs
+- **Configuration Inheritance**: Override macro defaults per invocation
+
+## 🔒 Production Security
+
+### Docker Build Command
+
+The `hexdag build` command generates containerized deployments from YAML pipelines.
+
+⚠️ **IMPORTANT**: This command is designed for **development and trusted pipelines only**.
+
+**Production Safety:**
+```bash
+# Disable build command in production environments
+export HEXDAG_DISABLE_BUILD=1
+```
+
+**For detailed documentation**, including security threat model, hardening checklist, and Docker Compose patterns, see the [CLI Reference](docs/CLI_REFERENCE.md#build---build-docker-containers).
+
 ## 🤝 Community
 
 - **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -172,7 +229,7 @@ uv run pre-commit run --all-files
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ---
 

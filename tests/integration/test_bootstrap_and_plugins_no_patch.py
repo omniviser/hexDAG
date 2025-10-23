@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.registry import registry as global_registry
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.registry import registry as global_registry
 
 
 class TestBootstrapWithRealConfig:
@@ -17,10 +17,10 @@ class TestBootstrapWithRealConfig:
     def cleanup_registry(self):
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
         yield
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
     def test_bootstrap_with_config_file(self):
         """Test bootstrap using a real TOML config file."""
@@ -28,11 +28,11 @@ class TestBootstrapWithRealConfig:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             config_content = """
 modules = [
-    "hexai.core.ports",
-    "hexai.core.application.nodes"
+    "hexdag.core.ports",
+    "hexdag.builtin.nodes"
 ]
 plugins = [
-    "hexai.adapters.mock"
+    "hexdag.builtin.adapters.mock"
 ]
 dev_mode = true
 """
@@ -64,8 +64,8 @@ dev_mode = true
             pyproject_path = Path(tmpdir) / "pyproject.toml"
             config_content = """
 [tool.hexdag]
-modules = ["hexai.core.ports"]
-plugins = ["hexai.adapters.mock"]
+modules = ["hexdag.core.ports"]
+plugins = ["hexdag.builtin.adapters.mock"]
 
 [tool.hexdag.settings]
 log_level = "DEBUG"
@@ -96,12 +96,12 @@ enable_metrics = false
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             config_content = """
 modules = [
-    "hexai.core.ports",
-    "hexai.core.application.nodes"
+    "hexdag.core.ports",
+    "hexdag.builtin.nodes"
 ]
 plugins = [
-    "hexai.adapters.mock",
-    "hexai.adapters.database.sqlite"
+    "hexdag.builtin.adapters.mock",
+    "hexdag.builtin.adapters.database.sqlite"
 ]
 """
             f.write(config_content)
@@ -118,7 +118,7 @@ plugins = [
             )
 
             # Test LLM adapter
-            from hexai.core.ports.llm import Message
+            from hexdag.core.ports.llm import Message
 
             response = await mock_llm.aresponse([Message(role="user", content="test")])
             assert "Mock response" in response
@@ -134,6 +134,9 @@ plugins = [
             assert len(results) == 1
             assert results[0]["data"] == "test_value"
 
+            # Cleanup: close the adapter connection
+            await sqlite.close()
+
         finally:
             Path(config_path).unlink()
 
@@ -142,11 +145,11 @@ plugins = [
         # Create config with conditional plugins
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             config_content = """
-modules = ["hexai.core.ports"]
+modules = ["hexdag.core.ports"]
 plugins = [
-    "hexai.adapters.mock",  # Always available
-    "hexai.adapters.llm.openai_adapter",  # Requires OPENAI_API_KEY
-    "hexai.adapters.llm.anthropic_adapter"  # Requires ANTHROPIC_API_KEY
+    "hexdag.builtin.adapters.mock",  # Always available
+    "hexdag.builtin.adapters.llm.openai_adapter",  # Requires OPENAI_API_KEY
+    "hexdag.builtin.adapters.llm.anthropic_adapter"  # Requires ANTHROPIC_API_KEY
 ]
 """
             f.write(config_content)
@@ -159,7 +162,7 @@ plugins = [
             os.environ.pop("ANTHROPIC_API_KEY", None)
 
             if global_registry.ready:
-                global_registry._cleanup_state()
+                global_registry._reset_for_testing()
 
             bootstrap_registry(config_path)
             adapters = [
@@ -175,7 +178,7 @@ plugins = [
 
             # Test 2: With OpenAI key
             os.environ["OPENAI_API_KEY"] = "test-key"
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
             bootstrap_registry(config_path)
             adapters = [

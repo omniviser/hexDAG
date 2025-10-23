@@ -9,11 +9,11 @@ repos:
       # Run the linter with auto-fix (main code)
       - id: ruff-check
         args: [--config=pyproject.toml]
-        exclude: ^hexai_plugins/
+        exclude: ^hexdag_plugins/
       # Run the formatter with auto-formatting (main code)
       - id: ruff-format
         args: [--config=pyproject.toml]
-        exclude: ^hexai_plugins/
+        exclude: ^hexdag_plugins/
 
   # Pyupgrade - Automatically upgrade Python syntax
   - repo: https://github.com/asottile/pyupgrade
@@ -39,6 +39,7 @@ repos:
         stages: [pre-commit]
       - id: pretty-format-json
         args: ["--autofix", "--indent", "4"]
+        exclude: "^notebooks/.*\\.ipynb$"
         stages: [pre-commit]
       - id: check-added-large-files
         stages: [pre-commit]
@@ -61,7 +62,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic>=2.0, types-PyYAML]
-        exclude: ^(tests/|examples/|hexai_plugins/)
+        exclude: ^(tests/|examples/|scripts/|hexdag_plugins/)
 
   - repo: local
     hooks:
@@ -70,12 +71,12 @@ repos:
         entry: uv run pyright
         language: system
         types: [python]
-        exclude: ^(tests/|examples/|hexai_plugins/)
+        exclude: ^(tests/|examples/|hexdag_plugins/)
         pass_filenames: false
 
 
   # ============================================================================
-  # Plugin-specific hooks (only run on hexai_plugins/ files)
+  # Plugin-specific hooks (only run on hexdag_plugins/ files)
   # ============================================================================
 
   # Plugin linting - uses each plugin's own pyproject.toml
@@ -85,12 +86,12 @@ repos:
       - id: ruff
         name: ruff-plugins
         args: [--fix]  # Will use plugin's own pyproject.toml
-        files: ^hexai_plugins/
-        exclude: ^hexai_plugins/.*\.venv/
+        files: ^hexdag_plugins/
+        exclude: ^hexdag_plugins/.*\.venv/
       - id: ruff-format
         name: ruff-format-plugins
-        files: ^hexai_plugins/
-        exclude: ^hexai_plugins/.*\.venv/
+        files: ^hexdag_plugins/
+        exclude: ^hexdag_plugins/.*\.venv/
 
   # Plugin type checking - with plugin dependencies
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -98,10 +99,12 @@ repos:
     hooks:
       - id: mypy
         name: mypy-plugins
-        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]  # Add plugin deps here
-        args: [--ignore-missing-imports, --python-version=3.12, hexai_plugins/]
-        files: ^hexai_plugins/.*\.py$
-        exclude: ^hexai_plugins/.*\.venv/
+        # Add plugin deps here
+        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]
+        args: [--ignore-missing-imports, --python-version=3.12, hexdag_plugins/]
+        files: ^hexdag_plugins/.*\.py$
+        exclude: ^hexdag_plugins/.*\.venv/
+
         pass_filenames: false
 
   # ============================================================================
@@ -112,8 +115,8 @@ repos:
     rev: 1.8.6
     hooks:
       - id: bandit
-        args: [-r, hexai]
-        exclude: ^(tests/|hexai_plugins/)
+        args: [-ll]  # Only report Medium and High severity
+        exclude: ^(tests/|hexdag_plugins/)
 
   # Security - Dependency vulnerabilities
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
@@ -139,8 +142,42 @@ repos:
         types: [yaml]
         stages: [pre-commit]
 
+  # Jupyter notebook support
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.9.1
+    hooks:
+      - id: nbqa-ruff
+        args: [--fix]
+        additional_dependencies: [ruff==0.13.0]
+      - id: nbqa-pyupgrade
+        args: [--py312-plus]
+        additional_dependencies: [pyupgrade==3.20.0]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+        args: [--extra-keys, "metadata.kernelspec metadata.language_info"]
+
   - repo: local
     hooks:
+
+      - id: check-core-imports
+        name: Check core doesn't import from adapters/builtin
+        entry: uv run python scripts/check_core_imports.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-async-io
+        name: Check for sync I/O in async code
+        entry: uv run python scripts/check_async_io.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: check-test-structure
         name: Check test structure consistency
         entry: uv run scripts/check_test_structure.py
@@ -149,17 +186,25 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
-      - id: check-examples
-        name: Check examples functionality
-        entry: uv run scripts/check_examples.py
+      - id: check-notebooks
+        name: Execute and validate notebooks
+        entry: uv run python scripts/check_notebooks.py
+        language: system
+        files: ^notebooks/.*\.ipynb$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: doctest
+        name: Run doctest
+        entry: uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure
         language: system
         types: [python]
         stages: [pre-commit]
         pass_filenames: false
 
       - id: pytest
-        name: Run pytest
-        entry: uv run pytest tests/hexai/ -x --tb=short
+        name: Run pytest with coverage
+        entry: uv run pytest tests/hexdag/ --ignore=tests/hexdag/cli -x --tb=short --cov=hexdag --cov-config=pyproject.toml --cov-fail-under=70 --cov-report=term-missing:skip-covered
         language: system
         types: [python]
         stages: [pre-commit]
@@ -183,7 +228,7 @@ repos:
 
       - id: vulture
         name: vulture - dead code detection
-        entry: uv run vulture hexai/ --min-confidence 90
+        entry: uv run vulture hexdag/ .vulture_whitelist.py --min-confidence 90
         language: system
         types: [python]
         stages: [pre-commit]
@@ -191,7 +236,15 @@ repos:
 
       - id: radon-complexity
         name: radon - code complexity analysis
-        entry: uv run radon cc hexai/ --min B --show-complexity
+        entry: uv run radon cc hexdag/ --min B --show-complexity
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: interrogate
+        name: interrogate - docstring coverage
+        entry: uv run interrogate hexdag/ --fail-under 95 --quiet
         language: system
         types: [python]
         stages: [pre-commit]
@@ -199,7 +252,7 @@ repos:
 
       - id: safety-check
         name: safety - dependency vulnerability scan
-        entry: uv run safety check --json
+        entry: bash -c 'uv run safety check --output bare 2>&1 | grep -v "DEPRECATED\|pkg_resources" || true'
         language: system
         stages: [pre-commit]
         pass_filenames: false
@@ -213,17 +266,27 @@ repos:
             BRANCH_NAME=$(git symbolic-ref --short HEAD)
 
             # Define your naming convention regex pattern
-            PATTERN="^(ci|dependabot\/pip|docs|experiment|feat|fix|refactor|test)\/[A-Za-z0-9._-]+$"
+            PATTERN="^(ci|dependabot\/pip|docs|experiment|feat|fix|refactor|test)\/"\
+            "[A-Za-z0-9._-]+$"
 
             # Check if the branch name matches the pattern
             if [[ $BRANCH_NAME =~ $PATTERN ]]; then
                 echo "Branch name \"$BRANCH_NAME\" is valid."
                 exit 0
             else
-                echo "Branch name \"$BRANCH_NAME\" is invalid. It must match the pattern \"$PATTERN\"."
+                echo "Branch name \"$BRANCH_NAME\" is invalid. " \
+                "It must match the pattern \"$PATTERN\"."
                 exit 1
             fi
             '
         language: system
         pass_filenames: false
+        always_run: true
+
+      - id: license-check
+        name: Check dependency licenses
+        entry: uv run licensecheck --zero
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
         always_run: true

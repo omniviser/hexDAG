@@ -1,186 +1,215 @@
 # hexDAG Demo: Customer Support Ticket Analyzer
 # "Because 80% of LLM workflows just need to work, not win a Turing test"
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: support-ticket-analyzer
+  description: Analyze customer support tickets for sentiment, category, and priority
+  tags: ["support", "automated", "llm"]
+  version: "1.0"
+spec:
+  # Input validation - because production systems need contracts
+  input_schema:
+    type: object
+    properties:
+      ticket_text:
+        type: string
+        minLength: 10
+        maxLength: 5000
+      customer_tier:
+        type: string
+        enum: ["bronze", "silver", "gold", "enterprise"]
+    required: ["ticket_text", "customer_tier"]
 
-name: support_ticket_analyzer
-description: Analyze customer support tickets for sentiment, category, and priority
+  # Declarative workflow - no spaghetti code, just clear intent
+  nodes:
+    # Step 1: Extract structured data from unstructured text
+    - kind: llm_node
+      metadata:
+        name: ticket_parser
+        annotations:
+          description: Extract structured information from support ticket
+      spec:
+        prompt_template: |
+          Extract the following from this support ticket:
+          Customer Tier: {{customer_tier}}
+          Ticket: {{ticket_text}}
 
-# Input validation - because production systems need contracts
-input_schema:
-  type: object
-  properties:
-    ticket_text:
-      type: string
-      minLength: 10
-      maxLength: 5000
-    customer_tier:
-      type: string
-      enum: ["bronze", "silver", "gold", "enterprise"]
-  required: ["ticket_text", "customer_tier"]
+        model: gpt-4o
+        temperature: 0.1
+        max_retries: 3
+        timeout: 10
+        output_schema:
+          type: object
+          properties:
+            issue_type:
+              type: string
+              enum: ["bug", "feature_request", "billing", "onboarding", "other"]
+            technical_details:
+              type: string
+            customer_emotion:
+              type: string
+              enum: ["angry", "frustrated", "neutral", "happy"]
+          required: ["issue_type", "technical_details", "customer_emotion"]
+        dependencies: []
+    # Step 2: Conditional routing based on customer tier (enterprise gets special treatment)
+    - kind: conditional_node
+      metadata:
+        name: tier_router
+        annotations:
+          description: Route to enterprise or standard analysis based on tier
+      spec:
+        condition: "customer_tier == 'enterprise'"
+        true_node: enterprise_analysis
+        false_node: standard_analysis
+        dependencies: [ticket_parser]
 
-# Declarative workflow - no spaghetti code, just clear intent
-nodes:
-  # Step 1: Extract structured data from unstructured text
-  - type: llm
-    id: ticket_parser
-    params:
-      prompt_template: |
-        Extract the following from this support ticket:
-        Customer Tier: {{customer_tier}}
-        Ticket: {{ticket_text}}
+    # Step 3A: Enterprise path - more thorough analysis
+    - kind: llm_node
+      metadata:
+        name: enterprise_analysis
+        annotations:
+          description: Comprehensive analysis for enterprise customers
+      spec:
+        prompt_template: |
+          ENTERPRISE CUSTOMER ALERT!
+          Issue Type: {{ticket_parser.issue_type}}
+          Technical Details: {{ticket_parser.technical_details}}
+          Emotion: {{ticket_parser.customer_emotion}}
 
-      model: gpt-4o
-      temperature: 0.1
-      max_retries: 3
-      timeout: 10
-    output_schema:
-      type: object
-      properties:
-        issue_type:
-          type: string
-          enum: ["bug", "feature_request", "billing", "onboarding", "other"]
-        technical_details:
-          type: string
-        customer_emotion:
-          type: string
-          enum: ["angry", "frustrated", "neutral", "happy"]
-      required: ["issue_type", "technical_details", "customer_emotion"]
-    depends_on: []
+          Provide:
+          1. Root cause analysis
+          2. Immediate mitigation steps
+          3. Long-term solution
+          4. Executive summary for account manager
+        model: gpt-4o
+        temperature: 0.3
+        max_tokens: 1000
+        output_schema:
+          type: object
+          properties:
+            priority:
+              type: string
+              enum: ["critical", "high", "medium", "low"]
+            action_items:
+              type: array
+              items:
+                type: string
+            executive_summary:
+              type: string
+        dependencies: []  # Conditional node handles dependency
 
-  # Step 2: Conditional routing based on customer tier (enterprise gets special treatment)
-  - type: conditional
-    id: tier_router
-    params:
-      condition: "customer_tier == 'enterprise'"
-      true_node: enterprise_analysis
-      false_node: standard_analysis
-    depends_on: [ticket_parser]
+    # Step 3B: Standard path - efficient processing
+    - kind: llm_node
+      metadata:
+        name: standard_analysis
+        annotations:
+          description: Efficient analysis for standard tier customers
+      spec:
+        prompt_template: |
+          Issue: {{ticket_parser.issue_type}}
+          Details: {{ticket_parser.technical_details}}
 
-  # Step 3A: Enterprise path - more thorough analysis
-  - type: llm
-    id: enterprise_analysis
-    params:
-      prompt_template: |
-        ENTERPRISE CUSTOMER ALERT!
-        Issue Type: {{ticket_parser.issue_type}}
-        Technical Details: {{ticket_parser.technical_details}}
-        Emotion: {{ticket_parser.customer_emotion}}
+          Assign priority and suggest response template.
+        model: gpt-4o
+        temperature: 0.2
+        max_tokens: 500
+        output_schema:
+          type: object
+          properties:
+            priority:
+              type: string
+              enum: ["high", "medium", "low"]
+            suggested_response:
+              type: string
+        dependencies: []  # Conditional node handles dependency
 
-        Provide:
-        1. Root cause analysis
-        2. Immediate mitigation steps
-        3. Long-term solution
-        4. Executive summary for account manager
-      model: gpt-4o
-      temperature: 0.3
-      max_tokens: 1000
-    output_schema:
-      type: object
-      properties:
-        priority:
-          type: string
-          enum: ["critical", "high", "medium", "low"]
-        action_items:
-          type: array
-          items:
-            type: string
-        executive_summary:
-          type: string
-    depends_on: []  # Conditional node handles dependency
+    # Step 4: Generate final response with observability
+    - kind: function_node
+      metadata:
+        name: response_generator
+        annotations:
+          description: Generate final response combining all analysis
+      spec:
+        function: generate_response
+        args:
+          tier: "{{customer_tier}}"
+          parser_output: "{{ticket_parser}}"
+          analysis: "{{tier_router.result}}"
+        output_schema:
+          type: object
+          properties:
+            ticket_id:
+              type: string
+            response_text:
+              type: string
+            internal_notes:
+              type: string
+            assigned_team:
+              type: string
+        dependencies: [tier_router]
 
-  # Step 3B: Standard path - efficient processing
-  - type: llm
-    id: standard_analysis
-    params:
-      prompt_template: |
-        Issue: {{ticket_parser.issue_type}}
-        Details: {{ticket_parser.technical_details}}
+    # Step 5: Parallel notifications (async-first architecture)
+    - kind: function_node
+      metadata:
+        name: notify_slack
+        annotations:
+          description: Send notification to Slack channel
+      spec:
+        function: send_slack_notification
+        args:
+          channel: "#support-urgent"
+          message: "New {{response_generator.assigned_team}} ticket: {{response_generator.ticket_id}}"
+        dependencies: [response_generator]
 
-        Assign priority and suggest response template.
-      model: gpt-4o
-      temperature: 0.2
-      max_tokens: 500
-    output_schema:
-      type: object
-      properties:
-        priority:
-          type: string
-          enum: ["high", "medium", "low"]
-        suggested_response:
-          type: string
-    depends_on: []  # Conditional node handles dependency
 
-  # Step 4: Generate final response with observability
-  - type: function
-    id: response_generator
-    params:
-      function: generate_response
-      args:
-        tier: "{{customer_tier}}"
-        parser_output: "{{ticket_parser}}"
-        analysis: "{{tier_router.result}}"
-    output_schema:
-      type: object
-      properties:
-        ticket_id:
-          type: string
-        response_text:
-          type: string
-        internal_notes:
-          type: string
-        assigned_team:
-          type: string
-    depends_on: [tier_router]
+    - kind: function_node
+      metadata:
+        name: update_crm
+        annotations:
+          description: Update customer record in CRM
+      spec:
+        function: update_customer_record
+        args:
+          ticket_id: "{{response_generator.ticket_id}}"
+          priority: "{{tier_router.result.priority}}"
+        dependencies: [response_generator]
 
-  # Step 5: Parallel notifications (async-first architecture)
-  - type: function
-    id: notify_slack
-    params:
-      function: send_slack_notification
-      args:
-        channel: "#support-urgent"
-        message: "New {{response_generator.assigned_team}} ticket: {{response_generator.ticket_id}}"
-    depends_on: [response_generator]
+    - kind: function_node
+      metadata:
+        name: create_jira
+        annotations:
+          description: Create JIRA ticket for tracking
+      spec:
+        function: create_jira_ticket
+        args:
+          summary: "{{ticket_parser.issue_type}}: {{response_generator.ticket_id}}"
+          description: "{{response_generator.internal_notes}}"
+          priority: "{{tier_router.result.priority}}"
+        dependencies: [response_generator]
 
-  - type: function
-    id: update_crm
-    params:
-      function: update_customer_record
-      args:
-        ticket_id: "{{response_generator.ticket_id}}"
-        priority: "{{tier_router.result.priority}}"
-    depends_on: [response_generator]
 
-  - type: function
-    id: create_jira
-    params:
-      function: create_jira_ticket
-      args:
-        summary: "{{ticket_parser.issue_type}}: {{response_generator.ticket_id}}"
-        description: "{{response_generator.internal_notes}}"
-        priority: "{{tier_router.result.priority}}"
-    depends_on: [response_generator]
+  # Event handlers for observability (know what's happening, when, and why)
+  events:
+    on_node_failed:
+      - type: alert
+        target: pagerduty
+        severity: high
+    on_workflow_complete:
+      - type: metrics
+        target: datadog
+        tags: ["support", "automated"]
 
-# Event handlers for observability (know what's happening, when, and why)
-events:
-  on_node_failed:
-    - type: alert
-      target: pagerduty
-      severity: high
-  on_workflow_complete:
-    - type: metrics
-      target: datadog
-      tags: ["support", "automated"]
-
-# Output validation - because garbage in should never mean garbage out
-output_schema:
-  type: object
-  properties:
-    ticket_id:
-      type: string
-      pattern: "^TKT-[0-9]{6}$"
-    response_sent:
-      type: boolean
-    processing_time_ms:
-      type: number
-      maximum: 30000  # SLA: 30 seconds max
-  required: ["ticket_id", "response_sent", "processing_time_ms"]
+  # Output validation - because garbage in should never mean garbage out
+  output_schema:
+    type: object
+    properties:
+      ticket_id:
+        type: string
+        pattern: "^TKT-[0-9]{6}$"
+      response_sent:
+        type: boolean
+      processing_time_ms:
+        type: number
+        maximum: 30000  # SLA: 30 seconds max
+    required: ["ticket_id", "response_sent", "processing_time_ms"]

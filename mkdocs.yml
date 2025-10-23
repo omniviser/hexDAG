@@ -1,0 +1,96 @@
+site_name: HexDAG Documentation
+site_description: Enterprise-ready AI agent orchestration framework
+site_url: https://hexdag.ai
+repo_url: https://github.com/omniviser/hexdag
+repo_name: hexdag
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Core Concepts: getting-started/concepts.md
+  - User Guide:
+      - Node Types: guide/node-types.md
+  - Reference:
+      - Nodes: reference/nodes.md
+      - Adapters: reference/adapters.md
+      - Ports: reference/ports.md
+      - Tools: reference/tools.md
+  - Namespaces:
+      - Core: namespaces/core.md
+      - Plugin: namespaces/plugin.md
+
+hooks:
+  - docs/.hooks/registry_docs.py
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/omniviser/hexdag
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/hexdag/
+
+copyright: Copyright &copy; 2025 HexDAG Project

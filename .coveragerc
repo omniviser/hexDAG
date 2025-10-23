@@ -1,5 +1,5 @@
 [run]
-source = hexai
+source = hexdag
 omit =
     */tests/*
     */test_*
