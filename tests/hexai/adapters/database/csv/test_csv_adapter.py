@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from hexai.adapters.database.csv.csv_adapter import CsvAdapter
+from hexdag.builtin.adapters.database.csv.csv_adapter import CsvAdapter
 
 
 @pytest.fixture

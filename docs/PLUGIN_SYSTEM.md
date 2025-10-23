@@ -4,6 +4,43 @@
 
 HexDAG uses a powerful plugin architecture that allows you to extend the framework with custom adapters and components. The system is built on the Hexagonal Architecture pattern (Ports and Adapters), providing clean separation between business logic and infrastructure.
 
+## Quick Start
+
+Get started with plugin development in minutes:
+
+```bash
+# Create a new plugin
+hexdag plugin new redis_adapter --port memory
+
+# Develop and test
+hexdag plugin lint redis_adapter
+hexdag plugin test redis_adapter
+
+# Install the plugin
+hexdag plugin install redis_adapter
+```
+
+### Plugin Structure
+
+```
+hexdag_plugins/my_adapter/
+├── my_adapter.py        # Implement @adapter decorator
+├── pyproject.toml       # Dependencies
+└── tests/               # Plugin tests
+```
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `new <name>` | Create plugin from template |
+| `list` | Show all installed plugins |
+| `lint <name>` | Lint code with auto-fix |
+| `format <name>` | Format code |
+| `test <name>` | Run plugin tests |
+| `install <name>` | Install plugin dependencies |
+| `check-all` | Check all plugins |
+
 ## Table of Contents
 
 1. [Core Concepts](#core-concepts)
@@ -25,7 +62,7 @@ The plugin system is based on two key concepts:
 
 ```python
 # Port definition (interface)
-from hexai.core.registry import port
+from hexdag.core.registry import port
 
 @port(name="llm")
 class LLM:
@@ -34,7 +71,7 @@ class LLM:
         raise NotImplementedError
 
 # Adapter implementation
-from hexai.core.registry import adapter
+from hexdag.core.registry import adapter
 
 @adapter(name="openai_llm", implements_port="llm", namespace="plugin")
 class OpenAILLM(LLM):
@@ -49,7 +86,7 @@ class OpenAILLM(LLM):
 The registry is the central hub that manages all components:
 
 ```python
-from hexai.core.registry import registry
+from hexdag.core.registry import registry
 
 # Get a component
 llm = registry.get("openai_llm", namespace="plugin")
@@ -80,11 +117,11 @@ bootstrap_registry("hexdag.toml")
 
 # 2. Load modules (ports first)
 for module in config.modules:
-    load_module(module)  # e.g., "hexai.core.ports"
+    load_module(module)  # e.g., "hexdag.core.ports"
 
 # 3. Load plugins (adapters)
 for plugin in config.plugins:
-    load_plugin(plugin)  # e.g., "hexai.adapters.openai"
+    load_plugin(plugin)  # e.g., "hexdag.adapters.openai"
 
 # 4. Components are now available in registry
 ```
@@ -105,13 +142,13 @@ Components are organized in namespaces:
 [tool.hexdag]
 # Core modules to load (ports and core components)
 modules = [
-    "hexai.core.ports",               # Port definitions
-    "hexai.core.application.nodes",   # Core node types
+    "hexdag.core.ports",               # Port definitions
+    "hexdag.builtin.nodes",   # Core node types
 ]
 
 # Default plugins to load
 plugins = [
-    "hexai.adapters.local",  # Local in-process adapters
+    "hexdag.builtin.adapters.local",  # Local in-process adapters
 ]
 
 # Enable development mode for testing
@@ -128,13 +165,13 @@ enable_metrics = true
 Plugins can have their own configuration files:
 
 ```toml
-# hexai/adapters/openai/hexdag.toml
+# hexdag/adapters/openai/hexdag.toml
 modules = [
-    "hexai.core.ports",  # Required ports
+    "hexdag.core.ports",  # Required ports
 ]
 
 plugins = [
-    "hexai.adapters.openai",  # The plugin module
+    "hexdag.adapters.openai",  # The plugin module
 ]
 
 [settings.openai]
@@ -147,7 +184,7 @@ max_tokens = 2000
 ### Loading Custom Configurations
 
 ```python
-from hexai.core.bootstrap import bootstrap_registry
+from hexdag.core.bootstrap import bootstrap_registry
 
 # Load main configuration
 bootstrap_registry()  # Uses pyproject.toml
@@ -167,8 +204,8 @@ bootstrap_registry(f"config/{env}/hexdag.toml")
 
 ```python
 # my_company/adapters/custom_llm.py
-from hexai.core.ports import LLM, Message
-from hexai.core.registry import adapter
+from hexdag.core.ports import LLM, Message
+from hexdag.core.registry import adapter
 from pydantic import BaseModel, Field
 
 # Configuration model
@@ -239,7 +276,7 @@ __all__ = [
 ```toml
 # my_company/hexdag.toml
 modules = [
-    "hexai.core.ports",  # Required for port definitions
+    "hexdag.core.ports",  # Required for port definitions
 ]
 
 plugins = [
@@ -259,8 +296,8 @@ pool_size = 10
 ### Step 5: Use Your Plugin
 
 ```python
-from hexai.core.bootstrap import bootstrap_registry
-from hexai.core.registry import registry
+from hexdag.core.bootstrap import bootstrap_registry
+from hexdag.core.registry import registry
 
 # Load your plugin
 bootstrap_registry("my_company/hexdag.toml")
@@ -275,7 +312,7 @@ response = await llm.aresponse(messages)
 ### Directory Structure Best Practices
 
 ```
-hexai/
+hexdag/
 ├── adapters/
 │   ├── local/           # In-process implementations
 │   │   ├── __init__.py
@@ -433,7 +470,7 @@ api_key_env = "CUSTOM_API_KEY"
 ## Usage
 
 ```python
-from hexai.core.registry import registry
+from hexdag.core.registry import registry
 
 llm = registry.get("custom_llm", namespace="plugin")
 response = await llm.aresponse(messages)
@@ -446,8 +483,8 @@ response = await llm.aresponse(messages)
 
 ```python
 # simple_memory.py
-from hexai.core.ports import Memory
-from hexai.core.registry import adapter
+from hexdag.core.ports import Memory
+from hexdag.core.registry import adapter
 from typing import Any
 
 @adapter(name="simple_memory", implements_port="memory", namespace="plugin")
@@ -472,8 +509,8 @@ class SimpleMemory(Memory):
 ```python
 # postgres_adapter.py
 import asyncpg
-from hexai.core.ports import DatabasePort
-from hexai.core.registry import adapter
+from hexdag.core.ports import DatabasePort
+from hexdag.core.registry import adapter
 
 @adapter(name="postgres_db", implements_port="database", namespace="plugin")
 class PostgreSQLAdapter(DatabasePort):
@@ -507,8 +544,8 @@ class PostgreSQLAdapter(DatabasePort):
 
 ```python
 # multi_llm_adapter.py
-from hexai.core.ports import LLM
-from hexai.core.registry import adapter, registry
+from hexdag.core.ports import LLM
+from hexdag.core.registry import adapter, registry
 
 @adapter(name="multi_llm", implements_port="llm", namespace="plugin")
 class MultiProviderLLM(LLM):
@@ -543,7 +580,7 @@ class MultiProviderLLM(LLM):
 
 ```python
 # main.py
-from hexai.core.bootstrap import bootstrap_registry
+from hexdag.core.bootstrap import bootstrap_registry
 import os
 
 # Determine environment
@@ -554,13 +591,13 @@ if environment == "production":
     bootstrap_registry("config/production/hexdag.toml")
 elif environment == "testing":
     # Load mock adapters for testing
-    bootstrap_registry("hexai/adapters/mock/hexdag.toml")
+    bootstrap_registry("hexdag/adapters/mock/hexdag.toml")
 else:
     # Load local adapters for development
     bootstrap_registry("config/development/hexdag.toml")
 
 # Now use the appropriate adapters
-from hexai.core.registry import registry
+from hexdag.core.registry import registry
 
 llm = registry.get("llm", namespace="plugin")  # Gets environment-appropriate LLM
 ```
@@ -594,7 +631,7 @@ for plugin in plugins:
 
 ```python
 # versioned_adapter.py
-from hexai.core.registry import adapter
+from hexdag.core.registry import adapter
 from packaging import version
 
 @adapter(
@@ -611,9 +648,9 @@ class VersionedLLM(LLM):
 
     def __init__(self):
         # Check compatibility
-        import hexai
-        if version.parse(hexai.__version__) < version.parse(self.MIN_HEXDAG_VERSION):
-            raise RuntimeError(f"HexDAG {hexai.__version__} is too old for this adapter")
+        import hexdag
+        if version.parse(hexdag.__version__) < version.parse(self.MIN_HEXDAG_VERSION):
+            raise RuntimeError(f"HexDAG {hexdag.__version__} is too old for this adapter")
 ```
 
 ### Plugin Lifecycle Hooks
@@ -675,7 +712,7 @@ Enable debug logging to troubleshoot plugin loading:
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-from hexai.core.bootstrap import bootstrap_registry
+from hexdag.core.bootstrap import bootstrap_registry
 bootstrap_registry("hexdag.toml")  # Will show detailed loading logs
 ```
 

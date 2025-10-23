@@ -9,8 +9,8 @@ This script ensures that:
 4. Test files follow the naming convention: test_<module_name>.py
 
 Expected structure:
-- Source: hexai/path/to/module.py
-- Test:   tests/hexai/path/to/test_module.py
+- Source: hexdag/path/to/module.py
+- Test:   tests/hexdag/path/to/test_module.py
 """
 
 import sys
@@ -27,13 +27,13 @@ class TestMismatch(NamedTuple):
 
 
 def get_source_files() -> set[Path]:
-    """Get all Python source files in the hexai module.
+    """Get all Python source files in the hexdag module.
 
     Returns
     -------
         Set of Path objects for source files.
     """
-    src_root = Path("hexai")
+    src_root = Path("hexdag")
     if not src_root.exists():
         return set()
 
@@ -47,13 +47,13 @@ def get_source_files() -> set[Path]:
 
 
 def get_test_files() -> set[Path]:
-    """Get all test files in the hexai test directory.
+    """Get all test files in the hexdag test directory.
 
     Returns
     -------
         Set of Path objects for test files.
     """
-    test_root = Path("tests/hexai")
+    test_root = Path("tests/hexdag")
     if not test_root.exists():
         return set()
 
@@ -71,14 +71,14 @@ def source_to_test_path(source_file: Path) -> Path:
     -------
         Expected test file path.
     """
-    # hexai/core/domain/dag.py -> tests/hexai/core/domain/test_dag.py
+    # hexdag/core/domain/dag.py -> tests/hexdag/core/domain/test_dag.py
 
-    # Remove the hexai prefix
-    relative_path = source_file.relative_to(Path("hexai"))
+    # Remove the hexdag prefix
+    relative_path = source_file.relative_to(Path("hexdag"))
 
     # Change module.py to test_module.py
     test_filename = f"test_{relative_path.name}"
-    return Path("tests/hexai") / relative_path.parent / test_filename
+    return Path("tests/hexdag") / relative_path.parent / test_filename
 
 
 def test_to_source_path(test_file: Path) -> Path:
@@ -93,17 +93,17 @@ def test_to_source_path(test_file: Path) -> Path:
     ValueError
         If test file doesn't follow naming convention.
     """
-    # tests/hexai/core/domain/test_dag.py -> hexai/core/domain/dag.py
+    # tests/hexdag/core/domain/test_dag.py -> hexdag/core/domain/dag.py
 
-    # Remove the tests/hexai prefix
-    relative_path = test_file.relative_to(Path("tests/hexai"))
+    # Remove the tests/hexdag prefix
+    relative_path = test_file.relative_to(Path("tests/hexdag"))
 
     # Remove test_ prefix from filename
     if not relative_path.name.startswith("test_"):
         raise ValueError(f"Test file {test_file} doesn't follow test_ naming convention")
 
     source_filename = relative_path.name[5:]  # Remove "test_"
-    return Path("hexai") / relative_path.parent / source_filename
+    return Path("hexdag") / relative_path.parent / source_filename
 
 
 def check_test_structure() -> list[TestMismatch]:
@@ -198,8 +198,8 @@ def main() -> int:
 
     print("\n" + "=" * 80)
     print("📋 Test Structure Convention:")
-    print("   Source: hexai/path/to/module.py")
-    print("   Test:   tests/hexai/path/to/test_module.py")
+    print("   Source: hexdag/path/to/module.py")
+    print("   Test:   tests/hexdag/path/to/test_module.py")
     print()
     print("💡 To fix:")
     print("   1. Move test files to the correct location")

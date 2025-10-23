@@ -13,8 +13,27 @@ hexDAG is an enterprise-ready AI agent orchestration framework that transforms c
 # Install dependencies using uv (Python package manager)
 uv sync
 
+# Install with notebook support (for documentation)
+uv sync --all-extras
+
 # Install pre-commit hooks
 uv run pre-commit install
+```
+
+### Notebooks
+```bash
+# Start Jupyter for interactive development
+jupyter notebook notebooks/
+
+# Execute and validate all notebooks
+uv run python scripts/check_notebooks.py
+
+# Format notebooks
+uv run nbqa ruff notebooks/ --fix
+uv run nbqa pyupgrade notebooks/ --py312-plus
+
+# Strip notebook outputs (automatic via pre-commit)
+uv run nbstripout notebooks/**/*.ipynb
 ```
 
 ### Testing
@@ -23,12 +42,16 @@ uv run pre-commit install
 uv run pytest
 
 # Run tests with coverage
-uv run pytest --cov=hexai --cov-report=html --cov-report=term-missing
+uv run pytest --cov=hexdag --cov-report=html --cov-report=term-missing
 
 # Run specific test areas
-uv run pytest tests/hexai/agent_factory/ -x --tb=short  # Agent factory tests
-uv run pytest tests/hexai/core/                        # Core framework tests
-uv run pytest tests/hexai/validation/                  # Validation tests
+uv run pytest tests/hexdag/pipeline_builder/ -x --tb=short  # Pipeline builder tests
+uv run pytest tests/hexdag/core/                        # Core framework tests
+uv run pytest tests/hexdag/validation/                  # Validation tests
+
+# Run doctests (tests embedded in docstrings)
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/
+uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure  # See all failures
 ```
 
 ### Code Quality
@@ -36,14 +59,32 @@ uv run pytest tests/hexai/validation/                  # Validation tests
 # Run all pre-commit hooks
 uv run pre-commit run --all-files
 
-# Individual tools
-uv run black hexai/                    # Code formatting
-uv run isort hexai/                    # Import sorting
-uv run ruff check hexai/ --fix         # Linting with auto-fix
-uv run ruff format hexai/              # Ruff formatting
-uv run mypy hexai/                     # Type checking
-uv run bandit -r hexai                 # Security scanning
-uv run deptry .                        # Dependency analysis
+# Linting and formatting
+uv run ruff check hexdag/ --fix         # Linting with auto-fix
+uv run ruff format hexdag/              # Code formatting
+uv run mypy hexdag/                     # Type checking
+uv run pyright hexdag/                  # Alternative type checker
+uv run bandit -r hexdag                 # Security scanning
+
+# Dependency analysis
+uv run deptry .                        # Unused dependencies
+uv run safety check                    # Vulnerability scanning
+./scripts/check_licenses.sh            # License compliance
+
+# Code quality metrics
+uv run vulture hexdag/ --min-confidence 90    # Dead code detection
+uv run radon cc hexdag/ --min B               # Complexity analysis
+
+# Coverage and testing
+./scripts/coverage_report.sh           # Full coverage report
+./scripts/diff_coverage.sh             # Coverage on changed code only
+./scripts/run_mutation_tests.sh        # Mutation testing (slow!)
+
+# API compatibility
+./scripts/check_api_compat.sh          # Check for breaking changes
+
+# Memory profiling
+./scripts/profile_memory.sh            # Memory leak detection
 ```
 
 ### Examples
@@ -73,18 +114,17 @@ hexDAG follows hexagonal architecture with clear separation of concerns:
 
 ### Core Framework Structure
 ```
-hexai/
+hexdag/
 ├── core/
 │   ├── domain/          # Core business logic (DAG, NodeSpec, DirectedGraph)
-│   ├── application/     # Use cases (Orchestrator, NodeFactory)
-│   │   ├── nodes/       # Node implementations (LLMNode, AgentNode, etc.)
-│   │   ├── events/      # Event system for observability
-│   │   └── prompt/      # Prompt templating system
+│   ├── orchestration/   # Orchestrator and execution engine
+│   ├── pipeline_builder/# YAML pipeline building and compilation
 │   ├── ports/           # Interface definitions (LLM, Database, Memory)
 │   └── validation/      # Type validation and schema conversion
-├── adapters/            # External service implementations
-│   ├── mock/           # Mock implementations for testing
-├── agent_factory/       # YAML pipeline building and compilation
+├── builtin/
+│   ├── nodes/          # Node implementations (LLMNode, AgentNode, etc.)
+│   ├── adapters/       # Built-in adapter implementations
+│   └── macros/         # Reusable macro components
 └── cli/                # Command-line interface
 ```
 
@@ -188,7 +228,7 @@ This project uses modern Python 3.12+ type checkers to ensure code quality and t
 - **Description**: Fast, feature-rich type checker developed by Microsoft
 - **Python Support**: Full Python 3.12+ compatibility including latest typing features
 - **Configuration**: Runs in both pre-commit hooks and Azure pipelines
-- **Command**: `uv run pyright ./hexai`
+- **Command**: `uv run pyright ./hexdag`
 - **Key Features**:
   - Excellent performance and speed
   - Rich VS Code integration (Pylance)
@@ -198,7 +238,7 @@ This project uses modern Python 3.12+ type checkers to ensure code quality and t
 ### MyPy
 - **Description**: Standard Python type checker with extensive ecosystem support
 - **Configuration**: Configured with pydantic and types-PyYAML support
-- **Command**: `uv run mypy ./hexai`
+- **Command**: `uv run mypy ./hexdag`
 
 ## Running Type Checks
 
@@ -208,10 +248,10 @@ This project uses modern Python 3.12+ type checkers to ensure code quality and t
 uv run pre-commit run --all-files
 
 # Run Pyright specifically
-uv run pyright ./hexai
+uv run pyright ./hexdag
 
 # Run MyPy specifically
-uv run mypy ./hexai
+uv run mypy ./hexdag
 ```
 
 ### Pre-commit Integration
@@ -260,14 +300,274 @@ Examples:
 - Mock adapters for external services
 - Example-based testing for user workflows
 
+### Async I/O Enforcement
+
+hexDAG enforces async-first architecture through:
+
+1. **Static Analysis** - `scripts/check_async_io.py` scans for blocking I/O in async functions
+2. **Runtime Warnings** - `hexdag/core/utils/async_warnings.py` detects blocking operations at runtime
+3. **Adapter Decorator Integration** - `@adapter` decorator automatically wraps async methods
+
+#### Running the Async I/O Checker
+
+```bash
+# Check entire codebase
+uv run python scripts/check_async_io.py
+
+# Verbose output
+uv run python scripts/check_async_io.py --verbose
+
+# Check specific paths
+uv run python scripts/check_async_io.py hexdag/adapters/
+```
+
+#### Using Runtime Warnings
+
+```python
+from hexdag.core.utils.async_warnings import warn_sync_io, warn_if_async
+
+# In async functions
+async def my_function():
+    warn_sync_io("file_open", "Use aiofiles.open()")
+
+# As decorator
+@warn_if_async
+def sync_helper():
+    return open('file.txt').read()
+```
+
+#### Adapter Decorator with Async Monitoring
+
+```python
+from hexdag.core.registry.decorators import adapter
+
+# Default: warnings enabled
+@adapter("database", name="sqlite")
+class SQLiteAdapter:
+    async def aexecute_query(self, sql):
+        # This will be monitored for blocking I/O
+        pass
+
+# Disable warnings for intentional sync I/O
+@adapter("database", name="local_db", warn_sync_io=False)
+class LocalDBAdapter:
+    async def aexecute_query(self, sql):
+        # No warnings - intentional sync I/O
+        pass
+```
+
+See `docs/async_io_enforcement.md` for complete documentation.
+
 ### Error Handling
 - Use custom exception hierarchies (e.g., `OrchestratorError`, `ValidationError`)
 - Maintain error context and node information
 - Event emission for error tracking
 
+## Component Configuration (Simplified Pattern)
+
+### Overview
+
+hexDAG uses a **simplified decorator-based pattern** for component configuration:
+- **No Config classes required** - just plain `__init__` signatures
+- **Secrets declared in decorator** - explicit and clean
+- **Automatic secret resolution** - from environment or memory
+- **Type-safe** - leverages Python type hints and Pydantic
+
+### Creating Adapters with Secrets
+
+**✅ CORRECT - Decorator-based (preferred):**
+```python
+from hexdag.core.registry import adapter
+
+@adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
+class OpenAIAdapter:
+    """OpenAI adapter with automatic secret resolution."""
+
+    def __init__(
+        self,
+        api_key: str,  # ← Auto-resolved from OPENAI_API_KEY env var
+        model: str = "gpt-4",
+        temperature: float = 0.7
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.temperature = temperature
+
+    async def aresponse(self, messages):
+        # Use self.api_key, self.model, etc.
+        ...
+```
+
+**Multiple secrets:**
+```python
+@adapter(
+    "database",
+    name="postgres",
+    secrets={
+        "username": "DB_USERNAME",
+        "password": "DB_PASSWORD"
+    }
+)
+class PostgresAdapter:
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        host: str = "localhost",
+        port: int = 5432
+    ):
+        self.connection = f"postgresql://{username}:{password}@{host}:{port}"
+```
+
+### Creating Adapters without Secrets
+
+**✅ CORRECT:**
+```python
+@adapter("cache", name="memory_cache")
+class MemoryCacheAdapter:
+    """Simple adapter - no secrets needed."""
+
+    def __init__(
+        self,
+        max_size: int = 100,
+        ttl: int = 3600
+    ):
+        self.cache = {}
+        self.max_size = max_size
+        self.ttl = ttl
+
+    async def aget(self, key: str):
+        return self.cache.get(key)
+```
+
+### Creating Nodes
+
+**✅ CORRECT:**
+```python
+from hexdag.core.registry import node
+
+@node(name="my_node", namespace="core")
+class MyNode(BaseNodeFactory):
+    """Custom node - no Config class needed."""
+
+    def __init__(self):
+        super().__init__()
+
+    def __call__(
+        self,
+        name: str,
+        timeout: float = 30.0,
+        max_retries: int = 3,
+        **kwargs
+    ):
+        # Parameters are passed directly from YAML
+        ...
+```
+
+### Creating Policies
+
+**✅ CORRECT:**
+```python
+from hexdag.core.registry import policy
+
+@policy(name="retry_policy", description="Retry failed operations")
+class RetryPolicy:
+    """Simple policy - no Config class needed."""
+
+    def __init__(self, max_retries: int = 3, backoff: float = 1.0):
+        self.max_retries = max_retries
+        self.backoff = backoff
+
+    async def evaluate(self, context):
+        # Use self.max_retries, self.backoff
+        ...
+```
+
+### Creating Tools
+
+**✅ CORRECT:**
+```python
+from hexdag.core.registry import tool
+
+@tool(name="my_tool", namespace="custom", description="Does something useful")
+def my_tool(input_param: str, threshold: int = 10) -> str:
+    """Tool function with typed parameters.
+
+    Args:
+        input_param: Input string to process
+        threshold: Processing threshold (default: 10)
+
+    Returns:
+        Processed result
+    """
+    # For tools, the function signature IS the configuration
+    # Type hints define input schema
+    # Docstring provides descriptions
+    return f"Processed: {input_param}"
+```
+
+### Secret Resolution
+
+Secrets are automatically resolved in this order:
+1. **Explicit kwargs** (highest priority)
+2. **Environment variables** (from decorator `secrets` mapping)
+3. **Memory port** (from orchestrator, with `secret:` prefix)
+4. **Error** (if parameter has no default value)
+
+**Example:**
+```python
+# Set environment variable
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+# Secret auto-resolved from env
+adapter = OpenAIAdapter()  # ✅ api_key resolved
+
+# Explicit value overrides env
+adapter = OpenAIAdapter(api_key="explicit-key")  # ✅ Uses explicit value
+```
+
+### Benefits of the Simplified Pattern
+
+1. **70% Less Code** - From 13 lines to 4 lines per adapter
+2. **Explicit Configuration** - Secrets declared in decorator, visible at a glance
+3. **Clean Signatures** - `__init__` uses plain typed parameters
+4. **Type Safety** - Leverages Python type hints and runtime validation
+5. **Easy Testing** - Direct parameter passing, no Config mocking needed
+6. **YAML Compatible** - Full support for declarative pipelines
+
+### Validation Rules
+
+✅ **All new components MUST:**
+
+**Adapters with Secrets:**
+- Use `secrets` parameter in `@adapter` decorator
+- Declare secret mapping: `secrets={"param_name": "ENV_VAR"}`
+- Clean `__init__` signatures with typed parameters
+
+**Adapters without Secrets:**
+- Simple `@adapter` decorator without `secrets`
+- Plain `__init__` with typed parameters and defaults
+
+**Nodes:**
+- Use `@node` decorator
+- Parameters passed directly from YAML to `__call__` method
+
+**Policies:**
+- Use `@policy` decorator
+- Simple `__init__` with typed parameters
+
+**Tools:**
+- Use typed function signatures
+- Include comprehensive docstrings
+- Type hints for automatic schema generation
+
+### Legacy Code
+
+Some existing adapters use the old `ConfigurableAdapter` pattern with Config classes. These still work but are deprecated. New code should use the simplified decorator pattern. See [SIMPLIFIED_PATTERN.md](docs/SIMPLIFIED_PATTERN.md) for migration guide.
+
 ## Working with YAML Pipelines
 
-YAML pipelines are built using `YamlPipelineBuilder` in `hexai/agent_factory/`:
+YAML pipelines are built using `YamlPipelineBuilder` in `hexdag/core/pipeline_builder/`:
 
 ```yaml
 name: example_workflow
@@ -302,4 +602,130 @@ The framework integrates with external services through ports:
 - **Database Port**: Data persistence and retrieval
 - **Tool Router**: Function calling and tool execution
 
-Use mock adapters in `hexai/adapters/mock/` for development and testing.
+Use mock adapters in `hexdag/adapters/mock/` for development and testing.
+
+## YAML-First Philosophy
+
+hexDAG emphasizes a **declarative, YAML-first approach** to workflow orchestration:
+
+### Why YAML-First?
+
+1. **Declarative** - Describe what you want, not how to build it
+2. **Version Control** - Git-friendly, reviewable configurations
+3. **Team Collaboration** - Non-developers can read and modify workflows
+4. **Environment Management** - Easy dev/staging/prod configurations
+5. **Infrastructure as Code** - Deploy workflows like infrastructure
+6. **Testable** - Validate YAML before execution
+7. **Maintainable** - Change workflows without code changes
+
+### YAML-First Development
+
+When creating examples or documentation:
+- ✅ **START with YAML** - Show YAML pipeline definition first
+- ✅ **Python API is secondary** - Only show for advanced use cases
+- ✅ **Emphasize declarative benefits** - Version control, collaboration, maintainability
+- ✅ **Save to .yaml files** - Show file-based workflow management
+- ✅ **Environment configs** - Demonstrate dev/staging/prod patterns
+- ❌ **Avoid Python-first** - Don't start with DirectedGraph code unless necessary
+
+### Example Structure
+
+```python
+# ✅ GOOD - YAML-first approach
+pipeline_yaml = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: my-workflow
+spec:
+  nodes:
+    - type: llm
+      id: analyzer
+      # ... config
+"""
+pipeline = YamlPipelineBuilder().build_from_string(pipeline_yaml)
+
+# ❌ AVOID - Python-first approach (unless teaching internals)
+graph = DirectedGraph()
+graph.add_node(NodeSpec(id="analyzer", ...))
+```
+
+## Notebook Development Guidelines
+
+hexDAG uses Jupyter notebooks for **interactive documentation and real-world use cases**.
+
+### Notebook Structure
+
+All notebooks follow this structure:
+
+```
+notebooks/
+├── 01_getting_started/       # YAML-first tutorials
+├── 02_real_world_use_cases/  # Production-ready examples
+└── 03_advanced_patterns/     # Enterprise patterns
+```
+
+### Writing Notebooks
+
+**✅ DO:**
+- Focus on **real-world business problems** with clear value
+- Use **YAML pipelines** as the primary interface
+- Include **comprehensive markdown** explaining concepts
+- Ensure **end-to-end execution** without errors
+- Use **mock adapters** to avoid external dependencies
+- Add **visualizations** (DAG graphs, metrics, results)
+- Follow the **standard structure** (Overview → Problem → Solution → Implementation → Analysis → Extensions)
+- **Strip outputs** before committing (automatic via pre-commit)
+
+**❌ DON'T:**
+- Create simple code examples (use integration tests instead)
+- Require external API keys when avoidable
+- Leave outputs in committed notebooks
+- Skip documentation in markdown cells
+- Focus on Python API over YAML
+
+### Notebook Categories
+
+1. **Getting Started (01/)** - YAML-first onboarding
+   - Introduction to YAML pipelines
+   - Component overview
+   - Validation and type safety
+
+2. **Real-World Use Cases (02/)** - Production scenarios
+   - Customer support automation
+   - Document intelligence
+   - Research assistants
+   - Data pipeline orchestration
+   - Code analysis and review
+
+3. **Advanced Patterns (03/)** - Enterprise techniques
+   - Multi-agent collaboration (YAML)
+   - Dynamic workflows (YAML)
+   - Production deployment patterns (YAML)
+   - Performance optimization
+   - Observability and monitoring
+
+### Notebook Quality Standards
+
+- **Validation**: Execute without errors via `scripts/check_notebooks.py`
+- **Formatting**: Auto-formatted via `nbqa-ruff` and `nbqa-pyupgrade`
+- **Outputs**: Stripped via `nbstripout` (pre-commit hook)
+- **CI/CD**: Executed in Azure pipelines to ensure freshness
+- **Structure**: Follow nbformat 4.4 specification
+
+### Creating New Notebooks
+
+```bash
+# Create notebook
+jupyter notebook notebooks/02_real_world_use_cases/new_use_case.ipynb
+
+# Validate
+uv run python scripts/check_notebooks.py
+
+# Format
+uv run nbqa ruff notebooks/ --fix
+
+# Commit (outputs automatically stripped)
+git add notebooks/
+git commit -m "docs: Add new use case notebook"
+```

@@ -1,0 +1,578 @@
+"""YAML Pipeline Validator - Validates pipeline configurations."""
+
+from typing import Any
+
+from hexdag.core.domain.dag import DirectedGraph
+from hexdag.core.registry.exceptions import ComponentNotFoundError
+from hexdag.core.registry.models import NAMESPACE_SEPARATOR, ComponentType
+from hexdag.core.registry.registry import registry
+
+
+class ValidationReport:
+    """Container for validation results with optimized memory usage."""
+
+    __slots__ = ("_errors", "_warnings", "_suggestions")
+
+    def __init__(self) -> None:
+        """Initialize validation result."""
+        self._errors: list[str] = []
+        self._warnings: list[str] = []
+        self._suggestions: list[str] = []
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if validation passed (no errors).
+
+        Returns
+        -------
+        bool
+            True if no errors are present, False otherwise
+        """
+        return len(self._errors) == 0
+
+    def add_error(self, message: str) -> None:
+        """Add an error message."""
+        self._errors.append(message)
+
+    def add_warning(self, message: str) -> None:
+        """Add a warning message."""
+        self._warnings.append(message)
+
+    def add_suggestion(self, message: str) -> None:
+        """Add a suggestion message."""
+        self._suggestions.append(message)
+
+    @property
+    def errors(self) -> list[str]:
+        """Get all error messages.
+
+        Returns
+        -------
+        list[str]
+            List of error messages
+        """
+        return self._errors
+
+    @property
+    def warnings(self) -> list[str]:
+        """Get all warning messages.
+
+        Returns
+        -------
+        list[str]
+            List of warning messages
+        """
+        return self._warnings
+
+    @property
+    def suggestions(self) -> list[str]:
+        """Get all suggestion messages.
+
+        Returns
+        -------
+        list[str]
+            List of suggestion messages
+        """
+        return self._suggestions
+
+
+class _SchemaValidator:
+    """Validates YAML node specs against auto-generated schemas from registry.
+
+    This ensures YAML manifests and Python DSL have exactly the same options,
+    using the registry as the single source of truth.
+
+    Note: This is an internal class. Use YamlValidator for public validation API.
+    """
+
+    def validate_node_spec(
+        self,
+        node_type: str,
+        spec: dict[str, Any],
+        namespace: str = "core",
+    ) -> list[str]:
+        """Validate a node's spec against its auto-generated schema.
+
+        Args
+        ----
+            node_type: Type of node (e.g., "llm", "agent", "function")
+            spec: Node specification from YAML manifest
+            namespace: Component namespace (default: "core")
+
+        Returns
+        -------
+            List of validation error messages (empty if valid)
+        """
+
+        factory_name = f"{node_type}_node"
+        try:
+            schema_dict = registry.get_schema(factory_name, namespace=namespace, format="dict")
+        except (KeyError, ValueError, ComponentNotFoundError):
+            # If schema doesn't exist, skip validation
+            # This allows for custom nodes that don't have schemas yet
+            return []
+
+        if not isinstance(schema_dict, dict):
+            return []
+
+        properties = schema_dict.get("properties", {})
+        required = schema_dict.get("required", [])
+
+        # Check required fields
+        errors: list[str] = [
+            f"Missing required field '{field}'" for field in required if field not in spec
+        ]
+
+        # Validate provided fields
+        for field_name, field_value in spec.items():
+            # Skip special fields (dependencies, etc.)
+            if field_name in ("dependencies",):
+                continue
+
+            if field_name not in properties:
+                errors.append(
+                    f"Unknown field '{field_name}'. "
+                    f"Valid fields: {', '.join(sorted(properties.keys()))}"
+                )
+                continue
+
+            field_schema = properties[field_name]
+
+            # Validate field type
+            if validation_error := self._validate_field(field_name, field_value, field_schema):
+                errors.append(validation_error)
+
+        return errors
+
+    def _validate_field(
+        self, field_name: str, value: Any, field_schema: dict[str, Any]
+    ) -> str | None:
+        """Validate a single field against its schema.
+
+        Args
+        ----
+            field_name: Name of the field being validated
+            value: Value from the YAML manifest
+            field_schema: Schema definition for this field
+
+        Returns
+        -------
+            Error message if validation fails, None if valid
+        """
+        field_type = field_schema.get("type")
+        if not field_type:
+            # No type specified, skip validation
+            return None
+
+        if "anyOf" in field_schema:
+            # Try validating against each option
+            errors = []
+            for option in field_schema["anyOf"]:
+                error = self._validate_field(field_name, value, option)
+                if error is None:
+                    return None  # Valid for at least one option
+                errors.append(error)
+            # Invalid for all options
+            types = [opt.get("type", "unknown") for opt in field_schema["anyOf"]]
+            return f"Field '{field_name}' must be one of types: {', '.join(set(types))}"
+
+        # Validate basic type
+        if not self._check_type(value, field_type):
+            return (
+                f"Field '{field_name}' must be of type '{field_type}', got '{type(value).__name__}'"
+            )
+
+        # Validate enum constraints
+        if "enum" in field_schema and value not in field_schema["enum"]:
+            return f"Field '{field_name}' must be one of {field_schema['enum']}, got '{value}'"
+
+        # Validate numeric constraints
+        if field_type in ("integer", "number"):
+            # Check minimum
+            if "minimum" in field_schema and value < field_schema["minimum"]:
+                return f"Field '{field_name}' must be >= {field_schema['minimum']}, got {value}"
+
+            # Check maximum
+            if "maximum" in field_schema and value > field_schema["maximum"]:
+                return f"Field '{field_name}' must be <= {field_schema['maximum']}, got {value}"
+
+        # Validate string constraints
+        if field_type == "string":
+            # Check min length
+            if "minLength" in field_schema and len(value) < field_schema["minLength"]:
+                return (
+                    f"Field '{field_name}' must have at least "
+                    f"{field_schema['minLength']} characters"
+                )
+
+            # Check max length
+            if "maxLength" in field_schema and len(value) > field_schema["maxLength"]:
+                return (
+                    f"Field '{field_name}' must have at most {field_schema['maxLength']} characters"
+                )
+
+        return None
+
+    def _check_type(self, value: Any, expected_type: str | list[str]) -> bool:
+        """Check if value matches expected JSON Schema type.
+
+        Args
+        ----
+            value: Value to check
+            expected_type: JSON Schema type name or list of type names
+
+        Returns
+        -------
+            True if type matches, False otherwise
+        """
+        type_mapping = {
+            "string": str,
+            "integer": int,
+            "number": (int, float),
+            "boolean": bool,
+            "array": list,
+            "object": dict,
+            "null": type(None),
+        }
+
+        if isinstance(expected_type, list):
+            return any(self._check_type(value, t) for t in expected_type)
+
+        expected_python_type = type_mapping.get(expected_type)
+        if not expected_python_type:
+            # Unknown type, skip validation
+            return True
+
+        # Type ignore for mypy - expected_python_type is guaranteed to be a type or tuple of types
+        return isinstance(value, expected_python_type)  # type: ignore[arg-type]
+
+
+class YamlValidator:
+    """Validates YAML pipeline configurations with optimized performance."""
+
+    def __init__(
+        self,
+        valid_node_types: set[str] | frozenset[str] | None = None,
+    ) -> None:
+        """Initialize validator with configurable node types.
+
+        Args
+        ----
+            valid_node_types: Set of valid node type names. If None, uses registry.
+        """
+        self._provided_node_types = (
+            frozenset(valid_node_types) if valid_node_types is not None else None
+        )
+        self._cached_node_types: frozenset[str] | None = None
+
+        # Schema validator for spec validation (always enabled - no fallback)
+        self.schema_validator = _SchemaValidator()
+
+    @property
+    def valid_node_types(self) -> frozenset[str]:
+        """Get valid node types from registry or cache.
+
+        Returns
+        -------
+        frozenset[str]
+            Set of valid node type names
+        """
+        # If user provided explicit node types, use those
+        if self._provided_node_types is not None:
+            return self._provided_node_types
+
+        # Otherwise, lazily get from registry and cache
+        if self._cached_node_types is None:
+            # Note: Core nodes follow "_node" suffix, but plugins may not
+            node_components = registry.list_components(component_type=ComponentType.NODE)
+            node_types = {
+                f"{comp.namespace}:{comp.name.removesuffix('_node')}" for comp in node_components
+            }
+
+            # If registry is empty (not bootstrapped yet), use core node types as fallback
+            if not node_types:
+                node_types = {
+                    "core:function",
+                    "core:llm",
+                    "core:agent",
+                    "core:loop",
+                    "core:conditional",
+                    "core:passthrough",
+                }
+
+            self._cached_node_types = frozenset(node_types)
+
+        return self._cached_node_types
+
+    def validate(self, config: Any) -> ValidationReport:
+        """Validate complete YAML configuration with optimized caching.
+
+        Expects declarative manifest format: {kind: Pipeline,
+        spec: {nodes: [{kind, metadata, spec}]}}
+
+        Args
+        ----
+            config: Parsed YAML configuration
+
+        Returns
+        -------
+        ValidationReport
+            ValidationReport with errors, warnings, and suggestions
+        """
+        result = ValidationReport()
+
+        # Validate manifest structure
+        self._validate_manifest_structure(config, result)
+
+        if not result.is_valid:
+            return result
+
+        spec = config.get("spec", {})
+        nodes = spec.get("nodes", [])
+
+        # Validate nodes and cache the IDs and macro instances for reuse
+        node_ids, macro_instances = self._validate_nodes(nodes, result)
+
+        # Reuse cached node_ids and macro_instances for dependency validation
+        self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
+
+        return result
+
+    def _validate_manifest_structure(self, config: Any, result: ValidationReport) -> None:
+        """Validate declarative manifest YAML structure.
+
+        Args
+        ----
+            config: Parsed YAML configuration
+            result: ValidationReport to add errors to
+        """
+        if not isinstance(config, dict):
+            result.add_error("Configuration must be a dictionary")
+            return
+
+        if "kind" not in config:
+            result.add_error(
+                "Configuration must contain 'kind' field (declarative manifest format required)"
+            )
+            return
+
+        if "metadata" not in config:
+            result.add_error("Configuration must contain 'metadata' field")
+            return
+
+        if "spec" not in config:
+            result.add_error("Configuration must contain 'spec' field")
+            return
+
+        spec = config.get("spec", {})
+        if not isinstance(spec, dict):
+            result.add_error("'spec' field must be a dictionary")
+            return
+
+        if "nodes" not in spec:
+            result.add_error("'spec' must contain 'nodes' field")
+            return
+
+        if not isinstance(spec["nodes"], list):
+            result.add_error("'spec.nodes' field must be a list")
+            return
+
+        if len(spec["nodes"]) == 0:
+            result.add_warning("Pipeline has no nodes defined")
+
+        # Validate common_field_mappings structure if present
+        common_mappings = spec.get("common_field_mappings")
+        if common_mappings is not None and not isinstance(common_mappings, dict):
+            result.add_error("'spec.common_field_mappings' must be a dictionary")
+
+    def _validate_nodes(
+        self, nodes: list[dict[str, Any]], result: ValidationReport
+    ) -> tuple[set[str], set[str]]:
+        """Validate nodes and return node IDs and macro instance names.
+
+        Expects declarative node format: {kind, metadata: {name}, spec: {dependencies}}
+
+        Returns
+        -------
+        tuple[set[str], set[str]]
+            Tuple of (node_ids, macro_instance_names) for caching and reuse in dependency validation
+        """
+        node_ids = set()
+        macro_instances = set()
+
+        for i, node in enumerate(nodes):
+            # Validate node has required fields
+            if "kind" not in node:
+                result.add_error(f"Node {i}: Missing 'kind' field")
+                continue
+
+            if "metadata" not in node:
+                result.add_error(f"Node {i}: Missing 'metadata' field")
+                continue
+
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                result.add_error(f"Node {i}: Missing 'metadata.name'")
+                continue
+
+            kind = node.get("kind", "")
+
+            # Check node ID uniqueness
+            if node_id in node_ids:
+                result.add_error(f"Duplicate node ID: '{node_id}'")
+            node_ids.add(node_id)
+
+            # Special case: macro_invocation is not a node type, skip node type validation
+            if kind == "macro_invocation":
+                # Validate macro invocation spec (macro reference required)
+                spec = node.get("spec", {})
+                if "macro" not in spec:
+                    result.add_error(
+                        f"Node '{node_id}': macro_invocation must specify 'spec.macro' field"
+                    )
+                macro_instances.add(node_id)
+                continue
+
+            if NAMESPACE_SEPARATOR in kind:
+                namespace, node_kind = kind.split(NAMESPACE_SEPARATOR, 1)
+            else:
+                namespace = "core"
+                node_kind = kind
+
+            # Remove '_node' suffix if present
+            node_type = node_kind[:-5] if node_kind.endswith("_node") else node_kind
+
+            qualified_node_type = f"{namespace}:{node_type}"
+
+            params = node.get("spec", {})
+
+            # Validate node type (check if registered in registry)
+            # Support both qualified (namespace:type) and simple (type) formats
+            if (
+                qualified_node_type not in self.valid_node_types
+                and node_type not in self.valid_node_types
+            ):
+                # Show available types grouped by namespace
+                by_namespace: dict[str, list[str]] = {}
+                simple_types: list[str] = []
+                has_namespaced = False
+
+                for valid_type in sorted(self.valid_node_types):
+                    if ":" in valid_type:
+                        has_namespaced = True
+                        ns, nt = valid_type.split(":", 1)
+                        by_namespace.setdefault(ns, []).append(nt)
+                    else:
+                        # Legacy format without namespace
+                        simple_types.append(valid_type)
+
+                parts = []
+                if by_namespace:
+                    parts.append(
+                        ", ".join(
+                            f"{ns}:[{', '.join(types)}]"
+                            for ns, types in sorted(by_namespace.items())
+                        )
+                    )
+                if simple_types:
+                    parts.append(", ".join(sorted(simple_types)))
+
+                valid_types_str = ", ".join(parts) if parts else "none"
+
+                # Use simple node_type in error if no valid types have namespaces (legacy mode)
+                invalid_type_str = node_type if not has_namespaced else qualified_node_type
+
+                result.add_error(
+                    f"Node '{node_id}': Invalid type '{invalid_type_str}'. "
+                    f"Valid types: {valid_types_str}"
+                )
+
+            # Validate node-specific requirements and schema
+            self._validate_node_params(node_id, node_type, params, namespace, result)
+
+        return node_ids, macro_instances
+
+    def _validate_node_params(
+        self,
+        node_id: str | None,
+        node_type: str,
+        params: dict[str, Any],
+        namespace: str,
+        result: ValidationReport,
+    ) -> None:
+        """Validate node-specific parameters using registry schema validation.
+
+        Uses auto-generated schemas from the registry as the single source of truth.
+
+        Args
+        ----
+            node_id: Node identifier
+            node_type: Type of node (e.g., "llm", "function")
+            params: Node spec parameters
+            namespace: Component namespace
+            result: ValidationReport to add errors to
+        """
+        # Schema-based validation using registry
+        schema_errors = self.schema_validator.validate_node_spec(
+            node_type, params, namespace=namespace
+        )
+        for error in schema_errors:
+            result.add_error(f"Node '{node_id}': {error}")
+
+    def _validate_dependencies_with_cache(
+        self,
+        nodes: list[dict[str, Any]],
+        result: ValidationReport,
+        node_ids: set[str],
+        macro_instances: set[str],
+    ) -> None:
+        """Validate node dependencies using cached node IDs and check for cycles.
+
+        Dependencies are in spec.dependencies field.
+
+        Parameters
+        ----------
+        nodes : list[dict[str, Any]]
+            List of node configurations
+        result : ValidationReport
+            Report to add errors to
+        node_ids : set[str]
+            Cached set of valid node IDs from _validate_nodes
+        macro_instances : set[str]
+            Set of macro instance names (nodes will be generated at runtime)
+        """
+        dependency_graph = {}
+
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+
+            deps = node.get("spec", {}).get("dependencies", [])
+
+            if not isinstance(deps, list):
+                deps = [deps]
+
+            # Check all dependencies exist using cached node_ids
+            valid_deps = set()
+            for dep in deps:
+                if dep in node_ids:
+                    valid_deps.add(dep)
+                    continue
+
+                is_macro_generated = False
+                for macro_instance in macro_instances:
+                    if dep.startswith(f"{macro_instance}_"):
+                        is_macro_generated = True
+                        valid_deps.add(dep)
+                        break
+
+                # If not a known node and not macro-generated, it's an error
+                if not is_macro_generated:
+                    result.add_error(f"Node '{node_id}': Dependency '{dep}' does not exist")
+
+            dependency_graph[node_id] = valid_deps
+
+        # Check for cycles using DirectedGraph's public static method
+        if cycle_message := DirectedGraph.detect_cycle(dependency_graph):
+            result.add_error(cycle_message)

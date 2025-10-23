@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Pre-commit hook to verify all examples run successfully.
+Pre-commit hook to verify all Python examples run successfully.
 
 This script ensures that:
-1. All examples in the examples/ directory execute without errors
-2. The example runner (run_all.py) completes successfully
-3. No examples are broken due to recent code changes
+1. All Python examples in the examples/ directory execute without errors
+2. No examples are broken due to recent code changes
 
-This prevents commits that would break the examples, ensuring they remain
-functional for users learning the library.
+Note: Notebooks are validated separately by check_notebooks.py
 """
 
 import subprocess  # nosec B404 # Needed to run example validation
@@ -16,70 +14,70 @@ import sys
 from pathlib import Path
 
 
-def run_examples() -> tuple[bool, str]:
-    """Run all examples using the run_all.py script.
+def run_python_examples() -> tuple[bool, str]:
+    """Run all Python example files.
 
     Returns
     -------
         Tuple of (success, output_message)
     """
     examples_dir = Path("examples")
-    run_all_script = examples_dir / "run_all.py"
 
     if not examples_dir.exists():
         return False, "Examples directory not found"
 
-    if not run_all_script.exists():
-        return False, "run_all.py script not found in examples directory"
+    # Find all Python files in examples directory (excluding __pycache__, etc.)
+    python_examples = sorted(examples_dir.glob("**/*.py"))
+    python_examples = [
+        p for p in python_examples if "__pycache__" not in str(p) and "plugins" not in str(p)
+    ]
 
-    try:
-        # Run the examples using uv to ensure correct environment
-        result = subprocess.run(  # nosec B603 B607 # Safe: controlled command, fixed args
-            ["uv", "run", "run_all.py", "--all", "--quiet"],
-            cwd=examples_dir,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout for all examples
-        )
+    if not python_examples:
+        return True, "No Python examples found (all converted to notebooks)"
 
-        if result.returncode == 0:
-            # Parse the output to get success count
-            output_lines = result.stdout.strip().split("\n")
-            summary_line = None
-            for line in reversed(output_lines):
-                if "Successful:" in line:
-                    summary_line = line.strip()
-                    break
+    failed_examples = []
+    passed_count = 0
 
-            if summary_line:
-                return True, f"All examples passed! {summary_line}"
-            return True, "All examples completed successfully"
-        # Extract error information
-        error_info = []
-        in_failed_section = False
+    print(f"   Found {len(python_examples)} Python example(s) to check")
 
-        for line in result.stdout.split("\n"):
-            if "failed with return code" in line.lower():
-                in_failed_section = True
-                error_info.append(line.strip())
-            elif in_failed_section and line.strip():
-                error_info.append(line.strip())
-            elif "Overall Summary:" in line:
-                in_failed_section = False
+    for example_file in python_examples:
+        relative_path = example_file.relative_to(examples_dir)
+        print(f"   Running {relative_path}... ", end="", flush=True)
 
-        if error_info:
-            return False, "Examples failed:\n" + "\n".join(error_info[:10])  # Limit output
-        stderr_excerpt = result.stderr[:500]
+        try:
+            result = subprocess.run(  # nosec B603 B607 # Safe: controlled command
+                ["uv", "run", "python", str(example_file)],
+                capture_output=True,
+                text=True,
+                timeout=60,  # 1 minute per example
+            )
+
+            if result.returncode == 0:
+                print("✅")
+                passed_count += 1
+            else:
+                print("❌")
+                error_msg = result.stderr[:200] if result.stderr else result.stdout[:200]
+                failed_examples.append((relative_path, error_msg))
+
+        except subprocess.TimeoutExpired:
+            print("⏱️ TIMEOUT")
+            failed_examples.append((relative_path, "Execution timed out after 60 seconds"))
+        except Exception as e:
+            print("💥 ERROR")
+            failed_examples.append((relative_path, str(e)))
+
+    if failed_examples:
+        error_details = []
+        for example, error in failed_examples:
+            error_details.append(f"   • {example}: {error}")
+
         return False, (
-            f"Examples failed with return code {result.returncode}\nStderr: {stderr_excerpt}"
+            f"{passed_count}/{len(python_examples)} examples passed\n"
+            "Failed examples:\n" + "\n".join(error_details)
         )
 
-    except subprocess.TimeoutExpired:
-        return False, "Examples timed out after 5 minutes"
-    except subprocess.CalledProcessError as e:
-        return False, f"Failed to run examples: {e}"
-    except Exception as e:
-        return False, f"Unexpected error: {e}"
+    return True, f"All {passed_count} Python examples passed!"
 
 
 def main() -> int:
@@ -89,21 +87,22 @@ def main() -> int:
     -------
         Exit code (0 for success, 1 for failure).
     """
-    print("🎓 Checking examples functionality...")
+    print("🎓 Checking Python examples functionality...")
 
-    success, message = run_examples()
+    success, message = run_python_examples()
 
     if success:
         print(f"✅ {message}")
         return 0
+
     print("❌ Examples check failed!")
-    print(f"   {message}")
+    print(message)
     print()
     print("💡 To fix this:")
-    print("   1. Check the failing examples manually:")
-    print("      cd examples && uv run run_all.py --all")
+    print("   1. Run failing examples manually to see detailed errors:")
+    print("      uv run python examples/<failing_example>.py")
     print("   2. Fix any broken examples before committing")
-    print("   3. Ensure all dependencies are properly installed")
+    print("   3. Consider converting complex examples to notebooks in notebooks/")
     print()
     print("🚫 Commit blocked - examples must pass before committing changes")
     return 1

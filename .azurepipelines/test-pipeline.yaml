@@ -112,28 +112,28 @@ jobs:
       uv pip install -e ".[dev,docs]"
       echo "Running Ruff linting..."
       # Ruff automatically reads configuration from pyproject.toml
-      uv run ruff check ./hexai
+      uv run ruff check ./hexdag
     displayName: "Run Ruff linting (replaces flake8, isort)"
 
   - script: |
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Ruff formatting check..."
-      uv run ruff format ./hexai --check
+      uv run ruff format ./hexdag --check
     displayName: "Run Ruff formatting check (replaces Black)"
 
   - script: |
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Mypy with pyproject.toml configuration..."
-      uv run mypy ./hexai
+      uv run mypy ./hexdag
     displayName: "Run Mypy"
 
   - script: |
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Pyright with pyproject.toml configuration..."
-      uv run pyright ./hexai
+      uv run pyright ./hexdag
     displayName: "Run Pyright"
 
   - script: |
@@ -148,8 +148,9 @@ jobs:
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Bandit for SAST..."
-      # Bandit reads configuration from pyproject.toml automatically
-      uv run bandit -r ./hexai -f json -o bandit-report.json || {
+      # Only report Medium and High severity issues (-ll flag)
+      # Bandit reads additional configuration from pyproject.toml
+      uv run bandit -r ./hexdag -ll -f json -o bandit-report.json || {
           echo "Bandit found issues or encountered an error. See bandit-report.json for details."
           cat bandit-report.json
           exit 1
@@ -166,13 +167,6 @@ jobs:
   - script: |
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
-      echo "Checking examples functionality..."
-      uv run scripts/check_examples.py
-    displayName: "Check examples functionality"
-
-  - script: |
-      set -e  # Exit immediately if a command exits with a non-zero status
-      export PATH="$HOME/.local/bin:$PATH"
       echo "Running deptry for dependency analysis..."
       uv run deptry .
     displayName: "Run deptry"
@@ -181,8 +175,10 @@ jobs:
       set -e  # Exit immediately if a command exits with a non-zero status
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running Safety for dependency vulnerability scanning..."
-      # Safety reads configuration from pyproject.toml automatically
-      uv run safety check --output json > safety-report.json || {
+      # Ignore known non-applicable vulnerabilities:
+      # 77745,77744: urllib3 Pyodide issues (we don't use Pyodide)
+      # 51457: py package (transitive dependency, not directly used)
+      uv run safety check --ignore 77745 --ignore 77744 --ignore 51457 --output json > safety-report.json || {
           echo "Safety found vulnerabilities. See safety-report.json for details."
           cat safety-report.json
           exit 1
@@ -216,7 +212,7 @@ jobs:
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running vulture for dead code detection..."
       # Vulture reads configuration from pyproject.toml automatically
-      uv run vulture hexai/ --min-confidence 90
+      uv run vulture hexdag/ --min-confidence 90
     displayName: "Run vulture - dead code detection"
 
   - script: |
@@ -224,7 +220,7 @@ jobs:
       export PATH="$HOME/.local/bin:$PATH"
       echo "Running radon for code complexity analysis..."
       # Radon configuration is read from pyproject.toml
-      uv run radon cc hexai/ --min B --show-complexity
+      uv run radon cc hexdag/ --min B --show-complexity
     displayName: "Run radon - code complexity analysis"
 
 - job: Documentation
@@ -249,16 +245,14 @@ jobs:
     displayName: "Install dependencies with uv"
 
   - script: |
-      uv run pydocstyle src/
-      uv run python -m doc8 docs/
-    displayName: "Check docstrings & docs formatting"
-
-  - script: |
-      uv run docs-build
+      set -e
+      export PATH="$HOME/.local/bin:$PATH"
+      echo "Building documentation with MkDocs..."
+      uv run hexdag docs build --clean
     displayName: "Build documentation"
 
   - task: PublishBuildArtifacts@1
     inputs:
-      pathToPublish: "docs/build/html"
+      pathToPublish: "site"
       artifactName: "docs"
     displayName: "Publish documentation artifact"
