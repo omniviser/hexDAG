@@ -5,10 +5,6 @@ from pathlib import Path
 import pytest
 import websockets
 
-from hexai.core.application.events.events import (
-    NodeStarted,
-    PipelineStarted,
-)
 from hexai.core.application.events.sinks.file_sink import (
     FileSinkError,
     FileSinkObserver,
@@ -16,6 +12,10 @@ from hexai.core.application.events.sinks.file_sink import (
 from hexai.core.application.events.sinks.websocket_sink import (
     WebSocketSinkError,
     WebSocketSinkObserver,
+)
+from hexdag.core.orchestration.events.events import (
+    NodeStarted,
+    PipelineStarted,
 )
 
 
