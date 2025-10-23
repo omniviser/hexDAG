@@ -5,7 +5,7 @@ from __future__ import annotations
 import yaml
 from pydantic import BaseModel
 
-from hexai.core.validation.secure_yaml import SafeYAML
+from hexdag.core.validation.secure_yaml import SafeYAML
 
 
 def test_extract_yaml_from_markdown_fenced_block_yaml():

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel, Field
 
-from hexai.core.validation.json_parser import SecureJSONParser
+from hexdag.core.validation.json_parser import SecureJSONParser
 
 
 class TestSchema(BaseModel):

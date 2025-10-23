@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel, Field
 
-from hexai.core.validation.unified_engine import UnifiedParsingEngine
+from hexdag.core.validation.unified_engine import UnifiedParsingEngine
 
 
 class ExampleSchema(BaseModel):

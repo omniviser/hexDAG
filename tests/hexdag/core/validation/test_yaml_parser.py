@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
-from hexai.core.validation.yaml_parser import SecureYAMLParser
+from hexdag.core.validation.yaml_parser import SecureYAMLParser
 
 
 class TestSchema(BaseModel):
