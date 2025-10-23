@@ -14,7 +14,6 @@ ErrorCode = Literal[
     "no_json_found",
 ]
 
-
 logger = logging.getLogger(__name__)
 
 
