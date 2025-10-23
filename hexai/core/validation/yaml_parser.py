@@ -1,10 +1,10 @@
 from pydantic import BaseModel, ValidationError
 
-from hexai.core.validation.base_parser import (
+from .base_parser import (
     BaseStructuredParser,
     ValidationResult,
 )
-from hexai.core.validation.secure_yaml import SafeYAML
+from .secure_yaml import SafeYAML
 
 
 class SecureYAMLParser(BaseStructuredParser):

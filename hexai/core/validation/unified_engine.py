@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
-from hexai.core.validation.base_parser import ValidationResult
-from hexai.core.validation.json_parser import SecureJSONParser
-from hexai.core.validation.yaml_parser import SecureYAMLParser
+from .base_parser import ValidationResult
+from .json_parser import SecureJSONParser
+from .yaml_parser import SecureYAMLParser
 
 
 class UnifiedParsingEngine:

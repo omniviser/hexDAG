@@ -1,10 +1,10 @@
 from pydantic import BaseModel, ValidationError
 
-from hexai.core.validation.base_parser import (
+from .base_parser import (
     BaseStructuredParser,
     ValidationResult,
 )
-from hexai.core.validation.secure_json import SafeJSON
+from .secure_json import SafeJSON
 
 
 class SecureJSONParser(BaseStructuredParser):
