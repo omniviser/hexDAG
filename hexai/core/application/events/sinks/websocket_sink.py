@@ -8,7 +8,7 @@ from typing import Any
 import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
-from hexai.core.ports.observer_manager import Observer
+from hexdag.core.ports.observer_manager import Observer
 
 from .file_sink import _event_to_dict
 

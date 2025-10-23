@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, TextIO, cast, runtime_checkable
 
-from hexai.core.application.events.events import EVENT_REGISTRY
-from hexai.core.ports.observer_manager import Observer
+from hexdag.core.orchestration.events.events import EVENT_REGISTRY
+from hexdag.core.ports.observer_manager import Observer
 
 
 class FileSinkError(Exception):
