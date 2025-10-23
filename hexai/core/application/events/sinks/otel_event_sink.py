@@ -150,7 +150,6 @@ class OpenTelemetrySinkObserver(Observer):
                 BatchSpanProcessor(JaegerExporter(collector_endpoint=self.cfg.jaeger_endpoint))
             )
         elif exporter_mode == "none":
-            # No processors — local no-op/export disabled.
             pass
         else:
             raise OpenTelemetrySinkError(f"Unknown exporter mode: {self.cfg.exporter}")
