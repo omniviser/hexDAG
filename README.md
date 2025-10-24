@@ -5,7 +5,7 @@
 ### Build Investment-Grade AI Systems with Just YAML
 
 [![Star](https://img.shields.io/badge/⭐-Star_This_Repo-yellow?style=for-the-badge)](https://github.com/omniviser/hexdag)
-[![Beta](https://img.shields.io/badge/🎯-Join_Private_Beta-blue?style=for-the-badge)](https://forms.gle/hexdag-beta)
+[![Beta](https://img.shields.io/badge/🎯-Join_Private_Beta-blue?style=for-the-badge)](https://forms.gle/ZDNupq2pqbVPHMAA8)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.11+-green?style=for-the-badge)](https://www.python.org)
 
 </div>
