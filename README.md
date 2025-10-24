@@ -452,7 +452,7 @@ Limited to 100 teams
 
 ### Built for Scale, Designed for Humans
 
-**📬 Stay Connected:** [Discord](https://discord.gg/hexdag) • [Twitter](https://twitter.com/hexdag) • [Newsletter](https://hexdag.ai/news)
+**📬 Stay Connected:** [Twitter](https://x.com/jhkwapisz)
 
 </div>
 
