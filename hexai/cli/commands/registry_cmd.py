@@ -4,11 +4,13 @@ import contextlib
 from enum import StrEnum
 from typing import Annotated, Any
 
+import click
 import typer
 from rich.console import Console
 from rich.table import Table
 from rich.tree import Tree
 
+from hexai.cli.utils import print_output
 from hexai.core.bootstrap import bootstrap_registry
 from hexai.core.registry import registry
 from hexai.core.registry.models import ComponentInfo, ComponentType
@@ -82,7 +84,22 @@ def list_components(
     if namespace:
         components = [c for c in components if c.namespace == namespace]
 
-    # Output based on format
+    # Respect global output format (ctx.obj overrides --format)
+    ctx = click.get_current_context()
+    if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+        serial = [
+            {
+                "name": c.name,
+                "qualified_name": c.qualified_name,
+                "type": c.component_type.value,
+                "namespace": c.namespace,
+                "metadata": c.model_dump(),
+            }
+            for c in components
+        ]
+        print_output(serial, ctx)
+        return
+
     if format == "json":
         data = [
             {
@@ -198,6 +215,19 @@ def show_component(
             except (ImportError, TypeError, ValueError):
                 # Some components can't be instantiated without config
                 component = None
+
+        ctx = click.get_current_context()
+        # If machine format requested, serialize and print
+        if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+            serial = {
+                "qualified_name": component_info.qualified_name,
+                "name": component_info.name,
+                "type": component_info.component_type.value,
+                "namespace": component_info.namespace,
+                "metadata": component_info.model_dump(),
+            }
+            print_output(serial, ctx)
+            return
 
         console.print(f"\n[bold cyan]{component_info.qualified_name}[/bold cyan]")
         console.print(f"[dim]Type: {component_info.component_type.value}[/dim]")

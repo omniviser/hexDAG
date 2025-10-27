@@ -5,9 +5,15 @@ import time
 from datetime import datetime, timedelta
 from typing import TypedDict, cast
 
+import click
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from hexai.cli.utils import print_output
+
+"""Events CLI commands for HexDAG."""
+
 
 app = typer.Typer()
 console = Console()
@@ -77,7 +83,10 @@ def tail(
     while True:
         for idx, evt in enumerate(EVENTS_DB[last_seen:], start=last_seen):
             if matches(evt):
-                if json_out:
+                ctx = click.get_current_context()
+                if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+                    print_output(evt, ctx)
+                elif json_out:
                     console.print(json.dumps(evt, default=str))
                 else:
                     console.print(
@@ -121,6 +130,11 @@ def list_events(
         filtered.append(evt)
         if len(filtered) >= limit:
             break
+
+    ctx = click.get_current_context()
+    if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+        print_output(filtered, ctx)
+        return
 
     if json_out:
         console.print(json.dumps(filtered, default=str))

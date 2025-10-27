@@ -5,11 +5,13 @@ import time
 import uuid
 from typing import Any
 
+import click
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from hexai.cli.commands.run_cmd import run_pipeline
+from hexai.cli.utils import print_output
 
 app = typer.Typer()
 console = Console()
@@ -83,6 +85,13 @@ def list_runs(
     limit: int = typer.Option(50, "--limit"), since: str | None = typer.Option(None)
 ) -> None:
     """List previous runs."""
+    ctx = click.get_current_context()
+    if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+        with RUN_LOCK:
+            serial = [{"run_id": rid, **run} for rid, run in list(RUN_STORE.items())[:limit]]
+        print_output(serial, ctx)
+        return
+
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Run ID")
     table.add_column("Pipeline")
@@ -109,7 +118,11 @@ def run_status(run_id: str) -> None:
         if not run:
             console.print(f"[red]Run {run_id} not found[/red]")
             raise typer.Exit(1)
-        console.print(f"[bold]Run {run_id}[/bold]: {run['status']}")
+        ctx = click.get_current_context()
+        if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+            print_output({"run_id": run_id, "status": run["status"]}, ctx)
+        else:
+            console.print(f"[bold]Run {run_id}[/bold]: {run['status']}")
 
 
 @app.command("cancel")
@@ -152,9 +165,13 @@ def run_results(run_id: str, out: str | None = typer.Option(None, "--out")) -> N
         if not run:
             console.print(f"[red]Run {run_id} not found[/red]")
             raise typer.Exit(1)
-        console.print(f"[bold]Results / Logs for {run_id}[/bold]")
-        for log_line in run["logs"]:
-            console.print(log_line)
+        ctx = click.get_current_context()
+        if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+            print_output({"run_id": run_id, "logs": run["logs"]}, ctx)
+        else:
+            console.print(f"[bold]Results / Logs for {run_id}[/bold]")
+            for log_line in run["logs"]:
+                console.print(log_line)
         if out:
             import json
 

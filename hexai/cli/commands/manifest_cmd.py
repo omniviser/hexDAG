@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Annotated
 
+import click
 import typer
 import yaml
 from deepdiff import DeepDiff
@@ -11,6 +12,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+
+from hexai.cli.utils import print_output
 
 app = typer.Typer()
 console = Console()
@@ -47,12 +50,22 @@ def validate(manifest: Path) -> None:
         errors.append("'components' must be a list")
 
     if errors:
-        console.print(Panel.fit("\n".join(errors), title="Manifest Errors", border_style="red"))
+        # Respect output mode
+        ctx = click.get_current_context()
+        if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+            print_output({"errors": errors}, ctx)
+        else:
+            console.print(Panel.fit("\n".join(errors), title="Manifest Errors", border_style="red"))
         raise typer.Exit(1)
 
-    console.print(
-        Panel.fit(f"Manifest [green]{manifest}[/green] is valid ✅", border_style="green")
-    )
+    # Success
+    ctx = click.get_current_context()
+    if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+        print_output({"valid": True, "manifest": str(manifest)}, ctx)
+    else:
+        console.print(
+            Panel.fit(f"Manifest [green]{manifest}[/green] is valid ✅", border_style="green")
+        )
 
 
 @app.command("build")
@@ -69,10 +82,24 @@ def build(
 
     if output:
         Path(output).write_text(json_str, encoding="utf-8")
-        console.print(f"[green]Manifest built and written to {output}[/green]")
+        ctx = click.get_current_context()
+        if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+            print_output({"out": str(output)}, ctx)
+        else:
+            console.print(f"[green]Manifest built and written to {output}[/green]")
     else:
-        syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
-        console.print(syntax)
+        # Respect output format
+        ctx = click.get_current_context()
+        if (
+            ctx.obj
+            and ctx.obj.get("output_format") == "json"
+            or ctx.obj
+            and ctx.obj.get("output_format") == "yaml"
+        ):
+            print_output(data, ctx)
+        else:
+            syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
+            console.print(syntax)
 
 
 @app.command("diff")
@@ -86,18 +113,31 @@ def diff(old: Path, new: Path) -> None:
     diff_result = DeepDiff(old_data, new_data, view="tree")
 
     if not diff_result:
-        console.print("[green]No differences found[/green]")
+        ctx = click.get_current_context()
+        print_output({"diff": []}, ctx)
         return
 
-    table = Table(title="Manifest Differences", show_header=True, header_style="bold magenta")
-    table.add_column("Change Type")
-    table.add_column("Path")
-    table.add_column("Details")
-
+    # Convert DeepDiff tree view into a serializable structure
+    serial: dict[str, list[dict[str, str]]] = {}
     for change_type, changes in diff_result.items():
+        serial[change_type] = []
         for change in changes:
-            table.add_row(
-                change_type, str(change.path()), str(change.t1) if hasattr(change, "t1") else "-"
-            )
+            serial[change_type].append({
+                "path": str(change.path()),
+                "details": str(change.t1) if hasattr(change, "t1") else "-",
+            })
 
-    console.print(table)
+    # Respect output mode
+    ctx = click.get_current_context()
+    if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+        print_output(serial, ctx)
+    else:
+        table = Table(title="Manifest Differences", show_header=True, header_style="bold magenta")
+        table.add_column("Change Type")
+        table.add_column("Path")
+        table.add_column("Details")
+
+        for change_type, changes in serial.items():
+            for change in changes:
+                table.add_row(change_type, change["path"], change["details"])
+        console.print(table)

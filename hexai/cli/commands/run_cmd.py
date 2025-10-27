@@ -5,12 +5,14 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
+import click
 import typer
 import yaml
 from rich.console import Console
 from rich.table import Table
 
 from hexai.cli.commands.registry_cmd import ComponentType, bootstrap_registry, registry
+from hexai.cli.utils import print_output
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -123,13 +125,17 @@ def run_pipeline(
             console.print(f"[red]✖ Node {node_name} failed: {e}[/red]")
             raise typer.Exit(1) from e
 
-    console.print("\n[bold]Pipeline finished. Results:[/bold]")
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Node")
-    table.add_column("Result")
-    for k, v in results.items():
-        table.add_row(k, str(v))
-    console.print(table)
+    ctx = click.get_current_context()
+    if ctx.obj and ctx.obj.get("output_format") in ("json", "yaml"):
+        print_output(results, ctx)
+    else:
+        console.print("\n[bold]Pipeline finished. Results:[/bold]")
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Node")
+        table.add_column("Result")
+        for k, v in results.items():
+            table.add_row(k, str(v))
+        console.print(table)
 
     # Optionally save results
     out_file = pipeline.get("results_out")
