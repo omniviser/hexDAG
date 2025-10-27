@@ -78,6 +78,13 @@ class OpenTelemetrySinkObserver(Observer):
         self._error_counter: Any | None = None
         self._tokens_counter: Any | None = None
 
+        # NEW: LLM usage/cost instruments
+        self._llm_tokens_counter: Any | None = None
+        self._llm_cost_counter: Any | None = None
+
+        # NEW: aggregate/root span for the session
+        self._root_span: Any | None = None
+
     async def start(self) -> None:
         try:
             from opentelemetry import metrics, trace
@@ -157,6 +164,9 @@ class OpenTelemetrySinkObserver(Observer):
         trace.set_tracer_provider(tp)
         self._tracer_provider = tp
         self._tracer = trace.get_tracer(__name__)
+        with suppress(Exception):
+            if self._tracer is not None:
+                self._root_span = self._tracer.start_span("Aggregate/Session")
 
         # Metrics
         readers: list[Any] = []
@@ -225,9 +235,25 @@ class OpenTelemetrySinkObserver(Observer):
         self._tokens_counter = self._meter.create_counter(
             "hexdag.llm.tokens", description="LLM total tokens (prompt+completion)"
         )
+        # NEW: LLM metrics
+        self._llm_tokens_counter = self._meter.create_counter(
+            "llm.tokens",
+            description="Total LLM tokens (prompt + completion)",
+        )
+        self._llm_cost_counter = self._meter.create_counter(
+            "llm.cost_usd",
+            unit="USD",
+            description="Accumulated LLM cost in USD",
+        )
 
     async def stop(self) -> None:
         # Shutdown order: metrics then traces (flush/close)
+        root = self._root_span
+        if root is not None:
+            with suppress(Exception):
+                root.end()
+        self._root_span = None
+
         if self._meter_provider:
             with suppress(Exception):
                 self._meter_provider.shutdown()
@@ -274,6 +300,7 @@ class OpenTelemetrySinkObserver(Observer):
         if etype.endswith(":failed") or etype.endswith(":error"):
             self._record_error(attrs)
         self._record_llm_tokens(attrs)
+        self._record_llm_metrics(attrs)
 
     # ---------- helpers ----------
 
@@ -323,6 +350,7 @@ class OpenTelemetrySinkObserver(Observer):
             "prompt_tokens": env.get("prompt_tokens") or data.get("prompt_tokens"),
             "completion_tokens": env.get("completion_tokens") or data.get("completion_tokens"),
             "total_tokens": env.get("total_tokens") or data.get("total_tokens"),
+            "cost_usd": env.get("cost_usd") or data.get("cost_usd"),
             # space for correlation ids if you have them:
             "session_id": env.get("session_id") or data.get("session_id"),
             "pipeline_id": env.get("pipeline_id") or data.get("pipeline_id"),
@@ -370,9 +398,23 @@ class OpenTelemetrySinkObserver(Observer):
         if isinstance(total, (int, float)):
             c.add(int(total), attributes=self._metric_attrs(attrs))
 
+    def _record_llm_metrics(self, attrs: dict[str, Any]) -> None:
+        tokens_counter = self._llm_tokens_counter
+        cost_counter = self._llm_cost_counter
+        metric_attrs = self._metric_attrs(attrs)
+
+        total_tokens = attrs.get("total_tokens")
+        if tokens_counter is not None and isinstance(total_tokens, (int, float)):
+            tokens_counter.add(int(total_tokens), attributes=metric_attrs)
+
+        cost = attrs.get("cost_usd") or attrs.get("llm_cost_usd") or attrs.get("cost")
+        if cost_counter is not None and isinstance(cost, (int, float)):
+            cost_counter.add(float(cost), attributes=metric_attrs)
+
     def _metric_attrs(self, attrs: dict[str, Any]) -> dict[str, Any]:
         return {
             "pipeline": attrs.get("pipeline"),
             "node": attrs.get("node"),
             "tool": attrs.get("tool"),
+            "model": attrs.get("model"),
         }
