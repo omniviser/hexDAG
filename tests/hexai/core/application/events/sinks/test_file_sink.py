@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 
@@ -30,20 +31,23 @@ async def test_file_sink_jsonl_roundtrip(tmp_path: Path):
     path = tmp_path / "events.jsonl"
     obs = FileSinkObserver(str(path))
 
-    ev = PipelineStarted(name="demo", total_waves=2, total_nodes=3)
-    await obs.handle(ev)
+    # Even though batching is off by default, call start() to be lifecycle-consistent
+    await obs.start()
+    try:
+        ev = PipelineStarted(name="demo", total_waves=2, total_nodes=3)
+        await obs.handle(ev)
 
-    content = path.read_text(encoding="utf-8").strip()
-    assert content, "JSONL file should not be empty after handle()"
-    lines = content.splitlines()
-    assert len(lines) == 1, "Expected exactly one JSON line"
+        content = path.read_text(encoding="utf-8").strip()
+        assert content, "JSONL file should not be empty after handle()"
+        lines = content.splitlines()
+        assert len(lines) == 1, "Expected exactly one JSON line"
 
-    data = json.loads(lines[0])
-    assert data["type"] == "pipeline:started"
-    assert data["envelope"] == {"pipeline": "demo"}
-    assert isinstance(data.get("timestamp"), str) and "T" in data["timestamp"]
-
-    obs.close()
+        data = json.loads(lines[0])
+        assert data["type"] == "pipeline:started"
+        assert data["envelope"] == {"pipeline": "demo"}
+        assert isinstance(data.get("timestamp"), str) and "T" in data["timestamp"]
+    finally:
+        await obs.stop()
 
 
 @pytest.mark.asyncio
@@ -54,10 +58,17 @@ async def test_file_sink_raises_in_strict_mode(tmp_path: Path):
     """
     path = tmp_path / "events.jsonl"
     obs = FileSinkObserver(str(path), raise_on_error=True)
-    obs.close()  # Force a ValueError on the next write/flush
+    await obs.start()
+    try:
+        # Force a ValueError on the next write/flush by closing file early
+        await obs.stop()
 
-    with pytest.raises(FileSinkError):
-        await obs.handle(PipelineStarted(name="x", total_waves=1, total_nodes=1))
+        with pytest.raises(FileSinkError):
+            await obs.handle(PipelineStarted(name="x", total_waves=1, total_nodes=1))
+    finally:
+        # Ensure idempotent stop in case of exceptions
+        with contextlib.suppress(Exception):
+            await obs.stop()
 
 
 @pytest.mark.asyncio
@@ -71,23 +82,23 @@ async def test_websocket_sink_broadcasts(unused_tcp_port: int):
 
     ws_obs = WebSocketSinkObserver(host=host, port=port)
     await ws_obs.start()
+    try:
+        uri = f"ws://{host}:{port}"
+        async with websockets.connect(uri) as ws_client:
+            # Give the server a brief moment to register the client
+            await asyncio.sleep(0.05)
 
-    uri = f"ws://{host}:{port}"
-    async with websockets.connect(uri) as ws_client:
-        # Give the server a brief moment to register the client
-        await asyncio.sleep(0.05)
+            ev = NodeStarted(name="A", wave_index=1, dependencies=["B"])
+            await ws_obs.handle(ev)
 
-        ev = NodeStarted(name="A", wave_index=1, dependencies=["B"])
-        await ws_obs.handle(ev)
+            msg = await asyncio.wait_for(ws_client.recv(), timeout=1.0)
+            data = json.loads(msg)
 
-        msg = await asyncio.wait_for(ws_client.recv(), timeout=1.0)
-        data = json.loads(msg)
-
-        assert data["type"] == "node:started"
-        assert data["envelope"] == {"node": "A", "wave": 1}
-        assert "timestamp" in data
-
-    await ws_obs.stop()
+            assert data["type"] == "node:started"
+            assert data["envelope"] == {"node": "A", "wave": 1}
+            assert "timestamp" in data
+    finally:
+        await ws_obs.stop()
 
 
 @pytest.mark.asyncio
@@ -101,9 +112,13 @@ async def test_websocket_sink_port_in_use(unused_tcp_port: int):
     s1 = WebSocketSinkObserver(host=host, port=port)
     await s1.start()
 
+    s2 = WebSocketSinkObserver(host=host, port=port)
     try:
-        s2 = WebSocketSinkObserver(host=host, port=port)
         with pytest.raises(WebSocketSinkError):
             await s2.start()
     finally:
+        # Cleanup: stop both if necessary
         await s1.stop()
+        # s2 may or may not have started; stop should be safe
+        with contextlib.suppress(Exception):
+            await s2.stop()

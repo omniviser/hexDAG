@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import Any
 
-from hexai.core.ports.observer_manager import Observer
+from hexdag.core.ports.observer_manager import Observer
 
 from .file_sink import _event_to_dict
 

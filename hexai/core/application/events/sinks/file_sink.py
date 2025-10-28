@@ -6,6 +6,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, TextIO, cast, runtime_checkable
 
+from hexdag.core.orchestration.events.batching import (
+    BatchingConfig,
+    EventBatchEnvelope,
+    EventBatcher,
+)
 from hexdag.core.orchestration.events.events import EVENT_REGISTRY
 from hexdag.core.ports.observer_manager import Observer
 
@@ -59,7 +64,13 @@ class FileSinkObserver(Observer):
     - Set raise_on_error=True to raise FileSinkError from handle() for strict testing.
     """
 
-    def __init__(self, path: str, line_buffered: bool = True, raise_on_error: bool = False) -> None:
+    def __init__(
+        self,
+        path: str,
+        line_buffered: bool = True,
+        raise_on_error: bool = False,
+        batching: BatchingConfig | None = None,  # optional batching
+    ) -> None:
         """
         Initialize the file sink.
 
@@ -69,6 +80,9 @@ class FileSinkObserver(Observer):
             raise_on_error: If True, handle() will raise FileSinkError on write/flush errors.
         """
         self._raise_on_error: bool = raise_on_error
+        self._batching_cfg = batching
+        self._batcher: EventBatcher | None = None
+
         buffering = 1 if line_buffered else -1
         try:
             self._path = path
@@ -80,6 +94,11 @@ class FileSinkObserver(Observer):
         except (OSError, ValueError) as e:
             raise FileSinkError(f"Failed to open file sink at '{path}': {e}") from e
 
+    async def start(self) -> None:
+        """Optionally create the batcher if batching is configured."""
+        if self._batching_cfg is not None:
+            self._batcher = EventBatcher(self._flush_envelope, self._batching_cfg)
+
     async def handle(self, event: Any) -> None:
         """
         Serialize and append the event as a JSON line, then flush.
@@ -87,6 +106,10 @@ class FileSinkObserver(Observer):
         Raises:
             FileSinkError: only if raise_on_error=True and a write/flush error occurs.
         """
+        if self._batcher is not None:
+            await self._batcher.add(event)
+            return
+
         obj = _event_to_dict(event)
         line = json.dumps(obj, ensure_ascii=False)
 
@@ -98,11 +121,28 @@ class FileSinkObserver(Observer):
                 raise FileSinkError(f"Failed to write/flush to '{self._path}': {e}") from e
             # Fault isolation by default: do nothing to avoid breaking the pipeline.
 
-    def close(self) -> None:
-        """Close the underlying file handle safely; raise on explicit close failure."""
+    async def stop(self) -> None:
+        """Flush remaining events (if batching) and close the underlying file handle."""
+        if self._batcher is not None:
+            await self._batcher.close()
+            self._batcher = None
+
         try:
             self._f.close()
         except (OSError, ValueError) as e:
-            # It’s reasonable to raise here because close() is a lifecycle action,
-            # but if you prefer silent shutdowns, convert to a log instead.
+            # Reasonable to raise on lifecycle close errors
             raise FileSinkError(f"Failed to close file sink '{self._path}': {e}") from e
+
+    async def _flush_envelope(self, envelope: EventBatchEnvelope) -> None:
+        """
+        Flush a whole batch to file in one go.
+        """
+        try:
+            for ev in envelope.events:
+                obj = _event_to_dict(ev)
+                line = json.dumps(obj, ensure_ascii=False)
+                self._f.write(line + "\n")
+            self._f.flush()
+        except (OSError, ValueError) as e:
+            if self._raise_on_error:
+                raise FileSinkError(f"Failed to write/flush batch to '{self._path}': {e}") from e
