@@ -32,8 +32,11 @@ def validate_pipeline(
         with open(pipeline_path, encoding="utf-8") as f:
             content = f.read()
         res = SafeYAML().loads(content)
-        if not res.ok or not isinstance(res.data, dict):
-            console.print(f"[red]Error: Invalid YAML in {pipeline_path}: {res.message}[/red]")
+        if not res.ok:
+            console.print(f"[red]YAML parsing error: {res.message}[/red]")
+            raise typer.Exit(1)
+        if not isinstance(res.data, dict):
+            console.print("[red]YAML parsing error: top-level document must be a mapping[/red]")
             raise typer.Exit(1)
         pipeline_data = res.data
 

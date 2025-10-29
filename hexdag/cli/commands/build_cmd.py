@@ -77,7 +77,7 @@ def _read_pipeline_yaml(path: Path) -> dict:
         content = f.read()
     result = SafeYAML().loads(content)
     if not result.ok or not isinstance(result.data, dict):
-        console.print(f"[red]Error:[/red] Invalid YAML in {path}: {result.message}")
+        console.print(f"[red]Error:[/red] Failed to parse YAML: {result.message}")
         raise typer.Exit(1)
     return result.data
 
