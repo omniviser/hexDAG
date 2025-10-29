@@ -8,6 +8,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from hexdag.core.validation.secure_json import SafeJSON
+from hexdag.core.validation.secure_yaml import SafeYAML
+
 app = typer.Typer()
 console = Console()
 
@@ -20,27 +23,26 @@ def validate_pipeline(
     ],
 ) -> None:
     """Validate pipeline file (schema + DAG validation)."""
-    import yaml
-
     if not pipeline_path.exists():
         console.print(f"[red]Error: Pipeline file not found: {pipeline_path}[/red]")
         raise typer.Exit(1)
 
     try:
         # Load YAML
-        with open(pipeline_path) as f:
-            pipeline_data = yaml.safe_load(f)
+        with open(pipeline_path, encoding="utf-8") as f:
+            content = f.read()
+        res = SafeYAML().loads(content)
+        if not res.ok or not isinstance(res.data, dict):
+            console.print(f"[red]Error: Invalid YAML in {pipeline_path}: {res.message}[/red]")
+            raise typer.Exit(1)
+        pipeline_data = res.data
 
         console.print(f"[cyan]Validating pipeline: {pipeline_path}[/cyan]")
 
-        issues = []
-        warnings = []
+        issues: list[str] = []
+        warnings: list[str] = []
 
         # Basic structure validation
-        if not isinstance(pipeline_data, dict):
-            issues.append("Pipeline must be a dictionary")
-            console.print("[red]✗ Invalid pipeline structure[/red]")
-            raise typer.Exit(1)
 
         # Check required fields
         required_fields = ["name", "nodes"]
@@ -123,9 +125,6 @@ def validate_pipeline(
         console.print(f"  Name: {pipeline_data.get('name', 'unnamed')}")
         console.print(f"  Nodes: {len(pipeline_data.get('nodes', []))}")
 
-    except yaml.YAMLError as e:
-        console.print(f"[red]YAML parsing error: {e}[/red]")
-        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Validation error: {e}[/red]")
         raise typer.Exit(1)
@@ -147,8 +146,6 @@ def generate_graph(
     ] = None,
 ) -> None:
     """Generate visual graph of pipeline DAG."""
-    import yaml
-
     if not pipeline_path.exists():
         console.print(f"[red]Error: Pipeline file not found: {pipeline_path}[/red]")
         raise typer.Exit(1)
@@ -162,8 +159,13 @@ def generate_graph(
             raise typer.Exit(1)
 
         # Load pipeline
-        with open(pipeline_path) as f:
-            pipeline_data = yaml.safe_load(f)
+        with open(pipeline_path, encoding="utf-8") as f:
+            content = f.read()
+        res = SafeYAML().loads(content)
+        if not res.ok or not isinstance(res.data, dict):
+            console.print(f"[red]Error: Invalid YAML in {pipeline_path}: {res.message}[/red]")
+            raise typer.Exit(1)
+        pipeline_data = res.data
 
         console.print(f"[cyan]Generating graph for: {pipeline_path}[/cyan]")
 
@@ -228,16 +230,19 @@ def plan_execution(
     ],
 ) -> None:
     """Show execution plan (waves, concurrency, expected I/O)."""
-    import yaml
-
     if not pipeline_path.exists():
         console.print(f"[red]Error: Pipeline file not found: {pipeline_path}[/red]")
         raise typer.Exit(1)
 
     try:
         # Load pipeline
-        with open(pipeline_path) as f:
-            pipeline_data = yaml.safe_load(f)
+        with open(pipeline_path, encoding="utf-8") as f:
+            content = f.read()
+        res = SafeYAML().loads(content)
+        if not res.ok or not isinstance(res.data, dict):
+            console.print(f"[red]Error: Invalid YAML in {pipeline_path}: {res.message}[/red]")
+            raise typer.Exit(1)
+        pipeline_data = res.data
 
         console.print(f"[cyan]Execution plan for: {pipeline_data.get('name', 'unnamed')}[/cyan]\n")
 
@@ -285,6 +290,7 @@ def _detect_cycles(nodes: list) -> list[str] | None:
     path = []
 
     def dfs(node_id: str) -> list[str] | None:
+        """DFS helper to detect cycles and return the cycle path if found."""
         visited.add(node_id)
         rec_stack.add(node_id)
         path.append(node_id)
@@ -400,22 +406,23 @@ def run_pipeline(
     try:
         # Parse input data
         inputs = {}
+        safe_json = SafeJSON()
         if input_data:
-            try:
-                inputs = json.loads(input_data)
-            except json.JSONDecodeError as e:
-                console.print(f"[red]Error: Invalid JSON in --input: {e}[/red]")
+            r = safe_json.loads(input_data)
+            if not r.ok or not isinstance(r.data, dict):
+                console.print(f"[red]Error: Invalid JSON in --input: {r.message}[/red]")
                 raise typer.Exit(1)
+            inputs = r.data
         elif input_file:
             if not input_file.exists():
                 console.print(f"[red]Error: Input file not found: {input_file}[/red]")
                 raise typer.Exit(1)
-            try:
-                with open(input_file) as f:
-                    inputs = json.load(f)
-            except json.JSONDecodeError as e:
-                console.print(f"[red]Error: Invalid JSON in input file: {e}[/red]")
+            with open(input_file, encoding="utf-8") as f:
+                r = safe_json.loads(f.read())
+            if not r.ok or not isinstance(r.data, dict):
+                console.print(f"[red]Error: Invalid JSON in input file: {r.message}[/red]")
                 raise typer.Exit(1)
+            inputs = r.data
 
         # Import hexdag components
         from hexdag import Orchestrator, YamlPipelineBuilder

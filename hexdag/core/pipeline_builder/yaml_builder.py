@@ -30,6 +30,7 @@ from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
 from hexdag.core.registry import registry
 from hexdag.core.registry.exceptions import ComponentNotFoundError
 from hexdag.core.registry.models import NAMESPACE_SEPARATOR
+from hexdag.core.validation.secure_yaml import SafeYAML
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -162,11 +163,25 @@ class YamlPipelineBuilder:
     # --- Core Logic ---
 
     def _parse_yaml(self, yaml_content: str, use_cache: bool) -> list[dict[str, Any]]:
-        """Parse YAML into list of documents."""
+        """Parse YAML into list of documents with SafeYAML limits."""
+        safe_yaml = SafeYAML()
+
+        # Multi-document: preflight checks for size/depth, then safe_load_all
         if "---" in yaml_content:
+            pre = safe_yaml.loads(yaml_content)
+            if not pre.ok:
+                raise YamlPipelineBuilderError(pre.message or "Invalid YAML")
             return list(yaml.safe_load_all(yaml_content))
-        parsed = _parse_yaml_cached(yaml_content) if use_cache else yaml.safe_load(yaml_content)
-        return [parsed]
+
+        # Single-document: parse via SafeYAML and validate dict type
+        res = safe_yaml.loads(yaml_content)
+        if not res.ok:
+            raise YamlPipelineBuilderError(res.message or "Invalid YAML")
+        if not isinstance(res.data, dict):
+            raise YamlPipelineBuilderError(
+                f"YAML document must be a dictionary, got {type(res.data).__name__}"
+            )
+        return [res.data]
 
     def _select_environment(
         self, documents: list[dict[str, Any]], environment: str | None

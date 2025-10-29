@@ -11,6 +11,7 @@ from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.prompt import PromptInput, TemplateType
 from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.protocols import to_dict
+from hexdag.core.validation.unified_engine import UnifiedParsingEngine
 
 from .base_node_factory import BaseNodeFactory
 
@@ -221,22 +222,10 @@ Example: {example_json}
         )
 
     def _parse_structured_response(self, response: str, output_model: type[BaseModel]) -> Any:
-        """Parse response into structured output.
-
-        Returns
-        -------
-        Any
-            Parsed response as output_model instance or raw response if parsing fails
-        """
-        try:
-            # Try to parse as JSON first
-            if response.strip().startswith("{"):
-                data = json.loads(response)
-                return output_model.model_validate(data)
-        except (json.JSONDecodeError, Exception):
-            pass
-
-        # Fallback: try to fit into result field
+        engine = UnifiedParsingEngine()
+        res = engine.auto_detect_and_parse(response, output_model)
+        if res.ok and res.data is not None:
+            return res.data
         try:
             return output_model.model_validate({"result": response})
         except Exception:

@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from hexdag.core.bootstrap import bootstrap_registry
 from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
+from hexdag.core.validation.secure_yaml import SafeYAML
 
 app = typer.Typer()
 console = Console()
@@ -62,12 +62,21 @@ def validate(
 
     # Read YAML file
     try:
-        with Path.open(yaml_file) as f:
+        with Path.open(yaml_file, encoding="utf-8") as f:
             content = f.read()
-            config = yaml.safe_load(content)
-    except yaml.YAMLError as e:
-        console.print(f"[red]✗ YAML Syntax Error:[/red] {e}")
-        raise typer.Exit(1) from e
+        res = SafeYAML().loads(content)
+        if not res.ok:
+            console.print(f"[red]✗ YAML Syntax/Error:[/red] {res.message}")
+            if res.preview:
+                console.print(res.preview)
+            raise typer.Exit(1)
+        data = res.data
+        if not isinstance(data, dict):
+            console.print(
+                "[red]✗ YAML Syntax/Error:[/red] Top-level YAML document must be a mapping"
+            )
+            raise typer.Exit(1)
+        config: dict = data
     except OSError as e:
         console.print(f"[red]✗ File Error:[/red] {e}")
         raise typer.Exit(1) from e

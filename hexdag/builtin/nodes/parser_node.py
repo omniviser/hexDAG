@@ -8,7 +8,6 @@ import json
 import re
 from typing import Any
 
-import yaml
 from pydantic import BaseModel, ValidationError
 
 from hexdag.core.domain.dag import NodeSpec
@@ -16,6 +15,8 @@ from hexdag.core.exceptions import ParseError
 from hexdag.core.logging import get_logger
 from hexdag.core.registry import node
 from hexdag.core.registry.models import NodeSubtype
+from hexdag.core.validation.secure_json import SafeJSON
+from hexdag.core.validation.secure_yaml import SafeYAML
 
 from .base_node_factory import BaseNodeFactory
 
@@ -190,32 +191,10 @@ class ParserNode(BaseNodeFactory):
         return parse_text
 
     def _parse_json(self, text: str) -> dict[str, Any]:
-        """Parse JSON from text.
-
-        Args
-        ----
-            text: Raw text containing JSON
-
-        Returns
-        -------
-        dict[str, Any]
-            Parsed JSON data
-        """
-        # Strip whitespace and common markdown artifacts
-        cleaned = text.strip()
-
-        # Try direct JSON parsing
-        try:
-            parsed: dict[str, Any] = json.loads(cleaned)
-            return parsed
-        except json.JSONDecodeError:
-            # Try to extract JSON from surrounding text
-            # Look for {...} or [...]
-            json_match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
-            if json_match:
-                extracted: dict[str, Any] = json.loads(json_match.group(1))
-                return extracted
-            raise
+        r = SafeJSON().loads_from_text(text)
+        if not r.ok or not isinstance(r.data, dict):
+            raise ValueError(r.message or "Invalid JSON")
+        return r.data
 
     def _parse_json_in_markdown(self, text: str) -> dict[str, Any]:
         """Extract and parse JSON from markdown code blocks.
@@ -246,19 +225,10 @@ class ParserNode(BaseNodeFactory):
         return self._parse_json(text)
 
     def _parse_yaml(self, text: str) -> dict[str, Any]:
-        """Parse YAML from text.
-
-        Args
-        ----
-            text: Raw text containing YAML
-
-        Returns
-        -------
-        dict[str, Any]
-            Parsed YAML data
-        """
-        parsed: dict[str, Any] = yaml.safe_load(text)
-        return parsed
+        r = SafeYAML().loads_from_text(text)
+        if not r.ok or not isinstance(r.data, dict):
+            raise ValueError(r.message or "Invalid YAML")
+        return r.data
 
     def _create_parse_error_message(self, text: str, error: str, strategy: str) -> str:
         """Create helpful error message for parse failures.

@@ -10,6 +10,8 @@ import typer
 import yaml
 from rich.console import Console
 
+from hexdag.core.validation.secure_yaml import SafeYAML
+
 app = typer.Typer()
 console = Console()
 
@@ -71,16 +73,13 @@ def _read_pipeline_yaml(path: Path) -> dict:
         console.print(f"[red]Error:[/red] Pipeline file not found: {path}")
         raise typer.Exit(1)
 
-    with Path.open(path) as f:
-        try:
-            data = yaml.safe_load(f)
-            if not isinstance(data, dict):
-                console.print(f"[red]Error:[/red] Invalid YAML structure in {path}")
-                raise typer.Exit(1)
-            return data
-        except yaml.YAMLError as e:
-            console.print(f"[red]Error:[/red] Failed to parse YAML: {e}")
-            raise typer.Exit(1) from e
+    with Path.open(path, encoding="utf-8") as f:
+        content = f.read()
+    result = SafeYAML().loads(content)
+    if not result.ok or not isinstance(result.data, dict):
+        console.print(f"[red]Error:[/red] Invalid YAML in {path}: {result.message}")
+        raise typer.Exit(1)
+    return result.data
 
 
 def _validate_pipeline_structure(pipeline_path: Path, data: dict) -> None:
