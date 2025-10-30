@@ -6,7 +6,7 @@ from typing import Any, Literal
 from openai import AsyncOpenAI
 
 from hexdag.core.logging import get_logger
-from hexdag.core.ports.llm import LLMResponse, MessageList, ToolCall
+from hexdag.core.ports.llm import LLMResponse, MessageList, ToolCall, VisionMessage
 from hexdag.core.registry import adapter
 from hexdag.core.types import (
     FrequencyPenalty,
@@ -250,4 +250,208 @@ class OpenAIAdapter:
 
         except Exception as e:
             logger.error(f"OpenAI API error with tools: {e}", exc_info=True)
+            raise
+
+    async def aresponse_with_vision(
+        self,
+        messages: list[VisionMessage],
+        max_tokens: int | None = None,
+    ) -> str | None:
+        """Generate response from messages containing images and text.
+
+        Args
+        ----
+            messages: List of messages with optional image content
+            max_tokens: Optional maximum tokens in response
+
+        Returns
+        -------
+            Generated response text or None if failed
+
+        Examples
+        --------
+        Single image analysis::
+
+            messages = [
+                VisionMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "What's in this image?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/image.jpg"}
+                        }
+                    ]
+                )
+            ]
+            response = await adapter.aresponse_with_vision(messages)
+        """
+        try:
+            # Convert VisionMessage to OpenAI format
+            openai_messages: list[dict[str, Any]] = []
+            for msg in messages:
+                if isinstance(msg.content, str):
+                    # Simple text message
+                    openai_messages.append({"role": msg.role, "content": msg.content})
+                else:
+                    # Multi-part content (text + images)
+                    openai_messages.append({"role": msg.role, "content": msg.content})
+
+            if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
+                openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+            request_params: dict[str, Any] = {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "frequency_penalty": self.frequency_penalty,
+                "presence_penalty": self.presence_penalty,
+            }
+
+            # Use provided max_tokens or default
+            if max_tokens is not None:
+                request_params["max_tokens"] = max_tokens
+            elif self.max_tokens is not None:
+                request_params["max_tokens"] = self.max_tokens
+
+            if self.seed is not None:
+                request_params["seed"] = self.seed
+
+            # Stop sequences from extra kwargs
+            if stop_seq := self._extra_kwargs.get("stop_sequences"):
+                request_params["stop"] = stop_seq
+
+            # Make API call
+            response = await self.client.chat.completions.create(**request_params)
+
+            if response.choices and len(response.choices) > 0:
+                message = response.choices[0].message
+                if message and message.content:
+                    return str(message.content)
+
+            logger.warning("No content in OpenAI vision response")
+            return None
+
+        except Exception as e:
+            logger.error(f"OpenAI API error with vision: {e}", exc_info=True)
+            return None
+
+    async def aresponse_with_vision_and_tools(
+        self,
+        messages: list[VisionMessage],
+        tools: list[dict[str, Any]],
+        tool_choice: str | dict[str, Any] = "auto",
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
+        """Generate response with both vision and tool calling capabilities.
+
+        Args
+        ----
+            messages: Messages with optional image content
+            tools: Tool definitions in OpenAI format
+            tool_choice: Tool selection strategy ("auto", "none", or specific tool)
+            max_tokens: Optional maximum tokens in response
+
+        Returns
+        -------
+        LLMResponse
+            Response with content and optional tool calls
+
+        Examples
+        --------
+        Image analysis with tool calls::
+
+            tools = [{
+                "type": "function",
+                "function": {
+                    "name": "identify_product",
+                    "description": "Look up product details",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"product_name": {"type": "string"}},
+                        "required": ["product_name"]
+                    }
+                }
+            }]
+
+            messages = [
+                VisionMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "What product is this?"},
+                        {"type": "image_url", "image_url": {"url": "product.jpg"}}
+                    ]
+                )
+            ]
+
+            response = await adapter.aresponse_with_vision_and_tools(messages, tools)
+        """
+        try:
+            # Convert VisionMessage to OpenAI format
+            openai_messages: list[dict[str, Any]] = []
+            for msg in messages:
+                if isinstance(msg.content, str):
+                    openai_messages.append({"role": msg.role, "content": msg.content})
+                else:
+                    openai_messages.append({"role": msg.role, "content": msg.content})
+
+            if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
+                openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+            request_params: dict[str, Any] = {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "frequency_penalty": self.frequency_penalty,
+                "presence_penalty": self.presence_penalty,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+
+            # Use provided max_tokens or default
+            if max_tokens is not None:
+                request_params["max_tokens"] = max_tokens
+            elif self.max_tokens is not None:
+                request_params["max_tokens"] = self.max_tokens
+
+            if self.seed is not None:
+                request_params["seed"] = self.seed
+
+            # Stop sequences from extra kwargs
+            if stop_seq := self._extra_kwargs.get("stop_sequences"):
+                request_params["stop"] = stop_seq
+
+            # Make API call
+            response = await self.client.chat.completions.create(**request_params)
+
+            if not response.choices or len(response.choices) == 0:
+                logger.warning("No choices in OpenAI vision+tools response")
+                return LLMResponse(content=None, tool_calls=None)
+
+            message = response.choices[0].message
+            finish_reason = response.choices[0].finish_reason
+
+            # Extract content
+            content = str(message.content) if message.content else None
+
+            # Extract tool calls
+            tool_calls_list = None
+            if message.tool_calls:
+                tool_calls_list = [
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=json.loads(tc.function.arguments),
+                    )
+                    for tc in message.tool_calls
+                ]
+
+            return LLMResponse(
+                content=content, tool_calls=tool_calls_list, finish_reason=finish_reason
+            )
+
+        except Exception as e:
+            logger.error(f"OpenAI API error with vision+tools: {e}", exc_info=True)
             raise
