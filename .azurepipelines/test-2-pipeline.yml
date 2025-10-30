@@ -55,18 +55,18 @@ stages:
           - script: |
               uv run ruff check . --config=pyproject.toml --output-format=github
               uv run ruff format . --check
-              uv run mypy hexai/
-              uv run bandit -r hexai/ -f json -o bandit-output.json || true
+              uv run mypy hexdag/
+              uv run bandit -r hexdag/ -f json -o bandit-output.json || true
             displayName: 'Lint and type check'
 
           - script: |
               # Run main tests
-              uv run pytest tests/hexai/ -v \
+              uv run pytest tests/hexdag/ -v \
                 --junitxml=junit/test-results-main.xml \
-                --cov=hexai --cov-report=xml --cov-report=html
+                --cov=hexdag --cov-report=xml --cov-report=html
 
               # Run plugin tests if they exist
-              for plugin_dir in hexai_plugins/*/; do
+              for plugin_dir in hexdag_plugins/*/; do
                 if [ -d "$plugin_dir/tests" ]; then
                   plugin_name=$(basename "$plugin_dir")
                   uv run pytest "$plugin_dir/tests/" -v \
@@ -106,8 +106,8 @@ stages:
               python -m pip install --upgrade pip uv
               uv sync --all-extras
               # Install all plugins for integration testing if they exist
-              if [ -d "hexai_plugins" ]; then
-                for plugin_dir in hexai_plugins/*/; do
+              if [ -d "hexdag_plugins" ]; then
+                for plugin_dir in hexdag_plugins/*/; do
                   if [ -f "$plugin_dir/pyproject.toml" ]; then
                     pip install -e "$plugin_dir"
                   fi

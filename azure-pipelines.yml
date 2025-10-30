@@ -55,22 +55,49 @@ stages:
           - script: |
               uv run ruff check . --config=pyproject.toml --output-format=github
               uv run ruff format . --check
-              uv run mypy hexai/
-              uv run bandit -r hexai/ -f json -o bandit-output.json || true
+              uv run mypy hexdag/
+              uv run pyright hexdag/
+              uv run bandit -r hexdag/ -f json -o bandit-output.json || true
             displayName: 'Lint and type check'
 
           - script: |
-              # Run main tests
-              uv run pytest tests/hexai/ -v \
-                --junitxml=junit/test-results-main.xml \
-                --cov=hexai --cov-report=xml --cov-report=html
+              uv run licensecheck --zero
+            displayName: 'Check dependency licenses'
+
+          - script: |
+              uv run deptry .
+              uv run vulture hexdag/ --min-confidence 90
+              uv run radon cc hexdag/ --min B --show-complexity
+              uv run interrogate hexdag/ --fail-under 95 --quiet
+              uv run safety check --json
+            displayName: 'Additional quality checks'
+
+          - script: |
+              uv run python scripts/check_core_imports.py
+            displayName: 'Check core architecture (no adapters/builtin imports)'
+
+          - script: |
+              uv run python scripts/check_async_io.py
+            displayName: 'Check async I/O compliance'
+
+          - script: |
+              uv run python scripts/check_test_structure.py
+            displayName: 'Check test structure consistency'
+
+          - script: |
+              # Run doctest first
+              uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ -v --junitxml=junit/test-results-doctest.xml --doctest-continue-on-failure
+            displayName: 'Run doctests'
+
+          - script: |
+              # Run main tests (excluding CLI which has separate coverage)
+              uv run pytest tests/hexdag/ --ignore=tests/hexdag/cli -v --junitxml=junit/test-results-main.xml --cov=hexdag --cov-config=pyproject.toml --cov-report=xml --cov-report=html
 
               # Run plugin tests if they exist
-              for plugin_dir in hexai_plugins/*/; do
+              for plugin_dir in hexdag_plugins/*/; do
                 if [ -d "$plugin_dir/tests" ]; then
                   plugin_name=$(basename "$plugin_dir")
-                  uv run pytest "$plugin_dir/tests/" -v \
-                    --junitxml=junit/test-results-$plugin_name.xml || true
+                  uv run pytest "$plugin_dir/tests/" -v --junitxml=junit/test-results-$plugin_name.xml || true
                 fi
               done
             displayName: 'Run all tests'
@@ -106,8 +133,8 @@ stages:
               python -m pip install --upgrade pip uv
               uv sync --all-extras
               # Install all plugins for integration testing if they exist
-              if [ -d "hexai_plugins" ]; then
-                for plugin_dir in hexai_plugins/*/; do
+              if [ -d "hexdag_plugins" ]; then
+                for plugin_dir in hexdag_plugins/*/; do
                   if [ -f "$plugin_dir/pyproject.toml" ]; then
                     pip install -e "$plugin_dir"
                   fi
@@ -126,6 +153,37 @@ stages:
               testResultsFiles: '**/test-results-integration.xml'
               testRunTitle: 'Integration Tests'
             displayName: 'Publish integration test results'
+
+  - stage: Notebooks
+    displayName: 'Execute Notebooks'
+    dependsOn: [Quality]
+    condition: succeeded()
+    jobs:
+      - job: ExecuteNotebooks
+        displayName: 'Execute and Validate Notebooks'
+        steps:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+          displayName: 'Use Python $(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip uv
+            uv sync --all-extras
+          displayName: 'Install dependencies with notebook support'
+
+        - script: |
+            uv run python scripts/check_notebooks.py
+          displayName: 'Execute and validate notebooks'
+          continueOnError: false
+
+        - task: PublishPipelineArtifact@1
+          condition: succeededOrFailed()
+          inputs:
+            targetPath: 'notebooks'
+            artifact: 'executed-notebooks'
+            publishLocation: 'pipeline'
+          displayName: 'Publish executed notebooks'
 
   - stage: Examples
     displayName: 'Test Examples'
@@ -149,3 +207,77 @@ stages:
               python scripts/check_examples.py
             displayName: 'Validate examples'
             continueOnError: true
+
+  - stage: BuildPackage
+    displayName: 'Build & Publish Package'
+    dependsOn: [Quality, Integration]
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/develop')))
+    jobs:
+      - job: BuildAndPublish
+        displayName: 'Build and Publish hexdag Package'
+        steps:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+          displayName: 'Use Python $(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip uv build twine
+          displayName: 'Install build tools'
+
+        - script: |
+            python -m build --wheel --sdist
+          displayName: 'Build hexdag package (includes bundled plugins)'
+
+        - task: TwineAuthenticate@1
+          inputs:
+            artifactFeed: 'hexdag/hexdag-packages'
+          displayName: 'Authenticate with Azure Artifacts'
+
+        - script: |
+            python -m twine upload -r hexdag-packages --config-file $(PYPIRC_PATH) dist/*
+          displayName: 'Publish to Azure Artifacts'
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: 'dist'
+            artifact: 'hexdag-dist'
+            publishLocation: 'pipeline'
+          displayName: 'Publish build artifacts to pipeline'
+
+  - stage: MutationTesting
+    displayName: 'Mutation Testing'
+    dependsOn: [Quality, Integration]
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Mutmut
+        displayName: 'Run Mutation Tests'
+        timeoutInMinutes: 120
+        steps:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+          displayName: 'Use Python $(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip uv
+            uv sync --all-extras
+          displayName: 'Install dependencies'
+
+        - script: |
+            uv run mutmut run --paths-to-mutate=hexdag/ --tests-dir=tests/ --runner="pytest -x --tb=short -q"
+          displayName: 'Run mutation testing'
+          continueOnError: true
+
+        - script: |
+            uv run mutmut html
+          displayName: 'Generate mutation test report'
+          condition: succeededOrFailed()
+
+        - task: PublishPipelineArtifact@1
+          condition: succeededOrFailed()
+          inputs:
+            targetPath: 'html'
+            artifact: 'mutation-test-report'
+            publishLocation: 'pipeline'
+          displayName: 'Publish mutation test report'

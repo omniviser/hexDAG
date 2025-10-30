@@ -4,7 +4,7 @@ Setup Instructions:
 -------------------
 Before running these tests, ensure the MySQL plugin is installed:
 
-    uv pip install -e hexai_plugins/mysql_adapter/
+    uv pip install -e hexdag_plugins/mysql_adapter/
 
 This will install the MySQL adapter as an editable package, allowing
 the tests to discover it as an external plugin.
@@ -18,8 +18,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hexai.core.config.models import ManifestEntry
-from hexai.core.registry import registry as global_registry
+from hexdag.core.config.models import ManifestEntry
+from hexdag.core.registry import registry as global_registry
 
 
 class TestMySQLExternalPlugin:
@@ -30,30 +30,30 @@ class TestMySQLExternalPlugin:
         """Ensure MySQL plugin is installed before running tests."""
         try:
             # Try importing to check if installed
-            import hexai_plugins.mysql_adapter  # noqa: F401
+            import hexdag_plugins.mysql_adapter  # noqa: F401
         except ImportError:
             pytest.skip(
-                "MySQL plugin not installed. Run: uv pip install -e hexai_plugins/mysql_adapter/"
+                "MySQL plugin not installed. Run: uv pip install -e hexdag_plugins/mysql_adapter/"
             )
 
     @pytest.fixture(autouse=True)
     def cleanup_registry(self):
         """Ensure registry is clean before and after each test."""
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
         yield
         if global_registry.ready:
-            global_registry._cleanup_state()
+            global_registry._reset_for_testing()
 
     def test_mysql_external_plugin_discovery(self):
         """Test that MySQL adapter can be discovered as an external plugin."""
         # Add MySQL plugin path to sys.path for import
-        if "hexai_plugins/mysql_adapter" not in sys.path:
-            sys.path.insert(0, "hexai_plugins/mysql_adapter")
+        if "hexdag_plugins/mysql_adapter" not in sys.path:
+            sys.path.insert(0, "hexdag_plugins/mysql_adapter")
 
         manifest = [
-            ManifestEntry(namespace="core", module="hexai.core.ports"),
-            ManifestEntry(namespace="plugin", module="hexai.adapters.database.sqlite"),
+            ManifestEntry(namespace="core", module="hexdag.core.ports"),
+            ManifestEntry(namespace="plugin", module="hexdag.builtin.adapters.database.sqlite"),
             ManifestEntry(namespace="plugin", module="mysql_adapter"),
         ]
 
@@ -76,11 +76,11 @@ class TestMySQLExternalPlugin:
     @pytest.mark.asyncio
     async def test_mysql_adapter_with_mock_connection(self):
         """Test MySQL adapter operations with mocked connection."""
-        if "hexai_plugins/mysql_adapter" not in sys.path:
-            sys.path.insert(0, "hexai_plugins/mysql_adapter")
+        if "hexdag_plugins/mysql_adapter" not in sys.path:
+            sys.path.insert(0, "hexdag_plugins/mysql_adapter")
 
         manifest = [
-            ManifestEntry(namespace="core", module="hexai.core.ports"),
+            ManifestEntry(namespace="core", module="hexdag.core.ports"),
             ManifestEntry(namespace="plugin", module="mysql_adapter"),
         ]
 

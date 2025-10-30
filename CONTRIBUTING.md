@@ -64,10 +64,10 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 uv run pytest
 
 # Run with coverage
-uv run pytest --cov=hexai
+uv run pytest --cov=hexdag
 
 # Run specific test files
-uv run pytest tests/unit/hexai/
+uv run pytest tests/unit/hexdag/
 ```
 
 ## Documentation

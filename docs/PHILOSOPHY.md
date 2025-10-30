@@ -4,6 +4,233 @@
 
 hexDAG was born from the frustration of working with overly complex orchestration frameworks that treat simple AI agent workflows as monumental challenges. We believe that building AI agents and data science workloads should be **intuitive**, **maintainable**, and **enterprise-ready** without unnecessary complexity.
 
+## 🗺️ Mental Map: Core Entities
+
+Understanding hexDAG's main entities and how they relate is essential for effective use of the framework.
+
+### The Entity Hierarchy
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      hexDAG Framework                         │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  WORKFLOW DEFINITION LAYER                         │     │
+│  ├────────────────────────────────────────────────────┤     │
+│  │  DirectedGraph              NodeSpec               │     │
+│  │  └─ Workflow structure      └─ Processing step    │     │
+│  │                                                     │     │
+│  │  YamlPipelineBuilder                               │     │
+│  │  └─ YAML → DirectedGraph                          │     │
+│  └────────────────────────────────────────────────────┘     │
+│                         ↓                                     │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  EXECUTION LAYER                                   │     │
+│  ├────────────────────────────────────────────────────┤     │
+│  │  Orchestrator                                      │     │
+│  │  └─ Executes DirectedGraph in topological order   │     │
+│  │                                                     │     │
+│  │  Event System                                      │     │
+│  │  └─ Real-time monitoring and observability        │     │
+│  └────────────────────────────────────────────────────┘     │
+│                         ↓                                     │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  NODE TYPES (Processing Units)                     │     │
+│  ├────────────────────────────────────────────────────┤     │
+│  │  • FunctionNode      - Execute Python functions    │     │
+│  │  • LLMNode          - Language model calls        │     │
+│  │  • ReActAgentNode   - Reasoning + Acting agents   │     │
+│  │  • LoopNode         - Iterative processing        │     │
+│  │  • ConditionalNode  - Branching logic             │     │
+│  └────────────────────────────────────────────────────┘     │
+│                         ↓                                     │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  INTEGRATION LAYER (Ports & Adapters)              │     │
+│  ├────────────────────────────────────────────────────┤     │
+│  │  Ports (Interfaces)      Adapters (Implementations)│     │
+│  │  • LLM                   → OpenAI, Anthropic, etc. │     │
+│  │  • DatabasePort          → PostgreSQL, SQLite, etc.│     │
+│  │  • ToolRouter            → Custom tools            │     │
+│  │  • Memory                → Vector stores, caches   │     │
+│  └────────────────────────────────────────────────────┘     │
+│                         ↓                                     │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  COMPONENT REGISTRY                                 │     │
+│  ├────────────────────────────────────────────────────┤     │
+│  │  registry                                           │     │
+│  │  └─ Discover, register, and manage all components │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Entity Descriptions
+
+#### 1. **DirectedGraph** - Workflow Structure
+The container for your entire workflow. It manages nodes, dependencies, and execution order.
+
+```python
+from hexdag import DirectedGraph, NodeSpec
+
+graph = DirectedGraph()
+graph.add(NodeSpec("step1", function1))
+graph.add(NodeSpec("step2", function2).after("step1"))
+```
+
+**Key Responsibilities:**
+- Store node specifications and dependencies
+- Validate workflow structure (no cycles, valid dependencies)
+- Compute execution waves via topological sorting
+- Provide workflow introspection (nodes, edges, waves)
+
+#### 2. **NodeSpec** - Processing Step
+Immutable specification of a single processing unit in your workflow.
+
+```python
+node = NodeSpec(
+    name="processor",
+    fn=my_function,
+    deps={"input_node"},  # Dependencies
+)
+```
+
+**Key Properties:**
+- Immutable (thread-safe)
+- Type-validated (Pydantic models)
+- Dependency-aware
+- Reusable across workflows
+
+#### 3. **Orchestrator** - Execution Engine
+The runtime that executes your DirectedGraph, managing concurrency, error handling, and events.
+
+```python
+from hexdag import Orchestrator
+
+orchestrator = Orchestrator(max_concurrent_nodes=5)
+results = await orchestrator.run(graph, input_data)
+```
+
+**Key Responsibilities:**
+- Execute nodes in topological order
+- Manage concurrent execution
+- Handle errors and retries
+- Emit execution events
+- Manage resource allocation
+
+#### 4. **Node Types** - Processing Units
+Pre-built node factories for common processing patterns:
+
+```python
+# Function execution
+FunctionNode()("my_func", fn=my_function)
+
+# LLM calls
+LLMNode()("llm_call", prompt_template="Analyze: {{text}}")
+
+# ReAct agents with tools
+ReActAgentNode()("agent", initial_prompt="Research topic", tools=["search"])
+
+# Iterative processing
+LoopNode()("loop", condition=lambda x: x < 10, body_graph=sub_graph)
+
+# Conditional branching
+ConditionalNode()("branch", condition=lambda x: x > 5, if_graph=g1, else_graph=g2)
+```
+
+#### 5. **Ports & Adapters** - External Integration
+Hexagonal architecture pattern for clean integration with external services:
+
+**Ports (Interfaces):**
+```python
+from hexdag.core.ports import LLM, DatabasePort, ToolRouter
+
+# Define abstract interface
+class LLM(Protocol):
+    async def aresponse(self, messages: list[dict]) -> str: ...
+```
+
+**Adapters (Implementations):**
+```python
+from hexdag.core.registry import adapter
+
+@adapter("llm", name="openai")
+class OpenAIAdapter(LLM):
+    async def aresponse(self, messages: list[dict]) -> str:
+        # Actual OpenAI API call
+        return response
+```
+
+#### 6. **YamlPipelineBuilder** - Declarative Workflows
+Transform YAML configurations into DirectedGraphs:
+
+```python
+from hexdag import YamlPipelineBuilder
+
+builder = YamlPipelineBuilder()
+graph, metadata = builder.build_from_yaml_file("workflow.yaml")
+```
+
+**YAML Structure:**
+```yaml
+name: my_workflow
+nodes:
+  - type: function
+    id: step1
+    params:
+      fn: my_module.process
+  - type: llm
+    id: step2
+    params:
+      prompt_template: "Analyze: {{step1.output}}"
+    depends_on: [step1]
+```
+
+#### 7. **Registry** - Component Management
+Central hub for discovering and managing all framework components:
+
+```python
+from hexdag.core.registry import registry
+
+# Get component
+llm = registry.get("openai", namespace="core")
+
+# List all components
+components = registry.list_components()
+
+# Register custom component
+@adapter("database", name="custom_db")
+class CustomDB: ...
+```
+
+### How Entities Work Together
+
+**Typical Workflow:**
+
+1. **Define** → Create DirectedGraph with NodeSpec instances
+2. **Configure** → Register Adapters for external services
+3. **Execute** → Orchestrator runs the graph
+4. **Monitor** → Event system provides real-time observability
+5. **Iterate** → Refine workflow based on execution results
+
+**Data Flow:**
+
+```
+Input Data
+    ↓
+DirectedGraph (structure)
+    ↓
+Orchestrator (execution)
+    ↓
+Wave 1 Nodes → Ports → Adapters → External Services
+    ↓
+Wave 2 Nodes → Ports → Adapters → External Services
+    ↓
+    ...
+    ↓
+Final Results + Events
+```
+
 ## 🔍 AI Framework Landscape & Positioning
 
 ### Where hexDAG Fits Among AI Frameworks

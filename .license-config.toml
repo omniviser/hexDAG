@@ -1,0 +1,41 @@
+# License compliance configuration for hexDAG
+# See: https://github.com/FHPythonUtils/LicenseCheck
+
+[tool.licensecheck]
+using = "PEP631:dev"  # Check dev dependencies from pyproject.toml
+
+# Fail if any dependency has these licenses (copyleft, proprietary)
+fail_packages = [
+    "GPL",
+    "GPLv2",
+    "GPLv3",
+    "AGPL",
+    "AGPLv3",
+    "LGPL",
+    "LGPLv2",
+    "LGPLv3",
+    "Commercial",
+    "Proprietary",
+]
+
+# Allow these licenses (permissive open source)
+allow_packages = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Python-2.0",
+    "PSF-2.0",
+    "MPL-2.0",
+    "0BSD",
+    "Unlicense",
+]
+
+# Packages to ignore (e.g., your own packages)
+ignore_packages = [
+    "hexdag",
+]
+
+# Zero tolerance - exit code 1 if any issues found
+zero_tolerance = true
