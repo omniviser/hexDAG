@@ -6,7 +6,13 @@ traditional code with YAML pipeline configuration.
 
 from typing import TYPE_CHECKING, Any
 
-__version__ = "0.4.0a1"
+# Version is defined in pyproject.toml and read dynamically
+try:
+    from importlib.metadata import version
+
+    __version__ = version("hexdag")
+except Exception:
+    __version__ = "0.0.0.dev0"  # Fallback for development installs
 
 # Core framework exports
 from hexdag.builtin.nodes import (
