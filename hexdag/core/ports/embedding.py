@@ -1,5 +1,35 @@
-"""Port interface definitions for Embedding generation."""
+"""Port interface definitions for Embedding generation.
 
+.. deprecated:: 0.5.0
+    The standalone ``embedding`` port is deprecated in favor of the unified ``llm`` port
+    with ``SupportsEmbedding`` protocol. Use ``LLM`` port and implement ``SupportsEmbedding``
+    instead. This port will be removed in version 1.0.0.
+
+    Migration guide:
+        Old (deprecated)::
+
+            from hexdag.core.ports.embedding import Embedding
+
+            @adapter("embedding", name="my_embedder")
+            class MyEmbeddingAdapter(Embedding):
+                async def aembed(self, text: str) -> list[float]:
+                    ...
+
+        New (recommended)::
+
+            from hexdag.core.ports.llm import LLM, SupportsEmbedding
+
+            @adapter("llm", name="my_embedder")
+            class MyEmbeddingAdapter(LLM, SupportsEmbedding):
+                async def aresponse(self, messages):
+                    # For pure embedding adapters, can raise NotImplementedError
+                    raise NotImplementedError("This is an embedding-only adapter")
+
+                async def aembed(self, text: str) -> list[float]:
+                    ...
+"""
+
+import warnings
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -10,6 +40,15 @@ if TYPE_CHECKING:
 
 type ImageInput = str | bytes
 
+# Issue deprecation warning when module is imported
+warnings.warn(
+    "The 'embedding' port is deprecated and will be removed in version 0.5.0. "
+    "Use 'llm' port with 'SupportsEmbedding' protocol instead. "
+    "See hexdag.core.ports.llm.SupportsEmbedding for details.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 @port(
     name="embedding",
@@ -18,6 +57,10 @@ type ImageInput = str | bytes
 @runtime_checkable
 class Embedding(Protocol):
     """Port interface for Embedding generation.
+
+    .. deprecated:: 0.5.0
+        Use :class:`hexdag.core.ports.llm.LLM` with
+        :class:`hexdag.core.ports.llm.SupportsEmbedding` protocol instead.
 
     Embeddings provide vector representations of text and images that capture semantic meaning.
     Implementations may use various backends (OpenAI, local models, etc.) but must

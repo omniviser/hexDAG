@@ -31,8 +31,8 @@ class TestLLMAdaptersBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.anthropic_adapter",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 
@@ -58,8 +58,8 @@ class TestLLMAdaptersBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.anthropic_adapter",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 
@@ -86,8 +86,8 @@ class TestLLMAdaptersBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.anthropic_adapter",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 
@@ -99,8 +99,10 @@ class TestLLMAdaptersBootstrap:
 
         # Mock the API clients
         with (
-            patch("hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
-            patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
+            patch(
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            ) as mock_anthropic,
+            patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai,
         ):
             mock_anthropic.return_value = AsyncMock()
             mock_openai.return_value = AsyncMock()
@@ -133,7 +135,8 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.llm.anthropic_adapter"]
+            modules=["hexdag.core.ports"],
+            plugins=["hexdag.builtin.adapters.anthropic.anthropic_adapter"],
         )
 
         with (
@@ -144,7 +147,7 @@ class TestLLMAdaptersBootstrap:
 
         # Mock Anthropic client
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_anthropic:
             mock_client = AsyncMock()
             mock_response = MagicMock()
@@ -181,8 +184,8 @@ class TestLLMAdaptersBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.anthropic_adapter",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 
@@ -194,8 +197,10 @@ class TestLLMAdaptersBootstrap:
 
         # Mock both clients
         with (
-            patch("hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_anthropic,
-            patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai,
+            patch(
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            ) as mock_anthropic,
+            patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai,
         ):
             # Setup Anthropic mock
             anthropic_client = AsyncMock()
@@ -245,7 +250,7 @@ class TestLLMAdaptersBootstrap:
     def test_ensure_bootstrapped_with_llm_adapters(self):
         """Test that ensure_bootstrapped works with LLM adapters."""
         config = HexDAGConfig(
-            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.llm.openai_adapter"]
+            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.openai.openai_adapter"]
         )
 
         with (
@@ -273,7 +278,7 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.llm.openai_adapter"]
+            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.openai.openai_adapter"]
         )
 
         with (
@@ -283,7 +288,7 @@ class TestLLMAdaptersBootstrap:
             bootstrap_registry()
 
         # Mock OpenAI client to simulate error
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_openai:
+        with patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_client.chat.completions.create = AsyncMock(
                 side_effect=Exception("API Error: Invalid key")
@@ -313,8 +318,8 @@ class TestLLMAdaptersBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.anthropic_adapter",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 
@@ -335,7 +340,8 @@ class TestLLMAdaptersBootstrap:
             pytest.skip("Registry already bootstrapped")
 
         config = HexDAGConfig(
-            modules=["hexdag.core.ports"], plugins=["hexdag.builtin.adapters.llm.anthropic_adapter"]
+            modules=["hexdag.core.ports"],
+            plugins=["hexdag.builtin.adapters.anthropic.anthropic_adapter"],
         )
 
         with (
@@ -345,7 +351,7 @@ class TestLLMAdaptersBootstrap:
             bootstrap_registry()
 
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_anthropic:
             mock_anthropic.return_value = AsyncMock()
 
@@ -392,8 +398,8 @@ class TestLLMAdaptersBootstrap:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.anthropic_adapter",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 

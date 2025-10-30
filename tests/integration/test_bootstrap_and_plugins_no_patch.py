@@ -148,8 +148,8 @@ plugins = [
 modules = ["hexdag.core.ports"]
 plugins = [
     "hexdag.builtin.adapters.mock",  # Always available
-    "hexdag.builtin.adapters.llm.openai_adapter",  # Requires OPENAI_API_KEY
-    "hexdag.builtin.adapters.llm.anthropic_adapter"  # Requires ANTHROPIC_API_KEY
+    "hexdag.builtin.adapters.openai.openai_adapter",  # Requires OPENAI_API_KEY
+    "hexdag.builtin.adapters.anthropic.anthropic_adapter"  # Requires ANTHROPIC_API_KEY
 ]
 """
             f.write(config_content)

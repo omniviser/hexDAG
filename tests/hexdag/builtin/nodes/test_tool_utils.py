@@ -2,7 +2,7 @@
 
 import pytest
 
-from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
+from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
 from hexdag.builtin.nodes.tool_utils import ToolDefinition, ToolParameter, ToolSchemaConverter
 from hexdag.core.ports.llm import LLMResponse, Message, MessageList, ToolCall
 

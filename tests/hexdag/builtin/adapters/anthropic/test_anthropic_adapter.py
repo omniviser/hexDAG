@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hexdag.builtin.adapters.llm.anthropic_adapter import AnthropicAdapter
+from hexdag.builtin.adapters.anthropic.anthropic_adapter import AnthropicAdapter
 from hexdag.core.ports.llm import Message, MessageList
 
 
@@ -45,7 +45,9 @@ class TestAnthropicAdapter:
 
     def test_initialization_with_custom_parameters(self):
         """Test adapter initialization with custom parameters."""
-        with patch("hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic") as mock_client:
+        with patch(
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+        ) as mock_client:
             adapter = AnthropicAdapter(
                 api_key="test-key",
                 model="claude-3-opus-20240229",
@@ -63,7 +65,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_with_user_message(self):
         """Test aresponse with a simple user message."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock response
             mock_response = MagicMock()
@@ -94,7 +96,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_with_system_message(self):
         """Test aresponse with system and user messages."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock response
             mock_response = MagicMock()
@@ -129,7 +131,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_with_multiple_system_messages(self):
         """Test aresponse concatenates multiple system messages."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock response
             mock_response = MagicMock()
@@ -161,7 +163,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_with_conversation(self):
         """Test aresponse with a full conversation."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock response
             mock_response = MagicMock()
@@ -200,7 +202,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_empty_content_returns_none(self):
         """Test aresponse returns None when response has empty content."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock response with empty content
             mock_response = MagicMock()
@@ -222,7 +224,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_no_text_attribute_returns_none(self):
         """Test aresponse returns None when content has no text attribute."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock response with content lacking text attribute
             mock_response = MagicMock()
@@ -245,7 +247,7 @@ class TestAnthropicAdapter:
     async def test_aresponse_exception_returns_none(self):
         """Test aresponse returns None and prints error on exception."""
         with patch(
-            "hexdag.builtin.adapters.llm.anthropic_adapter.AsyncAnthropic"
+            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Setup mock client to raise exception
             mock_client = AsyncMock()
@@ -255,7 +257,9 @@ class TestAnthropicAdapter:
             adapter = AnthropicAdapter(api_key="test-key")
             messages: MessageList = [Message(role="user", content="Hello")]
 
-            with patch("hexdag.builtin.adapters.llm.anthropic_adapter.logger.error") as mock_log:
+            with patch(
+                "hexdag.builtin.adapters.anthropic.anthropic_adapter.logger.error"
+            ) as mock_log:
                 result = await adapter.aresponse(messages)
 
             assert result is None

@@ -1,12 +1,24 @@
-"""OpenAI adapter for LLM interactions."""
+"""OpenAI adapter for LLM interactions with embedding support."""
 
 import json
+import time
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
 
 from hexdag.core.logging import get_logger
-from hexdag.core.ports.llm import LLMResponse, MessageList, ToolCall, VisionMessage
+from hexdag.core.ports.healthcheck import HealthStatus
+from hexdag.core.ports.llm import (
+    ImageInput,
+    LLMResponse,
+    MessageList,
+    SupportsEmbedding,
+    SupportsFunctionCalling,
+    SupportsGeneration,
+    SupportsVision,
+    ToolCall,
+    VisionMessage,
+)
 from hexdag.core.registry import adapter
 from hexdag.core.types import (
     FrequencyPenalty,
@@ -25,15 +37,20 @@ logger = get_logger(__name__)
     name="openai",
     implements_port="llm",
     namespace="core",
-    description="OpenAI GPT adapter for language model interactions",
+    description="Unified OpenAI adapter for text generation, vision, tool calling, and embeddings",
     secrets={"api_key": "OPENAI_API_KEY"},
 )
-class OpenAIAdapter:
-    """OpenAI implementation of the LLM port.
+class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision, SupportsEmbedding):
+    """Unified OpenAI implementation of the LLM port.
 
-    This adapter provides integration with OpenAI's GPT models through
-    their API. It supports async operations and handles message conversion
-    between hexDAG's format and OpenAI's format.
+    This adapter provides integration with OpenAI's models for:
+    - Text generation (GPT-4, GPT-3.5-turbo, etc.)
+    - Vision capabilities (GPT-4 Vision)
+    - Native tool/function calling
+    - Text embeddings (text-embedding-3-small, text-embedding-3-large)
+
+    It implements all optional protocols: SupportsGeneration, SupportsFunctionCalling,
+    SupportsVision, and SupportsEmbedding.
 
     Secret Management
     -----------------
@@ -57,6 +74,8 @@ class OpenAIAdapter:
         system_prompt: str | None = None,
         timeout: TimeoutSeconds = 60.0,
         max_retries: RetryCount = 2,
+        embedding_model: str = "text-embedding-3-small",
+        embedding_dimensions: int | None = None,
         **kwargs: Any,  # ← For extra params like organization, base_url
     ):
         """Initialize OpenAI adapter.
@@ -87,6 +106,10 @@ class OpenAIAdapter:
             Request timeout in seconds
         max_retries : int, default=2
             Maximum retry attempts
+        embedding_model : str, default="text-embedding-3-small"
+            OpenAI embedding model to use
+        embedding_dimensions : int | None, default=None
+            Embedding dimensionality (for text-embedding-3 models)
         """
         self.api_key = api_key
         self.model = model
@@ -100,6 +123,8 @@ class OpenAIAdapter:
         self.system_prompt = system_prompt
         self.timeout = timeout
         self.max_retries = max_retries
+        self.embedding_model = embedding_model
+        self.embedding_dimensions = embedding_dimensions
         self._extra_kwargs = kwargs  # Store extra params
 
         client_kwargs: dict[str, Any] = {
@@ -455,3 +480,160 @@ class OpenAIAdapter:
         except Exception as e:
             logger.error(f"OpenAI API error with vision+tools: {e}", exc_info=True)
             raise
+
+    # ========== Embedding Methods (SupportsEmbedding Protocol) ==========
+
+    async def aembed(self, text: str) -> list[float]:
+        """Generate embedding vector for a single text input.
+
+        Args
+        ----
+            text: Text string to embed
+
+        Returns
+        -------
+            List of floats representing the embedding vector
+
+        Examples
+        --------
+        Single text embedding::
+
+            embedding = await adapter.aembed("Hello, world!")
+            # Returns: [0.123, -0.456, 0.789, ...]
+        """
+        try:
+            request_params: dict[str, Any] = {
+                "model": self.embedding_model,
+                "input": text,
+            }
+
+            if self.embedding_dimensions is not None:
+                request_params["dimensions"] = self.embedding_dimensions
+
+            response = await self.client.embeddings.create(**request_params)
+
+            if response.data and len(response.data) > 0:
+                embedding: list[float] = response.data[0].embedding
+                return embedding
+
+            logger.warning("No embedding data in OpenAI response")
+            return []
+
+        except Exception as e:
+            logger.error(f"OpenAI embedding API error: {e}", exc_info=True)
+            raise
+
+    async def aembed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts efficiently.
+
+        Args
+        ----
+            texts: List of text strings to embed
+
+        Returns
+        -------
+            List of embedding vectors, one per input text
+
+        Examples
+        --------
+        Batch embedding::
+
+            texts = ["Hello", "World", "AI"]
+            embeddings = await adapter.aembed_batch(texts)
+            # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...], [0.5, 0.6, ...]]
+        """
+        try:
+            request_params: dict[str, Any] = {
+                "model": self.embedding_model,
+                "input": texts,
+            }
+
+            if self.embedding_dimensions is not None:
+                request_params["dimensions"] = self.embedding_dimensions
+
+            response = await self.client.embeddings.create(**request_params)
+
+            if response.data:
+                # Sort by index to ensure correct order
+                sorted_data = sorted(response.data, key=lambda x: x.index)
+                return [item.embedding for item in sorted_data]
+
+            logger.warning("No embedding data in OpenAI batch response")
+            return [[] for _ in texts]
+
+        except Exception as e:
+            logger.error(f"OpenAI batch embedding API error: {e}", exc_info=True)
+            raise
+
+    async def aembed_image(self, image: ImageInput) -> list[float]:
+        """Generate embedding vector for a single image input.
+
+        OpenAI does not currently support image embeddings via the embeddings API.
+
+        Args
+        ----
+            image: Image to embed
+
+        Raises
+        ------
+            NotImplementedError: OpenAI doesn't support image embeddings
+        """
+        raise NotImplementedError(
+            "OpenAI does not support image embeddings via the embeddings API. "
+            "For multimodal use cases, consider using vision models with aresponse_with_vision()."
+        )
+
+    async def aembed_image_batch(self, images: list[ImageInput]) -> list[list[float]]:
+        """Generate embeddings for multiple images efficiently.
+
+        OpenAI does not currently support image embeddings via the embeddings API.
+
+        Args
+        ----
+            images: List of images to embed
+
+        Raises
+        ------
+            NotImplementedError: OpenAI doesn't support image embeddings
+        """
+        raise NotImplementedError("OpenAI does not support image embeddings via the embeddings API")
+
+    # ========== Health Check ==========
+
+    async def ahealth_check(self) -> HealthStatus:
+        """Check OpenAI adapter health and connectivity.
+
+        Returns
+        -------
+        HealthStatus
+            Current health status with connectivity details
+        """
+        try:
+            # Try a minimal request to verify connectivity
+            start = time.time()
+
+            # Use a simple text generation request for health check
+            from hexdag.core.ports.llm import Message
+
+            test_messages = [Message(role="user", content="Hi")]
+            await self.aresponse(test_messages)
+
+            latency_ms = (time.time() - start) * 1000
+
+            return HealthStatus(
+                status="healthy",
+                adapter_name=f"OpenAI[{self.model}]",
+                latency_ms=latency_ms,
+                details={
+                    "model": self.model,
+                    "embedding_model": self.embedding_model,
+                },
+            )
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return HealthStatus(
+                status="unhealthy",
+                adapter_name=f"OpenAI[{self.model}]",
+                latency_ms=0.0,
+                details={"error": str(e)},
+            )

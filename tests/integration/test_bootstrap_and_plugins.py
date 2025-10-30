@@ -77,7 +77,7 @@ class TestSystemBootstrap:
             modules=["hexdag.core.ports"],
             plugins=[
                 "hexdag.builtin.adapters.mock",
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
             ],
         )
 
@@ -128,7 +128,7 @@ class TestPluginSystemIntegration:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
                 "hexdag.builtin.adapters.mock",
             ],
         )

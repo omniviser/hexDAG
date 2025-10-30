@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
+from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
 from hexdag.core.ports.llm import Message, MessageList
 
 
@@ -46,7 +46,7 @@ class TestOpenAIAdapter:
 
     def test_initialization_with_custom_parameters(self):
         """Test adapter initialization with custom parameters."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client:
+        with patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_client:
             adapter = OpenAIAdapter(
                 api_key="test-key",
                 model="gpt-4o",
@@ -62,7 +62,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_with_user_message(self):
         """Test aresponse with a simple user message."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock response
             mock_choice = MagicMock()
             mock_choice.message.content = "Hello! How can I help you?"
@@ -94,7 +96,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_with_system_message(self):
         """Test aresponse with system and user messages."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock response
             mock_choice = MagicMock()
             mock_choice.message.content = "I'm a helpful assistant!"
@@ -130,7 +134,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_with_conversation(self):
         """Test aresponse with a full conversation."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock response
             mock_choice = MagicMock()
             mock_choice.message.content = "I can help with that!"
@@ -168,7 +174,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_with_multiple_system_messages(self):
         """Test aresponse with multiple system messages (OpenAI format keeps them separate)."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock response
             mock_choice = MagicMock()
             mock_choice.message.content = "Response"
@@ -207,7 +215,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_empty_choices_returns_none(self):
         """Test aresponse returns None when response has no choices."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock response with empty choices
             mock_response = MagicMock()
             mock_response.choices = []
@@ -227,7 +237,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_none_content_returns_none(self):
         """Test aresponse returns None when message content is None."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock response with None content
             mock_choice = MagicMock()
             mock_choice.message.content = None
@@ -249,7 +261,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_aresponse_exception_returns_none(self):
         """Test aresponse returns None and prints error on exception."""
-        with patch("hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI") as mock_client_class:
+        with patch(
+            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+        ) as mock_client_class:
             # Setup mock client to raise exception
             mock_client = AsyncMock()
             mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API Error"))
@@ -258,7 +272,7 @@ class TestOpenAIAdapter:
             adapter = OpenAIAdapter(api_key="test-key")
             messages: MessageList = [Message(role="user", content="Hello")]
 
-            with patch("hexdag.builtin.adapters.llm.openai_adapter.logger.error") as mock_log:
+            with patch("hexdag.builtin.adapters.openai.openai_adapter.logger.error") as mock_log:
                 result = await adapter.aresponse(messages)
 
             assert result is None
@@ -275,7 +289,7 @@ class TestOpenAIAdapter:
 
         for model, temp, tokens in test_cases:
             with patch(
-                "hexdag.builtin.adapters.llm.openai_adapter.AsyncOpenAI"
+                "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
             ) as mock_client_class:
                 # Setup mock response
                 mock_choice = MagicMock()

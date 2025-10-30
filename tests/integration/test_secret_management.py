@@ -12,9 +12,9 @@ import os
 
 import pytest
 
-from hexdag.builtin.adapters.llm.anthropic_adapter import AnthropicAdapter
-from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
+from hexdag.builtin.adapters.anthropic.anthropic_adapter import AnthropicAdapter
 from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
+from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
 from hexdag.builtin.adapters.secret.local_secret_adapter import LocalSecretAdapter
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig

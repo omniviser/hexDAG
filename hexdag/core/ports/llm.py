@@ -45,31 +45,69 @@ class LLMResponse(BaseModel):
 class LLM(Protocol):
     """Port interface for Large Language Models (LLMs).
 
+    LLMs provide natural language generation and/or embedding capabilities.
+    Implementations may use various backends (OpenAI, Anthropic, local models, etc.).
 
-    LLMs provide natural language generation capabilities. Implementations
-    may use various backends (OpenAI, Anthropic, local models, etc.) but
-    must provide the aresponse method for generating text from messages.
+    At least ONE of the following protocols must be implemented:
+    - **SupportsGeneration**: Text generation capabilities (most common)
+    - **SupportsEmbedding**: Embedding generation capabilities
 
-    Optional Methods
-    ----------------
-    Adapters may optionally implement:
-    - ahealth_check(): Verify LLM API connectivity and availability
-    - aresponse_with_tools(): Native tool calling support (OpenAI/Anthropic style)
+    Optional Capabilities
+    ---------------------
+    Adapters may optionally implement additional protocols:
+
+    - **SupportsGeneration**: Text generation (most LLM adapters)
+        - aresponse(): Generate text from messages
+
+    - **SupportsFunctionCalling**: Native tool calling (OpenAI/Anthropic style)
+        - aresponse_with_tools(): Generate responses with tool calls
+
+    - **SupportsVision**: Multimodal vision capabilities
+        - aresponse_with_vision(): Process images alongside text
+        - aresponse_with_vision_and_tools(): Vision + tool calling
+
+    - **SupportsEmbedding**: Embedding generation (unified LLM+embedding adapters)
+        - aembed(): Generate text embeddings
+        - aembed_batch(): Batch text embeddings
+        - aembed_image(): Generate image embeddings (if supported)
+        - aembed_image_batch(): Batch image embeddings (if supported)
+
+    - **Health Checks**: Connectivity monitoring
+        - ahealth_check(): Verify API connectivity and availability
+
+    Examples
+    --------
+    Unified adapter (text generation + embeddings)::
+
+        @adapter("llm", name="unified")
+        class UnifiedAdapter(LLM, SupportsGeneration, SupportsEmbedding):
+            async def aresponse(self, messages):
+                # Text generation
+                ...
+
+            async def aembed(self, text):
+                # Embedding generation
+                ...
+
+    Pure embedding adapter::
+
+        @adapter("llm", name="embeddings_only")
+        class EmbeddingAdapter(LLM, SupportsEmbedding):
+            async def aembed(self, text):
+                # Only embeddings
+                ...
+
+    Pure text generation adapter::
+
+        @adapter("llm", name="text_only")
+        class TextAdapter(LLM, SupportsGeneration):
+            async def aresponse(self, messages):
+                # Only text generation
+                ...
     """
 
-    @abstractmethod
-    async def aresponse(self, messages: MessageList) -> str | None:
-        """Generate a response from a list of messages (async).
-
-        Args
-        ----
-            messages: List of role-message dicts, e.g. [{"role": "user", "content": "..."}]
-
-        Returns
-        -------
-            The generated response as a string, or None if failed.
-        """
-        pass
+    # No required methods - adapters must implement at least one protocol
+    pass
 
     async def aresponse_with_tools(
         self,
@@ -142,6 +180,39 @@ class LLM(Protocol):
             status.status  # "healthy", "degraded", or "unhealthy"
             status.latency_ms  # Time taken for health check
             status.details  # {"model": "gpt-4", "rate_limit_remaining": 100}
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsGeneration(Protocol):
+    """Optional protocol for LLMs that support text generation.
+
+    This protocol enables basic text generation from conversation messages.
+    Most LLM adapters will implement this protocol.
+    """
+
+    @abstractmethod
+    async def aresponse(self, messages: MessageList) -> str | None:
+        """Generate a response from a list of messages (async).
+
+        Args
+        ----
+            messages: List of role-message dicts, e.g. [{"role": "user", "content": "..."}]
+
+        Returns
+        -------
+            The generated response as a string, or None if failed.
+
+        Examples
+        --------
+        Basic text generation::
+
+            messages = [
+                Message(role="user", content="What is 2+2?")
+            ]
+            response = await llm.aresponse(messages)
+            # Returns: "2+2 equals 4."
         """
         ...
 
@@ -360,5 +431,127 @@ class SupportsVision(Protocol):
 
             response = await llm.aresponse_with_vision_and_tools(messages, tools)
             # LLM sees image, identifies product, and calls identify_product tool
+        """
+        ...
+
+
+type ImageInput = str | bytes
+
+
+@runtime_checkable
+class SupportsEmbedding(Protocol):
+    """Optional protocol for LLMs that support embedding generation.
+
+    This protocol enables LLM providers to also serve as embedding adapters,
+    useful for unified API management when using services like OpenAI or Azure
+    that provide both text generation and embedding capabilities.
+
+    This allows a single adapter to implement both LLM and embedding functionality.
+    """
+
+    @abstractmethod
+    async def aembed(self, text: str) -> list[float]:
+        """Generate embedding vector for a single text input.
+
+        Args
+        ----
+            text: Text string to embed
+
+        Returns
+        -------
+            List of floats representing the embedding vector
+
+        Examples
+        --------
+        Single text embedding::
+
+            embedding = await llm.aembed("Hello, world!")
+            # Returns: [0.123, -0.456, 0.789, ...]
+        """
+        ...
+
+    async def aembed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts efficiently (optional).
+
+        This method enables batch processing for improved performance when
+        embedding multiple texts. If not implemented, the framework will
+        fall back to sequential calls to aembed().
+
+        Args
+        ----
+            texts: List of text strings to embed
+
+        Returns
+        -------
+            List of embedding vectors, one per input text
+
+        Examples
+        --------
+        Batch embedding::
+
+            texts = ["Hello", "World", "AI"]
+            embeddings = await llm.aembed_batch(texts)
+            # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...], [0.5, 0.6, ...]]
+        """
+        ...
+
+    async def aembed_image(self, image: ImageInput) -> list[float]:
+        """Generate embedding vector for a single image input (optional).
+
+        This method enables image embedding for multimodal LLM providers
+        that support vision embeddings (e.g., OpenAI CLIP models).
+
+        Args
+        ----
+            image: Image to embed, either as:
+                - str: File path to image or base64-encoded image data
+                - bytes: Raw image bytes
+
+        Returns
+        -------
+            List of floats representing the embedding vector
+
+        Examples
+        --------
+        Image embedding from file path::
+
+            embedding = await llm.aembed_image("/path/to/image.jpg")
+            # Returns: [0.123, -0.456, 0.789, ...]
+
+        Image embedding from bytes::
+
+            with open("image.jpg", "rb") as f:
+                image_bytes = f.read()
+            embedding = await llm.aembed_image(image_bytes)
+        """
+        ...
+
+    async def aembed_image_batch(self, images: list[ImageInput]) -> list[list[float]]:
+        """Generate embeddings for multiple images efficiently (optional).
+
+        This method enables batch processing for improved performance when
+        embedding multiple images.
+
+        Args
+        ----
+            images: List of images to embed, each can be:
+                - str: File path to image or base64-encoded image data
+                - bytes: Raw image bytes
+
+        Returns
+        -------
+            List of embedding vectors, one per input image
+
+        Examples
+        --------
+        Batch image embedding::
+
+            images = [
+                "/path/to/image1.jpg",
+                "/path/to/image2.png",
+                image_bytes
+            ]
+            embeddings = await llm.aembed_image_batch(images)
+            # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...], [0.5, 0.6, ...]]
         """
         ...

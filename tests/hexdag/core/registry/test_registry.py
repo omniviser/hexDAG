@@ -1011,8 +1011,8 @@ modules = [
 ]
 
 plugins = [
-    "hexdag.builtin.adapters.llm.openai_adapter",
-    "hexdag.builtin.adapters.llm.anthropic_adapter",
+    "hexdag.builtin.adapters.openai.openai_adapter",
+    "hexdag.builtin.adapters.anthropic.anthropic_adapter",
     "hexdag.builtin.adapters.mock",
 ]
 """
@@ -1098,7 +1098,7 @@ class TestRegistryPluginScenarios:
         pytest.importorskip("openai")
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
+            from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
             from hexdag.core.ports.llm import Message
 
             # Create adapter
@@ -1129,7 +1129,7 @@ class TestRegistryPluginScenarios:
         config = HexDAGConfig(
             modules=["hexdag.core.ports"],
             plugins=[
-                "hexdag.builtin.adapters.llm.openai_adapter",
+                "hexdag.builtin.adapters.openai.openai_adapter",
                 "hexdag.builtin.adapters.mock",
             ],
         )
