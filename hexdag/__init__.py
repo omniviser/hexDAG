@@ -6,7 +6,7 @@ traditional code with YAML pipeline configuration.
 
 from typing import TYPE_CHECKING, Any
 
-__version__ = "0.4.0"
+__version__ = "0.4.0a1"
 
 # Core framework exports
 from hexdag.builtin.nodes import (
