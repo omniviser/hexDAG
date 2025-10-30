@@ -520,11 +520,14 @@ class IncludePreprocessPlugin:
         self.base_path = base_path or Path.cwd()
         self.project_root = self.base_path  # Fixed project root for security validation
         self.max_depth = max_depth
-        self._include_stack: list[Path] = []
 
     def process(self, config: dict[str, Any]) -> dict[str, Any]:
         """Process !include directives recursively."""
-        result = self._resolve_includes(config, self.base_path)
+        # Create new include stack for this processing run (thread-safe)
+        include_stack: list[Path] = []
+        result = self._resolve_includes(
+            config, self.base_path, depth=0, include_stack=include_stack
+        )
         if not _is_dict_config(result):
             raise TypeError(
                 f"Include processing must return a dictionary, got {type(result).__name__}. "
@@ -533,7 +536,7 @@ class IncludePreprocessPlugin:
         return result
 
     def _resolve_includes(
-        self, obj: Any, current_base: Path, depth: int = 0
+        self, obj: Any, current_base: Path, depth: int, include_stack: list[Path]
     ) -> dict[str, Any] | list[Any] | Any:
         """Recursively resolve !include directives.
 
@@ -541,6 +544,7 @@ class IncludePreprocessPlugin:
             obj: Object to process (dict, list, or primitive)
             current_base: Base path for resolving relative includes
             depth: Current recursion depth
+            include_stack: Stack of currently processing files (for circular detection)
 
         Returns:
             Processed object with includes resolved
@@ -548,23 +552,26 @@ class IncludePreprocessPlugin:
         if depth > self.max_depth:
             raise YamlPipelineBuilderError(
                 f"Include nesting too deep (max {self.max_depth}). "
-                f"Possible circular include in: {' -> '.join(str(p) for p in self._include_stack)}"
+                f"Possible circular include in: {' -> '.join(str(p) for p in include_stack)}"
             )
 
         if isinstance(obj, dict):
             # Check for !include directive
             if "!include" in obj and len(obj) == 1:
                 include_spec = obj["!include"]
-                return self._load_include(include_spec, current_base, depth)
+                return self._load_include(include_spec, current_base, depth, include_stack)
 
             # Recurse into dict values
-            return {k: self._resolve_includes(v, current_base, depth) for k, v in obj.items()}
+            return {
+                k: self._resolve_includes(v, current_base, depth, include_stack)
+                for k, v in obj.items()
+            }
 
         if isinstance(obj, list):
             # Process each list item and flatten nested lists from includes
             result = []
             for item in obj:
-                resolved = self._resolve_includes(item, current_base, depth)
+                resolved = self._resolve_includes(item, current_base, depth, include_stack)
                 # Flatten: if an include returns a list, extend rather than append
                 if isinstance(resolved, list):
                     result.extend(resolved)
@@ -574,20 +581,26 @@ class IncludePreprocessPlugin:
 
         return obj
 
-    def _load_include(self, include_spec: str, current_base: Path, depth: int) -> Any:
+    def _load_include(
+        self, include_spec: str, current_base: Path, depth: int, include_stack: list[Path]
+    ) -> Any:
         """Load content from included file.
 
         Args:
             include_spec: Include specification (e.g., "file.yaml" or "file.yaml#anchor")
             current_base: Base path for resolving relative paths
             depth: Current recursion depth
+            include_stack: Stack of currently processing files (for circular detection)
 
         Returns:
             Loaded and processed content from included file
         """
-        # Parse include specification
+        # Parse include specification (strip whitespace for better UX)
+        include_spec = include_spec.strip()
         if "#" in include_spec:
             file_path_str, anchor = include_spec.split("#", 1)
+            file_path_str = file_path_str.strip()
+            anchor = anchor.strip()
         else:
             file_path_str, anchor = include_spec, None
 
@@ -595,13 +608,13 @@ class IncludePreprocessPlugin:
         file_path = self._resolve_path(file_path_str, current_base)
 
         # Check for circular includes
-        if file_path in self._include_stack:
-            cycle = " -> ".join(str(p) for p in self._include_stack + [file_path])
+        if file_path in include_stack:
+            cycle = " -> ".join(str(p) for p in include_stack + [file_path])
             raise YamlPipelineBuilderError(f"Circular include detected: {cycle}")
 
         # Load YAML file
         try:
-            self._include_stack.append(file_path)
+            include_stack.append(file_path)
             content = yaml.safe_load(file_path.read_text(encoding="utf-8"))
 
             # Extract anchor if specified
@@ -614,7 +627,7 @@ class IncludePreprocessPlugin:
                 content = content[anchor]
 
             # Recursively resolve includes in loaded content
-            return self._resolve_includes(content, file_path.parent, depth + 1)
+            return self._resolve_includes(content, file_path.parent, depth + 1, include_stack)
 
         except FileNotFoundError as e:
             raise YamlPipelineBuilderError(
@@ -623,7 +636,7 @@ class IncludePreprocessPlugin:
         except yaml.YAMLError as e:
             raise YamlPipelineBuilderError(f"Invalid YAML in included file {file_path}: {e}") from e
         finally:
-            self._include_stack.pop()
+            include_stack.pop()
 
     def _resolve_path(self, path_str: str, current_base: Path) -> Path:
         """Resolve and validate include path.
