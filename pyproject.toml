@@ -118,6 +118,8 @@ dev = [
     # Build and publish tools
     "build>=1.0.0",
     "twine>=6.1.0",
+    "keyring>=25.6.0",
+    "artifacts-keyring>=1.0.0",
     # Code quality tools - linting and formatting
     "ruff>=0.13.0",           # All-in-one linter and formatter (replaces black, isort, flake8)
     "mypy==1.17.1",           # Type checking

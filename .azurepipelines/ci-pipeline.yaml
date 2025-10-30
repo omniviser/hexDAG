@@ -198,20 +198,42 @@ stages:
   - stage: Push
     dependsOn: Dispatch
     jobs:
-      - job: VersionPublish
-        condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
-        variables:
-          tag: $[ stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.tag'] ]
-        steps:
-          - script: |
-              echo "WOOP!"
-            displayName: "Put your logic here"
+     - job: VersionPublish
+       condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
+       steps:
+        - checkout: self
+          clean: true
 
-      - job: UpdateDocs
-        condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
-        variables:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: "3.12"
+
+        - script: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+          displayName: "Install uv"
+
+        - script: |
+            uv sync --all-groups
+            uvx --from build pyproject-build
+            uv run twine check dist/*
+          displayName: "Build sdist & wheel"
+
+        - script: |
+            pip install twine keyring artifacts-keyring
+            uv run twine upload \
+              --repository-url "https://pkgs.dev.azure.com/omniviser/_packaging/omniviser/pypi/upload/" \
+              -u __token__ \
+              -p $PAT\
+              dist/*
+          displayName: "Upload package to Azure Artifacts"
+          env:
+            PAT: $(System.AccessToken)
+
+     - job: UpdateDocs
+       condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
+       variables:
           tag: $[ stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.tag'] ]
-        steps:
-          - script: |
+       steps:
+        - script: |
               echo "WOOP!"
-            displayName: "Put your logic here"
+          displayName: "Put your logic here"
