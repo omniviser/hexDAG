@@ -8,6 +8,8 @@ from hexdag.core.registry.decorators import port
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
+type ImageInput = str | bytes
+
 
 @port(
     name="embedding",
@@ -17,15 +19,21 @@ if TYPE_CHECKING:
 class Embedding(Protocol):
     """Port interface for Embedding generation.
 
-    Embeddings provide vector representations of text that capture semantic meaning.
+    Embeddings provide vector representations of text and images that capture semantic meaning.
     Implementations may use various backends (OpenAI, local models, etc.) but must
     provide the aembed method for generating embeddings from text.
+
+    Required Methods
+    ----------------
+    - aembed(text: str): Generate embedding for text
+    - aembed_image(image: ImageInput): Generate embedding for image
 
     Optional Methods
     ----------------
     Adapters may optionally implement:
     - ahealth_check(): Verify embedding API connectivity and availability
     - aembed_batch(): Batch embedding generation for efficiency
+    - aembed_image_batch(): Batch image embedding generation for efficiency
     """
 
     @abstractmethod
@@ -45,6 +53,42 @@ class Embedding(Protocol):
         Single text embedding::
 
             embedding = await adapter.aembed("Hello, world!")
+            # Returns: [0.123, -0.456, 0.789, ...]
+        """
+        ...
+
+    @abstractmethod
+    async def aembed_image(self, image: ImageInput) -> list[float]:
+        """Generate embedding vector for a single image input (async).
+
+        Args
+        ----
+            image: Image to embed, either as:
+                - str: File path to image or base64-encoded image data
+                - bytes: Raw image bytes
+
+        Returns
+        -------
+            List of floats representing the embedding vector
+
+        Examples
+        --------
+        Image embedding from file path::
+
+            embedding = await adapter.aembed_image("/path/to/image.jpg")
+            # Returns: [0.123, -0.456, 0.789, ...]
+
+        Image embedding from bytes::
+
+            with open("image.jpg", "rb") as f:
+                image_bytes = f.read()
+            embedding = await adapter.aembed_image(image_bytes)
+            # Returns: [0.123, -0.456, 0.789, ...]
+
+        Image embedding from base64::
+
+            base64_image = "data:image/jpeg;base64,/9j/4AAQ..."
+            embedding = await adapter.aembed_image(base64_image)
             # Returns: [0.123, -0.456, 0.789, ...]
         """
         ...
@@ -70,6 +114,37 @@ class Embedding(Protocol):
 
             texts = ["Hello", "World", "AI"]
             embeddings = await adapter.aembed_batch(texts)
+            # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...], [0.5, 0.6, ...]]
+        """
+        ...
+
+    async def aembed_image_batch(self, images: list[ImageInput]) -> list[list[float]]:
+        """Generate embeddings for multiple images efficiently (optional).
+
+        This method enables batch processing for improved performance when
+        embedding multiple images. If not implemented, the framework will
+        fall back to sequential calls to aembed_image().
+
+        Args
+        ----
+            images: List of images to embed, each can be:
+                - str: File path to image or base64-encoded image data
+                - bytes: Raw image bytes
+
+        Returns
+        -------
+            List of embedding vectors, one per input image
+
+        Examples
+        --------
+        Batch image embedding::
+
+            images = [
+                "/path/to/image1.jpg",
+                "/path/to/image2.png",
+                image_bytes
+            ]
+            embeddings = await adapter.aembed_image_batch(images)
             # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...], [0.5, 0.6, ...]]
         """
         ...
