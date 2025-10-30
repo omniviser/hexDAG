@@ -423,3 +423,83 @@ spec:
 
         # Environment variable should be resolved in metadata
         assert config.metadata["name"] == "gpt-4-pipeline"
+
+    @pytest.mark.asyncio
+    async def test_template_field_preserved_for_nodes(self):
+        """Test that node template fields with {{...}} are not rendered by TemplatePlugin.
+
+        Regression test for bug where LLM node templates were being prematurely
+        rendered by the YAML TemplatePlugin, resulting in empty prompts when
+        template variables didn't exist in the YAML config context.
+
+        Bug: Node template fields like "{{input}}" were being rendered against
+        the YAML config context, resulting in empty strings since 'input'
+        doesn't exist in that context.
+
+        Fix: Skip rendering for 'template' keys to preserve {{...}} syntax
+        for node-level template rendering.
+        """
+        from hexdag.builtin.adapters.mock.mock_llm import MockLLM
+        from hexdag.core.orchestration.orchestrator import Orchestrator
+
+        def dummy_function(inputs: dict) -> dict:
+            """Test function that returns a dict with 'input' key."""
+            return {"input": "Hello from dependency"}
+
+        # Register the function temporarily
+        import sys
+
+        test_module = type(sys)("test_module")
+        test_module.dummy_function = dummy_function
+        sys.modules["test_module"] = test_module
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test_template_preservation
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: prepare_input
+      spec:
+        fn: "test_module.dummy_function"
+        input_schema:
+          data: str
+        output_schema:
+          input: str
+        dependencies: []
+
+    - kind: llm_node
+      metadata:
+        name: process_llm
+      spec:
+        template: "{{input}}"
+        dependencies: [prepare_input]
+"""
+
+        # Build pipeline
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        # Verify the template field was preserved (not rendered by TemplatePlugin)
+        llm_node = graph.nodes["process_llm"]
+        # The node should have been created with the template string intact
+        assert llm_node is not None
+
+        # Run the pipeline to verify the template works correctly
+        mock_llm = MockLLM()
+        orchestrator = Orchestrator(ports={"llm": mock_llm})
+        await orchestrator.run(graph, initial_input={"data": "test"})
+
+        # Verify the template was properly rendered at node execution time
+        assert mock_llm.last_messages is not None
+        assert len(mock_llm.last_messages) > 0
+        user_message = next((m for m in mock_llm.last_messages if m.role == "user"), None)
+        assert user_message is not None
+        # The message should contain the output from the dependency, not be empty
+        assert user_message.content == "Hello from dependency"
+
+        # Cleanup
+        del sys.modules["test_module"]

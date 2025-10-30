@@ -807,8 +807,20 @@ def _render_templates_str(obj: str, context: dict[str, Any], env: Any) -> str | 
 
 @_render_templates.register(dict)
 def _render_templates_dict(obj: dict, context: dict[str, Any], env: Any) -> dict[str, Any]:
-    """Render templates in dict values."""
-    return {k: _render_templates(v, context, env) for k, v in obj.items()}
+    """Render templates in dict values.
+
+    Skip rendering for node template fields to avoid conflicts between
+    YAML-level templating and node-level template strings.
+    """
+    result = {}
+    for k, v in obj.items():
+        # Skip rendering for 'template' keys in node specs to preserve {{...}} syntax
+        # for node-level template rendering (LLM nodes, etc.)
+        if k == "template" and isinstance(v, str):
+            result[k] = v  # Preserve as-is
+        else:
+            result[k] = _render_templates(v, context, env)
+    return result
 
 
 @_render_templates.register(list)
