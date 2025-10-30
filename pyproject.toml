@@ -32,6 +32,8 @@ dependencies = [
     "rich>=13.0.0",  # Rich terminal output and logging (previously optional)
     "orjson>=3.10.0",
     "commitizen>=4.8.3",
+    "keyring>=25.6.0",
+    "artifacts-keyring>=1.0.0",
 ]
 
 [project.optional-dependencies]

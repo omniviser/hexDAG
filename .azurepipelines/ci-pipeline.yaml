@@ -202,10 +202,41 @@ stages:
         condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
         variables:
           tag: $[ stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.tag'] ]
-        steps:
-          - script: |
-              echo "WOOP!"
-            displayName: "Put your logic here"
+    steps:
+      - checkout: self
+        clean: true
+
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+
+      - script: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          pip install azure-cli
+        displayName: "Install uv"
+
+      - script: |
+          uvx --from build pyproject-build
+          uv run twine check dist/*
+        displayName: "Build sdist & wheel"
+
+      - script: |
+          pip install twine keyring artifacts-keyring
+          uv run twine upload \
+            --repository-url "https://pkgs.dev.azure.com/omniviser/_packaging/omniviser/pypi/upload/" \
+            -u __token__ \
+            -p $PAT\
+            dist/*
+        displayName: "Upload package to Azure Artifacts"
+        env:
+          PAT: $(AZURE_ARTIFACTS_PAT)
+
+      - script: |
+          python -m venv .venv_test
+          source .venv_test/bin/activate
+          pip install --upgrade pip
+          pip install --index-url "https://pkgs.dev.azure.com/omniviser/_packaging/omniviser/pypi/simple/" hexdag
+        displayName: "Validate pip install from Azure Artifacts"
 
       - job: UpdateDocs
         condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
