@@ -4,6 +4,92 @@ This directory contains **dynamically generated** JSON Schema definitions for He
 
 > **⚠️ Important**: These schemas are auto-generated from the codebase. **Do not edit them manually!** Pre-commit hooks will reject any manual modifications. Instead, modify the source code (node factories, Pydantic models) and regenerate schemas using `scripts/generate_schemas.py`.
 
+## 📚 For Library Users
+
+If you're using hexDAG as a library in your project, you can enable IDE autocomplete and validation for your YAML pipeline files:
+
+### Quick Setup
+
+**1. Install VS Code YAML Extension:**
+```bash
+code --install-extension redhat.vscode-yaml
+```
+
+**2. Add to your project's `.vscode/settings.json`:**
+
+Reference schemas from your hexDAG installation:
+
+```json
+{
+  "yaml.schemas": {
+    "node_modules/hexdag/schemas/pipeline-schema.json": [
+      "*pipeline*.yaml",
+      "*workflow*.yaml",
+      "pipelines/**/*.yaml"
+    ]
+  }
+}
+```
+
+Or use the package site-packages path (Python environment):
+
+```bash
+# Find your hexDAG installation path
+python -c "import hexdag; import os; print(os.path.dirname(hexdag.__file__))"
+```
+
+```json
+{
+  "yaml.schemas": {
+    "/path/to/site-packages/hexdag/schemas/pipeline-schema.json": ["*pipeline*.yaml"]
+  }
+}
+```
+
+**Alternative: Use remote URL (no installation required):**
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/omniviser/hexdag/main/schemas/pipeline-schema.json": [
+      "*pipeline*.yaml",
+      "pipelines/**/*.yaml"
+    ]
+  }
+}
+```
+
+**3. Start writing pipelines with full IntelliSense!** 🎉
+
+Your YAML files will now have:
+- ✅ Autocomplete for node types and parameters
+- ✅ Real-time validation
+- ✅ Documentation on hover
+- ✅ Error detection
+
+### Alternative: Inline Schema Reference
+
+Add this comment at the top of your YAML files:
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/omniviser/hexdag/main/schemas/pipeline-schema.json
+
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: my-pipeline
+# ...
+```
+
+### For PyCharm/IntelliJ Users
+
+1. Go to **Settings** → **Languages & Frameworks** → **Schemas and DTDs** → **JSON Schema Mappings**
+2. Click **+** to add a new mapping:
+   - **Name**: hexDAG Pipeline
+   - **Schema URL**: `https://raw.githubusercontent.com/omniviser/hexdag/main/schemas/pipeline-schema.json`
+   - **File pattern**: `*pipeline*.yaml`, `*workflow*.yaml`
+
+---
+
 ## Available Schemas
 
 ### 1. Pipeline Schema (`pipeline-schema.json`)
