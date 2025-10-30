@@ -124,6 +124,20 @@ class MockToolRouter(ToolRouter):
                 }
 
                 def safe_eval(node: ast.AST) -> float | int:
+                    """Safely evaluate AST nodes for math expressions.
+
+                    Args
+                    ----
+                        node: AST node to evaluate
+
+                    Returns
+                    -------
+                        float | int: The evaluated numeric result
+
+                    Raises
+                    ------
+                        ValueError: If operation or values are not supported
+                    """
                     if isinstance(node, ast.Constant):  # Python 3.8+
                         val = node.value
                         if not isinstance(val, (int, float)):
@@ -163,6 +177,9 @@ class MockToolRouter(ToolRouter):
                 "conditions": "Partly cloudy",
                 "humidity": 65,
             }
+        elif tool_name == "tool_end":
+            # Return the params directly for tool_end calls
+            return params
         else:
             # Generic mock response for custom tools
             return {

@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 from hexdag.builtin.adapters.mock.mock_llm import MockLLM
-from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
+from hexdag.builtin.adapters.mock.mock_tool_router import MockToolRouter
 from hexdag.builtin.nodes.agent_node import AgentConfig, AgentState
 from hexdag.builtin.nodes.tool_utils import ToolCallFormat
 from hexdag.core.bootstrap import ensure_bootstrapped
@@ -33,7 +33,7 @@ class TestReActAgentNode:
     @pytest.fixture
     def mock_tool_router(self):
         """Fixture for mock tool router."""
-        return UnifiedToolRouter()
+        return MockToolRouter()
 
     @pytest.fixture
     def agent_node(self):
@@ -128,6 +128,16 @@ class TestReActAgentNode:
         main_prompt = "Process the input and call tool_end when done: {{input}}"
 
         node_spec = agent_node("tool_end_test", main_prompt=main_prompt, output_schema=CustomOutput)
+
+        # Register tool_end tool in mock router
+        mock_tool_router.add_tool(
+            name="tool_end",
+            description="Tool for ending agent execution with structured output",
+            parameters={
+                "result": {"type": "string", "description": "The final result"},
+                "confidence": {"type": "number", "description": "Confidence score"},
+            },
+        )
 
         # Mock LLM to call tool_end
         mock_llm.responses = ["INVOKE_TOOL: tool_end(result='analysis complete', confidence=0.95)"]

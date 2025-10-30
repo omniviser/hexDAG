@@ -274,11 +274,10 @@ metadata:
 
 spec:
   nodes:
-    - kind: function_node
+    - kind: unknown_type
       metadata:
         name: node1
       spec:
-        # Missing required 'fn' field
         input_mapping: {}
         dependencies: []
 """
@@ -287,7 +286,10 @@ spec:
         with pytest.raises(Exception) as exc_info:
             yaml_builder.build_from_yaml_string(yaml_content)
 
-        assert "validation" in str(exc_info.value).lower() or "fn" in str(exc_info.value).lower()
+        assert (
+            "invalid type" in str(exc_info.value).lower()
+            or "unknown_type" in str(exc_info.value).lower()
+        )
 
     @pytest.mark.skip(
         reason="YamlPipelineBuilder.register_function() API not implemented - needs rewrite"

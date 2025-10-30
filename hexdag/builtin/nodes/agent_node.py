@@ -355,8 +355,21 @@ class ReActAgentNode(BaseNodeFactory):
 
         tool_list = []
         for name, schema in tool_schemas.items():
-            params = ", ".join(p["name"] for p in schema.get("parameters", []))
-            tool_list.append(f"- {name}({params}): {schema.get('description', 'No description')}")
+            # Handle both nested parameters dict and flat parameters list formats
+            params = []
+            raw_params = schema.get("parameters", {})
+            if isinstance(raw_params, dict):
+                params = list(raw_params.keys())
+            else:
+                for p in raw_params:
+                    if isinstance(p, dict) and "name" in p:
+                        params.append(p["name"])
+                    elif isinstance(p, str):
+                        params.append(p)
+
+            params_str = ", ".join(params)
+            desc = schema.get("description", "No description")
+            tool_list.append(f"- {name}({params_str}): {desc}")
 
         tools_text = "\n".join(tool_list)
 
@@ -555,15 +568,35 @@ carried_data={'key': 'value'})"""
             return None
 
         try:
+            # Split at first colon and evaluate as Python literal
             result_str = tool_result.split(":", 1)[1].strip()
-            result_data = ast.literal_eval(result_str)
 
+            # Handle string values with outer quotes
+            if (result_str.startswith("'") and result_str.endswith("'")) or (
+                result_str.startswith('"') and result_str.endswith('"')
+            ):
+                result_str = result_str[1:-1].strip()
+
+            # First try ast.literal_eval
+            try:
+                result_data = ast.literal_eval(result_str)
+            except (SyntaxError, ValueError):
+                # If that fails, try as JSON
+                try:
+                    result_data = json.loads(result_str)
+                except json.JSONDecodeError:
+                    # If neither works, handle as string result
+                    result_data = result_str
+
+            # Convert string result to dict for tool_end
+            if isinstance(result_data, str):
+                # If it's just a result string, wrap it in dict
+                return {"result": result_data}
             if isinstance(result_data, dict):
                 return result_data
             return None
-        except (json.JSONDecodeError, SyntaxError, ValueError, IndexError):
+        except Exception:
             # Failed to parse - return None to skip this result
-            # IndexError: split failed (malformed tool_end output)
             return None
 
     async def _emit_agent_metadata(self, state: AgentState, event_manager: Any) -> None:
