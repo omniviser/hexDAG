@@ -1,54 +1,59 @@
-# hexDAG YAML Pipelines: Architectural Design and Multi-Tier Framework
+# hexDAG YAML Pipelines: Architecture and Current Implementation
 
-**Enterprise AI Workflow Orchestration Through Principled Architecture**
+**Declarative AI Workflow Orchestration with Clean Separation of Concerns**
 
 ---
 
 ## Executive Summary
 
-hexDAG YAML Pipelines addresses the fundamental challenges in AI orchestration with a **three-tier architecture**.
-Unlike retrofitted frameworks that couple business logic, orchestration, and cloud operations, hexDAG separates these concerns into:
+hexDAG YAML Pipelines provides a **declarative approach to AI workflow orchestration** built on a clean architectural foundation:
 
-1. **Core Engine** → mathematical primitives and execution runtime
-2. **YAML Pipelines** → declarative workflows, registries, macros, and policies
-3. **Plug-and-Play Integrations** → provider-specific extensions for enterprise adoption
+1. **Core Engine** (`hexdag.core`) → DAG orchestration, execution runtime, type safety
+2. **YAML Pipeline Builder** (`hexdag.core.pipeline_builder`) → Declarative manifests with plugin architecture
+3. **Registry System** (`hexdag.core.registry`) → Component discovery and namespace management
 
-This architecture ensures **testability, extensibility, and governance** while maintaining developer ergonomics and enterprise robustness.
+**Current Status:** Core engine and YAML builder are production-ready. Advanced features (policy framework, multi-orchestrator routing, cloud integrations) are planned for future releases.
+
+This document describes the **current implementation** and architectural patterns. For planned features, see [YAML_PIPELINES_ROADMAP.md](YAML_PIPELINES_ROADMAP.md).
 
 ---
 
-## 🏗️ Three-Tier Architecture
+## 🏗️ Current Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Tier 3: Plug-and-Play Integrations (hexdag[provider])        │
-│ • Native cloud/data integrations (Azure, AWS, GCP, Spark)    │
-│ • Cloud monitoring, IAM, compliance orchestrators            │
-│ • Kubernetes-native deployment (CRDs, autoscaling)           │
+│ Layer 3: Registry System (hexdag.core.registry)              │
+│ ✅ Component registration and discovery                      │
+│ ✅ Namespace management (core, plugin, custom)               │
+│ ✅ Type-based resolution (nodes, macros, adapters, tools)    │
+│ ✅ Decorator-based component definition                      │
 ├─────────────────────────────────────────────────────────────┤
-│ Tier 2: YAML Pipelines (hexdag.pipeline_builder)                  │
-│ • YAML pipelines & macros                                    │
-│ • Dual Registry System (standard + versioned)                │
-│ • Policy & governance framework                              │
-│ • Multi-orchestrator routing and workload specialization     │
-│ • Official vs unofficial nodes, cross-registry resolution    │
+│ Layer 2: YAML Pipeline Builder (hexdag.core.pipeline_builder)│
+│ ✅ K8s-style manifest format (apiVersion, kind, metadata)    │
+│ ✅ Plugin architecture (preprocessing + entity plugins)      │
+│ ✅ Environment variable resolution (${VAR})                  │
+│ ✅ Jinja2 templating support                                 │
+│ ✅ Macro system with expansion                               │
+│ ✅ Multi-document YAML support                               │
 ├─────────────────────────────────────────────────────────────┤
-│ Tier 1: Core Engine (hexdag.core)                             │
-│ • DAG orchestration & execution primitives                   │
-│ • Async-first runtime                                        │
-│ • Pydantic type safety and validation                        │
-│ • Event-driven observability                                 │
-│ • Port/adapter abstraction for external dependencies         │
+│ Layer 1: Core Engine (hexdag.core)                           │
+│ ✅ DAG orchestration & execution primitives                  │
+│ ✅ Async-first runtime                                       │
+│ ✅ Pydantic type safety and validation                       │
+│ ✅ Event-driven observability                                │
+│ ✅ Port/adapter abstraction for external dependencies        │
 └─────────────────────────────────────────────────────────────┘
+
+Legend: ✅ = Implemented | 🚧 = In Progress | 📋 = Planned
 ```
 
 ---
 
-## ⚙️ Tier 1: Core Engine
+## ⚙️ Layer 1: Core Engine
 
 ### Design Philosophy: Pure Computational Model
 
-The Core is **domain-agnostic**. It provides the mathematical foundation for orchestrating workflows, independent of AI, cloud, or business context.
+The Core Engine is **domain-agnostic** and provides the mathematical foundation for orchestrating workflows, independent of AI, cloud, or business context.
 
 #### **1. DAG as the Primary Abstraction**
 
@@ -118,166 +123,308 @@ class NodeExecutionStarted:
 
 ---
 
-## 🏗️ Tier 2: YAML Pipelines
+## 🏗️ Layer 2: YAML Pipeline Builder
 
-### Design Philosophy: Systematic Composition & Customization
+### Design Philosophy: Declarative Workflows with Plugin Architecture
 
-YAML Pipelines transforms the Core into an AI orchestration platform, balancing **low-code workflow design** with **deep extensibility** through registries.
-
----
-
-#### **1. Registry System (Customization Backbone)**
-
-The registry architecture is what makes hexDAG **extensible without modifying the framework**.
-
-* **NodeTypeRegistry** → official and custom nodes
-* **FunctionRegistry** → user-defined pipeline functions
-* **PipelineRegistry** → discoverable workflows, namespace + versioned
-* **MacroRegistry** → reusable template definitions
-* **PolicyRegistry** → governance components
-
-**Official vs Unofficial Nodes**
-
-* Official: auto-verified at build-time from `hexdag.builtin.nodes`
-* Unofficial: user-registered through clean APIs
-* Metadata (`official: true/false`, tags, version) ensures traceability and governance
-
-**Dual Registry Modes**
-
-* **Standard (Development)** → lightweight, auto-discovery, hot-reload
-* **Versioned (MLflow-style)** → semantic versioning, staging → prod promotion, rollback, experiment tracking
-
-**Cross-Registry Resolution**
-
-* Pipelines can reference nodes, macros, policies across registries:
-  `security/content-filter:1.0.0#validator-node`
+The YAML Pipeline Builder transforms the Core Engine into a declarative orchestration platform through a clean plugin architecture.
 
 ---
 
-#### **2. YAML Pipelines (K8s-Style)**
+### **Current Features**
 
-* Declarative manifests for nodes, pipelines, macros.
-* Multi-document YAML supported.
-* Schema validation powered by registry metadata.
+#### **1. K8s-Style Manifest Format**
+
+hexDAG uses a familiar Kubernetes-style declarative format:
 
 ```yaml
-apiVersion: hexdag/v1
+apiVersion: v1
 kind: Pipeline
+metadata:
+  name: my-pipeline
+  description: Pipeline description
+  namespace: custom  # Optional: for multi-environment support
 spec:
-  imports:
-    - pipeline: "security/content-filter:1.0.0"
   nodes:
-    - id: analyzer
-      type: AgentNode
-      params: { prompt: "Analyze: {{input}}" }
+    - kind: llm_node
+      metadata:
+        name: analyzer
+      spec:
+        prompt_template: "Analyze: {{input}}"
+        model: gpt-4
+        temperature: 0.7
+        dependencies: []
+```
+
+**Key Fields:**
+- `apiVersion` - Schema version (currently `v1`)
+- `kind` - Resource type (`Pipeline`, `macro_invocation`)
+- `metadata` - Name, description, namespace, annotations
+- `spec` - Pipeline specification (nodes, ports, policies)
+
+#### **2. Plugin Architecture**
+
+The builder uses two plugin types:
+
+**Preprocessing Plugins** (run before graph building):
+- `EnvironmentVariablePlugin` - Resolves `${VAR}` and `${VAR:default}`
+- `TemplatePlugin` - Jinja2 templating with context
+
+**Entity Plugins** (build specific components):
+- `MacroEntityPlugin` - Expands `macro_invocation` into subgraphs
+- `NodeEntityPlugin` - Builds nodes from registry
+
+This allows easy extension without modifying core builder logic.
+
+#### **3. Environment Variable Resolution**
+
+```yaml
+spec:
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: llm
+      spec:
+        model: ${MODEL_NAME:gpt-4}  # Falls back to gpt-4
+        temperature: ${TEMPERATURE}   # Required if no default
+```
+
+Features:
+- `${VAR}` - Required variable (error if missing)
+- `${VAR:default}` - Optional with default value
+- Type coercion - Automatic conversion to int, float, bool
+- Recursive resolution - Works in nested dicts/lists
+
+#### **4. Jinja2 Templating**
+
+```yaml
+metadata:
+  model: gpt-4
+spec:
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: llm
+      spec:
+        model: "{{ metadata.model }}"  # References YAML context
+        prompt_template: "Process: {{input}}"
+```
+
+#### **5. Macro System**
+
+Macros enable reusable pipeline templates:
+
+```yaml
+# Define macro instance
+- kind: macro_invocation
+  metadata:
+    name: my_rag_instance
+  spec:
+    macro: "core:rag_pipeline"  # namespace:name format
+    config:
+      chunk_size: 512
+      top_k: 5
+    inputs:
+      query: "{{user_query}}"
+    dependencies: [previous_node]
+```
+
+Macros expand into DirectedGraph subgraphs at build time.
+
+#### **6. Multi-Document YAML**
+
+```yaml
+---
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: dev-pipeline
+  namespace: dev
+spec:
+  nodes: [...]
+---
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: prod-pipeline
+  namespace: prod
+spec:
+  nodes: [...]
+```
+
+Select environment: `builder.build_from_yaml_string(yaml, environment="prod")`
+
+#### **7. Node Type Resolution**
+
+Nodes are resolved from the registry using namespaced references:
+
+```yaml
+- kind: llm_node              # Resolves to core:llm_node
+- kind: core:agent_node       # Explicit namespace
+- kind: plugin:custom_node    # Plugin namespace
+```
+
+#### **8. Function Node with Module Path Strings**
+
+Function nodes now support declarative function references via module path strings:
+
+```yaml
+# Use any Python function without imports
+- kind: function_node
+  metadata:
+    name: json_parser
+  spec:
+    fn: "json.loads"  # Module path string - resolved at build time
+  dependencies: []
+
+# Standard library functions
+- kind: function_node
+  metadata:
+    name: base64_encoder
+  spec:
+    fn: "base64.b64encode"
+  dependencies: []
+
+# Your custom business logic
+- kind: function_node
+  metadata:
+    name: order_processor
+  spec:
+    fn: "myapp.business.process_order"
+    input_schema:
+      order_id: str
+      customer_id: str
+    output_schema:
+      status: str
+      total: float
+  dependencies: [validate_order]
+
+# Third-party packages
+- kind: function_node
+  metadata:
+    name: data_loader
+  spec:
+    fn: "pandas.read_csv"
+  dependencies: []
+```
+
+**Benefits:**
+- **Fully Declarative** - No Python imports needed in pipeline definitions
+- **Git-Friendly** - Pure YAML with no code dependencies
+- **Clear Errors** - Descriptive messages for invalid paths at build time
+- **Universal** - Works with any Python function (stdlib, packages, custom code)
+
+**Error Handling:**
+```yaml
+# Invalid module → "Could not import module from function path"
+fn: "nonexistent.module.func"
+
+# Invalid function → "Function 'bad_func' not found in module 'json'"
+fn: "json.bad_func"
+
+# Non-callable → "Resolved 'json.__version__' is not callable"
+fn: "json.__version__"
 ```
 
 ---
 
-#### **3. Macro System**
+### **YAML Pipeline Benefits**
 
-* Parameterized templates with injection points.
-* Eliminates copy-paste workflows.
-* Macro collections:
-
-  * **Multi-agent coordination** (consensus, manager-worker, feedback loops)
-  * **Security/compliance** (prompt injection detection, audit trail)
-  * **Data processing** (ETL, semantic search, document analysis)
-
----
-
-#### **4. Policy & Governance Engine**
-
-* **Security**: RBAC, classification, access control
-* **Resource**: rate limits, quotas, SLAs
-* **Validation**: schema enforcement, content filtering
-* **Custom**: org-specific rules
-
-Policies integrate at:
-
-* Pre-execution validation
-* Node-level execution
-* Post-execution auditing
-* Cross-workflow governance
+✅ **Version Control** - Track workflows in Git like infrastructure code
+✅ **Declarative** - What to do, not how to do it
+✅ **Type Safe** - Schema validation before execution
+✅ **Portable** - Same YAML across environments
+✅ **Extensible** - Plugin architecture for custom behavior
+✅ **Composable** - Macros for reusable patterns
+✅ **Function Module Paths** - Reference any Python function via string paths
 
 ---
 
-#### **5. Multi-Orchestrator Support**
+## 🔧 Layer 3: Registry System
 
-* Specialized orchestrators (CPU, memory, throughput, compliance).
-* Workload routing driven by policies and registry metadata.
-* Enables isolation of regulated workloads.
+### Design Philosophy: Component Discovery and Management
 
----
+The registry provides a centralized system for discovering and managing components.
 
-### YAML Pipelines Benefits
+#### **Current Features**
 
-* **Customization** → Registries provide clean extension points
-* **Low-code orchestration** → YAML pipelines for rapid design
-* **Reusable patterns** → Macros standardize workflows
-* **Governed execution** → Policies and registry metadata enforce compliance
-* **Scalable execution** → Multi-orchestrator specialization
+**1. Component Types:**
+- Nodes (via `@node` decorator)
+- Macros (via `@macro` decorator)
+- Adapters (via `@adapter` decorator)
+- Tools (via `@tool` decorator)
+- Policies (via `@policy` decorator)
 
----
+**2. Namespace Management:**
+- `core` - Built-in components from `hexdag.builtin`
+- `plugin` - Plugin-provided components
+- Custom namespaces - User-defined
 
-## 🌐 Tier 3: Plug-and-Play Integrations
+**3. Registration API:**
 
-### Design Philosophy: Native, Modular, Vendor-Neutral
+```python
+from hexdag.core.registry import node, registry
 
-While Core and YAML Pipelines remain cloud-agnostic, enterprises need **native integration** with their platforms. Tier 3 provides that via modular plug-ins.
+# Decorator-based registration
+@node(name="custom_processor", namespace="myapp")
+class CustomProcessor(BaseNodeFactory):
+    def __call__(self, name: str, **params):
+        # Build NodeSpec
+        ...
 
----
+# Programmatic access
+component = registry.get("custom_processor", namespace="myapp")
+```
 
-#### **Supported Extensions**
-
-* **hexdag\[azure]** → Azure AD, Key Vault, Service Bus, Monitor, Managed Identity
-* **hexdag\[aws]** → IAM roles, Lambda, CloudWatch, SQS/SNS, Secrets Manager
-* **hexdag\[gcp]** → Vertex AI, Pub/Sub, Cloud Monitoring, BigQuery
-* **hexdag\[spark]** → Distributed DAG execution, Delta Lake, MLlib, streaming
-* **hexdag\[k8s]** → Kubernetes-native CRDs, autoscaling, service mesh integration
-
----
-
-#### **Design Principles**
-
-1. **Native Integration**
-
-   * Use provider IAM, secrets, monitoring directly (not lowest-common-denominator abstractions).
-
-2. **Backward Compatibility**
-
-   * Pipelines run with or without extensions.
-   * Extensions enhance, never break Core/Factory.
-
-3. **Multi-Cloud Flexibility**
-
-   * Same YAML pipeline deploys across providers.
-   * Event sinks (Kafka, Pub/Sub, CloudWatch) unify observability.
-   * Compliance orchestrators integrate with provider-native audit trails.
+**4. Discovery:**
+- List all components: `registry.list(component_type="node")`
+- Search by namespace: `registry.list(namespace="core")`
+- Get metadata: `registry.get_metadata("llm_node")`
 
 ---
 
-### Plug-and-Play Benefits
+## 📋 Planned Features
 
-* Enterprise-grade **security & compliance** (IAM, audit, policies).
-* **Observability** with cloud-native tools (Azure Monitor, CloudWatch, Prometheus).
-* **Scalability** across Spark, Kubernetes, and serverless runtimes.
-* **No vendor lock-in**: workflows remain portable.
+The following features are documented in roadmap but not yet implemented:
+
+**Policy & Governance Framework:**
+- PolicyRegistry for governance rules
+- Pre/post execution policy enforcement
+- RBAC, rate limiting, compliance policies
+
+**Multi-Orchestrator Support:**
+- Specialized orchestrators (CPU, memory, compliance)
+- Policy-driven workload routing
+- Dynamic scaling and health monitoring
+
+**Dual Registry System:**
+- Standard registry (current implementation)
+- MLflow-style versioned registry (planned)
+- Semantic versioning and lifecycle management
+- Staging → production promotion
+
+**Cloud Integrations:**
+- `hexdag[azure]`, `hexdag[aws]`, `hexdag[gcp]`
+- Native IAM, secrets, monitoring integration
+- Kubernetes CRDs and operators
+
+See [YAML_PIPELINES_ROADMAP.md](YAML_PIPELINES_ROADMAP.md) for complete roadmap.
 
 ---
 
-## 📚 Conclusion: Architecture as Advantage
+## 📚 Conclusion
 
-hexDAG’s **three-tier architecture** provides:
+hexDAG's **layered architecture** delivers:
 
-* **Tier 1 (Core)** → Deterministic async DAG engine with type safety and observability
-* **Tier 2 (YAML Pipelines)** → Customizable orchestration with registries, YAML, macros, policies, and multi-orchestrator routing
-* **Tier 3 (Integrations)** → Plug-and-play provider extensions for enterprise adoption
+* **Layer 1 (Core)** → Deterministic async DAG engine with type safety
+* **Layer 2 (YAML Builder)** → Declarative manifests with plugin architecture
+* **Layer 3 (Registry)** → Component discovery and namespace management
 
-By **separating computation, composition, and integration**, hexDAG delivers both:
+By **separating orchestration, declaration, and discovery**, hexDAG provides:
 
-* **Developer velocity** → clean APIs, low-code pipelines, reusable macros
-* **Enterprise rigor** → governance, observability, versioning, compliance
-* **Future-proofing** → modular integrations and systematic extensibility
+* **Developer Velocity** → Clean APIs and declarative YAML
+* **Extensibility** → Plugin architecture for customization
+* **Type Safety** → Pydantic validation throughout
+* **Testability** → Mock adapters and validation before execution
 
-hexDAG is architecture-first orchestration — designed for **scalability, maintainability, and enterprise adoption**.
+hexDAG is architecture-first orchestration — designed for **scalability, maintainability, and production use**.

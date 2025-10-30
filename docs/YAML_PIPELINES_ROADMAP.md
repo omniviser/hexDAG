@@ -1,220 +1,295 @@
-# YAML Pipelines ROADMAP v2.0
+# YAML Pipelines ROADMAP
 
-**YAML-based Agent Workflow Builder with Multi-Agent Coordination Patterns**
-
----
-
-## Phase 1: Registry System Foundation
-
-**Objective:** Build unified registry architecture with official/user extension distinction
-
-### 1.1 Core Registry System (`hexdag.core.registry`)
-
-* **NodeTypeRegistry:** Framework node factories with build-time verification
-* **Build script:** Auto-generate official nodes list from `hexdag.builtin.nodes`
-* **Official verification:** Simple module path comparison for security
-* **Extension API:** Clean registration interface for user nodes
-
-### 1.2 YAML Pipelines Registry System (`hexdag.pipeline_builder.registry`)
-
-* **FunctionRegistry:** Per-pipeline callable function management
-* **PipelineRegistry:** Enhanced PipelineCatalog with namespacing/versioning
-* **MacroRegistry:** Template discovery and expansion system
-* **CustomNodeRegistry:** User-defined node types specific to agent\_factory
-
-### 1.3 Registry Integration
-
-* **Cross-registry resolution:** Nodes, functions, pipelines, macros
-* **Metadata system:** Tags, descriptions, versioning, official status
-* **Discovery API:** Unified interface for finding components
+**Evolution of Declarative AI Workflow Orchestration**
 
 ---
 
-## Phase 2: Enhanced YAML Builder with Registry Integration
+## Status Legend
 
-**Objective:** K8s-style declarative manifests with full registry support
+* ✅ **Implemented** - Available in current release
+* 🚧 **In Progress** - Under active development
+* 📋 **Planned** - Future roadmap item
 
-### 2.1 Registry-Aware `YamlPipelineBuilder`
+---
 
-* **Node resolution:** Use NodeTypeRegistry for official + custom nodes
-* **Function binding:** Use FunctionRegistry for pipeline functions
-* **Cross-references:** Resolve pipeline/macro imports via registries
-* **Validation:** Schema validation using registry metadata
+## Phase 1: Registry System Foundation ✅
 
-### 2.2 Multi-Document YAML Support
+**Status:** ✅ **IMPLEMENTED**
+
+**Objective:** Build unified registry architecture for component discovery
+
+### 1.1 Core Registry System (`hexdag.core.registry`) ✅
+
+* ✅ **Component Registry:** Unified registry for all component types
+* ✅ **Decorator-based registration:** `@node`, `@macro`, `@adapter`, `@tool`, `@policy`
+* ✅ **Namespace management:** `core`, `plugin`, custom namespaces
+* ✅ **Discovery API:** List, search, and retrieve components by type/namespace
+* ✅ **Metadata system:** Tags, descriptions, component metadata
+
+### 1.2 Component Types Supported ✅
+
+* ✅ **Node Factories:** Build NodeSpec instances from declarative config
+* ✅ **Macro Definitions:** Reusable pipeline templates with expansion
+* ✅ **Adapters:** Port implementations (LLM, database, memory, etc.)
+* ✅ **Tools:** Agent tool functions with automatic schema generation
+* ✅ **Policies:** Governance and validation components (basic support)
+
+### 1.3 Registry Features ✅
+
+* ✅ **Type-based resolution:** Get components by type and namespace
+* ✅ **Bootstrap system:** Automatic registration of built-in components
+* ✅ **Lazy loading:** Components registered on-demand
+* ✅ **Error handling:** Clear error messages for missing components
+
+---
+
+## Phase 2: YAML Pipeline Builder ✅
+
+**Status:** ✅ **IMPLEMENTED**
+
+**Objective:** K8s-style declarative manifests with plugin architecture
+
+### 2.1 Core Builder Features ✅
+
+* ✅ **K8s-style manifests:** `apiVersion`, `kind`, `metadata`, `spec` format
+* ✅ **Schema validation:** YamlValidator ensures correct structure
+* ✅ **Plugin architecture:** Preprocessing and entity plugins
+* ✅ **Multi-document YAML:** Environment-specific configurations
+* ✅ **Registry integration:** Node resolution via registry
+* ✅ **Error reporting:** Clear validation and build errors
+
+### 2.2 Preprocessing Plugins ✅
+
+* ✅ **EnvironmentVariablePlugin:** `${VAR}` and `${VAR:default}` resolution
+* ✅ **TemplatePlugin:** Jinja2 templating in YAML values
+* ✅ **Type coercion:** Automatic int, float, bool conversion
+* ✅ **Recursive processing:** Nested dicts and lists
+
+### 2.3 Entity Plugins ✅
+
+* ✅ **MacroEntityPlugin:** Expand `macro_invocation` into subgraphs
+* ✅ **NodeEntityPlugin:** Build all node types from YAML
+* ✅ **Namespace resolution:** Support `namespace:name` format
+* ✅ **Dependency handling:** Explicit dependencies via `dependencies` field
+
+### 2.4 YAML Manifest Format ✅
 
 ```yaml
-apiVersion: hexdag/v1
-kind: Node
-metadata:
-  name: custom-consensus
-  namespace: my-org
-spec:
-  type: CustomConsensusNode  # From pipeline_builder custom registry
----
-apiVersion: hexdag/v1
+apiVersion: v1
 kind: Pipeline
+metadata:
+  name: my-pipeline
+  description: Pipeline description
+  namespace: custom  # Multi-environment support
 spec:
-  imports:
-    - pipeline: "security/content-filter:1.0.0"
-  nodes: [custom-consensus]
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: analyzer
+      spec:
+        prompt_template: "Analyze: {{input}}"
+        model: gpt-4
+        dependencies: []
+
+    - kind: macro_invocation
+      metadata:
+        name: rag
+      spec:
+        macro: "core:rag_pipeline"
+        config:
+          chunk_size: 512
+        inputs:
+          query: "{{user_query}}"
+        dependencies: [analyzer]
 ```
 
-### 2.3 Cross-Reference Resolution
+---
 
-* **Pipeline dependencies:** `security/content-filter:1.0.0#validator-node`
-* **Node imports:** Reference nodes from other pipelines/namespaces
-* **Macro expansion:** Template imports with parameter injection
+## Phase 3: Advanced Registry Features 📋
+
+**Status:** 📋 **PLANNED**
+
+**Objective:** Enhanced registry with versioning and governance
+
+### 3.1 Dual Registry System 📋
+
+* 📋 **Standard Registry:** Current lightweight implementation
+* 📋 **Versioned Registry:** MLflow-style lifecycle management
+* 📋 **Semantic versioning:** Component versioning with semver
+* 📋 **Stage management:** Development → Staging → Production
+* 📋 **Rollback support:** Version-based rollback capabilities
+
+### 3.2 Cross-Registry Resolution 📋
+
+* 📋 **Versioned references:** `security/content-filter:1.0.0#validator-node`
+* 📋 **Pipeline dependencies:** Import nodes from other pipelines
+* 📋 **Macro libraries:** Shared macro collections
+* 📋 **Version constraints:** Compatible version resolution
 
 ---
 
-## Phase 3: Custom Extension System in YAML Pipelines
+## Phase 4: Macro Library Expansion 📋
 
-**Objective:** YAML Pipelines as extension platform for custom components
+**Status:** 📋 **PLANNED**
 
-### 3.1 Custom Node Framework (`pipeline_builder/custom/`)
+**Objective:** Rich library of reusable macro templates
 
-* **CustomNodeBase:** Base class for agent\_factory-specific nodes
-* **CoordinationNodes:** Multi-agent coordination patterns
-* **SecurityNodes:** Specialized validation/filtering nodes
-* **DataNodes:** Enhanced data processing capabilities
-* **Auto-registration:** Custom nodes auto-discovered and registered
+### 4.1 Multi-Agent Coordination Macros 📋
 
-### 3.2 Custom Pipeline Patterns (`pipeline_builder/patterns/`)
+* 📋 **Chain-of-Thought:** Reasoning + validation pattern
+* 📋 **Consensus Network:** Multi-agent voting and agreement
+* 📋 **Manager-Worker:** Hierarchical task delegation
+* 📋 **Feedback Loop:** Executor + critic + improver cycle
 
-* **Multi-agent templates:** Consensus, hierarchical, feedback loops
-* **Security patterns:** Content filtering, prompt injection detection
-* **Data patterns:** ETL, semantic search, knowledge graphs
-* **Coordination patterns:** Event-driven, reactive, distributed
+### 4.2 Security & Validation Macros 📋
 
-### 3.3 Custom Function Library (`pipeline_builder/functions/`)
+* 📋 **Prompt Injection Detection:** Classifier + rules engine
+* 📋 **Content Safety:** Safety filters with escalation
+* 📋 **Authorization:** Auth validation and access control
+* 📋 **Audit Trail:** Logging and compliance checking
 
-* **Validation functions:** Schema validation, content safety
-* **Coordination functions:** Voting, consensus, delegation
-* **Data functions:** Parsing, transformation, aggregation
-* **Integration functions:** API calls, database operations
+### 4.3 Data Processing Macros 📋
 
----
-
-## Phase 4: Dual Registry System (Standard + MLflow)
-
-**Objective:** Development registry + production lifecycle management
-
-### 4.1 Standard Registry (`pipeline_builder/registry/standard.py`)
-
-* **Development focus:** Fast iteration, simple discovery
-* **Auto-registration:** Pipelines, macros, custom components
-* **Metadata:** Basic tags, descriptions, relationships
-* **Execution:** Direct workflow execution
-
-### 4.2 MLflow-Style Registry (`pipeline_builder/registry/versioned.py`)
-
-* **Production focus:** Lifecycle management, governance
-* **Versioning:** Semantic versioning for all components
-* **Stages:** Development → Staging → Production → Archived
-* **Experiments:** Performance tracking, A/B testing
-* **Artifacts:** Configuration snapshots, validation results
-
-### 4.3 Registry Promotion Pipeline
-
-* **Development → Staging:** Automated testing, validation
-* **Staging → Production:** Manual approval, performance gates
-* **Rollback:** Version-based rollback capabilities
-* **Analytics:** Usage metrics, performance monitoring
+* 📋 **ETL Pipeline:** Extract, transform, load pattern
+* 📋 **Document Analysis:** Parse, analyze, summarize
+* 📋 **Semantic Search:** Embed, retrieve, rank workflow
+* 📋 **RAG Pipeline:** Retrieval-augmented generation (partially implemented)
 
 ---
 
-## Phase 5: Macro System with Custom Injection
+## Phase 5: Policy & Governance Framework 📋
 
-**Objective:** Reusable templates with custom component injection
+**Status:** 📋 **PLANNED**
 
-### 5.1 Macro Architecture (`pipeline_builder/macros/`)
+**Objective:** Enterprise governance and compliance features
 
-* **MacroDefinition:** Inherits pipeline patterns, adds templating
-* **MacroParam:** Custom injection points for nodes/functions/policies
-* **MacroExpander:** Template → concrete YAML using PromptTemplate
-* **Custom injection:** User nodes, functions, validation policies
+### 5.1 Policy Framework 📋
 
-### 5.2 Essential Macro Collection
+* 📋 **PolicyDefinition:** Base class for governance rules
+* 📋 **Security Policies:** RBAC, data classification, access control
+* 📋 **Resource Policies:** Rate limiting, quota management, SLA enforcement
+* 📋 **Validation Policies:** Schema enforcement, content filtering
+* 📋 **Custom Policies:** User-defined business rules
+* 📋 **Policy Registry:** Discovery and management of policies
+* 📋 **Policy Enforcement:** Pre/post execution validation
 
-#### Multi-Agent Coordination (`macros/coordination/`)
+### 5.2 Policy Integration Points 📋
 
-* **Chain-of-Thought:** `{{reasoning_agent}} + {{validator_agent}}`
-* **Consensus Network:** `{{voter_agents}} + {{consensus_function}}`
-* **Manager-Worker:** `{{manager_agent}} + {{worker_pool}}`
-* **Feedback Loop:** `{{executor}} + {{critic}} + {{improver}}`
-
-#### Security & Validation (`macros/security/`)
-
-* **Prompt Injection Detection:** `{{classifier}} + {{rules_engine}}`
-* **Content Safety:** `{{safety_agents}} + {{escalation_policy}}`
-* **Authorization:** `{{auth_function}} + {{access_validator}}`
-* **Audit Trail:** `{{logger}} + {{compliance_checker}}`
-
-#### Data Processing (`macros/data/`)
-
-* **ETL Pipeline:** `{{extractor}} + {{transformer}} + {{loader}}`
-* **Document Analysis:** `{{parser}} + {{analyzer}} + {{summarizer}}`
-* **Semantic Search:** `{{embedder}} + {{retriever}} + {{ranker}}`
+* 📋 **Pre-execution validation:** Check policies before pipeline runs
+* 📋 **Node-level policies:** Per-node policy enforcement
+* 📋 **Post-execution auditing:** Log and validate results
+* 📋 **Cross-workflow governance:** Policies across pipelines
 
 ---
 
-# Phase 6: Governance Framework and Flexible Orchestration Patterns
+## Phase 6: Multi-Orchestrator Support 📋
 
-**Objective:** Governance framework and flexible orchestration patterns
+**Status:** 📋 **PLANNED**
 
-### 6.1 Policy Framework (`pipeline_builder/policies/`)
+**Objective:** Specialized orchestrators for different workload types
 
-* **PolicyDefinition:** Base class for governance rules
-* **Security Policies:** RBAC, data classification, access control
-* **Resource Policies:** Rate limiting, quota management, SLA enforcement
-* **Validation Policies:** Schema enforcement, content filtering, compliance
-* **Custom Policies:** User-defined governance and business rules
-* **Policy Registry:** Discovery and management of policy components
-* **Policy Enforcement:** Integration with pipeline execution
+### 6.1 Orchestrator Configurations 📋
 
-### 6.2 Multi-Orchestrator Architecture (`pipeline_builder/orchestration/`)
+* 📋 **Resource-optimized:** CPU, memory, throughput specialization
+* 📋 **Compliance orchestrators:** Dedicated secure execution environments
+* 📋 **YAML-based config:** Declarative orchestrator definitions
+* 📋 **Health monitoring:** Availability and performance tracking
 
-* **Orchestrator Configurations:** Multiple orchestrator setups per deployment
-* **Resource Optimization:** CPU, memory, and throughput-optimized configs
-* **Workload Distribution:** Route pipelines to appropriate orchestrators
-* **Configuration Management:** YAML-based orchestrator definitions
-* **Dynamic Scaling:** Auto-scaling orchestrator pools based on load
-* **Health Monitoring:** Orchestrator availability and performance tracking
+### 6.2 Workload Routing 📋
 
-### 6.3 Policy-Orchestrator Integration
+* 📋 **Policy-aware routing:** Route based on policy requirements
+* 📋 **Dynamic scaling:** Auto-scaling orchestrator pools
+* 📋 **Load balancing:** Distribute workloads efficiently
+* 📋 **Workload isolation:** Separate regulated and standard workloads
 
-* **Policy-aware routing:** Route workflows based on policy requirements
-* **Compliance orchestrators:** Dedicated orchestrators for regulated workloads
-* **Resource governance:** Policy-based resource allocation and limits
-* **Audit integration:** Policy enforcement tracking and compliance reporting
+### 6.3 Policy-Orchestrator Integration 📋
 
-### 6.4 Advanced Coordination with Policies
-
-* **Policy-driven workflows:** Macros that adapt based on active policies
-* **Conditional orchestration:** Route to different orchestrators based on policies
-* **Multi-tenant isolation:** Policy-based workspace and resource separation
-* **Governance automation:** Self-healing and policy violation remediation
+* 📋 **Compliance routing:** Route regulated workloads to compliant orchestrators
+* 📋 **Resource governance:** Policy-based resource allocation
+* 📋 **Audit integration:** Track policy enforcement and violations
+* 📋 **Multi-tenant isolation:** Policy-based workspace separation
 
 ---
 
-## Phase 7: Observability and Event Sink
+## Phase 7: Cloud Integrations 📋
+
+**Status:** 📋 **PLANNED**
+
+**Objective:** Native cloud platform integrations
+
+### 7.1 Azure Integration (`hexdag[azure]`) 📋
+
+* 📋 **Azure AD:** Authentication and authorization
+* 📋 **Key Vault:** Secrets management
+* 📋 **Service Bus:** Message queue integration
+* 📋 **Monitor:** Native observability
+* 📋 **Managed Identity:** Secure credential-less access
+
+### 7.2 AWS Integration (`hexdag[aws]`) 📋
+
+* 📋 **IAM Roles:** Authentication and authorization
+* 📋 **Secrets Manager:** Secrets management
+* 📋 **SQS/SNS:** Message queue integration
+* 📋 **CloudWatch:** Native observability
+* 📋 **Lambda:** Serverless execution
+
+### 7.3 GCP Integration (`hexdag[gcp]`) 📋
+
+* 📋 **Vertex AI:** Model deployment integration
+* 📋 **Pub/Sub:** Message queue integration
+* 📋 **Cloud Monitoring:** Native observability
+* 📋 **BigQuery:** Data warehouse integration
+
+### 7.4 Distributed Computing 📋
+
+* 📋 **Spark Integration (`hexdag[spark]`):** Distributed DAG execution
+* 📋 **Kubernetes (`hexdag[k8s]`):** CRDs, operators, autoscaling
+* 📋 **Service Mesh:** Integration with Istio, Linkerd
+
+---
+
+## Phase 8: Enhanced Observability 📋
+
+**Status:** 📋 **PLANNED**
 
 **Objective:** Unified observability and event-driven extensibility
 
-### 7.1 Observability Refactor
+### 8.1 Observability Enhancements 📋
 
-* **Registry metrics:** Usage patterns, performance tracking
-* **Custom component monitoring:** User extension health checks
-* **Distributed tracing:** Cross-component execution flows
-* **Dashboard integration:** Grafana-compatible metrics
-* **Unified observability API:** Standardized metrics and logging hooks
+* 📋 **Registry metrics:** Component usage patterns
+* 📋 **Custom component monitoring:** Health checks for user extensions
+* 📋 **Distributed tracing:** Cross-component execution flows
+* 📋 **Dashboard integration:** Grafana-compatible metrics
 
-### 7.2 Event Sink (`pipeline_builder/events/`)
+### 8.2 Event Sink System 📋
 
-* **EventDefinition:** Standard schema for registry + orchestration events
-* **EventRouter:** Routes events to sinks (logging, monitoring, external systems)
-* **Pluggable Sinks:** Kafka, Webhooks, CloudWatch, Prometheus exporters
-* **Event Correlation:** Link registry, policy, and orchestration events
-* **Replay & Auditing:** Store events for compliance and debugging
-* **Integration with Policies:** Policy violations emitted as structured events
+* 📋 **EventRouter:** Route events to external sinks
+* 📋 **Pluggable Sinks:** Kafka, Webhooks, CloudWatch, Prometheus
+* 📋 **Event Correlation:** Link registry, policy, and orchestration events
+* 📋 **Replay & Auditing:** Store events for compliance
+* 📋 **Policy Events:** Policy violations as structured events
+
+---
+
+## Summary
+
+### ✅ Currently Available
+
+- **Core Engine:** Full DAG orchestration with async execution
+- **Registry System:** Component discovery and namespace management
+- **YAML Builder:** K8s-style manifests with plugin architecture
+- **Environment Variables:** `${VAR}` resolution with defaults
+- **Jinja2 Templating:** Dynamic YAML with context
+- **Macro System:** Reusable templates with expansion
+- **Multi-document YAML:** Environment-specific configurations
+
+### 📋 Future Roadmap
+
+- **Advanced Registry:** Versioning, staging, lifecycle management
+- **Macro Library:** Rich collection of coordination patterns
+- **Policy Framework:** Governance and compliance enforcement
+- **Multi-Orchestrator:** Specialized execution environments
+- **Cloud Integrations:** Azure, AWS, GCP native support
+- **Enhanced Observability:** Distributed tracing and event sinks
+
+For current implementation details, see [YAML_PIPELINES_ARCHITECTURE.md](YAML_PIPELINES_ARCHITECTURE.md).

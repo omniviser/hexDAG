@@ -594,6 +594,56 @@ Key components:
 - **Parameters**: Node-specific configuration
 - **Template System**: Jinja2-style templating for dynamic content
 
+### Function Nodes with Module Path Strings
+
+Function nodes support fully declarative function references using module path strings:
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: data-processing
+spec:
+  nodes:
+    # Standard library functions
+    - kind: function_node
+      metadata:
+        name: json_parser
+      spec:
+        fn: "json.loads"  # Module path string - no imports needed!
+      dependencies: []
+
+    # Your custom business logic
+    - kind: function_node
+      metadata:
+        name: process_order
+      spec:
+        fn: "myapp.business.process_order"
+        input_schema:
+          order_id: str
+          customer_id: str
+        output_schema:
+          status: str
+          total: float
+      dependencies: [json_parser]
+
+    # Third-party packages
+    - kind: function_node
+      metadata:
+        name: data_transform
+      spec:
+        fn: "pandas.DataFrame.from_dict"
+      dependencies: [process_order]
+```
+
+**Benefits:**
+- **100% Declarative** - No Python imports in YAML files
+- **Git-Friendly** - Pure YAML configurations version-controlled
+- **Clear Error Messages** - Validation at build time with descriptive errors
+- **Universal** - Works with stdlib, third-party packages, and custom code
+
+See [docs/reference/nodes.md](docs/reference/nodes.md#function_node) for complete documentation.
+
 ## External Dependencies
 
 The framework integrates with external services through ports:

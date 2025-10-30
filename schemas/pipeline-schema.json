@@ -227,7 +227,14 @@
                             ]
                         },
                         "fn": {
-                            "type": "string"
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ]
                         },
                         "input_mapping": {
                             "default": null,
