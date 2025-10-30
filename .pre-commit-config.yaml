@@ -39,7 +39,7 @@ repos:
         stages: [pre-commit]
       - id: pretty-format-json
         args: ["--autofix", "--indent", "4"]
-        exclude: "^notebooks/.*\\.ipynb$"
+        exclude: "^(notebooks/.*\\.ipynb|schemas/.*\\.json)$"
         stages: [pre-commit]
       - id: check-added-large-files
         stages: [pre-commit]
@@ -290,3 +290,23 @@ repos:
         pass_filenames: false
         stages: [pre-push]
         always_run: true
+
+      # ========================================================================
+      # JSON Schema Generation and Validation
+      # ========================================================================
+
+      - id: generate-schemas
+        name: Generate JSON Schemas from registry
+        entry: uv run python scripts/generate_schemas.py
+        language: system
+        files: ^(hexdag/(builtin/nodes|core/config/models|core/orchestration/policies/models).*\.py|scripts/generate_schemas\.py)$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-schemas
+        name: Check JSON schemas are auto-generated
+        entry: uv run python scripts/check_schemas.py
+        language: system
+        files: ^schemas/.*\.json$
+        stages: [pre-commit]
+        pass_filenames: false
