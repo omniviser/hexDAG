@@ -10,6 +10,7 @@ from hexdag.core.context import get_port
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.prompt import PromptInput, TemplateType
 from hexdag.core.orchestration.prompt.template import PromptTemplate
+from hexdag.core.ports.llm import Message
 from hexdag.core.protocols import to_dict
 
 from .base_node_factory import BaseNodeFactory
@@ -131,15 +132,17 @@ class BaseLLMNode(BaseNodeFactory):
 
     def _generate_messages(
         self, template: TemplateType, validated_input: dict[str, Any]
-    ) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    ) -> tuple[list[Message], dict[str, Any]]:
         """Generate messages from template and extract variables.
 
         Returns
         -------
-        tuple[list[dict[str, str]], dict[str, Any]]
-            Tuple containing (messages, template_variables)
+        tuple[list[Message], dict[str, Any]]
+            Tuple containing (messages as Message objects, template_variables)
         """
-        messages = template.to_messages(**validated_input)
+        message_dicts = template.to_messages(**validated_input)
+        # Convert plain dicts to Message objects for port wrapper compatibility
+        messages = [Message(**msg) for msg in message_dicts]
         return messages, validated_input
 
     # Remove the individual message generation methods - they're not needed

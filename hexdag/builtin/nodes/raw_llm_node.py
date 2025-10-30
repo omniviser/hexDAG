@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from hexdag.core.context import get_port
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
+from hexdag.core.ports.llm import Message
 from hexdag.core.registry import node
 from hexdag.core.registry.models import NodeSubtype
 
@@ -220,9 +221,12 @@ class RawLLMNode(BaseNodeFactory):
             if tools and has_tool_support:
                 logger.debug(f"Using native tool calling with {len(tools)} tools")
 
+                # Convert dicts to Message objects for port wrapper compatibility
+                message_objects = [Message(**msg) for msg in messages]
+
                 # Call with tools
                 response = await llm_port.aresponse_with_tools(
-                    messages=messages,
+                    messages=message_objects,
                     tools=tools,
                     tool_choice=tool_choice,
                 )
@@ -246,8 +250,11 @@ class RawLLMNode(BaseNodeFactory):
             # Fallback to standard aresponse
             logger.debug(f"Using standard LLM call with {len(messages)} messages")
 
+            # Convert dicts to Message objects for port wrapper compatibility
+            message_objects = [Message(**msg) for msg in messages]
+
             # Call LLM with messages as positional argument
-            response = await llm_port.aresponse(messages)
+            response = await llm_port.aresponse(message_objects)
 
             # Return raw text response
             return {"text": response or "", "tool_calls": None, "finish_reason": None}
