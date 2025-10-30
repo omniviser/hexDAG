@@ -1,3 +1,5 @@
+## v0.4.0 (2025-10-30)
+
 ## v0.4.0-a1 (2025-10-30)
 
 ### Features
@@ -189,3 +191,8 @@ Merged PR 2225: refactor
 Final refactor
 
 Related work items: #1655, #1656, #1657, #1658, #1667, #1673, #1716, #1909, #1910, #1913, #1936, #1966, #2006, #2011
+
+## Version Release: 0.4.0a2
+Merged PR 2348: feat: schemas
+
+Related work items: #2152
