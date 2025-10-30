@@ -24,13 +24,17 @@ class MockLLM(LLM):
     call_count: int
     last_messages: MessageList | None
     should_raise: bool
+    mock_tool_calls: list[dict[str, Any] | list[dict[str, Any]]] | None
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize with configuration.
 
         Args
         ----
-            **kwargs: Configuration options (responses, delay_seconds)
+            **kwargs: Configuration options
+                - responses: List of text responses or single response string
+                - delay_seconds: Delay before returning responses
+                - mock_tool_calls: List of tool call configurations for testing
         """
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
 
@@ -43,6 +47,9 @@ class MockLLM(LLM):
                 self.responses = responses
         else:
             self.responses = ['{"result": "Mock response"}']
+
+        # Process mock tool calls
+        self.mock_tool_calls = kwargs.get("mock_tool_calls")
 
         # Non-config state
         self.call_count = 0
@@ -89,15 +96,68 @@ class MockLLM(LLM):
         tools: list[dict[str, Any]],
         tool_choice: str | dict[str, Any] = "auto",
     ) -> Any:
-        """Mock implementation of tool calling - returns response without tools.
+        """Mock implementation of tool calling with configurable tool call simulation.
 
-        For testing purposes, this just returns a regular response without
-        actually calling any tools. Real adapters would parse and execute tools.
+        For testing purposes, this can simulate tool calls based on configuration.
+        If mock_tool_calls are configured, it will return those. Otherwise, it
+        returns a regular response without tool calls.
+
+        Examples
+        --------
+        Configure mock to return tool calls::
+
+            mock_llm = MockLLM(
+                responses=["I'll search for that"],
+                mock_tool_calls=[
+                    {
+                        "id": "call_123",
+                        "name": "search",
+                        "arguments": {"query": "test"}
+                    }
+                ]
+            )
         """
-        from hexdag.core.ports.llm import LLMResponse
+        from hexdag.core.ports.llm import LLMResponse, ToolCall
 
         # Get regular response
         response_text = await self.aresponse(messages)
+
+        # Check if mock tool calls are configured
+        mock_tool_calls = getattr(self, "mock_tool_calls", None)
+
+        if mock_tool_calls and self.call_count <= len(mock_tool_calls):
+            # Return configured tool calls
+            tool_call_data = (
+                mock_tool_calls[self.call_count - 1]
+                if self.call_count <= len(mock_tool_calls)
+                else mock_tool_calls[-1]
+            )
+
+            if isinstance(tool_call_data, dict):
+                tool_calls_list = [
+                    ToolCall(
+                        id=tool_call_data.get("id", "call_mock"),
+                        name=tool_call_data.get("name", "mock_tool"),
+                        arguments=tool_call_data.get("arguments", {}),
+                    )
+                ]
+            elif isinstance(tool_call_data, list):
+                tool_calls_list = [
+                    ToolCall(
+                        id=tc.get("id", f"call_mock_{i}"),
+                        name=tc.get("name", "mock_tool"),
+                        arguments=tc.get("arguments", {}),
+                    )
+                    for i, tc in enumerate(tool_call_data)
+                ]
+            else:
+                tool_calls_list = None
+
+            return LLMResponse(
+                content=response_text,
+                tool_calls=tool_calls_list,
+                finish_reason="tool_calls" if tool_calls_list else "stop",
+            )
 
         # Return as LLMResponse without tool calls
         return LLMResponse(content=response_text, tool_calls=None, finish_reason="stop")

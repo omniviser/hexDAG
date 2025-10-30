@@ -1,118 +1,52 @@
 {
-    "$defs": {
-        "Policy": {
-            "properties": {
-                "events": {
-                    "items": {
-                        "enum": [
-                            "node_started",
-                            "node_completed",
-                            "node_failed",
-                            "dag_started",
-                            "dag_completed",
-                            "dag_failed"
-                        ],
-                        "type": "string"
-                    },
-                    "type": "array"
-                },
-                "handler": {
-                    "type": "string"
-                },
-                "name": {
-                    "minLength": 1,
-                    "type": "string"
-                },
-                "priority": {
-                    "default": 0,
-                    "type": "integer"
-                },
-                "type": {
-                    "default": "user",
-                    "enum": [
-                        "core",
-                        "plugin",
-                        "user",
-                        "temporary"
-                    ],
-                    "type": "string"
-                }
-            },
-            "required": [
-                "name",
-                "type",
-                "handler"
-            ],
-            "type": "object"
-        },
-        "PolicyContext": {
-            "description": "Context provided to policy handlers",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Policy configuration for execution control and error handling",
+    "properties": {
+        "context": {
+            "description": "Policy evaluation context",
             "properties": {
                 "attempt": {
-                    "default": 1,
-                    "minimum": 1,
+                    "description": "Attempt number (1-based)",
                     "type": "integer"
                 },
                 "dag_id": {
+                    "description": "DAG identifier",
                     "type": "string"
                 },
                 "error": {
+                    "description": "Exception details (if any)",
                     "type": [
                         "object",
                         "null"
                     ]
                 },
                 "event": {
+                    "description": "Event that triggered evaluation",
                     "type": "object"
                 },
                 "metadata": {
-                    "additionalProperties": true,
+                    "description": "Additional context",
                     "type": [
                         "object",
                         "null"
                     ]
                 },
                 "node_id": {
+                    "description": "Current node (if applicable)",
                     "type": [
                         "string",
                         "null"
                     ]
                 },
                 "wave_index": {
-                    "default": 0,
+                    "description": "Current wave index",
                     "type": "integer"
                 }
             },
             "type": "object"
         },
-        "PolicyResponse": {
-            "properties": {
-                "data": {},
-                "metadata": {
-                    "additionalProperties": true,
-                    "type": [
-                        "object",
-                        "null"
-                    ]
-                },
-                "signal": {
-                    "default": "proceed",
-                    "enum": [
-                        "proceed",
-                        "retry",
-                        "skip",
-                        "fallback",
-                        "fail"
-                    ],
-                    "type": "string"
-                }
-            },
-            "required": [
-                "signal"
-            ],
-            "type": "object"
-        },
-        "PolicySignals": {
+        "signal": {
+            "description": "Policy decision signal",
             "enum": [
                 "proceed",
                 "retry",
@@ -123,17 +57,6 @@
             "type": "string"
         }
     },
-    "$id": "https://hexdag.dev/schemas/policy.json",
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "description": "JSON Schema for HexDAG policy management (auto-generated)",
-    "properties": {
-        "policies": {
-            "items": {
-                "$ref": "#/$defs/Policy"
-            },
-            "type": "array"
-        }
-    },
-    "title": "HexDAG Policy Configuration",
+    "title": "hexDAG Policy Configuration",
     "type": "object"
 }
