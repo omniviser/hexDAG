@@ -13,13 +13,14 @@ Plugins provide clear value:
 
 import os
 import re
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from functools import lru_cache, singledispatch
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeGuard, cast
 
 import yaml
-from jinja2 import Environment, TemplateSyntaxError, UndefinedError
+from jinja2 import TemplateSyntaxError, UndefinedError
+from jinja2.sandbox import SandboxedEnvironment
 
 from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.configurable import ConfigurableMacro
@@ -41,6 +42,16 @@ class YamlPipelineBuilderError(Exception):
     """YAML pipeline building errors."""
 
     pass
+
+
+# ============================================================================
+# Type Guards
+# ============================================================================
+
+
+def _is_dict_config(value: Any) -> TypeGuard[dict[str, Any]]:
+    """Type guard to verify value is a dictionary."""
+    return isinstance(value, dict)
 
 
 # ============================================================================
@@ -95,10 +106,15 @@ class YamlPipelineBuilder:
     6. Extract pipeline config
     """
 
-    def __init__(self) -> None:
-        """Initialize builder."""
+    def __init__(self, base_path: Path | None = None) -> None:
+        """Initialize builder.
+
+        Args:
+            base_path: Base directory for resolving includes (default: cwd)
+        """
         ensure_bootstrapped()
 
+        self.base_path = base_path or Path.cwd()
         self.validator = YamlValidator()
 
         # Plugins
@@ -110,6 +126,7 @@ class YamlPipelineBuilder:
     def _register_default_plugins(self) -> None:
         """Register default plugins for common use cases."""
         # Preprocessing plugins (run before building)
+        self.preprocess_plugins.append(IncludePreprocessPlugin(base_path=self.base_path))
         self.preprocess_plugins.append(EnvironmentVariablePlugin())
         self.preprocess_plugins.append(TemplatePlugin())
 
@@ -117,14 +134,53 @@ class YamlPipelineBuilder:
         self.entity_plugins.append(MacroEntityPlugin())
         self.entity_plugins.append(NodeEntityPlugin(self))
 
+    @contextmanager
+    def _temporary_base_path(self, new_base: Path) -> Any:
+        """Context manager for temporarily changing base_path.
+
+        Args:
+            new_base: Temporary base path to use
+
+        Yields:
+            None
+        """
+        original_base = self.base_path
+        self.base_path = new_base
+
+        # Update include plugin base paths
+        for plugin in self.preprocess_plugins:
+            if isinstance(plugin, IncludePreprocessPlugin):
+                plugin.base_path = new_base
+
+        try:
+            yield
+        finally:
+            # Always restore original state
+            self.base_path = original_base
+            for plugin in self.preprocess_plugins:
+                if isinstance(plugin, IncludePreprocessPlugin):
+                    plugin.base_path = original_base
+
     # --- Public API ---
 
     def build_from_yaml_file(
         self, yaml_path: str, use_cache: bool = True
     ) -> tuple[DirectedGraph, PipelineConfig]:
-        """Build from YAML file."""
-        yaml_content = Path(yaml_path).read_text(encoding="utf-8")
-        return self.build_from_yaml_string(yaml_content, use_cache=use_cache)
+        """Build from YAML file.
+
+        Args:
+            yaml_path: Path to YAML file
+            use_cache: Whether to use cached YAML parsing
+
+        Returns:
+            Tuple of (DirectedGraph, PipelineConfig)
+        """
+        yaml_file = Path(yaml_path)
+        yaml_content = yaml_file.read_text(encoding="utf-8")
+
+        # Use context manager to temporarily change base_path for relative includes
+        with self._temporary_base_path(yaml_file.parent):
+            return self.build_from_yaml_string(yaml_content, use_cache=use_cache)
 
     def build_from_yaml_string(
         self, yaml_content: str, use_cache: bool = True, environment: str | None = None
@@ -136,12 +192,12 @@ class YamlPipelineBuilder:
         # Step 2: Select environment
         config = self._select_environment(documents, environment)
 
-        # Step 3: Validate structure
-        config = self._validate_config(config)
-
-        # Step 4: Preprocess (env vars, templating, etc.)
+        # Step 3: Preprocess FIRST (includes must resolve before validation)
         for plugin in self.preprocess_plugins:
             config = plugin.process(config)
+
+        # Step 4: Validate structure (after includes are resolved)
+        config = self._validate_config(config)
 
         # Step 5: Build graph
         graph = self._build_graph(config)
@@ -350,20 +406,23 @@ class MacroEntityPlugin:
     def _merge_subgraph(
         graph: DirectedGraph, subgraph: DirectedGraph, external_deps: list[str]
     ) -> None:
-        """Merge subgraph into main graph with external dependencies."""
+        """Merge subgraph into main graph with external dependencies.
+
+        Optimized to avoid unnecessary graph copies when no external dependencies exist.
+        """
         if not external_deps:
+            # Fast path: direct merge when no external dependencies
             graph |= subgraph
         else:
-            # Add external deps to entry nodes
-            modified = DirectedGraph()
+            # Only process entry nodes that need external dependencies
+            # Use in-place merge for better performance
             for node in subgraph.nodes.values():
                 if not subgraph.get_dependencies(node.name):
                     # Entry node - add external dependencies
-                    modified += node.after(*external_deps)
+                    graph += node.after(*external_deps)
                 else:
-                    # Internal node - keep original
-                    modified += node
-            graph |= modified
+                    # Internal node - add as-is
+                    graph += node
 
     @staticmethod
     def _parse_macro_ref(ref: str) -> tuple[str, str]:
@@ -436,6 +495,174 @@ class NodeEntityPlugin:
 # ============================================================================
 
 
+class IncludePreprocessPlugin:
+    """Resolve !include directives for YAML file inclusion.
+
+    Supports two syntaxes:
+    1. Simple include: !include path/to/file.yaml
+    2. Anchor include: !include path/to/file.yaml#anchor_name
+
+    Security:
+    - Only allows relative paths (no absolute paths)
+    - Prevents directory traversal attacks (no ../ beyond project root)
+    - Detects circular includes
+
+    For comprehensive examples, see notebooks/03_yaml_includes_and_composition.ipynb
+    """
+
+    def __init__(self, base_path: Path | None = None, max_depth: int = 10):
+        """Initialize include plugin.
+
+        Args:
+            base_path: Base directory for resolving relative includes (changeable via context manager)
+            max_depth: Maximum include nesting depth to prevent circular includes
+        """
+        self.base_path = base_path or Path.cwd()
+        self.project_root = self.base_path  # Fixed project root for security validation
+        self.max_depth = max_depth
+        self._include_stack: list[Path] = []
+
+    def process(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Process !include directives recursively."""
+        result = self._resolve_includes(config, self.base_path)
+        if not _is_dict_config(result):
+            raise TypeError(
+                f"Include processing must return a dictionary, got {type(result).__name__}. "
+                "Check that your included files resolve to valid YAML dictionaries."
+            )
+        return result
+
+    def _resolve_includes(
+        self, obj: Any, current_base: Path, depth: int = 0
+    ) -> dict[str, Any] | list[Any] | Any:
+        """Recursively resolve !include directives.
+
+        Args:
+            obj: Object to process (dict, list, or primitive)
+            current_base: Base path for resolving relative includes
+            depth: Current recursion depth
+
+        Returns:
+            Processed object with includes resolved
+        """
+        if depth > self.max_depth:
+            raise YamlPipelineBuilderError(
+                f"Include nesting too deep (max {self.max_depth}). "
+                f"Possible circular include in: {' -> '.join(str(p) for p in self._include_stack)}"
+            )
+
+        if isinstance(obj, dict):
+            # Check for !include directive
+            if "!include" in obj and len(obj) == 1:
+                include_spec = obj["!include"]
+                return self._load_include(include_spec, current_base, depth)
+
+            # Recurse into dict values
+            return {k: self._resolve_includes(v, current_base, depth) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            # Process each list item and flatten nested lists from includes
+            result = []
+            for item in obj:
+                resolved = self._resolve_includes(item, current_base, depth)
+                # Flatten: if an include returns a list, extend rather than append
+                if isinstance(resolved, list):
+                    result.extend(resolved)
+                else:
+                    result.append(resolved)
+            return result
+
+        return obj
+
+    def _load_include(self, include_spec: str, current_base: Path, depth: int) -> Any:
+        """Load content from included file.
+
+        Args:
+            include_spec: Include specification (e.g., "file.yaml" or "file.yaml#anchor")
+            current_base: Base path for resolving relative paths
+            depth: Current recursion depth
+
+        Returns:
+            Loaded and processed content from included file
+        """
+        # Parse include specification
+        if "#" in include_spec:
+            file_path_str, anchor = include_spec.split("#", 1)
+        else:
+            file_path_str, anchor = include_spec, None
+
+        # Resolve file path
+        file_path = self._resolve_path(file_path_str, current_base)
+
+        # Check for circular includes
+        if file_path in self._include_stack:
+            cycle = " -> ".join(str(p) for p in self._include_stack + [file_path])
+            raise YamlPipelineBuilderError(f"Circular include detected: {cycle}")
+
+        # Load YAML file
+        try:
+            self._include_stack.append(file_path)
+            content = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+
+            # Extract anchor if specified
+            if anchor:
+                if not isinstance(content, dict) or anchor not in content:
+                    raise YamlPipelineBuilderError(
+                        f"Anchor '{anchor}' not found in {file_path}. "
+                        f"Available keys: {list(content.keys()) if isinstance(content, dict) else 'N/A'}"
+                    )
+                content = content[anchor]
+
+            # Recursively resolve includes in loaded content
+            return self._resolve_includes(content, file_path.parent, depth + 1)
+
+        except FileNotFoundError as e:
+            raise YamlPipelineBuilderError(
+                f"Include file not found: {file_path}\nSearched relative to: {current_base}"
+            ) from e
+        except yaml.YAMLError as e:
+            raise YamlPipelineBuilderError(f"Invalid YAML in included file {file_path}: {e}") from e
+        finally:
+            self._include_stack.pop()
+
+    def _resolve_path(self, path_str: str, current_base: Path) -> Path:
+        """Resolve and validate include path.
+
+        Args:
+            path_str: Path string from !include directive
+            current_base: Base path for resolving relative paths
+
+        Returns:
+            Validated absolute path
+
+        Raises:
+            YamlPipelineBuilderError: If path is invalid or potentially malicious
+        """
+        # Prevent absolute paths
+        if Path(path_str).is_absolute():
+            raise YamlPipelineBuilderError(
+                f"Absolute paths not allowed in !include: {path_str}\n"
+                "Use relative paths only for security."
+            )
+
+        # Resolve path relative to current base
+        resolved = (current_base / path_str).resolve()
+
+        # Prevent directory traversal outside project root
+        # Use the resolved project_root (not base_path) to handle symlinks properly
+        resolved_root = self.project_root.resolve()
+        try:
+            resolved.relative_to(resolved_root)
+        except ValueError as e:
+            raise YamlPipelineBuilderError(
+                f"Include path traverses outside project root: {path_str}\n"
+                f"Project root: {resolved_root}\n"
+                f"Attempted path: {resolved}"
+            ) from e
+
+        return resolved
+
+
 class EnvironmentVariablePlugin:
     """Resolve ${VAR} and ${VAR:default} in YAML."""
 
@@ -444,18 +671,29 @@ class EnvironmentVariablePlugin:
     def process(self, config: dict[str, Any]) -> dict[str, Any]:
         """Recursively resolve environment variables."""
         result = _resolve_env_vars(config, self.ENV_VAR_PATTERN)
-        assert isinstance(result, dict)  # nosec B101 - type narrowing
+        if not _is_dict_config(result):
+            raise TypeError(
+                f"Environment variable resolution must return a dictionary, "
+                f"got {type(result).__name__}"
+            )
         return result
 
 
 @singledispatch
 def _resolve_env_vars(obj: Any, pattern: re.Pattern[str]) -> Any:
-    """Recursively resolve ${VAR} in any structure."""
+    """Recursively resolve ${VAR} in any structure.
+
+    Returns:
+        - For primitives: Returns the primitive unchanged
+        - For strings: Returns str | int | float | bool (with type coercion)
+        - For dicts: Returns dict[str, Any]
+        - For lists: Returns list[Any]
+    """
     return obj
 
 
-@_resolve_env_vars.register
-def _(obj: str, pattern: re.Pattern[str]) -> str | int | float | bool:
+@_resolve_env_vars.register(str)
+def _resolve_env_vars_str(obj: str, pattern: re.Pattern[str]) -> str | int | float | bool:
     """Resolve ${VAR} in strings with type coercion."""
 
     def replacer(match: re.Match[str]) -> str:
@@ -481,40 +719,53 @@ def _(obj: str, pattern: re.Pattern[str]) -> str | int | float | bool:
 
 
 @_resolve_env_vars.register(dict)
-def _(obj: dict, pattern: re.Pattern[str]) -> dict[str, Any]:
+def _resolve_env_vars_dict(obj: dict, pattern: re.Pattern[str]) -> dict[str, Any]:
     """Resolve ${VAR} in dict values."""
     return {k: _resolve_env_vars(v, pattern) for k, v in obj.items()}
 
 
 @_resolve_env_vars.register(list)
-def _(obj: list, pattern: re.Pattern[str]) -> list[Any]:
+def _resolve_env_vars_list(obj: list, pattern: re.Pattern[str]) -> list[Any]:
     """Resolve ${VAR} in list items."""
     return [_resolve_env_vars(item, pattern) for item in obj]
 
 
 class TemplatePlugin:
-    """Render Jinja2 templates in YAML (e.g., {{ variables.model }})."""
+    """Render Jinja2 templates in YAML (e.g., {{ variables.model }}).
+
+    Uses SandboxedEnvironment to prevent arbitrary code execution.
+    """
 
     def __init__(self) -> None:
-        # YAML config templates don't contain HTML, so autoescape=False is safe
-        # This is for configuration files, not web content
-        self.env = Environment(autoescape=False, keep_trailing_newline=True)  # nosec B701
+        # Use sandboxed environment to prevent code execution attacks
+        # Even though this is for config files, defense in depth is important
+        self.env = SandboxedEnvironment(autoescape=False, keep_trailing_newline=True)
 
     def process(self, config: dict[str, Any]) -> dict[str, Any]:
         """Render Jinja2 templates with config as context."""
         result = _render_templates(config, config, self.env)
-        assert isinstance(result, dict)  # nosec B101 - type narrowing
+        if not _is_dict_config(result):
+            raise TypeError(
+                f"Template rendering must return a dictionary, got {type(result).__name__}"
+            )
         return result
 
 
 @singledispatch
 def _render_templates(obj: Any, context: dict[str, Any], env: Any) -> Any:
-    """Recursively render Jinja2 templates."""
+    """Recursively render Jinja2 templates.
+
+    Returns:
+        - For primitives: Returns the primitive unchanged
+        - For strings: Returns str | int | float | bool (with type coercion)
+        - For dicts: Returns dict[str, Any]
+        - For lists: Returns list[Any]
+    """
     return obj
 
 
-@_render_templates.register
-def _(obj: str, context: dict[str, Any], env: Any) -> str | int | float | bool:
+@_render_templates.register(str)
+def _render_templates_str(obj: str, context: dict[str, Any], env: Any) -> str | int | float | bool:
     """Render Jinja2 template in string."""
     if "{{" not in obj and "{%" not in obj:
         return obj
@@ -542,13 +793,13 @@ def _(obj: str, context: dict[str, Any], env: Any) -> str | int | float | bool:
 
 
 @_render_templates.register(dict)
-def _(obj: dict, context: dict[str, Any], env: Any) -> dict[str, Any]:
+def _render_templates_dict(obj: dict, context: dict[str, Any], env: Any) -> dict[str, Any]:
     """Render templates in dict values."""
     return {k: _render_templates(v, context, env) for k, v in obj.items()}
 
 
 @_render_templates.register(list)
-def _(obj: list, context: dict[str, Any], env: Any) -> list[Any]:
+def _render_templates_list(obj: list, context: dict[str, Any], env: Any) -> list[Any]:
     """Render templates in list items."""
     return [_render_templates(item, context, env) for item in obj]
 
