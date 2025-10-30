@@ -11,6 +11,7 @@ from hexdag.core.ports.database import (
     SupportsVectorSearch,
     TableSchema,
 )
+from hexdag.core.ports.embedding import Embedding
 from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -36,6 +37,7 @@ __all__ = [
     "ColumnSchema",
     "ColumnType",
     "DatabasePort",
+    "Embedding",
     "ExecutionResult",
     "ExecutionTask",
     "ExecutorPort",
