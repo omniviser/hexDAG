@@ -1,6 +1,7 @@
 """Function node factory for creating function-based pipeline nodes."""
 
 import asyncio
+import importlib
 import inspect
 from collections.abc import Callable
 from typing import Any, get_type_hints
@@ -28,7 +29,7 @@ class FunctionNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
-        fn: Callable[..., Any],
+        fn: Callable[..., Any] | str,
         input_schema: dict[str, Any] | type[BaseModel] | None = None,
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
@@ -40,7 +41,7 @@ class FunctionNode(BaseNodeFactory):
         Args:
         ----
             name: Node name
-            fn: Function to execute
+            fn: Function to execute (callable or module path string like 'mymodule.myfunc')
             input_schema: Input schema for validation (if None, inferred from function)
             output_schema: Output schema for validation (if None, inferred from function)
             deps: List of dependency node names
@@ -52,8 +53,11 @@ class FunctionNode(BaseNodeFactory):
         NodeSpec
             Complete node specification ready for execution
         """
+        # Resolve function from string path if needed
+        resolved_fn = self._resolve_function(fn)
+
         # Validate function can be used properly
-        self._validate_function(fn)
+        self._validate_function(resolved_fn)
 
         if input_mapping is not None:
             kwargs["input_mapping"] = input_mapping
@@ -68,7 +72,7 @@ class FunctionNode(BaseNodeFactory):
 
         # Infer schemas from function annotations if not provided
         if input_schema is None or output_schema is None:
-            inferred_input, inferred_output = self._infer_schemas_from_function(fn)
+            inferred_input, inferred_output = self._infer_schemas_from_function(resolved_fn)
             input_schema = input_schema or inferred_input
             output_schema = output_schema or inferred_output
 
@@ -98,7 +102,7 @@ class FunctionNode(BaseNodeFactory):
         else:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
-        wrapped_fn = self._create_wrapped_function(name, fn, input_model, output_model)
+        wrapped_fn = self._create_wrapped_function(name, resolved_fn, input_model, output_model)
 
         return NodeSpec(
             name=name,
@@ -153,6 +157,58 @@ class FunctionNode(BaseNodeFactory):
         wrapped_fn.__doc__ = getattr(fn, "__doc__", f"Wrapped function: {name}")
 
         return wrapped_fn
+
+    def _resolve_function(self, fn: Callable[..., Any] | str) -> Callable[..., Any]:
+        """Resolve function from callable or module path string.
+
+        Args
+        ----
+            fn: Function (callable) or module path string (e.g., 'mymodule.myfunc')
+
+        Returns
+        -------
+        Callable[..., Any]
+            The resolved callable function
+
+        Raises
+        ------
+        TypeError
+            If fn is not a callable or string
+        ValueError
+            If string path cannot be resolved to a callable
+        """
+        if callable(fn):
+            return fn
+
+        # At this point, fn should be a string based on type hints
+        # But we validate at runtime for safety
+        if not isinstance(fn, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                f"Expected a callable function or string module path, got {type(fn).__name__}"
+            )
+
+        # Parse module path string
+        if "." not in fn:
+            raise ValueError(f"Function path must be in format 'module.function', got: {fn}")
+
+        # Split the module path
+        module_path, func_name = fn.rsplit(".", 1)
+
+        try:
+            module = importlib.import_module(module_path)
+            resolved_fn = getattr(module, func_name)
+
+            if not callable(resolved_fn):
+                raise ValueError(
+                    f"Resolved '{fn}' is not callable (got {type(resolved_fn).__name__})"
+                )
+
+            return resolved_fn  # type: ignore[no-any-return]
+
+        except ImportError as e:
+            raise ValueError(f"Could not import module from function path '{fn}': {e}") from e
+        except AttributeError as e:
+            raise ValueError(f"Function '{func_name}' not found in module '{module_path}'") from e
 
     def _validate_function(self, fn: Callable[..., Any]) -> None:
         """Validate that function can be properly wrapped.

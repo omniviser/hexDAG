@@ -533,3 +533,128 @@ class TestFunctionNode:
 
         assert node.params["input_mapping"] == expected_mappings
         assert node.deps == frozenset(["user_data", "validation", "scoring", "config"])
+
+
+class TestFunctionNodeStringResolution:
+    """Test function path string resolution feature."""
+
+    @pytest.fixture
+    def factory(self):
+        """Get function node factory from registry."""
+        ensure_bootstrapped()
+        return registry.get("function_node", namespace="core")
+
+    def test_resolve_function_from_string_path(self, factory):
+        """Test resolving a function from a module path string."""
+        # Use a known function from the standard library
+        node = factory("json_dumps", "json.dumps")
+
+        assert isinstance(node, NodeSpec)
+        assert node.name == "json_dumps"
+        # Verify node was created successfully
+        assert node.fn is not None
+
+    def test_resolve_function_from_os_module(self, factory):
+        """Test resolving a function from os module."""
+        node = factory("get_env", "os.getenv")
+
+        assert isinstance(node, NodeSpec)
+        assert node.name == "get_env"
+
+    def test_resolve_custom_module_function(self, factory):
+        """Test resolving a function from hexdag's own modules."""
+        # Use a simple function from hexdag itself
+        node = factory(
+            "is_schema_type",
+            "hexdag.core.protocols.is_schema_type",
+        )
+
+        assert isinstance(node, NodeSpec)
+        assert node.name == "is_schema_type"
+
+    def test_invalid_module_path_raises_error(self, factory):
+        """Test that invalid module path raises ValueError."""
+        with pytest.raises(ValueError, match="Could not import module"):
+            factory("invalid", "nonexistent.module.function")
+
+    def test_invalid_function_name_raises_error(self, factory):
+        """Test that invalid function name raises ValueError."""
+        with pytest.raises(ValueError, match="Function 'nonexistent' not found"):
+            factory("invalid", "json.nonexistent")
+
+    def test_non_callable_raises_error(self, factory):
+        """Test that non-callable attributes raise ValueError."""
+        with pytest.raises(ValueError, match="is not callable"):
+            # json.__version__ is a string, not callable
+            factory("invalid", "json.__version__")
+
+    def test_malformed_path_raises_error(self, factory):
+        """Test that malformed paths (no dot) raise ValueError."""
+        with pytest.raises(ValueError, match="Function path must be in format 'module.function'"):
+            factory("invalid", "justafunctionname")
+
+    def test_function_path_with_schemas(self, factory):
+        """Test using function path string with input/output schemas."""
+        node = factory(
+            "json_dumps",
+            "json.dumps",
+            input_schema=dict,
+            output_schema=str,
+        )
+
+        assert node.in_model is not None
+        assert node.out_model is not None
+
+    def test_function_path_with_dependencies(self, factory):
+        """Test using function path string with dependencies."""
+        node = factory(
+            "get_env",
+            "os.getenv",
+            deps=["config", "secrets"],
+        )
+
+        assert node.deps == frozenset(["config", "secrets"])
+
+    @pytest.mark.asyncio
+    async def test_resolved_function_execution(self, factory):
+        """Test that resolved functions can be executed."""
+        import json
+
+        node = factory("json_dumps", "json.dumps")
+
+        # The wrapped function should work
+        result = await node.fn({"key": "value"})
+
+        # Should return JSON string
+        assert isinstance(result, str)
+        assert json.loads(result) == {"key": "value"}
+
+    def test_callable_still_works(self, factory):
+        """Test that passing a callable directly still works."""
+
+        def my_func(x: int) -> int:
+            return x + 1
+
+        node = factory("my_func", my_func)
+
+        assert isinstance(node, NodeSpec)
+        assert node.name == "my_func"
+
+    def test_invalid_type_raises_error(self, factory):
+        """Test that invalid fn type raises TypeError."""
+        with pytest.raises(TypeError, match="Expected a callable function or string module path"):
+            factory("invalid", 12345)
+
+        with pytest.raises(TypeError, match="Expected a callable function or string module path"):
+            factory("invalid", ["not", "a", "function"])
+
+    def test_nested_module_path(self, factory):
+        """Test resolving function from deeply nested module."""
+        # Use a nested standard library path
+        node = factory(
+            "get_loader",
+            "importlib.util.find_spec",
+        )
+
+        assert isinstance(node, NodeSpec)
+        assert node.name == "get_loader"
