@@ -1,0 +1,12 @@
+{
+    "recommendations": [
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "eamodio.gitlens",
+        "yzhang.markdown-all-in-one",
+        "charliermarsh.ruff"
+    ]
+}
