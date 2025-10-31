@@ -242,12 +242,17 @@ spec:
   - Example: `template: "{{dependency.output}}"` → Rendered when node executes
   - Allows templates to access outputs from dependency nodes
 
-- **Pipeline spec fields**: Rendered at build time (except node specs)
+- **Pipeline outputs**: Preserved for runtime rendering after execution
+  - Example: `outputs: {result: "{{analyzer.analysis}}"}` → Rendered after nodes complete
+  - Allows mapping node results to pipeline outputs
+
+- **Pipeline spec fields**: Rendered at build time (except node specs and outputs)
   - Example: `variables`, `ports`, `policies` support templating
 
 This two-phase approach enables:
 - ✅ Dynamic pipeline configuration from environment/config at build time
 - ✅ Dynamic prompt generation from dependency outputs at runtime
+- ✅ Dynamic output mapping from node execution results
 - ✅ Clean separation between configuration and execution concerns
 
 #### **5. Macro System**

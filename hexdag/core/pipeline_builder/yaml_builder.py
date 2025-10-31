@@ -753,8 +753,9 @@ class TemplatePlugin:
 
     **Runtime Rendering** (node execution context):
     - Node spec fields (e.g., template, prompt_template, initial_prompt)
-    - Preserved to allow access to dependency outputs at runtime
-    - Enables dynamic prompts based on previous node results
+    - Pipeline outputs (e.g., spec.outputs with {{node.result}} references)
+    - Preserved to allow access to dependency/node outputs at runtime
+    - Enables dynamic prompts and output mapping based on execution results
 
     Example:
         ```yaml
@@ -767,6 +768,8 @@ class TemplatePlugin:
                 name: "{{ spec.variables.node_name }}"  # Build-time: renders to "analyzer"
               spec:
                 template: "{{input}}"  # Runtime: renders when node executes
+          outputs:
+            result: "{{analyzer.analysis}}"  # Runtime: rendered after pipeline completes
         ```
 
     Security:
@@ -833,11 +836,13 @@ def _render_templates_str(obj: str, context: dict[str, Any], env: Any) -> str | 
 def _render_templates_dict(obj: dict, context: dict[str, Any], env: Any) -> dict[str, Any]:
     """Render templates in dict values.
 
-    Skip rendering for node spec fields to avoid conflicts between
-    YAML-level templating and node-level template strings.
+    Skip rendering for node spec fields and pipeline outputs to avoid conflicts between
+    YAML-level templating and runtime template strings.
 
-    Strategy: Node specs should preserve template strings for runtime rendering,
-    while metadata and config should still support YAML-level templating.
+    Strategy:
+    - Node specs: Preserve for runtime rendering with dependency outputs
+    - Pipeline outputs: Preserve for runtime rendering with node results
+    - Metadata and config: Render at build time with YAML context
     """
     result = {}
     for k, v in obj.items():
@@ -853,6 +858,11 @@ def _render_templates_dict(obj: dict, context: dict[str, Any], env: Any) -> dict
         ):
             # This is a node spec - preserve template strings for runtime rendering
             result[k] = v  # Preserve entire spec as-is
+        # Also preserve 'outputs' field in Pipeline spec - references node results
+        elif k == "outputs" and isinstance(v, dict):
+            # Pipeline outputs reference node results (e.g., {{node.output}})
+            # Preserve for runtime rendering after nodes execute
+            result[k] = v
         else:
             result[k] = _render_templates(v, context, env)
     return result
