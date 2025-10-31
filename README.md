@@ -429,7 +429,7 @@ Stop writing orchestration code. Start declaring intelligent systems.
 ### 🚀 Request Beta Access
 Limited to 100 teams
 
-[![Beta](https://img.shields.io/badge/🎯_Join_Beta-blue?style=for-the-badge)](https://hexdag.ai/beta)
+[![Beta](https://img.shields.io/badge/🎯_Join_Beta-blue?style=for-the-badge)](https://forms.gle/ZDNupq2pqbVPHMAA8)
 
 *73 spots remaining*
 
