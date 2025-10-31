@@ -201,3 +201,16 @@ Merged PR 2399: fix: revert bug
 NOTE: it only reverts the bug, it does not introduce pre-release handling
 
 Related work items: #2159
+
+## Version Release: 0.5.0a0
+Merged PR 2426: feat: [alpha] pre-release version support
+
+Just in PR title include
+
+[rc]
+[alpha]
+[beta]
+
+and lets go
+
+Related work items: #2160
