@@ -744,9 +744,33 @@ def _resolve_env_vars_list(obj: list, pattern: re.Pattern[str]) -> list[Any]:
 
 
 class TemplatePlugin:
-    """Render Jinja2 templates in YAML (e.g., {{ variables.model }}).
+    """Render Jinja2 templates in YAML with two-phase rendering strategy.
 
-    Uses SandboxedEnvironment to prevent arbitrary code execution.
+    **Build-time Rendering** (YAML configuration context):
+    - Metadata fields (e.g., node names, descriptions)
+    - Pipeline-level spec fields (e.g., variables, ports, policies)
+    - Enables dynamic configuration from environment/variables
+
+    **Runtime Rendering** (node execution context):
+    - Node spec fields (e.g., template, prompt_template, initial_prompt)
+    - Preserved to allow access to dependency outputs at runtime
+    - Enables dynamic prompts based on previous node results
+
+    Example:
+        ```yaml
+        spec:
+          variables:
+            node_name: analyzer
+          nodes:
+            - kind: llm_node
+              metadata:
+                name: "{{ spec.variables.node_name }}"  # Build-time: renders to "analyzer"
+              spec:
+                template: "{{input}}"  # Runtime: renders when node executes
+        ```
+
+    Security:
+        Uses SandboxedEnvironment to prevent arbitrary code execution.
     """
 
     def __init__(self) -> None:
@@ -809,15 +833,26 @@ def _render_templates_str(obj: str, context: dict[str, Any], env: Any) -> str | 
 def _render_templates_dict(obj: dict, context: dict[str, Any], env: Any) -> dict[str, Any]:
     """Render templates in dict values.
 
-    Skip rendering for node template fields to avoid conflicts between
+    Skip rendering for node spec fields to avoid conflicts between
     YAML-level templating and node-level template strings.
+
+    Strategy: Node specs should preserve template strings for runtime rendering,
+    while metadata and config should still support YAML-level templating.
     """
     result = {}
     for k, v in obj.items():
-        # Skip rendering for 'template' keys in node specs to preserve {{...}} syntax
-        # for node-level template rendering (LLM nodes, etc.)
-        if k == "template" and isinstance(v, str):
-            result[k] = v  # Preserve as-is
+        # Check if this is a node spec (not a Pipeline spec) by looking for the 'kind' sibling key
+        # Node kinds end with '_node' (e.g., 'prompt_node', 'llm_node', 'function_node')
+        # Pipeline kind is 'Pipeline' - we should NOT skip its spec
+        if (
+            k == "spec"
+            and isinstance(v, dict)
+            and "kind" in obj
+            and isinstance(obj.get("kind"), str)
+            and obj["kind"] != "Pipeline"
+        ):
+            # This is a node spec - preserve template strings for runtime rendering
+            result[k] = v  # Preserve entire spec as-is
         else:
             result[k] = _render_templates(v, context, env)
     return result
