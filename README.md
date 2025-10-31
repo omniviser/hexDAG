@@ -1,28 +1,39 @@
-# 🚀 hexDAG - Production AI Orchestration That Actually Works
+**hexDAG - Production AI Orchestration with YAML configuration.That atually works.**
 
 <div align="center">
 
-### Build Investment-Grade AI Systems with Just YAML
+# Join Beta ⬇️
 
 [![Beta](https://img.shields.io/badge/🎯-Join_Private_Beta-blue?style=for-the-badge)](https://forms.gle/ZDNupq2pqbVPHMAA8)
-[![Python 3.12+](https://img.shields.io/badge/Python-3.11+-green?style=for-the-badge)](https://www.python.org)
 
 </div>
 
----
+**The Problem**
+**Every AI framework promises simplicity. Then you hit production and... you know what happens**
 
-## 🎯 Real Problem, Real Solution
+Most AI frameworks break at scale. You start with a prototype, then need parallel execution, memory, error handling, compliance. 
+What began as simple code... becomes thousands of lines of orchestration logic you can't test or maintain.
+Models are not the problem. Look at the architecture first.
 
-**Every AI framework promises simplicity. Then you hit production.**
+**The Solution**
+hexDAG treats AI agents as components in deterministic workflows. Declare what should happen in YAML. The framework handles execution.
 
-You need parallel agents, memory persistence, compliance policies, error handling, and suddenly your "simple" LangChain app is 5,000 lines of spaghetti code and breaks in production.
+_Three principles of hexDAG:_
 
-## 💡 What If Building Production AI Was This Simple?
+1. Deterministic core - if-else beats LLM for control flow
+2. Declarative complexity - YAML is code. Complex behavior from simple rules
+3. Scalable infrastructure - retry, timeout, cleanup belong in the framework
 
-## Example 1: Investment Research Platform
+Result: AI systems that are fast, predictable, testable.
+
+
+**Example 1: Investment Research Platform**
+
+This runs three agents in parallel (fundamental + technical) → risk synthesis → actionable research. 
+Compliance runs automatically. State persists across sessions.
 
 <details>
-<summary>📊 Click to see the complete YAML (yes, this is production code)</summary>
+<summary>Click to see the complete YAML (yes, this is production code)</summary>
 
 ```yaml
 apiVersion: hexdag/v1
@@ -138,10 +149,11 @@ spec:
 
 **Result:** Three AI agents analyze in parallel → Risk assessment → Synthesized report. All with compliance, audit trails, and position sizing built-in.
 
-### Example 2: Automated Code Review & Security Audit
+**Example 2: Automated code review & Security audit**
+Security scanner and code reviewer run in parallel. Results merge in interactive discussion. License violations block automatically. 
 
 <details>
-<summary>🔒 Click to see the security audit pipeline</summary>
+<summary>Click to see the security audit pipeline</summary>
 
 ```yaml
 apiVersion: hexdag/v1
@@ -245,11 +257,15 @@ spec:
 </details>
 
 **Result:** Parallel security + code review → AI synthesis → Actionable feedback. Catches vulnerabilities, license issues, and performance problems automatically.
-**That's it.** No boilerplate. No complex orchestration code. Just declare what you want.
+**That's it.** 
+No boilerplate. 
+No complex orchestration code. 
+Just declare what you want.
 
-## 🔥 The Power of Dynamic Graphs
 
-hexDAG's **DynamicDirectedGraph** adapts in real-time based on runtime conditions:
+**The Power of dynamic graphs**
+
+**DynamicDirectedGraph** in hexDag adapts in real-time based on runtime conditions:
 
 ```python
 # The graph reshapes itself based on market conditions
@@ -267,16 +283,16 @@ else:
 # The DAG restructures itself - no code changes needed
 ```
 
-### Real-Time Adaptation Examples:
+### Real-time adaptation examples:
 
 1. **Market Conditions** → Different analysis strategies
 2. **Data Availability** → Alternative data sources
 3. **Compliance Rules** → Region-specific workflows
 4. **User Permissions** → Role-based processing paths
 
-## 🔥 Why This Changes Everything
+## Why This Changes Everything
 
-### 🎯 Multi-Agent Orchestration Made Simple
+### Multi-Agent orchestration made simple
 ```yaml
 # These agents run IN PARALLEL automatically
 - type: macro_invocation
@@ -295,7 +311,9 @@ else:
 
 No asyncio. No thread management. No race conditions. **It just works.**
 
-## 🏗️ Hexagonal Architecture = True Flexibility
+## Hexagonal Architecture is THE True Flexibility
+
+Business logic stays pure. External dependencies go through adapters.
 
 ```
 Your Business Logic (Pure Python/YAML)
@@ -307,13 +325,13 @@ Redis  Memory  Postgres   ← Change anytime
 S3    Local    Azure      ← No code changes
 ```
 
-**Why This Matters:**
+**Why this matters:**
 - **Test with mocks** → 1000x faster, $0 cost
 - **Dev with SQLite** → Prod with PostgreSQL
 - **Start with OpenAI** → Switch to local LLMs
-- **Zero vendor lock-in** → Your logic stays pure
+- **No vendor lock-in** → Your logic stays pure
 
-## 📊 Real Production Results
+## Real production results
 
 <table>
 <tr>
@@ -353,14 +371,14 @@ async def analyze_investment():
 </tr>
 </table>
 
-## 🚀 Production Features That Actually Matter
+## Production features that actually matter
 
-### 🔄 Automatic Parallelization
+### Automatic Parallelization
 - Fundamental + Technical + Sentiment analysis run in parallel
 - 10x faster than sequential execution
 - Zero concurrency code needed
 
-### 🧠 Stateful Conversations
+### Stateful Conversations
 ```yaml
 - type: conversation
   params:
@@ -368,7 +386,7 @@ async def analyze_investment():
     max_history: 100              # Sliding context window
 ```
 
-### 🛡️ Policy Framework
+### Policy Framework
 ```yaml
 policies:
   - type: risk_assessment      # Prevent catastrophic trades
@@ -377,18 +395,18 @@ policies:
   - type: audit_logging       # Compliance tracking
 ```
 
-### 📈 Real-Time Observability
+### Real-Time observability
 Every node emits events → See exactly what your AI is thinking:
 - `NodeStarted` → `DataFetched` → `AnalysisComplete` → `DecisionMade`
 - Full audit trail for compliance
 - Performance metrics built-in
 
-## 🌟 Why Teams Choose hexDAG
+## Why This Matters
 
 ### For Startups
-- **Ship in days, not months** - YAML to production
+- **Ship faster** - YAML to production. 
 - **Iterate rapidly** - Change behavior without code
-- **Start free** - Mock adapters for development
+- **Start free** - Test with mocks, scale to production
 
 ### For Enterprises
 - **Compliance built-in** - Policy framework included
@@ -400,7 +418,7 @@ Every node emits events → See exactly what your AI is thinking:
 - **Clean architecture** - Hexagonal pattern
 - **Type-safe** - Pydantic everywhere
 
-## 🎁 What Makes hexDAG Different?
+## Comparison
 
 | Feature | LangChain | CrewAI | AutoGen | hexDAG |
 |---------|-----------|---------|----------|---------|
@@ -412,7 +430,15 @@ Every node emits events → See exactly what your AI is thinking:
 | True Async | Partial | ❌ | Limited | ✅ |
 | Production-Ready | Complex | Limited | Limited | ✅ |
 
-## 🚀 The Future is Declarative + Dynamic
+## Philosophy
+The problem is organizing models into coherent systems. Most frameworks optimize for demos, not production.
+
+**hexDAG inverts this.** 
+More structure upfront (YAML vs Python), less complexity later (no orchestration code, no state management, no lock-in).
+
+Simple rules. Complex emergent behavior.
+
+## The future is declarative + dynamic
 
 Stop writing orchestration code. Start declaring intelligent systems.
 
@@ -420,7 +446,7 @@ Stop writing orchestration code. Start declaring intelligent systems.
 
 ---
 
-### 🎯 Join the Revolution
+### Join the Revolution
 
 <table>
 <tr>
@@ -449,8 +475,12 @@ Limited to 100 teams
 
 <div align="center">
 
-*hexDAG - Because production AI shouldn't require a PhD in distributed systems*
+**Star now and watch your AI pipelines transform from chaos to clarity**
 
-**🔮 Star now and watch your AI pipelines transform from chaos to clarity**
+Beta Access [![Beta](https://img.shields.io/badge/🎯-Join_Private_Beta-blue?style=for-the-badge)](https://forms.gle/ZDNupq2pqbVPHMAA8)
+
+Follow: @jhkwapisz
 
 </div>
+
+**Production AI without the PhD in distributed systems**
