@@ -194,3 +194,10 @@ Related work items: #1655, #1656, #1657, #1658, #1667, #1673, #1716, #1909, #191
 Merged PR 2348: feat: schemas
 
 Related work items: #2152
+
+## Version Release: 0.4.1
+Merged PR 2399: fix: revert bug
+
+NOTE: it only reverts the bug, it does not introduce pre-release handling
+
+Related work items: #2159
