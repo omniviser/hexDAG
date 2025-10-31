@@ -214,3 +214,10 @@ Just in PR title include
 and lets go
 
 Related work items: #2160
+
+## Version Release: 0.5.0
+Merged PR 2428: ci: force zero major
+
+this is test
+
+Related work items: #2161
