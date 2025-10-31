@@ -1,4 +1,5 @@
-**hexDAG - Production AI Orchestration with YAML configuration.That atually works.**
+**hexDAG - Production AI Orchestration with YAML configuration.
+That atually works.**
 
 <div align="center">
 
