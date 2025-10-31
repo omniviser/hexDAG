@@ -389,6 +389,7 @@ version = "0.5.0a0"
 version_files = ["pyproject.toml:^version"]
 bump_message = "release $current_version -> $new_version [skip ci]"
 changelog_file = "CHANGELOG.md"
+major_version_zero = true
 
 [tool.commitizen.customize]
 bump_pattern = '^(?:Merged PR \d+:) (ci!?|docs!?|experiment!?|feat!?|fix!?|refactor!?|test!?)'
