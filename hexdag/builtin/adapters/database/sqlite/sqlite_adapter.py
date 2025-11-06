@@ -117,10 +117,12 @@ class SQLiteAdapter:
             List of table names
         """
         async with self._get_cursor() as cursor:
-            await cursor.execute("""
+            await cursor.execute(
+                """
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND name NOT LIKE 'sqlite_%'
-            """)
+            """
+            )
             rows = await cursor.fetchall()
             return [row[0] for row in rows]
 
@@ -174,7 +176,11 @@ class SQLiteAdapter:
                 await cursor.execute(f'PRAGMA foreign_key_list("{table}")')
                 fk_rows = await cursor.fetchall()
                 foreign_keys = [
-                    {"from_column": fk_row[3], "to_table": fk_row[2], "to_column": fk_row[4]}
+                    {
+                        "from_column": fk_row[3],
+                        "to_table": fk_row[2],
+                        "to_column": fk_row[4],
+                    }
                     for fk_row in fk_rows
                 ]
 
@@ -300,10 +306,12 @@ class SQLiteAdapter:
         indexes = []
 
         async with self._get_cursor() as cursor:
-            await cursor.execute("""
+            await cursor.execute(
+                """
                 SELECT name, tbl_name, sql FROM sqlite_master
                 WHERE type='index' AND sql IS NOT NULL
-            """)
+            """
+            )
             index_rows = await cursor.fetchall()
 
             for row in index_rows:
@@ -358,7 +366,8 @@ class SQLiteAdapter:
                 row_count = result[0] if result else 0
 
                 await cursor.execute(
-                    "SELECT SUM(LENGTH(sql)) FROM sqlite_master WHERE tbl_name = ?", (table,)
+                    "SELECT SUM(LENGTH(sql)) FROM sqlite_master WHERE tbl_name = ?",
+                    (table,),
                 )
                 size_result = await cursor.fetchone()
                 size_bytes = size_result[0] if size_result and size_result[0] else 0
@@ -395,3 +404,13 @@ class SQLiteAdapter:
         """Return string representation."""
         mode = "read-only" if self.read_only else "read-write"
         return f"SQLiteAdapter(db_path='{self.db_path}', mode='{mode}')"
+
+    # SupportsReadOnly protocol method
+    async def is_read_only(self) -> bool:
+        """Check if the adapter is in read-only mode.
+
+        Returns
+        -------
+            True if adapter is read-only, False otherwise
+        """
+        return bool(self.read_only)

@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.3.0"
+version = "0.5.0"
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
 authors = [{ name = "hexDAG Team" }]
 requires-python = "~=3.12.0"
@@ -118,6 +118,8 @@ dev = [
     # Build and publish tools
     "build>=1.0.0",
     "twine>=6.1.0",
+    "keyring>=25.6.0",
+    "artifacts-keyring>=1.0.0",
     # Code quality tools - linting and formatting
     "ruff>=0.13.0",           # All-in-one linter and formatter (replaces black, isort, flake8)
     "mypy==1.17.1",           # Type checking
@@ -397,46 +399,16 @@ convention = "numpy"
 known-first-party = ["hexdag"]
 
 [tool.commitizen]
-name = "cz_conventional_commits"
-version = "0.3.0"
-tag_format = "v$version"
-version_scheme = "semver"
-version_files = [
-    "pyproject.toml:version",
-    "hexdag/__init__.py:__version__"
-]
-update_changelog_on_bump = true
-bump_message = "chore(release): bump version $current_version → $new_version"
-# Keep major version at 0 for pre-1.0 releases
-# Breaking changes will bump minor (0.2.0 → 0.3.0)
-# Features/fixes will bump patch (0.2.0 → 0.2.1)
-major_version_zero = true
-# Pre-release support: alpha, beta, rc
-# Example versions: 0.3.0-a1-alpha.1, 0.3.0-a1-beta.1, 0.3.0-a1-rc.1
-prerelease_offset = 1
-
-# Changelog configuration
-[tool.commitizen.change_type_map]
-feat = "Features"
-fix = "Bug Fixes"
-docs = "Documentation"
-style = "Styles"
-refactor = "Code Refactoring"
-perf = "Performance Improvements"
-test = "Tests"
-build = "Build System"
-ci = "Continuous Integration"
-chore = "Chores"
 name = "cz_customize"
-version = "0.2.0"
+version = "0.5.0"
 version_files = ["pyproject.toml:^version"]
 bump_message = "release $current_version -> $new_version [skip ci]"
 changelog_file = "CHANGELOG.md"
+major_version_zero = true
 
 [tool.commitizen.customize]
 bump_pattern = '^(?:Merged PR \d+:) (ci!?|docs!?|experiment!?|feat!?|fix!?|refactor!?|test!?)'
 bump_map = { ".*!" = "MAJOR", "ci" = "PATCH", "docs" = "PATCH", "experiment" = "PATCH", "feat" = "MINOR", "fix" = "PATCH", "refactor" = "PATCH", "test" = "PATCH" }
-
 
 [tool.vulture]
 min_confidence = 90

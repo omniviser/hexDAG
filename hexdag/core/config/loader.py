@@ -430,13 +430,15 @@ def get_default_config() -> HexDAGConfig:
     Returns
     -------
     HexDAGConfig
-        Default configuration with minimal modules
+        Default configuration with core ports and builtin components
     """
     return HexDAGConfig(
         modules=[
+            "hexdag.core.ports",
             "hexdag.builtin.nodes",
             "hexdag.builtin.adapters.mock",
-            "hexdag.builtin.tools.builtin_tools",  # Essential built-in tools
+            "hexdag.builtin.adapters.local",
+            "hexdag.builtin.tools.builtin_tools",
         ],
         settings={
             "log_level": "INFO",
@@ -461,9 +463,11 @@ def config_to_manifest_entries(config: HexDAGConfig) -> list[ManifestEntry]:
     # Core and builtin modules go to 'core' namespace, others to 'user'
     module_entries = [
         ManifestEntry(
-            namespace="core"
-            if (module.startswith("hexdag.core") or module.startswith("hexdag.builtin"))
-            else "user",
+            namespace=(
+                "core"
+                if (module.startswith("hexdag.core") or module.startswith("hexdag.builtin"))
+                else "user"
+            ),
             module=module,
         )
         for module in config.modules

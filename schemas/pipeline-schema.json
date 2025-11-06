@@ -8,11 +8,31 @@
             ],
             "description": "Specification for core:agent_node type",
             "properties": {
+                "kind": {
+                    "const": "agent_node",
+                    "description": "Node type: agent_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
                 "spec": {
+                    "additionalProperties": false,
                     "properties": {
                         "config": {
                             "default": null,
-                            "description": "Agent configuration",
                             "type": [
                                 "string",
                                 "null"
@@ -20,7 +40,6 @@
                         },
                         "continuation_prompts": {
                             "default": null,
-                            "description": "Phase-specific prompts",
                             "type": [
                                 "object",
                                 "null"
@@ -28,7 +47,6 @@
                         },
                         "deps": {
                             "default": null,
-                            "description": "Dependencies",
                             "items": {
                                 "type": "string"
                             },
@@ -54,8 +72,7 @@
                                 {
                                     "type": "string"
                                 }
-                            ],
-                            "description": "Initial reasoning prompt"
+                            ]
                         },
                         "output_schema": {
                             "anyOf": [
@@ -66,8 +83,7 @@
                                     "type": "string"
                                 }
                             ],
-                            "default": null,
-                            "description": "Custom output schema for tool_end results"
+                            "default": null
                         }
                     },
                     "required": [
@@ -75,7 +91,13 @@
                     ],
                     "type": "object"
                 }
-            }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
         },
         "ConditionalNodeSpec": {
             "allOf": [
@@ -85,28 +107,83 @@
             ],
             "description": "Specification for core:conditional_node type",
             "properties": {
-                "spec": {
+                "kind": {
+                    "const": "conditional_node",
+                    "description": "Node type: conditional_node"
+                },
+                "metadata": {
                     "properties": {
-                        "condition_key": {
-                            "default": "should_continue",
-                            "description": "Key in input data to evaluate for routing decision",
-                            "type": "string"
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
                         },
-                        "false_action": {
-                            "default": "proceed",
-                            "description": "Action to take when condition is false",
-                            "type": "string"
-                        },
-                        "true_action": {
-                            "default": "continue",
-                            "description": "Action to take when condition is true",
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
                             "type": "string"
                         }
                     },
-                    "required": [],
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {},
                     "type": "object"
                 }
-            }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "EventHandler": {
+            "description": "Event handler configuration",
+            "properties": {
+                "params": {
+                    "description": "Handler-specific parameters",
+                    "type": "object"
+                },
+                "severity": {
+                    "description": "Alert severity level",
+                    "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "critical"
+                    ],
+                    "type": "string"
+                },
+                "tags": {
+                    "description": "Tags for categorization",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "target": {
+                    "description": "Target system (e.g., 'pagerduty', 'datadog', 'slack')",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Handler type (e.g., 'alert', 'metrics', 'log')",
+                    "enum": [
+                        "alert",
+                        "metrics",
+                        "log",
+                        "webhook",
+                        "callback"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "type"
+            ],
+            "type": "object"
         },
         "FunctionNodeSpec": {
             "allOf": [
@@ -116,11 +193,31 @@
             ],
             "description": "Specification for core:function_node type",
             "properties": {
+                "kind": {
+                    "const": "function_node",
+                    "description": "Node type: function_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
                 "spec": {
+                    "additionalProperties": false,
                     "properties": {
                         "deps": {
                             "default": null,
-                            "description": "List of dependency node names",
                             "items": {
                                 "type": "string"
                             },
@@ -130,12 +227,17 @@
                             ]
                         },
                         "fn": {
-                            "description": "Function to execute",
-                            "type": "string"
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ]
                         },
                         "input_mapping": {
                             "default": null,
-                            "description": "Optional field mapping dict {target_field: \"source.path\"}",
                             "type": [
                                 "object",
                                 "null"
@@ -150,8 +252,7 @@
                                     "type": "string"
                                 }
                             ],
-                            "default": null,
-                            "description": "Input schema for validation (if None, inferred from function)"
+                            "default": null
                         },
                         "output_schema": {
                             "anyOf": [
@@ -162,8 +263,7 @@
                                     "type": "string"
                                 }
                             ],
-                            "default": null,
-                            "description": "Output schema for validation (if None, inferred from function)"
+                            "default": null
                         }
                     },
                     "required": [
@@ -171,7 +271,13 @@
                     ],
                     "type": "object"
                 }
-            }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
         },
         "LlmNodeSpec": {
             "allOf": [
@@ -181,11 +287,31 @@
             ],
             "description": "Specification for core:llm_node type",
             "properties": {
+                "kind": {
+                    "const": "llm_node",
+                    "description": "Node type: llm_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
                 "spec": {
+                    "additionalProperties": false,
                     "properties": {
                         "deps": {
                             "default": null,
-                            "description": "List of dependency node names",
                             "items": {
                                 "type": "string"
                             },
@@ -203,8 +329,235 @@
                                     "type": "string"
                                 }
                             ],
+                            "default": null
+                        },
+                        "template": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "template"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "LoopNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for core:loop_node type",
+            "properties": {
+                "kind": {
+                    "const": "loop_node",
+                    "description": "Node type: loop_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {},
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "Node": {
+            "description": "Base node structure",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "spec": {
+                    "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "ParserNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for core:parser_node type",
+            "properties": {
+                "kind": {
+                    "const": "parser_node",
+                    "description": "Node type: parser_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "deps": {
                             "default": null,
-                            "description": "Output schema for validation"
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array",
+                                "null"
+                            ]
+                        },
+                        "output_schema": {
+                            "anyOf": [
+                                {
+                                    "type": "object"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "strategy": {
+                            "default": "json",
+                            "type": "string"
+                        },
+                        "strict": {
+                            "default": true,
+                            "type": "boolean"
+                        }
+                    },
+                    "required": [
+                        "output_schema"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "PromptNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for core:prompt_node type",
+            "properties": {
+                "kind": {
+                    "const": "prompt_node",
+                    "description": "Node type: prompt_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "deps": {
+                            "default": null,
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array",
+                                "null"
+                            ]
+                        },
+                        "output_format": {
+                            "default": "messages",
+                            "type": "string"
+                        },
+                        "prompt_args": {
+                            "default": null,
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        },
+                        "prompt_ref": {
+                            "default": null,
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "system_prompt": {
+                            "default": null,
+                            "type": [
+                                "string",
+                                "null"
+                            ]
                         },
                         "template": {
                             "anyOf": [
@@ -224,85 +577,7 @@
                                     "type": "string"
                                 }
                             ],
-                            "description": "Template for LLM prompt"
-                        }
-                    },
-                    "required": [
-                        "template"
-                    ],
-                    "type": "object"
-                }
-            }
-        },
-        "LoopNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for core:loop_node type",
-            "properties": {
-                "spec": {
-                    "properties": {
-                        "iteration_key": {
-                            "default": "loop_iteration",
-                            "description": "Key to store iteration count in state",
-                            "type": "string"
-                        },
-                        "max_iterations": {
-                            "default": 3,
-                            "description": "Maximum number of loop iterations",
-                            "type": "integer"
-                        },
-                        "success_condition": {
-                            "default": null,
-                            "description": "Function to evaluate if success criteria are met",
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        }
-                    },
-                    "required": [],
-                    "type": "object"
-                }
-            }
-        },
-        "Node": {
-            "properties": {
-                "kind": {
-                    "description": "Node type (e.g., 'llm_node', 'plugin:custom_node')",
-                    "pattern": "^([a-z0-9-]+:)?[a-z_]+(_node)?$",
-                    "type": "string"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "additionalProperties": {
-                                "type": "string"
-                            },
-                            "type": "object"
-                        },
-                        "name": {
-                            "minLength": 1,
-                            "pattern": "^[a-z0-9_]+$",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": true,
-                    "properties": {
-                        "dependencies": {
-                            "default": [],
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": "array"
+                            "default": null
                         }
                     },
                     "type": "object"
@@ -314,55 +589,189 @@
                 "spec"
             ],
             "type": "object"
+        },
+        "Raw_LlmNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for core:raw_llm_node type",
+            "properties": {
+                "kind": {
+                    "const": "raw_llm_node",
+                    "description": "Node type: raw_llm_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "deps": {
+                            "default": null,
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array",
+                                "null"
+                            ]
+                        },
+                        "tool_choice": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ],
+                            "default": "auto"
+                        },
+                        "tools": {
+                            "default": null,
+                            "items": {
+                                "type": "object"
+                            },
+                            "type": [
+                                "array",
+                                "null"
+                            ]
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "Tool_CallNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for core:tool_call_node type",
+            "properties": {
+                "kind": {
+                    "const": "tool_call_node",
+                    "description": "Node type: tool_call_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "arguments": {
+                            "default": null,
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        },
+                        "deps": {
+                            "default": null,
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array",
+                                "null"
+                            ]
+                        },
+                        "tool_call_id": {
+                            "default": null,
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "tool_name": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "tool_name"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
         }
     },
-    "$id": "https://hexdag.dev/schemas/pipeline.json",
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "description": "JSON Schema for HexDAG declarative pipeline YAML manifests (auto-generated from core namespace)",
+    "description": "(auto-generated from core namespace)",
     "properties": {
         "apiVersion": {
             "default": "v1",
-            "description": "API version for the pipeline manifest",
-            "enum": [
-                "v1"
-            ],
+            "description": "API version",
             "type": "string"
         },
         "kind": {
             "const": "Pipeline",
-            "description": "Resource type - must be 'Pipeline'",
+            "description": "Resource kind (must be 'Pipeline')",
             "type": "string"
         },
         "metadata": {
-            "description": "Pipeline metadata and descriptive information",
             "properties": {
-                "annotations": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
-                    "type": "object"
-                },
                 "author": {
+                    "description": "Pipeline author",
                     "type": "string"
                 },
                 "description": {
+                    "description": "Pipeline description",
                     "type": "string"
                 },
                 "name": {
-                    "description": "Unique identifier for the pipeline",
-                    "maxLength": 253,
-                    "minLength": 1,
-                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+                    "description": "Unique pipeline identifier",
                     "type": "string"
                 },
                 "tags": {
+                    "description": "Categorization tags",
                     "items": {
                         "type": "string"
                     },
                     "type": "array"
                 },
                 "version": {
-                    "pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
+                    "description": "Semantic version (e.g., 1.0.0)",
                     "type": "string"
                 }
             },
@@ -374,25 +783,122 @@
         "spec": {
             "properties": {
                 "common_field_mappings": {
-                    "additionalProperties": {
-                        "additionalProperties": {
-                            "type": "string"
+                    "description": "Reusable field mapping definitions",
+                    "type": "object"
+                },
+                "events": {
+                    "description": "Event handlers for observability",
+                    "properties": {
+                        "on_node_completed": {
+                            "items": {
+                                "$ref": "#/$defs/EventHandler"
+                            },
+                            "type": "array"
                         },
-                        "type": "object"
+                        "on_node_failed": {
+                            "items": {
+                                "$ref": "#/$defs/EventHandler"
+                            },
+                            "type": "array"
+                        },
+                        "on_node_started": {
+                            "items": {
+                                "$ref": "#/$defs/EventHandler"
+                            },
+                            "type": "array"
+                        },
+                        "on_workflow_complete": {
+                            "items": {
+                                "$ref": "#/$defs/EventHandler"
+                            },
+                            "type": "array"
+                        }
                     },
-                    "description": "Reusable field mappings for DRY pipeline definitions",
                     "type": "object"
                 },
                 "input_schema": {
-                    "description": "JSON Schema defining expected pipeline inputs",
+                    "description": "JSON Schema for pipeline inputs",
                     "type": "object"
                 },
                 "nodes": {
+                    "description": "List of pipeline nodes",
                     "items": {
-                        "$ref": "#/$defs/Node"
+                        "oneOf": [
+                            {
+                                "$ref": "#/$defs/ConditionalNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/FunctionNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/LlmNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/LoopNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/ParserNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/PromptNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/Raw_LlmNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/AgentNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/Tool_CallNodeSpec"
+                            }
+                        ]
                     },
-                    "minItems": 0,
                     "type": "array"
+                },
+                "output_schema": {
+                    "description": "JSON Schema for pipeline outputs",
+                    "type": "object"
+                },
+                "policies": {
+                    "additionalProperties": {
+                        "properties": {
+                            "params": {
+                                "description": "Policy parameters",
+                                "type": "object"
+                            },
+                            "type": {
+                                "description": "Policy type",
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "description": "Execution policies (retry, timeout, error handling)",
+                    "type": "object"
+                },
+                "ports": {
+                    "additionalProperties": {
+                        "properties": {
+                            "adapter": {
+                                "description": "Adapter type",
+                                "type": "string"
+                            },
+                            "params": {
+                                "description": "Adapter parameters",
+                                "type": "object"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "description": "Port adapters configuration (LLM, database, memory, etc.)",
+                    "type": "object"
+                },
+                "type_ports": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "Port type mappings",
+                    "type": "object"
                 }
             },
             "required": [
@@ -406,6 +912,6 @@
         "metadata",
         "spec"
     ],
-    "title": "HexDAG Pipeline Configuration",
+    "title": "hexDAG Pipeline",
     "type": "object"
 }

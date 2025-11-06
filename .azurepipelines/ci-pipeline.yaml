@@ -49,7 +49,7 @@ stages:
               # Try to extract the PR title
               # Merging PR gives commit message in this format:
               extracted_pr_title=$(echo "$(commit_message)" | grep -oP 'Merged PR \d+: \K.*')
-              echo "Extracted message: $extracted_message"
+              echo "Extracted message: $extracted_pr_title"
 
               if [[ -n "$extracted_pr_title" ]]; then
                 echo "Identified PR merge commit"
@@ -57,6 +57,7 @@ stages:
                 bump_type=$(echo "$extracted_pr_title" | cut -d':' -f1)
                 echo "Bump type: $bump_type"
                 if [[ -n "$bump_type" ]]; then
+                  echo "##vso[task.setvariable variable=pr_title;isOutput=true]$extracted_pr_title"
                   echo "##vso[task.setvariable variable=bump;isOutput=true]true"
                 else
                   echo "Empty bump type."
@@ -125,6 +126,7 @@ stages:
         condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['UserPRCheck.bump'], 'true'))
         variables:
           commit_hash: $[ stageDependencies.Dispatch.BumpOrPush.outputs['GitSetup.commit_hash'] ]
+          pr_title: $[ stageDependencies.Dispatch.BumpOrPush.outputs['UserPRCheck.pr_title'] ]
         steps:
           - checkout: self
             persistCredentials: true
@@ -133,17 +135,36 @@ stages:
               git config user.email "$(CI_EMAIL)"
               git config user.name "$(CI_USERNAME)"
               git remote set-url origin https://$(PAT)@dev.azure.com/omniviser/hexDAG/_git/hexDAG
-            displayName: GitSetup
+              pip install commitizen
+            displayName: Setup
 
           - script: |
                 CURRENT_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml | head -n 1)
                 echo $CURRENT_VERSION
 
-                # Try bumping
                 echo "Trying cz bump..."
-                python -m pip install --upgrade pip uv
-                uv sync --all-extras
-                uv run cz --config pyproject.toml bump --files-only --yes
+                echo "Debug: $(pr_title)"
+
+                # Extract message inside [ ]
+                bracket_message=$(echo $(pr_title) | grep -oP '(?<=\[)[^]]+(?=\])')
+
+                # Normalize (trim and lowercase)
+                bracket_message=$(echo "$bracket_message" | tr '[:upper:]' '[:lower:]' | xargs)
+
+                if [[ -n "$bracket_message" ]]; then
+                    echo "Bracket message found: $bracket_message"
+                else
+                    echo "No bracket message detected"
+                fi
+
+                # Decide prerelease bump type
+                if [[ "$bracket_message" == "alpha" || "$bracket_message" == "beta" || "$bracket_message" == "rc" ]]; then
+                    echo "Running prerelease bump: $bracket_message"
+                    cz --config pyproject.toml bump --prerelease "$bracket_message" --files-only --yes
+                else
+                    echo "Running normal bump"
+                    cz --config pyproject.toml bump --files-only --yes
+                fi
 
                 NEW_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml | head -n 1)
                 echo "New version: $NEW_VERSION"
@@ -198,20 +219,42 @@ stages:
   - stage: Push
     dependsOn: Dispatch
     jobs:
-      - job: VersionPublish
-        condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
-        variables:
-          tag: $[ stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.tag'] ]
-        steps:
-          - script: |
-              echo "WOOP!"
-            displayName: "Put your logic here"
+     - job: VersionPublish
+       condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
+       steps:
+        - checkout: self
+          clean: true
 
-      - job: UpdateDocs
-        condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
-        variables:
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: "3.12"
+
+        - script: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+          displayName: "Install uv"
+
+        - script: |
+            uv sync --all-groups
+            uvx --from build pyproject-build
+            uv run twine check dist/*
+          displayName: "Build sdist & wheel"
+
+        - script: |
+            pip install twine keyring artifacts-keyring
+            uv run twine upload \
+              --repository-url "https://pkgs.dev.azure.com/omniviser/_packaging/omniviser/pypi/upload/" \
+              -u __token__ \
+              -p $PAT\
+              dist/*
+          displayName: "Upload package to Azure Artifacts"
+          env:
+            PAT: $(System.AccessToken)
+
+     - job: UpdateDocs
+       condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
+       variables:
           tag: $[ stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.tag'] ]
-        steps:
-          - script: |
+       steps:
+        - script: |
               echo "WOOP!"
-            displayName: "Put your logic here"
+          displayName: "Put your logic here"

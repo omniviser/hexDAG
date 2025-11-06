@@ -1,3 +1,41 @@
+## v0.4.0-a1 (2025-10-30)
+
+### Features
+
+#### Database Enhancements
+- **PGVector Adapter Read-Only Mode**: Added comprehensive read-only mode support to PGVector adapter
+  - Prevents accidental data modifications in production environments
+  - Application-level enforcement before database queries
+  - Blocks all write operations: vector upserts, deletions, and SQL writes (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE)
+  - Added `is_read_only()` method implementing SupportsReadOnly protocol
+  - Ideal for read replicas, analytics, and reporting workloads
+
+#### Type Safety & Code Quality
+- **OpenAI Adapter**: Fixed type annotations for vision message content handling
+- **SQLite Adapter**: Improved type safety for read-only status checks
+- **Security**: Added proper `# nosec` annotations for legitimate parameterized SQL queries in PGVector adapter
+
+#### JSON Schema Generation
+- **Schema Generation Fix**: Fixed pre-commit hook cycle where schema files were modified twice
+  - Schema generation now includes trailing newlines
+  - Prevents `end-of-file-fixer` from repeatedly modifying files
+
+### Testing
+- Added comprehensive test suite for PGVector read-only mode (10 tests)
+- All tests verify write operation blocking and error messages
+- Validates both read-only and read-write modes
+
+### Bug Fixes
+- Fixed mypy type errors in OpenAI and SQLite adapters
+- Resolved bandit security warnings with proper justification
+- Fixed schema file generation cycle in pre-commit hooks
+
+### Code Quality
+- Full mypy compliance across modified adapters
+- Bandit security scan passing
+- Ruff linting compliance
+- Test coverage maintained
+
 ## Version Release: 0.1.0
 Merged PR 2166: feat: add cz
 
@@ -151,3 +189,35 @@ Merged PR 2225: refactor
 Final refactor
 
 Related work items: #1655, #1656, #1657, #1658, #1667, #1673, #1716, #1909, #1910, #1913, #1936, #1966, #2006, #2011
+
+## Version Release: 0.4.0a2
+Merged PR 2348: feat: schemas
+
+Related work items: #2152
+
+## Version Release: 0.4.1
+Merged PR 2399: fix: revert bug
+
+NOTE: it only reverts the bug, it does not introduce pre-release handling
+
+Related work items: #2159
+
+## Version Release: 0.5.0a0
+Merged PR 2426: feat: [alpha] pre-release version support
+
+Just in PR title include
+
+[rc]
+[alpha]
+[beta]
+
+and lets go
+
+Related work items: #2160
+
+## Version Release: 0.5.0
+Merged PR 2428: ci: force zero major
+
+this is test
+
+Related work items: #2161
