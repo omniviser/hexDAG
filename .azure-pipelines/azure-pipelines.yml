@@ -208,6 +208,35 @@ stages:
             displayName: 'Validate examples'
             continueOnError: true
 
+  - stage: Documentation
+    displayName: 'Build Documentation'
+    dependsOn: []
+    condition: succeeded()
+    jobs:
+      - job: BuildDocs
+        displayName: 'Build MkDocs Site'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -e '.[docs]'
+            displayName: 'Install dependencies'
+
+          - script: |
+              hexdag docs build --strict
+            displayName: 'Build documentation'
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: 'build/site'
+              artifact: 'docs-site'
+              publishLocation: 'pipeline'
+            displayName: 'Publish documentation'
+
   - stage: BuildPackage
     displayName: 'Build & Publish Package'
     dependsOn: [Quality, Integration]

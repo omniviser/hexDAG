@@ -17,6 +17,7 @@ except ImportError:
 from hexdag.cli.commands import (
     adapters_cmd,
     config_cmd,
+    docs_cmd,
     events_cmd,
     init_cmd,
     manifest_cmd,
@@ -59,6 +60,7 @@ app.add_typer(ports_cmd.app, name="ports", help="Manage and inspect ports")
 app.add_typer(adapters_cmd.app, name="adapters", help="Manage and inspect adapters")
 app.add_typer(validation_cmd.app, name="validate", help="Validation commands")
 app.add_typer(run_cmd.app, name="run", help="Run a pipeline (monolithic executor)")
+app.add_typer(docs_cmd.app, name="docs", help="Documentation generation tools")
 
 # Optionally hide experimental commands behind env var
 
