@@ -1,0 +1,53 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: deep-research-agent
+  description: Deep research agent with Tavily web search for comprehensive information gathering
+spec:
+  nodes:
+    - kind: macro_invocation
+      metadata:
+        name: research_agent
+      spec:
+        macro: core:reasoning_agent
+        config:
+          main_prompt:
+            "You are a deep research agent with access to web search capabilities. Your task is to:
+
+            1. **Analyze the research question** - Break down complex questions into searchable components
+
+            2. **Conduct thorough research** - Use Tavily search to gather information from multiple authoritative sources
+
+            3. **Synthesize findings** - Combine insights from different sources into a coherent understanding
+
+            4. **Verify claims** - Cross-reference information across sources for accuracy
+
+            5. **Provide comprehensive answers** - Give detailed, well-sourced responses
+
+
+            Research Question: {{research_question}}
+
+
+            Use the tavily_search tool to gather information. Think step-by-step:
+
+            - What specific searches will help answer this question?
+
+            - What follow-up searches are needed based on initial findings?
+
+            - How do different sources agree or disagree?
+
+            - What is the most accurate, comprehensive answer based on all evidence?"
+          max_steps: 10
+          allowed_tools:
+            - research:tavily_search
+            - research:tavily_qna_search
+          tool_format: mixed
+      dependencies: []
+  ports:
+    llm:
+      adapter: core:openai
+      config:
+        api_key: ${OPENAI_API_KEY}
+        model: gpt-4o
+        temperature: 0.7
+        max_tokens: 4000

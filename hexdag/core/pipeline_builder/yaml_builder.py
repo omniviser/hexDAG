@@ -131,8 +131,9 @@ class YamlPipelineBuilder:
         self.preprocess_plugins.append(TemplatePlugin())
 
         # Entity plugins (build specific entity types)
-        self.entity_plugins.append(MacroEntityPlugin())
-        self.entity_plugins.append(NodeEntityPlugin(self))
+        self.entity_plugins.append(MacroDefinitionPlugin())  # Process Macro definitions first
+        self.entity_plugins.append(MacroEntityPlugin())  # Then macro invocations
+        self.entity_plugins.append(NodeEntityPlugin(self))  # Finally regular nodes
 
     @contextmanager
     def _temporary_base_path(self, new_base: Path) -> Any:
@@ -189,20 +190,45 @@ class YamlPipelineBuilder:
         # Step 1: Parse YAML
         documents = self._parse_yaml(yaml_content, use_cache=use_cache)
 
-        # Step 2: Select environment
+        # Step 2: Process ALL documents for macro definitions first
+        #         This allows macros to be defined in multi-document YAML
+        #         before the pipeline that uses them
+        for doc in documents:
+            if isinstance(doc, dict) and doc.get("kind") == "Macro":
+                # Process includes for macro definitions (but skip template rendering)
+                # Templates in macros should be preserved for expansion-time rendering
+                processed_doc = doc
+                for plugin in self.preprocess_plugins:
+                    # Skip TemplatePlugin for Macro definitions - templates should be preserved
+                    if not isinstance(plugin, TemplatePlugin):
+                        processed_doc = plugin.process(processed_doc)
+                # Validate and process macro definition
+                processed_doc = self._validate_config(processed_doc)
+                # Register macro (MacroDefinitionPlugin handles this)
+                self._process_macro_definitions([processed_doc])
+
+        # Step 3: Select pipeline environment
         config = self._select_environment(documents, environment)
 
-        # Step 3: Preprocess FIRST (includes must resolve before validation)
+        # Skip if selected document is a Macro (already processed above)
+        if config.get("kind") == "Macro":
+            # Return empty graph for macro-only documents
+            logger.info("Document contains only macro definitions, no pipeline to build")
+            return DirectedGraph(), PipelineConfig(
+                ports={}, type_ports={}, policies={}, metadata={}, nodes=[]
+            )
+
+        # Step 4: Preprocess FIRST (includes must resolve before validation)
         for plugin in self.preprocess_plugins:
             config = plugin.process(config)
 
-        # Step 4: Validate structure (after includes are resolved)
+        # Step 5: Validate structure (after includes are resolved)
         config = self._validate_config(config)
 
-        # Step 5: Build graph
+        # Step 6: Build graph
         graph = self._build_graph(config)
 
-        # Step 6: Extract pipeline config
+        # Step 7: Extract pipeline config
         pipeline_config = self._extract_pipeline_config(config)
 
         logger.info(
@@ -227,29 +253,39 @@ class YamlPipelineBuilder:
     def _select_environment(
         self, documents: list[dict[str, Any]], environment: str | None
     ) -> dict[str, Any]:
-        """Select document by environment name."""
+        """Select document by environment name.
+
+        Skips Macro definitions when selecting the Pipeline document.
+        """
+        # Filter out Macro definitions - they're processed separately
+        pipeline_docs = [doc for doc in documents if doc.get("kind") != "Macro"]
+
+        if not pipeline_docs:
+            # No pipeline documents, return first macro (for macro-only files)
+            return documents[0]
+
         if environment:
-            for doc in documents:
+            for doc in pipeline_docs:
                 if doc.get("metadata", {}).get("namespace") == environment:
                     logger.info(f"Selected environment '{environment}' from multi-document YAML")
                     return doc
 
             available_envs = [
-                doc.get("metadata", {}).get("namespace", "default") for doc in documents
+                doc.get("metadata", {}).get("namespace", "default") for doc in pipeline_docs
             ]
             raise YamlPipelineBuilderError(
                 f"Environment '{environment}' not found in YAML. "
                 f"Available environments: {', '.join(available_envs)}"
             )
 
-        if len(documents) > 1:
+        if len(pipeline_docs) > 1:
             logger.warning(
-                f"Multi-document YAML detected ({len(documents)} documents) "
+                f"Multi-document YAML detected ({len(pipeline_docs)} pipeline documents) "
                 "but no environment specified. "
-                "Using first document. Specify environment parameter to select specific config."
+                "Using first pipeline document. Specify environment parameter to select specific config."
             )
 
-        return documents[0]
+        return pipeline_docs[0]
 
     def _validate_config(self, config: Any) -> dict[str, Any]:
         """Validate YAML structure."""
@@ -285,11 +321,47 @@ class YamlPipelineBuilder:
                 "  nodes: [...]"
             )
 
-        if "spec" not in config:
-            raise YamlPipelineBuilderError("Manifest YAML must have 'spec' field")
+        # Macro definitions have different structure (no spec field)
+        kind = config.get("kind")
+        if kind == "Macro":
+            # Macro has: metadata, parameters, nodes (no spec)
+            if "metadata" not in config:
+                raise YamlPipelineBuilderError("Macro definition must have 'metadata' field")
+            if "nodes" not in config:
+                raise YamlPipelineBuilderError("Macro definition must have 'nodes' field")
+        else:
+            # Pipeline and other kinds require spec
+            if "spec" not in config:
+                raise YamlPipelineBuilderError("Manifest YAML must have 'spec' field")
 
-        if "metadata" not in config:
-            raise YamlPipelineBuilderError("Manifest YAML must have 'metadata' field")
+            if "metadata" not in config:
+                raise YamlPipelineBuilderError("Manifest YAML must have 'metadata' field")
+
+    def _process_macro_definitions(self, macro_configs: list[dict[str, Any]]) -> None:
+        """Process macro definitions and register them.
+
+        Parameters
+        ----------
+        macro_configs : list[dict[str, Any]]
+            List of validated macro configuration dictionaries
+        """
+        # Create temporary graph (not used for macros, but required by plugin interface)
+        temp_graph = DirectedGraph()
+
+        # Find MacroDefinitionPlugin
+        macro_plugin = next(
+            (p for p in self.entity_plugins if isinstance(p, MacroDefinitionPlugin)), None
+        )
+
+        if macro_plugin is None:
+            raise YamlPipelineBuilderError(
+                "MacroDefinitionPlugin not found. Cannot process macro definitions."
+            )
+
+        for macro_config in macro_configs:
+            # Wrap in a fake node config format expected by entity plugin
+            node_config = macro_config
+            macro_plugin.build(node_config, self, temp_graph)
 
     def _build_graph(self, config: dict[str, Any]) -> DirectedGraph:
         """Build DirectedGraph using entity plugins."""
@@ -329,6 +401,140 @@ class YamlPipelineBuilder:
 # ============================================================================
 # Entity Plugins - Each handles one entity type
 # ============================================================================
+
+
+class MacroDefinitionPlugin:
+    """Plugin for handling Macro definitions (kind: Macro).
+
+    This plugin processes YAML macro definitions and registers them in the
+    component registry for later invocation. Macro definitions don't add
+    nodes to the graph - they just register reusable templates.
+
+    Examples
+    --------
+    YAML macro definition::
+
+        apiVersion: hexdag/v1
+        kind: Macro
+        metadata:
+          name: retry_workflow
+          description: Retry logic with exponential backoff
+        parameters:
+          - name: max_retries
+            type: int
+            default: 3
+        nodes:
+          - kind: function_node
+            metadata:
+              name: "{{name}}_attempt"
+            spec:
+              fn: "{{fn}}"
+    """
+
+    def can_handle(self, node_config: dict[str, Any]) -> bool:
+        """Handle Macro kind."""
+        return node_config.get("kind") == "Macro"
+
+    def build(
+        self, node_config: dict[str, Any], builder: YamlPipelineBuilder, graph: DirectedGraph
+    ) -> NodeSpec | None:
+        """Register YAML macro in component registry.
+
+        Parameters
+        ----------
+        node_config : dict[str, Any]
+            Macro definition configuration
+        builder : YamlPipelineBuilder
+            Builder instance (unused)
+        graph : DirectedGraph
+            Graph instance (unused - definitions don't add nodes)
+
+        Returns
+        -------
+        None
+            Macro definitions don't add nodes to the graph
+
+        Raises
+        ------
+        YamlPipelineBuilderError
+            If macro definition is invalid
+        """
+        # Import here to avoid circular dependency
+        from hexdag.core.yaml_macro import YamlMacro, YamlMacroConfig, YamlMacroParameterSpec
+
+        # Extract metadata
+        metadata = node_config.get("metadata", {})
+        macro_name = metadata.get("name")
+        if not macro_name:
+            raise YamlPipelineBuilderError("Macro definition missing 'metadata.name'")
+
+        macro_description = metadata.get("description")
+        namespace = metadata.get("namespace", "user")  # Default to user namespace
+
+        # Extract parameters
+        raw_parameters = node_config.get("parameters", [])
+        parameters = [YamlMacroParameterSpec(**p) for p in raw_parameters]
+
+        # Extract nodes
+        nodes = node_config.get("nodes", [])
+        if not nodes:
+            raise YamlPipelineBuilderError(
+                f"Macro '{macro_name}' has no nodes. Macros must define at least one node."
+            )
+
+        # Extract outputs (optional)
+        outputs = node_config.get("outputs")
+
+        # Create YamlMacroConfig
+        macro_config = YamlMacroConfig(
+            macro_name=macro_name,
+            macro_description=macro_description,
+            parameters=parameters,
+            nodes=nodes,
+            outputs=outputs,
+        )
+
+        # Register macro in registry
+        # Create a dynamic class that pre-fills the YamlMacro config
+        from hexdag.core.registry.models import ComponentType
+
+        # Create a subclass of YamlMacro with pre-filled config
+        config_dict = macro_config.model_dump()
+
+        class DynamicYamlMacro(YamlMacro):
+            """Dynamically generated YamlMacro with pre-filled configuration."""
+
+            def __init__(self, **kwargs: Any) -> None:
+                # Merge pre-filled config with any override kwargs
+                merged_config = {**config_dict, **kwargs}
+                super().__init__(**merged_config)
+
+        # Set class name for better debugging
+        DynamicYamlMacro.__name__ = f"YamlMacro_{macro_name}"
+        DynamicYamlMacro.__qualname__ = f"YamlMacro_{macro_name}"
+
+        # Copy metadata to the dynamic class
+        DynamicYamlMacro._hexdag_type = ComponentType.MACRO  # type: ignore[attr-defined]
+        DynamicYamlMacro._hexdag_name = macro_name  # type: ignore[attr-defined]
+        DynamicYamlMacro._hexdag_names = [macro_name]  # type: ignore[attr-defined]
+        DynamicYamlMacro._hexdag_namespace = namespace  # type: ignore[attr-defined]
+        DynamicYamlMacro._hexdag_description = macro_description or f"YAML macro: {macro_name}"  # type: ignore[attr-defined]
+
+        registry.register(
+            name=macro_name,
+            component=DynamicYamlMacro,
+            namespace=namespace,
+            component_type=ComponentType.MACRO,
+            description=macro_description or f"YAML macro: {macro_name}",
+        )
+
+        logger.info(
+            f"✅ Registered YAML macro '{namespace}:{macro_name}' "
+            f"({len(parameters)} parameters, {len(nodes)} nodes)"
+        )
+
+        # Return None - macro definitions don't add nodes to the graph
+        return None
 
 
 class MacroEntityPlugin:
@@ -677,13 +883,58 @@ class IncludePreprocessPlugin:
 
 
 class EnvironmentVariablePlugin:
-    """Resolve ${VAR} and ${VAR:default} in YAML."""
+    """Resolve ${VAR} and ${VAR:default} in YAML with deferred secret resolution.
+
+    For KeyVault/SecretPort workflows, secret-like environment variables are
+    preserved as ${VAR} for runtime resolution. This allows:
+    - Building pipelines without secrets present
+    - Runtime secret injection via SecretPort → Memory
+    - Separation of build and deployment contexts
+
+    Secret patterns (deferred to runtime):
+    - *_API_KEY, *_SECRET, *_TOKEN, *_PASSWORD, *_CREDENTIAL
+    - SECRET_*
+
+    Non-secret variables are resolved immediately at build-time.
+    """
 
     ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*?)(?::([^}]*))?\}")
 
+    # Secret patterns that should be deferred to runtime
+    SECRET_PATTERNS = frozenset({
+        r".*_API_KEY$",
+        r".*_SECRET$",
+        r".*_TOKEN$",
+        r".*_PASSWORD$",
+        r".*_CREDENTIAL$",
+        r"^SECRET_.*",
+    })
+
+    def __init__(self, defer_secrets: bool = True):
+        """Initialize environment variable plugin.
+
+        Parameters
+        ----------
+        defer_secrets : bool, default=True
+            If True, preserve ${VAR} syntax for secret-like variables,
+            allowing runtime resolution from KeyVault/Memory.
+            If False, all variables are resolved at build-time (legacy behavior).
+        """
+        self.defer_secrets = defer_secrets
+        if defer_secrets:
+            # Compile secret detection regex
+            self._secret_regex = re.compile("|".join(f"({p})" for p in self.SECRET_PATTERNS))
+        else:
+            self._secret_regex = None
+
     def process(self, config: dict[str, Any]) -> dict[str, Any]:
         """Recursively resolve environment variables."""
-        result = _resolve_env_vars(config, self.ENV_VAR_PATTERN)
+        result = _resolve_env_vars(
+            config,
+            self.ENV_VAR_PATTERN,
+            secret_regex=self._secret_regex,
+            defer_secrets=self.defer_secrets,
+        )
         if not _is_dict_config(result):
             raise TypeError(
                 f"Environment variable resolution must return a dictionary, "
@@ -693,10 +944,28 @@ class EnvironmentVariablePlugin:
 
 
 @singledispatch
-def _resolve_env_vars(obj: Any, pattern: re.Pattern[str]) -> Any:
+def _resolve_env_vars(
+    obj: Any,
+    pattern: re.Pattern[str],
+    secret_regex: re.Pattern[str] | None = None,
+    defer_secrets: bool = True,
+) -> Any:
     """Recursively resolve ${VAR} in any structure.
 
-    Returns:
+    Parameters
+    ----------
+    obj : Any
+        Object to process
+    pattern : re.Pattern[str]
+        Regex pattern for matching ${VAR} syntax
+    secret_regex : re.Pattern[str] | None
+        Regex for detecting secret-like variable names
+    defer_secrets : bool
+        If True, preserve ${VAR} for secrets
+
+    Returns
+    -------
+    Any
         - For primitives: Returns the primitive unchanged
         - For strings: Returns str | int | float | bool (with type coercion)
         - For dicts: Returns dict[str, Any]
@@ -706,11 +975,24 @@ def _resolve_env_vars(obj: Any, pattern: re.Pattern[str]) -> Any:
 
 
 @_resolve_env_vars.register(str)
-def _resolve_env_vars_str(obj: str, pattern: re.Pattern[str]) -> str | int | float | bool:
-    """Resolve ${VAR} in strings with type coercion."""
+def _resolve_env_vars_str(
+    obj: str,
+    pattern: re.Pattern[str],
+    secret_regex: re.Pattern[str] | None = None,
+    defer_secrets: bool = True,
+) -> str | int | float | bool:
+    """Resolve ${VAR} in strings with optional secret deferral."""
 
     def replacer(match: re.Match[str]) -> str:
         var_name, default = match.group(1), match.group(2)
+
+        # Check if this looks like a secret
+        if defer_secrets and secret_regex and secret_regex.match(var_name):
+            # Secret detected - preserve ${VAR} syntax for runtime resolution
+            logger.debug(f"Deferring secret variable to runtime: {var_name}")
+            return match.group(0)  # Return original ${VAR} or ${VAR:default}
+
+        # Non-secret - resolve immediately from environment
         env_value = os.environ.get(var_name)
         if env_value is None:
             if default is not None:
@@ -719,7 +1001,9 @@ def _resolve_env_vars_str(obj: str, pattern: re.Pattern[str]) -> str | int | flo
         return env_value
 
     resolved = pattern.sub(replacer, obj)
-    if resolved != obj:  # Type coercion if changed
+
+    # Type coercion only if the value changed (was resolved)
+    if resolved != obj and not (defer_secrets and resolved.startswith("${")):
         if resolved.lower() in ("true", "yes", "1"):
             return True
         if resolved.lower() in ("false", "no", "0"):
@@ -732,15 +1016,25 @@ def _resolve_env_vars_str(obj: str, pattern: re.Pattern[str]) -> str | int | flo
 
 
 @_resolve_env_vars.register(dict)
-def _resolve_env_vars_dict(obj: dict, pattern: re.Pattern[str]) -> dict[str, Any]:
+def _resolve_env_vars_dict(
+    obj: dict,
+    pattern: re.Pattern[str],
+    secret_regex: re.Pattern[str] | None = None,
+    defer_secrets: bool = True,
+) -> dict[str, Any]:
     """Resolve ${VAR} in dict values."""
-    return {k: _resolve_env_vars(v, pattern) for k, v in obj.items()}
+    return {k: _resolve_env_vars(v, pattern, secret_regex, defer_secrets) for k, v in obj.items()}
 
 
 @_resolve_env_vars.register(list)
-def _resolve_env_vars_list(obj: list, pattern: re.Pattern[str]) -> list[Any]:
+def _resolve_env_vars_list(
+    obj: list,
+    pattern: re.Pattern[str],
+    secret_regex: re.Pattern[str] | None = None,
+    defer_secrets: bool = True,
+) -> list[Any]:
     """Resolve ${VAR} in list items."""
-    return [_resolve_env_vars(item, pattern) for item in obj]
+    return [_resolve_env_vars(item, pattern, secret_regex, defer_secrets) for item in obj]
 
 
 class TemplatePlugin:

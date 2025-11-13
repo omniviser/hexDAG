@@ -48,6 +48,9 @@ database = [
     "aiosqlite>=0.19.0",  # Async SQLite database adapter
     "aiofiles>=23.0.0",   # Async file I/O for CSV adapter
 ]
+mcp = [
+    "mcp>=1.0.0",  # Model Context Protocol server support
+]
 # Storage plugin extras (bundled with main package)
 storage-postgresql = [
     "sqlalchemy>=2.0.0",
@@ -88,7 +91,7 @@ all = [
     "hexdag[database]",
     "hexdag[storage-all]",
     "hexdag[notebooks]",
-
+    "hexdag[mcp]",
 ]
 
 [project.urls]

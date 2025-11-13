@@ -281,7 +281,7 @@ def adapter(
 def _wrap_adapter_init_for_secrets(cls: type) -> None:
     """Wrap __init__ to automatically resolve secrets from decorator or signature.
 
-    This enables two patterns:
+    This enables three patterns:
 
     Pattern 1: Decorator-based (preferred):
         @adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
@@ -289,7 +289,13 @@ def _wrap_adapter_init_for_secrets(cls: type) -> None:
             def __init__(self, api_key: str, model: str = "gpt-4"):
                 self.api_key = api_key
 
-    Pattern 2: Signature-based (backward compatible):
+    Pattern 2: YAML ${VAR} syntax (deferred from build-time):
+        # In YAML:
+        config:
+          api_key: ${OPENAI_API_KEY}
+        # Resolved at runtime from environment or memory
+
+    Pattern 3: Signature-based (backward compatible):
         @adapter("llm", name="openai")
         class OpenAIAdapter:
             def __init__(self, api_key: str = secret(env="OPENAI_API_KEY")):
@@ -316,7 +322,10 @@ def _wrap_adapter_init_for_secrets(cls: type) -> None:
         # Memory port might be passed via kwargs
         memory = kwargs.pop("memory", None)
 
-        # First, try decorator-based secrets (preferred)
+        # First, resolve ${VAR} patterns in kwargs values (deferred from YAML)
+        kwargs = _resolve_deferred_env_vars(kwargs, memory)
+
+        # Second, try decorator-based secrets (preferred)
         if hasattr(cls, "_hexdag_secrets") and cls._hexdag_secrets:
             for param_name, env_var in cls._hexdag_secrets.items():
                 # Skip if already provided explicitly
@@ -367,6 +376,96 @@ def _wrap_adapter_init_for_secrets(cls: type) -> None:
         original_init(self, *args, **kwargs)
 
     cls.__init__ = wrapped_init  # type: ignore[misc]
+
+
+def _resolve_deferred_env_vars(kwargs: dict[str, Any], memory: Any = None) -> dict[str, Any]:
+    """Resolve deferred ${VAR} patterns in kwargs values.
+
+    This handles ${VAR} syntax that was preserved by EnvironmentVariablePlugin
+    during YAML build-time for runtime resolution.
+
+    Parameters
+    ----------
+    kwargs : dict[str, Any]
+        Keyword arguments (may contain ${VAR} strings)
+    memory : Any, optional
+        Memory port for resolving secrets from KeyVault
+
+    Returns
+    -------
+    dict[str, Any]
+        Updated kwargs with ${VAR} patterns resolved
+
+    Examples
+    --------
+    >>> kwargs = {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}
+    >>> # With OPENAI_API_KEY in environment
+    >>> resolved = _resolve_deferred_env_vars(kwargs)
+    >>> resolved["api_key"]  # "sk-..."
+    """
+    import os
+
+    # Pattern to match ${VAR} or ${VAR:default}
+    env_var_pattern = re.compile(r"^\$\{([A-Z_][A-Z0-9_]*?)(?::([^}]*))?\}$")
+
+    updated_kwargs = {}
+    for param_name, param_value in kwargs.items():
+        # Only process string values that look like ${VAR}
+        if isinstance(param_value, str) and param_value.startswith("${"):
+            match = env_var_pattern.match(param_value)
+            if match:
+                var_name, default = match.groups()
+
+                # Try environment variable first
+                if value := os.getenv(var_name):
+                    updated_kwargs[param_name] = value
+                    logger.debug(f"Resolved ${{{var_name}}} from environment for '{param_name}'")
+                    continue
+
+                # Try memory port (KeyVault injection)
+                if memory:
+                    memory_key = f"secret:{var_name}"
+                    try:
+                        # Try sync get first
+                        if hasattr(memory, "get"):
+                            value = memory.get(memory_key)
+                        # Fallback: check storage attribute directly (for in-memory adapters)
+                        elif hasattr(memory, "storage") and isinstance(memory.storage, dict):
+                            value = memory.storage.get(memory_key)
+                        # Async-only memory - skip
+                        elif hasattr(memory, "aget"):
+                            logger.debug(
+                                f"Memory is async-only, cannot resolve {memory_key} in __init__"
+                            )
+                            value = None
+                        else:
+                            value = None
+
+                        if value:
+                            updated_kwargs[param_name] = value
+                            logger.debug(f"Resolved ${{{var_name}}} from memory for '{param_name}'")
+                            continue
+                    except Exception as e:
+                        logger.debug(f"Failed to read from memory: {e}")
+
+                # Use default if provided
+                if default is not None:
+                    updated_kwargs[param_name] = default
+                    logger.debug(f"Using default value for ${{{var_name}}} in '{param_name}'")
+                    continue
+
+                # Required but not found
+                raise ValueError(
+                    f"Required environment variable '${{{var_name}}}' not found. "
+                    f"Set environment variable {var_name} or provide via memory port."
+                )
+            # Not a valid ${VAR} pattern, keep as-is
+            updated_kwargs[param_name] = param_value
+        else:
+            # Not a string or doesn't start with ${
+            updated_kwargs[param_name] = param_value
+
+    return updated_kwargs
 
 
 def _wrap_adapter_async_methods(cls: type) -> None:

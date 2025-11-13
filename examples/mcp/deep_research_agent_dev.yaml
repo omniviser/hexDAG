@@ -1,0 +1,36 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: deep-research-agent-dev
+  description: Deep research agent with web search capabilities (DEV - Mock Adapters)
+spec:
+  ports:
+    llm:
+      adapter: plugin:mock_llm
+      config:
+        responses:
+        - 'I''ll search for information. INVOKE_TOOL: search(query=''...'')'
+        - 'Let me gather more details. INVOKE_TOOL: search(query=''...'')'
+        - 'Based on research, here are my findings: [Mock comprehensive answer]'
+        delay_seconds: 0.1
+    tool_router:
+      adapter: plugin:mock_tool_router
+      config:
+        available_tools:
+        - search
+        - calculate
+  nodes:
+  - kind: macro_invocation
+    metadata:
+      name: research_agent
+    spec:
+      macro: core:reasoning_agent
+      config:
+        main_prompt: 'You are a deep research agent. Research the following question
+          thoroughly: {{research_question}}'
+        max_steps: 5
+        allowed_tools:
+        - search
+        - calculate
+        tool_format: mixed
+    dependencies: []

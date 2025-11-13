@@ -360,6 +360,17 @@ class YamlValidator:
             result.add_error("Configuration must contain 'metadata' field")
             return
 
+        # Macro definitions have different structure (no spec field)
+        kind = config.get("kind")
+        if kind == "Macro":
+            # Macro has: metadata, parameters, nodes (no spec)
+            if "nodes" not in config:
+                result.add_error("Macro definition must contain 'nodes' field")
+                return
+            # Skip rest of validation for Macro kind
+            return
+
+        # For Pipeline and other kinds, validate spec
         if "spec" not in config:
             result.add_error("Configuration must contain 'spec' field")
             return
