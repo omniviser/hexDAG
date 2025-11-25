@@ -1,13 +1,19 @@
 {
-  "mcp": {
-    "servers": {
-      "hexdag": {
-        "command": "uv",
-        "args": ["run", "python", "-m", "hexdag", "--mcp"],
-        "env": {
-          "HEXDAG_CONFIG_PATH": ""
+    "mcp": {
+        "servers": {
+            "hexdag": {
+                "args": [
+                    "run",
+                    "python",
+                    "-m",
+                    "hexdag",
+                    "--mcp"
+                ],
+                "command": "uv",
+                "env": {
+                    "HEXDAG_CONFIG_PATH": ""
+                }
+            }
         }
-      }
     }
-  }
 }

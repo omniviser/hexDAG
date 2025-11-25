@@ -104,8 +104,7 @@ async def run_research_agent(
         # Validate API key
         if not os.getenv("STAGING_OPENAI_API_KEY"):
             raise EnvironmentError(
-                "STAGING_OPENAI_API_KEY not set\n"
-                "Set with: export STAGING_OPENAI_API_KEY=sk-..."
+                "STAGING_OPENAI_API_KEY not set\nSet with: export STAGING_OPENAI_API_KEY=sk-..."
             )
 
         # Use mock tools for staging
@@ -137,9 +136,9 @@ async def run_research_agent(
         raise ValueError(f"Unknown environment: {environment}. Use: dev, staging, or prod")
 
     # Run the agent
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"Research Question: {question}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     print("🚀 Running agent...")
     print("-" * 80)
@@ -158,7 +157,9 @@ async def run_research_agent(
     if final_key in results:
         final_result = results[final_key]
         final_text = (
-            final_result.get("text", final_result) if isinstance(final_result, dict) else final_result
+            final_result.get("text", final_result)
+            if isinstance(final_result, dict)
+            else final_result
         )
 
         print("\n✅ Final Answer:")
@@ -171,7 +172,7 @@ async def run_research_agent(
 
     # Show stats
     if environment == "dev":
-        print(f"\n📈 Mock Statistics:")
+        print("\n📈 Mock Statistics:")
         if hasattr(orchestrator.ports.get("llm"), "call_count"):
             print(f"   LLM calls: {orchestrator.ports['llm'].call_count}")
         if hasattr(orchestrator.ports.get("tool_router"), "call_history"):
@@ -223,18 +224,14 @@ def main():
         default="dev",
         help="Environment to run in (default: dev)",
     )
-    parser.add_argument(
-        "--pipeline", help="Custom pipeline file path (optional)", default=None
-    )
+    parser.add_argument("--pipeline", help="Custom pipeline file path (optional)", default=None)
     parser.add_argument(
         "--question",
         "-q",
         help="Research question (if not provided, enters interactive mode)",
         default=None,
     )
-    parser.add_argument(
-        "--interactive", "-i", action="store_true", help="Run in interactive mode"
-    )
+    parser.add_argument("--interactive", "-i", action="store_true", help="Run in interactive mode")
 
     args = parser.parse_args()
 

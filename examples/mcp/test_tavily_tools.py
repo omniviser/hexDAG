@@ -13,11 +13,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Import registry first, then Tavily tools
-from hexdag.core.registry import registry
-from hexdag.core.registry.models import ComponentType
-
 # Import tavily adapter to register tools (after registry is available)
 import examples.mcp.tavily_adapter  # noqa: F401
+from hexdag.core.registry import registry
 
 
 def test_tool_registration():
@@ -72,13 +70,13 @@ def test_yaml_loading():
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_file(str(yaml_path))
 
-        print(f"\n✓ Pipeline loaded successfully!")
+        print("\n✓ Pipeline loaded successfully!")
         print(f"  Config type: {type(config)}")
         print(f"  Nodes: {len(graph.nodes)}")
 
         # List first few nodes
-        print(f"\n  Sample node names:")
-        for i, node_name in enumerate(sorted(graph.nodes.keys())[:5]):
+        print("\n  Sample node names:")
+        for node_name in sorted(graph.nodes.keys())[:5]:
             print(f"    - {node_name}")
         if len(graph.nodes) > 5:
             print(f"    ... and {len(graph.nodes) - 5} more")

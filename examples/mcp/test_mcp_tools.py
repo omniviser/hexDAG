@@ -24,9 +24,9 @@ from hexdag.mcp_server import (
 
 def print_section(title: str) -> None:
     """Print a section header."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  {title}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
 
 def demo_list_nodes() -> None:

@@ -585,11 +585,19 @@ class MacroEntityPlugin:
 
         macro_instance: ConfigurableMacro = macro_instance_obj
 
+        # Expand macro - merge config and inputs for validation
+        # config params are the parameter values for the macro
+        # inputs are the value mappings, so they should be merged
+        macro_inputs = {**config_params, **inputs}
+
         # Expand macro
         try:
             subgraph = macro_instance.expand(
-                instance_name=instance_name, inputs=inputs, dependencies=dependencies
+                instance_name=instance_name, inputs=macro_inputs, dependencies=dependencies
             )
+        except ValueError:
+            # Re-raise validation errors directly (e.g., required parameter, enum validation)
+            raise
         except Exception as e:
             raise YamlPipelineBuilderError(
                 f"Failed to expand macro '{macro_name}' (instance '{instance_name}'): {e}"
@@ -923,7 +931,9 @@ class EnvironmentVariablePlugin:
         self.defer_secrets = defer_secrets
         if defer_secrets:
             # Compile secret detection regex
-            self._secret_regex = re.compile("|".join(f"({p})" for p in self.SECRET_PATTERNS))
+            self._secret_regex: re.Pattern[str] | None = re.compile(
+                "|".join(f"({p})" for p in self.SECRET_PATTERNS)
+            )
         else:
             self._secret_regex = None
 

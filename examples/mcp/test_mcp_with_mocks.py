@@ -178,7 +178,7 @@ spec:
     builder = YamlPipelineBuilder()
     graph, config = builder.build_from_yaml_string(pipeline_yaml)
 
-    print(f"\n✅ Pipeline built successfully!")
+    print("\n✅ Pipeline built successfully!")
     print(f"  Nodes: {len(graph.nodes)}")
     print(f"  Ports: {list(config.ports.keys())}")
 
@@ -225,12 +225,12 @@ spec:
         print("-" * 80)
 
         # Verify mock was called
-        print(f"\n📈 Mock Statistics:")
+        print("\n📈 Mock Statistics:")
         print(f"  LLM calls: {mock_llm.call_count}")
         print(f"  Tool calls: {len(mock_tool_router.call_history)}")
 
         if mock_tool_router.call_history:
-            print(f"\n🔧 Tool Calls Made:")
+            print("\n🔧 Tool Calls Made:")
             for i, call in enumerate(mock_tool_router.call_history, 1):
                 print(f"  {i}. {call['tool']}({call['params']})")
 

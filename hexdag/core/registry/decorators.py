@@ -398,10 +398,10 @@ def _resolve_deferred_env_vars(kwargs: dict[str, Any], memory: Any = None) -> di
 
     Examples
     --------
-    >>> kwargs = {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}
-    >>> # With OPENAI_API_KEY in environment
-    >>> resolved = _resolve_deferred_env_vars(kwargs)
-    >>> resolved["api_key"]  # "sk-..."
+    >>> kwargs = {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}  # doctest: +SKIP
+    >>> resolved = _resolve_deferred_env_vars(kwargs)  # doctest: +SKIP
+    >>> resolved["api_key"]  # doctest: +SKIP
+    "sk-..."
     """
     import os
 
@@ -628,34 +628,34 @@ def macro(
 
     Examples
     --------
-    Basic macro definition:
+    Basic macro definition::
 
-    >>> from hexdag.core.registry import macro
-    >>> from hexdag.core.configurable import ConfigurableMacro, MacroConfig
-    >>> from hexdag.core.domain.dag import DirectedGraph
-    >>>
-    >>> class ResearchMacroConfig(MacroConfig):
-    ...     depth: int = 3
-    >>>
-    >>> @macro(name="research", namespace="core")
-    ... class ResearchMacro(ConfigurableMacro):
-    ...     Config = ResearchMacroConfig
-    ...
-    ...     def expand(self, instance_name, inputs, dependencies):
-    ...         return DirectedGraph([...])
+        from hexdag.core.registry import macro
+        from hexdag.core.configurable import ConfigurableMacro, MacroConfig
+        from hexdag.core.domain.dag import DirectedGraph
 
-    Usage in YAML:
+        class ResearchMacroConfig(MacroConfig):
+            depth: int = 3
 
-    >>> # nodes:
-    >>> #   - kind: macro_invocation
-    >>> #     metadata:
-    >>> #       name: deep_research
-    >>> #     spec:
-    >>> #       macro: core:research
-    >>> #       config:
-    >>> #         depth: 5
-    >>> #       inputs:
-    >>> #         topic: "AI safety"
+        @macro(name="research", namespace="core")
+        class ResearchMacro(ConfigurableMacro):
+            Config = ResearchMacroConfig
+
+            def expand(self, instance_name, inputs, dependencies):
+                return DirectedGraph([...])
+
+    Usage in YAML::
+
+        nodes:
+          - kind: macro_invocation
+            metadata:
+              name: deep_research
+            spec:
+              macro: core:research
+              config:
+                depth: 5
+              inputs:
+                topic: "AI safety"
     """
 
     def decorator(cls: T) -> T:
