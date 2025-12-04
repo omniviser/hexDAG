@@ -1,0 +1,41 @@
+# hexDAG Pipeline: Basic Chatbot
+# Ported from LangGraph project-01-basic-chatbot
+# Uses Google Gemini API (same as original)
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: basic-chatbot
+  description: Simple chatbot that responds to user input using Google Gemini
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-01-basic-chatbot"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: chatbot
+        annotations:
+          description: Main chatbot node using Google Gemini
+      spec:
+        prompt_template: |
+          {% if messages %}
+          Previous conversation:
+          {% for msg in messages %}
+          {{ msg.role }}: {{ msg.content }}
+          {% endfor %}
+          {% endif %}
+
+          User: {{ user_input }}
+
+          Respond naturally and helpfully.
+
+        # LLM configuration - using Google Gemini (same as LangGraph version)
+        model: gemini-2.5-flash
+        temperature: 0.7
+        max_tokens: 1000
+
+        # No dependencies - single node pipeline
+        dependencies: []
