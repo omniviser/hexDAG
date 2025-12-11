@@ -1,0 +1,126 @@
+# hexDAG Pipeline: Marketing Slogan Generator
+# Ported from LangGraph project-09-creative-content-generation
+#
+# Pattern: Iterative refinement of creative content
+# LangGraph uses cycles (generate <-> refine)
+# hexDAG uses linear DAG with multiple refinement nodes
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: marketing-generator
+  description: Generate and iteratively refine marketing slogans
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-09"
+    pattern: "Iterative refinement (DAG version)"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Generate initial slogan
+    - kind: llm_node
+      metadata:
+        name: generate_slogan
+        annotations:
+          description: Generate initial marketing slogan
+      spec:
+        prompt_template: |
+          Generate a creative marketing slogan for: {{ product_description }}
+
+          Requirements:
+          - Catchy and memorable
+          - Short (under 10 words)
+          - Highlights key benefits
+
+          Respond with ONLY the slogan, nothing else.
+
+        model: gemini-2.0-flash
+        temperature: 0.9
+        dependencies: []
+
+    # Step 2: First refinement
+    - kind: llm_node
+      metadata:
+        name: refine_1
+        annotations:
+          description: First refinement pass
+      spec:
+        prompt_template: |
+          Refine this marketing slogan to make it better:
+          "{{ initial_slogan }}"
+
+          Product: {{ product_description }}
+
+          Make it:
+          - More catchy
+          - More memorable
+          - Better rhythm
+
+          Respond with ONLY the refined slogan, nothing else.
+
+        model: gemini-2.0-flash
+        temperature: 0.8
+        dependencies: [generate_slogan]
+
+    # Step 3: Second refinement
+    - kind: llm_node
+      metadata:
+        name: refine_2
+        annotations:
+          description: Second refinement pass
+      spec:
+        prompt_template: |
+          Further refine this marketing slogan:
+          "{{ refined_slogan_1 }}"
+
+          Product: {{ product_description }}
+
+          Polish it to be:
+          - Perfect length
+          - Maximum impact
+          - Ready for advertising
+
+          Respond with ONLY the final slogan, nothing else.
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+        dependencies: [refine_1]
+
+    # Step 4: Final evaluation
+    - kind: llm_node
+      metadata:
+        name: evaluate
+        annotations:
+          description: Evaluate and present final slogan
+      spec:
+        prompt_template: |
+          Evaluate this marketing slogan for {{ product_description }}:
+
+          Final slogan: "{{ final_slogan }}"
+
+          Provide:
+          1. Rating (1-10)
+          2. Strengths
+          3. Why it works for the target audience
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+        dependencies: [refine_2]
+
+# COMPARISON - Cycles vs DAG:
+#
+# LangGraph (cycles):
+#   generate <--> refine (loops until recursion_limit)
+#   - Flexible number of iterations
+#   - Can loop forever without limit
+#   - Harder to predict execution
+#
+# hexDAG (linear DAG):
+#   generate -> refine_1 -> refine_2 -> evaluate
+#   - Fixed number of refinements
+#   - Always completes
+#   - Predictable execution
+#
+# Trade-off: hexDAG requires pre-defining iteration count
+# Benefit: Guaranteed completion, easier to test and debug
