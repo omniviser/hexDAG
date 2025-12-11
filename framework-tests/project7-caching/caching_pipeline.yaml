@@ -1,0 +1,49 @@
+# hexDAG Pipeline: Node-Level Caching
+# Ported from LangGraph project-07-document-summarization-pipeline
+# (Note: Folder name is misleading - this is about CACHING, not summarization)
+#
+# Pattern: Cache LLM responses to avoid redundant API calls
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: cached-chatbot
+  description: Chatbot with response caching to reduce API costs
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-07"
+    pattern: "Node-level caching"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: chatbot
+        annotations:
+          description: Chatbot with caching support
+      spec:
+        prompt_template: |
+          {{ user_input }}
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+
+        # hexDAG caching would be configured here
+        # cache: true
+        # cache_ttl: 3600  # seconds
+
+        dependencies: []
+
+# CACHING COMPARISON:
+#
+# LangGraph approach:
+#   memory = SqliteSaver.from_conn_string(":memory:")
+#   app = graph.compile(checkpointer=memory)
+#   - Built-in checkpointer saves state between runs
+#   - Same input with same thread_id returns cached result
+#
+# hexDAG approach:
+#   - No built-in checkpointer equivalent
+#   - Must implement caching manually or use memory port
+#   - See run_caching.py for implementation
