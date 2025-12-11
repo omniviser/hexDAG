@@ -1,0 +1,63 @@
+# hexDAG Pipeline: Budget Data Summarization
+# Ported from LangGraph project-14-budget-data-summarization
+#
+# Pattern: Data Processing -> LLM Analysis
+# - Parse CSV budget data
+# - Aggregate by category
+# - Generate natural language insights
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: budget-planner
+  description: Analyze budget data and provide insights
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-14"
+    pattern: "Data Processing + LLM Analysis"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Parse and aggregate CSV data
+    - kind: function_node
+      metadata:
+        name: parse_csv
+        annotations:
+          description: Parse CSV and aggregate expenses by category
+      spec:
+        fn: "parse_csv"
+        dependencies: []
+
+    # Step 2: Generate natural language summary
+    - kind: llm_node
+      metadata:
+        name: summarize_budget
+        annotations:
+          description: Create human-readable budget analysis
+      spec:
+        prompt_template: |
+          Analyze this budget data and provide insights:
+
+          {{ budget_summary }}
+
+          Provide:
+          1. Total spending overview
+          2. Top spending categories
+          3. Observations or concerns
+          4. Recommendations for optimization
+
+        model: gemini-2.0-flash
+        temperature: 0.5
+        dependencies: [parse_csv]
+
+# DATA PROCESSING PATTERN:
+#
+#   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+#   │   CSV Data  │ --> │   Parse &   │ --> │  LLM        │ --> Insights
+#   │             │     │  Aggregate  │     │  Summary    │
+#   └─────────────┘     └─────────────┘     └─────────────┘
+#                            │                    │
+#                            v                    v
+#                     Category totals       Natural language
+#                     and statistics        analysis
