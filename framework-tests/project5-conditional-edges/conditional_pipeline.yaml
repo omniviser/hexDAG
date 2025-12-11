@@ -1,0 +1,69 @@
+# hexDAG Pipeline: Conditional Edges (Loop with Threshold)
+# Ported from LangGraph project-05-multi-agent-collaboration
+# Actually demonstrates conditional branching, not multi-agent
+#
+# LangGraph behavior: Chatbot loops until message count > 5
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: conditional-edges
+  description: Chatbot with conditional looping based on message threshold
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-05-multi-agent-collaboration"
+    actual_pattern: "Conditional edges / loop with threshold"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Node 1: Chatbot responds to messages
+    - kind: llm_node
+      metadata:
+        name: chatbot
+        annotations:
+          description: Generate response to user message
+      spec:
+        prompt_template: |
+          You are a helpful assistant.
+
+          {% if messages %}
+          Conversation history:
+          {% for msg in messages %}
+          {{ msg.role }}: {{ msg.content }}
+          {% endfor %}
+          {% endif %}
+
+          User: {{ user_input }}
+
+          Respond helpfully.
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+        dependencies: []
+
+    # Node 2: Check threshold condition
+    # In LangGraph: check_threshold returns True if len(messages) > 5
+    - kind: conditional_node
+      metadata:
+        name: threshold_check
+        annotations:
+          description: Check if message count exceeds threshold
+      spec:
+        condition: "len(messages) > 5"
+        true_branch: end
+        false_branch: chatbot  # Loop back
+        dependencies: [chatbot]
+
+# NOTE: hexDAG handles loops differently than LangGraph
+#
+# LangGraph approach:
+#   graph.add_conditional_edges("chatbot", check_threshold, {True: "end", False: "chatbot"})
+#   - Creates a cycle in the graph that loops until condition is True
+#
+# hexDAG approach:
+#   - DAGs are acyclic by definition (no cycles allowed)
+#   - Loops must be implemented with LoopNode or external iteration
+#   - See run_conditional.py for the workaround implementation
+#
+# This is a POTENTIAL GAP or DESIGN DIFFERENCE to document.
