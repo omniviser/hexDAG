@@ -1,0 +1,69 @@
+# hexDAG Pipeline: Shell Command Execution and Summarization
+# Ported from LangGraph project-19-shell-command-execution-and-summarization
+#
+# Pattern: Execute -> Summarize
+# - Execute shell/system commands
+# - Summarize output in human-readable format
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: shell-command-agent
+  description: Execute shell commands and summarize output
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-19"
+    pattern: "Command Execution + LLM Summary"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Execute shell command
+    - kind: function_node
+      metadata:
+        name: execute_command
+        annotations:
+          description: Run a shell command safely
+      spec:
+        fn: "execute_command"
+        dependencies: []
+
+    # Step 2: Summarize the output
+    - kind: llm_node
+      metadata:
+        name: summarize_output
+        annotations:
+          description: Explain command output in plain English
+      spec:
+        prompt_template: |
+          You are a system administrator assistant.
+
+          COMMAND EXECUTED:
+          {{ command }}
+
+          OUTPUT:
+          {{ command_output }}
+
+          Provide:
+          1. Summary of what the command does
+          2. Key information from the output
+          3. Any warnings or issues noticed
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+        dependencies: [execute_command]
+
+# SHELL COMMAND PATTERN:
+#
+#   ┌──────────┐     ┌──────────────┐     ┌──────────────┐
+#   │ Command  │ --> │   Execute    │ --> │  Summarize   │ --> Report
+#   │          │     │   Safely     │     │   Output     │
+#   └──────────┘     └──────────────┘     └──────────────┘
+#                          │                     │
+#                          v                     v
+#                    subprocess            Human-readable
+#                    with timeout          explanation
+#
+# SECURITY NOTE:
+# Only safe, read-only commands are allowed in this demo.
+# Never execute arbitrary user input without validation!
