@@ -1,0 +1,107 @@
+# hexDAG Pipeline: Blog Writing and Publishing Agent
+# Ported from LangGraph project-22-blog-writing-and-publishing-agent
+#
+# Pattern: Research -> Write -> Proofread -> Publish
+# - Research topic from URLs
+# - Write SEO-optimized blog post
+# - Proofread and refine
+# - Publish to WordPress (or save locally)
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: blog-writer-agent
+  description: Multi-agent blog writing and publishing workflow
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-22"
+    pattern: "Multi-Agent Content Pipeline"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Research from URLs
+    - kind: function_node
+      metadata:
+        name: research
+        annotations:
+          description: Fetch and compile research from URLs
+      spec:
+        fn: "research_agent"
+        dependencies: []
+
+    # Step 2: Write the blog post
+    - kind: llm_node
+      metadata:
+        name: write
+        annotations:
+          description: Write SEO-optimized blog post
+      spec:
+        prompt_template: |
+          You are an expert SEO content writer for {{ organization_name }}.
+          Company Description: {{ organization_description }}
+
+          Write a comprehensive, engaging, SEO-optimized blog post based on:
+          {{ research_content }}
+
+          Follow SEO best practices:
+          - Use main keyword naturally throughout
+          - Include related LSI keywords
+          - Write compelling meta title and description
+          - Use H1, H2, H3 headings for structure
+          - Hook reader in intro, summarize in conclusion
+          - At least 800 words
+
+          Tone: Professional, informative, engaging.
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+        dependencies: [research]
+
+    # Step 3: Proofread and polish
+    - kind: llm_node
+      metadata:
+        name: proofread
+        annotations:
+          description: Review and refine the blog post
+      spec:
+        prompt_template: |
+          You are an expert proofreader and editor.
+          Review this blog post for:
+          - Grammatical errors
+          - Spelling mistakes
+          - Awkward phrasing
+          - Clarity and readability
+
+          Blog Post:
+          ---
+          {{ blog_post }}
+          ---
+
+          Return the polished final version as clean markdown.
+          Do not include HTML tags or code blocks.
+
+        model: gemini-2.0-flash
+        temperature: 0
+        dependencies: [write]
+
+    # Step 4: Publish (or save)
+    - kind: function_node
+      metadata:
+        name: publish
+        annotations:
+          description: Publish to WordPress or save locally
+      spec:
+        fn: "publish_agent"
+        dependencies: [proofread]
+
+# BLOG WRITING PIPELINE:
+#
+#   ┌──────────┐    ┌─────────┐    ┌────────────┐    ┌──────────┐
+#   │ Research │ -> │  Write  │ -> │ Proofread  │ -> │ Publish  │
+#   │  (URLs)  │    │  (LLM)  │    │   (LLM)    │    │  (WP)    │
+#   └──────────┘    └─────────┘    └────────────┘    └──────────┘
+#        │               │               │                │
+#        v               v               v                v
+#    Web content    800+ word       Polished         Published
+#    extraction     SEO article     content          to WordPress
