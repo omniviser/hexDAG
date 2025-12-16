@@ -1,0 +1,69 @@
+# hexDAG Pipeline: RAG (Retrieval Augmented Generation) Chatbot
+# Ported from LangGraph project-16-rag-retrieval-augmented-generation-chatbot
+#
+# Pattern: Retrieve -> Generate
+# - Retrieve relevant context from knowledge base
+# - Generate answer using LLM with context
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: rag-chatbot
+  description: Question-answering over a knowledge base using RAG
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-16"
+    pattern: "RAG (Retrieval Augmented Generation)"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Retrieve relevant context
+    - kind: function_node
+      metadata:
+        name: retrieve_context
+        annotations:
+          description: Search knowledge base for relevant information
+      spec:
+        fn: "retrieve_context"
+        dependencies: []
+
+    # Step 2: Generate answer using retrieved context
+    - kind: llm_node
+      metadata:
+        name: generate_answer
+        annotations:
+          description: Answer question using retrieved context
+      spec:
+        prompt_template: |
+          Answer the question based ONLY on the following context.
+          If the answer is not in the context, say "I don't have information about that."
+
+          CONTEXT:
+          {{ context }}
+
+          QUESTION:
+          {{ question }}
+
+          ANSWER:
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+        dependencies: [retrieve_context]
+
+# RAG PATTERN:
+#
+#   ┌──────────┐     ┌──────────────┐     ┌──────────────┐
+#   │ Question │ --> │   Retrieve   │ --> │   Generate   │ --> Answer
+#   │          │     │   Context    │     │   Answer     │
+#   └──────────┘     └──────────────┘     └──────────────┘
+#                          │                     │
+#                          v                     v
+#                    Search knowledge       LLM uses context
+#                    base for relevant      to answer accurately
+#                    documents
+#
+# Why RAG?
+# - LLMs have knowledge cutoffs
+# - RAG provides current/private information
+# - Reduces hallucination by grounding in facts
