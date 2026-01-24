@@ -31,3 +31,29 @@ def aput(url: str, json: dict, data: dict, headers: dict, **kwargs: object) -> N
 def adelete(url: str, headers: dict, **kwargs: object) -> None:
     """Whitelist for APICallPort.adelete parameters."""
     _ = (url, headers, kwargs)
+
+
+# hexdag/core/ports/file_storage.py - FileStoragePort protocol
+def aupload(local_path: str, remote_path: str) -> None:
+    """Whitelist for FileStoragePort.aupload parameters."""
+    _ = (local_path, remote_path)
+
+
+def adownload(remote_path: str, local_path: str) -> None:
+    """Whitelist for FileStoragePort.adownload parameters."""
+    _ = (remote_path, local_path)
+
+
+def adelete_file(remote_path: str) -> None:
+    """Whitelist for FileStoragePort.adelete parameter."""
+    _ = remote_path
+
+
+def aexists(remote_path: str) -> None:
+    """Whitelist for FileStoragePort.aexists parameter."""
+    _ = remote_path
+
+
+def aget_metadata(remote_path: str) -> None:
+    """Whitelist for FileStoragePort.aget_metadata parameter."""
+    _ = remote_path

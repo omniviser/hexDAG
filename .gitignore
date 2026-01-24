@@ -91,3 +91,8 @@ hexdag_plugins/*/.pytest_cache/
 hexdag_plugins/*/dist/
 hexdag_plugins/*/build/
 hexdag_plugins/*/*.egg-info/
+
+# Studio UI (React/Vite)
+hexdag/studio/ui/node_modules/
+hexdag/studio/ui/dist/
+hexdag/studio/ui/.vite/

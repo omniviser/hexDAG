@@ -24,6 +24,7 @@ from hexdag.cli.commands import (
     plugins_cmd,
     registry_cmd,
     schema_cmd,
+    studio_cmd,
     validate_cmd,
 )
 
@@ -46,6 +47,7 @@ app.add_typer(pipeline_cmd.app, name="pipeline", help="Pipeline validation and e
 app.add_typer(create_cmd.app, name="create", help="Create pipeline templates from schemas")
 app.add_typer(schema_cmd.app, name="schema", help="Inspect component schemas")
 app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
+app.add_typer(studio_cmd.app, name="studio", help="Visual editor for pipelines")
 
 app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
 app.command(name="validate", help="Validate YAML pipeline files")(validate_cmd.validate)

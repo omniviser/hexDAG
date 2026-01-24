@@ -14,10 +14,13 @@ from pathlib import Path
 
 import pandas as pd
 
-# Add plugin to path and import to register components
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from hexdag.core.memory import InMemoryMemory
-from hexdag.core.orchestrator import Orchestrator
+# Add hexdag and plugin to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))  # hexdag root
+sys.path.insert(0, str(Path(__file__).parent.parent))  # plugin root
+
+# Import plugin to register components
+from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
+from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 import hexdag_etl  # noqa: F401 - import to register plugin components
@@ -156,7 +159,7 @@ spec:
           key: transactions_v1
 
     # Transform: Join and enrich data
-    - kind: etl:pandas_transform
+    - kind: user:pandas_transform_node
       metadata:
         name: enrich_customer_data
       spec:
@@ -170,10 +173,10 @@ spec:
           - type: transform
             method: pandas.merge
             args:
-              - {{input_artifacts[0]}}
+              - "{{input_artifacts[0]}}"
               - |
-                {{input_artifacts[1]}}
-                .groupby('customer_id')
+                "{{input_artifacts[1]}}
+                .groupby('customer_id')"
                 .agg({
                   'transaction_id': 'count',
                   'amount': ['sum', 'mean']
@@ -223,7 +226,7 @@ spec:
 
     print("\n✓ Building pipeline from YAML...")
     builder = YamlPipelineBuilder()
-    graph, config = builder.build_from_string(pipeline_yaml)
+    graph, config = builder.build_from_yaml_string(pipeline_yaml)
 
     print(f"✓ Pipeline built with {len(graph._graph.nodes())} nodes")
 

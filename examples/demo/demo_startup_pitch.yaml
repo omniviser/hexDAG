@@ -17,14 +17,7 @@ spec:
           description: Extract structured information from support ticket
       spec:
         prompt_template: |
-          Extract the following from this support ticket:
-          Customer Tier: {{customer_tier}}
-          Ticket: {{ticket_text}}
-
-          Respond with JSON containing:
-          - issue_type: one of [bug, feature_request, billing, onboarding, other]
-          - technical_details: summary of technical aspects
-          - customer_emotion: one of [angry, frustrated, neutral, happy]
+          YOLO
 
         model: gpt-4o
         temperature: 0.1

@@ -1,21 +1,48 @@
 """hexdag-etl: ETL infrastructure for hexDAG pipelines.
 
-Provides:
-- Multi-operation pandas transform nodes for data transformation
-- API extraction with pagination and authentication (placeholder)
-- SQL extraction and loading (placeholder implementations)
+Provides file I/O and multi-operation pandas transform nodes for data transformation pipelines.
 
-This plugin extends hexDAG with data pipeline capabilities for ETL workflows.
-Note: Artifact storage adapter temporarily removed - pending architecture update.
+This plugin extends hexDAG with ETL capabilities:
+- FileReaderNode: Read CSV, Parquet, JSON, Excel files
+- FileWriterNode: Write data to various file formats
+- PandasTransformNode: Chain pandas operations
+
+Example Pipeline:
+    - kind: etl:file_reader_node
+      metadata:
+        name: load_data
+      spec:
+        file_path: data/input.csv
+        format: csv
+
+    - kind: etl:pandas_transform_node
+      metadata:
+        name: transform
+      spec:
+        operations:
+          - type: filter
+            condition: "{{ df['value'] > 0 }}"
+      dependencies: [load_data]
+
+    - kind: etl:file_writer_node
+      metadata:
+        name: save_results
+      spec:
+        file_path: output/results.parquet
+        format: parquet
+      dependencies: [transform]
 """
 
-from .nodes import APIExtractNode, PandasTransformNode, SQLExtractNode, SQLLoadNode
+from .nodes.file_io import FileReaderNode, FileWriterNode
+from .nodes.outlook import OutlookReaderNode, OutlookSenderNode
+from .nodes.pandas_transform import PandasTransformNode
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "FileReaderNode",
+    "FileWriterNode",
+    "OutlookReaderNode",
+    "OutlookSenderNode",
     "PandasTransformNode",
-    "APIExtractNode",
-    "SQLExtractNode",
-    "SQLLoadNode",
 ]

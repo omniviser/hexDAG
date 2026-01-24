@@ -25,6 +25,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Azure SDK dependencies (lazy-loaded by adapters)
+blob = ["azure-storage-blob>=12.13.0", "azure-identity>=1.13.0"]
+cosmos = ["azure-cosmos>=4.3.0", "azure-identity>=1.13.0"]
+keyvault = ["azure-keyvault-secrets>=4.4.0", "azure-identity>=1.13.0"]
+all = [
+    "azure-storage-blob>=12.13.0",
+    "azure-cosmos>=4.3.0",
+    "azure-keyvault-secrets>=4.4.0",
+    "azure-identity>=1.13.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.21.0",
@@ -85,6 +95,9 @@ select = [
     "B",      # flake8-bugbear
     "SIM",    # flake8-simplify
     "I",      # isort
+]
+ignore = [
+    "SIM105",  # contextlib.suppress doesn't work with async
 ]
 
 [tool.mypy]

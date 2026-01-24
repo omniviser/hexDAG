@@ -7,12 +7,11 @@ from dataclasses import asdict
 from typing import Any
 
 import pandas as pd
+from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.registry import node
 from hexdag.core.registry.models import NodeSubtype
 from pydantic import BaseModel
-
-from .base_node_factory import BaseNodeFactory
 
 
 class PandasOperation(BaseModel):
@@ -37,7 +36,7 @@ class PandasOperation(BaseModel):
     """Filter condition expression (for 'filter' operations)"""
 
 
-@node(name="pandas_transform", subtype=NodeSubtype.FUNCTION, namespace="etl")
+@node(name="pandas_transform_node", subtype=NodeSubtype.FUNCTION, namespace="etl")
 class PandasTransformNode(BaseNodeFactory):
     """Node factory for multi-operation pandas transforms.
 
@@ -472,14 +471,34 @@ class PandasTransformNode(BaseNodeFactory):
             raise ValueError(f"Method path must contain '.', got: {method_path}")
 
         try:
-            module_path, attr_path = method_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            method = getattr(module, attr_path)
+            # Handle pandas class paths like pandas.DataFrame.sort_values
+            if method_path.startswith("pandas."):
+                parts = method_path.split(".")
+                if len(parts) >= 3 and parts[1] == "DataFrame":
+                    # It's a DataFrame method: pandas.DataFrame.method_name
+                    method_name = parts[2]
+                    return getattr(pd.DataFrame, method_name)
+                else:
+                    # It's a module-level function like pandas.merge
+                    module_path = ".".join(parts[:-1])
+                    attr_path = parts[-1]
+                    module = importlib.import_module(module_path)
+                    method = getattr(module, attr_path)
 
-            if not callable(method):
-                raise ValueError(f"'{method_path}' is not callable")
+                    if not callable(method):
+                        raise ValueError(f"'{method_path}' is not callable")
 
-            return method
+                    return method
+            else:
+                # Standard module attribute resolution
+                module_path, attr_path = method_path.rsplit(".", 1)
+                module = importlib.import_module(module_path)
+                method = getattr(module, attr_path)
+
+                if not callable(method):
+                    raise ValueError(f"'{method_path}' is not callable")
+
+                return method
         except Exception as e:
             raise ValueError(f"Could not resolve method '{method_path}': {e}") from e
 

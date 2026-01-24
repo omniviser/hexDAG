@@ -246,8 +246,9 @@ class YamlMacro(ConfigurableMacro):
         # Use PreserveUndefined to allow partial rendering:
         # - Macro variables ({{name}}, {{param}}) are replaced
         # - Runtime variables ({{node.output}}) are preserved
+        # Note: autoescape=False is intentional - we're processing YAML, not HTML
         self.jinja_env = Environment(
-            autoescape=False,
+            autoescape=False,  # nosec B701 - YAML processing, not HTML
             undefined=PreserveUndefined,
             keep_trailing_newline=True,
         )

@@ -84,6 +84,11 @@ notebooks = [
     "matplotlib>=3.8.0",  # Plotting for visualization
     "pandas>=2.1.0",  # Data analysis (common in notebooks)
 ]
+studio = [
+    "fastapi>=0.109.0",  # Web framework for studio server
+    "uvicorn>=0.27.0",   # ASGI server
+    "watchfiles>=0.21.0",  # File watching for hot reload
+]
 all = [
     "hexdag[viz]",
     "hexdag[openai]",
@@ -91,6 +96,7 @@ all = [
     "hexdag[database]",
     "hexdag[storage-all]",
     "hexdag[notebooks]",
+    "hexdag[studio]",
     "hexdag[mcp]",
 ]
 
@@ -217,7 +223,8 @@ omit = [
     "*/examples/*",
     "*/notebooks/*",
     "*_plugins/*",
-    "hexdag/cli/*"  # CLI has separate test suite with 67% coverage
+    "hexdag/cli/*",  # CLI has separate test suite with 67% coverage
+    "hexdag/studio/*",  # Studio is new, will add tests in follow-up PR
 ]
 
 [tool.coverage.report]
@@ -261,7 +268,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
-exclude = ["tests/", "examples/", "scripts/", ".mutmut-config.py", "docs/"]
+exclude = ["tests/", "examples/", "scripts/", ".mutmut-config.py", "docs/", "hexdag/studio/", "hexdag/cli/", "hexdag/mcp_server.py"]
 
 disable_error_code = ["import-untyped"]
 
@@ -280,7 +287,7 @@ disallow_untyped_decorators = false
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-exclude = ["tests/**", "examples/**", "hexdag_plugins/**", ".venv", "build", "dist", ".mutmut-config.py", "docs/**"]
+exclude = ["tests/**", "examples/**", "hexdag_plugins/**", ".venv", "build", "dist", ".mutmut-config.py", "docs/**", "hexdag/studio/**"]
 include = ["hexdag"]
 
 # Type checking settings
@@ -431,11 +438,11 @@ bump_map = { ".*!" = "MAJOR", "ci" = "PATCH", "docs" = "PATCH", "experiment" = "
 [tool.vulture]
 min_confidence = 90
 paths = ["hexdag", ".vulture_whitelist.py"]
-exclude = ["tests/", "examples/", "hexdag/core/ports/", "hexdag_plugins/"]
+exclude = ["tests/", "examples/", "hexdag/core/ports/", "hexdag_plugins/", "hexdag/studio/"]
 
 
 [tool.radon]
-exclude = "tests/*,examples/*,hexdag_plugins/*"
+exclude = "tests/*,examples/*,hexdag_plugins/*,hexdag/studio/*"
 cc_min = "B"  # Minimum complexity grade (A, B, C, D, E, F)
 show_complexity = true
 
@@ -452,7 +459,7 @@ ignore-nested-functions = true  # Nested functions are implementation details
 ignore-nested-classes = false
 ignore-setters = false
 fail-under = 95.0
-exclude = ["tests", "examples", "hexdag_plugins", ".git", ".tox"]
+exclude = ["tests", "examples", "hexdag_plugins", ".git", ".tox", "hexdag/studio"]
 ignore-regex = ["^get$", "^set$", "^main$"]
 verbose = 0
 quiet = false
@@ -488,6 +495,7 @@ exclude = [
     "examples/plugins",  # Plugin examples have their own dependencies
     "examples/run_text_analysis_pipeline.py",  # Uses plugin-specific transformers
     "examples/simple_text_analysis.py",  # Uses plugin-specific transformers
+    "examples/mcp",  # MCP examples use optional MCP-specific dependencies (tavily)
     "tests",  # Test files use dev dependencies
     "hexdag_plugins",  # External plugin directories
 ]

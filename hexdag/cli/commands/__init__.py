@@ -11,6 +11,7 @@ from . import (
     plugins_cmd,
     registry_cmd,
     schema_cmd,
+    studio_cmd,
     validate_cmd,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "plugins_cmd",
     "registry_cmd",
     "schema_cmd",
+    "studio_cmd",
     "validate_cmd",
 ]

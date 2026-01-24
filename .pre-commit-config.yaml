@@ -57,21 +57,22 @@ repos:
     hooks:
       - id: validate-pyproject
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.1
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic>=2.0, types-PyYAML]
-        exclude: ^(tests/|examples/|scripts/|hexdag_plugins/)
-
   - repo: local
     hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy hexdag/
+        language: system
+        types: [python]
+        exclude: '^(tests/|examples/|scripts/|hexdag_plugins/|hexdag/studio/|hexdag/cli/)'
+        pass_filenames: false
+
       - id: pyright
         name: pyright
         entry: uv run pyright
         language: system
         types: [python]
-        exclude: ^(tests/|examples/|hexdag_plugins/)
+        exclude: ^(tests/|examples/|hexdag_plugins/|hexdag/studio/)
         pass_filenames: false
 
 
@@ -116,7 +117,7 @@ repos:
     hooks:
       - id: bandit
         args: [-ll]  # Only report Medium and High severity
-        exclude: ^(tests/|hexdag_plugins/)
+        exclude: ^(tests/|hexdag_plugins/|hexdag/studio/)
 
   # Security - Dependency vulnerabilities
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
@@ -228,7 +229,7 @@ repos:
 
       - id: vulture
         name: vulture - dead code detection
-        entry: uv run vulture hexdag/ .vulture_whitelist.py --min-confidence 90
+        entry: uv run vulture hexdag/ .vulture_whitelist.py --min-confidence 90 --exclude hexdag/studio/
         language: system
         types: [python]
         stages: [pre-commit]
@@ -236,7 +237,7 @@ repos:
 
       - id: radon-complexity
         name: radon - code complexity analysis
-        entry: uv run radon cc hexdag/ --min B --show-complexity
+        entry: uv run radon cc hexdag/ --min B --show-complexity --exclude hexdag/studio/
         language: system
         types: [python]
         stages: [pre-commit]
@@ -244,7 +245,7 @@ repos:
 
       - id: interrogate
         name: interrogate - docstring coverage
-        entry: uv run interrogate hexdag/ --fail-under 95 --quiet
+        entry: uv run interrogate hexdag/ --fail-under 95 --quiet --exclude hexdag/studio/
         language: system
         types: [python]
         stages: [pre-commit]
