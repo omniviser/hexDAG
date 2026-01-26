@@ -262,7 +262,7 @@ async def test_anthropic_adapter_missing_api_key_raises():
     # Make sure env var is not set
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
-    with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
+    with pytest.raises(ValueError, match="api_key required"):
         AnthropicAdapter()
 
 
@@ -295,7 +295,7 @@ async def test_openai_adapter_missing_api_key_raises():
     """Test OpenAIAdapter raises when API key is missing."""
     os.environ.pop("OPENAI_API_KEY", None)
 
-    with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
+    with pytest.raises(ValueError, match="api_key required"):
         OpenAIAdapter()
 
 

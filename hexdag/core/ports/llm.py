@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-from hexdag.core.registry.decorators import port
-
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
@@ -37,10 +35,6 @@ class LLMResponse(BaseModel):
     finish_reason: str | None = None
 
 
-@port(
-    name="llm",
-    namespace="core",
-)
 @runtime_checkable
 class LLM(Protocol):
     """Port interface for Large Language Models (LLMs).

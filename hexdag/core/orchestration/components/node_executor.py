@@ -176,19 +176,53 @@ class NodeExecutor:
             # Determine timeout: node_spec.timeout > orchestrator default
             node_timeout = node_spec.timeout or self.default_node_timeout
 
-            try:
-                if node_timeout:
-                    async with asyncio.timeout(node_timeout):
+            # Determine max retries: node_spec.max_retries or 1 (no retries)
+            max_retries = node_spec.max_retries or 1
+            last_error: Exception | None = None
+            raw_output: Any = None  # Initialize to satisfy type checker
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    if node_timeout:
+                        async with asyncio.timeout(node_timeout):
+                            raw_output = await self._execute_function(
+                                node_spec, validated_input, kwargs
+                            )
+                    else:
                         raw_output = await self._execute_function(
                             node_spec, validated_input, kwargs
                         )
-                else:
-                    raw_output = await self._execute_function(node_spec, validated_input, kwargs)
-            except TimeoutError as e:
-                # node_timeout is guaranteed to be set here because TimeoutError
-                # only occurs when timeout is set
-                timeout_value = node_timeout if node_timeout is not None else 0.0
-                raise NodeTimeoutError(node_name, timeout_value, e) from e
+                    break  # Success - exit retry loop
+                except TimeoutError as e:
+                    # node_timeout is guaranteed to be set here because TimeoutError
+                    # only occurs when timeout is set
+                    timeout_value = node_timeout if node_timeout is not None else 0.0
+                    last_error = NodeTimeoutError(node_name, timeout_value, e)
+                    if attempt < max_retries:
+                        logger.debug(
+                            "Node '{node}' timeout ({attempt}/{max_retries}), retrying...",
+                            node=node_name,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                        )
+                        continue
+                    raise last_error from e
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        logger.debug(
+                            "Node '{node}' error ({attempt}/{max_retries}): {error}, retrying...",
+                            node=node_name,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            error=e,
+                        )
+                        continue
+                    raise
+            else:
+                # Loop completed without break - should not happen but handle it
+                if last_error:
+                    raise last_error
 
             # Output validation
             if validate:

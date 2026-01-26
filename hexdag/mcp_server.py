@@ -2,13 +2,12 @@
 
 Exposes hexDAG functionality as MCP tools for LLM-powered editors like Claude Code and Cursor.
 This server enables LLMs to:
-- Discover available components dynamically from the registry
+- Discover available components by scanning builtin modules
 - Build YAML pipelines with guided, structured approaches
 - Validate pipeline configurations
 - Generate pipeline templates
 
-The server is **registry-aware** - all tools automatically reflect registered components,
-including user plugins loaded from pyproject.toml or hexdag.toml.
+Components are discovered by scanning module contents (no registry needed).
 
 Installation
 ------------
@@ -24,26 +23,13 @@ Install for Claude Desktop/Cursor::
 
     uv run mcp install hexdag/mcp_server.py --name hexdag
 
-Configuration
--------------
-The MCP server loads hexDAG configuration from::
-
-    1. HEXDAG_CONFIG_PATH environment variable (highest priority)
-    2. hexdag.toml (project-specific)
-    3. pyproject.toml with [tool.hexdag]
-    4. .hexdag.toml (hidden config)
-    5. Defaults (core + builtin components)
-
 Example Claude Desktop config::
 
     {
       "mcpServers": {
         "hexdag": {
           "command": "uv",
-          "args": ["run", "python", "-m", "hexdag.mcp_server"],
-          "env": {
-            "HEXDAG_CONFIG_PATH": "/path/to/hexdag.toml"  // Optional
-          }
+          "args": ["run", "python", "-m", "hexdag.mcp_server"]
         }
       }
     }
@@ -52,29 +38,72 @@ Example Claude Desktop config::
 from __future__ import annotations
 
 import json
-import os
 from enum import Enum
 from typing import Any
 
 import yaml
 from mcp.server.fastmcp import FastMCP
 
-from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.pipeline_builder import YamlPipelineBuilder
-from hexdag.core.registry import registry
-from hexdag.core.registry.models import ComponentType
+from hexdag.core.resolver import ResolveError, resolve
 from hexdag.core.schema import SchemaGenerator
-
-# Bootstrap registry on module load
-# Uses HEXDAG_CONFIG_PATH env var if set, otherwise auto-discovers config
-config_path = os.getenv("HEXDAG_CONFIG_PATH")
-ensure_bootstrapped(config_path=config_path if config_path else None)
 
 # Create MCP server
 mcp = FastMCP(
     "hexDAG",
     dependencies=["pydantic>=2.0", "pyyaml>=6.0", "jinja2>=3.1.0"],
 )
+
+
+# ============================================================================
+# Component Discovery (Module-based instead of registry)
+# ============================================================================
+
+
+def _discover_components_in_module(
+    module: Any, suffix: str | None = None, base_class: type | None = None
+) -> list[dict[str, Any]]:
+    """Discover components in a module by class name convention or base class.
+
+    Parameters
+    ----------
+    module : Any
+        Module to scan
+    suffix : str | None
+        Class name suffix to filter by (e.g., "Node", "Adapter")
+    base_class : type | None
+        Base class to filter by (alternative to suffix)
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        List of component info dicts
+    """
+    result = []
+
+    for name in dir(module):
+        if name.startswith("_"):
+            continue
+
+        obj = getattr(module, name, None)
+        if obj is None or not isinstance(obj, type):
+            continue
+
+        # Filter by suffix or base class
+        matches = False
+        if suffix and name.endswith(suffix):
+            matches = True
+        if base_class and issubclass(obj, base_class) and obj is not base_class:
+            matches = True
+
+        if matches:
+            result.append({
+                "name": name,
+                "module": f"{module.__name__}.{name}",
+                "description": (obj.__doc__ or "").split("\n")[0].strip(),
+            })
+
+    return result
 
 
 # ============================================================================
@@ -110,25 +139,31 @@ def list_nodes() -> str:
           ]
         }
     """
-    nodes_by_namespace: dict[str, list[dict[str, Any]]] = {}
+    from hexdag.builtin import nodes as builtin_nodes
 
-    for name, metadata in registry._components.items():
-        if metadata.component_type != ComponentType.NODE:
+    nodes_by_namespace: dict[str, list[dict[str, Any]]] = {"core": []}
+
+    # Scan builtin nodes module
+    for name in dir(builtin_nodes):
+        if name.startswith("_"):
             continue
 
-        namespace = metadata.namespace
-        if namespace not in nodes_by_namespace:
-            nodes_by_namespace[namespace] = []
+        obj = getattr(builtin_nodes, name, None)
+        if obj is None or not isinstance(obj, type):
+            continue
+
+        # Check if it's a node class (ends with Node or has BaseNodeFactory parent)
+        if not name.endswith("Node"):
+            continue
 
         node_info = {
             "name": name,
-            "namespace": namespace,
-            "qualified_name": metadata.qualified_name,
-            "description": metadata.description or "No description available",
-            "subtype": str(metadata.subtype) if metadata.subtype else None,
+            "namespace": "core",
+            "module_path": f"hexdag.builtin.nodes.{name}",
+            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
         }
 
-        nodes_by_namespace[namespace].append(node_info)
+        nodes_by_namespace["core"].append(node_info)
 
     return json.dumps(nodes_by_namespace, indent=2)
 
@@ -159,34 +194,62 @@ def list_adapters(port_type: str | None = None) -> str:
           ]
         }
     """
+    from hexdag.builtin import adapters as builtin_adapters
+
     adapters_by_port: dict[str, list[dict[str, Any]]] = {}
 
-    for name, metadata in registry._components.items():
-        if metadata.component_type != ComponentType.ADAPTER:
+    # Scan builtin adapters module
+    for name in dir(builtin_adapters):
+        if name.startswith("_"):
             continue
 
-        port = metadata.implements_port
-        if not port:
+        obj = getattr(builtin_adapters, name, None)
+        if obj is None or not isinstance(obj, type):
             continue
+
+        # Check if it's an adapter class
+        if not name.endswith("Adapter"):
+            continue
+
+        # Guess port type from name
+        guessed_port = _guess_port_type_from_name(name)
 
         # Filter by port type if specified
-        if port_type and port != port_type:
+        if port_type and guessed_port != port_type:
             continue
 
-        if port not in adapters_by_port:
-            adapters_by_port[port] = []
+        if guessed_port not in adapters_by_port:
+            adapters_by_port[guessed_port] = []
 
         adapter_info = {
             "name": name,
-            "namespace": metadata.namespace,
-            "qualified_name": metadata.qualified_name,
-            "port_type": port,
-            "description": metadata.description or "No description available",
+            "namespace": "core",
+            "module_path": f"hexdag.builtin.adapters.{name}",
+            "port_type": guessed_port,
+            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
         }
 
-        adapters_by_port[port].append(adapter_info)
+        adapters_by_port[guessed_port].append(adapter_info)
 
     return json.dumps(adapters_by_port, indent=2)
+
+
+def _guess_port_type_from_name(adapter_name: str) -> str:
+    """Guess port type from adapter class name."""
+    name_lower = adapter_name.lower()
+    if "llm" in name_lower or "openai" in name_lower or "anthropic" in name_lower:
+        return "llm"
+    if "memory" in name_lower:
+        return "memory"
+    if "database" in name_lower or "sql" in name_lower:
+        return "database"
+    if "secret" in name_lower or "keyvault" in name_lower:
+        return "secret"
+    if "storage" in name_lower or "blob" in name_lower:
+        return "storage"
+    if "tool" in name_lower:
+        return "tool_router"
+    return "unknown"
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -214,29 +277,39 @@ def list_tools(namespace: str | None = None) -> str:
           ]
         }
     """
-    tools_by_namespace: dict[str, list[dict[str, Any]]] = {}
+    from hexdag.builtin.tools import builtin_tools
 
-    for name, metadata in registry._components.items():
-        if metadata.component_type != ComponentType.TOOL:
+    tools_by_namespace: dict[str, list[dict[str, Any]]] = {"core": []}
+
+    # Filter by namespace if specified (only core namespace for builtin)
+    if namespace and namespace != "core":
+        return json.dumps(tools_by_namespace, indent=2)
+
+    # Scan builtin tools module
+    for name in dir(builtin_tools):
+        if name.startswith("_"):
             continue
 
-        ns = metadata.namespace
-
-        # Filter by namespace if specified
-        if namespace and ns != namespace:
+        obj = getattr(builtin_tools, name, None)
+        if obj is None:
             continue
 
-        if ns not in tools_by_namespace:
-            tools_by_namespace[ns] = []
+        # Check if it's a callable (function or class)
+        if not callable(obj):
+            continue
+
+        # Skip non-tool items
+        if name in ("Any", "TypeVar"):
+            continue
 
         tool_info = {
             "name": name,
-            "namespace": ns,
-            "qualified_name": metadata.qualified_name,
-            "description": metadata.description or "No description available",
+            "namespace": "core",
+            "module_path": f"hexdag.builtin.tools.{name}",
+            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
         }
 
-        tools_by_namespace[ns].append(tool_info)
+        tools_by_namespace["core"].append(tool_info)
 
     return json.dumps(tools_by_namespace, indent=2)
 
@@ -262,21 +335,32 @@ def list_macros() -> str:
           }
         ]
     """
-    macros: list[dict[str, Any]] = []
+    from hexdag.builtin import macros as builtin_macros
 
-    for name, metadata in registry._components.items():
-        if metadata.component_type != ComponentType.MACRO:
+    macros_list: list[dict[str, Any]] = []
+
+    # Scan builtin macros module
+    for name in dir(builtin_macros):
+        if name.startswith("_"):
+            continue
+
+        obj = getattr(builtin_macros, name, None)
+        if obj is None or not isinstance(obj, type):
+            continue
+
+        # Check if it's a macro class (ends with Macro or has ConfigurableMacro parent)
+        if not name.endswith("Macro"):
             continue
 
         macro_info = {
             "name": name,
-            "namespace": metadata.namespace,
-            "qualified_name": metadata.qualified_name,
-            "description": metadata.description or "No description available",
+            "namespace": "core",
+            "module_path": f"hexdag.builtin.macros.{name}",
+            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
         }
-        macros.append(macro_info)
+        macros_list.append(macro_info)
 
-    return json.dumps(macros, indent=2)
+    return json.dumps(macros_list, indent=2)
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -298,21 +382,32 @@ def list_policies() -> str:
           }
         ]
     """
-    policies: list[dict[str, Any]] = []
+    from hexdag.builtin import policies as builtin_policies
 
-    for name, metadata in registry._components.items():
-        if metadata.component_type != ComponentType.POLICY:
+    policies_list: list[dict[str, Any]] = []
+
+    # Scan builtin policies module
+    for name in dir(builtin_policies):
+        if name.startswith("_"):
+            continue
+
+        obj = getattr(builtin_policies, name, None)
+        if obj is None or not isinstance(obj, type):
+            continue
+
+        # Check if it's a policy class (ends with Policy)
+        if not name.endswith("Policy"):
             continue
 
         policy_info = {
             "name": name,
-            "namespace": metadata.namespace,
-            "qualified_name": metadata.qualified_name,
-            "description": metadata.description or "No description available",
+            "namespace": "core",
+            "module_path": f"hexdag.builtin.policies.{name}",
+            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
         }
-        policies.append(policy_info)
+        policies_list.append(policy_info)
 
-    return json.dumps(policies, indent=2)
+    return json.dumps(policies_list, indent=2)
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -326,8 +421,8 @@ def get_component_schema(
     Args
     ----
         component_type: Type of component (node, adapter, tool, macro, policy)
-        name: Component name
-        namespace: Component namespace (default: "core")
+        name: Component name (class name or full module path)
+        namespace: Component namespace (default: "core") - ignored if full path provided
 
     Returns
     -------
@@ -346,8 +441,26 @@ def get_component_schema(
         }
     """
     try:
-        # Get component from registry
-        component_obj = registry.get(name, namespace=namespace)
+        # If name is a full module path, resolve directly
+        if "." in name:
+            component_obj = resolve(name)
+        else:
+            # Try to resolve from builtin modules based on component type
+            module_map = {
+                "node": "hexdag.builtin.nodes",
+                "adapter": "hexdag.builtin.adapters",
+                "tool": "hexdag.builtin.tools",
+                "macro": "hexdag.builtin.macros",
+                "policy": "hexdag.builtin.policies",
+            }
+
+            base_module = module_map.get(component_type)
+            if not base_module:
+                raise ResolveError(name, f"Unknown component type: {component_type}")
+
+            # Try to resolve with full path
+            full_path = f"{base_module}.{name}"
+            component_obj = resolve(full_path)
 
         # Extract schema using SchemaGenerator
         schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
@@ -716,15 +829,13 @@ def create_environment_pipelines(
           "prod": "apiVersion: hexdag/v1\\nkind: Pipeline..."
         }
     """
-    ensure_bootstrapped()
-
     result = {}
 
     # Default dev ports to mock adapters
     if dev_ports is None:
         dev_ports = {
             "llm": {
-                "adapter": "plugin:mock_llm",
+                "adapter": "hexdag.builtin.adapters.mock.MockLLMAdapter",
                 "config": {
                     "responses": [
                         "I'll search for information. INVOKE_TOOL: search(query='...')",
@@ -735,7 +846,7 @@ def create_environment_pipelines(
                 },
             },
             "tool_router": {
-                "adapter": "plugin:mock_tool_router",
+                "adapter": "hexdag.builtin.adapters.mock.MockToolRouterAdapter",
                 "config": {"available_tools": ["search", "calculate"]},
             },
         }
@@ -859,19 +970,17 @@ def create_environment_pipelines_with_includes(
         {
           "base": "apiVersion: hexdag/v1\\n...",
           "dev": "include: ./research_agent_base.yaml\\nports:\\n  llm:\\n    adapter: "
-                "plugin:mock_llm",
-          "prod": "include: ./research_agent_base.yaml\\nports:\\n  llm:\\n    adapter: core:openai"
+                "hexdag.builtin.adapters.mock.MockLLMAdapter",
+          "prod": "include: ./research_agent_base.yaml\\nports:\\n  llm:\\n    adapter: ..."
         }
     """
-    ensure_bootstrapped()
-
     result = {}
 
     # Default dev ports to mock adapters
     if dev_ports is None:
         dev_ports = {
             "llm": {
-                "adapter": "plugin:mock_llm",
+                "adapter": "hexdag.builtin.adapters.mock.MockLLMAdapter",
                 "config": {
                     "responses": [
                         "I'll search for information. INVOKE_TOOL: search(query='...')",
@@ -882,7 +991,7 @@ def create_environment_pipelines_with_includes(
                 },
             },
             "tool_router": {
-                "adapter": "plugin:mock_tool_router",
+                "adapter": "hexdag.builtin.adapters.mock.MockToolRouterAdapter",
                 "config": {"available_tools": ["search", "calculate"]},
             },
         }

@@ -5,15 +5,8 @@ from typing import Any
 
 from hexdag.core.exceptions import DependencyError
 from hexdag.core.ports.database import DatabasePort
-from hexdag.core.registry import tool
 
 
-@tool(
-    name=["sql_query"],
-    namespace="core",
-    required_ports=["database"],
-    description="Execute SQL query on database",
-)
 async def database_query(
     sql: str, params: dict[str, Any] | None = None, database_port: DatabasePort | None = None
 ) -> list[dict[str, Any]]:
@@ -44,12 +37,6 @@ async def database_query(
     return await database_port.aexecute_query(sql, params or {})
 
 
-@tool(
-    name=["db_execute"],
-    namespace="core",
-    required_ports=["database"],
-    description="Execute SQL command on database",
-)
 async def database_execute(
     sql: str, params: dict[str, Any] | None = None, database_port: Any | None = None
 ) -> None:
@@ -75,12 +62,6 @@ async def database_execute(
     await database_port.aexecute_query(sql, params or {})
 
 
-@tool(
-    name=["db_tables"],
-    namespace="core",
-    required_ports=["database"],
-    description="List all tables in database",
-)
 async def list_tables(database_port: DatabasePort | None = None) -> list[str]:
     """List all tables in the database.
 
@@ -111,12 +92,6 @@ async def list_tables(database_port: DatabasePort | None = None) -> list[str]:
     return [row["table_name"] for row in results]
 
 
-@tool(
-    name=["describe_table"],
-    namespace="core",
-    required_ports=["database"],
-    description="Get schema information for a table",
-)
 async def describe_table(
     table: str, database_port: DatabasePort | None = None
 ) -> list[dict[str, Any]]:
@@ -154,12 +129,6 @@ async def describe_table(
 
 
 # Synchronous versions for compatibility
-@tool(
-    name=["db_query_sync", "database_query_sync"],
-    namespace="core",
-    required_ports=["database"],
-    description="Execute SQL query on database (synchronous)",
-)
 def database_query_sync(
     sql: str, params: dict[str, Any] | None = None, database_port: DatabasePort | None = None
 ) -> list[dict[str, Any]]:

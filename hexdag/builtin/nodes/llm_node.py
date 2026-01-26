@@ -15,13 +15,10 @@ from pydantic import BaseModel
 
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.prompt import PromptInput
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_llm_node import BaseLLMNode
 
 
-@node(name="llm_node", subtype=NodeSubtype.LLM, namespace="core", required_ports=["llm"])
 class LLMNode(BaseLLMNode):
     """DEPRECATED: Use PromptNode + RawLLMNode + ParserNode instead.
 

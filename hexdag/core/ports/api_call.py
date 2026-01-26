@@ -6,13 +6,7 @@ This is a fundamental protocol that other ports can inherit from.
 from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
-from hexdag.core.registry.decorators import port
 
-
-@port(
-    name="api_call",
-    namespace="core",
-)
 @runtime_checkable
 class APICall(Protocol):
     """Base protocol for making external API calls.

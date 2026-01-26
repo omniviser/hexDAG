@@ -216,133 +216,126 @@ def install_plugin(
 
 
 def _get_available_plugins() -> list[dict[str, Any]]:
-    """Get list of available plugins dynamically from registry and known extras."""
-    from hexdag.core.bootstrap import bootstrap_registry
-    from hexdag.core.registry import registry
-
-    # Ensure registry is bootstrapped
-    from hexdag.core.registry.models import ComponentType
-
-    with contextlib.suppress(Exception):
-        # Registry may already be bootstrapped or other initialization issue
-        # Auto-discovery happens during bootstrap
-        bootstrap_registry()
+    """Get list of available plugins by scanning known module paths."""
+    import importlib
 
     plugins = []
 
-    components = registry.list_components()
-    adapters = [c for c in components if c.component_type == ComponentType.ADAPTER]
+    # Built-in adapters (always available)
+    builtin_adapters = {
+        "mock": {
+            "module": "hexdag.builtin.adapters.mock",
+            "capabilities": ["LLM", "Database", "ToolRouter"],
+            "namespace": "core",
+        },
+        "memory": {
+            "module": "hexdag.builtin.adapters.memory",
+            "capabilities": ["Memory"],
+            "namespace": "core",
+        },
+    }
 
-    # Group adapters by their namespace
-    from hexdag.core.registry.models import ComponentInfo
+    for name, info in builtin_adapters.items():
+        installed = False
+        with contextlib.suppress(ImportError):
+            importlib.import_module(info["module"])
+            installed = True
 
-    by_namespace: dict[str, list[ComponentInfo]] = {}
-    for adapter in adapters:
-        ns = adapter.namespace
-        if ns not in by_namespace:
-            by_namespace[ns] = []
-        by_namespace[ns].append(adapter)
+        plugins.append({
+            "name": name,
+            "namespace": info["namespace"],
+            "installed": installed,
+            "capabilities": info["capabilities"],
+        })
 
-    for ns, ns_adapters in by_namespace.items():
-        capabilities = set()
-        for adapter in ns_adapters:
-            if adapter.metadata.implements_port:
-                port = adapter.metadata.implements_port
-                # Map port names to capabilities
-                capability_map = {
-                    "llm": "LLM",
-                    "database": "Database",
-                    "memory": "Memory",
-                    "tool_router": "ToolRouter",
-                    "api_call": "API",
-                }
-                cap = capability_map.get(port, port)
-                capabilities.add(cap)
-
-        if ns == "plugin" and ns_adapters:
-            # Group adapters by their prefix (e.g., "mock" from "mock_llm", "mock_database")
-            prefix_groups: dict[str, list[ComponentInfo]] = {}
-            for adapter in ns_adapters:
-                # Special case for in_memory_memory -> local
-                if adapter.name == "in_memory_memory":
-                    prefix = "local"
-                elif "_" in adapter.name:
-                    prefix = adapter.name.split("_")[0]
-                else:
-                    prefix = adapter.name
-
-                if prefix not in prefix_groups:
-                    prefix_groups[prefix] = []
-                prefix_groups[prefix].append(adapter)
-
-            for prefix, group_adapters in prefix_groups.items():
-                # Collect capabilities from all adapters in this group
-                group_capabilities = set()
-                for adapter in group_adapters:
-                    if adapter.metadata.implements_port:
-                        port = adapter.metadata.implements_port
-                        # Map port names to capabilities
-                        capability_map = {
-                            "llm": "LLM",
-                            "database": "Database",
-                            "memory": "Memory",
-                            "tool_router": "ToolRouter",
-                            "api_call": "API",
-                        }
-                        cap = capability_map.get(port, port)
-                        group_capabilities.add(cap)
-
-                caps = sorted(group_capabilities) if group_capabilities else ["Adapter"]
-                plugins.append({
-                    "name": prefix,
-                    "namespace": ns,
-                    "installed": True,  # If in registry, it's installed
-                    "capabilities": caps,
-                })
-
-    # Check for known optional dependencies that may not be loaded
-    known_extras = {
+    # Optional adapters (extras)
+    optional_adapters = {
         "openai": {
             "module": "hexdag.adapters.openai",
             "capabilities": ["LLM", "Embeddings"],
+            "namespace": "plugin",
         },
         "anthropic": {
             "module": "hexdag.adapters.anthropic",
             "capabilities": ["LLM"],
+            "namespace": "plugin",
         },
         "visualization": {
             "module": "hexdag.visualization",
             "capabilities": ["DAG Visualization"],
+            "namespace": "core",
         },
     }
 
-    for name, info in known_extras.items():
-        if name not in [p["name"] for p in plugins]:
-            # Try to import to check availability
-            installed = False
-            try:
-                import importlib
+    for name, info in optional_adapters.items():
+        installed = False
+        with contextlib.suppress(ImportError):
+            importlib.import_module(info["module"])
+            installed = True
 
-                importlib.import_module(str(info["module"]))
-                installed = True
-            except ImportError:
-                pass
+        plugins.append({
+            "name": name,
+            "namespace": info["namespace"],
+            "installed": installed,
+            "capabilities": info["capabilities"],
+        })
 
-            plugins.append({
-                "name": name,
-                "namespace": "plugin",
-                "installed": installed,
-                "capabilities": info["capabilities"],
-            })
+    # Check for plugins in hexdag_plugins directory
+    from pathlib import Path
 
-    # Special check for visualization
+    # Try to find hexdag_plugins
+    current = Path.cwd()
+    plugin_dir = None
+    while current != current.parent:
+        if (current / "hexdag_plugins").exists():
+            plugin_dir = current / "hexdag_plugins"
+            break
+        current = current.parent
+
+    if plugin_dir:
+        for plugin_path in plugin_dir.iterdir():
+            if plugin_path.is_dir() and not plugin_path.name.startswith((".", "_")):
+                plugin_name = plugin_path.name
+                # Skip if already in list
+                if plugin_name in [p["name"] for p in plugins]:
+                    continue
+
+                # Try to determine capabilities from pyproject.toml
+                capabilities = ["Adapter"]
+                pyproject = plugin_path / "pyproject.toml"
+                if pyproject.exists():
+                    import tomllib
+
+                    with pyproject.open("rb") as f:
+                        data = tomllib.load(f)
+                        # Check for port hints in keywords
+                        keywords = data.get("project", {}).get("keywords", [])
+                        for kw in keywords:
+                            if kw in ("llm", "database", "memory", "api"):
+                                capabilities = [kw.upper() if kw != "llm" else "LLM"]
+
+                # Check if installable
+                installed = False
+                try:
+                    importlib.import_module(f"hexdag_plugins.{plugin_name}")
+                    installed = True
+                except ImportError:
+                    pass
+
+                plugins.append({
+                    "name": plugin_name,
+                    "namespace": "plugin",
+                    "installed": installed,
+                    "capabilities": capabilities,
+                })
+
+    # Special check for visualization graphviz support
     try:
         from hexdag.visualization import GRAPHVIZ_AVAILABLE
 
         for plugin in plugins:
             if plugin["name"] == "visualization":
                 plugin["installed"] = GRAPHVIZ_AVAILABLE
-                plugin["namespace"] = "core"
                 break
     except ImportError:
         pass

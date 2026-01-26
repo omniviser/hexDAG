@@ -291,13 +291,9 @@ import sys
 from pathlib import Path
 
 from hexdag.core.pipeline_builder import YamlPipelineBuilder
-from hexdag.core.bootstrap import bootstrap_registry
 
 async def main():
     try:
-        # Bootstrap registry
-        bootstrap_registry()
-
         # Load pipeline
         builder = YamlPipelineBuilder()
         with Path.open("$PIPELINE_FILE") as f:

@@ -41,7 +41,7 @@ class TestOpenAIAdapter:
         with patch.dict(os.environ, {}, clear=True):
             # Remove OPENAI_API_KEY from env
             os.environ.pop("OPENAI_API_KEY", None)
-            with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
+            with pytest.raises(ValueError, match="api_key required"):
                 OpenAIAdapter()
 
     def test_initialization_with_custom_parameters(self):

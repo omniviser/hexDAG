@@ -33,7 +33,7 @@ from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.context import get_port
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import macro
+from hexdag.core.resolver import resolve
 
 logger = get_logger(__name__)
 
@@ -72,7 +72,6 @@ class ConversationConfig(MacroConfig):
     )
 
 
-@macro(name="conversation", namespace="core")
 class ConversationMacro(ConfigurableMacro):
     """Multi-turn conversation with dynamic message history expansion.
 
@@ -230,10 +229,9 @@ class ConversationMacro(ConfigurableMacro):
             # Get Memory port (use configured adapter or default)
             try:
                 if config.memory_adapter:
-                    # Use specific adapter if configured
-                    from hexdag.core.registry import registry
-
-                    memory_port = registry.get(config.memory_adapter)
+                    # Use specific adapter if configured (full module path)
+                    memory_class = resolve(config.memory_adapter)
+                    memory_port = memory_class()
                     # Verify it has the required methods
                     assert hasattr(memory_port, "aget") and hasattr(memory_port, "aset")
                 else:
@@ -362,10 +360,9 @@ Please provide a thoughtful response to continue this conversation."""
             # Save to memory
             try:
                 if config.memory_adapter:
-                    # Use specific adapter if configured
-                    from hexdag.core.registry import registry
-
-                    memory_port = registry.get(config.memory_adapter)
+                    # Use specific adapter if configured (full module path)
+                    memory_class = resolve(config.memory_adapter)
+                    memory_port = memory_class()
                     # Verify it has the required method
                     assert hasattr(memory_port, "aset")
                 else:

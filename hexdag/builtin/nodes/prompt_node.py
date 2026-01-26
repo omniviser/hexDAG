@@ -1,4 +1,4 @@
-"""PromptNode - Composable prompt building with registry support.
+"""PromptNode - Composable prompt building.
 
 This node handles ONLY prompt construction - no LLM calls, no parsing.
 Supports composition: ChatPrompt + FewShot + ToolPrompt + custom templates.
@@ -16,13 +16,10 @@ from hexdag.builtin.prompts.base import (
 )
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.prompt import PromptInput
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 
 
-@node(name="prompt_node", subtype=NodeSubtype.FUNCTION, namespace="core")
 class PromptNode(BaseNodeFactory):
     """Composable prompt building node - LangChain-style prompt construction.
 
@@ -163,11 +160,11 @@ class PromptNode(BaseNodeFactory):
     def _build_from_registry(
         self, prompt_ref: str, prompt_args: dict[str, Any], extra_kwargs: dict[str, Any]
     ) -> PromptInput:
-        """Build prompt from registry reference.
+        """Build prompt from module path reference.
 
         Args
         ----
-            prompt_ref: Registry reference (e.g., "core:chat_qa")
+            prompt_ref: Full module path (e.g., "hexdag.builtin.prompts.ChatQATemplate")
             prompt_args: Arguments for prompt constructor
             extra_kwargs: Additional kwargs from __call__
 
@@ -179,36 +176,21 @@ class PromptNode(BaseNodeFactory):
         Raises
         ------
         ValueError
-            If prompt not found in registry
+            If prompt not found at module path
         """
-        from hexdag.core.registry import registry
+        from hexdag.core.resolver import resolve
 
-        # Parse registry reference
-        if ":" in prompt_ref:
-            namespace, name = prompt_ref.split(":", 1)
-        else:
-            namespace = "core"
-            name = prompt_ref
-
-        # Get prompt class from registry
+        # Resolve prompt class from module path
         try:
-            from hexdag.core.registry.models import ComponentType
-
-            prompt_metadata = registry.get_metadata(
-                name, namespace=namespace, component_type=ComponentType.PROMPT
-            )
-            prompt_class = prompt_metadata.component
+            prompt_class = resolve(prompt_ref)
         except Exception as e:
-            raise ValueError(
-                f"Prompt '{prompt_ref}' not found in registry. "
-                f"Available: {list(registry._components.keys())}"
-            ) from e
+            raise ValueError(f"Prompt '{prompt_ref}' not found: {e}") from e
 
         # Merge prompt_args with extra_kwargs
         all_args = {**prompt_args, **extra_kwargs}
 
         # Instantiate the prompt
-        return prompt_class(**all_args)  # type: ignore[operator,no-any-return]
+        return prompt_class(**all_args)  # type: ignore[no-any-return]
 
     def _infer_input_schema(self, template: PromptInput) -> dict[str, Any]:
         """Infer input schema from template variables.

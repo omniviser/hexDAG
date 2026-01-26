@@ -5,13 +5,11 @@ import hashlib
 from typing import TYPE_CHECKING, Any
 
 from hexdag.core.ports.embedding import ImageInput
-from hexdag.core.registry import adapter
 
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-@adapter(name="mock_embedding", implements_port="embedding", namespace="plugin")
 class MockEmbedding:
     """Mock implementation of the Embedding interface for testing.
 

@@ -5,18 +5,10 @@ from typing import Any
 import asyncpg
 
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import adapter
 
 logger = get_logger(__name__)
 
 
-@adapter(
-    name="pgvector",
-    implements_port="database",
-    namespace="core",
-    description="PostgreSQL adapter with pgvector extension for vector similarity search",
-    secrets={"password": "PGVECTOR_PASSWORD"},
-)
 class PgVectorAdapter:
     """PostgreSQL adapter with pgvector extension support.
 

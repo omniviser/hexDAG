@@ -3,18 +3,12 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from hexdag.core.registry.decorators import port
-
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
     from hexdag.core.ports.memory import Memory
     from hexdag.core.types import Secret
 
 
-@port(
-    name="secret",
-    namespace="core",
-)
 @runtime_checkable
 class SecretPort(Protocol):
     """Port interface for secret/credential management systems.

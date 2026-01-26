@@ -3,15 +3,8 @@
 from typing import Any
 
 from hexdag.core.ports.tool_router import ToolRouter
-from hexdag.core.registry import adapter
 
 
-@adapter(
-    name="mock_tool_adapter",
-    implements_port="tool_router",
-    namespace="plugin",
-    description="Simple mock tool adapter with predefined responses",
-)
 class MockToolAdapter(ToolRouter):
     """Mock tool adapter that returns predefined responses.
 

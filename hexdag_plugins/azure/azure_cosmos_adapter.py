@@ -3,21 +3,14 @@
 Provides persistent memory and state storage for agents and pipelines.
 """
 
+import os
 import time
 from typing import Any
 
 from hexdag.core.ports.healthcheck import HealthStatus
 from hexdag.core.ports.memory import Memory
-from hexdag.core.registry import adapter
 
 
-@adapter(
-    "memory",
-    name="azure_cosmos",
-    secrets={
-        "key": "AZURE_COSMOS_KEY",
-    },
-)
 class AzureCosmosAdapter(Memory):
     """Azure Cosmos DB adapter for agent memory and pipeline state.
 
@@ -48,7 +41,7 @@ class AzureCosmosAdapter(Memory):
         spec:
           ports:
             memory:
-              adapter: azure_cosmos
+              adapter: hexdag_plugins.azure.AzureCosmosAdapter
               config:
                 endpoint: ${AZURE_COSMOS_ENDPOINT}
                 database_name: "hexdag"
@@ -98,7 +91,7 @@ class AzureCosmosAdapter(Memory):
             throughput: Container throughput RU/s (default: 400)
         """
         self.endpoint = endpoint
-        self.key = key
+        self.key = key or os.getenv("AZURE_COSMOS_KEY")
         self.database_name = database_name
         self.container_name = container_name
         self.partition_key = partition_key

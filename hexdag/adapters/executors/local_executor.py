@@ -28,7 +28,6 @@ from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
 )
-from hexdag.core.registry.decorators import adapter
 
 if TYPE_CHECKING:
     from hexdag.core.domain.dag import DirectedGraph, NodeSpec
@@ -70,7 +69,6 @@ class Local:
     default_node_timeout: float | None = None
 
 
-@adapter("executor", name="local", namespace="core")
 class LocalExecutor:
     """Local in-process executor using asyncio.
 

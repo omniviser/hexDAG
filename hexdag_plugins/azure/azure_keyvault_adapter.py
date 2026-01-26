@@ -6,14 +6,8 @@ Provides secret resolution from Azure Key Vault for production deployments.
 from typing import Any
 
 from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.registry import adapter
 
 
-@adapter(
-    "secret",
-    name="azure_keyvault",
-    secrets={},  # No secrets needed - uses managed identity or explicit credentials
-)
 class AzureKeyVaultAdapter:
     """Azure Key Vault adapter for secret resolution.
 
@@ -44,7 +38,7 @@ class AzureKeyVaultAdapter:
         spec:
           ports:
             secret:
-              adapter: azure_keyvault
+              adapter: hexdag_plugins.azure.AzureKeyVaultAdapter
               config:
                 vault_url: "https://my-vault.vault.azure.net"
                 use_managed_identity: true
@@ -54,7 +48,7 @@ class AzureKeyVaultAdapter:
         spec:
           ports:
             secret:
-              adapter: azure_keyvault
+              adapter: hexdag_plugins.azure.AzureKeyVaultAdapter
               config:
                 vault_url: "https://my-vault.vault.azure.net"
                 use_managed_identity: false

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate JSON Schema files from the registry for IDE autocomplete.
+"""Generate JSON Schema files from node factories for IDE autocomplete.
 
 This script generates JSON Schema definitions for:
 1. Pipeline YAML files - All node types with their complete parameter schemas
@@ -22,10 +22,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from hexdag.core.bootstrap import ensure_bootstrapped
+from hexdag.builtin.nodes import (
+    ConditionalNode,
+    FunctionNode,
+    LLMNode,
+    LoopNode,
+    ParserNode,
+    PromptNode,
+    RawLLMNode,
+    ReActAgentNode,
+    ToolCallNode,
+)
 from hexdag.core.orchestration.policies.models import PolicySignal
-from hexdag.core.registry import registry
-from hexdag.core.registry.models import ComponentType
 from hexdag.core.schema.generator import SchemaGenerator
 
 # Add project root to path for imports
@@ -33,34 +41,37 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 
+# Node factories to include in schema generation
+# Maps node name (as used in YAML) to the factory class
+NODE_FACTORIES: dict[str, type[Any]] = {
+    "function_node": FunctionNode,
+    "llm_node": LLMNode,
+    "raw_llm_node": RawLLMNode,
+    "prompt_node": PromptNode,
+    "parser_node": ParserNode,
+    "agent_node": ReActAgentNode,
+    "loop_node": LoopNode,
+    "conditional_node": ConditionalNode,
+    "tool_call_node": ToolCallNode,
+}
 
-def generate_pipeline_schema(namespace: str = "core") -> dict[str, Any]:
+
+def generate_pipeline_schema() -> dict[str, Any]:
     """Generate JSON Schema for hexDAG pipeline YAML files.
 
-    This schema includes all registered node types from the specified namespace
-    with their complete parameter schemas for IDE autocomplete.
-
-    Parameters
-    ----------
-    namespace : str
-        Component namespace to include (default: "core" for built-in nodes)
+    This schema includes all node types with their complete parameter schemas
+    for IDE autocomplete.
 
     Returns
     -------
     dict[str, Any]
         Complete JSON Schema for pipeline YAML files
     """
-    # Get all registered node types
-    node_components = registry.list_components(component_type=ComponentType.NODE)
-
-    # Filter by namespace
-    node_components = [c for c in node_components if c.namespace == namespace]
-
     # Base schema structure
     schema: dict[str, Any] = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "hexDAG Pipeline",
-        "description": f"(auto-generated from {namespace} namespace)",
+        "description": "(auto-generated from builtin nodes)",
         "type": "object",
         "properties": {
             "apiVersion": {
@@ -124,7 +135,7 @@ def generate_pipeline_schema(namespace: str = "core") -> dict[str, Any]:
                     },
                     "ports": {
                         "type": "object",
-                        "description": "Port adapters configuration (LLM, database, memory, etc.)",
+                        "description": "Port adapters configuration (LLM, database, memory)",
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
@@ -182,18 +193,20 @@ def generate_pipeline_schema(namespace: str = "core") -> dict[str, Any]:
     # Generate node definitions
     node_definitions = []
 
-    for component in node_components:
-        node_name = component.name
-
-        # Get node factory from registry
+    for node_name, factory_class in NODE_FACTORIES.items():
+        # Instantiate factory to get the __call__ method for schema generation
         try:
-            factory = registry.get(node_name, namespace=namespace)
-        except (KeyError, ValueError):
+            factory_instance = factory_class()
+        except Exception as e:
+            print(
+                f"Warning: Could not instantiate {node_name}: {e}",
+                file=sys.stderr,
+            )
             continue
 
         # Generate schema for this node type
         try:
-            node_schema = SchemaGenerator.from_callable(factory, format="dict")
+            node_schema = SchemaGenerator.from_callable(factory_instance, format="dict")
         except Exception as e:
             print(
                 f"Warning: Could not generate schema for {node_name}: {e}",
@@ -201,17 +214,14 @@ def generate_pipeline_schema(namespace: str = "core") -> dict[str, Any]:
             )
             continue
 
-        # Create node definition
-        node_kind = node_name  # e.g., "llm_node", "agent_node"
-
         # Build the node spec structure
         node_def = {
             "type": "object",
-            "description": f"Specification for {namespace}:{node_name} type",
+            "description": f"Specification for {node_name} type",
             "properties": {
                 "kind": {
-                    "const": node_kind,
-                    "description": f"Node type: {node_kind}",
+                    "const": node_name,
+                    "description": f"Node type: {node_name}",
                 },
                 "metadata": {
                     "type": "object",
@@ -351,9 +361,6 @@ def generate_policy_schema() -> dict[str, Any]:
 def generate_hexdag_config_schema() -> dict[str, Any]:
     """Generate JSON Schema for [tool.hexdag] configuration in pyproject.toml.
 
-    Note: HexDAGConfig is a dataclass. The existing schema file is already correct.
-    This function keeps it up-to-date if needed.
-
     Returns
     -------
     dict[str, Any]
@@ -367,9 +374,13 @@ def generate_hexdag_config_schema() -> dict[str, Any]:
         with config_schema_path.open() as f:
             return json.load(f)
 
-    # Fallback: Return existing schema structure
-    # (This schema is already correct and shouldn't need regeneration)
-    return {}
+    # Fallback: Return minimal schema structure
+    return {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "hexDAG Configuration",
+        "description": "Configuration for hexDAG in pyproject.toml",
+        "type": "object",
+    }
 
 
 def save_schema(schema: dict[str, Any], filename: str) -> None:
@@ -403,21 +414,14 @@ def main() -> int:
     print("Generating JSON Schema files...")
     print()
 
-    # Bootstrap registry to discover components
+    # Generate pipeline schema
     try:
-        ensure_bootstrapped(use_defaults=True)
-    except Exception as e:
-        print(f"Error bootstrapping registry: {e}", file=sys.stderr)
-        return 1
-
-    # Generate pipeline schema (core namespace only)
-    try:
-        pipeline_schema = generate_pipeline_schema(namespace="core")
+        pipeline_schema = generate_pipeline_schema()
         save_schema(pipeline_schema, "pipeline-schema.json")
 
         # Count node types
-        node_count = len(pipeline_schema.get("$defs", {})) - 1  # -1 for base Node
-        print(f"  → Included {node_count} node types from core namespace")
+        node_count = len(pipeline_schema.get("$defs", {})) - 2  # -2 for Node and EventHandler
+        print(f"  → Included {node_count} node types")
     except Exception as e:
         print(f"Error generating pipeline schema: {e}", file=sys.stderr)
         return 1
@@ -435,7 +439,7 @@ def main() -> int:
     try:
         config_schema = generate_hexdag_config_schema()
         save_schema(config_schema, "hexdag-config-schema.json")
-        print("  → Generated from HexDAGConfig Pydantic model")
+        print("  → Generated from existing config schema")
     except Exception as e:
         print(f"Error generating config schema: {e}", file=sys.stderr)
         return 1

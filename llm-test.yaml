@@ -2,10 +2,10 @@ apiVersion: v1
 kind: Pipeline
 metadata:
   name: llm-test
-  description: Pipeline using core:llm_node
+  description: Pipeline using LLMNode
 spec:
   nodes:
-  - kind: llm_node
+  - kind: hexdag.builtin.nodes.LLMNode
     metadata:
       name: llm_1
     spec: {}

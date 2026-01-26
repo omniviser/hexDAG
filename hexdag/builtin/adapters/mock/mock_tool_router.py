@@ -7,10 +7,8 @@ from typing import Any
 
 from hexdag.core.exceptions import ResourceNotFoundError
 from hexdag.core.ports.tool_router import ToolRouter
-from hexdag.core.registry import adapter
 
 
-@adapter(name="mock_tool_router", implements_port="tool_router", namespace="plugin")
 class MockToolRouter(ToolRouter):
     """Mock implementation of ToolRouter for testing."""
 

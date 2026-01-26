@@ -33,8 +33,6 @@ import warnings
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from hexdag.core.registry.decorators import port
-
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
@@ -50,10 +48,6 @@ warnings.warn(
 )
 
 
-@port(
-    name="embedding",
-    namespace="core",
-)
 @runtime_checkable
 class Embedding(Protocol):
     """Port interface for Embedding generation.

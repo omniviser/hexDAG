@@ -3,10 +3,8 @@
 from typing import Protocol, runtime_checkable
 
 from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.registry.decorators import port
 
 
-@port(name="file_storage", namespace="storage")
 @runtime_checkable
 class FileStoragePort(Protocol):
     """Port for file storage operations.

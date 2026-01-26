@@ -13,8 +13,6 @@ from hexdag.core.context import get_port
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.llm import Message
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 
@@ -46,7 +44,6 @@ class RawLLMOutput(BaseModel):
     """Finish reason from LLM response"""
 
 
-@node(name="raw_llm_node", subtype=NodeSubtype.LLM, namespace="core", required_ports=["llm"])
 class RawLLMNode(BaseNodeFactory):
     """Pure LLM API call node - no prompting, no parsing, just raw API interaction.
 

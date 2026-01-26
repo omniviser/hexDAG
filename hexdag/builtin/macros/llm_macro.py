@@ -17,7 +17,6 @@ from hexdag.builtin.nodes.raw_llm_node import RawLLMNode
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.orchestration.prompt import PromptInput
-from hexdag.core.registry import macro
 from hexdag.core.utils.schema_conversion import normalize_schema
 
 
@@ -59,11 +58,6 @@ class LLMMacroConfig(MacroConfig):
         return normalize_schema(v)
 
 
-@macro(
-    name="llm_workflow",
-    namespace="core",
-    description="LLM workflow with prompt building, API call, and parsing",
-)
 class LLMMacro(ConfigurableMacro):
     """LLM macro that composes PromptNode + RawLLMNode + ParserNode.
 

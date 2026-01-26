@@ -1,6 +1,7 @@
 """OpenAI adapter for LLM interactions with embedding support."""
 
 import json
+import os
 import time
 from typing import Any, Literal
 
@@ -19,7 +20,6 @@ from hexdag.core.ports.llm import (
     ToolCall,
     VisionMessage,
 )
-from hexdag.core.registry import adapter
 from hexdag.core.types import (
     FrequencyPenalty,
     PresencePenalty,
@@ -33,13 +33,6 @@ from hexdag.core.types import (
 logger = get_logger(__name__)
 
 
-@adapter(
-    name="openai",
-    implements_port="llm",
-    namespace="core",
-    description="Unified OpenAI adapter for text generation, vision, tool calling, and embeddings",
-    secrets={"api_key": "OPENAI_API_KEY"},
-)
 class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision, SupportsEmbedding):
     """Unified OpenAI implementation of the LLM port.
 
@@ -62,7 +55,7 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
 
     def __init__(
         self,
-        api_key: str,  # ← Auto-resolved by @adapter decorator
+        api_key: str | None = None,
         model: str = "gpt-4o-mini",
         temperature: Temperature02 = 0.7,
         max_tokens: TokenCount | None = None,
@@ -82,8 +75,8 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
 
         Parameters
         ----------
-        api_key : str
-            OpenAI API key (auto-resolved from OPENAI_API_KEY env var)
+        api_key : str | None
+            OpenAI API key (auto-resolved from OPENAI_API_KEY env var if not provided)
         model : str, default="gpt-4o-mini"
             OpenAI model to use
         temperature : float, default=0.7
@@ -111,7 +104,9 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
         embedding_dimensions : int | None, default=None
             Embedding dimensionality (for text-embedding-3 models)
         """
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("api_key required (pass directly or set OPENAI_API_KEY)")
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -128,7 +123,7 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
         self._extra_kwargs = kwargs  # Store extra params
 
         client_kwargs: dict[str, Any] = {
-            "api_key": api_key,
+            "api_key": self.api_key,
             "timeout": timeout,
             "max_retries": max_retries,
         }

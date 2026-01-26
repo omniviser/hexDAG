@@ -38,8 +38,7 @@ from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt import PromptTemplate
 from hexdag.core.ports.llm import Message, MessageList
-from hexdag.core.registry import macro, registry
-from hexdag.core.registry.models import NAMESPACE_SEPARATOR, ComponentType
+from hexdag.core.resolver import resolve_function
 
 logger = get_logger(__name__)
 
@@ -79,7 +78,6 @@ class ReasoningAgentConfig(MacroConfig):
         return str(v)
 
 
-@macro(name="reasoning_agent", namespace="core")
 class ReasoningAgentMacro(ConfigurableMacro):
     """Multi-step reasoning agent with adaptive tool calling.
 
@@ -294,44 +292,28 @@ Continue reasoning. Use tools if needed to gather more information."""
                     "has_tools": False,
                 }
 
-            # Build tool name mapping (handle both qualified and unqualified names)
-            # This provides backward compatibility with namespace:name format
-            tool_name_map = {}
-            for allowed_tool in config.allowed_tools:
-                # Store the tool as-is
-                tool_name_map[allowed_tool] = allowed_tool
-
-                # If it has a namespace, also map the short name to it
-                # This allows "search" to resolve to "demo:search" for backward compatibility
-                if NAMESPACE_SEPARATOR in allowed_tool:
-                    _, short_name = allowed_tool.split(NAMESPACE_SEPARATOR, 1)
-                    # Only add short name mapping if it doesn't conflict
-                    if short_name not in tool_name_map:
-                        tool_name_map[short_name] = allowed_tool
+            # Build tool name mapping for allowed tools
+            tool_name_map = {tool: tool for tool in config.allowed_tools}
 
             # Execute tools
             tool_results = []
             for tc in tool_calls:
                 try:
-                    # Resolve tool name (handle both "search" and "demo:search")
                     tool_name = tc["name"]
-                    resolved_name = tool_name_map.get(tool_name, tool_name)
+                    resolved_name = tool_name_map.get(tool_name) or tool_name
 
                     # Execute tool
                     if tool_router:
                         result = await tool_router.acall_tool(resolved_name, tc["arguments"])
                     else:
-                        # Direct registry call
-                        tool = registry.get(resolved_name)
-                        if callable(tool):
-                            import asyncio
+                        # Direct resolution via module path
+                        import asyncio
 
-                            if asyncio.iscoroutinefunction(tool):
-                                result = await tool(**tc["arguments"])
-                            else:
-                                result = tool(**tc["arguments"])
+                        tool = resolve_function(resolved_name)
+                        if asyncio.iscoroutinefunction(tool):
+                            result = await tool(**tc["arguments"])
                         else:
-                            result = tool
+                            result = tool(**tc["arguments"])
 
                     tool_results.append({
                         "tool_name": tc["name"],
@@ -412,14 +394,17 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
         schemas = []
         for tool_name in allowed_tools:
             try:
-                # Get tool metadata
-                metadata = registry.get_metadata(tool_name, component_type=ComponentType.TOOL)
+                # Resolve tool function to get its docstring
+                tool_fn = resolve_function(tool_name)
+                description = tool_fn.__doc__ or f"Tool {tool_name}"
+                # Take first line of docstring
+                description = description.split("\n")[0].strip()
 
                 # Build ToolDefinition
                 tool_def = ToolDefinition(
                     name=tool_name,
-                    simplified_description=metadata.description or f"Tool {tool_name}",
-                    detailed_description=metadata.description or f"Tool {tool_name}",
+                    simplified_description=description,
+                    detailed_description=description,
                     parameters=[],
                     examples=[],
                 )
@@ -440,8 +425,10 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
         tool_lines = []
         for tool_name in allowed_tools:
             try:
-                metadata = registry.get_metadata(tool_name)
-                description = metadata.description or "No description"
+                tool_fn = resolve_function(tool_name)
+                description = tool_fn.__doc__ or "No description"
+                # Take first line of docstring
+                description = description.split("\n")[0].strip()
                 tool_lines.append(f"  - {tool_name}: {description}")
             except Exception:
                 tool_lines.append(f"  - {tool_name}: Tool description unavailable")

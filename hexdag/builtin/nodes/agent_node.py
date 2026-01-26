@@ -16,8 +16,6 @@ from hexdag.core.orchestration.prompt import PromptInput
 from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.ports.tool_router import ToolRouter
 from hexdag.core.protocols import to_dict
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 from .llm_node import LLMNode
@@ -99,12 +97,6 @@ class Agent:
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
 
 
-@node(
-    name="agent_node",
-    subtype=NodeSubtype.AGENT,
-    namespace="core",
-    required_ports=["llm", "tool_router"],
-)
 class ReActAgentNode(BaseNodeFactory):
     """Multi-step reasoning agent.
 

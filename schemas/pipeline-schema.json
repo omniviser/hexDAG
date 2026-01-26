@@ -6,7 +6,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:agent_node type",
+            "description": "Specification for agent_node type",
             "properties": {
                 "kind": {
                     "const": "agent_node",
@@ -105,7 +105,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:conditional_node type",
+            "description": "Specification for conditional_node type",
             "properties": {
                 "kind": {
                     "const": "conditional_node",
@@ -191,7 +191,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:function_node type",
+            "description": "Specification for function_node type",
             "properties": {
                 "kind": {
                     "const": "function_node",
@@ -285,7 +285,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:llm_node type",
+            "description": "Specification for llm_node type",
             "properties": {
                 "kind": {
                     "const": "llm_node",
@@ -370,7 +370,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:loop_node type",
+            "description": "Specification for loop_node type",
             "properties": {
                 "kind": {
                     "const": "loop_node",
@@ -426,7 +426,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:parser_node type",
+            "description": "Specification for parser_node type",
             "properties": {
                 "kind": {
                     "const": "parser_node",
@@ -499,7 +499,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:prompt_node type",
+            "description": "Specification for prompt_node type",
             "properties": {
                 "kind": {
                     "const": "prompt_node",
@@ -596,7 +596,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:raw_llm_node type",
+            "description": "Specification for raw_llm_node type",
             "properties": {
                 "kind": {
                     "const": "raw_llm_node",
@@ -669,7 +669,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:tool_call_node type",
+            "description": "Specification for tool_call_node type",
             "properties": {
                 "kind": {
                     "const": "tool_call_node",
@@ -737,7 +737,7 @@
         }
     },
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "description": "(auto-generated from core namespace)",
+    "description": "(auto-generated from builtin nodes)",
     "properties": {
         "apiVersion": {
             "default": "v1",
@@ -825,28 +825,28 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/$defs/ConditionalNodeSpec"
-                            },
-                            {
                                 "$ref": "#/$defs/FunctionNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/LlmNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/LoopNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/ParserNodeSpec"
+                                "$ref": "#/$defs/Raw_LlmNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/PromptNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/Raw_LlmNodeSpec"
+                                "$ref": "#/$defs/ParserNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/AgentNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/LoopNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/ConditionalNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/Tool_CallNodeSpec"
@@ -890,7 +890,7 @@
                         },
                         "type": "object"
                     },
-                    "description": "Port adapters configuration (LLM, database, memory, etc.)",
+                    "description": "Port adapters configuration (LLM, database, memory)",
                     "type": "object"
                 },
                 "type_ports": {

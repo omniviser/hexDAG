@@ -40,7 +40,7 @@ class TestAnthropicAdapter:
         with patch.dict(os.environ, {}, clear=True):
             # Remove ANTHROPIC_API_KEY from env
             os.environ.pop("ANTHROPIC_API_KEY", None)
-            with pytest.raises(ValueError, match="Required secret .api_key. not found"):
+            with pytest.raises(ValueError, match="api_key required"):
                 AnthropicAdapter()
 
     def test_initialization_with_custom_parameters(self):

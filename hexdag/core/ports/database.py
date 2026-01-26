@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from hexdag.core.registry.decorators import port
-
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
@@ -47,7 +45,6 @@ class TableSchema:
     columns: list[ColumnSchema]
 
 
-@port(name="database", namespace="core")
 @runtime_checkable
 class DatabasePort(Protocol):
     """Port interface for accessing database schema and metadata.

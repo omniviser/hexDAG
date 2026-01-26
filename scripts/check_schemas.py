@@ -78,22 +78,6 @@ def check_schema_file(name: str, current_file: Path, generator_func, **kwargs) -
     return True
 
 
-def bootstrap_quietly() -> None:
-    """Bootstrap the registry without verbose output."""
-    # Suppress loguru output during bootstrap
-    import sys
-    from io import StringIO
-
-    from hexdag.core.bootstrap import ensure_bootstrapped
-
-    old_stderr = sys.stderr
-    sys.stderr = StringIO()
-    try:
-        ensure_bootstrapped(use_defaults=True)
-    finally:
-        sys.stderr = old_stderr
-
-
 def main() -> int:
     """Check all schema files are up-to-date.
 
@@ -102,16 +86,13 @@ def main() -> int:
     """
     print("Checking JSON schemas are auto-generated (not manually edited)...")
 
-    # Bootstrap registry quietly
-    bootstrap_quietly()
-
     # Check each schema file
     checks = [
         (
             "Pipeline schema",
             SCHEMAS_DIR / "pipeline-schema.json",
             generate_pipeline_schema,
-            {"namespace": "core"},
+            {},
         ),
         (
             "Policy schema",

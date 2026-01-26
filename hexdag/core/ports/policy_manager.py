@@ -14,7 +14,6 @@ from hexdag.core.orchestration.policies.models import (
     PolicyResponse,
     SubscriberType,
 )
-from hexdag.core.registry import port
 
 PolicyFunc = Callable[..., PolicyResponse]
 AsyncPolicyFunc = Callable[..., Awaitable[PolicyResponse]]
@@ -41,7 +40,6 @@ class Policy(Protocol):
 
 
 @runtime_checkable
-@port(name="policy_manager", namespace="core")
 class PolicyManagerPort(Protocol):
     """Port for managing execution control policies.
 

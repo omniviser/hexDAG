@@ -9,7 +9,7 @@ spec:
       metadata:
         name: research_agent
       spec:
-        macro: core:reasoning_agent
+        macro: hexdag.builtin.macros.ReasoningAgentMacro
         config:
           main_prompt:
             "You are a deep research agent with access to web search capabilities. Your task is to:
@@ -45,7 +45,7 @@ spec:
       dependencies: []
   ports:
     llm:
-      adapter: core:openai
+      adapter: hexdag.builtin.adapters.openai.OpenAIAdapter
       config:
         api_key: ${OPENAI_API_KEY}
         model: gpt-4o

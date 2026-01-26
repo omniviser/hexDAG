@@ -1,12 +1,12 @@
 """Anthropic adapter for LLM interactions."""
 
+import os
 from typing import Any
 
 from anthropic import AsyncAnthropic
 
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.llm import MessageList
-from hexdag.core.registry import adapter
 from hexdag.core.types import (
     PositiveInt,
     RetryCount,
@@ -18,13 +18,6 @@ from hexdag.core.types import (
 logger = get_logger(__name__)
 
 
-@adapter(
-    name="anthropic",
-    implements_port="llm",
-    namespace="core",
-    description="Anthropic Claude adapter for language model interactions",
-    secrets={"api_key": "ANTHROPIC_API_KEY"},
-)
 class AnthropicAdapter:
     """Anthropic implementation of the LLM port.
 
@@ -42,7 +35,7 @@ class AnthropicAdapter:
 
     def __init__(
         self,
-        api_key: str,  # ← Auto-resolved by @adapter decorator
+        api_key: str | None = None,
         model: str = "claude-3-5-sonnet-20241022",
         temperature: Temperature01 = 0.7,
         max_tokens: PositiveInt = 4096,
@@ -57,8 +50,8 @@ class AnthropicAdapter:
 
         Parameters
         ----------
-        api_key : str
-            Anthropic API key (auto-resolved from ANTHROPIC_API_KEY env var)
+        api_key : str | None
+            Anthropic API key (auto-resolved from ANTHROPIC_API_KEY env var if not provided)
         model : str, default="claude-3-5-sonnet-20241022"
             Claude model to use
         temperature : float, default=0.7
@@ -76,7 +69,9 @@ class AnthropicAdapter:
         max_retries : int, default=2
             Maximum retry attempts
         """
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        if not self.api_key:
+            raise ValueError("api_key required (pass directly or set ANTHROPIC_API_KEY)")
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -88,7 +83,7 @@ class AnthropicAdapter:
         self._extra_kwargs = kwargs  # Store extra params
 
         client_kwargs: dict[str, Any] = {
-            "api_key": api_key,
+            "api_key": self.api_key,
             "timeout": timeout,
             "max_retries": max_retries,
         }

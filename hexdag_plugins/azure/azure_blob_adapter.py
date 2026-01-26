@@ -3,20 +3,13 @@
 Provides file storage and retrieval for pipelines and agents.
 """
 
+import os
 import time
 from typing import Any
 
 from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.registry import adapter
 
 
-@adapter(
-    "storage",
-    name="azure_blob",
-    secrets={
-        "connection_string": "AZURE_STORAGE_CONNECTION_STRING",
-    },
-)
 class AzureBlobAdapter:
     """Azure Blob Storage adapter for file operations.
 
@@ -41,7 +34,7 @@ class AzureBlobAdapter:
         spec:
           ports:
             storage:
-              adapter: azure_blob
+              adapter: hexdag_plugins.azure.AzureBlobAdapter
               config:
                 container_name: "pipeline-artifacts"
 
@@ -50,7 +43,7 @@ class AzureBlobAdapter:
         spec:
           ports:
             storage:
-              adapter: azure_blob
+              adapter: hexdag_plugins.azure.AzureBlobAdapter
               config:
                 account_url: "https://mystorageaccount.blob.core.windows.net"
                 container_name: "pipeline-artifacts"
@@ -87,11 +80,12 @@ class AzureBlobAdapter:
         Args
         ----
             connection_string: Azure Storage connection string
+                (auto-resolved from AZURE_STORAGE_CONNECTION_STRING)
             container_name: Blob container name (default: "hexdag")
             account_url: Storage account URL (for managed identity)
             use_managed_identity: Use Managed Identity (default: False)
         """
-        self.connection_string = connection_string
+        self.connection_string = connection_string or os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         self.container_name = container_name
         self.account_url = account_url
         self.use_managed_identity = use_managed_identity

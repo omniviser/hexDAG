@@ -14,8 +14,6 @@ from pydantic import BaseModel, ValidationError
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.exceptions import ParseError
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 
@@ -29,7 +27,6 @@ class ParserInput(BaseModel):
     """Raw text to parse (from LLM output)"""
 
 
-@node(name="parser_node", subtype=NodeSubtype.FUNCTION, namespace="core")
 class ParserNode(BaseNodeFactory):
     """Structured output parser with clear error messages and retry hints.
 

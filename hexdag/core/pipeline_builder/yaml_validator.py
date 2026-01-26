@@ -3,9 +3,34 @@
 from typing import Any
 
 from hexdag.core.domain.dag import DirectedGraph
-from hexdag.core.registry.exceptions import ComponentNotFoundError
-from hexdag.core.registry.models import NAMESPACE_SEPARATOR, ComponentType
-from hexdag.core.registry.registry import registry
+
+# Separator for namespace:name format
+NAMESPACE_SEPARATOR = ":"
+
+# Known node types for validation (discovered from hexdag.builtin.nodes)
+KNOWN_NODE_TYPES = frozenset({
+    "core:function",
+    "core:llm",
+    "core:agent",
+    "core:loop",
+    "core:conditional",
+    "core:passthrough",
+    "core:prompt",
+    "core:parser",
+    "core:raw_llm",
+    "core:tool_call",
+    # Support module path format too (these are valid when using full paths)
+    "function_node",
+    "llm_node",
+    "agent_node",
+    "loop_node",
+    "conditional_node",
+    "passthrough_node",
+    "prompt_node",
+    "parser_node",
+    "raw_llm_node",
+    "tool_call_node",
+})
 
 
 class ValidationReport:
@@ -77,10 +102,10 @@ class ValidationReport:
 
 
 class _SchemaValidator:
-    """Validates YAML node specs against auto-generated schemas from registry.
+    """Validates YAML node specs against known schemas.
 
-    This ensures YAML manifests and Python DSL have exactly the same options,
-    using the registry as the single source of truth.
+    Since we no longer have a registry, schema validation is simplified
+    to basic structural validation.
 
     Note: This is an internal class. Use YamlValidator for public validation API.
     """
@@ -91,7 +116,7 @@ class _SchemaValidator:
         spec: dict[str, Any],
         namespace: str = "core",
     ) -> list[str]:
-        """Validate a node's spec against its auto-generated schema.
+        """Validate a node's spec with basic structural checks.
 
         Args
         ----
@@ -103,148 +128,38 @@ class _SchemaValidator:
         -------
             List of validation error messages (empty if valid)
         """
+        # Basic validation - without registry, we can only do structural checks
+        errors: list[str] = []
 
-        factory_name = f"{node_type}_node"
-        try:
-            schema_dict = registry.get_schema(factory_name, namespace=namespace, format="dict")
-        except (KeyError, ValueError, ComponentNotFoundError):
-            # If schema doesn't exist, skip validation
-            # This allows for custom nodes that don't have schemas yet
-            return []
+        # LLM nodes require template or prompt_template
+        if (
+            node_type in ("llm", "llm_node")
+            and "template" not in spec
+            and "prompt_template" not in spec
+        ):
+            errors.append("Missing required field 'template' (or 'prompt_template')")
 
-        if not isinstance(schema_dict, dict):
-            return []
+        # Prompt nodes require template
+        if (
+            node_type in ("prompt", "prompt_node")
+            and "template" not in spec
+            and "prompt_ref" not in spec
+        ):
+            errors.append("Missing required field 'template' or 'prompt_ref'")
 
-        properties = schema_dict.get("properties", {})
-        required = schema_dict.get("required", [])
+        # Agent nodes require initial_prompt_template or main_prompt
+        if (
+            node_type in ("agent", "agent_node")
+            and "initial_prompt_template" not in spec
+            and "main_prompt" not in spec
+        ):
+            errors.append("Missing required field 'initial_prompt_template' (or 'main_prompt')")
 
-        # Check required fields
-        errors: list[str] = [
-            f"Missing required field '{field}'" for field in required if field not in spec
-        ]
-
-        # Validate provided fields
-        for field_name, field_value in spec.items():
-            # Skip special fields (dependencies, etc.)
-            if field_name in ("dependencies",):
-                continue
-
-            if field_name not in properties:
-                errors.append(
-                    f"Unknown field '{field_name}'. "
-                    f"Valid fields: {', '.join(sorted(properties.keys()))}"
-                )
-                continue
-
-            field_schema = properties[field_name]
-
-            # Validate field type
-            if validation_error := self._validate_field(field_name, field_value, field_schema):
-                errors.append(validation_error)
+        # Function nodes require fn
+        if node_type in ("function", "function_node") and "fn" not in spec:
+            errors.append("Missing required field 'fn'")
 
         return errors
-
-    def _validate_field(
-        self, field_name: str, value: Any, field_schema: dict[str, Any]
-    ) -> str | None:
-        """Validate a single field against its schema.
-
-        Args
-        ----
-            field_name: Name of the field being validated
-            value: Value from the YAML manifest
-            field_schema: Schema definition for this field
-
-        Returns
-        -------
-            Error message if validation fails, None if valid
-        """
-        field_type = field_schema.get("type")
-        if not field_type:
-            # No type specified, skip validation
-            return None
-
-        if "anyOf" in field_schema:
-            # Try validating against each option
-            errors = []
-            for option in field_schema["anyOf"]:
-                error = self._validate_field(field_name, value, option)
-                if error is None:
-                    return None  # Valid for at least one option
-                errors.append(error)
-            # Invalid for all options
-            types = [opt.get("type", "unknown") for opt in field_schema["anyOf"]]
-            return f"Field '{field_name}' must be one of types: {', '.join(set(types))}"
-
-        # Validate basic type
-        if not self._check_type(value, field_type):
-            return (
-                f"Field '{field_name}' must be of type '{field_type}', got '{type(value).__name__}'"
-            )
-
-        # Validate enum constraints
-        if "enum" in field_schema and value not in field_schema["enum"]:
-            return f"Field '{field_name}' must be one of {field_schema['enum']}, got '{value}'"
-
-        # Validate numeric constraints
-        if field_type in ("integer", "number"):
-            # Check minimum
-            if "minimum" in field_schema and value < field_schema["minimum"]:
-                return f"Field '{field_name}' must be >= {field_schema['minimum']}, got {value}"
-
-            # Check maximum
-            if "maximum" in field_schema and value > field_schema["maximum"]:
-                return f"Field '{field_name}' must be <= {field_schema['maximum']}, got {value}"
-
-        # Validate string constraints
-        if field_type == "string":
-            # Check min length
-            if "minLength" in field_schema and len(value) < field_schema["minLength"]:
-                return (
-                    f"Field '{field_name}' must have at least "
-                    f"{field_schema['minLength']} characters"
-                )
-
-            # Check max length
-            if "maxLength" in field_schema and len(value) > field_schema["maxLength"]:
-                return (
-                    f"Field '{field_name}' must have at most {field_schema['maxLength']} characters"
-                )
-
-        return None
-
-    def _check_type(self, value: Any, expected_type: str | list[str]) -> bool:
-        """Check if value matches expected JSON Schema type.
-
-        Args
-        ----
-            value: Value to check
-            expected_type: JSON Schema type name or list of type names
-
-        Returns
-        -------
-            True if type matches, False otherwise
-        """
-        type_mapping = {
-            "string": str,
-            "integer": int,
-            "number": (int, float),
-            "boolean": bool,
-            "array": list,
-            "object": dict,
-            "null": type(None),
-        }
-
-        if isinstance(expected_type, list):
-            return any(self._check_type(value, t) for t in expected_type)
-
-        expected_python_type = type_mapping.get(expected_type)
-        if not expected_python_type:
-            # Unknown type, skip validation
-            return True
-
-        # Type ignore for mypy - expected_python_type is guaranteed to be a type or tuple of types
-        return isinstance(value, expected_python_type)  # type: ignore[arg-type]
 
 
 class YamlValidator:
@@ -258,19 +173,19 @@ class YamlValidator:
 
         Args
         ----
-            valid_node_types: Set of valid node type names. If None, uses registry.
+            valid_node_types: Set of valid node type names. If None, uses defaults.
         """
         self._provided_node_types = (
             frozenset(valid_node_types) if valid_node_types is not None else None
         )
         self._cached_node_types: frozenset[str] | None = None
 
-        # Schema validator for spec validation (always enabled - no fallback)
+        # Schema validator for spec validation
         self.schema_validator = _SchemaValidator()
 
     @property
     def valid_node_types(self) -> frozenset[str]:
-        """Get valid node types from registry or cache.
+        """Get valid node types.
 
         Returns
         -------
@@ -281,26 +196,9 @@ class YamlValidator:
         if self._provided_node_types is not None:
             return self._provided_node_types
 
-        # Otherwise, lazily get from registry and cache
+        # Otherwise, use known node types
         if self._cached_node_types is None:
-            # Note: Core nodes follow "_node" suffix, but plugins may not
-            node_components = registry.list_components(component_type=ComponentType.NODE)
-            node_types = {
-                f"{comp.namespace}:{comp.name.removesuffix('_node')}" for comp in node_components
-            }
-
-            # If registry is empty (not bootstrapped yet), use core node types as fallback
-            if not node_types:
-                node_types = {
-                    "core:function",
-                    "core:llm",
-                    "core:agent",
-                    "core:loop",
-                    "core:conditional",
-                    "core:passthrough",
-                }
-
-            self._cached_node_types = frozenset(node_types)
+            self._cached_node_types = KNOWN_NODE_TYPES
 
         return self._cached_node_types
 
@@ -444,6 +342,13 @@ class YamlValidator:
                 macro_instances.add(node_id)
                 continue
 
+            # Handle module paths (e.g., hexdag.builtin.nodes.LLMNode)
+            if "." in kind and ":" not in kind:
+                # This is a full module path, skip node type validation
+                # (resolution will happen at build time)
+                params = node.get("spec", {})
+                continue
+
             if NAMESPACE_SEPARATOR in kind:
                 namespace, node_kind = kind.split(NAMESPACE_SEPARATOR, 1)
             else:
@@ -457,11 +362,12 @@ class YamlValidator:
 
             params = node.get("spec", {})
 
-            # Validate node type (check if registered in registry)
+            # Validate node type
             # Support both qualified (namespace:type) and simple (type) formats
             if (
                 qualified_node_type not in self.valid_node_types
                 and node_type not in self.valid_node_types
+                and node_kind not in self.valid_node_types
             ):
                 # Show available types grouped by namespace
                 by_namespace: dict[str, list[str]] = {}
@@ -511,9 +417,7 @@ class YamlValidator:
         namespace: str,
         result: ValidationReport,
     ) -> None:
-        """Validate node-specific parameters using registry schema validation.
-
-        Uses auto-generated schemas from the registry as the single source of truth.
+        """Validate node-specific parameters using basic structural validation.
 
         Args
         ----
@@ -523,7 +427,7 @@ class YamlValidator:
             namespace: Component namespace
             result: ValidationReport to add errors to
         """
-        # Schema-based validation using registry
+        # Schema-based validation
         schema_errors = self.schema_validator.validate_node_spec(
             node_type, params, namespace=namespace
         )

@@ -4,13 +4,11 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from hexdag.core.ports.llm import LLM, MessageList
-from hexdag.core.registry import adapter
 
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-@adapter(name="mock_llm", implements_port="llm", namespace="plugin")
 class MockLLM(LLM):
     """Mock implementation of the LLM interface for testing.
 

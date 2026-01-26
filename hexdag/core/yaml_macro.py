@@ -58,7 +58,6 @@ from pydantic import BaseModel, Field, field_validator
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import macro
 
 logger = get_logger(__name__)
 
@@ -161,11 +160,6 @@ class YamlMacroConfig(MacroConfig):
     outputs: dict[str, str] | None = None
 
 
-@macro(
-    name="yaml_macro",
-    namespace="core",
-    description="Macro defined entirely in YAML (internal implementation)",
-)
 class YamlMacro(ConfigurableMacro):
     """Macro defined entirely in YAML.
 
@@ -206,11 +200,12 @@ class YamlMacro(ConfigurableMacro):
               true_branch: "{{name}}_human"
               false_branch: "{{name}}_auto"
 
-    Python invocation (via registry)::
+    Python invocation::
 
-        from hexdag.core.registry import registry
+        from hexdag.core.resolver import resolve
 
-        macro = registry.get("hitl_decision", namespace="user")
+        MacroClass = resolve("myapp.macros.HitlDecisionMacro")
+        macro = MacroClass()
         graph = macro.expand(
             instance_name="approval",
             inputs={"mode": "auto"},

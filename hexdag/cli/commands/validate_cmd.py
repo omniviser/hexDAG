@@ -1,6 +1,5 @@
 """Pipeline validation command for HexDAG CLI."""
 
-import contextlib
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -10,17 +9,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from hexdag.core.bootstrap import bootstrap_registry
 from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
 
 app = typer.Typer()
 console = Console()
-
-
-def _ensure_bootstrapped() -> None:
-    """Ensure registry is bootstrapped."""
-    with contextlib.suppress(Exception):
-        bootstrap_registry()
 
 
 @app.command()
@@ -58,7 +50,6 @@ def validate(
     hexdag validate pipeline.yaml
     hexdag validate pipeline.yaml --explain
     """
-    _ensure_bootstrapped()
 
     # Read YAML file
     try:
@@ -171,14 +162,16 @@ def _explain_validation(config: dict, result: Any) -> None:
             if node_type.endswith("_node"):
                 node_type = node_type[:-5]
 
-            # Try to get schema
-            from hexdag.core.registry import registry
+            # Check if node type is known
+            from hexdag.core.pipeline_builder.yaml_validator import KNOWN_NODE_TYPES
 
-            try:
-                registry.get_schema(f"{node_type}_node", namespace=namespace)
-                schema_status = "[green]✓[/green] Found"
-            except (KeyError, ValueError):
-                schema_status = "[red]✗[/red] Not found"
+            qualified_type = f"{namespace}:{node_type}"
+            if qualified_type in KNOWN_NODE_TYPES or node_type in KNOWN_NODE_TYPES:
+                schema_status = "[green]✓[/green] Known type"
+            elif "." in node_kind:
+                schema_status = "[blue]ℹ[/blue] Module path"
+            else:
+                schema_status = "[yellow]?[/yellow] Unknown type"
 
             node_has_error = any(node_name in str(error) for error in result.errors)
             status = "[red]✗[/red]" if node_has_error else "[green]✓[/green]"

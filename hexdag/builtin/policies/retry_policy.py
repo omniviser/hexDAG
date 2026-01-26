@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from hexdag.core.exceptions import ParseError
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import policy
 
 logger = get_logger(__name__)
 
@@ -46,11 +45,6 @@ class RetryContext(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
-@policy(
-    name="parse_retry",
-    namespace="core",
-    description="Retry policy for LLM parse failures with improved prompts",
-)
 class ParseRetryPolicy:
     """Retry policy for parse failures in LLM workflows.
 
@@ -268,11 +262,6 @@ class ParseRetryPolicy:
         return summary
 
 
-@policy(
-    name="exponential_backoff",
-    namespace="core",
-    description="Exponential backoff retry policy for rate limits",
-)
 class ExponentialBackoffPolicy:
     """Exponential backoff for rate limit errors.
 

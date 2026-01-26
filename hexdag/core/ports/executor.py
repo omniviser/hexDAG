@@ -11,7 +11,6 @@ from typing import Any, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from hexdag.core.orchestration.hook_context import PipelineStatus
-from hexdag.core.registry.decorators import port
 
 
 class ExecutionTask(BaseModel):
@@ -75,7 +74,6 @@ class ExecutionResult(BaseModel):
     error_type: str | None = None
 
 
-@port(name="executor", namespace="core")
 @runtime_checkable
 class ExecutorPort(Protocol):
     """Port interface for DAG node execution strategies.

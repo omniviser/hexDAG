@@ -22,15 +22,12 @@ import yaml
 from jinja2 import TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
 
-from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.configurable import ConfigurableMacro
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.pipeline_builder.pipeline_config import PipelineConfig
 from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
-from hexdag.core.registry import registry
-from hexdag.core.registry.exceptions import ComponentNotFoundError
-from hexdag.core.registry.models import NAMESPACE_SEPARATOR
+from hexdag.core.resolver import ResolveError, register_runtime, resolve
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -112,8 +109,6 @@ class YamlPipelineBuilder:
         Args:
             base_path: Base directory for resolving includes (default: cwd)
         """
-        ensure_bootstrapped()
-
         self.base_path = base_path or Path.cwd()
         self.validator = YamlValidator()
 
@@ -282,7 +277,7 @@ class YamlPipelineBuilder:
             logger.warning(
                 f"Multi-document YAML detected ({len(pipeline_docs)} pipeline documents) "
                 "but no environment specified. "
-                "Using first pipeline document. Specify environment parameter to select specific config."
+                "Using first pipeline. Specify environment parameter to select specific config."
             )
 
         return pipeline_docs[0]
@@ -469,7 +464,7 @@ class MacroDefinitionPlugin:
             raise YamlPipelineBuilderError("Macro definition missing 'metadata.name'")
 
         macro_description = metadata.get("description")
-        namespace = metadata.get("namespace", "user")  # Default to user namespace
+        _ = metadata.get("namespace", "user")  # Reserved for future namespace support
 
         # Extract parameters
         raw_parameters = node_config.get("parameters", [])
@@ -494,11 +489,8 @@ class MacroDefinitionPlugin:
             outputs=outputs,
         )
 
-        # Register macro in registry
+        # Register macro at runtime
         # Create a dynamic class that pre-fills the YamlMacro config
-        from hexdag.core.registry.models import ComponentType
-
-        # Create a subclass of YamlMacro with pre-filled config
         config_dict = macro_config.model_dump()
 
         class DynamicYamlMacro(YamlMacro):
@@ -513,23 +505,11 @@ class MacroDefinitionPlugin:
         DynamicYamlMacro.__name__ = f"YamlMacro_{macro_name}"
         DynamicYamlMacro.__qualname__ = f"YamlMacro_{macro_name}"
 
-        # Copy metadata to the dynamic class
-        DynamicYamlMacro._hexdag_type = ComponentType.MACRO  # type: ignore[attr-defined]
-        DynamicYamlMacro._hexdag_name = macro_name  # type: ignore[attr-defined]
-        DynamicYamlMacro._hexdag_names = [macro_name]  # type: ignore[attr-defined]
-        DynamicYamlMacro._hexdag_namespace = namespace  # type: ignore[attr-defined]
-        DynamicYamlMacro._hexdag_description = macro_description or f"YAML macro: {macro_name}"  # type: ignore[attr-defined]
-
-        registry.register(
-            name=macro_name,
-            component=DynamicYamlMacro,
-            namespace=namespace,
-            component_type=ComponentType.MACRO,
-            description=macro_description or f"YAML macro: {macro_name}",
-        )
+        # Register in runtime storage (for YAML-defined macros)
+        register_runtime(macro_name, DynamicYamlMacro)
 
         logger.info(
-            f"✅ Registered YAML macro '{namespace}:{macro_name}' "
+            f"✅ Registered YAML macro '{macro_name}' "
             f"({len(parameters)} parameters, {len(nodes)} nodes)"
         )
 
@@ -554,33 +534,31 @@ class MacroEntityPlugin:
         if not macro_ref:
             raise YamlPipelineBuilderError(f"Macro '{instance_name}' missing spec.macro field")
 
-        # Parse macro reference
-        macro_name, namespace = self._parse_macro_ref(macro_ref)
+        # macro_ref is the full module path (e.g., hexdag.builtin.macros.ReasoningAgentMacro)
+        # or a runtime-registered name for YAML-defined macros
 
         # Get config params for macro initialization
         config_params = spec.get("config", {}).copy()
         inputs = spec.get("inputs", {})
         dependencies = spec.get("dependencies", [])
 
-        # Get macro from registry with init_params (macro handles schema conversion)
+        # Resolve macro class - either full module path or runtime-registered name
         try:
-            macro_instance_obj: object = registry.get(
-                macro_name, namespace=namespace, init_params=config_params
-            )
-        except ComponentNotFoundError as e:
-            raise YamlPipelineBuilderError(
-                f"Macro '{namespace}:{macro_name}' not found: {e}"
-            ) from e
+            macro_cls = resolve(macro_ref)
+        except ResolveError as e:
+            raise YamlPipelineBuilderError(f"Macro '{macro_ref}' not found: {e}") from e
+
+        # Instantiate macro with config params
+        try:
+            macro_instance_obj = macro_cls(**config_params)
         except Exception as e:
-            raise YamlPipelineBuilderError(
-                f"Failed to instantiate macro '{macro_name}': {e}"
-            ) from e
+            raise YamlPipelineBuilderError(f"Failed to instantiate macro '{macro_ref}': {e}") from e
 
         # Validate it's actually a macro
         if not isinstance(macro_instance_obj, ConfigurableMacro):
             type_name = type(macro_instance_obj).__name__
             raise YamlPipelineBuilderError(
-                f"Component '{macro_name}' is not a ConfigurableMacro (got {type_name})"
+                f"Component '{macro_ref}' is not a ConfigurableMacro (got {type_name})"
             )
 
         macro_instance: ConfigurableMacro = macro_instance_obj
@@ -600,7 +578,7 @@ class MacroEntityPlugin:
             raise
         except Exception as e:
             raise YamlPipelineBuilderError(
-                f"Failed to expand macro '{macro_name}' (instance '{instance_name}'): {e}"
+                f"Failed to expand macro '{macro_ref}' (instance '{instance_name}'): {e}"
             ) from e
 
         # Merge subgraph into main graph
@@ -638,11 +616,6 @@ class MacroEntityPlugin:
                     # Internal node - add as-is
                     graph += node
 
-    @staticmethod
-    def _parse_macro_ref(ref: str) -> tuple[str, str]:
-        """Parse 'namespace:name' or 'name' into (name, namespace)."""
-        return _parse_namespaced_ref(ref)
-
 
 class NodeEntityPlugin:
     """Plugin for handling all node types (llm, function, agent, etc.)."""
@@ -658,7 +631,11 @@ class NodeEntityPlugin:
     def build(
         self, node_config: dict[str, Any], builder: YamlPipelineBuilder, graph: DirectedGraph
     ) -> NodeSpec:
-        """Build node from config."""
+        """Build node from config.
+
+        The 'kind' field must be a full module path to the node factory class.
+        Example: hexdag.builtin.nodes.LLMNode
+        """
         # Validate structure
         if "kind" not in node_config:
             raise YamlPipelineBuilderError("Node missing 'kind' field")
@@ -672,22 +649,30 @@ class NodeEntityPlugin:
         spec = node_config.get("spec", {}).copy()
         deps = spec.pop("dependencies", [])
 
-        # Parse kind into (type, namespace)
-        node_type, namespace = self._parse_kind(kind)
-
-        # Get factory from registry
-        factory_obj: object = registry.get(f"{node_type}_node", namespace=namespace)
+        # Resolve factory class from full module path
+        try:
+            factory_obj = resolve(kind)
+        except ResolveError as e:
+            raise YamlPipelineBuilderError(f"Cannot resolve node kind '{kind}': {e}") from e
 
         # Validate it's callable
         if not callable(factory_obj):
             raise YamlPipelineBuilderError(
-                f"Node factory for '{node_type}_node' "
-                f"is not callable (got {type(factory_obj).__name__})"
+                f"Node factory '{kind}' is not callable (got {type(factory_obj).__name__})"
             )
 
-        factory = cast("Callable[..., NodeSpec]", factory_obj)
+        # Handle factory classes vs factory functions
+        # Factory classes need to be instantiated first, then called
+        # Factory functions can be called directly
+        if isinstance(factory_obj, type):
+            # It's a class - instantiate then call
+            factory_instance = factory_obj()
+            factory = cast("Callable[..., NodeSpec]", factory_instance)
+        else:
+            # It's already a callable (function or instance)
+            factory = cast("Callable[..., NodeSpec]", factory_obj)  # type: ignore[unreachable]
 
-        # Create node
+        # Create node - pass name as first positional arg
         node: NodeSpec = factory(node_id, **spec)
 
         # Add dependencies
@@ -695,13 +680,6 @@ class NodeEntityPlugin:
             node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
 
         return node
-
-    @staticmethod
-    def _parse_kind(kind: str) -> tuple[str, str]:
-        """Parse 'namespace:type' or 'type' into (type, namespace)."""
-        node_kind, namespace = _parse_namespaced_ref(kind)
-        node_type = node_kind.removesuffix("_node")
-        return node_type, namespace
 
 
 # ============================================================================
@@ -728,7 +706,7 @@ class IncludePreprocessPlugin:
         """Initialize include plugin.
 
         Args:
-            base_path: Base directory for resolving relative includes (changeable via context manager)
+            base_path: Base directory for relative includes (changeable via context manager)
             max_depth: Maximum include nesting depth to prevent circular includes
         """
         self.base_path = base_path or Path.cwd()
@@ -836,7 +814,7 @@ class IncludePreprocessPlugin:
                 if not isinstance(content, dict) or anchor not in content:
                     raise YamlPipelineBuilderError(
                         f"Anchor '{anchor}' not found in {file_path}. "
-                        f"Available keys: {list(content.keys()) if isinstance(content, dict) else 'N/A'}"
+                        f"Available: {list(content.keys()) if isinstance(content, dict) else 'N/A'}"
                     )
                 content = content[anchor]
 
@@ -1190,19 +1168,3 @@ def _parse_yaml_cached(yaml_content: str) -> Any:
     Returns dict[str, Any] in practice, but yaml.safe_load returns Any.
     """
     return yaml.safe_load(yaml_content)
-
-
-def _parse_namespaced_ref(ref: str, default_namespace: str = "core") -> tuple[str, str]:
-    """Parse 'namespace:name' or 'name' into (name, namespace).
-
-    Args:
-        ref: Reference string (e.g., "core:llm" or "llm")
-        default_namespace: Namespace to use if not specified
-
-    Returns:
-        Tuple of (name, namespace)
-    """
-    if NAMESPACE_SEPARATOR in ref:
-        namespace, name = ref.split(NAMESPACE_SEPARATOR, 1)
-        return name, namespace
-    return ref, default_namespace

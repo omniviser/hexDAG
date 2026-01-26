@@ -263,7 +263,12 @@ class TestYamlValidator:
         assert result.is_valid
 
     def test_field_mapping_validation(self):
-        """Test field mapping validation."""
+        """Test field mapping validation.
+
+        Note: With simplified validation (no registry), we only check required fields
+        for known node types. Unknown fields like 'field_mapping' are not rejected
+        since we can't know all valid fields without full schema introspection.
+        """
         config = {
             "kind": "Pipeline",
             "metadata": {"name": "test"},
@@ -279,11 +284,16 @@ class TestYamlValidator:
             },
         }
         result = self.validator.validate(config)
-        # Schema validation: field_mapping not in schema
-        assert not result.is_valid  # Unknown field error
+        # With simplified validation, we don't reject unknown fields
+        # The node has all required fields (fn for function_node)
+        assert result.is_valid
 
     def test_unknown_field_mapping_reference(self):
-        """Test warning for unknown field mapping."""
+        """Test unknown field mapping handling.
+
+        Note: With simplified validation, we don't reject unknown fields.
+        Field mapping validation would happen at runtime when the field is used.
+        """
         config = {
             "kind": "Pipeline",
             "metadata": {"name": "test"},
@@ -298,8 +308,9 @@ class TestYamlValidator:
             },
         }
         result = self.validator.validate(config)
-        # Schema validation: field_mapping not in schema
-        assert not result.is_valid  # Unknown field error
+        # With simplified validation, unknown fields are not rejected
+        # The node has all required fields (fn for function_node)
+        assert result.is_valid
 
         config = {
             "kind": "Pipeline",
@@ -315,10 +326,9 @@ class TestYamlValidator:
             },
         }
         result = self.validator.validate(config)
-        # Schema validation: field_mapping is unknown field
-        assert (
-            not result.is_valid
-        )  # Unknown field error since field mapping validation doesn't work with K8s format yet
+        # With simplified validation, unknown fields are not rejected
+        # Type validation of field_mapping value would happen at runtime
+        assert result.is_valid
 
     def test_field_mapping_dependency_suggestion(self):
         """Test suggestion for missing dependency in field mapping."""

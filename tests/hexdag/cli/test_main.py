@@ -33,7 +33,7 @@ class TestMainApp:
         assert "init" in result.stdout
         assert "plugins" in result.stdout
         assert "plugin" in result.stdout
-        assert "registry" in result.stdout
+        # Note: registry command was removed in registry simplification
 
     def test_version_flag_short(self, runner):
         """Test -v flag shows version."""

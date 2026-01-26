@@ -18,12 +18,9 @@ from hexdag.cli.commands import (
     create_cmd,
     docs_cmd,
     init_cmd,
-    manifest_cmd,
     pipeline_cmd,
     plugin_dev_cmd,
     plugins_cmd,
-    registry_cmd,
-    schema_cmd,
     studio_cmd,
     validate_cmd,
 )
@@ -41,11 +38,8 @@ console = Console()
 app.add_typer(init_cmd.app, name="init", help="Initialize a new HexDAG project")
 app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters")
 app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
-app.add_typer(registry_cmd.app, name="registry", help="Inspect the component registry")
-app.add_typer(manifest_cmd.app, name="manifest", help="Manifest file management")
 app.add_typer(pipeline_cmd.app, name="pipeline", help="Pipeline validation and execution")
 app.add_typer(create_cmd.app, name="create", help="Create pipeline templates from schemas")
-app.add_typer(schema_cmd.app, name="schema", help="Inspect component schemas")
 app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
 app.add_typer(studio_cmd.app, name="studio", help="Visual editor for pipelines")
 

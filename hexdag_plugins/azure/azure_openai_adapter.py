@@ -1,5 +1,6 @@
 """Azure OpenAI LLM adapter for hexDAG framework."""
 
+import os
 import time
 from typing import Any
 
@@ -14,17 +15,9 @@ from hexdag.core.ports.llm import (
     SupportsGeneration,
     ToolCall,
 )
-from hexdag.core.registry import adapter
 from openai import AsyncAzureOpenAI
 
 
-@adapter(
-    "llm",
-    name="azure_openai",
-    secrets={
-        "api_key": "AZURE_OPENAI_API_KEY",
-    },
-)
 class AzureOpenAIAdapter(LLM, SupportsGeneration, SupportsEmbedding):
     """Azure OpenAI adapter for LLM port with embedding support.
 
@@ -105,9 +98,9 @@ class AzureOpenAIAdapter(LLM, SupportsGeneration, SupportsEmbedding):
 
     def __init__(
         self,
-        api_key: str,
-        resource_name: str,
-        deployment_id: str,
+        api_key: str | None = None,
+        resource_name: str = "",
+        deployment_id: str = "",
         api_version: str = "2024-02-15-preview",
         temperature: float = 0.7,
         max_tokens: int | None = None,
@@ -119,7 +112,7 @@ class AzureOpenAIAdapter(LLM, SupportsGeneration, SupportsEmbedding):
 
         Args
         ----
-            api_key: Azure OpenAI API key
+            api_key: Azure OpenAI API key (auto-resolved from AZURE_OPENAI_API_KEY)
             resource_name: Azure OpenAI resource name
             deployment_id: Azure deployment name for text generation
             api_version: API version (default: "2024-02-15-preview")
@@ -129,7 +122,9 @@ class AzureOpenAIAdapter(LLM, SupportsGeneration, SupportsEmbedding):
             embedding_deployment_id: Azure deployment name for embeddings (optional)
             embedding_dimensions: Embedding dimensionality for text-embedding-3 models (optional)
         """
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("api_key required (pass directly or set AZURE_OPENAI_API_KEY)")
         self.resource_name = resource_name
         self.deployment_id = deployment_id
         self.api_version = api_version

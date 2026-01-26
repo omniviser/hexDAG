@@ -1,7 +1,6 @@
 """ToolCallNode - Execute a single tool call as a FunctionNode.
 
-This node wraps a tool function from the registry and executes it as a node.
-No ToolRouter needed - tools are accessed directly from the registry.
+This node wraps a tool function and executes it as a node.
 Used by ToolMacro to create parallel tool execution nodes.
 """
 
@@ -16,8 +15,7 @@ from hexdag.core.context import get_port
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.events import ToolCalled, ToolCompleted
-from hexdag.core.registry import node, registry
-from hexdag.core.registry.models import NodeSubtype
+from hexdag.core.resolver import resolve_function
 
 from .base_node_factory import BaseNodeFactory
 
@@ -44,25 +42,14 @@ class ToolCallOutput(BaseModel):
     error: str | None = None
 
 
-@node(name="tool_call_node", subtype=NodeSubtype.FUNCTION, namespace="core")
 class ToolCallNode(BaseNodeFactory):
     """Execute a single tool call as a FunctionNode.
 
     This node is a simple wrapper that:
     1. Takes a tool name and arguments
-    2. Gets the tool function from the registry
-    3. Injects required ports (if tool needs them)
-    4. Executes it and returns the result with metadata
-    5. Emits ToolCalled and ToolCompleted events
-
-    Port Injection:
-    ---------------
-    If a tool declares `required_ports=["database"]`, ToolCallNode will:
-    - Get the "database" port from context
-    - Inject it as `database_port` parameter
-    - Tool receives it: `def my_tool(arg1, database_port=None)`
-
-    No ToolRouter needed - tools accessed directly from registry.
+    2. Resolves the tool function using the module path resolver
+    3. Executes it and returns the result with metadata
+    4. Emits ToolCalled and ToolCompleted events
     Used by ToolMacro to create parallel tool execution nodes.
 
     Examples
@@ -124,7 +111,7 @@ class ToolCallNode(BaseNodeFactory):
         Args
         ----
             name: Node name (should be unique)
-            tool_name: Name of the tool to execute (from registry)
+            tool_name: Full module path to the tool function (e.g., 'mymodule.my_tool')
             arguments: Arguments to pass to the tool (default: {})
             tool_call_id: Optional ID for tracking (from LLM tool calls)
             deps: Dependencies (typically the LLM node that requested the tool)
@@ -155,34 +142,13 @@ class ToolCallNode(BaseNodeFactory):
 
             start_time = time.time()
             try:
-                # Get tool function and metadata from registry
-                tool_fn_obj = registry.get(tool_name)
-                tool_metadata = registry.get_metadata(tool_name)
+                # Resolve tool function using module path
+                tool_fn: Callable[..., Any] = resolve_function(tool_name)
 
-                # Type assertion for callable
-                tool_fn: Callable[..., Any] = tool_fn_obj  # type: ignore[assignment]
+                # Prepare tool arguments
+                tool_kwargs = dict(arguments)
 
-                # Prepare tool arguments + inject required ports
-                tool_kwargs = dict(arguments)  # Start with provided arguments
-
-                if tool_metadata and tool_metadata.port_requirements:
-                    # Tool needs ports - inject them as parameters
-                    for port_name in tool_metadata.port_requirements:
-                        try:
-                            # Get port and inject as {port_name}_port parameter
-                            # Example: "database" port → "database_port" parameter
-                            port = get_port(port_name)
-                            port_param_name = f"{port_name}_port"
-                            tool_kwargs[port_param_name] = port
-                            logger.debug(f"  Injected port '{port_name}' as '{port_param_name}'")
-                        except Exception as e:
-                            logger.warning(
-                                f"  Failed to inject required port '{port_name}': {e}. "
-                                f"Tool may fail if port is required."
-                            )
-                            # Don't add the port - tool will get None or handle missing port
-
-                # Execute tool with arguments + injected ports (handle both sync and async)
+                # Execute tool (handle both sync and async)
                 if inspect.iscoroutinefunction(tool_fn):
                     result = await tool_fn(**tool_kwargs)
                 else:

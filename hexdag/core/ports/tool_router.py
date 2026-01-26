@@ -3,13 +3,7 @@
 from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
-from hexdag.core.registry.decorators import port
 
-
-@port(
-    name="tool_router",
-    namespace="core",
-)
 @runtime_checkable
 class ToolRouter(Protocol):
     """Protocol for routing tool calls."""

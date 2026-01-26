@@ -11,7 +11,6 @@ from collections.abc import Callable, Iterable
 from typing import Any, Protocol
 
 from hexdag.core.orchestration.events.events import Event
-from hexdag.core.registry import port
 
 # Type aliases for observer functions
 ObserverFunc = Callable[[Event], None]
@@ -26,7 +25,6 @@ class Observer(Protocol):
         ...
 
 
-@port(name="observer_manager", namespace="core")
 class ObserverManagerPort(Protocol):
     """Port interface for event observation systems.
 

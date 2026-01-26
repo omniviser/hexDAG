@@ -6,12 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 from pydantic import BaseModel
 
-from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.context import get_port
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.orchestration.components import NodeExecutionError
 from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.registry import registry
 
 
 # Test data models
@@ -352,7 +350,7 @@ class TestOrchestrator:
     async def test_ports_with_mocks(self, orchestrator, observers):
         """Test orchestrator with mock LLM and ToolRouter ports."""
         from hexdag.builtin.adapters.mock.mock_llm import MockLLM
-        from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
+        from hexdag.builtin.adapters.mock.mock_tool_router import MockToolRouter
 
         async def async_dummy_node_with_ports(input_data):
             """Async dummy node that uses ports."""
@@ -378,25 +376,9 @@ class TestOrchestrator:
         graph = DirectedGraph()
         graph.add(NodeSpec("async_node", async_dummy_node_with_ports))
 
-        # Create mock ports - use UnifiedToolRouter with a simple mock function
+        # Create mock ports - use MockToolRouter for testing
         mock_llm = MockLLM(responses=["Test LLM response"])
-        mock_tool_router = UnifiedToolRouter()
-
-        # Add a simple mock tool by registering it with the global registry
-        from hexdag.core.registry import registry, tool
-        from hexdag.core.registry.models import ComponentType
-
-        @tool(name="test_tool", namespace="test")
-        def mock_test_tool(input_data):
-            return f"Mock tool result for: {input_data}"
-
-        # Register the tool with the global registry
-        registry.register(
-            name="test_tool",
-            component=mock_test_tool,
-            component_type=ComponentType.TOOL,
-            namespace="test",
-        )
+        mock_tool_router = MockToolRouter(available_tools=["test_tool"])
         ports = {"llm": mock_llm, "tool_router": mock_tool_router, "observers": observers}
 
         # Execute the DAG
@@ -406,7 +388,9 @@ class TestOrchestrator:
         result = results["async_node"]
         assert result["input"] == "test_input"
         assert result["llm_response"] == "Test LLM response"
-        assert "test_input" in result["tool_result"]
+        # MockToolRouter returns a dict with result, status, and tool fields
+        assert result["tool_result"]["status"] == "success"
+        assert result["tool_result"]["tool"] == "test_tool"
 
     @pytest.mark.asyncio
     async def test_ports_none_defaults_to_empty(self, orchestrator, observers):
@@ -783,8 +767,9 @@ class TestOrchestrator:
             deps=set(),
         )
 
-        ensure_bootstrapped()
-        function_node = registry.get("function_node", namespace="core")
+        from hexdag.builtin.nodes import FunctionNode
+
+        function_node = FunctionNode()
 
         consumer_node = function_node(
             name="consumer",
@@ -827,11 +812,9 @@ class TestOrchestrator:
         )
 
         # Consumer without explicit mapping - uses structured aggregation
-        from hexdag.core.bootstrap import ensure_bootstrapped
-        from hexdag.core.registry import registry
+        from hexdag.builtin.nodes import FunctionNode
 
-        ensure_bootstrapped()
-        function_node = registry.get("function_node", namespace="core")
+        function_node = FunctionNode()
 
         consumer_node = function_node(
             name="consumer",
@@ -878,9 +861,9 @@ class TestOrchestrator:
         )
 
         # Consumer using Pydantic model
+        from hexdag.builtin.nodes import FunctionNode
 
-        ensure_bootstrapped()
-        function_node = registry.get("function_node", namespace="core")
+        function_node = FunctionNode()
 
         consumer_node = function_node(
             name="consumer",
@@ -951,9 +934,9 @@ class TestOrchestrator:
         )
 
         # Node using Pydantic model for structured input
+        from hexdag.builtin.nodes import FunctionNode
 
-        ensure_bootstrapped()
-        function_node = registry.get("function_node", namespace="core")
+        function_node = FunctionNode()
 
         mapped_node = function_node(
             name="mapped",

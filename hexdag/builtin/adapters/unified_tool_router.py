@@ -1,4 +1,4 @@
-"""ToolRouter adapter that uses the global registry singleton for tool management."""
+"""ToolRouter adapter that aggregates multiple tool routers with namespacing."""
 
 import asyncio
 import inspect
@@ -9,37 +9,25 @@ from hexdag.core.exceptions import ResourceNotFoundError
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.tool_router import ToolRouter
 from hexdag.core.protocols import has_execute_method
-from hexdag.core.registry import registry  # Use the direct module-level singleton
-from hexdag.core.registry.decorators import adapter
-from hexdag.core.registry.models import ClassComponent, ComponentType, FunctionComponent
 
 logger = get_logger(__name__)
 
 __all__ = ["UnifiedToolRouter"]
 
 
-@adapter(implements_port="tool_router")
 class UnifiedToolRouter(ToolRouter):
     """ToolRouter adapter that supports multiple tool sources with namespacing.
 
-    This adapter can aggregate multiple tool routers and provide unified access
+    This adapter aggregates multiple tool routers and provides unified access
     with namespace prefixes (e.g., "builtin::tool", "mcp::tool").
-
-    When routers are provided, tools are namespaced by router ID.
-    When no routers are provided, uses the global registry singleton (legacy mode).
 
     Example
     -------
-        # Multi-router mode (new)
         router = UnifiedToolRouter(routers={
             "builtin": PythonToolRouter(),
             "mcp_sql": MCPToolRouter("sqlite"),
         })
         result = await router.acall_tool("builtin::search_papers", {"query": "..."})
-
-        # Legacy mode (backward compatible)
-        router = UnifiedToolRouter()
-        result = await router.acall_tool("search_papers", {"query": "..."})
     """
 
     def __init__(self, routers: dict[str, ToolRouter] | None = None, **kwargs: Any) -> None:
@@ -47,11 +35,10 @@ class UnifiedToolRouter(ToolRouter):
 
         Args
         ----
-            routers: Optional dict of {router_id: ToolRouter} for multi-router mode
+            routers: Dict of {router_id: ToolRouter} for multi-router mode
             **kwargs: Additional configuration options
         """
         self.routers = routers or {}
-        self.multi_router_mode = bool(self.routers)
 
         # Store first router as default for unprefixed calls
         self.default_router = next(iter(self.routers.values())) if self.routers else None
@@ -70,12 +57,6 @@ class UnifiedToolRouter(ToolRouter):
         -------
             Tool execution result
         """
-        if self.multi_router_mode:
-            return await self._acall_tool_multi_router(tool_name, params)
-        return await self._acall_tool_legacy(tool_name, params)
-
-    async def _acall_tool_multi_router(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Call tool in multi-router mode with namespace support."""
         # Parse namespace: "builtin::tool" or "tool"
         if "::" in tool_name:
             router_id, actual_tool = tool_name.split("::", 1)
@@ -100,19 +81,6 @@ class UnifiedToolRouter(ToolRouter):
 
         # Delegate to the specific router
         return await router.acall_tool(actual_tool, params)
-
-    async def _acall_tool_legacy(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Call tool in legacy mode (global registry)."""
-        try:
-            # Validate tool exists and is correct type
-            registry.get_metadata(tool_name, component_type=ComponentType.TOOL)
-            tool = registry.get(tool_name)
-        except Exception as e:
-            available = self.get_available_tools()
-            raise ResourceNotFoundError("tool", tool_name, available) from e
-
-        # Execute tool outside the try/except so tool errors aren't wrapped
-        return await self._execute_tool(tool, params)
 
     async def _execute_tool(self, tool: Any, params: dict[str, Any]) -> Any:
         """Execute any tool (function, class, or instance) with parameters.
@@ -174,94 +142,58 @@ class UnifiedToolRouter(ToolRouter):
     def get_available_tools(self) -> list[str]:
         """Get list of available tool names.
 
-        In multi-router mode, returns namespaced tools: ["router1::tool1", "router2::tool2"]
-        In legacy mode, returns tools from registry: ["tool1", "tool2"]
+        Returns namespaced tools: ["router1::tool1", "router2::tool2"]
         """
-        if self.multi_router_mode:
-            all_tools = []
-            for router_id, router in self.routers.items():
-                try:
-                    router_tools = router.get_available_tools()
-                    # Prefix each tool with router ID
-                    namespaced_tools = [f"{router_id}::{tool}" for tool in router_tools]
-                    all_tools.extend(namespaced_tools)
-                except Exception as e:
-                    logger.debug("Could not list tools from router %s: %s", router_id, e)
-            return all_tools
-        # Legacy mode: registry tools
-        try:
-            registry_tools = registry.list_components(component_type=ComponentType.TOOL)
-            return [tool.name for tool in registry_tools]
-        except Exception as e:
-            logger.debug("Could not list registry tools: %s", e)
-            return []
+        all_tools = []
+        for router_id, router in self.routers.items():
+            try:
+                router_tools = router.get_available_tools()
+                # Prefix each tool with router ID
+                namespaced_tools = [f"{router_id}::{tool}" for tool in router_tools]
+                all_tools.extend(namespaced_tools)
+            except Exception as e:
+                logger.debug("Could not list tools from router %s: %s", router_id, e)
+        return all_tools
 
     def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
         """Get schema for a specific tool.
 
         Args
         ----
-            tool_name: Name of the tool (with optional "router::" prefix in multi-router mode)
+            tool_name: Name of the tool (with optional "router::" prefix)
 
         Returns
         -------
             Tool schema dictionary or empty dict if not found
         """
-        if self.multi_router_mode:
-            # Parse namespace
-            router_id: str
-            if "::" in tool_name:
-                router_id, actual_tool = tool_name.split("::", 1)
-                if router_id not in self.routers:
-                    return {}
-                router = self.routers[router_id]
-            else:
-                if not self.default_router:
-                    return {}
-                router = self.default_router
-                router_id = "default"
-                actual_tool = tool_name
-
-            # Get schema from specific router
-            try:
-                schema = router.get_tool_schema(actual_tool)
-                # Add router info
-                schema["_router"] = router_id
-                return schema
-            except Exception as e:
-                logger.debug("Could not get tool schema from router: %s", e)
+        # Parse namespace
+        router_id: str
+        if "::" in tool_name:
+            router_id, actual_tool = tool_name.split("::", 1)
+            if router_id not in self.routers:
                 return {}
+            router = self.routers[router_id]
         else:
-            # Legacy mode: registry
-            try:
-                tool_info = registry.get_info(tool_name)
-                if tool_info.component_type == ComponentType.TOOL:
-                    tool_def = self._get_tool_definition_from_component(tool_info)
-                    return {
-                        "name": tool_def.name,
-                        "description": tool_def.simplified_description,
-                        "detailed_description": tool_def.detailed_description,
-                        "parameters": [
-                            {
-                                "name": p.name,
-                                "type": p.param_type,
-                                "required": p.required,
-                                "default": p.default,
-                                "description": p.description,
-                            }
-                            for p in tool_def.parameters
-                        ],
-                        "examples": tool_def.examples,
-                    }
-            except Exception as e:
-                logger.debug("Could not get tool schema from registry: %s", e)
+            if not self.default_router:
+                return {}
+            router = self.default_router
+            router_id = "default"
+            actual_tool = tool_name
+
+        # Get schema from specific router
+        try:
+            schema = router.get_tool_schema(actual_tool)
+            # Add router info
+            schema["_router"] = router_id
+            return schema
+        except Exception as e:
+            logger.debug("Could not get tool schema from router: %s", e)
             return {}
 
     def get_all_tool_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schemas for all available tools.
 
-        In multi-router mode, returns schemas with namespaced keys.
-        In legacy mode, returns schemas from registry.
+        Returns schemas with namespaced keys.
         """
         schemas = {}
         for tool_name in self.get_available_tools():
@@ -271,156 +203,78 @@ class UnifiedToolRouter(ToolRouter):
 
     async def aget_available_tools(self) -> list[str]:
         """Async version of get_available_tools."""
-        if self.multi_router_mode:
-            all_tools = []
-            for router_id, router in self.routers.items():
-                try:
-                    # Use async method if available
-                    if hasattr(router, "aget_available_tools"):
-                        router_tools = await router.aget_available_tools()
-                    else:
-                        router_tools = router.get_available_tools()
-                    namespaced_tools = [f"{router_id}::{tool}" for tool in router_tools]
-                    all_tools.extend(namespaced_tools)
-                except Exception as e:
-                    logger.debug("Could not list tools from router %s: %s", router_id, e)
-            return all_tools
-        return self.get_available_tools()
+        all_tools = []
+        for router_id, router in self.routers.items():
+            try:
+                # Use async method if available
+                if hasattr(router, "aget_available_tools"):
+                    router_tools = await router.aget_available_tools()
+                else:
+                    router_tools = router.get_available_tools()
+                namespaced_tools = [f"{router_id}::{tool}" for tool in router_tools]
+                all_tools.extend(namespaced_tools)
+            except Exception as e:
+                logger.debug("Could not list tools from router %s: %s", router_id, e)
+        return all_tools
 
     async def aget_tool_schema(self, tool_name: str) -> dict[str, Any]:
         """Async version of get_tool_schema."""
-        if self.multi_router_mode:
-            # Parse namespace
-            router_id: str
-            if "::" in tool_name:
-                router_id, actual_tool = tool_name.split("::", 1)
-                if router_id not in self.routers:
-                    return {}
-                router = self.routers[router_id]
-            else:
-                if not self.default_router:
-                    return {}
-                router = self.default_router
-                router_id = "default"
-                actual_tool = tool_name
-
-            # Get schema from specific router (async if available)
-            try:
-                if hasattr(router, "aget_tool_schema"):
-                    schema = await router.aget_tool_schema(actual_tool)
-                else:
-                    schema = router.get_tool_schema(actual_tool)
-                schema["_router"] = router_id
-                return schema
-            except Exception as e:
-                logger.debug("Could not get tool schema from router: %s", e)
+        # Parse namespace
+        router_id: str
+        if "::" in tool_name:
+            router_id, actual_tool = tool_name.split("::", 1)
+            if router_id not in self.routers:
                 return {}
+            router = self.routers[router_id]
         else:
-            return self.get_tool_schema(tool_name)
+            if not self.default_router:
+                return {}
+            router = self.default_router
+            router_id = "default"
+            actual_tool = tool_name
+
+        # Get schema from specific router (async if available)
+        try:
+            if hasattr(router, "aget_tool_schema"):
+                schema = await router.aget_tool_schema(actual_tool)
+            else:
+                schema = router.get_tool_schema(actual_tool)
+            schema["_router"] = router_id
+            return schema
+        except Exception as e:
+            logger.debug("Could not get tool schema from router: %s", e)
+            return {}
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
-        """Get ToolDefinitions from registry for integration with ToolDescriptionManager.
+        """Get ToolDefinitions from all routers.
 
         Returns
         -------
-            List of ToolDefinitions generated from registry tools
+            List of ToolDefinitions generated from router tools
         """
         definitions = []
-        try:
-            registry_tools = registry.list_components(component_type=ComponentType.TOOL)
-            for tool_info in registry_tools:
-                tool_def = self._get_tool_definition_from_component(tool_info)
-                definitions.append(tool_def)
-        except Exception as e:
-            logger.debug("Could not get tool definitions from registry: %s", e)
+        for router_id, router in self.routers.items():
+            try:
+                for tool_name in router.get_available_tools():
+                    schema = router.get_tool_schema(tool_name)
+                    if schema:
+                        tool_def = ToolDefinition(
+                            name=f"{router_id}::{tool_name}",
+                            simplified_description=schema.get("description", f"Tool {tool_name}"),
+                            detailed_description=schema.get("description", f"Tool {tool_name}"),
+                            parameters=[
+                                ToolParameter(
+                                    name=p.get("name", ""),
+                                    description=p.get("description", ""),
+                                    param_type=p.get("type", "Any"),
+                                    required=p.get("required", False),
+                                    default=p.get("default"),
+                                )
+                                for p in schema.get("parameters", [])
+                            ],
+                            examples=[f"{router_id}::{tool_name}()"],
+                        )
+                        definitions.append(tool_def)
+            except Exception as e:
+                logger.debug("Could not get tool definitions from router %s: %s", router_id, e)
         return definitions
-
-    def _get_tool_definition_from_component(self, component_info: Any) -> ToolDefinition:
-        """Generate ToolDefinition from registry component.
-
-        Args
-        ----
-            component_info: ComponentInfo from registry
-
-        Returns
-        -------
-            ToolDefinition for the component
-        """
-        # Access metadata from ComponentInfo
-        metadata = component_info.metadata
-        component = metadata.component
-
-        match component:
-            case FunctionComponent(value=func):
-                return self._generate_tool_definition_from_function(func, component_info.name)
-            case ClassComponent(value=cls) if has_execute_method(cls):
-                return self._generate_tool_definition_from_function(
-                    cls.execute, component_info.name
-                )
-            case _:
-                return ToolDefinition(
-                    name=component_info.name,
-                    simplified_description=metadata.description or f"Tool {component_info.name}",
-                    detailed_description=metadata.description or f"Tool {component_info.name}",
-                    parameters=[],
-                    examples=[f"{component_info.name}()"],
-                )
-
-    def _generate_tool_definition_from_function(self, func: Any, tool_name: str) -> ToolDefinition:
-        """Generate ToolDefinition from a function's signature and docstring.
-
-        Args
-        ----
-            func: Function to analyze
-            tool_name: Name for the tool
-
-        Returns
-        -------
-            ToolDefinition with extracted metadata
-        """
-        sig = inspect.signature(func)
-
-        parameters: list[ToolParameter] = []
-        for param_name, param in sig.parameters.items():
-            if param_name == "self":  # Skip self parameter for methods
-                continue
-
-            param_type = (
-                str(param.annotation) if param.annotation != inspect.Parameter.empty else "Any"
-            )
-            # Clean up type string
-            if "<class '" in param_type:
-                param_type = param_type.replace("<class '", "").replace("'>", "")
-
-            tool_param = ToolParameter(
-                name=param_name,
-                description=f"Parameter {param_name}",
-                param_type=param_type,
-                required=param.default == inspect.Parameter.empty,
-                default=param.default if param.default != inspect.Parameter.empty else None,
-            )
-            parameters.append(tool_param)
-
-        doc = inspect.getdoc(func) or f"Execute {tool_name}"
-        lines = doc.strip().split("\n")
-        simplified_desc = lines[0] if lines else f"Execute {tool_name}"
-
-        example_args = []
-        for p in parameters:
-            if p.required:
-                if "str" in p.param_type:
-                    example_args.append(f"{p.name}='example'")
-                elif "int" in p.param_type:
-                    example_args.append(f"{p.name}=10")
-                else:
-                    example_args.append(f"{p.name}=...")
-
-        example = f"{tool_name}({', '.join(example_args)})" if example_args else f"{tool_name}()"
-
-        return ToolDefinition(
-            name=tool_name,
-            simplified_description=simplified_desc,
-            detailed_description=doc.strip() if len(doc.strip()) > 50 else simplified_desc,
-            parameters=parameters,
-            examples=[example],
-        )
