@@ -118,9 +118,6 @@ class TestResolve:
             "agent_node",
             "loop_node",
             "conditional_node",
-            "parser_node",
-            "prompt_node",
-            "raw_llm_node",
             "tool_call_node",
         ]
         for name in legacy_names:

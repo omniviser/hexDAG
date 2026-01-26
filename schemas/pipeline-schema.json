@@ -312,48 +312,33 @@
                     "properties": {
                         "deps": {
                             "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
+                            "type": "string"
                         },
                         "output_schema": {
-                            "anyOf": [
-                                {
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null
+                            "default": null,
+                            "type": "string"
+                        },
+                        "parse_json": {
+                            "default": false,
+                            "type": "string"
+                        },
+                        "parse_strategy": {
+                            "default": "json",
+                            "type": "string"
+                        },
+                        "prompt_template": {
+                            "default": null,
+                            "type": "string"
+                        },
+                        "system_prompt": {
+                            "default": null,
+                            "type": "string"
                         },
                         "template": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ]
+                            "default": null,
+                            "type": "string"
                         }
                     },
-                    "required": [
-                        "template"
-                    ],
                     "type": "object"
                 }
             },
@@ -418,249 +403,6 @@
                     "type": "object"
                 }
             },
-            "type": "object"
-        },
-        "ParserNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for parser_node type",
-            "properties": {
-                "kind": {
-                    "const": "parser_node",
-                    "description": "Node type: parser_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "deps": {
-                            "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "output_schema": {
-                            "anyOf": [
-                                {
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ]
-                        },
-                        "strategy": {
-                            "default": "json",
-                            "type": "string"
-                        },
-                        "strict": {
-                            "default": true,
-                            "type": "boolean"
-                        }
-                    },
-                    "required": [
-                        "output_schema"
-                    ],
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
-        "PromptNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for prompt_node type",
-            "properties": {
-                "kind": {
-                    "const": "prompt_node",
-                    "description": "Node type: prompt_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "deps": {
-                            "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "output_format": {
-                            "default": "messages",
-                            "type": "string"
-                        },
-                        "prompt_args": {
-                            "default": null,
-                            "type": [
-                                "object",
-                                "null"
-                            ]
-                        },
-                        "prompt_ref": {
-                            "default": null,
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        },
-                        "system_prompt": {
-                            "default": null,
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        },
-                        "template": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null
-                        }
-                    },
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
-        "Raw_LlmNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for raw_llm_node type",
-            "properties": {
-                "kind": {
-                    "const": "raw_llm_node",
-                    "description": "Node type: raw_llm_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "deps": {
-                            "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "tool_choice": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ],
-                            "default": "auto"
-                        },
-                        "tools": {
-                            "default": null,
-                            "items": {
-                                "type": "object"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        }
-                    },
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
             "type": "object"
         },
         "Tool_CallNodeSpec": {
@@ -829,15 +571,6 @@
                             },
                             {
                                 "$ref": "#/$defs/LlmNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/Raw_LlmNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/PromptNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/ParserNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/AgentNodeSpec"

@@ -338,11 +338,11 @@ metadata:
   version: ${VERSION}
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -365,11 +365,11 @@ spec:
   variables:
     node_name: processor
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: "{{ spec.variables.node_name }}"
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -388,11 +388,11 @@ metadata:
   name: ${ENV}-pipeline
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -412,11 +412,11 @@ metadata:
   name: ${MODEL}-pipeline
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -523,11 +523,11 @@ metadata:
   name: simple-pipeline
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: greeter
       spec:
-        template: "Hello, World!"
+        fn: "json.dumps"
 """
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -596,11 +596,11 @@ spec:
     retry:
       name: hexdag.builtin.policies.execution_policies.RetryPolicy
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -628,11 +628,11 @@ metadata:
   namespace: dev
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test1
       spec:
-        template: "First"
+        fn: "json.dumps"
 ---
 apiVersion: hexdag/v1
 kind: Pipeline
@@ -641,11 +641,11 @@ metadata:
   namespace: prod
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test2
       spec:
-        template: "Second"
+        fn: "json.dumps"
 """
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -663,11 +663,11 @@ metadata:
   namespace: dev
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: dev_node
       spec:
-        template: "Dev"
+        fn: "json.dumps"
 ---
 apiVersion: hexdag/v1
 kind: Pipeline
@@ -676,11 +676,11 @@ metadata:
   namespace: prod
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: prod_node
       spec:
-        template: "Prod"
+        fn: "json.dumps"
 """
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content, environment="prod")
@@ -698,11 +698,11 @@ metadata:
   namespace: dev
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Test"
+        fn: "json.dumps"
 """
         builder = YamlPipelineBuilder()
         with pytest.raises(YamlPipelineBuilderError, match="staging.*not found"):
@@ -744,7 +744,7 @@ metadata:
   name: test
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata: {}
       spec:
         template: "Test"
@@ -781,16 +781,16 @@ metadata:
   name: deps-test
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: first
       spec:
-        template: "First"
-    - kind: prompt_node
+        fn: "json.dumps"
+    - kind: function_node
       metadata:
         name: second
       spec:
-        template: "Second"
+        fn: "json.dumps"
         dependencies: [first]
 """
         builder = YamlPipelineBuilder()
@@ -970,11 +970,11 @@ metadata:
   name: warning-test
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
         unknown_field: this_should_warn
 """
         import logging

@@ -126,9 +126,9 @@ class TestYamlMacro:
             parameters=[],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_prompt"},
-                    "spec": {"template": "Hello"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -141,9 +141,9 @@ class TestYamlMacro:
             parameters=[],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_node"},
-                    "spec": {"template": "Hello {{name}}"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -163,9 +163,9 @@ class TestYamlMacro:
             ],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_llm"},
-                    "spec": {"template": "Using {{model}}"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -184,9 +184,9 @@ class TestYamlMacro:
             parameters=[],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_step1"},
-                    "spec": {"template": "Step 1"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -203,9 +203,9 @@ class TestYamlMacro:
             ],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_node"},
-                    "spec": {"template": "Retries: {{retries}}"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -222,9 +222,9 @@ class TestYamlMacro:
             ],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_node"},
-                    "spec": {"template": "Hello"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -242,9 +242,9 @@ class TestYamlMacro:
             ],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_node"},
-                    "spec": {"template": "Mode: {{mode}}"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -263,9 +263,9 @@ class TestYamlMacro:
             ],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_node"},
-                    "spec": {"template": "Mode: {{mode}}"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )
@@ -279,9 +279,9 @@ class TestYamlMacro:
             parameters=[],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_node"},
-                    "spec": {"template": "Input: {{input}}"},  # runtime variable
+                    "spec": {"fn": "json.dumps"},  # runtime variable
                 }
             ],
         )
@@ -314,7 +314,13 @@ class TestYamlMacro:
                 YamlMacroParameterSpec(name="p1", type="str"),
                 YamlMacroParameterSpec(name="p2", type="int"),
             ],
-            nodes=[{"kind": "prompt_node", "metadata": {"name": "n"}, "spec": {"template": "Hi"}}],
+            nodes=[
+                {
+                    "kind": "function_node",
+                    "metadata": {"name": "n"},
+                    "spec": {"fn": "json.dumps"},
+                }
+            ],
         )
         repr_str = repr(macro)
         assert "test" in repr_str
@@ -332,14 +338,14 @@ class TestYamlMacroIntegration:
             parameters=[],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_step1"},
-                    "spec": {"template": "Step 1"},
+                    "spec": {"fn": "json.dumps"},
                 },
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{name}}_step2"},
-                    "spec": {"template": "Step 2", "dependencies": ["{{name}}_step1"]},
+                    "spec": {"fn": "json.dumps", "dependencies": ["{{name}}_step1"]},
                 },
             ],
         )
@@ -358,9 +364,9 @@ class TestYamlMacroIntegration:
             ],
             nodes=[
                 {
-                    "kind": "prompt_node",
+                    "kind": "function_node",
                     "metadata": {"name": "{{prefix}}_{{name}}_node"},
-                    "spec": {"template": "Count: {{count}}"},
+                    "spec": {"fn": "json.dumps"},
                 }
             ],
         )

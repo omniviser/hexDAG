@@ -27,9 +27,6 @@ from hexdag.builtin.nodes import (
     FunctionNode,
     LLMNode,
     LoopNode,
-    ParserNode,
-    PromptNode,
-    RawLLMNode,
     ReActAgentNode,
     ToolCallNode,
 )
@@ -46,9 +43,6 @@ SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 NODE_FACTORIES: dict[str, type[Any]] = {
     "function_node": FunctionNode,
     "llm_node": LLMNode,
-    "raw_llm_node": RawLLMNode,
-    "prompt_node": PromptNode,
-    "parser_node": ParserNode,
     "agent_node": ReActAgentNode,
     "loop_node": LoopNode,
     "conditional_node": ConditionalNode,

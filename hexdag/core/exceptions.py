@@ -84,7 +84,7 @@ class ValidationError(HexDAGError):
 class ParseError(HexDAGError):
     """Raised when LLM output parsing fails.
 
-    Used by ParserNode when JSON/YAML/structured parsing fails.
+    Used by LLMNode when JSON/YAML/structured parsing fails.
     Contains helpful retry hints for fixing the prompt.
 
     Examples

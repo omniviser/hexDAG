@@ -1,139 +1,452 @@
-"""LLM node factory for creating LLM-based pipeline nodes.
+"""LLMNode - Unified LLM node for prompt building, API calls, and parsing.
 
-.. deprecated:: 0.2.0
-   Use the new composable architecture instead:
-   - PromptNode for prompt building
-   - RawLLMNode for API calls
-   - ParserNode for output parsing
-   - Or use the LLM macro that combines all three with retry logic
+This is the primary LLM node in hexdag, providing an n8n-style unified interface
+for all LLM interactions. It combines:
+- Prompt templating (Jinja2-style variable substitution)
+- LLM API calls (via the llm port)
+- Optional structured output parsing (JSON/Pydantic validation)
 """
 
-import warnings
-from typing import Any
+from __future__ import annotations
 
-from pydantic import BaseModel
+import json
+import re
+from typing import TYPE_CHECKING, Any
 
-from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.orchestration.prompt import PromptInput
+from pydantic import BaseModel, ValidationError
 
-from .base_llm_node import BaseLLMNode
+from hexdag.core.context import get_port
+from hexdag.core.exceptions import ParseError
+from hexdag.core.logging import get_logger
+from hexdag.core.orchestration.prompt.template import PromptTemplate
+from hexdag.core.ports.llm import Message
+from hexdag.core.protocols import to_dict
+
+from .base_node_factory import BaseNodeFactory
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from hexdag.core.domain.dag import NodeSpec
+    from hexdag.core.orchestration.prompt import PromptInput, TemplateType
+
+logger = get_logger(__name__)
 
 
-class LLMNode(BaseLLMNode):
-    """DEPRECATED: Use PromptNode + RawLLMNode + ParserNode instead.
+def _convert_dicts_to_messages(message_dicts: list[dict[str, str]]) -> list[Message]:
+    """Convert list of message dicts to Message objects."""
+    return [Message(**msg) for msg in message_dicts]
 
-    This monolithic LLM node combines prompt building, API calls, and parsing.
-    The new architecture separates these concerns for better composability:
 
-    Old (monolithic)::
+class LLMNode(BaseNodeFactory):
+    """Unified LLM node - prompt building, API calls, and optional parsing.
 
-        llm_node = LLMNode()
-        spec = llm_node(name="analyzer", template="Analyze {{data}}", output_schema=Result)
+    This is the primary node for LLM interactions in hexdag. It provides a simple,
+    n8n-style interface that handles the complete LLM workflow in a single node.
 
-    New (composable)::
+    Capabilities
+    ------------
+    1. **Prompt Templating**: Jinja2-style variable substitution ({{variable}})
+    2. **LLM API Calls**: Calls the configured LLM port
+    3. **Structured Output**: Optional JSON parsing with Pydantic validation
+    4. **System Prompts**: Optional system message support
+    5. **Message History**: Support for conversation context
 
-        # Option 1: Use the LLM macro (recommended)
-        from hexdag.builtin.macros import LLMMacro
-        macro = LLMMacro()
-        graph = macro.expand(
-            instance_name="analyzer",
-            inputs={"template": "Analyze {{data}}", "output_schema": Result}
+    Examples
+    --------
+    Simple text generation::
+
+        llm = LLMNode()
+        spec = llm(
+            name="summarizer",
+            prompt_template="Summarize this text: {{text}}"
         )
 
-        # Option 2: Compose manually for full control
-        prompt_node = PromptNode()(name="prompt", template="Analyze {{data}}")
-        llm_node = RawLLMNode()(name="llm")
-        parser_node = ParserNode()(name="parser", output_schema=Result)
+    With system prompt::
 
-    Inherits all common LLM functionality from BaseLLMNode. LLM nodes are highly dynamic -
-    templates and schemas are passed via __call__() parameters rather than static Config.
-    No Config class needed (follows YAGNI principle).
+        spec = llm(
+            name="assistant",
+            prompt_template="Answer: {{question}}",
+            system_prompt="You are a helpful assistant."
+        )
 
-    .. deprecated:: 0.2.0
-       Will be removed in version 0.3.0. Use the new composable architecture.
+    Structured output with JSON parsing::
+
+        from pydantic import BaseModel
+
+        class Analysis(BaseModel):
+            sentiment: str
+            confidence: float
+            keywords: list[str]
+
+        spec = llm(
+            name="analyzer",
+            prompt_template="Analyze this text: {{text}}",
+            output_schema=Analysis,
+            parse_json=True
+        )
+
+    YAML Pipeline Usage::
+
+        - kind: llm_node
+          metadata:
+            name: analyzer
+          spec:
+            prompt_template: "Analyze: {{input}}"
+            system_prompt: "You are an analyst"
+            parse_json: true
+            output_schema:
+              summary: str
+              confidence: float
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initialize LLMNode with deprecation warning."""
-        warnings.warn(
-            "LLMNode is deprecated and will be removed in version 0.3.0. "
-            "Use the new composable architecture: PromptNode + RawLLMNode + ParserNode, "
-            "or use the LLM macro for automatic composition with retry logic. "
-            "See documentation for migration guide.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        """Initialize LLMNode."""
         super().__init__()
 
     def __call__(
         self,
         name: str,
-        template: PromptInput,
+        prompt_template: PromptInput | str | None = None,
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
+        system_prompt: str | None = None,
+        parse_json: bool = False,
+        parse_strategy: str = "json",
         deps: list[str] | None = None,
+        template: PromptInput | str | None = None,  # Alias for prompt_template (YAML compat)
         **kwargs: Any,
     ) -> NodeSpec:
-        """Create a NodeSpec for an LLM-based node with rich template support.
+        """Create a unified LLM node specification.
 
-        Args
-        ----
-            name: Node name
-            template: Template for LLM prompt
-            output_schema: Output schema for validation
-            deps: List of dependency node names
-            **kwargs: Additional parameters
+        Parameters
+        ----------
+        name : str
+            Node name (must be unique in the graph)
+        prompt_template : PromptInput | str
+            Template for the user prompt. Supports Jinja2-style {{variable}} syntax.
+            Can be a string or PromptTemplate/ChatPromptTemplate object.
+            Can also be provided as 'template' (alias for YAML compatibility).
+        output_schema : dict[str, Any] | type[BaseModel] | None, optional
+            Expected output schema for structured output. If provided with parse_json=True,
+            the LLM response will be parsed and validated against this schema.
+        system_prompt : str | None, optional
+            System message to prepend to the conversation.
+        parse_json : bool, optional
+            If True, parse the LLM response as JSON and validate against output_schema.
+            Default is False (returns raw text).
+        parse_strategy : str, optional
+            JSON parsing strategy: "json", "json_in_markdown", or "yaml".
+            Default is "json".
+        deps : list[str] | None, optional
+            List of dependency node names.
+        **kwargs : Any
+            Additional parameters passed to NodeSpec.
 
         Returns
         -------
         NodeSpec
-            Complete node specification ready for execution
+            Complete node specification ready for execution.
 
         Raises
         ------
         ValueError
-            If output_schema is provided for string templates
+            If parse_json is True but no output_schema is provided.
+
+        Examples
+        --------
+        >>> llm = LLMNode()
+        >>> spec = llm(
+        ...     name="greeter",
+        ...     prompt_template="Say hello to {{name}}",
+        ...     system_prompt="You are friendly."
+        ... )
         """
-        # String templates don't support rich features (structured output)
-        if isinstance(template, str) and output_schema is not None:
-            raise ValueError(
-                "output_schema not supported for string templates - "
-                "use PromptTemplate, ChatPromptTemplate, or other template objects "
-                "for structured output"
-            )
+        # Handle template alias for YAML compatibility
+        actual_template = prompt_template or template
+        if actual_template is None:
+            raise ValueError("prompt_template (or template) is required")
 
-        # Rich features enabled for non-string templates with output schema
-        rich_features = not isinstance(template, str) and output_schema is not None
+        if parse_json and output_schema is None:
+            raise ValueError("output_schema is required when parse_json=True")
 
-        # Use BaseLLMNode pipeline
-        return self.build_llm_node_spec(
+        # Prepare template
+        prepared_template = self._prepare_template(actual_template)
+
+        # Infer input schema from template variables
+        input_schema = self.infer_input_schema_from_template(
+            prepared_template, special_params={"context_history", "system_prompt"}
+        )
+
+        # Create output model if schema provided
+        output_model: type[BaseModel] | None = None
+        if output_schema is not None:
+            output_model = self.create_pydantic_model(f"{name}Output", output_schema)
+
+        # Create the LLM wrapper function
+        llm_wrapper = self._create_llm_wrapper(
             name=name,
-            template=template,
-            output_schema=output_schema,
+            template=prepared_template,
+            output_model=output_model,
+            system_prompt=system_prompt,
+            parse_json=parse_json,
+            parse_strategy=parse_strategy,
+        )
+
+        return self.create_node_with_mapping(
+            name=name,
+            wrapped_fn=llm_wrapper,
+            input_schema=input_schema,
+            output_schema=output_schema if parse_json else None,
             deps=deps,
-            rich_features=rich_features,
             **kwargs,
         )
+
+    # Template Processing
+    # -------------------
+
+    @staticmethod
+    def _prepare_template(template: PromptInput | str) -> TemplateType:
+        """Convert string input to PromptTemplate if needed."""
+        if isinstance(template, str):
+            return PromptTemplate(template)
+        return template
+
+    # LLM Wrapper Creation
+    # --------------------
+
+    def _create_llm_wrapper(
+        self,
+        name: str,
+        template: TemplateType,
+        output_model: type[BaseModel] | None,
+        system_prompt: str | None,
+        parse_json: bool,
+        parse_strategy: str,
+    ) -> Callable[..., Any]:
+        """Create an async LLM wrapper function."""
+
+        async def llm_wrapper(validated_input: dict[str, Any]) -> Any:
+            """Execute LLM call with optional parsing."""
+            llm = get_port("llm")
+            if not llm:
+                raise RuntimeError("LLM port not available in execution context")
+
+            try:
+                # Convert input to dict if needed
+                try:
+                    input_dict = to_dict(validated_input)
+                except TypeError:
+                    input_dict = validated_input
+
+                # Enhance template with schema instructions if using structured output
+                enhanced_template = template
+                if parse_json and output_model:
+                    enhanced_template = self._enhance_template_with_schema(template, output_model)
+
+                # Generate messages from template
+                messages = self._generate_messages(enhanced_template, input_dict, system_prompt)
+
+                # Call LLM
+                response = await llm.aresponse(messages)
+
+                # Parse response if requested
+                if parse_json and output_model:
+                    return self._parse_response(response, output_model, parse_strategy)
+
+                return response
+
+            except Exception:
+                raise
+
+        return llm_wrapper
+
+    def _generate_messages(
+        self,
+        template: TemplateType,
+        input_data: dict[str, Any],
+        system_prompt: str | None,
+    ) -> list[Message]:
+        """Generate messages from template and input data."""
+        message_dicts = template.to_messages(**input_data)
+
+        # Add system prompt if provided and not already present
+        if system_prompt:
+            has_system = any(msg.get("role") == "system" for msg in message_dicts)
+            if not has_system:
+                message_dicts.insert(0, {"role": "system", "content": system_prompt})
+
+        return _convert_dicts_to_messages(message_dicts)
+
+    # Schema Enhancement
+    # ------------------
+
+    def _enhance_template_with_schema(
+        self, template: TemplateType, output_model: type[BaseModel]
+    ) -> TemplateType:
+        """Add schema instructions to template for structured output."""
+        schema_instruction = self._create_schema_instruction(output_model)
+        return template + schema_instruction
+
+    def _create_schema_instruction(self, output_model: type[BaseModel]) -> str:
+        """Create schema instruction for structured output."""
+        schema = output_model.model_json_schema()
+
+        fields_info = []
+        if "properties" in schema:
+            for field_name, field_schema in schema["properties"].items():
+                field_type = field_schema.get("type", "any")
+                field_desc = field_schema.get("description", "")
+                desc_part = f" - {field_desc}" if field_desc else ""
+                fields_info.append(f"  - {field_name}: {field_type}{desc_part}")
+
+        fields_text = "\n".join(fields_info) if fields_info else "  - (no specific fields defined)"
+
+        example_data = {field: f"<{field}_value>" for field in schema.get("properties", {})}
+        example_json = json.dumps(example_data, indent=2)
+
+        return f"""
+
+## Output Format
+Respond with valid JSON matching this schema:
+{fields_text}
+
+Example: {example_json}
+"""
+
+    # Response Parsing
+    # ----------------
+
+    def _parse_response(
+        self, response: str, output_model: type[BaseModel], strategy: str
+    ) -> BaseModel:
+        """Parse LLM response into structured output."""
+        try:
+            if strategy == "json":
+                parsed_data = self._parse_json(response)
+            elif strategy == "json_in_markdown":
+                parsed_data = self._parse_json_in_markdown(response)
+            elif strategy == "yaml":
+                parsed_data = self._parse_yaml(response)
+            else:
+                parsed_data = self._parse_json(response)
+
+        except (json.JSONDecodeError, ValueError, SyntaxError) as e:
+            error_msg = self._create_parse_error_message(response, str(e), strategy)
+            raise ParseError(error_msg) from e
+
+        # Validate against schema
+        try:
+            return output_model.model_validate(parsed_data)
+        except ValidationError as e:
+            error_msg = self._create_validation_error_message(
+                response, parsed_data, e, output_model
+            )
+            raise ParseError(error_msg) from e
+
+    def _parse_json(self, text: str) -> dict[str, Any]:
+        """Parse JSON from text."""
+        cleaned = text.strip()
+
+        try:
+            result: dict[str, Any] = json.loads(cleaned)
+            return result
+        except json.JSONDecodeError:
+            # Try to extract JSON from surrounding text
+            json_match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(1))  # type: ignore[no-any-return]
+            raise
+
+    def _parse_json_in_markdown(self, text: str) -> dict[str, Any]:
+        """Extract and parse JSON from markdown code blocks."""
+        code_block_pattern = r"```(?:json)?\s*(.*?)\s*```"
+        matches = re.findall(code_block_pattern, text, re.DOTALL)
+
+        if matches:
+            for block in matches:
+                try:
+                    result: dict[str, Any] = json.loads(block)
+                    return result
+                except json.JSONDecodeError:
+                    continue
+
+        return self._parse_json(text)
+
+    def _parse_yaml(self, text: str) -> dict[str, Any]:
+        """Parse YAML from text."""
+        import yaml
+
+        result: dict[str, Any] = yaml.safe_load(text)
+        return result
+
+    # Error Messages
+    # --------------
+
+    def _create_parse_error_message(self, text: str, error: str, strategy: str) -> str:
+        """Create helpful error message for parse failures."""
+        preview = text[:200] + ("..." if len(text) > 200 else "")
+
+        return f"""
+Failed to parse LLM output using strategy '{strategy}'.
+
+Error: {error}
+
+Output preview:
+{preview}
+
+Retry hints:
+1. Ensure the LLM output is valid {strategy.upper()} format
+2. Check for trailing commas, missing quotes, or malformed syntax
+3. Consider using 'json_in_markdown' strategy if JSON is in code blocks
+"""
+
+    def _create_validation_error_message(
+        self,
+        text: str,
+        parsed_data: Any,
+        error: ValidationError,
+        model: type[BaseModel],
+    ) -> str:
+        """Create helpful error message for validation failures."""
+        schema = model.model_json_schema()
+        required_fields = schema.get("required", [])
+
+        preview = str(parsed_data)[:200]
+
+        return f"""
+Parsed data does not match expected schema.
+
+Expected schema: {model.__name__}
+Required fields: {required_fields}
+
+Parsed data preview:
+{preview}
+
+Validation errors:
+{error}
+"""
+
+    # Legacy Compatibility
+    # --------------------
 
     @classmethod
     def from_template(
         cls,
         name: str,
-        template: PromptInput,
+        template: PromptInput | str,
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Create a NodeSpec with rich template features and auto-inferred input schema.
+        """Create a NodeSpec from template (legacy compatibility method).
 
-        Returns
-        -------
-        NodeSpec
-            Complete node specification ready for execution
+        This method provides backward compatibility with the old LLMNode API.
         """
         return cls()(
             name=name,
-            template=template,
+            prompt_template=template,
             output_schema=output_schema,
+            parse_json=output_schema is not None,
             deps=deps,
             **kwargs,
         )

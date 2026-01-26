@@ -36,9 +36,6 @@ _SHORT_NAME_ALIASES: dict[str, str] = {
     "agent_node": "hexdag.builtin.nodes.ReActAgentNode",
     "loop_node": "hexdag.builtin.nodes.LoopNode",
     "conditional_node": "hexdag.builtin.nodes.ConditionalNode",
-    "parser_node": "hexdag.builtin.nodes.ParserNode",
-    "prompt_node": "hexdag.builtin.nodes.PromptNode",
-    "raw_llm_node": "hexdag.builtin.nodes.RawLLMNode",
     "tool_call_node": "hexdag.builtin.nodes.ToolCallNode",
     # Namespace:name format
     "core:llm_node": "hexdag.builtin.nodes.LLMNode",

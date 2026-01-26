@@ -48,10 +48,10 @@ class RetryContext(BaseModel):
 class ParseRetryPolicy:
     """Retry policy for parse failures in LLM workflows.
 
-    When a ParserNode fails to parse LLM output, this policy:
+    When an LLMNode fails to parse LLM output, this policy:
     1. Detects the parse error
     2. Generates an improved prompt with error hints
-    3. Re-executes the LLM + Parser with the improved prompt
+    3. Re-executes the LLM with the improved prompt
     4. Repeats up to max_retries times
 
     This works at the **orchestrator level** - no need for dynamic graphs!
