@@ -12,10 +12,9 @@ from typing import TYPE_CHECKING, Any
 from hexdag.core.context import get_port
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components import (
-    InputMapper,
+    ExecutionCoordinator,
     NodeExecutionError,
     NodeExecutor,
-    PolicyCoordinator,
 )
 from hexdag.core.orchestration.constants import (
     EXECUTOR_CONTEXT_GRAPH,
@@ -135,8 +134,7 @@ class LocalExecutor:
             strict_validation=strict_validation,
             default_node_timeout=default_node_timeout,
         )
-        self._input_mapper = InputMapper()
-        self._policy_coordinator = PolicyCoordinator()
+        self._execution_coordinator = ExecutionCoordinator()
 
         # State for tracking
         self._initialized = False
@@ -193,8 +191,8 @@ class LocalExecutor:
 
             node_spec: NodeSpec = graph.nodes[task.node_name]
 
-            # Prepare input using InputMapper
-            node_input = self._input_mapper.prepare_node_input(
+            # Prepare input using ExecutionCoordinator
+            node_input = self._execution_coordinator.prepare_node_input(
                 node_spec, node_results, initial_input
             )
 
@@ -212,7 +210,7 @@ class LocalExecutor:
                 node_spec=node_spec,
                 node_input=node_input,
                 context=execution_context,
-                policy_coordinator=self._policy_coordinator,
+                policy_coordinator=self._execution_coordinator,
                 wave_index=task.wave_index,
                 validate=task.should_validate,
                 **task.params,
