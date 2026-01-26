@@ -9,17 +9,11 @@ from typing import Any
 import aiosqlite
 
 from hexdag.core.logging import get_logger
-from hexdag.core.registry.decorators import adapter
 from hexdag.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
 
 
-@adapter(
-    name="sqlite",
-    implements_port="database",
-    description="Async SQLite database adapter for SQL query execution and schema introspection",
-)
 class SQLiteAdapter:
     """Async SQLite adapter for database port.
 

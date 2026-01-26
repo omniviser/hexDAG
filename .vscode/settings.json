@@ -22,6 +22,23 @@
         }
     ],
     "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "mcp.servers": {
+        "hexdag": {
+            "args": [
+                "--directory",
+                "/Users/jankwapisz/Documents/Praca/Omniviser/hexdag",
+                "run",
+                "python",
+                "-m",
+                "hexdag",
+                "--mcp"
+            ],
+            "command": "uv",
+            "env": {
+                "HEXDAG_CONFIG_PATH": ""
+            }
+        }
+    },
     "python.analysis.typeCheckingMode": "basic",
     "python.formatting.provider": "black",
     "python.linting.enabled": true,

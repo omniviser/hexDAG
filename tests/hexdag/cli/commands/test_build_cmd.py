@@ -255,7 +255,7 @@ def test_entrypoint_script_structure(temp_pipeline_file, tmp_path):
         assert "#!/bin/bash" in content
         assert "test-pipeline" in content
         assert "YamlPipelineBuilder" in content
-        assert "bootstrap_registry()" in content
+        # Note: bootstrap_registry() was removed in registry simplification
 
 
 def test_readme_generation(temp_pipeline_file, tmp_path):

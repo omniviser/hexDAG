@@ -2,14 +2,10 @@
 
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.registry import tool
-
 if TYPE_CHECKING:
     from hexdag.builtin.nodes.agent_node import PhaseContext
 
 
-# Register tool_end
-@tool(name="tool_end", namespace="core")
 def tool_end(**kwargs: Any) -> dict[str, Any]:
     """End tool execution with structured output.
 
@@ -27,8 +23,6 @@ def tool_end(**kwargs: Any) -> dict[str, Any]:
     return kwargs
 
 
-# Register change_phase with typed parameters
-@tool(name="change_phase", namespace="core")
 def change_phase(
     phase: str,
     previous_phase: str | None = None,

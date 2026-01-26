@@ -171,20 +171,17 @@ class ConfigurableMacro:
     Subclasses must:
     - Define a nested Config class inheriting from MacroConfig
     - Implement expand() method that returns DirectedGraph
-    - Register via @macro decorator
 
     Examples
     --------
     >>> from hexdag.core.configurable import ConfigurableMacro, MacroConfig
-    >>> from hexdag.core.registry import macro
     >>> from hexdag.core.domain.dag import DirectedGraph
     >>>
     >>> class ResearchMacroConfig(MacroConfig):
     ...     depth: int = 3
     ...     enable_synthesis: bool = True
     >>>
-    >>> @macro(name="research", namespace="core")
-    ... class ResearchMacro(ConfigurableMacro):
+    >>> class ResearchMacro(ConfigurableMacro):
     ...     Config = ResearchMacroConfig
     ...
     ...     def expand(self, instance_name, inputs, dependencies):

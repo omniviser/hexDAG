@@ -15,7 +15,6 @@ from hexdag.builtin.nodes import FunctionNode, ToolCallNode
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import macro
 
 logger = get_logger(__name__)
 
@@ -42,7 +41,6 @@ class ToolMacroConfig(MacroConfig):
     allowed_tools: list[str] | None = None
 
 
-@macro(name="tool_macro", namespace="core")
 class ToolMacro(ConfigurableMacro):
     """Expand tool calls into parallel ToolCallNodes.
 

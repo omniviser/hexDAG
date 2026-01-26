@@ -42,7 +42,37 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 git clone https://omniviser@dev.azure.com/omniviser/hexDAG/_git/hexDAG
 cd hexDAG
 uv sync # optional, uv checks packages in each run
-````
+```
+
+### MCP Server for LLM Editors
+
+hexDAG includes a built-in MCP (Model Context Protocol) server that exposes pipeline building capabilities to Claude Code, Cursor, and other LLM-powered editors:
+
+```bash
+# Development: Install MCP dependencies
+uv sync --extra mcp
+
+# Production: Install from PyPI with MCP support
+uv pip install "hexdag[mcp]"
+
+# Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json)
+{
+  "mcpServers": {
+    "hexdag": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "hexdag", "--mcp"]
+    }
+  }
+}
+```
+
+The MCP server provides LLMs with tools to:
+- List available nodes, adapters, tools, and macros from your registry
+- Build and validate YAML pipelines interactively
+- Get component schemas and documentation
+- Auto-discover custom plugins from your `pyproject.toml`
+
+See [examples/mcp/](examples/mcp/) for detailed configuration guides.
 
 ### Your First Agent Workflow
 

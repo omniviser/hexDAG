@@ -1,518 +1,463 @@
-"""Comprehensive tests for UnifiedToolRouter."""
+"""Tests for the UnifiedToolRouter module."""
 
-import asyncio
+from __future__ import annotations
+
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
-from hexdag.builtin.nodes.tool_utils import ToolDefinition
-from hexdag.core.registry.registry import ComponentRegistry
+from hexdag.core.exceptions import ResourceNotFoundError
+from hexdag.core.ports.tool_router import ToolRouter
 
 
-class TestUnifiedToolRouter:
-    """Test UnifiedToolRouter functionality."""
+class MockToolRouter(ToolRouter):
+    """Mock tool router for testing."""
+
+    def __init__(self, tools: dict[str, Any] | None = None) -> None:
+        """Initialize with optional tools dict."""
+        self.tools = tools or {}
+        self._schemas: dict[str, dict[str, Any]] = {}
+
+    async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
+        """Call a tool by name."""
+        if tool_name not in self.tools:
+            raise ResourceNotFoundError("tool", tool_name, list(self.tools.keys()))
+        tool = self.tools[tool_name]
+        if callable(tool):
+            return tool(**params)
+        return tool
+
+    def get_available_tools(self) -> list[str]:
+        """Get list of available tool names."""
+        return list(self.tools.keys())
+
+    def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
+        """Get schema for a tool."""
+        return self._schemas.get(tool_name, {})
+
+    def set_tool_schema(self, tool_name: str, schema: dict[str, Any]) -> None:
+        """Set schema for a tool (helper for testing)."""
+        self._schemas[tool_name] = schema
+
+
+class TestUnifiedToolRouterInit:
+    """Tests for UnifiedToolRouter initialization."""
+
+    def test_default_initialization(self) -> None:
+        """Test default initialization with no routers."""
+        router = UnifiedToolRouter()
+        assert router.routers == {}
+        assert router.default_router is None
+
+    def test_initialization_with_routers(self) -> None:
+        """Test initialization with routers dict."""
+        mock_router = MockToolRouter()
+        router = UnifiedToolRouter(routers={"builtin": mock_router})
+        assert "builtin" in router.routers
+        assert router.default_router is mock_router
+
+    def test_initialization_with_multiple_routers(self) -> None:
+        """Test initialization with multiple routers."""
+        router1 = MockToolRouter()
+        router2 = MockToolRouter()
+        router = UnifiedToolRouter(routers={"builtin": router1, "custom": router2})
+        assert len(router.routers) == 2
+        # Default is the first one
+        assert router.default_router is router1
+
+
+class TestAcallTool:
+    """Tests for acall_tool method."""
 
     @pytest.fixture
-    def router(self):
-        """Create a UnifiedToolRouter instance."""
-        # Router now uses global registry, no parameters needed
-        return UnifiedToolRouter()
-
-    def register_tool(self, func, name=None, namespace="test"):
-        """Helper to register a tool in the global registry."""
-        from hexdag.core.registry import registry
-        from hexdag.core.registry.models import ComponentType
-
-        tool_name = name or func.__name__
-        registry.register(
-            name=tool_name,
-            component=func,
-            component_type=ComponentType.TOOL,
-            namespace=namespace,
+    def router_with_tools(self) -> UnifiedToolRouter:
+        """Create router with mock tools."""
+        builtin_router = MockToolRouter(
+            tools={
+                "add": lambda x, y: x + y,
+                "multiply": lambda x, y: x * y,
+            }
         )
-
-    @pytest.fixture(autouse=True)
-    def setup_registry(self):
-        """Setup the global registry for testing."""
-        from hexdag.core.config.models import ManifestEntry
-        from hexdag.core.registry import registry
-
-        # Bootstrap registry if it hasn't been bootstrapped yet
-        if not registry.ready:
-            registry.bootstrap(
-                manifest=[ManifestEntry(namespace="core", module="hexdag.tools.builtin_tools")],
-                dev_mode=True,
-            )
-        elif not registry.dev_mode:
-            # Registry is bootstrapped but not in dev_mode
-            # We need to manually enable dev mode for testing
-            registry._dev_mode = True
-
-        yield
-
-        # Note: We can't easily clean up the registry without singleton.py
-        # The registry will stay bootstrapped for the entire test session
-
-    def test_initialization(self):
-        """Test router initialization."""
-        # Router now uses global registry, no parameters needed
-        router = UnifiedToolRouter()
-        assert router is not None
-
-    def test_initialization_simple(self):
-        """Test router initialization is simple with no parameters."""
-        # Router uses global registry, no parameters needed
-        router1 = UnifiedToolRouter()
-        router2 = UnifiedToolRouter()
-        assert router1 is not None
-        assert router2 is not None
-        # Both routers should see the same tools from the global registry
-        assert router1.get_available_tools() == router2.get_available_tools()
-
-    def test_builtin_tools_registered(self, router):
-        """Test that built-in tools are registered in the global registry."""
-        # Ensure registry has tools (in case it was cleared by other tests)
-        # Force import of builtin tools module - the decorators register at import time
-        import hexdag.builtin.tools.builtin_tools  # noqa: F401
-        from hexdag.core.registry import registry
-        from hexdag.core.registry.models import ComponentType
-
-        # The tools should now be registered via their decorators
-        tools = registry.list_components(component_type=ComponentType.TOOL, namespace="core")
-        tool_names = [t.name for t in tools]
-
-        # If still empty, it means the registry was cleared after module import
-        # Skip this specific test in that case as we can't re-register decorator-based tools
-        if not tool_names:
-            import pytest
-
-            pytest.skip(
-                "Registry was cleared by another test and can't re-register decorator-based tools"
-            )
-
-        assert "tool_end" in tool_names
-        assert "change_phase" in tool_names
-
-        # Also check through router's method
-        router_tools = router.get_available_tools()
-        assert "tool_end" in router_tools
-
-    def test_tool_registration_via_decorator(self, router):
-        """Test tool registration through the global registry."""
-
-        def add_numbers(x: int, y: int) -> int:
-            """Add two numbers together."""
-            return x + y
-
-        # Register the tool
-        self.register_tool(add_numbers)
-
-        # Tool should be available through router
-        assert "add_numbers" in router.get_available_tools()
-
-        # Get tool definition
-        tool_defs = router.get_tool_definitions()
-        add_tool = next((td for td in tool_defs if td.name == "add_numbers"), None)
-        assert add_tool is not None
-        assert isinstance(add_tool, ToolDefinition)
-        assert len(add_tool.parameters) == 2
-
-    def test_tool_registration_with_aliases(self, router):
-        """Test tool registration with multiple names/aliases."""
-
-        def multiply(x: int, y: int) -> int:
-            """Multiply two numbers."""
-            return x * y
-
-        # Register with multiple names
-        self.register_tool(multiply, name="multiply")
-        self.register_tool(multiply, name="mult")
-
-        # Both names should be available
-        tools = router.get_available_tools()
-        assert "multiply" in tools
-        assert "mult" in tools
-
-    @pytest.mark.asyncio
-    async def test_tool_execution_with_error(self, router):
-        """Test tool execution that raises an error."""
-
-        def divide(x: float, y: float) -> float:
-            """Divide x by y.
-
-            Raises
-            ------
-            ValueError
-                If y is zero
-            """
-            if y == 0:
-                raise ValueError("Cannot divide by zero")
-            return x / y
-
-        # Register the tool
-        self.register_tool(divide)
-
-        # Test successful division
-        result = await router.acall_tool("divide", {"x": 10, "y": 2})
-        assert result == 5.0
-
-        # Test division by zero
-        with pytest.raises(ValueError, match="Cannot divide by zero"):
-            await router.acall_tool("divide", {"x": 10, "y": 0})
-
-    @pytest.mark.asyncio
-    async def test_sync_tool_execution(self, router):
-        """Test synchronous tool execution."""
-
-        def square(x: int) -> int:
-            """Square a number."""
-            return x * x
-
-        self.register_tool(square)
-
-        result = await router.acall_tool("square", {"x": 5})
-        assert result == 25
-
-    @pytest.mark.asyncio
-    async def test_async_tool_execution(self, router):
-        """Test asynchronous tool execution."""
-
-        async def fetch_data(key: str) -> dict:
-            """Fetch data asynchronously."""
-            await asyncio.sleep(0.01)  # Simulate async operation
-            return {"key": key, "value": f"data_{key}"}
-
-        self.register_tool(fetch_data)
-
-        result = await router.acall_tool("fetch_data", {"key": "test"})
-        assert result == {"key": "test", "value": "data_test"}
-
-    @pytest.mark.asyncio
-    async def test_kwargs_tool(self, router):
-        """Test tool that accepts **kwargs."""
-
-        def flexible_tool(**kwargs: Any) -> dict:
-            """Tool that accepts any parameters."""
-            return {"received": kwargs}
-
-        self.register_tool(flexible_tool)
-
-        result = await router.acall_tool("flexible_tool", {"a": 1, "b": "test", "c": [1, 2, 3]})
-        assert result == {"received": {"a": 1, "b": "test", "c": [1, 2, 3]}}
-
-    @pytest.mark.asyncio
-    async def test_tool_not_found_error(self, router):
-        """Test error when tool is not found."""
-        from hexdag.core.exceptions import ResourceNotFoundError
-
-        with pytest.raises(ResourceNotFoundError, match="Tool 'nonexistent' not found"):
-            await router.acall_tool("nonexistent", {})
-
-    def test_get_tool_schema(self, router):
-        """Test getting tool schema."""
-
-        def process_text(text: str, max_length: int = 100) -> str:
-            """Process text with optional length limit."""
-            return text[:max_length]
-
-        self.register_tool(process_text)
-
-        schema = router.get_tool_schema("process_text")
-
-        assert schema["name"] == "process_text"
-        assert "description" in schema
-        assert len(schema["parameters"]) == 2
-
-        # Check parameter details
-        params = {p["name"]: p for p in schema["parameters"]}
-        assert params["text"]["required"] is True
-        assert params["max_length"]["required"] is False
-        assert params["max_length"]["default"] == 100
-
-    def test_get_all_tool_schemas(self, router):
-        """Test getting all tool schemas."""
-
-        def tool_a() -> str:
-            return "a"
-
-        def tool_b() -> str:
-            return "b"
-
-        self.register_tool(tool_a)
-        self.register_tool(tool_b)
-
-        schemas = router.get_all_tool_schemas()
-
-        # Should include built-in tools plus registered tools
-        assert "tool_a" in schemas
-        assert "tool_b" in schemas
-        # Built-in tools may have been cleared by other tests - skip if missing
-        if "tool_end" not in schemas:
-            import hexdag.builtin.tools.builtin_tools  # noqa: F401
-
-            # Try again after import
-            schemas = router.get_all_tool_schemas()
-        if "tool_end" not in schemas:
-            import pytest
-
-            pytest.skip("Built-in tools cleared by other tests")
-
-    def test_get_tool_definitions(self, router):
-        """Test getting ToolDefinitions."""
-
-        def analyze(data: dict) -> dict:
-            """Analyze data."""
-            return {"analyzed": data}
-
-        self.register_tool(analyze)
-
-        definitions = router.get_tool_definitions()
-
-        # Find our tool
-        analyze_def = next(d for d in definitions if d.name == "analyze")
-        assert (
-            "Analyze" in analyze_def.simplified_description
-            or "analyze" in analyze_def.simplified_description
+        custom_router = MockToolRouter(
+            tools={
+                "greet": lambda name: f"Hello, {name}!",
+            }
         )
-        assert len(analyze_def.parameters) == 1
-        assert len(analyze_def.examples) > 0
+        return UnifiedToolRouter(routers={"builtin": builtin_router, "custom": custom_router})
 
     @pytest.mark.asyncio
-    async def test_registry_tool_integration(self, router):
-        """Test integration with global registry tools."""
+    async def test_call_namespaced_tool(self, router_with_tools: UnifiedToolRouter) -> None:
+        """Test calling a tool with namespace prefix."""
+        result = await router_with_tools.acall_tool("builtin::add", {"x": 2, "y": 3})
+        assert result == 5
 
-        # Register a tool in the global registry
-        def registry_tool(value: int) -> int:
-            """Tool from registry."""
-            return value * 2
+    @pytest.mark.asyncio
+    async def test_call_namespaced_tool_different_router(
+        self, router_with_tools: UnifiedToolRouter
+    ) -> None:
+        """Test calling a tool from different router."""
+        result = await router_with_tools.acall_tool("custom::greet", {"name": "World"})
+        assert result == "Hello, World!"
 
-        self.register_tool(registry_tool)
-
-        # Tool should be available through router
-        tools = router.get_available_tools()
-        assert "registry_tool" in tools
-
-        # Should be executable
-        result = await router.acall_tool("registry_tool", {"value": 10})
+    @pytest.mark.asyncio
+    async def test_call_tool_without_namespace(self, router_with_tools: UnifiedToolRouter) -> None:
+        """Test calling a tool without namespace uses default router."""
+        result = await router_with_tools.acall_tool("multiply", {"x": 4, "y": 5})
         assert result == 20
 
     @pytest.mark.asyncio
-    async def test_class_tool_with_execute_method(self, router):
-        """Test class-based tool with execute method."""
-        from hexdag.core.registry import registry
-        from hexdag.core.registry.models import ComponentType
-
-        class DataProcessor:
-            """Process data with state."""
-
-            def __init__(self):
-                self.count = 0
-
-            def execute(self, data: str) -> dict:
-                """Execute processing."""
-                self.count += 1
-                return {"processed": data, "count": self.count}
-
-        # Register the class instance in the global registry
-        processor = DataProcessor()
-        registry.register(
-            name="processor",
-            component=processor,
-            component_type=ComponentType.TOOL,
-            namespace="test",
-        )
-
-        # Execute through router
-        result1 = await router.acall_tool("processor", {"data": "test1"})
-        result2 = await router.acall_tool("processor", {"data": "test2"})
-
-        assert result1 == {"processed": "test1", "count": 1}
-        assert result2 == {"processed": "test2", "count": 2}
+    async def test_call_tool_unknown_router(self, router_with_tools: UnifiedToolRouter) -> None:
+        """Test calling a tool from unknown router raises error."""
+        with pytest.raises(ResourceNotFoundError) as exc_info:
+            await router_with_tools.acall_tool("unknown::tool", {})
+        assert exc_info.value.resource_type == "tool_router"
+        assert exc_info.value.resource_id == "unknown"
 
     @pytest.mark.asyncio
-    async def test_class_tool_async_execute(self, router):
-        """Test class-based tool with async execute method."""
-        from hexdag.core.registry import registry
-        from hexdag.core.registry.models import ComponentType
+    async def test_call_tool_no_default_router(self) -> None:
+        """Test calling tool without namespace when no default router."""
+        router = UnifiedToolRouter()
+        with pytest.raises(ResourceNotFoundError) as exc_info:
+            await router.acall_tool("some_tool", {})
+        assert exc_info.value.resource_type == "tool"
 
-        class AsyncProcessor:
-            """Async processor."""
 
-            async def execute(self, value: int) -> int:
-                """Execute async processing."""
-                await asyncio.sleep(0.01)
-                return value + 1
+class TestExecuteTool:
+    """Tests for _execute_tool method."""
 
-        # Register in global registry
-        processor = AsyncProcessor()
-        registry.register(
-            name="async_proc",
-            component=processor,
-            component_type=ComponentType.TOOL,
-            namespace="test",
-        )
+    @pytest.fixture
+    def router(self) -> UnifiedToolRouter:
+        """Create empty router for testing."""
+        return UnifiedToolRouter()
 
-        result = await router.acall_tool("async_proc", {"value": 5})
+    @pytest.mark.asyncio
+    async def test_execute_async_function(self, router: UnifiedToolRouter) -> None:
+        """Test executing an async function."""
+
+        async def async_tool(x: int) -> int:
+            return x * 2
+
+        result = await router._execute_tool(async_tool, {"x": 5})
+        assert result == 10
+
+    @pytest.mark.asyncio
+    async def test_execute_sync_function(self, router: UnifiedToolRouter) -> None:
+        """Test executing a sync function."""
+
+        def sync_tool(x: int) -> int:
+            return x + 1
+
+        result = await router._execute_tool(sync_tool, {"x": 5})
         assert result == 6
 
-    def test_tool_definition_generation_with_types(self, router):
-        """Test ToolDefinition generation with various type hints."""
+    @pytest.mark.asyncio
+    async def test_execute_class_with_execute_method(self, router: UnifiedToolRouter) -> None:
+        """Test executing a class with execute method."""
 
-        def complex_tool(
-            text: str, count: int = 5, enabled: bool = True, multiplier: float = 1.5
-        ) -> dict:
-            """Complex tool with multiple parameter types."""
-            return {"text": text, "count": count, "enabled": enabled, "multiplier": multiplier}
+        class ToolClass:
+            def execute(self, value: str) -> str:
+                return value.upper()
 
-        self.register_tool(complex_tool)
-
-        # Get tool definition through router
-        tool_defs = router.get_tool_definitions()
-        tool_def = next(d for d in tool_defs if d.name == "complex_tool")
-
-        # Check parameters
-        params = {p.name: p for p in tool_def.parameters}
-
-        assert "str" in params["text"].param_type
-        assert params["text"].required is True
-
-        assert "int" in params["count"].param_type
-        assert params["count"].required is False
-        assert params["count"].default == 5
-
-        assert "bool" in params["enabled"].param_type
-        assert params["enabled"].required is False
-        assert params["enabled"].default is True
-
-        assert "float" in params["multiplier"].param_type
-        assert params["multiplier"].required is False
-        assert params["multiplier"].default == 1.5
-
-    def test_tool_examples_generation(self, router):
-        """Test that examples are properly generated."""
-
-        def example_tool(name: str, age: int) -> str:
-            """Tool for testing examples."""
-            return f"{name} is {age}"
-
-        self.register_tool(example_tool)
-
-        # Get tool definition
-        tool_defs = router.get_tool_definitions()
-        tool_def = next(d for d in tool_defs if d.name == "example_tool")
-
-        assert len(tool_def.examples) > 0
-        example = tool_def.examples[0]
-        assert "example_tool" in example
-        assert "name=" in example
-        assert "age=" in example
+        tool = ToolClass()
+        result = await router._execute_tool(tool, {"value": "hello"})
+        assert result == "HELLO"
 
     @pytest.mark.asyncio
-    async def test_exception_propagation(self, router):
-        """Test that exceptions are properly propagated."""
+    async def test_execute_class_with_async_execute(self, router: UnifiedToolRouter) -> None:
+        """Test executing a class with async execute method."""
 
-        def failing_tool(value: int) -> int:
-            """Tool that always fails.
+        class AsyncToolClass:
+            async def execute(self, value: str) -> str:
+                return value.lower()
 
-            Raises
-            ------
-            RuntimeError
-                Always raises this error
-            """
-            raise RuntimeError("Tool failed!")
+        tool = AsyncToolClass()
+        result = await router._execute_tool(tool, {"value": "HELLO"})
+        assert result == "hello"
 
-        self.register_tool(failing_tool)
+    @pytest.mark.asyncio
+    async def test_execute_non_executable_raises(self, router: UnifiedToolRouter) -> None:
+        """Test that non-executable raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            await router._execute_tool("not callable", {})
+        assert "not executable" in str(exc_info.value)
 
-        with pytest.raises(RuntimeError, match="Tool failed!"):
-            await router.acall_tool("failing_tool", {"value": 1})
 
-    def test_parameter_filtering(self, router):
-        """Test that only expected parameters are passed to tools."""
+class TestCallWithParams:
+    """Tests for _call_with_params method."""
 
-        def strict_tool(a: int, b: int) -> int:
-            """Tool with specific parameters."""
+    @pytest.fixture
+    def router(self) -> UnifiedToolRouter:
+        """Create empty router for testing."""
+        return UnifiedToolRouter()
+
+    def test_call_with_var_keyword(self, router: UnifiedToolRouter) -> None:
+        """Test calling function with **kwargs."""
+
+        def tool_with_kwargs(**kwargs: Any) -> dict[str, Any]:
+            return kwargs
+
+        result = router._call_with_params(
+            tool_with_kwargs, {"a": 1, "b": 2, "extra": 3}, is_async=False
+        )
+        assert result == {"a": 1, "b": 2, "extra": 3}
+
+    def test_call_with_filtered_params(self, router: UnifiedToolRouter) -> None:
+        """Test that extra params are filtered out for regular functions."""
+
+        def tool_without_kwargs(a: int, b: int) -> int:
             return a + b
 
-        self.register_tool(strict_tool)
-
-        # Pass extra parameters that should be filtered
-        result = asyncio.run(
-            router.acall_tool("strict_tool", {"a": 1, "b": 2, "c": 3, "extra": "ignored"})
+        result = router._call_with_params(
+            tool_without_kwargs, {"a": 1, "b": 2, "extra": 3}, is_async=False
         )
+        assert result == 3
 
-        assert result == 3  # Should work despite extra params
+    def test_call_async_returns_coroutine(self, router: UnifiedToolRouter) -> None:
+        """Test that async call returns a coroutine."""
+        import asyncio
+
+        async def async_tool(x: int) -> int:
+            return x
+
+        result = router._call_with_params(async_tool, {"x": 5}, is_async=True)
+        assert asyncio.iscoroutine(result)
+        # Clean up the coroutine
+        asyncio.get_event_loop().run_until_complete(result)
 
 
-class TestUnifiedToolRouterWithPorts:
-    """Test UnifiedToolRouter with port injection."""
+class TestGetAvailableTools:
+    """Tests for get_available_tools method."""
 
-    @pytest.fixture
-    def mock_port_registry(self):
-        """Create a mock port registry."""
+    def test_get_available_tools_empty(self) -> None:
+        """Test getting tools from empty router."""
+        router = UnifiedToolRouter()
+        tools = router.get_available_tools()
+        assert tools == []
 
-        class MockPortRegistry:
-            def get_adapter(self, port_type: str):
-                if port_type == "database":
-                    return MockDatabasePort()
-                if port_type == "llm":
-                    return MockLLMPort()
-                raise ValueError(f"Unknown port type: {port_type}")
+    def test_get_available_tools_namespaced(self) -> None:
+        """Test that tools are namespaced."""
+        mock_router = MockToolRouter(tools={"tool1": lambda: None, "tool2": lambda: None})
+        router = UnifiedToolRouter(routers={"ns": mock_router})
+        tools = router.get_available_tools()
+        assert "ns::tool1" in tools
+        assert "ns::tool2" in tools
 
-        return MockPortRegistry()
+    def test_get_available_tools_multiple_routers(self) -> None:
+        """Test getting tools from multiple routers."""
+        router1 = MockToolRouter(tools={"a": lambda: None})
+        router2 = MockToolRouter(tools={"b": lambda: None})
+        router = UnifiedToolRouter(routers={"r1": router1, "r2": router2})
+        tools = router.get_available_tools()
+        assert "r1::a" in tools
+        assert "r2::b" in tools
 
-    @pytest.fixture
-    def registry_with_ports(self, mock_port_registry):
-        """Create a registry with port-dependent tools."""
+    def test_get_available_tools_handles_exceptions(self) -> None:
+        """Test that exceptions are handled gracefully."""
+        mock_router = MagicMock()
+        mock_router.get_available_tools.side_effect = Exception("Error")
+        router = UnifiedToolRouter(routers={"broken": mock_router})
+        tools = router.get_available_tools()
+        assert tools == []
 
-        registry = ComponentRegistry()
-        registry.bootstrap(
-            manifest=[],  # Empty manifest for testing
-            dev_mode=True,
-        )
 
-        # Register a tool that requires ports
-        class DatabaseTool:
-            _required_ports = ["database"]  # Convention-based port requirements
+class TestGetToolSchema:
+    """Tests for get_tool_schema method."""
 
-            def __init__(self, database):
-                self.database = database
+    def test_get_tool_schema_namespaced(self) -> None:
+        """Test getting schema for namespaced tool."""
+        mock_router = MockToolRouter()
+        mock_router.set_tool_schema("tool1", {"description": "A tool"})
+        router = UnifiedToolRouter(routers={"ns": mock_router})
+        schema = router.get_tool_schema("ns::tool1")
+        assert schema["description"] == "A tool"
+        assert schema["_router"] == "ns"
 
-            def execute(self, query: str) -> list:
-                return self.database.query(query)
+    def test_get_tool_schema_default_router(self) -> None:
+        """Test getting schema from default router."""
+        mock_router = MockToolRouter()
+        mock_router.set_tool_schema("tool1", {"description": "Default tool"})
+        router = UnifiedToolRouter(routers={"default": mock_router})
+        schema = router.get_tool_schema("tool1")
+        assert schema["description"] == "Default tool"
+        assert schema["_router"] == "default"
 
-        # Manual registration
-        registry.register(
-            name="db_tool", component=DatabaseTool, component_type="tool", namespace="test"
-        )
+    def test_get_tool_schema_unknown_router(self) -> None:
+        """Test getting schema from unknown router returns empty dict."""
+        router = UnifiedToolRouter()
+        schema = router.get_tool_schema("unknown::tool")
+        assert schema == {}
 
-        return registry
+    def test_get_tool_schema_no_default_router(self) -> None:
+        """Test getting schema without default router returns empty dict."""
+        router = UnifiedToolRouter()
+        schema = router.get_tool_schema("tool")
+        assert schema == {}
+
+    def test_get_tool_schema_handles_exception(self) -> None:
+        """Test that exceptions are handled gracefully."""
+        mock_router = MagicMock()
+        mock_router.get_tool_schema.side_effect = Exception("Error")
+        router = UnifiedToolRouter(routers={"broken": mock_router})
+        schema = router.get_tool_schema("broken::tool")
+        assert schema == {}
+
+
+class TestGetAllToolSchemas:
+    """Tests for get_all_tool_schemas method."""
+
+    def test_get_all_tool_schemas(self) -> None:
+        """Test getting all tool schemas."""
+        mock_router = MockToolRouter(tools={"tool1": lambda: None, "tool2": lambda: None})
+        mock_router.set_tool_schema("tool1", {"description": "Tool 1"})
+        mock_router.set_tool_schema("tool2", {"description": "Tool 2"})
+        router = UnifiedToolRouter(routers={"ns": mock_router})
+        schemas = router.get_all_tool_schemas()
+        assert "ns::tool1" in schemas
+        assert "ns::tool2" in schemas
+
+    def test_get_all_tool_schemas_empty(self) -> None:
+        """Test getting schemas from empty router."""
+        router = UnifiedToolRouter()
+        schemas = router.get_all_tool_schemas()
+        assert schemas == {}
+
+
+class TestAgetAvailableTools:
+    """Tests for aget_available_tools async method."""
 
     @pytest.mark.asyncio
-    async def test_tool_with_port_injection(self, registry_with_ports, mock_port_registry):
-        """Test tool that requires port injection."""
-        # Router now uses global registry, no parameters
+    async def test_aget_available_tools_uses_async_method(self) -> None:
+        """Test that async method is used when available."""
+        mock_router = AsyncMock()
+        mock_router.aget_available_tools = AsyncMock(return_value=["async_tool"])
+        router = UnifiedToolRouter(routers={"async": mock_router})
+        tools = await router.aget_available_tools()
+        assert "async::async_tool" in tools
+        mock_router.aget_available_tools.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_aget_available_tools_falls_back_to_sync(self) -> None:
+        """Test fallback to sync method when async not available."""
+        mock_router = MockToolRouter(tools={"sync_tool": lambda: None})
+        router = UnifiedToolRouter(routers={"sync": mock_router})
+        tools = await router.aget_available_tools()
+        assert "sync::sync_tool" in tools
+
+    @pytest.mark.asyncio
+    async def test_aget_available_tools_handles_exception(self) -> None:
+        """Test that exceptions are handled gracefully."""
+        mock_router = MagicMock()
+        mock_router.aget_available_tools = AsyncMock(side_effect=Exception("Error"))
+        # Make sure hasattr returns True for aget_available_tools
+        router = UnifiedToolRouter(routers={"broken": mock_router})
+        tools = await router.aget_available_tools()
+        assert tools == []
+
+
+class TestAgetToolSchema:
+    """Tests for aget_tool_schema async method."""
+
+    @pytest.mark.asyncio
+    async def test_aget_tool_schema_uses_async_method(self) -> None:
+        """Test that async method is used when available."""
+        mock_router = AsyncMock()
+        mock_router.aget_tool_schema = AsyncMock(return_value={"description": "Async schema"})
+        router = UnifiedToolRouter(routers={"async": mock_router})
+        schema = await router.aget_tool_schema("async::tool")
+        assert schema["description"] == "Async schema"
+        assert schema["_router"] == "async"
+
+    @pytest.mark.asyncio
+    async def test_aget_tool_schema_falls_back_to_sync(self) -> None:
+        """Test fallback to sync method when async not available."""
+        mock_router = MockToolRouter()
+        mock_router.set_tool_schema("tool", {"description": "Sync schema"})
+        router = UnifiedToolRouter(routers={"sync": mock_router})
+        schema = await router.aget_tool_schema("sync::tool")
+        assert schema["description"] == "Sync schema"
+
+    @pytest.mark.asyncio
+    async def test_aget_tool_schema_unknown_router(self) -> None:
+        """Test getting schema from unknown router returns empty dict."""
         router = UnifiedToolRouter()
+        schema = await router.aget_tool_schema("unknown::tool")
+        assert schema == {}
 
-        # Tool requiring ports should fail since we don't support auto-injection anymore
-        from hexdag.core.exceptions import ResourceNotFoundError
+    @pytest.mark.asyncio
+    async def test_aget_tool_schema_no_default_router(self) -> None:
+        """Test getting schema without default router returns empty dict."""
+        router = UnifiedToolRouter()
+        schema = await router.aget_tool_schema("tool")
+        assert schema == {}
 
-        with pytest.raises(ResourceNotFoundError) as exc_info:
-            await router.acall_tool("db_tool", {"query": "SELECT * FROM users"})
-        assert "not found" in str(exc_info.value).lower()
+    @pytest.mark.asyncio
+    async def test_aget_tool_schema_handles_exception(self) -> None:
+        """Test that exceptions are handled gracefully."""
+        mock_router = MagicMock()
+        mock_router.aget_tool_schema = AsyncMock(side_effect=Exception("Error"))
+        router = UnifiedToolRouter(routers={"broken": mock_router})
+        schema = await router.aget_tool_schema("broken::tool")
+        assert schema == {}
 
 
-class MockDatabasePort:
-    """Mock database port for testing."""
+class TestGetToolDefinitions:
+    """Tests for get_tool_definitions method."""
 
-    def query(self, sql: str) -> list:
-        """Mock query execution."""
-        return [{"id": 1, "name": "test"}]
+    def test_get_tool_definitions(self) -> None:
+        """Test getting tool definitions."""
+        mock_router = MockToolRouter(tools={"my_tool": lambda: None})
+        mock_router.set_tool_schema(
+            "my_tool",
+            {
+                "description": "My tool description",
+                "parameters": [
+                    {
+                        "name": "param1",
+                        "description": "First param",
+                        "type": "str",
+                        "required": True,
+                    },
+                ],
+            },
+        )
+        router = UnifiedToolRouter(routers={"ns": mock_router})
+        definitions = router.get_tool_definitions()
+        assert len(definitions) == 1
+        assert definitions[0].name == "ns::my_tool"
+        assert definitions[0].simplified_description == "My tool description"
+        assert len(definitions[0].parameters) == 1
+        assert definitions[0].parameters[0].name == "param1"
 
+    def test_get_tool_definitions_empty(self) -> None:
+        """Test getting definitions from empty router."""
+        router = UnifiedToolRouter()
+        definitions = router.get_tool_definitions()
+        assert definitions == []
 
-class MockLLMPort:
-    """Mock LLM port for testing."""
+    def test_get_tool_definitions_handles_exception(self) -> None:
+        """Test that exceptions are handled gracefully."""
+        mock_router = MagicMock()
+        mock_router.get_available_tools.side_effect = Exception("Error")
+        router = UnifiedToolRouter(routers={"broken": mock_router})
+        definitions = router.get_tool_definitions()
+        assert definitions == []
 
-    async def generate(self, prompt: str) -> str:
-        """Mock text generation."""
-        return f"Generated: {prompt}"
+    def test_get_tool_definitions_skips_empty_schema(self) -> None:
+        """Test that tools without schema are skipped."""
+        mock_router = MockToolRouter(tools={"no_schema": lambda: None})
+        # Don't set schema for this tool
+        router = UnifiedToolRouter(routers={"ns": mock_router})
+        definitions = router.get_tool_definitions()
+        assert definitions == []
+
+    def test_get_tool_definitions_with_defaults(self) -> None:
+        """Test tool definitions use defaults for missing fields."""
+        mock_router = MockToolRouter(tools={"tool": lambda: None})
+        mock_router.set_tool_schema("tool", {"parameters": []})
+        router = UnifiedToolRouter(routers={"ns": mock_router})
+        definitions = router.get_tool_definitions()
+        assert len(definitions) == 1
+        # Should use default description
+        assert "Tool tool" in definitions[0].simplified_description

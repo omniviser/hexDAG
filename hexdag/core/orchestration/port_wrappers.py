@@ -21,7 +21,7 @@ from hexdag.core.orchestration.events import (
     ToolCalled,
     ToolCompleted,
 )
-from hexdag.core.ports.llm import LLM, LLMResponse, MessageList
+from hexdag.core.ports.llm import LLM, LLMResponse, MessageList, SupportsGeneration
 
 logger = get_logger(__name__)
 
@@ -88,7 +88,16 @@ class ObservableLLMWrapper:
 
         # Call underlying LLM
         start_time = time.perf_counter()
-        response = await self._llm.aresponse(messages, **kwargs)
+
+        # Check if the adapter supports generation
+        if isinstance(self._llm, SupportsGeneration):
+            response = await self._llm.aresponse(messages, **kwargs)
+        else:
+            raise NotImplementedError(
+                f"LLM adapter {type(self._llm).__name__} does not support text generation. "
+                "It must implement SupportsGeneration protocol."
+            )
+
         duration_ms = (time.perf_counter() - start_time) * 1000
 
         # Emit response received event (OBSERVABILITY)

@@ -157,6 +157,10 @@ class BaseNodeFactory(ABC):
         # Copy required_ports metadata to wrapper
         self._copy_required_ports_to_wrapper(wrapped_fn)
 
+        # Extract framework-level parameters from kwargs
+        timeout = kwargs.pop("timeout", None)
+        max_retries = kwargs.pop("max_retries", None)
+
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
@@ -167,6 +171,8 @@ class BaseNodeFactory(ABC):
             out_model=output_model,
             deps=frozenset(deps or []),
             params=kwargs,
+            timeout=timeout,
+            max_retries=max_retries,
         )
 
     @abstractmethod

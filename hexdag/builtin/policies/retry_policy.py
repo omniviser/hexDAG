@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from hexdag.core.exceptions import ParseError
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import policy
 
 logger = get_logger(__name__)
 
@@ -46,18 +45,13 @@ class RetryContext(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
-@policy(
-    name="parse_retry",
-    namespace="core",
-    description="Retry policy for LLM parse failures with improved prompts",
-)
 class ParseRetryPolicy:
     """Retry policy for parse failures in LLM workflows.
 
-    When a ParserNode fails to parse LLM output, this policy:
+    When an LLMNode fails to parse LLM output, this policy:
     1. Detects the parse error
     2. Generates an improved prompt with error hints
-    3. Re-executes the LLM + Parser with the improved prompt
+    3. Re-executes the LLM with the improved prompt
     4. Repeats up to max_retries times
 
     This works at the **orchestrator level** - no need for dynamic graphs!
@@ -268,11 +262,6 @@ class ParseRetryPolicy:
         return summary
 
 
-@policy(
-    name="exponential_backoff",
-    namespace="core",
-    description="Exponential backoff retry policy for rate limits",
-)
 class ExponentialBackoffPolicy:
     """Exponential backoff for rate limit errors.
 

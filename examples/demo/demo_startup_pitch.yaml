@@ -10,21 +10,14 @@ spec:
   # Declarative workflow - no spaghetti code, just clear intent
   nodes:
     # Step 1: Extract structured data from unstructured text
-    - kind: llm_node
+    - kind: hexdag.builtin.nodes.LLMNode
       metadata:
         name: ticket_parser
         annotations:
           description: Extract structured information from support ticket
       spec:
         prompt_template: |
-          Extract the following from this support ticket:
-          Customer Tier: {{customer_tier}}
-          Ticket: {{ticket_text}}
-
-          Respond with JSON containing:
-          - issue_type: one of [bug, feature_request, billing, onboarding, other]
-          - technical_details: summary of technical aspects
-          - customer_emotion: one of [angry, frustrated, neutral, happy]
+          YOLO
 
         model: gpt-4o
         temperature: 0.1
@@ -32,7 +25,7 @@ spec:
         timeout: 10
         dependencies: []
     # Step 2: Standard analysis for all tiers
-    - kind: llm_node
+    - kind: hexdag.builtin.nodes.LLMNode
       metadata:
         name: ticket_analysis
         annotations:
@@ -59,15 +52,14 @@ spec:
 # NOTE: This is a demonstration YAML showing the declarative pipeline format.
 # In production, you would:
 # 1. Define the custom functions (generate_response, send_slack_notification, etc.)
-# 2. Register them with the registry
-# 3. Use actual LLM adapters with API keys
-# 4. Implement proper error handling and retries
+# 2. Use actual LLM adapters with API keys
+# 3. Implement proper error handling and retries
 #
 # The YAML format supports:
 # - Environment variables: ${VAR_NAME} or ${VAR_NAME:default}
 # - Jinja2 templating: {{ variable }}
 # - Multi-document YAML for different environments
 # - Macro invocations for reusable patterns
-# - Namespace-qualified node types: namespace:node_type
+# - Full module paths for node types: hexdag.builtin.nodes.LLMNode
 #
 # See docs/YAML_PIPELINES_ARCHITECTURE.md for complete documentation.

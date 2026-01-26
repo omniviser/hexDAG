@@ -8,12 +8,10 @@ if TYPE_CHECKING:
 
 
 from hexdag.core.ports.memory import Memory
-from hexdag.core.registry import adapter
 
 __all__ = ["InMemoryMemory"]
 
 
-@adapter(name="in_memory_memory", implements_port="memory")
 class InMemoryMemory(Memory):
     """In-memory implementation of Memory for testing.
 

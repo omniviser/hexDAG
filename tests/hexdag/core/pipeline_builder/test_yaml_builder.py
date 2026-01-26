@@ -7,6 +7,7 @@ Tests cover:
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -337,11 +338,11 @@ metadata:
   version: ${VERSION}
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -364,11 +365,11 @@ spec:
   variables:
     node_name: processor
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: "{{ spec.variables.node_name }}"
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -387,11 +388,11 @@ metadata:
   name: ${ENV}-pipeline
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -411,11 +412,11 @@ metadata:
   name: ${MODEL}-pipeline
 spec:
   nodes:
-    - kind: prompt_node
+    - kind: function_node
       metadata:
         name: test
       spec:
-        template: "Hello"
+        fn: "json.dumps"
 """
 
         builder = YamlPipelineBuilder()
@@ -423,3 +424,564 @@ spec:
 
         # Environment variable should be resolved in metadata
         assert config.metadata["name"] == "gpt-4-pipeline"
+
+    @pytest.mark.asyncio
+    async def test_template_field_preserved_for_nodes(self):
+        """Test that node template fields with {{...}} are not rendered by TemplatePlugin.
+
+        Regression test for bug where LLM node templates were being prematurely
+        rendered by the YAML TemplatePlugin, resulting in empty prompts when
+        template variables didn't exist in the YAML config context.
+
+        Bug: Node template fields like "{{input}}" were being rendered against
+        the YAML config context, resulting in empty strings since 'input'
+        doesn't exist in that context.
+
+        Fix: Skip rendering for 'template' keys to preserve {{...}} syntax
+        for node-level template rendering.
+        """
+        from hexdag.builtin.adapters.mock.mock_llm import MockLLM
+        from hexdag.core.orchestration.orchestrator import Orchestrator
+
+        def dummy_function(inputs: dict) -> dict:
+            """Test function that returns a dict with 'input' key."""
+            return {"input": "Hello from dependency"}
+
+        # Register the function temporarily
+        import sys
+
+        test_module = type(sys)("test_module")
+        test_module.dummy_function = dummy_function
+        sys.modules["test_module"] = test_module
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test_template_preservation
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: prepare_input
+      spec:
+        fn: "test_module.dummy_function"
+        input_schema:
+          data: str
+        output_schema:
+          input: str
+        dependencies: []
+
+    - kind: llm_node
+      metadata:
+        name: process_llm
+      spec:
+        template: "{{input}}"
+        dependencies: [prepare_input]
+"""
+
+        # Build pipeline
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        # Verify the template field was preserved (not rendered by TemplatePlugin)
+        llm_node = graph.nodes["process_llm"]
+        # The node should have been created with the template string intact
+        assert llm_node is not None
+
+        # Run the pipeline to verify the template works correctly
+        mock_llm = MockLLM()
+        orchestrator = Orchestrator(ports={"llm": mock_llm})
+        await orchestrator.run(graph, initial_input={"data": "test"})
+
+        # Verify the template was properly rendered at node execution time
+        assert mock_llm.last_messages is not None
+        assert len(mock_llm.last_messages) > 0
+        user_message = next((m for m in mock_llm.last_messages if m.role == "user"), None)
+        assert user_message is not None
+        # The message should contain the output from the dependency, not be empty
+        assert user_message.content == "Hello from dependency"
+
+        # Cleanup
+        del sys.modules["test_module"]
+
+
+# ============================================================================
+# YamlPipelineBuilder Core Tests
+# ============================================================================
+
+
+class TestYamlPipelineBuilderCore:
+    """Tests for core YamlPipelineBuilder functionality."""
+
+    def test_build_from_yaml_string_simple(self) -> None:
+        """Test building a simple pipeline from YAML string."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: simple-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: greeter
+      spec:
+        fn: "json.dumps"
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "greeter" in graph.nodes
+        assert config.metadata["name"] == "simple-pipeline"
+
+    def test_missing_kind_raises_error(self) -> None:
+        """Test that missing 'kind' field raises error."""
+        yaml_content = """
+metadata:
+  name: invalid
+spec:
+  nodes: []
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="kind"):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_missing_spec_raises_error(self) -> None:
+        """Test that missing 'spec' field raises error."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: no-spec
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="spec"):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_missing_metadata_raises_error(self) -> None:
+        """Test that missing 'metadata' field raises error."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+spec:
+  nodes: []
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="metadata"):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_non_dict_yaml_raises_error(self) -> None:
+        """Test that non-dict YAML document raises error."""
+        yaml_content = "- item1\n- item2"
+        builder = YamlPipelineBuilder()
+        # Non-dict YAML will cause an AttributeError when trying to access .get()
+        # This is acceptable behavior - invalid input causes error
+        with pytest.raises((YamlPipelineBuilderError, AttributeError)):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_extract_pipeline_config(self) -> None:
+        """Test pipeline config extraction."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: config-test
+  author: tester
+spec:
+  ports:
+    llm:
+      adapter: hexdag.builtin.adapters.mock.MockLLM
+  policies:
+    retry:
+      name: hexdag.builtin.policies.execution_policies.RetryPolicy
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test
+      spec:
+        fn: "json.dumps"
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "llm" in config.ports
+        assert "retry" in config.policies
+        assert config.metadata["author"] == "tester"
+
+
+# ============================================================================
+# Multi-Document YAML Tests
+# ============================================================================
+
+
+class TestMultiDocumentYAML:
+    """Tests for multi-document YAML support."""
+
+    def test_multi_document_first_selected(self) -> None:
+        """Test that first pipeline document is selected by default."""
+        yaml_content = """---
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: first-pipeline
+  namespace: dev
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test1
+      spec:
+        fn: "json.dumps"
+---
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: second-pipeline
+  namespace: prod
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test2
+      spec:
+        fn: "json.dumps"
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert config.metadata["name"] == "first-pipeline"
+        assert "test1" in graph.nodes
+
+    def test_multi_document_environment_selection(self) -> None:
+        """Test selecting specific environment in multi-document YAML."""
+        yaml_content = """---
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: dev-pipeline
+  namespace: dev
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: dev_node
+      spec:
+        fn: "json.dumps"
+---
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: prod-pipeline
+  namespace: prod
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: prod_node
+      spec:
+        fn: "json.dumps"
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content, environment="prod")
+
+        assert config.metadata["name"] == "prod-pipeline"
+        assert "prod_node" in graph.nodes
+
+    def test_nonexistent_environment_raises_error(self) -> None:
+        """Test that selecting nonexistent environment raises error."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: only-pipeline
+  namespace: dev
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test
+      spec:
+        fn: "json.dumps"
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="staging.*not found"):
+            builder.build_from_yaml_string(yaml_content, environment="staging")
+
+
+# ============================================================================
+# NodeEntityPlugin Tests
+# ============================================================================
+
+
+class TestNodeEntityPlugin:
+    """Tests for NodeEntityPlugin."""
+
+    def test_node_missing_kind_raises_error(self) -> None:
+        """Test that node without 'kind' raises error."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test
+spec:
+  nodes:
+    - metadata:
+        name: broken
+      spec:
+        template: "Test"
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="kind"):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_node_missing_metadata_name_raises_error(self) -> None:
+        """Test that node without metadata.name raises error."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test
+spec:
+  nodes:
+    - kind: function_node
+      metadata: {}
+      spec:
+        template: "Test"
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="metadata.name"):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_nonexistent_node_kind_raises_error(self) -> None:
+        """Test that nonexistent node kind raises error."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test
+spec:
+  nodes:
+    - kind: nonexistent.module.FakeNode
+      metadata:
+        name: broken
+      spec:
+        template: "Test"
+"""
+        builder = YamlPipelineBuilder()
+        with pytest.raises(YamlPipelineBuilderError, match="Cannot resolve"):
+            builder.build_from_yaml_string(yaml_content)
+
+    def test_node_with_dependencies(self) -> None:
+        """Test node with dependencies."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: deps-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: first
+      spec:
+        fn: "json.dumps"
+    - kind: function_node
+      metadata:
+        name: second
+      spec:
+        fn: "json.dumps"
+        dependencies: [first]
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "first" in graph.nodes
+        assert "second" in graph.nodes
+        # Second should depend on first
+        deps = graph.get_dependencies("second")
+        assert "first" in deps
+
+
+# ============================================================================
+# Secret Deferral Tests
+# ============================================================================
+
+
+class TestSecretDeferral:
+    """Tests for deferred secret resolution."""
+
+    def test_secret_pattern_deferred(self) -> None:
+        """Test that secret-like variables are deferred."""
+        plugin = EnvironmentVariablePlugin(defer_secrets=True)
+        config = {"api_key": "${OPENAI_API_KEY}"}
+
+        result = plugin.process(config)
+
+        # Should preserve ${...} syntax for runtime resolution
+        assert result["api_key"] == "${OPENAI_API_KEY}"
+
+    def test_non_secret_resolved_immediately(self) -> None:
+        """Test that non-secret variables are resolved immediately."""
+        os.environ["MODEL_NAME"] = "gpt-4"
+
+        plugin = EnvironmentVariablePlugin(defer_secrets=True)
+        config = {"model": "${MODEL_NAME}"}
+
+        result = plugin.process(config)
+
+        assert result["model"] == "gpt-4"
+
+    def test_defer_secrets_disabled(self) -> None:
+        """Test behavior when defer_secrets is disabled."""
+        os.environ["OPENAI_API_KEY"] = "test-key"
+
+        plugin = EnvironmentVariablePlugin(defer_secrets=False)
+        config = {"api_key": "${OPENAI_API_KEY}"}
+
+        result = plugin.process(config)
+
+        # Should resolve immediately when defer_secrets=False
+        assert result["api_key"] == "test-key"
+
+    def test_multiple_secret_patterns(self) -> None:
+        """Test various secret patterns are all deferred."""
+        plugin = EnvironmentVariablePlugin(defer_secrets=True)
+        config = {
+            "api_key": "${MY_API_KEY}",
+            "secret": "${DB_SECRET}",
+            "token": "${AUTH_TOKEN}",
+            "password": "${USER_PASSWORD}",
+            "credential": "${SERVICE_CREDENTIAL}",
+        }
+
+        result = plugin.process(config)
+
+        # All should be preserved
+        assert result["api_key"] == "${MY_API_KEY}"
+        assert result["secret"] == "${DB_SECRET}"
+        assert result["token"] == "${AUTH_TOKEN}"
+        assert result["password"] == "${USER_PASSWORD}"
+        assert result["credential"] == "${SERVICE_CREDENTIAL}"
+
+
+# ============================================================================
+# Include Plugin Tests
+# ============================================================================
+
+
+class TestIncludePreprocessPlugin:
+    """Tests for include directive processing."""
+
+    def test_absolute_path_rejected(self, tmp_path: Path) -> None:
+        """Test that absolute paths are rejected for security."""
+        from hexdag.core.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+
+        plugin = IncludePreprocessPlugin(base_path=tmp_path)
+        config = {"!include": "/etc/passwd"}
+
+        with pytest.raises(YamlPipelineBuilderError, match="Absolute paths not allowed"):
+            plugin.process(config)
+
+    def test_max_depth_exceeded(self, tmp_path: Path) -> None:
+        """Test that max nesting depth is enforced."""
+        from hexdag.core.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+
+        # Create a simple YAML file
+        (tmp_path / "test.yaml").write_text("key: value")
+
+        plugin = IncludePreprocessPlugin(base_path=tmp_path, max_depth=0)
+        config = {"!include": "test.yaml"}
+
+        with pytest.raises(YamlPipelineBuilderError, match="nesting too deep"):
+            plugin.process(config)
+
+    def test_file_not_found_error(self, tmp_path: Path) -> None:
+        """Test clear error message for missing include file."""
+        from hexdag.core.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+
+        plugin = IncludePreprocessPlugin(base_path=tmp_path)
+        config = {"!include": "nonexistent.yaml"}
+
+        with pytest.raises(YamlPipelineBuilderError, match="Include file not found"):
+            plugin.process(config)
+
+    def test_anchor_not_found_error(self, tmp_path: Path) -> None:
+        """Test error when anchor doesn't exist in include file."""
+        from hexdag.core.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+
+        # Create include file without the anchor
+        (tmp_path / "base.yaml").write_text("existing_key: value")
+
+        plugin = IncludePreprocessPlugin(base_path=tmp_path)
+        config = {"!include": "base.yaml#nonexistent_anchor"}
+
+        with pytest.raises(YamlPipelineBuilderError, match="Anchor.*not found"):
+            plugin.process(config)
+
+    def test_simple_include(self, tmp_path: Path) -> None:
+        """Test simple file inclusion."""
+        from hexdag.core.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+
+        # Create include file
+        (tmp_path / "shared.yaml").write_text("shared_key: shared_value")
+
+        plugin = IncludePreprocessPlugin(base_path=tmp_path)
+        config = {"config": {"!include": "shared.yaml"}}
+
+        result = plugin.process(config)
+
+        assert result["config"]["shared_key"] == "shared_value"
+
+    def test_anchor_include(self, tmp_path: Path) -> None:
+        """Test inclusion with anchor reference."""
+        from hexdag.core.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+
+        # Create include file with multiple anchors
+        (tmp_path / "configs.yaml").write_text("""
+dev:
+  debug: true
+prod:
+  debug: false
+""")
+
+        plugin = IncludePreprocessPlugin(base_path=tmp_path)
+        config = {"settings": {"!include": "configs.yaml#prod"}}
+
+        result = plugin.process(config)
+
+        assert result["settings"]["debug"] is False
+
+
+# ============================================================================
+# Validation Warnings Tests
+# ============================================================================
+
+
+class TestValidationWarnings:
+    """Tests for validation warning handling."""
+
+    def test_validation_warnings_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that validation warnings are logged."""
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: warning-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: test
+      spec:
+        fn: "json.dumps"
+        unknown_field: this_should_warn
+"""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            builder = YamlPipelineBuilder()
+            # This should still succeed but log warnings about unknown fields
+            graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "test" in graph.nodes

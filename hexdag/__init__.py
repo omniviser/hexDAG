@@ -32,15 +32,8 @@ from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 # Port interfaces
 from hexdag.core.ports import LLM, APICall, DatabasePort, ToolRouter
 
-# This ensures core components are loaded and plugins are discovered
-from hexdag.core.registry import registry
-from hexdag.core.registry.models import ComponentType  # For internal framework use
-
-# Load core components - using attribute assignment for dynamic loading flag
-registry._core_loading = True  # type: ignore  # Allow core namespace registration
-import hexdag.builtin.nodes  # noqa: F401, E402 - triggers decorator registration
-
-registry._core_loading = False  # type: ignore  # Block core namespace registration
+# Import resolver for component resolution
+from hexdag.core.resolver import resolve, resolve_function
 
 # Define placeholders for lazy-loaded adapters to satisfy __all__ checking
 # These will be replaced by __getattr__ when accessed
@@ -94,9 +87,9 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     # Version
     "__version__",
-    # Registry System
-    "registry",
-    "ComponentType",
+    # Module Resolution
+    "resolve",
+    "resolve_function",
     # Core Framework - DAG Building and Execution
     "Orchestrator",
     "DirectedGraph",

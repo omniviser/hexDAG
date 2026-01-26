@@ -522,3 +522,128 @@ class TestNodeExecutor:
 
         completed_event = next(e for e in observer.events if isinstance(e, NodeCompleted))
         assert completed_event.duration_ms > 0
+
+    @pytest.mark.asyncio
+    async def test_max_retries_success_after_failures(
+        self, executor, coordinator, context, observer, policy
+    ):
+        """Test that max_retries allows retrying until success."""
+        call_count = 0
+
+        async def failing_then_success(input_data: int) -> int:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError(f"Attempt {call_count} failed")
+            return input_data * 2
+
+        node_spec = NodeSpec("test_node", failing_then_success, max_retries=3)
+
+        async with ExecutionContext(
+            observer_manager=observer,
+            policy_manager=policy,
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
+
+        assert result == 10  # 5 * 2
+        assert call_count == 3  # Failed twice, succeeded on third
+
+    @pytest.mark.asyncio
+    async def test_max_retries_exhausted(self, executor, coordinator, context, observer, policy):
+        """Test that max_retries raises after all retries exhausted."""
+        call_count = 0
+
+        async def always_fails(input_data: int) -> int:
+            nonlocal call_count
+            call_count += 1
+            raise ValueError(f"Attempt {call_count} failed")
+
+        node_spec = NodeSpec("test_node", always_fails, max_retries=3)
+
+        with pytest.raises(NodeExecutionError) as exc_info:
+            async with ExecutionContext(
+                observer_manager=observer,
+                policy_manager=policy,
+                run_id="test-run",
+                ports={},
+            ):
+                await executor.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input=5,
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
+
+        assert call_count == 3  # All retries exhausted
+        assert "Attempt 3 failed" in str(exc_info.value.original_error)
+
+    @pytest.mark.asyncio
+    async def test_max_retries_default_no_retry(
+        self, executor, coordinator, context, observer, policy
+    ):
+        """Test that without max_retries, failures are immediate."""
+        call_count = 0
+
+        async def always_fails(input_data: int) -> int:
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("Failed")
+
+        node_spec = NodeSpec("test_node", always_fails)  # No max_retries
+
+        with pytest.raises(NodeExecutionError):
+            async with ExecutionContext(
+                observer_manager=observer,
+                policy_manager=policy,
+                run_id="test-run",
+                ports={},
+            ):
+                await executor.execute_node(
+                    node_name="test_node",
+                    node_spec=node_spec,
+                    node_input=5,
+                    context=context,
+                    policy_coordinator=coordinator,
+                )
+
+        assert call_count == 1  # No retry
+
+    @pytest.mark.asyncio
+    async def test_max_retries_with_timeout(self, executor, coordinator, context, observer, policy):
+        """Test max_retries with timeout - retries on timeout."""
+        call_count = 0
+
+        async def slow_then_fast(input_data: int) -> int:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                await asyncio.sleep(10)  # Will timeout
+            return input_data * 2
+
+        node_spec = NodeSpec("test_node", slow_then_fast, timeout=0.1, max_retries=3)
+
+        async with ExecutionContext(
+            observer_manager=observer,
+            policy_manager=policy,
+            run_id="test-run",
+            ports={},
+        ):
+            result = await executor.execute_node(
+                node_name="test_node",
+                node_spec=node_spec,
+                node_input=5,
+                context=context,
+                policy_coordinator=coordinator,
+            )
+
+        assert result == 10  # 5 * 2
+        assert call_count == 2  # First timed out, second succeeded

@@ -22,7 +22,10 @@ from hexdag.core.ports.healthcheck import HealthStatus
 from hexdag.core.ports.llm import (
     LLM,
     ImageContent,
+    ImageInput,
+    SupportsEmbedding,
     SupportsFunctionCalling,
+    SupportsGeneration,
     SupportsVision,
     VisionMessage,
 )
@@ -37,19 +40,22 @@ __all__ = [
     "ColumnSchema",
     "ColumnType",
     "DatabasePort",
-    "Embedding",
+    "Embedding",  # Deprecated - kept for backward compatibility
     "ExecutionResult",
     "ExecutionTask",
     "ExecutorPort",
     "FileStoragePort",
     "HealthStatus",
     "ImageContent",
+    "ImageInput",
     "LLM",
     "Memory",
     "ObserverManagerPort",
     "PolicyManagerPort",
     "SecretPort",
+    "SupportsEmbedding",  # New - unified embedding support in LLM port
     "SupportsFunctionCalling",
+    "SupportsGeneration",  # New - text generation support in LLM port
     "SupportsRawSQL",
     "SupportsReadOnly",
     "SupportsStreamingQuery",

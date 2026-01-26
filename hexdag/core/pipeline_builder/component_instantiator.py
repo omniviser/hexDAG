@@ -2,7 +2,7 @@
 
 This module handles:
 - Parsing native YAML dict component specifications
-- Resolving components from registry
+- Resolving components via module paths
 - Instantiating adapters with configuration
 - Instantiating policies with configuration
 """
@@ -10,15 +10,13 @@ This module handles:
 from collections import namedtuple
 from typing import Any
 
-from hexdag.core.bootstrap import ensure_bootstrapped
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import registry
-from hexdag.core.registry.models import ClassComponent, ComponentType
+from hexdag.core.resolver import resolve
 
 logger = get_logger(__name__)
 
 # Simple namedtuple for component specification
-ComponentSpec = namedtuple("ComponentSpec", ["namespace", "name", "params"])
+ComponentSpec = namedtuple("ComponentSpec", ["module_path", "params"])
 
 
 class ComponentInstantiationError(Exception):
@@ -32,7 +30,7 @@ class ComponentInstantiator:
 
     def __init__(self) -> None:
         """Initialize component instantiator."""
-        ensure_bootstrapped()
+        pass  # No bootstrap needed anymore
 
     def _parse_component_spec(self, spec: dict[str, Any]) -> ComponentSpec:
         """Parse component specification from native YAML dict format.
@@ -40,50 +38,37 @@ class ComponentInstantiator:
         Parameters
         ----------
         spec : dict[str, Any]
-            Component specification: {"namespace": "ns", "name": "n", "params": {...}}
+            Component specification with either:
+            - "adapter": "module.path.ClassName" and optional "config": {...}
+            - "name": "module.path.ClassName" and optional "params": {...}
 
         Returns
         -------
         ComponentSpec
-            Parsed component specification with namespace, name, and params
+            Parsed component specification with module_path and params
 
         Raises
         ------
         ComponentInstantiationError
             If specification format is invalid
-
-
-        Examples
-        --------
-        >>> spec = self._parse_component_spec({  # doctest: +SKIP
-        ...     "namespace": "core",
-        ...     "name": "retry",
-        ...     "params": {"max_retries": 3}
-        ... })
-        >>> spec = self._parse_component_spec({  # doctest: +SKIP
-        ...     "name": "core:retry",  # Namespace stripped from name
-        ...     "params": {"max_retries": 3}
-        ... })
         """
         if not isinstance(spec, dict):
             raise ComponentInstantiationError(
                 f"Component specification must be a dict, got {type(spec).__name__}. "
-                f"Use native YAML format: {{namespace: 'core', name: 'retry', params: {{...}}}}"
+                f"Use format: {{adapter: 'module.path.Class', config: {{...}}}}"
             )
 
-        namespace = spec.get("namespace", "core")
-        name = spec.get("name")
-        params = spec.get("params", {})
+        # Support both "adapter" and "name" keys for module path
+        module_path = spec.get("adapter") or spec.get("name")
+        # Support both "config" and "params" keys for parameters
+        params = spec.get("config") or spec.get("params", {})
 
-        if not name:
+        if not module_path:
             raise ComponentInstantiationError(
-                f"Component specification requires 'name' field. Got: {spec}"
+                f"Component specification requires 'adapter' or 'name' field. Got: {spec}"
             )
 
-        # Strip namespace from name if present (e.g., "core:retry" -> "retry")
-        clean_name = name.split(":")[-1] if ":" in name else name
-
-        return ComponentSpec(namespace=namespace, name=clean_name, params=params)
+        return ComponentSpec(module_path=module_path, params=params)
 
     def instantiate_adapter(self, spec: dict[str, Any], port_name: str | None = None) -> Any:
         """Instantiate an adapter from native YAML dict specification.
@@ -91,8 +76,8 @@ class ComponentInstantiator:
         Parameters
         ----------
         spec : dict[str, Any]
-            Adapter specification: {"namespace": "core", "name": "openai", "params":
-            {"model": "gpt-4"}}
+            Adapter specification: {"adapter": "hexdag.builtin.adapters.mock.MockLLM",
+            "config": {"model": "gpt-4"}}
         port_name : str | None
             Optional port name for context in error messages
 
@@ -110,9 +95,8 @@ class ComponentInstantiator:
         --------
         >>> instantiator = ComponentInstantiator()  # doctest: +SKIP
         >>> adapter = instantiator.instantiate_adapter({  # doctest: +SKIP
-        ...     "namespace": "core",
-        ...     "name": "openai",
-        ...     "params": {"model": "gpt-4"}
+        ...     "adapter": "hexdag.builtin.adapters.mock.MockLLM",
+        ...     "config": {"model": "gpt-4"}
         ... })
         """
         try:
@@ -120,44 +104,43 @@ class ComponentInstantiator:
             component_spec = self._parse_component_spec(spec)
 
             try:
-                adapter_or_class = registry.get(component_spec.name)
+                adapter_class = resolve(component_spec.module_path)
             except Exception as e:
                 raise ComponentInstantiationError(
-                    f"Adapter '{component_spec.name}' "
-                    f"not found in registry. "
-                    f"Make sure it's registered in pyproject.toml. Error: {e}"
+                    f"Adapter '{component_spec.module_path}' "
+                    f"could not be resolved. "
+                    f"Make sure the module path is correct. Error: {e}"
                 ) from e
 
-            # Some adapters (like LocalObserverManager) are registered as instances
-            if isinstance(adapter_or_class, type):
-                # It's a class, instantiate it with parameters
+            # Instantiate the adapter class with parameters
+            if isinstance(adapter_class, type):
                 try:
-                    adapter_instance = adapter_or_class(**component_spec.params)
+                    adapter_instance = adapter_class(**component_spec.params)
                     logger.info(
-                        f"Instantiated adapter '{component_spec.name}' "
+                        f"Instantiated adapter '{component_spec.module_path}' "
                         f"for port '{port_name}' with params: {component_spec.params}"
                     )
                     return adapter_instance
                 except Exception as e:
                     raise ComponentInstantiationError(
                         f"Failed to instantiate adapter "
-                        f"'{component_spec.name}' "
+                        f"'{component_spec.module_path}' "
                         f"with params {component_spec.params}. Error: {e}"
                     ) from e
             else:
-                # It's already an instance, check if params were provided
-                if component_spec.params:
+                # It's already an instance (runtime-registered non-class component)
+                if component_spec.params:  # type: ignore[unreachable]
                     logger.warning(
-                        f"Adapter '{component_spec.name}' "
-                        f"is registered as an instance. Parameters {component_spec.params} "
+                        f"Adapter '{component_spec.module_path}' "
+                        f"resolved to an instance. Parameters {component_spec.params} "
                         f"will be ignored."
                     )
                 logger.info(
-                    f"Using registered adapter instance "
-                    f"'{component_spec.name}' "
+                    f"Using resolved adapter instance "
+                    f"'{component_spec.module_path}' "
                     f"for port '{port_name}'"
                 )
-                return adapter_or_class
+                return adapter_class
 
         except ComponentInstantiationError:
             raise
@@ -172,8 +155,8 @@ class ComponentInstantiator:
         Parameters
         ----------
         spec : dict[str, Any]
-            Policy specification: {"namespace": "core", "name": "retry", "params":
-            {"max_retries": 3}}
+            Policy specification: {"name": "hexdag.builtin.policies.RetryPolicy",
+            "params": {"max_retries": 3}}
         policy_name : str | None
             Optional policy name for context in error messages
 
@@ -191,8 +174,7 @@ class ComponentInstantiator:
         --------
         >>> instantiator = ComponentInstantiator()  # doctest: +SKIP
         >>> policy = instantiator.instantiate_policy({  # doctest: +SKIP
-        ...     "namespace": "core",
-        ...     "name": "retry",
+        ...     "name": "hexdag.builtin.policies.execution_policies.RetryPolicy",
         ...     "params": {"max_retries": 5}
         ... })
         """
@@ -200,20 +182,33 @@ class ComponentInstantiator:
             # Parse the specification
             component_spec = self._parse_component_spec(spec)
 
-            policy_class = self._get_policy_class(component_spec.name)
+            try:
+                policy_class = resolve(component_spec.module_path)
+            except Exception as e:
+                raise ComponentInstantiationError(
+                    f"Policy '{component_spec.module_path}' "
+                    f"could not be resolved. "
+                    f"Make sure the module path is correct. Error: {e}"
+                ) from e
+
+            if not isinstance(policy_class, type):
+                raise ComponentInstantiationError(
+                    f"Policy '{component_spec.module_path}' resolved to an instance, "
+                    f"not a class. Cannot instantiate from instance."
+                )
 
             # Instantiate with parameters
             try:
                 policy_instance = policy_class(**component_spec.params)
                 logger.info(
-                    f"Instantiated policy '{component_spec.name}' "
+                    f"Instantiated policy '{component_spec.module_path}' "
                     f"('{policy_name}') with params: {component_spec.params}"
                 )
                 return policy_instance
             except Exception as e:
                 raise ComponentInstantiationError(
                     f"Failed to instantiate policy "
-                    f"'{component_spec.name}' "
+                    f"'{component_spec.module_path}' "
                     f"with params {component_spec.params}. Error: {e}"
                 ) from e
 
@@ -222,46 +217,6 @@ class ComponentInstantiator:
         except Exception as e:
             raise ComponentInstantiationError(
                 f"Failed to instantiate policy '{policy_name}': {e}"
-            ) from e
-
-    def _get_policy_class(self, name: str) -> type:
-        """Get policy class by name from registry.
-
-        Parameters
-        ----------
-        name : str
-            Policy name (e.g., "retry")
-
-        Returns
-        -------
-        type
-            Policy class
-
-        Raises
-        ------
-        ComponentInstantiationError
-            If policy not found in registry
-
-        """
-        try:
-            # Use get_metadata() to get the class, not get() which instantiates
-            metadata = registry.get_metadata(name, component_type=ComponentType.POLICY)
-            component = metadata.component
-
-            policy_class = component.value if isinstance(component, ClassComponent) else component
-
-            if not isinstance(policy_class, type):
-                raise ComponentInstantiationError(
-                    f"Policy '{name}' is registered as an instance, not a class. "
-                    f"Cannot instantiate from instance."
-                )
-
-            return policy_class
-        except Exception as e:
-            raise ComponentInstantiationError(
-                f"Policy '{name}' not found in registry. "
-                f"Ensure policies are registered via @policy decorator "
-                f"and the policy module is in bootstrap config. Error: {e}"
             ) from e
 
     def instantiate_ports(self, ports_config: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -281,9 +236,10 @@ class ComponentInstantiator:
         --------
         >>> instantiator = ComponentInstantiator()  # doctest: +SKIP
         >>> config = {  # doctest: +SKIP
-        ...     "llm": {"namespace": "core", "name": "openai", "params": {"model": "gpt-4"}},
-        ...     "database": {"namespace": "core", "name": "postgres", "params":
-                {"connection_string": "..."}}
+        ...     "llm": {"adapter": "hexdag.builtin.adapters.mock.MockLLM",
+        ...             "config": {"model": "gpt-4"}},
+        ...     "database": {"adapter": "hexdag.builtin.adapters.mock.MockDatabaseAdapter",
+        ...                  "config": {}}
         ... }
         """
         ports: dict[str, Any] = {}
@@ -314,8 +270,10 @@ class ComponentInstantiator:
         --------
         >>> instantiator = ComponentInstantiator()  # doctest: +SKIP
         >>> config = {  # doctest: +SKIP
-        ...     "retry": {"name": "retry", "params": {"max_retries": 3}},
-        ...     "timeout": {"name": "timeout", "params": {"timeout_seconds": 300}}
+        ...     "retry": {"name": "hexdag.builtin.policies.RetryPolicy",
+        ...               "params": {"max_retries": 3}},
+        ...     "timeout": {"name": "hexdag.builtin.policies.TimeoutPolicy",
+        ...                 "params": {"timeout_seconds": 300}}
         ... }
         """
         policies: list[Any] = []

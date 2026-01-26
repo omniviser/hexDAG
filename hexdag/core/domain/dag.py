@@ -70,6 +70,7 @@ class NodeSpec:
     deps: frozenset[str] = field(default_factory=frozenset)
     params: dict[str, Any] = field(default_factory=dict)
     timeout: float | None = None  # Optional timeout in seconds for this node
+    max_retries: int | None = None  # Optional max retries for this node (1 = no retries)
 
     def __post_init__(self) -> None:
         """Ensure deps and params are immutable, and intern strings for performance."""

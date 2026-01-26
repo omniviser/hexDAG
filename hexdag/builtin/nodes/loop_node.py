@@ -26,8 +26,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 logger = logging.getLogger("hexdag.app.application.nodes")
 
@@ -118,7 +116,6 @@ def _apply_on_iteration_end(
         return state
 
 
-@node(name="loop_node", subtype=NodeSubtype.LOOP, namespace="core")
 class LoopNode(BaseNodeFactory):
     """Advanced loop control node (functional-only).
 
@@ -401,7 +398,6 @@ class LoopNode(BaseNodeFactory):
         )
 
 
-@node(name="conditional_node", subtype=NodeSubtype.CONDITIONAL, namespace="core")
 class ConditionalNode(BaseNodeFactory):
     """Multi-branch conditional router (functional-only, breaking change).
 

@@ -31,7 +31,6 @@ from hexdag.core.orchestration.events.observers.models import (
     AlertType,
     NodeMetrics,
 )
-from hexdag.core.registry.decorators import observer
 
 logger = get_logger(__name__)
 
@@ -41,7 +40,6 @@ logger = get_logger(__name__)
 # ==============================================================================
 
 
-@observer(name="performance_metrics", description="Collect detailed performance metrics")
 class PerformanceMetricsObserver:
     """Observer that collects comprehensive performance metrics.
 
@@ -176,7 +174,6 @@ class PerformanceMetricsObserver:
         self.pipeline_end_times.clear()
 
 
-@observer(name="alerting", description="Trigger alerts based on performance thresholds")
 class AlertingObserver:
     """Observer that triggers alerts based on configurable thresholds.
 
@@ -335,7 +332,6 @@ class ExecutionTrace:
         self.events.append((elapsed_ms, event_type, event))
 
 
-@observer(name="execution_tracer", description="Build detailed execution traces for debugging")
 class ExecutionTracerObserver:
     """Observer that builds detailed execution traces.
 
@@ -400,7 +396,6 @@ class ExecutionTracerObserver:
         self.trace = ExecutionTrace()
 
 
-@observer(name="simple_logger", description="Simple logging observer for basic monitoring")
 class SimpleLoggingObserver:
     """Simple observer that logs events to console/logger.
 
@@ -470,7 +465,6 @@ class SimpleLoggingObserver:
 # ==============================================================================
 
 
-@observer(name="resource_monitor", description="Monitor resource usage and concurrency patterns")
 class ResourceMonitorObserver:
     """Observer that monitors resource usage patterns.
 
@@ -556,7 +550,6 @@ class ResourceMonitorObserver:
         self.current_wave = -1
 
 
-@observer(name="data_quality", description="Monitor data quality through the pipeline")
 class DataQualityObserver:
     """Observer that monitors data quality in pipeline execution.
 

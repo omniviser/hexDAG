@@ -71,25 +71,43 @@ __all__ = ["{class_name}"]
     class_name = name.replace("_", " ").title().replace(" ", "")
     adapter_content = f'''"""{class_name} implementation."""
 
+import os
 from typing import Any
 
-from hexdag.core.registry.decorators import adapter
 
-
-@adapter(
-    name="{name.replace("_adapter", "")}",
-    implements_port="{port}",
-    namespace="plugin",
-    description="{class_name} for hexDAG",
-)
 class {class_name}:
-    """{class_name} implementation.
+    """{class_name} adapter for hexDAG.
 
     This adapter implements the {port} port interface.
+
+    YAML Usage:
+        ```yaml
+        ports:
+          {port}:
+            adapter: hexdag_plugins.{name}.{class_name}
+            config:
+              # your config here
+        ```
     """
 
-    def __init__(self, **kwargs: Any) -> None:
-        """Initialize {name}."""
+    def __init__(
+        self,
+        # Add your configuration parameters here
+        # Example with secret:
+        # api_key: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize {name}.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Additional configuration options
+        """
+        # Example secret resolution:
+        # self.api_key = api_key or os.getenv("MY_API_KEY")
+        # if not self.api_key:
+        #     raise ValueError("api_key required (pass directly or set MY_API_KEY)")
         pass
 
     # TODO: Implement the {port} port interface methods
@@ -125,12 +143,6 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hexdag.plugin]
-name = "{name.replace("_adapter", "")}"
-module = "hexdag_plugins.{name}"
-port = "{port}"
-description = "{class_name} for hexDAG"
-
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -154,27 +166,32 @@ A hexDAG plugin that provides {name.replace("_", " ")} functionality.
 pip install -e hexdag_plugins/{name}/
 ```
 
-## Configuration
-
-Add to your hexDAG configuration:
-
-```toml
-# In hexdag.toml or pyproject.toml
-[tool.hexdag]
-plugins = [
-    "hexdag_plugins.{name}",
-]
-```
-
-## Usage
+## Usage in YAML Pipelines
 
 The {class_name} implements the `{port}` port interface.
 
-```python
-from hexdag.core.registry import registry
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: my-pipeline
+spec:
+  ports:
+    {port}:
+      adapter: hexdag_plugins.{name}.{class_name}
+      config:
+        # your config here
 
-# After bootstrap
-adapter = registry.get("{name.replace("_adapter", "")}", namespace="plugin")
+  nodes:
+    # your nodes here
+```
+
+## Usage in Python
+
+```python
+from hexdag_plugins.{name} import {class_name}
+
+adapter = {class_name}()
 ```
 
 ## Development

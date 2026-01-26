@@ -3,16 +3,10 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from hexdag.core.registry.decorators import port
-
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-@port(
-    name="memory",
-    namespace="core",
-)
 @runtime_checkable
 class Memory(Protocol):
     """Protocol for long-term memory storage and retrieval.

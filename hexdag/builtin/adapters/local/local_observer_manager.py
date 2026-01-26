@@ -30,18 +30,16 @@ from hexdag.core.orchestration.events.decorators import (
     EventTypesInput,
     normalize_event_types,
 )
-from hexdag.core.ports.observer_manager import (
-    AsyncObserverFunc,
-    Observer,
-    ObserverFunc,
-    ObserverManagerPort,
-)
-from hexdag.core.registry import adapter
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Sequence
 
     from hexdag.core.orchestration.events.events import Event
+    from hexdag.core.ports.observer_manager import (
+        AsyncObserverFunc,
+        Observer,
+        ObserverFunc,
+    )
 
 LOGGER = logging.getLogger(__name__)
 
@@ -116,7 +114,6 @@ class ObserverRegistrationConfig(BaseModel):
         return normalize_event_types(value)
 
 
-@adapter(implements_port=ObserverManagerPort, namespace="core")
 class LocalObserverManager:
     """Local standalone implementation of observer manager.
 

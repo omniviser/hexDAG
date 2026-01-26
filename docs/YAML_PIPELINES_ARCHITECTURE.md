@@ -197,18 +197,63 @@ Features:
 
 #### **4. Jinja2 Templating**
 
+The TemplatePlugin provides Jinja2 templating with intelligent context-aware rendering:
+
+**Build-time Templating** (YAML-level configuration):
 ```yaml
-metadata:
-  model: gpt-4
 spec:
+  variables:
+    model_name: gpt-4
+    node_prefix: analyzer
   nodes:
     - kind: llm_node
       metadata:
-        name: llm
+        name: "{{ spec.variables.node_prefix }}_llm"  # Rendered at build time
       spec:
-        model: "{{ metadata.model }}"  # References YAML context
-        prompt_template: "Process: {{input}}"
+        model: "{{ spec.variables.model_name }}"      # Rendered at build time
+        template: "Analyze: {{input}}"                 # Preserved for runtime
 ```
+
+**Runtime Templating** (node execution):
+```yaml
+spec:
+  nodes:
+    - kind: prompt_node
+      metadata:
+        name: prepare_data
+      spec:
+        template: "Data: {{input}}"  # Rendered at runtime with actual input
+
+    - kind: llm_node
+      metadata:
+        name: analyzer
+      spec:
+        # This template is preserved and rendered at runtime with dependency outputs
+        template: "Analyze this: {{prepare_data.text}}"
+        dependencies: [prepare_data]
+```
+
+**Template Rendering Strategy:**
+
+- **Metadata fields**: Rendered at build time using YAML config context
+  - Example: `name: "{{ spec.variables.node_name }}"` → Resolves to static node name
+
+- **Node spec fields**: Preserved for runtime rendering with execution context
+  - Example: `template: "{{dependency.output}}"` → Rendered when node executes
+  - Allows templates to access outputs from dependency nodes
+
+- **Pipeline outputs**: Preserved for runtime rendering after execution
+  - Example: `outputs: {result: "{{analyzer.analysis}}"}` → Rendered after nodes complete
+  - Allows mapping node results to pipeline outputs
+
+- **Pipeline spec fields**: Rendered at build time (except node specs and outputs)
+  - Example: `variables`, `ports`, `policies` support templating
+
+This two-phase approach enables:
+- ✅ Dynamic pipeline configuration from environment/config at build time
+- ✅ Dynamic prompt generation from dependency outputs at runtime
+- ✅ Dynamic output mapping from node execution results
+- ✅ Clean separation between configuration and execution concerns
 
 #### **5. Macro System**
 

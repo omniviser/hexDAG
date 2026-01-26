@@ -8,17 +8,11 @@ from typing import Any
 
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.database import DatabasePort
-from hexdag.core.registry.decorators import adapter
 from hexdag.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
 
 
-@adapter(
-    name="sqlite_memory",
-    implements_port="memory",
-    description="SQLite-backed persistent memory storage using key-value table",
-)
 class SQLiteMemoryAdapter:
     """Memory adapter backed by SQLite database.
 

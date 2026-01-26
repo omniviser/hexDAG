@@ -26,7 +26,6 @@ from hexdag.core.orchestration.policies.models import (
     SubscriberType,
 )
 from hexdag.core.ports.policy_manager import Policy, PolicyManagerPort
-from hexdag.core.registry import adapter
 
 PolicyFunc = Callable[..., PolicyResponse]
 AsyncPolicyFunc = Callable[..., Awaitable[PolicyResponse]]
@@ -169,7 +168,6 @@ class FunctionPolicy(Policy):
         return result
 
 
-@adapter(implements_port=PolicyManagerPort, name="local_policy_manager")
 class LocalPolicyManager(PolicyManagerPort):
     """Local policy manager using WeakSet and heapq for efficient management.
 

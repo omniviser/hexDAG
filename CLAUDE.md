@@ -526,6 +526,88 @@ adapter = OpenAIAdapter()  # ✅ api_key resolved
 adapter = OpenAIAdapter(api_key="explicit-key")  # ✅ Uses explicit value
 ```
 
+### Deferred Secret Resolution (YAML + KeyVault)
+
+**New in v0.2:** hexDAG now supports **deferred secret resolution** for KeyVault/SecretPort workflows. Secret-like environment variables in YAML are preserved at build-time and resolved at runtime.
+
+#### Secret Patterns (Deferred to Runtime)
+
+The following patterns are automatically detected and deferred:
+- `*_API_KEY` - API keys (e.g., `OPENAI_API_KEY`)
+- `*_SECRET` - Generic secrets (e.g., `DB_SECRET`)
+- `*_TOKEN` - Authentication tokens (e.g., `AUTH_TOKEN`)
+- `*_PASSWORD` - Passwords (e.g., `DB_PASSWORD`)
+- `*_CREDENTIAL` - Credentials (e.g., `SERVICE_CREDENTIAL`)
+- `SECRET_*` - Secrets with prefix (e.g., `SECRET_KEY`)
+
+#### Usage Example
+
+**YAML Pipeline:**
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: production-pipeline
+spec:
+  ports:
+    llm:
+      adapter: openai
+      config:
+        api_key: ${OPENAI_API_KEY}  # ✅ Deferred to runtime
+        model: ${MODEL}              # ✅ Resolved at build-time (non-secret)
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: analyzer
+      spec:
+        prompt_template: "Analyze: {{input}}"
+```
+
+**Build Without Secrets:**
+```python
+# CI/CD environment - no secrets present
+graph, config = YamlPipelineBuilder().build_from_yaml_file("pipeline.yaml")
+# ✅ Builds successfully - secrets deferred
+```
+
+**Runtime Resolution (Production):**
+```python
+# Production - secrets from KeyVault
+orchestrator = Orchestrator(
+    secret_port=KeyVaultAdapter(...),  # Loads secrets into memory
+    memory=InMemoryMemory(),
+)
+await orchestrator.run(graph, ...)  # ✅ Secrets resolved from memory
+```
+
+**Runtime Resolution (Local Dev):**
+```python
+# Local dev - secrets from environment
+os.environ["OPENAI_API_KEY"] = "sk-..."
+os.environ["MODEL"] = "gpt-4"
+
+graph, config = YamlPipelineBuilder().build_from_yaml_file("pipeline.yaml")
+orchestrator = Orchestrator()
+await orchestrator.run(graph, ...)  # ✅ Secrets resolved from environment
+```
+
+#### Benefits
+
+1. **Build Without Secrets** - Parse/validate YAML in CI/CD without secrets present
+2. **KeyVault Support** - Runtime injection via SecretPort → Memory
+3. **Environment Separation** - Different secrets for dev/staging/prod
+4. **Backward Compatible** - Non-secret variables resolved at build-time (existing behavior)
+5. **Opt-out Available** - Disable with `defer_secrets=False` if needed
+
+#### Legacy Behavior
+
+To restore legacy behavior (all variables resolved at build-time):
+```python
+builder = YamlPipelineBuilder()
+# Disable secret deferral for specific plugin
+builder.preprocess_plugins[1] = EnvironmentVariablePlugin(defer_secrets=False)
+```
+
 ### Benefits of the Simplified Pattern
 
 1. **70% Less Code** - From 13 lines to 4 lines per adapter

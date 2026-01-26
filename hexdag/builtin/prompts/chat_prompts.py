@@ -12,14 +12,8 @@ from hexdag.builtin.prompts.base import (
     ChatPromptTemplate,
     FewShotPromptTemplate,
 )
-from hexdag.core.registry import prompt
 
 
-@prompt(
-    name="chat_qa",
-    namespace="core",
-    description="Question-answering chat template with system message",
-)
 class ChatQAPrompt(ChatPromptTemplate):
     """Chat template for question-answering tasks.
 
@@ -61,11 +55,6 @@ class ChatQAPrompt(ChatPromptTemplate):
         )
 
 
-@prompt(
-    name="chat_analysis",
-    namespace="core",
-    description="Analysis chat template for structured reasoning",
-)
 class ChatAnalysisPrompt(ChatPromptTemplate):
     """Chat template for analytical tasks.
 
@@ -90,11 +79,6 @@ class ChatAnalysisPrompt(ChatPromptTemplate):
         )
 
 
-@prompt(
-    name="chat_conversational",
-    namespace="core",
-    description="Conversational chat template with history support",
-)
 class ChatConversationalPrompt(ChatPromptTemplate):
     """Conversational chat template with conversation history.
 
@@ -122,11 +106,6 @@ class ChatConversationalPrompt(ChatPromptTemplate):
         )
 
 
-@prompt(
-    name="fewshot_classification",
-    namespace="core",
-    description="Few-shot template for classification tasks",
-)
 class FewShotClassificationPrompt(FewShotPromptTemplate):
     """Few-shot template for classification tasks.
 
@@ -190,11 +169,6 @@ class FewShotClassificationPrompt(FewShotPromptTemplate):
         )
 
 
-@prompt(
-    name="fewshot_extraction",
-    namespace="core",
-    description="Few-shot template for information extraction",
-)
 class FewShotExtractionPrompt(FewShotPromptTemplate):
     """Few-shot template for extracting structured information.
 
@@ -234,11 +208,6 @@ class FewShotExtractionPrompt(FewShotPromptTemplate):
         )
 
 
-@prompt(
-    name="chat_fewshot_qa",
-    namespace="core",
-    description="Chat template with few-shot examples for Q&A",
-)
 class ChatFewShotQAPrompt(ChatFewShotTemplate):
     """Chat template with few-shot examples for question answering.
 
@@ -290,32 +259,20 @@ class ChatFewShotQAPrompt(ChatFewShotTemplate):
 def create_chat_prompt(
     system_message: str,
     human_message: str,
-    name: str | None = None,
-    namespace: str = "user",
 ) -> type[ChatPromptTemplate]:
-    """Factory for creating custom registered chat prompts.
+    """Factory for creating custom chat prompts.
 
     Examples
     --------
         MyCustomPrompt = create_chat_prompt(
             system_message="You are a {{role}}",
             human_message="{{task}}",
-            name="my_custom_chat",
-            namespace="myapp"
         )
-
-        # Now usable in YAML as: myapp:my_custom_chat
     """
 
     class CustomChatPrompt(ChatPromptTemplate):
         def __init__(self) -> None:
             super().__init__(system_message=system_message, human_message=human_message)
-
-    # Register if name provided
-    if name:
-        return prompt(name=name, namespace=namespace, description="Custom chat prompt")(
-            CustomChatPrompt
-        )
 
     return CustomChatPrompt
 
@@ -324,11 +281,9 @@ def create_chat_prompt(
 def create_fewshot_prompt(
     template: str,
     examples: list[dict[str, Any]],
-    name: str | None = None,
-    namespace: str = "user",
     format_example: Callable[[dict[str, Any]], str] | None = None,
 ) -> type[FewShotPromptTemplate]:
-    """Factory for creating custom registered few-shot prompts.
+    """Factory for creating custom few-shot prompts.
 
     Examples
     --------
@@ -338,18 +293,11 @@ def create_fewshot_prompt(
                 {"input": "Hello", "output": "Hola"},
                 {"input": "Goodbye", "output": "Adiós"}
             ],
-            name="translation_prompt",
-            namespace="myapp"
         )
     """
 
     class CustomFewShotPrompt(FewShotPromptTemplate):
         def __init__(self) -> None:
             super().__init__(template=template, examples=examples, format_example=format_example)
-
-    if name:
-        return prompt(name=name, namespace=namespace, description="Custom few-shot prompt")(
-            CustomFewShotPrompt
-        )
 
     return CustomFewShotPrompt

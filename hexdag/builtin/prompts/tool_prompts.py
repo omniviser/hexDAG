@@ -6,12 +6,8 @@ with other prompts using the builder pattern.
 
 from hexdag.builtin.nodes.tool_utils import ToolCallFormat
 from hexdag.core.orchestration.prompt.template import PromptTemplate
-from hexdag.core.registry import prompt
 
 
-@prompt(
-    name="tool_usage_function", namespace="core", description="Function-style tool calling prompt"
-)
 class FunctionToolPrompt(PromptTemplate):
     """Tool usage prompt for function-style tool calls.
 
@@ -54,7 +50,6 @@ INVOKE_TOOL: tool_end(result='Analysis complete', confidence='high')
         super().__init__(template, input_vars=["tools"])
 
 
-@prompt(name="tool_usage_json", namespace="core", description="JSON-style tool calling prompt")
 class JsonToolPrompt(PromptTemplate):
     """Tool usage prompt for JSON-style tool calls.
 
@@ -95,11 +90,6 @@ INVOKE_TOOL: {"tool": "tool_end", "params": {"result": "Analysis complete", "con
         super().__init__(template, input_vars=["tools"])
 
 
-@prompt(
-    name="tool_usage_mixed",
-    namespace="core",
-    description="Mixed-style tool calling prompt (function or JSON)",
-)
 class MixedToolPrompt(PromptTemplate):
     """Tool usage prompt supporting both function and JSON styles.
 

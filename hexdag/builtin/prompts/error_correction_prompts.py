@@ -5,14 +5,8 @@ They provide clear instructions on what went wrong and how to fix it.
 """
 
 from hexdag.core.orchestration.prompt.template import PromptTemplate
-from hexdag.core.registry import prompt
 
 
-@prompt(
-    name="json_parse_error",
-    namespace="core",
-    description="Corrective prompt for JSON parse errors",
-)
 class JsonParseErrorPrompt(PromptTemplate):
     """Prompt to help fix JSON parsing errors.
 
@@ -79,11 +73,6 @@ Please respond ONLY with valid JSON. No explanations, no markdown formatting.
         super().__init__(template)
 
 
-@prompt(
-    name="json_validation_error",
-    namespace="core",
-    description="Corrective prompt for JSON schema validation errors",
-)
 class JsonValidationErrorPrompt(PromptTemplate):
     """Prompt to fix schema validation errors.
 
@@ -158,11 +147,6 @@ Please respond with valid JSON that matches the schema exactly.
         super().__init__(template)
 
 
-@prompt(
-    name="safe_json_instructions",
-    namespace="core",
-    description="Proactive JSON formatting instructions to prevent errors",
-)
 class SafeJsonInstructionsPrompt(PromptTemplate):
     """Proactive JSON instructions to prevent common errors.
 
@@ -208,11 +192,6 @@ Respond with ONLY the JSON object. No explanations before or after.
         super().__init__(template)
 
 
-@prompt(
-    name="markdown_json_error",
-    namespace="core",
-    description="Corrective prompt when JSON is wrapped in markdown",
-)
 class MarkdownJsonErrorPrompt(PromptTemplate):
     """Prompt to fix JSON wrapped in markdown code blocks.
 
@@ -259,11 +238,6 @@ Please provide ONLY the JSON object, nothing else.
         super().__init__(template)
 
 
-@prompt(
-    name="generic_parse_error",
-    namespace="core",
-    description="Generic error correction prompt for parse failures",
-)
 class GenericParseErrorPrompt(PromptTemplate):
     """Generic parse error correction prompt.
 

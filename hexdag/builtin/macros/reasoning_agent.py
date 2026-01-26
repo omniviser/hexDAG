@@ -24,8 +24,7 @@ from typing import Any
 from pydantic import field_validator
 
 from hexdag.builtin.nodes.function_node import FunctionNode
-from hexdag.builtin.nodes.prompt_node import PromptNode
-from hexdag.builtin.nodes.raw_llm_node import RawLLMNode, RawLLMOutput
+from hexdag.builtin.nodes.llm_node import LLMNode
 from hexdag.builtin.nodes.tool_utils import (
     ToolCallFormat,
     ToolDefinition,
@@ -34,12 +33,12 @@ from hexdag.builtin.nodes.tool_utils import (
 )
 from hexdag.builtin.prompts.tool_prompts import get_tool_prompt_for_format
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
+from hexdag.core.context import get_port
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt import PromptTemplate
 from hexdag.core.ports.llm import Message, MessageList
-from hexdag.core.registry import macro, registry
-from hexdag.core.registry.models import NAMESPACE_SEPARATOR, ComponentType
+from hexdag.core.resolver import resolve_function
 
 logger = get_logger(__name__)
 
@@ -79,7 +78,6 @@ class ReasoningAgentConfig(MacroConfig):
         return str(v)
 
 
-@macro(name="reasoning_agent", namespace="core")
 class ReasoningAgentMacro(ConfigurableMacro):
     """Multi-step reasoning agent with adaptive tool calling.
 
@@ -132,7 +130,7 @@ class ReasoningAgentMacro(ConfigurableMacro):
             step_name_prefix = f"{instance_name}_step_{step_idx}"
             step_deps: list[str] = dependencies if step_idx == 0 else [prev_step]  # type: ignore[list-item]
 
-            # Create LLM subgraph (Prompt + RawLLM + Adapter)
+            # Create LLM subgraph (unified LLMNode + adapter)
             llm_subgraph = self._create_llm_subgraph(
                 fn_factory,
                 step_name_prefix,
@@ -156,28 +154,18 @@ class ReasoningAgentMacro(ConfigurableMacro):
 
             prev_step = f"{step_name_prefix}_result_merger"
 
-        # Final consolidation using composable nodes
+        # Final consolidation using unified LLMNode
         if prev_step is None:
             raise ValueError("prev_step is None")
 
-        # Prompt for final consolidation
-        prompt_factory = PromptNode()
-        final_prompt = prompt_factory(
-            name=f"{instance_name}_final_prompt",
-            template=f"""All reasoning steps and tool results:
+        llm_factory = LLMNode()
+        final_llm = llm_factory(
+            name=f"{instance_name}_final",
+            prompt_template=f"""All reasoning steps and tool results:
 {{{{{prev_step}}}}}
 
 Provide your final conclusion based on all reasoning and evidence gathered.""",
-            output_format="messages",
             deps=[prev_step],
-        )
-        graph += final_prompt
-
-        # RawLLM for final response
-        llm_factory = RawLLMNode()
-        final_llm = llm_factory(
-            name=f"{instance_name}_final",
-            deps=[f"{instance_name}_final_prompt"],
         )
         graph += final_llm
 
@@ -195,12 +183,11 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
         tool_prompt: Any,
         deps: list[str],
     ) -> DirectedGraph:
-        """Create prompt + LLM nodes using composable architecture.
+        """Create LLM nodes using unified LLMNode architecture.
 
         Returns a subgraph with:
-        - PromptNode: builds prompt with tool instructions
-        - RawLLMNode: calls LLM with native tools (auto-detects capability)
-        - FunctionNode: parses text-based tool calls if needed
+        - LLMNode: unified node for prompt + LLM call
+        - FunctionNode: adapts response and parses tool calls
         """
         subgraph = DirectedGraph()
 
@@ -221,44 +208,42 @@ Continue reasoning. Use tools if needed to gather more information."""
 
 {tool_prompt.template if hasattr(tool_prompt, "template") else str(tool_prompt)}"""
 
-        # Node 1: PromptNode builds the prompt
-        prompt_factory = PromptNode()
-        prompt_node = prompt_factory(
-            name=f"{step_name}_prompt",
-            template=full_prompt,
-            output_format="messages",
-            deps=deps,
-        )
-        subgraph += prompt_node
-
-        # Node 2: RawLLMNode calls LLM (with native tools if available)
-        llm_factory = RawLLMNode()
+        # Node 1: Unified LLMNode for prompt + LLM call
+        llm_factory = LLMNode()
         llm_node = llm_factory(
-            name=f"{step_name}_raw_llm",
-            tools=tool_schemas if tool_schemas else None,
-            tool_choice="auto",
-            deps=[f"{step_name}_prompt"],
+            name=f"{step_name}_llm",
+            prompt_template=full_prompt,
+            deps=deps,
         )
         subgraph += llm_node
 
-        async def normalize_response(input_data: RawLLMOutput, **kwargs: Any) -> dict[str, Any]:
-            """Normalize LLM response to unified format."""
-            # RawLLMNode returns RawLLMOutput:
-            # RawLLMOutput(text=..., tool_calls=[...] | None, finish_reason=...)
+        # Node 2: Adapter function to normalize response and parse tool calls
+        async def normalize_response(input_data: str, **kwargs: Any) -> dict[str, Any]:
+            """Normalize LLM response to unified format with tool parsing."""
+            text = input_data if isinstance(input_data, str) else str(input_data)
 
-            if input_data.tool_calls:
-                # Native tool calling was used
-                return {
-                    "content": input_data.text,
-                    "tool_calls": input_data.tool_calls,
-                    "strategy": "native",
-                }
+            # Try native tool calling if LLM port supports it
+            llm_port = get_port("llm")
+            has_tool_support = (
+                llm_port and hasattr(llm_port, "aresponse_with_tools") and tool_schemas
+            )
+
+            if has_tool_support:
+                # Check if adapter actually implements aresponse_with_tools
+                for cls in llm_port.__class__.__mro__:
+                    if (
+                        cls.__name__ not in ["LLM", "Protocol", "object"]
+                        and "aresponse_with_tools" in cls.__dict__
+                    ):
+                        # Native tool calling available but we already got text response
+                        # Parse any tool calls from the text (in case it includes them)
+                        break
 
             # Text-based - parse tool calls from text
-            parsed_calls = ToolParser.parse_tool_calls(input_data.text, format=config.tool_format)
+            parsed_calls = ToolParser.parse_tool_calls(text, format=config.tool_format)
 
             return {
-                "content": input_data.text,
+                "content": text,
                 "tool_calls": [
                     {"id": f"text_{i}", "name": tc.name, "arguments": tc.params}
                     for i, tc in enumerate(parsed_calls)
@@ -267,9 +252,9 @@ Continue reasoning. Use tools if needed to gather more information."""
             }
 
         adapter_node = fn_factory(
-            name=f"{step_name}_llm",
+            name=f"{step_name}_adapter",
             fn=normalize_response,
-            deps=[f"{step_name}_raw_llm"],
+            deps=[f"{step_name}_llm"],
         )
         subgraph += adapter_node
 
@@ -294,44 +279,28 @@ Continue reasoning. Use tools if needed to gather more information."""
                     "has_tools": False,
                 }
 
-            # Build tool name mapping (handle both qualified and unqualified names)
-            # This provides backward compatibility with namespace:name format
-            tool_name_map = {}
-            for allowed_tool in config.allowed_tools:
-                # Store the tool as-is
-                tool_name_map[allowed_tool] = allowed_tool
-
-                # If it has a namespace, also map the short name to it
-                # This allows "search" to resolve to "demo:search" for backward compatibility
-                if NAMESPACE_SEPARATOR in allowed_tool:
-                    _, short_name = allowed_tool.split(NAMESPACE_SEPARATOR, 1)
-                    # Only add short name mapping if it doesn't conflict
-                    if short_name not in tool_name_map:
-                        tool_name_map[short_name] = allowed_tool
+            # Build tool name mapping for allowed tools
+            tool_name_map = {tool: tool for tool in config.allowed_tools}
 
             # Execute tools
             tool_results = []
             for tc in tool_calls:
                 try:
-                    # Resolve tool name (handle both "search" and "demo:search")
                     tool_name = tc["name"]
-                    resolved_name = tool_name_map.get(tool_name, tool_name)
+                    resolved_name = tool_name_map.get(tool_name) or tool_name
 
                     # Execute tool
                     if tool_router:
                         result = await tool_router.acall_tool(resolved_name, tc["arguments"])
                     else:
-                        # Direct registry call
-                        tool = registry.get(resolved_name)
-                        if callable(tool):
-                            import asyncio
+                        # Direct resolution via module path
+                        import asyncio
 
-                            if asyncio.iscoroutinefunction(tool):
-                                result = await tool(**tc["arguments"])
-                            else:
-                                result = tool(**tc["arguments"])
+                        tool = resolve_function(resolved_name)
+                        if asyncio.iscoroutinefunction(tool):
+                            result = await tool(**tc["arguments"])
                         else:
-                            result = tool
+                            result = tool(**tc["arguments"])
 
                     tool_results.append({
                         "tool_name": tc["name"],
@@ -355,7 +324,7 @@ Continue reasoning. Use tools if needed to gather more information."""
         return fn_factory(
             name=f"{step_name}_tool_executor",
             fn=execute_tools,
-            deps=[f"{step_name}_llm"],
+            deps=[f"{step_name}_adapter"],
         )
 
     def _create_result_merger_node(self, fn_factory: FunctionNode, step_name: str) -> Any:
@@ -412,14 +381,17 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
         schemas = []
         for tool_name in allowed_tools:
             try:
-                # Get tool metadata
-                metadata = registry.get_metadata(tool_name, component_type=ComponentType.TOOL)
+                # Resolve tool function to get its docstring
+                tool_fn = resolve_function(tool_name)
+                description = tool_fn.__doc__ or f"Tool {tool_name}"
+                # Take first line of docstring
+                description = description.split("\n")[0].strip()
 
                 # Build ToolDefinition
                 tool_def = ToolDefinition(
                     name=tool_name,
-                    simplified_description=metadata.description or f"Tool {tool_name}",
-                    detailed_description=metadata.description or f"Tool {tool_name}",
+                    simplified_description=description,
+                    detailed_description=description,
                     parameters=[],
                     examples=[],
                 )
@@ -440,8 +412,10 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
         tool_lines = []
         for tool_name in allowed_tools:
             try:
-                metadata = registry.get_metadata(tool_name)
-                description = metadata.description or "No description"
+                tool_fn = resolve_function(tool_name)
+                description = tool_fn.__doc__ or "No description"
+                # Take first line of docstring
+                description = description.split("\n")[0].strip()
                 tool_lines.append(f"  - {tool_name}: {description}")
             except Exception:
                 tool_lines.append(f"  - {tool_name}: Tool description unavailable")

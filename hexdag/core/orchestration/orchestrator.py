@@ -30,9 +30,12 @@ from hexdag.core.domain.dag import DirectedGraph, DirectedGraphError
 from hexdag.core.exceptions import OrchestratorError
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration import NodeExecutionContext
-from hexdag.core.orchestration.components import (
-    InputMapper,
-    PolicyCoordinator,
+from hexdag.core.orchestration.components import ExecutionCoordinator
+from hexdag.core.orchestration.components.lifecycle_manager import (
+    HookConfig,
+    LifecycleManager,
+    PipelineStatus,
+    PostDagHookConfig,
 )
 from hexdag.core.orchestration.constants import (
     EXECUTOR_CONTEXT_GRAPH,
@@ -40,13 +43,6 @@ from hexdag.core.orchestration.constants import (
     EXECUTOR_CONTEXT_NODE_RESULTS,
 )
 from hexdag.core.orchestration.events import WaveCompleted, WaveStarted
-from hexdag.core.orchestration.hook_context import PipelineStatus
-from hexdag.core.orchestration.hooks import (
-    HookConfig,
-    PostDagHookConfig,
-    PostDagHookManager,
-    PreDagHookManager,
-)
 from hexdag.core.orchestration.models import PortsConfiguration
 from hexdag.core.orchestration.port_wrappers import wrap_ports_with_observability
 from hexdag.core.ports.executor import ExecutionTask, ExecutorPort
@@ -250,17 +246,15 @@ class Orchestrator:
         # Validate known port types
         self._validate_port_types(self.ports)
 
-        self._policy_coordinator = PolicyCoordinator()
-        self._input_mapper = InputMapper()
-
-        self._pre_hook_manager = PreDagHookManager(pre_hook_config)
-        self._post_hook_manager = PostDagHookManager(post_hook_config, self._pre_hook_manager)
+        # Unified managers (consolidate 11 managers into 2 unified managers)
+        self._execution_coordinator = ExecutionCoordinator()
+        self._lifecycle_manager = LifecycleManager(pre_hook_config, post_hook_config)
 
     async def _notify_observer(
         self, observer_manager: ObserverManagerPort | None, event: Any
     ) -> None:
-        """Notify observer if it exists (delegates to PolicyCoordinator)."""
-        await self._policy_coordinator.notify_observer(observer_manager, event)
+        """Notify observer if it exists (delegates to ExecutionCoordinator)."""
+        await self._execution_coordinator.notify_observer(observer_manager, event)
 
     async def _evaluate_policy(
         self,
@@ -271,14 +265,14 @@ class Orchestrator:
         wave_index: int | None = None,
         attempt: int = 1,
     ) -> PolicyResponse:
-        """Evaluate policy and create context (delegates to PolicyCoordinator)."""
-        return await self._policy_coordinator.evaluate_policy(
+        """Evaluate policy and create context (delegates to ExecutionCoordinator)."""
+        return await self._execution_coordinator.evaluate_policy(
             policy_manager, event, context, node_id, wave_index, attempt
         )
 
     def _check_policy_signal(self, response: PolicyResponse, context: str) -> None:
-        """Check policy signal and raise error if not PROCEED (delegates to PolicyCoordinator)."""
-        self._policy_coordinator.check_policy_signal(response, context)
+        """Check policy signal and raise error if not PROCEED."""
+        self._execution_coordinator.check_policy_signal(response, context)
 
     def _validate_port_types(self, ports: dict[str, Any]) -> None:
         """Validate that orchestrator ports match expected types.
@@ -333,10 +327,10 @@ class Orchestrator:
             # Try to get required_ports from the function/method
             if hasattr(fn, "_hexdag_required_ports"):
                 required_ports = getattr(fn, "_hexdag_required_ports", [])
-            # Note: type ignore needed for pyright - hasattr doesn't narrow union types for it
-            elif hasattr(fn, "__self__") and hasattr(fn.__self__, "__class__"):  # type: ignore[unused-ignore]
+            # Check if bound method - use getattr to avoid type checker issues
+            elif (self_obj := getattr(fn, "__self__", None)) is not None:
                 # It's a bound method - check the class
-                node_class = fn.__self__.__class__  # type: ignore[unused-ignore]
+                node_class = self_obj.__class__
                 required_ports = getattr(node_class, "_hexdag_required_ports", [])
 
             # Check each required port
@@ -532,8 +526,8 @@ class Orchestrator:
             set_current_graph(graph)
             set_node_results(node_results)
 
-            # PRE-DAG HOOKS: Execute before pipeline starts
-            pre_hook_results = await self._pre_hook_manager.execute_hooks(
+            # PRE-DAG LIFECYCLE: Execute before pipeline starts
+            pre_hook_results = await self._lifecycle_manager.pre_execute(
                 context=context,
                 pipeline_name=pipeline_name,
             )
@@ -614,9 +608,9 @@ class Orchestrator:
                     )
                     await self._notify_observer(observer_manager, pipeline_completed)
 
-                # POST-DAG HOOKS: Always execute for cleanup (even on failure)
+                # POST-DAG LIFECYCLE: Always execute for cleanup (even on failure)
                 try:
-                    post_hook_results = await self._post_hook_manager.execute_hooks(
+                    post_hook_results = await self._lifecycle_manager.post_execute(
                         context=context,
                         pipeline_name=pipeline_name,
                         pipeline_status=pipeline_status.value,
@@ -628,7 +622,7 @@ class Orchestrator:
                     # Log all hook errors but don't fail the pipeline
                     # (hooks are for cleanup/observability, not critical path)
                     logger.error(
-                        f"Post-DAG hooks failed: {post_hook_error}",
+                        f"Post-DAG lifecycle failed: {post_hook_error}",
                         exc_info=True,
                     )
 

@@ -1,23 +1,20 @@
-"""LLM Macro - Composable LLM workflow with prompt, LLM call, and parsing.
+"""LLM Macro - Structured LLM workflow with prompt and optional parsing.
 
-This macro combines PromptNode + RawLLMNode + ParserNode into a single
-workflow for structured LLM interactions.
+This macro provides a convenient way to use the unified LLMNode with
+structured output parsing in a declarative YAML-friendly format.
 
-Architecture:
-    PromptNode → RawLLMNode → ParserNode (optional)
+Note: With the unified LLMNode, this macro is now a thin wrapper.
+Consider using LLMNode directly for simpler use cases.
 """
 
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from hexdag.builtin.nodes.parser_node import ParserNode
-from hexdag.builtin.nodes.prompt_node import PromptNode
-from hexdag.builtin.nodes.raw_llm_node import RawLLMNode
+from hexdag.builtin.nodes.llm_node import LLMNode
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.orchestration.prompt import PromptInput
-from hexdag.core.registry import macro
 from hexdag.core.utils.schema_conversion import normalize_schema
 
 
@@ -30,24 +27,18 @@ class LLMMacroConfig(MacroConfig):
         Prompt template for LLM
     output_schema : dict[str, type] | type[BaseModel] | None
         Expected output schema (if None, returns raw text)
-    output_format : str
-        Prompt output format: "messages" or "string"
     system_prompt : str | None
         Optional system prompt
     parse_strategy : str
         Parsing strategy: "json", "json_in_markdown", "yaml"
-    strict_parsing : bool
-        If True, raise errors on parse failure
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     template: PromptInput
     output_schema: dict[str, type] | type[BaseModel] | None = None
-    output_format: str = "messages"
     system_prompt: str | None = None
     parse_strategy: str = "json"
-    strict_parsing: bool = False
 
     @field_validator("output_schema", mode="before")
     @classmethod
@@ -59,24 +50,14 @@ class LLMMacroConfig(MacroConfig):
         return normalize_schema(v)
 
 
-@macro(
-    name="llm_workflow",
-    namespace="core",
-    description="LLM workflow with prompt building, API call, and parsing",
-)
 class LLMMacro(ConfigurableMacro):
-    """LLM macro that composes PromptNode + RawLLMNode + ParserNode.
+    """LLM macro that wraps the unified LLMNode.
 
-    This macro replaces the monolithic LLMNode with a composable architecture:
-    - PromptNode builds the prompt from templates
-    - RawLLMNode calls the LLM API
-    - ParserNode parses the output (optional)
+    This macro provides a YAML-friendly interface for structured LLM interactions.
+    It uses the unified LLMNode which handles prompt templating, API calls, and
+    optional JSON parsing in a single node.
 
-    Benefits:
-    1. **Separation of Concerns** - Each node has one responsibility
-    2. **Composable** - Mix and match components
-    3. **Clear Errors** - Parser provides helpful error messages
-    4. **Type Safety** - Automatic schema validation
+    Note: For simple use cases, consider using LLMNode directly instead of this macro.
 
     Examples
     --------
@@ -137,7 +118,7 @@ class LLMMacro(ConfigurableMacro):
         inputs: dict[str, Any],
         dependencies: list[str],
     ) -> DirectedGraph:
-        """Expand macro into a DirectedGraph of nodes.
+        """Expand macro into a DirectedGraph with a single LLMNode.
 
         Args
         ----
@@ -148,41 +129,23 @@ class LLMMacro(ConfigurableMacro):
         Returns
         -------
         DirectedGraph
-            Graph containing PromptNode → RawLLMNode → (ParserNode)
+            Graph containing a single unified LLMNode
         """
         config: LLMMacroConfig = self.config  # type: ignore[assignment]
 
         graph = DirectedGraph()
 
-        # Node 1: PromptNode - builds the prompt
-        prompt_node_factory = PromptNode()
-        prompt_spec = prompt_node_factory(
-            name=f"{instance_name}_prompt",
-            template=config.template,
-            output_format=config.output_format,
+        # Create unified LLMNode
+        llm_node_factory = LLMNode()
+        llm_spec = llm_node_factory(
+            name=instance_name,
+            prompt_template=config.template,
+            output_schema=config.output_schema,
             system_prompt=config.system_prompt,
+            parse_json=config.output_schema is not None,
+            parse_strategy=config.parse_strategy,
             deps=dependencies,
         )
-        graph += prompt_spec
-
-        # Node 2: RawLLMNode - calls LLM API
-        llm_node_factory = RawLLMNode()
-        llm_spec = llm_node_factory(
-            name=f"{instance_name}_llm",
-            deps=[f"{instance_name}_prompt"],
-        )
         graph += llm_spec
-
-        # Node 3: ParserNode (optional) - parses structured output
-        if config.output_schema is not None:
-            parser_node_factory = ParserNode()
-            parser_spec = parser_node_factory(
-                name=f"{instance_name}_parser",
-                output_schema=config.output_schema,
-                strategy=config.parse_strategy,
-                strict=config.strict_parsing,
-                deps=[f"{instance_name}_llm"],
-            )
-            graph += parser_spec
 
         return graph

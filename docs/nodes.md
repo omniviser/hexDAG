@@ -124,11 +124,11 @@ Simple factory for creating function-based nodes with optional Pydantic validati
 
 ### `llm_node`
 
-Simple factory for creating LLM-based nodes with rich template support.
+Unified LLM node for prompt building, API calls, and optional parsing.
 
-    Inherits all common LLM functionality from BaseLLMNode. LLM nodes are highly dynamic -
-    templates and schemas are passed via __call__() parameters rather than static Config.
-    No Config class needed (follows YAGNI principle).
+    This is the primary LLM node in hexdag, providing an n8n-style unified interface
+    for all LLM interactions. It combines prompt templating, LLM API calls, and
+    optional structured output parsing in a single node.
 
 **Metadata:**
 

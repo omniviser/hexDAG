@@ -12,9 +12,9 @@ import os
 
 import pytest
 
-from hexdag.builtin.adapters.llm.anthropic_adapter import AnthropicAdapter
-from hexdag.builtin.adapters.llm.openai_adapter import OpenAIAdapter
+from hexdag.builtin.adapters.anthropic.anthropic_adapter import AnthropicAdapter
 from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
+from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
 from hexdag.builtin.adapters.secret.local_secret_adapter import LocalSecretAdapter
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig
@@ -262,7 +262,7 @@ async def test_anthropic_adapter_missing_api_key_raises():
     # Make sure env var is not set
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
-    with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
+    with pytest.raises(ValueError, match="api_key required"):
         AnthropicAdapter()
 
 
@@ -295,7 +295,7 @@ async def test_openai_adapter_missing_api_key_raises():
     """Test OpenAIAdapter raises when API key is missing."""
     os.environ.pop("OPENAI_API_KEY", None)
 
-    with pytest.raises(ValueError, match="Required secret 'api_key' not found"):
+    with pytest.raises(ValueError, match="api_key required"):
         OpenAIAdapter()
 
 

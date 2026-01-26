@@ -7,7 +7,6 @@ from typing import Any
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.events.events import NodeCompleted, NodeFailed, NodeStarted
 from hexdag.core.orchestration.policies.models import PolicyContext, PolicyResponse, PolicySignal
-from hexdag.core.registry.decorators import policy
 
 logger = get_logger(__name__)
 
@@ -24,7 +23,6 @@ class Retry:
     max_retries: int = 3
 
 
-@policy(name="retry", description="Retry failed operations up to a maximum number of attempts")
 class RetryPolicy:
     """Simple retry policy."""
 
@@ -65,10 +63,6 @@ class CircuitBreaker:
     failure_threshold: int = 5
 
 
-@policy(
-    name="circuit_breaker",
-    description="Fail fast after reaching failure threshold to prevent cascading failures",
-)
 class CircuitBreakerPolicy:
     """Simple circuit breaker."""
 
@@ -120,7 +114,6 @@ class Fallback:
     fallback_value: Any = None
 
 
-@policy(name="fallback", description="Provide fallback value when operations fail")
 class FallbackPolicy:
     """Simple fallback policy."""
 
@@ -162,7 +155,6 @@ class Timeout:
     timeout_seconds: float = 30.0
 
 
-@policy(name="timeout", description="Enforce time limits on node execution")
 class TimeoutPolicy:
     """Policy that enforces execution time limits.
 
@@ -239,7 +231,6 @@ class RateLimit:
     window_seconds: float = 60.0
 
 
-@policy(name="rate_limit", description="Enforce rate limits on node execution")
 class RateLimitPolicy:
     """Policy that enforces rate limiting on node execution.
 
@@ -321,7 +312,6 @@ class ConditionalSkip:
     # Will be passed as parameter
 
 
-@policy(name="conditional_skip", description="Skip nodes based on custom conditions")
 class ConditionalSkipPolicy:
     """Policy that skips nodes based on custom conditions.
 
@@ -392,7 +382,6 @@ class ResourceThrottle:
     resource_cost: int = 1
 
 
-@policy(name="resource_throttle", description="Throttle execution based on resource availability")
 class ResourceThrottlePolicy:
     """Policy that throttles execution based on simulated resource limits.
 
@@ -468,10 +457,6 @@ class ExponentialBackoff:
     max_delay_ms: float = 10000.0
 
 
-@policy(
-    name="exponential_backoff",
-    description="Retry with exponential backoff on failures",
-)
 class ExponentialBackoffPolicy:
     """Policy that implements exponential backoff retry strategy.
 

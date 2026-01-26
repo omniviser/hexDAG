@@ -10,14 +10,11 @@ from pydantic import BaseModel
 
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.protocols import is_schema_type
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 from .mapped_input import MappedInput
 
 
-@node(name="function_node", subtype=NodeSubtype.FUNCTION, namespace="core")
 class FunctionNode(BaseNodeFactory):
     """Simple factory for creating function-based nodes with optional Pydantic validation.
 

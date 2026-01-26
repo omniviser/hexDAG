@@ -6,7 +6,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:agent_node type",
+            "description": "Specification for agent_node type",
             "properties": {
                 "kind": {
                     "const": "agent_node",
@@ -105,7 +105,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:conditional_node type",
+            "description": "Specification for conditional_node type",
             "properties": {
                 "kind": {
                     "const": "conditional_node",
@@ -191,7 +191,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:function_node type",
+            "description": "Specification for function_node type",
             "properties": {
                 "kind": {
                     "const": "function_node",
@@ -285,7 +285,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:llm_node type",
+            "description": "Specification for llm_node type",
             "properties": {
                 "kind": {
                     "const": "llm_node",
@@ -312,48 +312,33 @@
                     "properties": {
                         "deps": {
                             "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
+                            "type": "string"
                         },
                         "output_schema": {
-                            "anyOf": [
-                                {
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null
+                            "default": null,
+                            "type": "string"
+                        },
+                        "parse_json": {
+                            "default": false,
+                            "type": "string"
+                        },
+                        "parse_strategy": {
+                            "default": "json",
+                            "type": "string"
+                        },
+                        "prompt_template": {
+                            "default": null,
+                            "type": "string"
+                        },
+                        "system_prompt": {
+                            "default": null,
+                            "type": "string"
                         },
                         "template": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ]
+                            "default": null,
+                            "type": "string"
                         }
                     },
-                    "required": [
-                        "template"
-                    ],
                     "type": "object"
                 }
             },
@@ -370,7 +355,7 @@
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:loop_node type",
+            "description": "Specification for loop_node type",
             "properties": {
                 "kind": {
                     "const": "loop_node",
@@ -420,256 +405,13 @@
             },
             "type": "object"
         },
-        "ParserNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for core:parser_node type",
-            "properties": {
-                "kind": {
-                    "const": "parser_node",
-                    "description": "Node type: parser_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "deps": {
-                            "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "output_schema": {
-                            "anyOf": [
-                                {
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ]
-                        },
-                        "strategy": {
-                            "default": "json",
-                            "type": "string"
-                        },
-                        "strict": {
-                            "default": true,
-                            "type": "boolean"
-                        }
-                    },
-                    "required": [
-                        "output_schema"
-                    ],
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
-        "PromptNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for core:prompt_node type",
-            "properties": {
-                "kind": {
-                    "const": "prompt_node",
-                    "description": "Node type: prompt_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "deps": {
-                            "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "output_format": {
-                            "default": "messages",
-                            "type": "string"
-                        },
-                        "prompt_args": {
-                            "default": null,
-                            "type": [
-                                "object",
-                                "null"
-                            ]
-                        },
-                        "prompt_ref": {
-                            "default": null,
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        },
-                        "system_prompt": {
-                            "default": null,
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        },
-                        "template": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null
-                        }
-                    },
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
-        "Raw_LlmNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for core:raw_llm_node type",
-            "properties": {
-                "kind": {
-                    "const": "raw_llm_node",
-                    "description": "Node type: raw_llm_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "deps": {
-                            "default": null,
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "tool_choice": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ],
-                            "default": "auto"
-                        },
-                        "tools": {
-                            "default": null,
-                            "items": {
-                                "type": "object"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        }
-                    },
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
         "Tool_CallNodeSpec": {
             "allOf": [
                 {
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for core:tool_call_node type",
+            "description": "Specification for tool_call_node type",
             "properties": {
                 "kind": {
                     "const": "tool_call_node",
@@ -737,7 +479,7 @@
         }
     },
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "description": "(auto-generated from core namespace)",
+    "description": "(auto-generated from builtin nodes)",
     "properties": {
         "apiVersion": {
             "default": "v1",
@@ -825,28 +567,19 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/$defs/ConditionalNodeSpec"
-                            },
-                            {
                                 "$ref": "#/$defs/FunctionNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/LlmNodeSpec"
                             },
                             {
+                                "$ref": "#/$defs/AgentNodeSpec"
+                            },
+                            {
                                 "$ref": "#/$defs/LoopNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/ParserNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/PromptNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/Raw_LlmNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/AgentNodeSpec"
+                                "$ref": "#/$defs/ConditionalNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/Tool_CallNodeSpec"
@@ -890,7 +623,7 @@
                         },
                         "type": "object"
                     },
-                    "description": "Port adapters configuration (LLM, database, memory, etc.)",
+                    "description": "Port adapters configuration (LLM, database, memory)",
                     "type": "object"
                 },
                 "type_ports": {

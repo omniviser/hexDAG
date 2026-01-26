@@ -4,10 +4,8 @@ import asyncio
 from typing import Any
 
 from hexdag.core.ports.database import DatabasePort
-from hexdag.core.registry import adapter
 
 
-@adapter(name="mock_database", implements_port="database", namespace="plugin")
 class MockDatabaseAdapter(DatabasePort):
     """Mock implementation of DatabasePort for testing and demos."""
 
