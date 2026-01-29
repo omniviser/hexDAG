@@ -1,159 +1,122 @@
-import { useEffect, useState } from 'react'
-import { Folder, FileText, ChevronRight, RefreshCw } from 'lucide-react'
-import { useStudioStore } from '../lib/store'
+import { useState, useEffect } from 'react'
+import { File, Folder, RefreshCw, ChevronRight, ChevronDown } from 'lucide-react'
 import { listFiles, readFile } from '../lib/api'
+import { useStudioStore } from '../lib/store'
 import type { FileInfo } from '../types'
 
 export default function FileBrowser() {
+  const [files, setFiles] = useState<FileInfo[]>([])
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const {
-    files,
-    setFiles,
-    currentFile,
-    setCurrentFile,
-    setYamlContent,
-    setValidation,
-    syncYamlToCanvas,
-    setIsDirty,
-  } = useStudioStore()
-
-  const loadFiles = async (path: string = '') => {
-    setIsLoading(true)
-    try {
-      const fileList = await listFiles(path)
-      if (path === '') {
-        setFiles(fileList)
-      }
-      return fileList
-    } catch (error) {
-      console.error('Failed to load files:', error)
-      return []
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const openFile = async (path: string) => {
-    try {
-      const data = await readFile(path)
-      setCurrentFile(path)
-      setYamlContent(data.content)
-      setIsDirty(false)
-      setValidation(null)
-      // Sync to canvas after a short delay
-      setTimeout(() => {
-        syncYamlToCanvas()
-      }, 100)
-    } catch (error) {
-      console.error('Failed to open file:', error)
-      alert(`Failed to open file: ${error}`)
-    }
-  }
-
-  const toggleDir = async (path: string) => {
-    const newExpanded = new Set(expandedDirs)
-    if (newExpanded.has(path)) {
-      newExpanded.delete(path)
-    } else {
-      newExpanded.add(path)
-      // Load directory contents if needed
-      await loadFiles(path)
-    }
-    setExpandedDirs(newExpanded)
-  }
+  const { currentFile, setCurrentFile, setYamlContent, syncYamlToCanvas, setIsDirty } = useStudioStore()
 
   useEffect(() => {
     loadFiles()
   }, [])
 
-  const renderFile = (file: FileInfo, depth: number = 0) => {
+  const loadFiles = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const fileList = await listFiles('')
+      setFiles(fileList)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load files')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFileClick = async (file: FileInfo) => {
+    if (file.is_directory) {
+      setExpandedDirs((prev) => {
+        const next = new Set(prev)
+        if (next.has(file.path)) {
+          next.delete(file.path)
+        } else {
+          next.add(file.path)
+        }
+        return next
+      })
+      return
+    }
+
+    try {
+      const content = await readFile(file.path)
+      setCurrentFile(file.path)
+      setYamlContent(content.content)
+      setIsDirty(false)
+      setTimeout(() => {
+        syncYamlToCanvas()
+      }, 0)
+    } catch (err) {
+      console.error('Failed to load file:', err)
+    }
+  }
+
+  const renderFile = (file: FileInfo) => {
+    const isSelected = currentFile === file.path
     const isExpanded = expandedDirs.has(file.path)
-    const isActive = currentFile === file.path
 
     return (
-      <div key={file.path}>
-        <div
-          className={`
-            flex items-center gap-2 py-1.5 px-2 cursor-pointer
-            hover:bg-hex-border/30 transition-colors rounded-sm
-            ${isActive ? 'bg-hex-accent text-white' : 'text-hex-text'}
-          `}
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-          onClick={() => file.is_directory ? toggleDir(file.path) : openFile(file.path)}
-        >
-          {file.is_directory ? (
-            <>
-              <ChevronRight
-                size={14}
-                className={`text-hex-text-muted transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-              />
-              <Folder size={14} className="text-hex-warning" />
-            </>
-          ) : (
-            <>
-              <span className="w-3.5" />
-              <FileText size={14} className="text-hex-accent" />
-            </>
-          )}
-          <span className="text-xs truncate flex-1">{file.name}</span>
-        </div>
-
-        {/* Render children if directory is expanded */}
-        {file.is_directory && isExpanded && (
-          <div>
-            {files
-              .filter((f) => {
-                const parentPath = f.path.substring(0, f.path.lastIndexOf('/'))
-                return parentPath === file.path
-              })
-              .map((child) => renderFile(child, depth + 1))}
-          </div>
+      <button
+        key={file.path}
+        onClick={() => handleFileClick(file)}
+        className={
+          'w-full flex items-center gap-2 py-1.5 px-2 text-left transition-colors rounded-sm ' +
+          (isSelected
+            ? 'bg-hex-accent/20 text-hex-accent'
+            : 'text-hex-text hover:bg-hex-border/30')
+        }
+      >
+        {file.is_directory ? (
+          <>
+            {isExpanded ? (
+              <ChevronDown size={12} className="text-hex-text-muted flex-shrink-0" />
+            ) : (
+              <ChevronRight size={12} className="text-hex-text-muted flex-shrink-0" />
+            )}
+            <Folder size={14} className="text-hex-warning flex-shrink-0" />
+          </>
+        ) : (
+          <>
+            <span className="w-3" />
+            <File size={14} className="text-hex-text-muted flex-shrink-0" />
+          </>
         )}
-      </div>
+        <span className="text-xs truncate">{file.name}</span>
+      </button>
     )
   }
 
-  // Get root-level files (no parent directory in path)
-  const rootFiles = files.filter((f) => !f.path.includes('/'))
-
   return (
-    <div className="h-full bg-hex-surface border-r border-hex-border flex flex-col">
-      <div className="p-3 border-b border-hex-border flex items-center justify-between">
+    <div className="flex flex-col border-b border-hex-border">
+      <div className="flex items-center justify-between p-2 border-b border-hex-border">
         <h2 className="text-xs font-semibold uppercase text-hex-text-muted tracking-wider">
           Files
         </h2>
         <button
-          onClick={() => loadFiles()}
-          className="p-1 hover:bg-hex-border/50 rounded transition-colors"
+          onClick={loadFiles}
           disabled={isLoading}
+          className="p-1 rounded hover:bg-hex-border/50 transition-colors text-hex-text-muted hover:text-hex-text"
+          title="Refresh files"
         >
-          <RefreshCw
-            size={12}
-            className={`text-hex-text-muted ${isLoading ? 'animate-spin' : ''}`}
-          />
+          <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1">
-        {rootFiles.length === 0 ? (
-          <div className="p-4 text-center text-hex-text-muted text-xs">
-            {isLoading ? 'Loading...' : 'No YAML files found'}
-          </div>
+      <div className="max-h-48 overflow-y-auto p-1">
+        {error ? (
+          <div className="p-2 text-xs text-hex-error">{error}</div>
+        ) : isLoading ? (
+          <div className="p-2 text-xs text-hex-text-muted">Loading...</div>
+        ) : files.length === 0 ? (
+          <div className="p-2 text-xs text-hex-text-muted">No YAML files found</div>
         ) : (
-          rootFiles.map((file) => renderFile(file))
+          files.map((file) => renderFile(file))
         )}
-      </div>
-
-      <div className="p-2 border-t border-hex-border">
-        <div className="text-[10px] text-hex-text-muted text-center">
-          {currentFile ? (
-            <span className="truncate block">{currentFile}</span>
-          ) : (
-            'No file selected'
-          )}
-        </div>
       </div>
     </div>
   )

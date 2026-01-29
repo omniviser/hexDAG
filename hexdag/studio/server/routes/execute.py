@@ -4,10 +4,13 @@ Provides test execution of pipelines with mock adapters.
 """
 
 import asyncio
+import sys
 from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from hexdag.studio.server.routes.files import get_workspace_root
 
 router = APIRouter(prefix="/execute", tags=["execute"])
 
@@ -52,6 +55,20 @@ async def execute_pipeline(request: ExecuteRequest) -> ExecuteResponse:
 
     start = time.perf_counter()
     node_results: list[NodeResult] = []
+
+    # Add workspace root to sys.path so local modules (like tools/) can be imported
+    try:
+        workspace_root = get_workspace_root()
+        # Check if workspace has a parent with tools/adapters (project root pattern)
+        # e.g., workspace is "examples/raven/pipelines", project root is "examples/raven"
+        project_root = (
+            workspace_root.parent if workspace_root.name == "pipelines" else workspace_root
+        )
+        project_root_str = str(project_root)
+        if project_root_str not in sys.path:
+            sys.path.insert(0, project_root_str)
+    except Exception:
+        pass  # Workspace not set, continue without modification
 
     try:
         from hexdag.core.orchestration.orchestrator import Orchestrator
@@ -147,6 +164,18 @@ async def dry_run(request: ExecuteRequest) -> dict[str, Any]:
 
     Returns execution plan, dependency order, and estimated complexity.
     """
+    # Add workspace root to sys.path for local module imports
+    try:
+        workspace_root = get_workspace_root()
+        project_root = (
+            workspace_root.parent if workspace_root.name == "pipelines" else workspace_root
+        )
+        project_root_str = str(project_root)
+        if project_root_str not in sys.path:
+            sys.path.insert(0, project_root_str)
+    except Exception:
+        pass
+
     try:
         from hexdag.core.pipeline_builder import YamlPipelineBuilder
 

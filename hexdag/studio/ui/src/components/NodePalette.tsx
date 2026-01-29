@@ -110,7 +110,7 @@ export default function NodePalette() {
   }
 
   return (
-    <div className="h-full bg-hex-surface border-r border-hex-border flex flex-col">
+    <div className="h-full flex flex-col">
       <div className="p-3 border-b border-hex-border">
         <h2 className="text-xs font-semibold uppercase text-hex-text-muted tracking-wider">
           Node Palette
