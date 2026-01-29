@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import Header from './components/Header'
+import FileBrowser from './components/FileBrowser'
 import NodePalette from './components/NodePalette'
 import Canvas from './components/Canvas'
 import YamlEditor from './components/YamlEditor'
@@ -106,9 +107,12 @@ export default function App() {
 
         {/* Main content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Node palette */}
-          <div className="w-48 flex-shrink-0">
-            <NodePalette />
+          {/* Left sidebar: Files + Node palette */}
+          <div className="w-48 flex-shrink-0 flex flex-col bg-hex-surface border-r border-hex-border">
+            <FileBrowser />
+            <div className="flex-1 overflow-hidden">
+              <NodePalette />
+            </div>
           </div>
 
           {/* Main editor area */}

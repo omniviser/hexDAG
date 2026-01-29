@@ -471,6 +471,7 @@ exclude = [
     "build",                                  # Build artifacts directory
     "examples/demo",                          # Demo files with mock langchain imports
     "examples/plugins",                       # Plugin examples have their own dependencies
+    "examples/*",                             # Raven example has its own pyproject.toml and venv
     "examples/run_text_analysis_pipeline.py", # Uses plugin-specific transformers
     "examples/simple_text_analysis.py",       # Uses plugin-specific transformers
     "examples/mcp",                           # MCP examples use optional MCP-specific dependencies (tavily)
