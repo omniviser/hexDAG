@@ -1,0 +1,65 @@
+# hexDAG Demo: Customer Support Ticket Analyzer
+# "Because 80% of LLM workflows just need to work, not win a Turing test"
+apiVersion: v1
+kind: Pipeline
+metadata:
+  name: support-ticket-analyzer
+  description: Analyze customer support tickets for sentiment, category, and priority
+  version: "1.0"
+spec:
+  # Declarative workflow - no spaghetti code, just clear intent
+  nodes:
+    # Step 1: Extract structured data from unstructured text
+    - kind: hexdag.builtin.nodes.LLMNode
+      metadata:
+        name: ticket_parser
+        annotations:
+          description: Extract structured information from support ticket
+      spec:
+        prompt_template: |
+          YOLO
+
+        model: gpt-4o
+        temperature: 0.1
+        max_retries: 3
+        timeout: 10
+        dependencies: []
+    # Step 2: Standard analysis for all tiers
+    - kind: hexdag.builtin.nodes.LLMNode
+      metadata:
+        name: ticket_analysis
+        annotations:
+          description: Analyze ticket and determine priority
+      spec:
+        prompt_template: |
+          Analyze this support ticket:
+          Issue Type: {{ticket_parser.output.issue_type}}
+          Technical Details: {{ticket_parser.output.technical_details}}
+          Emotion: {{ticket_parser.output.customer_emotion}}
+          Customer Tier: {{customer_tier}}
+
+          Provide:
+          1. Priority level (critical/high/medium/low)
+          2. Suggested response approach
+          3. Action items
+
+          Respond in JSON format.
+        model: gpt-4o
+        temperature: 0.3
+        max_tokens: 1000
+        dependencies: [ticket_parser]
+
+# NOTE: This is a demonstration YAML showing the declarative pipeline format.
+# In production, you would:
+# 1. Define the custom functions (generate_response, send_slack_notification, etc.)
+# 2. Use actual LLM adapters with API keys
+# 3. Implement proper error handling and retries
+#
+# The YAML format supports:
+# - Environment variables: ${VAR_NAME} or ${VAR_NAME:default}
+# - Jinja2 templating: {{ variable }}
+# - Multi-document YAML for different environments
+# - Macro invocations for reusable patterns
+# - Full module paths for node types: hexdag.builtin.nodes.LLMNode
+#
+# See docs/YAML_PIPELINES_ARCHITECTURE.md for complete documentation.

@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables
+.env.*
+!.env.example
+
+# uv
+uv.lock
+
+# Development
+.pre-commit-config.yaml.bak
+outputs/
+sbom.json
+
+# MkDocs
+site/
+docs/reference/*.md
+docs/namespaces/*.md
+
+# HexDAG config (only in root, not in subdirectories or examples)
+/hexdag.toml
+
+# Plugin build artifacts
+hexdag_plugins/*/.ruff_cache/
+hexdag_plugins/*/__pycache__/
+hexdag_plugins/*/.mypy_cache/
+hexdag_plugins/*/.pytest_cache/
+hexdag_plugins/*/dist/
+hexdag_plugins/*/build/
+hexdag_plugins/*/*.egg-info/
+
+# Studio UI (React/Vite)
+hexdag/studio/ui/node_modules/
+hexdag/studio/ui/dist/
+hexdag/studio/ui/.vite/

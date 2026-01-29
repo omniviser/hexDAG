@@ -1,0 +1,25 @@
+# hexDAG ETL Plugin Configuration
+# This file configures how the plugin loads its components
+
+[tool.hexdag]
+# Core modules to load - include the plugin's nodes
+modules = [
+    "hexdag.core.ports",               # Core port definitions
+    "hexdag.builtin.nodes",            # Core node factories
+    "hexdag.builtin.tools.builtin_tools",
+    "hexdag.builtin.policies.execution_policies",
+    "hexdag.builtin.macros",
+    "hexdag_etl.nodes",                # ETL plugin nodes (pandas_transform, etc.)
+]
+
+# No additional plugins needed for ETL plugin
+plugins = []
+
+# Development mode enabled
+dev_mode = true
+
+[tool.hexdag.logging]
+level = "DEBUG"  # More verbose for plugin development
+format = "structured"
+use_color = true
+include_timestamp = true

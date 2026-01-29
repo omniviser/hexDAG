@@ -1,0 +1,260 @@
+variables:
+  CI_USERNAME: "CI Pipeline"
+  CI_EMAIL: developers@omniviser.ai
+
+trigger:
+  branches:
+    include:
+    - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  - stage: Dispatch
+    jobs:
+      - job: BumpOrPush
+        condition: eq(variables['Build.SourceBranchName'], 'main')
+        steps:
+          - script: |
+              echo "This Pipeline should not work with manual triggers. It should be CI triggered by new commits in main."
+              exit 1
+            condition: eq(variables['Build.Reason'], 'Manual')
+            displayName: "Block manual trigger"
+            continueOnError: true
+
+          - script: |
+              # Configure Git with CI credentials
+              git config user.email "$(CI_EMAIL)"
+              git config user.name "$(CI_USERNAME)"
+              git remote set-url origin https://$(PAT)@dev.azure.com/omniviser/hexDAG/_git/hexDAG
+              git branch -D main
+              git fetch --depth=2
+              git checkout main
+
+              commit_message=$(git log -1 --pretty=%B)
+              commit_hash=$(git log -1 --pretty=%H)
+
+              echo -e "Last commit:\n$commit_message\nEnd of commit message"
+              echo -e "Last commit HASH:\n$commit_hash\nEnd of commit HASH"
+
+              echo "##vso[task.setvariable variable=commit_hash;isOutput=true]$commit_hash"
+              echo "##vso[task.setvariable variable=commit_hash]$commit_hash"
+
+              echo "##vso[task.setvariable variable=commit_message]$commit_message"
+
+            name: GitSetup
+
+          - script: |
+              # Try to extract the PR title
+              # Merging PR gives commit message in this format:
+              extracted_pr_title=$(echo "$(commit_message)" | grep -oP 'Merged PR \d+: \K.*')
+              echo "Extracted message: $extracted_pr_title"
+
+              if [[ -n "$extracted_pr_title" ]]; then
+                echo "Identified PR merge commit"
+
+                bump_type=$(echo "$extracted_pr_title" | cut -d':' -f1)
+                echo "Bump type: $bump_type"
+                if [[ -n "$bump_type" ]]; then
+                  echo "##vso[task.setvariable variable=pr_title;isOutput=true]$extracted_pr_title"
+                  echo "##vso[task.setvariable variable=bump;isOutput=true]true"
+                else
+                  echo "Empty bump type."
+                  exit 1
+                fi
+              else
+                echo "Will check if push is needed..."
+                echo "##vso[task.setvariable variable=bot_check]true"
+              fi
+            name: UserPRCheck
+
+          - script: |
+              # Extract the branch of incomming commit
+              # Merging with bypassing rules gives commits in the following format
+              extracted_branch=$(echo "$(commit_message)" | grep -oP 'Merge pull request \d+ from \K.* into main')
+              echo "Extracted branch: $extracted_branch"
+
+              # Determine branch with version information
+              branch_category=$(echo "$extracted_branch" | cut -d'/' -f1)
+
+              if [[ "$branch_category" == chore ]]; then
+                echo "##vso[task.setvariable variable=tag_repo]true"
+                version=$(echo "$extracted_branch" | cut -d'/' -f2 | sed 's/ into main//' )
+                echo "Version: $version"
+                echo "##vso[task.setvariable variable=version]$version"
+
+                if [[ -z "$version" ]]; then
+                  echo "Version is empty, exiting"
+                  exit 1
+                fi
+              else
+                echo "No pushing new package version"
+                echo "Invalid commit in main found"
+                exit 1
+              fi
+            condition: eq(variables['bot_check'], 'true')
+            continueOnError: false
+            name: BotPRCheck
+
+          - script: |
+              tags=$(git tag -l)
+              if [[ -z "$tags" ]]; then
+                echo "There is no tags in the repository"
+              else
+                echo -e "Tags in repository:\n$tags\nEnd of tags"
+              fi
+
+              if echo "$tags" | grep -q "$(version)"; then
+                echo "Tag $(version) already exists."
+              fi
+
+              echo "##vso[task.setvariable variable=push;isOutput=true]true"
+              echo "##vso[task.setvariable variable=tag;isOutput=true]$(version)"
+
+              git tag $(version)
+              git push origin $(version)
+            name: TagRepository
+            condition: eq(variables['tag_repo'], 'true')
+            env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+  - stage: Bump
+    dependsOn: Dispatch
+    jobs:
+      - job: BumpVersion
+        condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['UserPRCheck.bump'], 'true'))
+        variables:
+          commit_hash: $[ stageDependencies.Dispatch.BumpOrPush.outputs['GitSetup.commit_hash'] ]
+          pr_title: $[ stageDependencies.Dispatch.BumpOrPush.outputs['UserPRCheck.pr_title'] ]
+        steps:
+          - checkout: self
+            persistCredentials: true
+
+          - script: |
+              git config user.email "$(CI_EMAIL)"
+              git config user.name "$(CI_USERNAME)"
+              git remote set-url origin https://$(PAT)@dev.azure.com/omniviser/hexDAG/_git/hexDAG
+              pip install commitizen
+            displayName: Setup
+
+          - script: |
+                CURRENT_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml | head -n 1)
+                echo $CURRENT_VERSION
+
+                echo "Trying cz bump..."
+                echo "Debug: $(pr_title)"
+
+                # Extract message inside [ ]
+                bracket_message=$(echo $(pr_title) | grep -oP '(?<=\[)[^]]+(?=\])')
+
+                # Normalize (trim and lowercase)
+                bracket_message=$(echo "$bracket_message" | tr '[:upper:]' '[:lower:]' | xargs)
+
+                if [[ -n "$bracket_message" ]]; then
+                    echo "Bracket message found: $bracket_message"
+                else
+                    echo "No bracket message detected"
+                fi
+
+                # Decide prerelease bump type
+                if [[ "$bracket_message" == "alpha" || "$bracket_message" == "beta" || "$bracket_message" == "rc" ]]; then
+                    echo "Running prerelease bump: $bracket_message"
+                    cz --config pyproject.toml bump --prerelease "$bracket_message" --files-only --yes
+                else
+                    echo "Running normal bump"
+                    cz --config pyproject.toml bump --files-only --yes
+                fi
+
+                NEW_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml | head -n 1)
+                echo "New version: $NEW_VERSION"
+
+                if [ "$CURRENT_VERSION" = "$NEW_VERSION" ]; then
+                    echo "No need for bumping"
+                else
+                    echo "Bump detectedF"
+
+                    git add pyproject.toml
+                    git commit -n -m "chore: hexDAG $NEW_VERSION"
+                fi
+            displayName: 'Bump hexDAG'
+            env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+
+          - script: |
+              # GPT review
+              echo "Running restarting gpt scan config"
+              echo "scanned=false" > code_review.conf
+
+              common_version=$(grep -oP 'version = "\K[^"]+' pyproject.toml | head -n 1)
+
+              echo >> CHANGELOG.md
+              echo "## Version Release: $common_version" >> CHANGELOG.md
+              echo "$(git show -s --format=%B $(commit_hash))" | sed 's/[[:space:]]\+$//' >> CHANGELOG.md
+              git add CHANGELOG.md
+
+              git commit -m "chore: CI pipeline setup commit"
+
+              RELEASE_BRANCH="chore/${common_version}"
+              git branch -D $RELEASE_BRANCH 2>/dev/null || true
+              git checkout -b $RELEASE_BRANCH
+              git push origin $RELEASE_BRANCH
+
+              # Create PR
+              PR_RESPONSE=$(az repos pr create --source-branch $RELEASE_BRANCH --target-branch main --title "chore: Release $common_version" --description "Automated release of version $common_version")
+
+              # Complete PR
+              PR_ID=$(echo $PR_RESPONSE | jq -r '.pullRequestId')
+              az repos pr update --status completed --id $PR_ID --bypass-policy true --bypass-policy-reason "Automated pull request"
+
+              # Delete branch
+              objectid=$(az repos ref list | jq -r '.[] | select(.name=="$(Build.SourceBranch)") | .objectId')
+              az repos ref delete --name "heads/$RELEASE_BRANCH" --object-id $objectid --detect true --project "$(System.TeamProject)" --repository "$(Build.Repository.Name)"
+
+            displayName: 'Create and complete PR'
+            env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+  - stage: Push
+    dependsOn: Dispatch
+    jobs:
+     - job: VersionPublish
+       condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
+       steps:
+        - checkout: self
+          clean: true
+
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: "3.12"
+
+        - script: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+          displayName: "Install uv"
+
+        - script: |
+            uv sync --all-groups
+            uvx --from build pyproject-build
+            uv run twine check dist/*
+          displayName: "Build sdist & wheel"
+
+        - script: |
+            pip install twine keyring artifacts-keyring
+            uv run twine upload \
+              --repository-url "https://pkgs.dev.azure.com/omniviser/_packaging/omniviser/pypi/upload/" \
+              -u __token__ \
+              -p $PAT\
+              dist/*
+          displayName: "Upload package to Azure Artifacts"
+          env:
+            PAT: $(System.AccessToken)
+
+     - job: UpdateDocs
+       condition: and(succeeded(), eq(stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.push'], 'true'))
+       variables:
+          tag: $[ stageDependencies.Dispatch.BumpOrPush.outputs['TagRepository.tag'] ]
+       steps:
+        - script: |
+              echo "WOOP!"
+          displayName: "Put your logic here"

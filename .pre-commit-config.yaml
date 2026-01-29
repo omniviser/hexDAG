@@ -1,0 +1,313 @@
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  # Ruff - Fast Python linter and formatter (replaces Black, isort, flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      # Run the linter with auto-fix (main code)
+      - id: ruff-check
+        args: [--config=pyproject.toml]
+        exclude: ^hexdag_plugins/
+      # Run the formatter with auto-formatting (main code)
+      - id: ruff-format
+        args: [--config=pyproject.toml]
+        exclude: ^hexdag_plugins/
+
+  # Pyupgrade - Automatically upgrade Python syntax
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py312-plus]
+        exclude: ^(tests/|examples/)
+
+  # General pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [pre-commit]
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+      - id: check-yaml
+        stages: [pre-commit]
+      - id: check-json
+        stages: [pre-commit]
+      - id: check-toml
+        stages: [pre-commit]
+      - id: pretty-format-json
+        args: ["--autofix", "--indent", "4"]
+        exclude: "^(notebooks/.*\\.ipynb|schemas/.*\\.json)$"
+        stages: [pre-commit]
+      - id: check-added-large-files
+        stages: [pre-commit]
+      - id: debug-statements
+        stages: [pre-commit]
+      - id: check-ast
+        stages: [pre-commit]
+      - id: check-builtin-literals
+        stages: [pre-commit]
+      - id: check-merge-conflict
+        stages: [pre-commit]
+
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.24.1
+    hooks:
+      - id: validate-pyproject
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy hexdag/
+        language: system
+        types: [python]
+        exclude: '^(tests/|examples/|scripts/|hexdag_plugins/|hexdag/studio/|hexdag/cli/)'
+        pass_filenames: false
+
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        exclude: ^(tests/|examples/|hexdag_plugins/|hexdag/studio/)
+        pass_filenames: false
+
+
+  # ============================================================================
+  # Plugin-specific hooks (only run on hexdag_plugins/ files)
+  # ============================================================================
+
+  # Plugin linting - uses each plugin's own pyproject.toml
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff
+        name: ruff-plugins
+        args: [--fix]  # Will use plugin's own pyproject.toml
+        files: ^hexdag_plugins/
+        exclude: ^hexdag_plugins/.*\.venv/
+      - id: ruff-format
+        name: ruff-format-plugins
+        files: ^hexdag_plugins/
+        exclude: ^hexdag_plugins/.*\.venv/
+
+  # Plugin type checking - with plugin dependencies
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.1
+    hooks:
+      - id: mypy
+        name: mypy-plugins
+        # Add plugin deps here
+        additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]
+        args: [--ignore-missing-imports, --python-version=3.12, hexdag_plugins/]
+        files: ^hexdag_plugins/.*\.py$
+        exclude: ^hexdag_plugins/.*\.venv/
+
+        pass_filenames: false
+
+  # ============================================================================
+  # Main code hooks (exclude plugins)
+  # ============================================================================
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.6
+    hooks:
+      - id: bandit
+        args: [-ll]  # Only report Medium and High severity
+        exclude: ^(tests/|hexdag_plugins/|hexdag/studio/)
+
+  # Security - Dependency vulnerabilities
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.4.2
+    hooks:
+      - id: python-safety-dependencies-check
+        files: requirements.*\.txt$
+        stages: [pre-commit]
+
+  # Secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.37.1
+    hooks:
+      - id: yamllint
+        args: [-d, relaxed]
+        types: [yaml]
+        stages: [pre-commit]
+
+  # Jupyter notebook support
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.9.1
+    hooks:
+      - id: nbqa-ruff
+        args: [--fix]
+        additional_dependencies: [ruff==0.13.0]
+      - id: nbqa-pyupgrade
+        args: [--py312-plus]
+        additional_dependencies: [pyupgrade==3.20.0]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+        args: [--extra-keys, "metadata.kernelspec metadata.language_info"]
+
+  - repo: local
+    hooks:
+
+      - id: check-core-imports
+        name: Check core doesn't import from adapters/builtin
+        entry: uv run python scripts/check_core_imports.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-async-io
+        name: Check for sync I/O in async code
+        entry: uv run python scripts/check_async_io.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-test-structure
+        name: Check test structure consistency
+        entry: uv run scripts/check_test_structure.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-notebooks
+        name: Execute and validate notebooks
+        entry: uv run python scripts/check_notebooks.py
+        language: system
+        files: ^notebooks/.*\.ipynb$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: doctest
+        name: Run doctest
+        entry: uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: pytest
+        name: Run pytest with coverage
+        entry: uv run pytest tests/hexdag/ --ignore=tests/hexdag/cli -x --tb=short --cov=hexdag --cov-config=pyproject.toml --cov-fail-under=70 --cov-report=term-missing:skip-covered
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: pytest-integration
+        name: Run integration tests
+        entry: uv run pytest tests/integration/ -x --tb=short
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
+
+      - id: deptry
+        name: deptry
+        entry: uv run deptry .
+        language: system
+        always_run: true
+        pass_filenames: false
+
+      - id: vulture
+        name: vulture - dead code detection
+        entry: uv run vulture hexdag/ .vulture_whitelist.py --min-confidence 90 --exclude hexdag/studio/
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: radon-complexity
+        name: radon - code complexity analysis
+        entry: uv run radon cc hexdag/ --min B --show-complexity --exclude hexdag/studio/
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: interrogate
+        name: interrogate - docstring coverage
+        entry: uv run interrogate hexdag/ --fail-under 95 --quiet --exclude hexdag/studio/
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: safety-check
+        name: safety - dependency vulnerability scan
+        entry: bash -c 'uv run safety check --output bare 2>&1 | grep -v "DEPRECATED\|pkg_resources" || true'
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+
+      - id: branch-name-check
+        name: Branch Name Check
+        entry: |
+            bash -c '
+            # Retrieve the branch name from Git
+            BRANCH_NAME=$(git symbolic-ref --short HEAD)
+
+            # Define your naming convention regex pattern
+            PATTERN="^(ci|dependabot\/pip|docs|experiment|feat|fix|refactor|test)\/"\
+            "[A-Za-z0-9._-]+$"
+
+            # Check if the branch name matches the pattern
+            if [[ $BRANCH_NAME =~ $PATTERN ]]; then
+                echo "Branch name \"$BRANCH_NAME\" is valid."
+                exit 0
+            else
+                echo "Branch name \"$BRANCH_NAME\" is invalid. " \
+                "It must match the pattern \"$PATTERN\"."
+                exit 1
+            fi
+            '
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: license-check
+        name: Check dependency licenses
+        entry: uv run licensecheck --zero
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
+
+      # ========================================================================
+      # JSON Schema Generation and Validation
+      # ========================================================================
+
+      - id: generate-schemas
+        name: Generate JSON Schemas from registry
+        entry: uv run python scripts/generate_schemas.py
+        language: system
+        files: ^(hexdag/(builtin/nodes|core/config/models|core/orchestration/policies/models).*\.py|scripts/generate_schemas\.py)$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-schemas
+        name: Check JSON schemas are auto-generated
+        entry: uv run python scripts/check_schemas.py
+        language: system
+        files: ^schemas/.*\.json$
+        stages: [pre-commit]
+        pass_filenames: false

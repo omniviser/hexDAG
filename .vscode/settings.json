@@ -1,0 +1,75 @@
+{
+    "[toml]": {
+        "editor.defaultFormatter": "tamasfe.even-better-toml"
+    },
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "editor.formatOnSave": true,
+    "evenBetterToml.schema.associations": {
+        "pyproject.toml": "./schemas/hexdag-config-schema.json"
+    },
+    "files.associations": {
+        "*.yaml": "yaml",
+        "*.yml": "yaml"
+    },
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "schemas/*-schema.json"
+            ],
+            "url": "http://json-schema.org/draft-07/schema#"
+        }
+    ],
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "mcp.servers": {
+        "hexdag": {
+            "args": [
+                "--directory",
+                "/Users/jankwapisz/Documents/Praca/Omniviser/hexdag",
+                "run",
+                "python",
+                "-m",
+                "hexdag",
+                "--mcp"
+            ],
+            "command": "uv",
+            "env": {
+                "HEXDAG_CONFIG_PATH": ""
+            }
+        }
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "python.formatting.provider": "black",
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": false,
+    "python.linting.pylintEnabled": false,
+    "yaml.completion": true,
+    "yaml.customTags": [
+        "!Ref scalar",
+        "!GetAtt sequence"
+    ],
+    "yaml.format.enable": true,
+    "yaml.hover": true,
+    "yaml.schemas": {
+        "./schemas/pipeline-schema.json": [
+            "*pipeline*.yaml",
+            "*pipeline*.yml",
+            "pipelines/**/*.yaml",
+            "pipelines/**/*.yml",
+            "examples/**/*.yaml",
+            "examples/**/*.yml",
+            "notebooks/**/*.yaml",
+            "notebooks/**/*.yml",
+            "workflows/**/*.yaml",
+            "workflows/**/*.yml"
+        ],
+        "./schemas/policy-schema.json": [
+            "*policy*.yaml",
+            "*policy*.yml",
+            "policies/**/*.yaml",
+            "policies/**/*.yml"
+        ]
+    },
+    "yaml.validate": true
+}

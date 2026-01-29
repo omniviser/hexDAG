@@ -1,0 +1,31 @@
+[flake8]
+# General Options
+exclude = .git,__pycache__,docs/source/conf.py,old,build,dist,examples,*.toml,*.yaml,*.yml,*.sh,*.md,*.html,*.css,*.js
+max-complexity = 10
+max-line-length = 100
+max-annotations-complexity = 4
+import-order-style = google
+application-import-names = hexdag
+extend-ignore = S106
+per-file-ignores =
+    tests/*:S101,D100,D101,D102,D103,D104
+    scripts/*:T201,D401
+
+# Error and Warning Codes
+# B008: Do not perform function calls in argument defaults.
+# W503: line break before binary operator
+# I201: missing newline between import groups
+# I101: module import order
+# C901: complexity of the code
+# S101: using the asserts
+# N803: lower and upper cases
+# R504: unnecessary variable assignment before return statement
+# R505: unnecessary elif after return statement
+# R506: unnecessary variable assignment before return statement
+ignore = W503, C901, B008, I101, I201, I202, I100, S101, N803, R504, R505, R506, S105
+
+# Format Style Options
+format = pylint
+
+# Plugins
+docstring-convention = numpy
