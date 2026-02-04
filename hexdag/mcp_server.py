@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -47,6 +48,29 @@ from mcp.server.fastmcp import FastMCP
 from hexdag.core.pipeline_builder import YamlPipelineBuilder
 from hexdag.core.resolver import ResolveError, resolve
 from hexdag.core.schema import SchemaGenerator
+
+# Generated documentation directory
+_GENERATED_DOCS_DIR = Path(__file__).parent.parent / "docs" / "generated" / "mcp"
+
+
+def _load_generated_doc(filename: str) -> str | None:
+    """Load generated documentation from file.
+
+    Parameters
+    ----------
+    filename : str
+        Name of the documentation file (e.g., "adapter_guide.md")
+
+    Returns
+    -------
+    str | None
+        File contents if exists, None otherwise
+    """
+    doc_path = _GENERATED_DOCS_DIR / filename
+    if doc_path.exists():
+        return doc_path.read_text()
+    return None
+
 
 # Create MCP server
 mcp = FastMCP(
@@ -684,6 +708,12 @@ def get_syntax_reference() -> str:
         # hexDAG Variable Reference Syntax
         ...
     """
+    # Try to load auto-generated documentation first
+    generated = _load_generated_doc("syntax_reference.md")
+    if generated:
+        return generated
+
+    # Fallback to static documentation
     return """# hexDAG Variable Reference Syntax
 
 ## 1. Initial Input Reference: $input
@@ -1706,6 +1736,12 @@ def get_custom_adapter_guide() -> str:
         # Creating Custom Adapters in hexDAG
         ...
     """
+    # Try to load auto-generated documentation first
+    generated = _load_generated_doc("adapter_guide.md")
+    if generated:
+        return generated
+
+    # Fallback to static documentation
     return '''# Creating Custom Adapters in hexDAG
 
 ## Overview
@@ -1989,6 +2025,12 @@ def get_custom_node_guide() -> str:
         # Creating Custom Nodes in hexDAG
         ...
     """
+    # Try to load auto-generated documentation first
+    generated = _load_generated_doc("node_guide.md")
+    if generated:
+        return generated
+
+    # Fallback to static documentation
     return '''# Creating Custom Nodes in hexDAG
 
 ## Overview
@@ -2283,6 +2325,12 @@ def get_custom_tool_guide() -> str:
     -------
         Guide for creating custom tools
     """
+    # Try to load auto-generated documentation first
+    generated = _load_generated_doc("tool_guide.md")
+    if generated:
+        return generated
+
+    # Fallback to static documentation
     return '''# Creating Custom Tools for hexDAG Agents
 
 ## Overview
@@ -2454,6 +2502,12 @@ def get_extension_guide(component_type: str | None = None) -> str:
     if component_type == "tool":
         return "Use get_custom_tool_guide() for detailed tool documentation."
 
+    # Try to load auto-generated documentation first
+    generated = _load_generated_doc("extension_guide.md")
+    if generated:
+        return generated
+
+    # Fallback to static documentation
     return """# Extending hexDAG - Overview
 
 ## Extension Points
