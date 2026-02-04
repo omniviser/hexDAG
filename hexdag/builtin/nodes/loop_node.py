@@ -20,7 +20,7 @@ import logging
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -359,27 +359,100 @@ class LoopNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
+        while_condition: str | Callable[[dict, dict], bool] | None = None,
+        body: str | Callable[[dict, dict], Any] | None = None,
+        max_iterations: int | None = None,
+        collect_mode: CollectMode | None = None,
+        initial_state: dict | None = None,
+        iteration_key: str | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Builds a LoopNode NodeSpec.
 
-        Parameters:
-            - name: Node name.
-            - max_iterations: Safety cap to prevent infinite loops (must be > 0).
-            - iteration_key: Key under which the current iteration is stored in state.
-            - **kwargs: Passed through to NodeSpec (e.g., in_model, out_model, deps).
+        Supports two modes:
+        1. Builder pattern: Use .condition(), .do(), etc. methods, then .build()
+        2. YAML/direct: Pass while_condition and body as parameters
+
+        Parameters
+        ----------
+        name : str
+            Node name.
+        while_condition : str | Callable | None
+            For YAML: String expression like "state.iteration < 10".
+            For builder: Set via .condition() method.
+        body : str | Callable | None
+            For YAML: Module path to body function (e.g., "myapp.process").
+            For builder: Set via .do() method.
+        max_iterations : int | None
+            Safety cap to prevent infinite loops (default: 100).
+        collect_mode : CollectMode | None
+            How to collect results: "last", "list", or "reduce".
+        initial_state : dict | None
+            Initial state dict passed to first iteration.
+        iteration_key : str | None
+            Key name for current iteration number in state.
+        **kwargs
+            Passed through to NodeSpec (e.g., in_model, out_model, deps).
+
+        Examples
+        --------
+        YAML usage::
+
+            - kind: loop_node
+              metadata:
+                name: retry_loop
+              spec:
+                while_condition: "state.iteration < 3"
+                body: myapp.process_item
+                max_iterations: 10
+                initial_state:
+                  counter: 0
         """
-        while_condition = self._while
-        if while_condition is None:
-            raise ValueError("while_condition is required")
-        body_fn = self._body
+        from hexdag.core.expression_parser import compile_expression
+        from hexdag.core.resolver import resolve
+
+        # Determine source: YAML parameters or builder state
+        if while_condition is not None:
+            # YAML mode: Compile string condition
+            if isinstance(while_condition, str):
+                final_condition = compile_expression(while_condition)
+            else:
+                final_condition = while_condition
+        else:
+            # Builder mode: Use internal state
+            if self._while is None:
+                raise ValueError("while_condition is required")
+            final_condition = self._while
+
+        final_body: Callable[[dict, dict], Any]
+        if body is not None:
+            # YAML mode: Resolve body function from module path or use callable directly
+            resolved = resolve(body) if isinstance(body, str) else body
+            final_body = cast("Callable[[dict, dict], Any]", resolved)
+        else:
+            # Builder mode: Use internal state
+            final_body = self._body
+
+        # Use YAML params or builder state with defaults
+        final_max_iter = max_iterations if max_iterations is not None else self._max_iter
+        final_collect_mode = collect_mode if collect_mode is not None else self._collect_mode
+        final_init_state = dict(initial_state or self._init_state or {})
+        final_iter_key = iteration_key if iteration_key is not None else self._iter_key
+
         on_iteration_end = self._on_end
-        init_state = dict(self._init_state or {})
-        collect_mode = self._collect_mode
         reduce_cfg = self._reduce_cfg
-        max_iterations = self._max_iter
-        iteration_key = self._iter_key
         break_if = list(self._break_if or [])
+
+        # Capture for closure
+        _condition = final_condition
+        _body_fn = final_body
+        _max_iter = final_max_iter
+        _collect_mode = final_collect_mode
+        _init_state = final_init_state
+        _iter_key = final_iter_key
+        _on_end = on_iteration_end
+        _reduce_cfg = reduce_cfg
+        _break_if = break_if
 
         async def loop_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute the enhanced loop.
@@ -399,27 +472,27 @@ class LoopNode(BaseNodeFactory):
             data = _normalize_input_data(input_data)
 
             # Local loop state
-            state = dict(init_state or {})
+            state = dict(_init_state or {})
 
-            acc, collect_fn = self._init_collector(collect_mode, reduce_cfg)
+            acc, collect_fn = self._init_collector(_collect_mode, _reduce_cfg)
 
             iteration_count = 0
             stopped_by: StopReason = StopReason.NONE
 
             while True:
                 # Safety cap
-                if iteration_count >= max_iterations:
+                if iteration_count >= _max_iter:
                     stopped_by = StopReason.LIMIT
                     break
 
                 # Main condition
-                ok, reason = self._should_continue(while_condition, data, state)
+                ok, reason = self._should_continue(_condition, data, state)
                 if not ok:
                     stopped_by = reason or StopReason.CONDITION
                     break
 
                 # Body execution (supports async)
-                out = body_fn(data, state)
+                out = _body_fn(data, state)
                 if asyncio.iscoroutine(out):
                     out = await out
 
@@ -427,17 +500,17 @@ class LoopNode(BaseNodeFactory):
                 acc = collect_fn(acc, out)
 
                 # State update after each iteration
-                state = _apply_on_iteration_end(on_iteration_end, state, out)
+                state = _apply_on_iteration_end(_on_end, state, out)
 
                 # Break guard
-                if _eval_break_guards(break_if, data, state):
+                if _eval_break_guards(_break_if, data, state):
                     stopped_by = StopReason.BREAK_GUARD
                     iteration_count += 1
-                    state[iteration_key] = iteration_count
+                    state[_iter_key] = iteration_count
                     break
 
                 iteration_count += 1
-                state[iteration_key] = iteration_count
+                state[_iter_key] = iteration_count
 
             # Build final result payload
             return {
@@ -445,7 +518,7 @@ class LoopNode(BaseNodeFactory):
                 "metadata": {
                     "iterations": iteration_count,
                     "stopped_by": stopped_by,
-                    "max_iterations": max_iterations,
+                    "max_iterations": _max_iter,
                     "state": state,
                 },
             }
@@ -620,24 +693,74 @@ class ConditionalNode(BaseNodeFactory):
     def __call__(
         self,
         name: str,
+        branches: list[dict[str, str]] | None = None,
+        else_action: str | None = None,
+        tie_break: TieBreak = "first_true",
         **kwargs: Any,
     ) -> NodeSpec:
-        """Builds a ConditionalNode NodeSpec (functional-only).
+        """Builds a ConditionalNode NodeSpec.
 
-        Parameters:
+        Supports two modes:
+        1. Builder pattern: Use .when() and .otherwise() methods, then .build()
+        2. YAML/direct: Pass branches and else_action as parameters
 
-        - name: Node name.
-        - branches: Non-empty list of branches; each branch requires:
-                - "pred": Callable[[dict, dict], bool]
-                - "action": non-empty str
-        - else_action: Optional fallback action when no branch matches.
-        - tie_break: Branch selection strategy; only "first_true" supported.
-        - **kwargs: Passed through to NodeSpec (e.g., in_model, out_model, deps).
+        Parameters
+        ----------
+        name : str
+            Node name.
+        branches : list[dict[str, str]] | None
+            For YAML usage: List of branches with "condition" (string expression)
+            and "action" fields. Example:
+            [{"condition": "action == 'ACCEPT'", "action": "approve"}]
+        else_action : str | None
+            Optional fallback action when no branch matches.
+        tie_break : TieBreak
+            Branch selection strategy; only "first_true" supported.
+        **kwargs
+            Passed through to NodeSpec (e.g., in_model, out_model, deps).
+
+        Examples
+        --------
+        YAML usage::
+
+            - kind: conditional_node
+              metadata:
+                name: router
+              spec:
+                branches:
+                  - condition: "action == 'ACCEPT'"
+                    action: approve
+                  - condition: "confidence < 0.5"
+                    action: manual_review
+                else_action: default_handler
         """
+        from hexdag.core.expression_parser import compile_expression
 
-        branches = list(self._branches or [])
-        else_action = self._else_action
-        tie_break: TieBreak = "first_true"
+        # Determine source of branches: builder state or YAML parameters
+        if branches is not None:
+            # YAML mode: Convert string conditions to compiled predicates
+            compiled_branches: list[dict[str, Any]] = []
+            for branch in branches:
+                condition = branch.get("condition")
+                action = branch.get("action")
+                if not condition or not action:
+                    raise ValueError(
+                        f"Each branch must have 'condition' and 'action' fields. Got: {branch}"
+                    )
+                # Compile string expression to predicate
+                pred = compile_expression(condition)
+                compiled_branches.append({"pred": pred, "action": action})
+            final_branches = compiled_branches
+            final_else_action = else_action
+        else:
+            # Builder mode: Use internal state from .when() calls
+            final_branches = list(self._branches or [])
+            final_else_action = self._else_action
+
+        # Capture for closure
+        _branches = final_branches
+        _else_action = final_else_action
+        _tie_break = tie_break
 
         async def conditional_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Evaluate branches in order and pick the routing action.
@@ -655,7 +778,7 @@ class ConditionalNode(BaseNodeFactory):
             chosen_idx: int | None = None
             evaluations: list[bool] = []
 
-            for idx, br in enumerate(branches):
+            for idx, br in enumerate(_branches):
                 ok = False
                 try:
                     ok = bool(br["pred"](data, state))
@@ -665,18 +788,18 @@ class ConditionalNode(BaseNodeFactory):
                 if ok and chosen is None:
                     chosen = br["action"]
                     chosen_idx = idx
-                    if tie_break == "first_true":
+                    if _tie_break == "first_true":
                         break
 
             if chosen is None:
-                chosen = else_action
+                chosen = _else_action
 
             result = {
                 "result": chosen,
                 "metadata": {
                     "matched_branch": chosen_idx,
                     "evaluations": evaluations,
-                    "has_else": else_action is not None,
+                    "has_else": _else_action is not None,
                 },
             }
 
