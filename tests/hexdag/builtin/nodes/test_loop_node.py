@@ -296,3 +296,344 @@ class TestYamlIntegration:
         assert (await spec.fn({"score": 0.85}))["result"] == "medium_confidence"
         assert (await spec.fn({"score": 0.6}))["result"] == "low_confidence"
         assert (await spec.fn({"score": 0.3}))["result"] == "reject"
+
+
+class TestConditionalNodeYamlMode:
+    """Test ConditionalNode with YAML-style direct parameter passing.
+
+    These tests verify the YAML mode where branches and else_action are passed
+    directly to __call__() instead of using the fluent API (.when().otherwise()).
+    """
+
+    def test_yaml_branches_basic(self) -> None:
+        """Test __call__ with branches parameter (YAML mode)."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "action == 'ACCEPT'", "action": "approve"},
+                {"condition": "action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        assert node_spec.name == "router"
+
+    def test_yaml_branches_without_else(self) -> None:
+        """Test YAML mode works without else_action."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "status == 'done'", "action": "complete"},
+            ],
+        )
+        assert node_spec.name == "router"
+
+    @pytest.mark.asyncio
+    async def test_yaml_branches_empty_uses_else(self) -> None:
+        """Test that empty branches list falls back to else_action."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[],
+            else_action="fallback",
+        )
+        assert node_spec.name == "router"
+
+        # With empty branches, always use else_action
+        result = await node_spec.fn({"action": "anything"})
+        assert result["result"] == "fallback"
+        assert result["metadata"]["matched_branch"] is None
+
+    def test_yaml_branch_missing_condition_raises(self) -> None:
+        """Test that branch without condition raises error."""
+        with pytest.raises(ValueError, match="condition"):
+            ConditionalNode()(
+                "router",
+                branches=[{"action": "approve"}],
+            )
+
+    def test_yaml_branch_missing_action_raises(self) -> None:
+        """Test that branch without action raises error."""
+        with pytest.raises(ValueError, match="action"):
+            ConditionalNode()(
+                "router",
+                branches=[{"condition": "x == 1"}],
+            )
+
+    def test_yaml_invalid_expression_raises(self) -> None:
+        """Test that invalid expression raises error at build time."""
+        from hexdag.core.expression_parser import ExpressionError
+
+        with pytest.raises(ExpressionError):
+            ConditionalNode()(
+                "router",
+                branches=[{"condition": "invalid ==== syntax", "action": "fail"}],
+            )
+
+    @pytest.mark.asyncio
+    async def test_yaml_execution_matches_first(self) -> None:
+        """Test YAML mode execution matches first branch."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "action == 'ACCEPT'", "action": "approve"},
+                {"condition": "action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        result = await node_spec.fn({"action": "ACCEPT"})
+        assert result["result"] == "approve"
+        assert result["metadata"]["matched_branch"] == 0
+
+    @pytest.mark.asyncio
+    async def test_yaml_execution_matches_second(self) -> None:
+        """Test YAML mode execution matches second branch."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "action == 'ACCEPT'", "action": "approve"},
+                {"condition": "action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        result = await node_spec.fn({"action": "REJECT"})
+        assert result["result"] == "reject"
+        assert result["metadata"]["matched_branch"] == 1
+
+    @pytest.mark.asyncio
+    async def test_yaml_execution_else_fallback(self) -> None:
+        """Test YAML mode falls back to else_action."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "status == 'done'", "action": "complete"},
+            ],
+            else_action="pending",
+        )
+        result = await node_spec.fn({"status": "processing"})
+        assert result["result"] == "pending"
+        assert result["metadata"]["matched_branch"] is None
+
+    @pytest.mark.asyncio
+    async def test_yaml_execution_no_match_no_else(self) -> None:
+        """Test YAML mode returns None when no match and no else_action."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "status == 'done'", "action": "complete"},
+            ],
+        )
+        result = await node_spec.fn({"status": "processing"})
+        assert result["result"] is None
+        assert result["metadata"]["matched_branch"] is None
+
+    @pytest.mark.asyncio
+    async def test_yaml_complex_expressions(self) -> None:
+        """Test YAML mode with complex boolean expressions."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "score >= 0.9 and confidence > 0.8", "action": "high"},
+                {"condition": "score >= 0.5", "action": "medium"},
+            ],
+            else_action="low",
+        )
+        assert (await node_spec.fn({"score": 0.95, "confidence": 0.9}))["result"] == "high"
+        assert (await node_spec.fn({"score": 0.7, "confidence": 0.5}))["result"] == "medium"
+        assert (await node_spec.fn({"score": 0.3, "confidence": 0.2}))["result"] == "low"
+
+    @pytest.mark.asyncio
+    async def test_yaml_nested_attribute_access(self) -> None:
+        """Test YAML mode with nested attribute expressions."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "result.action == 'ACCEPT'", "action": "approve"},
+                {"condition": "result.action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        result = await node_spec.fn({"result": {"action": "ACCEPT"}})
+        assert result["result"] == "approve"
+
+    @pytest.mark.asyncio
+    async def test_yaml_membership_operators(self) -> None:
+        """Test YAML mode with in/not in operators."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "status in ['active', 'pending']", "action": "process"},
+                {"condition": "status not in ['active', 'pending', 'done']", "action": "skip"},
+            ],
+            else_action="archive",
+        )
+        assert (await node_spec.fn({"status": "active"}))["result"] == "process"
+        assert (await node_spec.fn({"status": "unknown"}))["result"] == "skip"
+        assert (await node_spec.fn({"status": "done"}))["result"] == "archive"
+
+    @pytest.mark.asyncio
+    async def test_yaml_deep_nested_access(self) -> None:
+        """Test YAML mode with deeply nested attribute access."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "llm.response.decision.action == 'ACCEPT'", "action": "approve"},
+            ],
+            else_action="manual_review",
+        )
+        result = await node_spec.fn({
+            "llm": {"response": {"decision": {"action": "ACCEPT", "confidence": 0.95}}}
+        })
+        assert result["result"] == "approve"
+
+
+class TestYamlPipelineConditionalNode:
+    """Test ConditionalNode through YamlPipelineBuilder."""
+
+    def test_yaml_pipeline_conditional_builds(self) -> None:
+        """Test conditional_node builds correctly from YAML."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-conditional
+spec:
+  nodes:
+    - kind: conditional_node
+      metadata:
+        name: router
+      spec:
+        branches:
+          - condition: "action == 'ACCEPT'"
+            action: approve
+          - condition: "action == 'REJECT'"
+            action: reject
+        else_action: review
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+        assert "router" in graph.nodes
+        assert graph.nodes["router"].name == "router"
+
+    @pytest.mark.asyncio
+    async def test_yaml_pipeline_conditional_executes(self) -> None:
+        """Test conditional_node executes correctly from YAML pipeline."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-conditional
+spec:
+  nodes:
+    - kind: conditional_node
+      metadata:
+        name: router
+      spec:
+        branches:
+          - condition: "action == 'ACCEPT'"
+            action: approve
+          - condition: "action == 'REJECT'"
+            action: reject
+        else_action: review
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        router = graph.nodes["router"]
+
+        # Test ACCEPT routing
+        result = await router.fn({"action": "ACCEPT"})
+        assert result["result"] == "approve"
+
+        # Test REJECT routing
+        result = await router.fn({"action": "REJECT"})
+        assert result["result"] == "reject"
+
+        # Test else fallback
+        result = await router.fn({"action": "UNKNOWN"})
+        assert result["result"] == "review"
+
+    def test_yaml_pipeline_conditional_without_else(self) -> None:
+        """Test conditional_node in YAML without else_action."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-conditional-no-else
+spec:
+  nodes:
+    - kind: conditional_node
+      metadata:
+        name: router
+      spec:
+        branches:
+          - condition: "status == 'done'"
+            action: complete
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+        assert "router" in graph.nodes
+
+    def test_yaml_pipeline_conditional_complex_expressions(self) -> None:
+        """Test conditional_node in YAML with complex expressions."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-conditional-complex
+spec:
+  nodes:
+    - kind: conditional_node
+      metadata:
+        name: confidence_router
+      spec:
+        branches:
+          - condition: "score >= 0.9 and confidence > 0.8"
+            action: high_confidence
+          - condition: "score >= 0.5"
+            action: medium_confidence
+        else_action: low_confidence
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+        assert "confidence_router" in graph.nodes
+
+    @pytest.mark.asyncio
+    async def test_yaml_pipeline_conditional_with_dependencies(self) -> None:
+        """Test conditional_node in YAML with dependencies."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-conditional-deps
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: analyzer
+      spec:
+        fn: "json.loads"
+    - kind: conditional_node
+      metadata:
+        name: router
+      spec:
+        branches:
+          - condition: "action == 'ACCEPT'"
+            action: approve
+        else_action: review
+      dependencies:
+        - analyzer
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        router = graph.nodes["router"]
+        assert "analyzer" in router.deps

@@ -267,6 +267,47 @@ class ExecutionCoordinator:
 
         return base_input
 
+    def _is_expression(self, source: str) -> bool:
+        """Check if a source string is an expression (contains function calls or operators).
+
+        Parameters
+        ----------
+        source : str
+            The source string to check
+
+        Returns
+        -------
+        bool
+            True if the source appears to be an expression
+        """
+        from hexdag.core.expression_parser import ALLOWED_FUNCTIONS
+
+        # Check for function call patterns (function_name followed by parenthesis)
+        for func_name in ALLOWED_FUNCTIONS:
+            if f"{func_name}(" in source:
+                return True
+
+        # Check for arithmetic/comparison operators (but not dots which are field paths)
+        # Be careful not to match operators in simple field paths
+        expression_indicators = [
+            "==",
+            "!=",
+            "<=",
+            ">=",
+            " < ",
+            " > ",
+            " + ",
+            " - ",
+            " * ",
+            " / ",
+            " % ",
+            " and ",
+            " or ",
+            " not ",
+            " in ",
+        ]
+        return any(op in source for op in expression_indicators)
+
     def _apply_input_mapping(
         self,
         base_input: Any,
@@ -276,16 +317,17 @@ class ExecutionCoordinator:
     ) -> dict[str, Any]:
         """Apply field mapping to transform input data.
 
-        Supports two special syntaxes:
+        Supports multiple syntaxes:
         - ``$input.field`` - Extract from the initial pipeline input
         - ``node_name.field`` - Extract from a specific node's output
+        - Expression syntax - Use allowed functions and operators
 
         Parameters
         ----------
         base_input : Any
             The prepared input from dependencies (may be single value or dict)
         input_mapping : dict[str, str]
-            Mapping of {target_field: "source_path"}
+            Mapping of {target_field: "source_path"} or {target_field: "expression"}
         initial_input : Any
             The original pipeline input (for $input references)
         node_results : dict[str, Any]
@@ -301,13 +343,26 @@ class ExecutionCoordinator:
         >>> coordinator = ExecutionCoordinator()
         >>> mapping = {"load_id": "$input.load_id", "result": "analyzer.output"}
         >>> # This would extract load_id from initial input and result from analyzer node
+
+        Expression examples::
+
+            mapping = {
+                "is_valid": "len(items) > 0",
+                "name_upper": "upper(user.name)",
+                "total": "price * quantity",
+            }
         """
         from hexdag.builtin.nodes.mapped_input import FieldExtractor
 
         result: dict[str, Any] = {}
 
         for target_field, source_path in input_mapping.items():
-            if source_path.startswith("$input."):
+            # Check if this is an expression that needs evaluation
+            if self._is_expression(source_path):
+                value = self._evaluate_expression(
+                    source_path, base_input, initial_input, node_results
+                )
+            elif source_path.startswith("$input."):
                 # Extract from initial pipeline input
                 actual_path = source_path[7:]  # Remove "$input." prefix
                 if actual_path:
@@ -349,3 +404,63 @@ class ExecutionCoordinator:
             result[target_field] = value
 
         return result
+
+    def _evaluate_expression(
+        self,
+        expression: str,
+        base_input: Any,
+        initial_input: Any,
+        node_results: dict[str, Any],
+    ) -> Any:
+        """Evaluate an expression against available data.
+
+        Parameters
+        ----------
+        expression : str
+            The expression to evaluate (e.g., "len(items) > 0")
+        base_input : Any
+            The prepared input from dependencies
+        initial_input : Any
+            The original pipeline input
+        node_results : dict[str, Any]
+            Results from all previously executed nodes
+
+        Returns
+        -------
+        Any
+            The result of evaluating the expression
+        """
+        from hexdag.core.expression_parser import ExpressionError, evaluate_expression
+
+        # Build the data context for expression evaluation
+        # Merge all available data sources into a single dict
+        data_context: dict[str, Any] = {}
+
+        # Add node results
+        data_context.update(node_results)
+
+        # Add base_input (either as-is if dict, or wrapped)
+        if isinstance(base_input, dict):
+            data_context.update(base_input)
+        elif base_input is not None:
+            data_context["_input"] = base_input
+
+        # Add initial input with $input prefix removed (accessible as 'input')
+        if isinstance(initial_input, dict):
+            data_context["input"] = initial_input
+            # Also add initial_input fields at top level for convenience
+            for key, val in initial_input.items():
+                if key not in data_context:
+                    data_context[key] = val
+        elif initial_input is not None:
+            data_context["input"] = initial_input
+
+        try:
+            # Use evaluate_expression to get the actual value, not a boolean
+            return evaluate_expression(expression, data_context, {})
+        except ExpressionError as e:
+            logger.error(f"Expression evaluation failed for '{expression}': {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error evaluating expression '{expression}': {e}")
+            return None
