@@ -672,7 +672,8 @@ class NodeEntityPlugin:
         kind = node_config["kind"]
         node_id = node_config["metadata"]["name"]
         spec = node_config.get("spec", {}).copy()
-        deps = spec.pop("dependencies", [])
+        # Dependencies can be at node level or inside spec (for backwards compatibility)
+        deps = node_config.get("dependencies", []) or spec.pop("dependencies", [])
 
         # Resolve factory class from full module path
         try:
