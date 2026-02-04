@@ -303,12 +303,41 @@ class ModelFactory:
         """
 
         def extract_mapped_fields(data: Any) -> dict[str, Any]:
-            """Extract fields from nested structure based on mapping."""
+            """Extract fields from nested structure based on mapping.
+
+            This validator handles two scenarios:
+            1. Data pre-processed by ExecutionCoordinator._apply_input_mapping
+               - Target fields already exist in data with resolved values
+               - Just pass through the pre-resolved data
+            2. Raw dependency data that needs extraction
+               - Use FieldExtractor to extract values from nested structures
+            """
             if not isinstance(data, dict):
                 return {}
 
             result: dict[str, Any] = {}
+            target_fields = set(mapping.keys())
+
+            # Check if data was pre-processed by ExecutionCoordinator
+            # Pre-processed data has the target field names as keys (not source paths)
+            data_keys = set(data.keys())
+            if target_fields <= data_keys:
+                # Data already has all target fields - it was pre-processed
+                # Just extract the target fields directly
+                for target_field in target_fields:
+                    result[target_field] = data.get(target_field)
+                return result
+
+            # Data needs extraction using the mapping paths
             for target_field, source_path in mapping.items():
+                # Skip $input paths - these should have been resolved by ExecutionCoordinator
+                # If we get here with $input paths, the data wasn't pre-processed
+                if source_path.startswith("$input"):
+                    # Try to find the target field directly in data
+                    if target_field in data:
+                        result[target_field] = data[target_field]
+                    continue
+
                 value = FieldExtractor.extract(data, source_path)
                 if value is not None:
                     result[target_field] = value
