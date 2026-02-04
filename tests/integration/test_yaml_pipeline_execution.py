@@ -254,3 +254,118 @@ class TestYAMLPipelineExecution:
             result = await orchestrator.run(graph, test_input)
             assert "sentiment_analyzer" in result
             assert result["sentiment_analyzer"]["sentiment"] in ["positive", "negative", "neutral"]
+
+
+class TestYAMLPipelineWithInputMapping:
+    """Test YAML pipelines with $input and input_mapping features."""
+
+    @pytest.mark.asyncio
+    async def test_input_mapping_preserved_through_yaml_builder(self):
+        """Test that input_mapping from YAML is correctly stored in node params."""
+        from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: mapping-preservation-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: my_node
+      spec:
+        fn: json.loads
+        input_mapping:
+          field_a: $input.source_a
+          field_b: other_node.output
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        # Verify input_mapping is in node params
+        node = graph.nodes["my_node"]
+        assert "input_mapping" in node.params
+        assert node.params["input_mapping"] == {
+            "field_a": "$input.source_a",
+            "field_b": "other_node.output",
+        }
+
+    @pytest.mark.asyncio
+    async def test_execution_coordinator_applies_input_mapping(self):
+        """Test that ExecutionCoordinator correctly applies $input mappings at runtime."""
+        from hexdag.core.domain.dag import NodeSpec
+        from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
+
+        coordinator = ExecutionCoordinator()
+
+        # Create a node with input_mapping in params
+        node_spec = NodeSpec(
+            "consumer",
+            lambda x: x,
+            deps={"producer"},
+            params={
+                "input_mapping": {
+                    "load_id": "$input.load_id",
+                    "carrier_mc": "$input.carrier_mc",
+                    "producer_result": "producer.output",
+                }
+            },
+        )
+
+        initial_input = {"load_id": "LOAD123", "carrier_mc": "MC456", "extra": "ignored"}
+        node_results = {"producer": {"output": "processed_data", "status": "ok"}}
+
+        # This is what happens during execution
+        result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
+
+        # Verify $input.* fields were extracted from initial_input
+        assert result["load_id"] == "LOAD123"
+        assert result["carrier_mc"] == "MC456"
+        # Verify dependency.field was extracted from node results
+        assert result["producer_result"] == "processed_data"
+
+    @pytest.mark.asyncio
+    async def test_full_yaml_pipeline_with_input_mapping_end_to_end(self, orchestrator):
+        """Test full pipeline execution with input_mapping using real functions."""
+        from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+
+        # Create a simple pipeline manually that tests the input_mapping flow
+        async def identity(x):
+            """Just return the input."""
+            return {"result": x}
+
+        async def consumer(x):
+            """Consumer that expects mapped input."""
+            return {"consumed": x}
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec("producer", identity))
+        graph.add(
+            NodeSpec(
+                "consumer",
+                consumer,
+                deps={"producer"},
+                params={
+                    "input_mapping": {
+                        "original_id": "$input.request_id",
+                        "produced": "producer.result",
+                    }
+                },
+            )
+        )
+
+        # Run with dict initial input
+        initial_input = {"request_id": "REQ001", "extra": "data"}
+        result = await orchestrator.run(graph, initial_input)
+
+        # Verify producer got initial input
+        assert "producer" in result
+        # Verify consumer got mapped input
+        assert "consumer" in result
+        # The consumer received the mapped input dict
+        assert result["consumer"]["consumed"]["original_id"] == "REQ001"
+        assert result["consumer"]["consumed"]["produced"] == {
+            "request_id": "REQ001",
+            "extra": "data",
+        }

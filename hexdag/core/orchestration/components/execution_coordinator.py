@@ -310,13 +310,15 @@ class ExecutionCoordinator:
             if source_path.startswith("$input."):
                 # Extract from initial pipeline input
                 actual_path = source_path[7:]  # Remove "$input." prefix
-                value = FieldExtractor.extract(
-                    initial_input if isinstance(initial_input, dict) else {"_root": initial_input},
-                    actual_path if isinstance(initial_input, dict) else "_root",
-                )
-                if actual_path and isinstance(initial_input, dict):
-                    value = FieldExtractor.extract(initial_input, actual_path)
-                elif not actual_path:
+                if actual_path:
+                    # Has a field path like "$input.my_field"
+                    if isinstance(initial_input, dict):
+                        value = FieldExtractor.extract(initial_input, actual_path)
+                    else:
+                        # Non-dict input - wrap and extract
+                        value = FieldExtractor.extract({"_root": initial_input}, "_root")
+                else:
+                    # Just "$input." with no field - return entire initial input
                     value = initial_input
             elif source_path == "$input":
                 # Reference the entire initial input
