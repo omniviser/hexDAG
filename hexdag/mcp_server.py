@@ -113,12 +113,13 @@ def _discover_components_in_module(
 
 @mcp.tool()  # type: ignore[misc]
 def list_nodes() -> str:
-    """List all available node types in the hexDAG registry.
+    """List all available node types with auto-generated documentation.
 
     Returns detailed information about each node type including:
-    - Node name and namespace
-    - Description
-    - Configuration schema
+    - Node name, namespace, and module path
+    - Description (from docstring)
+    - Parameters summary (from _yaml_schema if available)
+    - Required vs optional parameters
 
     Returns
     -------
@@ -130,12 +131,15 @@ def list_nodes() -> str:
         {
           "core": [
             {
-              "name": "llm_node",
+              "name": "ConditionalNode",
               "namespace": "core",
-              "description": "LLM node with prompt templating",
-              "subtype": "llm"
-            },
-            ...
+              "module_path": "hexdag.builtin.nodes.ConditionalNode",
+              "description": "Multi-branch conditional router...",
+              "parameters": {
+                "required": ["branches"],
+                "optional": ["else_action", "tie_break"]
+              }
+            }
           ]
         }
     """
@@ -156,12 +160,30 @@ def list_nodes() -> str:
         if not name.endswith("Node"):
             continue
 
-        node_info = {
+        # Extract description from _yaml_schema or docstring
+        yaml_schema = getattr(obj, "_yaml_schema", None)
+        if yaml_schema and isinstance(yaml_schema, dict):
+            description = yaml_schema.get(
+                "description", (obj.__doc__ or "No description").split("\n")[0].strip()
+            )
+            # Extract parameter info from schema
+            properties = yaml_schema.get("properties", {})
+            required = yaml_schema.get("required", [])
+            optional = [k for k in properties if k not in required]
+            params_info = {"required": required, "optional": optional}
+        else:
+            description = (obj.__doc__ or "No description available").split("\n")[0].strip()
+            params_info = None
+
+        node_info: dict[str, Any] = {
             "name": name,
             "namespace": "core",
             "module_path": f"hexdag.builtin.nodes.{name}",
-            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
+            "description": description,
         }
+
+        if params_info:
+            node_info["parameters"] = params_info
 
         nodes_by_namespace["core"].append(node_info)
 
@@ -416,7 +438,12 @@ def get_component_schema(
     name: str,
     namespace: str = "core",
 ) -> str:
-    """Get detailed schema for a specific component.
+    """Get detailed auto-generated schema for a specific component.
+
+    Auto-extracts documentation from:
+    - _yaml_schema class attribute (preferred, with full descriptions)
+    - __call__ method signature (fallback)
+    - Class/function docstrings
 
     Args
     ----
@@ -426,18 +453,23 @@ def get_component_schema(
 
     Returns
     -------
-        JSON string with component schema including parameters and types
+        JSON string with:
+        - schema: Full JSON schema with property descriptions
+        - parameters: Detailed parameter documentation
+        - yaml_example: Ready-to-use YAML example
+        - documentation: Full docstring
 
     Examples
     --------
-        >>> get_component_schema("node", "llm_node", "core")  # doctest: +SKIP
+        >>> get_component_schema("node", "ConditionalNode", "core")  # doctest: +SKIP
         {
-          "name": "llm_node",
+          "name": "ConditionalNode",
           "type": "node",
-          "schema": {
-            "prompt_template": {"type": "str", "required": true},
-            "output_key": {"type": "str", "default": "result"}
-          }
+          "schema": {...},
+          "parameters": [
+            {"name": "branches", "type": "array", "required": true, "description": "..."}
+          ],
+          "yaml_example": "..."
         }
     """
     try:
@@ -462,27 +494,37 @@ def get_component_schema(
             full_path = f"{base_module}.{name}"
             component_obj = resolve(full_path)
 
-        # For classes (node factories, etc.), instantiate to get callable with __call__ method
-        # This allows SchemaGenerator to introspect the __call__ signature
-        if isinstance(component_obj, type):
-            try:
-                # Try to instantiate without args (most factories work this way)
-                component_instance = component_obj()
-                # Use instance for schema generation (inspects __call__)
-                schema = SchemaGenerator.from_callable(component_instance)  # type: ignore[arg-type]
-            except TypeError:
-                # Can't instantiate without args - fall back to class inspection
-                schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
+        # Check for explicit _yaml_schema (preferred - has full descriptions)
+        yaml_schema = getattr(component_obj, "_yaml_schema", None)
+
+        if yaml_schema and isinstance(yaml_schema, dict):
+            # Use explicit schema with full documentation
+            schema = yaml_schema
+
+            # Extract detailed parameter documentation
+            parameters = _extract_parameters_from_schema(yaml_schema)
+
+            # Generate rich YAML example from schema
+            yaml_example = _generate_yaml_example_from_schema(name, yaml_schema)
         else:
-            # Already a function or instance
-            schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
+            # Fall back to signature introspection
+            if isinstance(component_obj, type):
+                try:
+                    component_instance = component_obj()
+                    schema = SchemaGenerator.from_callable(component_instance)  # type: ignore[arg-type]
+                except TypeError:
+                    schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
+            else:
+                schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
 
-        # Generate example YAML
-        yaml_example = ""
-        if isinstance(schema, dict) and schema:
-            yaml_example = SchemaGenerator.generate_example_yaml(name, schema)
+            parameters = _extract_parameters_from_schema(schema) if isinstance(schema, dict) else []
+            yaml_example = (
+                SchemaGenerator.generate_example_yaml(name, schema)
+                if isinstance(schema, dict) and schema
+                else ""
+            )
 
-        # Extract documentation
+        # Extract documentation from docstring
         doc = ""
         if hasattr(component_obj, "__doc__") and component_obj.__doc__:
             doc = component_obj.__doc__.strip()
@@ -492,6 +534,7 @@ def get_component_schema(
             "namespace": namespace,
             "type": component_type,
             "schema": schema,
+            "parameters": parameters,
             "yaml_example": yaml_example,
             "documentation": doc,
         }
@@ -508,6 +551,117 @@ def get_component_schema(
             },
             indent=2,
         )
+
+
+def _extract_parameters_from_schema(schema: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract detailed parameter documentation from JSON schema.
+
+    Args
+    ----
+        schema: JSON schema dict with properties
+
+    Returns
+    -------
+        List of parameter dicts with name, type, required, default, description
+    """
+    parameters = []
+    properties = schema.get("properties", {})
+    required = set(schema.get("required", []))
+
+    for prop_name, prop_schema in properties.items():
+        param: dict[str, Any] = {
+            "name": prop_name,
+            "type": prop_schema.get("type", "any"),
+            "required": prop_name in required,
+        }
+
+        if "description" in prop_schema:
+            param["description"] = prop_schema["description"]
+
+        if "default" in prop_schema:
+            param["default"] = prop_schema["default"]
+
+        if "enum" in prop_schema:
+            param["allowed_values"] = prop_schema["enum"]
+
+        # Handle nested objects (like branch items)
+        if prop_schema.get("type") == "array" and "items" in prop_schema:
+            items_schema = prop_schema["items"]
+            if items_schema.get("type") == "object" and "properties" in items_schema:
+                param["item_properties"] = list(items_schema["properties"].keys())
+
+        parameters.append(param)
+
+    return parameters
+
+
+def _generate_yaml_example_from_schema(node_name: str, schema: dict[str, Any]) -> str:
+    """Generate a rich YAML example from schema with comments.
+
+    Args
+    ----
+        node_name: Name of the node type
+        schema: JSON schema dict
+
+    Returns
+    -------
+        YAML string with example values and comments
+    """
+    properties = schema.get("properties", {})
+    required = set(schema.get("required", []))
+
+    # Build example spec
+    spec: dict[str, Any] = {}
+
+    for prop_name, prop_schema in properties.items():
+        prop_type = prop_schema.get("type", "string")
+
+        # Use default if available
+        if "default" in prop_schema:
+            if prop_name in required:
+                spec[prop_name] = prop_schema["default"]
+            continue  # Skip optional with defaults
+
+        # Generate example value based on type
+        if prop_type == "string":
+            if "enum" in prop_schema:
+                spec[prop_name] = prop_schema["enum"][0]
+            else:
+                spec[prop_name] = f"<{prop_name}>"
+        elif prop_type == "integer":
+            spec[prop_name] = 0
+        elif prop_type == "number":
+            spec[prop_name] = 0.0
+        elif prop_type == "boolean":
+            spec[prop_name] = False
+        elif prop_type == "array":
+            items = prop_schema.get("items", {})
+            if items.get("type") == "object":
+                # Generate example array item
+                item_props = items.get("properties", {})
+                example_item = {}
+                for item_key, item_schema in item_props.items():
+                    if item_schema.get("type") == "string":
+                        example_item[item_key] = f"<{item_key}>"
+                    else:
+                        example_item[item_key] = f"<{item_key}>"
+                spec[prop_name] = [example_item]
+            else:
+                spec[prop_name] = []
+        elif prop_type == "object":
+            spec[prop_name] = {}
+        else:
+            spec[prop_name] = f"<{prop_name}>"
+
+    # Build full YAML structure
+    example = {
+        "kind": node_name.lower().replace("node", "_node") if "Node" in node_name else node_name,
+        "metadata": {"name": f"my_{node_name.lower().replace('node', '')}"},
+        "spec": spec,
+        "dependencies": [],
+    }
+
+    return yaml.dump(example, sort_keys=False, default_flow_style=False)
 
 
 @mcp.tool()  # type: ignore[misc]
