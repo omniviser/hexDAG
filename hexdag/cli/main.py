@@ -17,6 +17,7 @@ from hexdag.cli.commands import (
     build_cmd,
     create_cmd,
     docs_cmd,
+    generate_types_cmd,
     init_cmd,
     pipeline_cmd,
     plugin_dev_cmd,
@@ -45,6 +46,9 @@ app.add_typer(studio_cmd.app, name="studio", help="Visual editor for pipelines")
 
 app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
 app.command(name="validate", help="Validate YAML pipeline files")(validate_cmd.validate)
+app.command(name="generate-types", help="Generate type stubs from YAML pipelines")(
+    generate_types_cmd.generate_types
+)
 
 
 @app.callback(invoke_without_command=True)

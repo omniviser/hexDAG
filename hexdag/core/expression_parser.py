@@ -8,7 +8,7 @@ Uses Python's AST module with a strict whitelist approach:
 - Only allows boolean operators: and, or, not
 - Only allows membership: in, not in
 - Only allows attribute access and subscript for data extraction
-- NO function calls, imports, or arbitrary code execution
+- Only allows whitelisted function calls (see ALLOWED_FUNCTIONS)
 
 Examples
 --------
@@ -35,16 +35,24 @@ Basic usage::
     # Membership test
     pred = compile_expression("status in ['pending', 'active']")
     result = pred({"status": "active"}, {})  # True
+
+    # Built-in functions
+    pred = compile_expression("len(items) > 0")
+    result = pred({"items": [1, 2, 3]}, {})  # True
+
+    pred = compile_expression("upper(name) == 'JOHN'")
+    result = pred({"name": "john"}, {})  # True
 """
 
 import ast
 import operator
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from hexdag.core.logging import get_logger
 
-__all__ = ["compile_expression", "ExpressionError"]
+__all__ = ["compile_expression", "evaluate_expression", "ExpressionError", "ALLOWED_FUNCTIONS"]
 
 logger = get_logger(__name__)
 
@@ -85,6 +93,71 @@ _UNARY_OPS: dict[type[ast.unaryop], Callable[..., Any]] = {
     ast.UAdd: operator.pos,
 }
 
+# Safe built-in functions allowed in expressions
+# These are carefully selected to avoid side effects and security risks
+ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
+    # Date/time functions
+    "now": lambda: datetime.now(),
+    "utcnow": lambda: datetime.now(UTC),
+    "timestamp": lambda dt: dt.timestamp() if isinstance(dt, datetime) else float(dt),
+    # Type conversion functions
+    "str": str,
+    "int": int,
+    "float": float,
+    "bool": bool,
+    # Math functions
+    "abs": abs,
+    "round": round,
+    "min": min,
+    "max": max,
+    "sum": sum,
+    # Collection functions
+    "len": len,
+    "all": all,
+    "any": any,
+    "sorted": sorted,
+    "reversed": lambda x: list(reversed(x)),
+    "list": list,
+    "set": set,
+    "dict": dict,
+    "tuple": tuple,
+    # String operations (wrapped to handle non-strings gracefully)
+    "lower": lambda s: s.lower() if isinstance(s, str) else str(s).lower(),
+    "upper": lambda s: s.upper() if isinstance(s, str) else str(s).upper(),
+    "strip": lambda s: s.strip() if isinstance(s, str) else str(s).strip(),
+    "lstrip": lambda s: s.lstrip() if isinstance(s, str) else str(s).lstrip(),
+    "rstrip": lambda s: s.rstrip() if isinstance(s, str) else str(s).rstrip(),
+    "split": lambda s, sep=None: s.split(sep) if isinstance(s, str) else [s],
+    "join": lambda sep, items: sep.join(str(i) for i in items),
+    "replace": lambda s, old, new: s.replace(old, new) if isinstance(s, str) else s,
+    "startswith": lambda s, prefix: s.startswith(prefix) if isinstance(s, str) else False,
+    "endswith": lambda s, suffix: s.endswith(suffix) if isinstance(s, str) else False,
+    "contains": lambda s, sub: sub in s if isinstance(s, str) else False,
+    # Conditional/utility functions
+    "default": lambda val, default: val if val is not None else default,
+    "coalesce": lambda *args: next((a for a in args if a is not None), None),
+    "isnone": lambda x: x is None,
+    "isempty": lambda x: x is None or x == "" or x == [] or x == {},
+}
+
+
+def _get_function_name(func_node: ast.AST) -> str | None:
+    """Extract function name from a Call node's func attribute.
+
+    Parameters
+    ----------
+    func_node : ast.AST
+        The func attribute of an ast.Call node
+
+    Returns
+    -------
+    str | None
+        Function name if it's a simple Name node, None otherwise
+    """
+    if isinstance(func_node, ast.Name):
+        return func_node.id
+    return None
+
 
 def _validate_ast(node: ast.AST, expression: str) -> None:
     """Validate that an AST node only contains allowed operations.
@@ -117,6 +190,8 @@ def _validate_ast(node: ast.AST, expression: str) -> None:
         ast.Tuple,
         ast.List,
         ast.Dict,
+        ast.Call,  # Now allowed for whitelisted functions
+        ast.keyword,  # For keyword arguments in function calls
         # Comparison operators
         ast.Eq,
         ast.NotEq,
@@ -147,9 +222,20 @@ def _validate_ast(node: ast.AST, expression: str) -> None:
     if not isinstance(node, allowed_types):
         raise ExpressionError(expression, f"Disallowed expression type: {type(node).__name__}")
 
-    # Check for function calls explicitly
+    # Check for function calls - only allow whitelisted functions
     if isinstance(node, ast.Call):
-        raise ExpressionError(expression, "Function calls are not allowed in expressions")
+        func_name = _get_function_name(node.func)
+        if func_name is None:
+            raise ExpressionError(
+                expression,
+                "Only simple function calls are allowed (e.g., 'len(x)', not 'obj.method()')",
+            )
+        if func_name not in ALLOWED_FUNCTIONS:
+            allowed_list = ", ".join(sorted(ALLOWED_FUNCTIONS.keys()))
+            raise ExpressionError(
+                expression,
+                f"Function '{func_name}' is not allowed. Allowed functions: {allowed_list}",
+            )
 
     # Recursively check all child nodes
     for child in ast.iter_child_nodes(node):
@@ -308,6 +394,28 @@ def _evaluate_node(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -
             raise ExpressionError("", f"Unsupported binary op: {type(node.op).__name__}")
         return op_func(left, right)
 
+    if isinstance(node, ast.Call):
+        # Handle whitelisted function calls
+        func_name = _get_function_name(node.func)
+        if func_name is None or func_name not in ALLOWED_FUNCTIONS:
+            raise ExpressionError("", f"Unknown or disallowed function: {func_name}")
+
+        func = ALLOWED_FUNCTIONS[func_name]
+
+        # Evaluate arguments
+        args = [_evaluate_node(arg, data, state) for arg in node.args]
+
+        # Evaluate keyword arguments
+        kwargs = {}
+        for kw in node.keywords:
+            if kw.arg is not None:
+                kwargs[kw.arg] = _evaluate_node(kw.value, data, state)
+
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            raise ExpressionError("", f"Error calling {func_name}: {e}") from e
+
     raise ExpressionError("", f"Unsupported AST node: {type(node).__name__}")
 
 
@@ -388,3 +496,61 @@ def compile_expression(expression: str) -> Callable[[dict[str, Any], dict[str, A
             return False
 
     return predicate
+
+
+def evaluate_expression(
+    expression: str,
+    data: dict[str, Any],
+    state: dict[str, Any] | None = None,
+) -> Any:
+    """Evaluate an expression and return the actual result value.
+
+    Unlike compile_expression which returns a boolean predicate, this function
+    returns the actual computed value of the expression. Use this for input_mapping
+    transformations where you need the actual value, not just True/False.
+
+    Parameters
+    ----------
+    expression : str
+        Expression string like "len(items)" or "upper(name)"
+    data : dict
+        Data dict for variable resolution
+    state : dict | None
+        Optional state dict for state variable resolution
+
+    Returns
+    -------
+    Any
+        The actual result of evaluating the expression
+
+    Raises
+    ------
+    ExpressionError
+        If expression is invalid or contains disallowed operations
+
+    Examples
+    --------
+    >>> evaluate_expression("len(items)", {"items": [1, 2, 3]})
+    3
+
+    >>> evaluate_expression("upper(name)", {"name": "john"})
+    'JOHN'
+
+    >>> evaluate_expression("price * quantity", {"price": 10, "quantity": 5})
+    50
+    """
+    if not expression or not expression.strip():
+        raise ExpressionError(expression, "Expression cannot be empty")
+
+    expression = expression.strip()
+    state = state or {}
+
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as e:
+        raise ExpressionError(expression, f"Syntax error: {e.msg}") from e
+
+    # Validate AST is safe
+    _validate_ast(tree, expression)
+
+    return _evaluate_node(tree.body, data, state)

@@ -114,7 +114,15 @@ class SchemaGenerator:
         properties = {}
         required = []
 
-        param_docs = SchemaGenerator._extract_param_docs(factory)
+        # Extract param docs - try __call__ method first (for callable instances),
+        # then fall back to the factory itself
+        param_docs: dict[str, str] = {}
+        # We need the actual __call__ method to extract docstrings, not just callable check
+        call_method = getattr(factory, "__call__", None)  # noqa: B004
+        if call_method is not None:
+            param_docs = SchemaGenerator._extract_param_docs(call_method)
+        if not param_docs:
+            param_docs = SchemaGenerator._extract_param_docs(factory)
 
         param_list = list(sig.parameters.items())
         first_non_self_param = None
@@ -286,9 +294,9 @@ class SchemaGenerator:
         """Extract parameter descriptions from function docstring.
 
         Supports multiple docstring formats:
-        - Google style
-        - NumPy style
-        - Sphinx style
+        - Google style (Args:)
+        - NumPy style (Parameters with --- separator)
+        - Sphinx style (:param name:)
 
         Args
         ----
@@ -316,22 +324,30 @@ class SchemaGenerator:
         if not docstring:
             return {}
 
-        param_docs = {}
+        param_docs: dict[str, str] = {}
         lines = docstring.split("\n")
 
         # Look for Args/Parameters section
         in_params_section = False
-        current_param = None
+        current_param: str | None = None
+        is_numpy_style = False
 
-        for line in lines:
+        for i, line in enumerate(lines):
             line_stripped = line.strip()
 
-            # Skip separator lines (NumPy style: "----------")
+            # Check for NumPy-style separator (line of dashes after Parameters header)
+            # Also check if this is a short separator (4 chars like "----") which may be
+            # a formatting artifact rather than a true NumPy-style separator
             if (
                 in_params_section
                 and line_stripped
+                and len(line_stripped) >= 3
                 and all(c in ("-", "=", "_") for c in line_stripped)
             ):
+                # Only treat as NumPy style if the separator is long enough (>=10 chars)
+                # Short separators like "----" are often just formatting
+                if len(line_stripped) >= 10:
+                    is_numpy_style = True
                 continue
 
             # Detect start of parameters section (case insensitive)
@@ -348,56 +364,95 @@ class SchemaGenerator:
                 in_params_section = True
                 continue
 
-            # Exit parameters section when we hit another section header (ends with :)
-            # or non-indented text
+            # Exit parameters section when we hit another section header
             if in_params_section:
-                if line_stripped and line_stripped.endswith(":") and not line.startswith(" "):
+                # NumPy style: section headers are followed by separator lines
+                # Check if next line is a separator (indicating new section)
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if (
+                        line_stripped
+                        and not line.startswith((" ", "\t"))
+                        and next_line
+                        and len(next_line) >= 3
+                        and all(c in ("-", "=", "_") for c in next_line)
+                    ):
+                        break
+
+                # Google style: section headers end with :
+                if (
+                    line_stripped
+                    and line_stripped.endswith(":")
+                    and not line.startswith(" ")
+                    and line_stripped.lower() not in ("args:", "parameters:", "params:")
+                ):
                     break
+
+                # Check for section keywords
                 if (
                     line
                     and not line.startswith((" ", "\t"))
                     and line_stripped
                     and any(
                         keyword in line_stripped.lower()
-                        for keyword in ["return", "raise", "yield", "example", "note"]
+                        for keyword in [
+                            "returns",
+                            "raises",
+                            "yields",
+                            "examples",
+                            "notes",
+                            "see also",
+                        ]
                     )
                 ):
                     break
 
-            # Process parameter lines (either indented or not, since inspect.getdoc normalizes)
+            # Process parameter lines
             if in_params_section:
-                # Google/NumPy style: "    param_name: description" or "param_name: description"
-                # Sphinx style: "    :param param_name: description"
-                if ":" in line_stripped:
-                    # Try to extract param name and description
-                    if line_stripped.startswith(":param"):
-                        # Sphinx style
-                        parts = line_stripped.split(":", 3)
-                        if len(parts) >= 3:
-                            param_name = parts[1].replace("param", "").strip()
-                            description = parts[2].strip()
+                # Sphinx style: ":param param_name: description"
+                if line_stripped.startswith(":param"):
+                    parts = line_stripped.split(":", 3)
+                    if len(parts) >= 3:
+                        param_name = parts[1].replace("param", "").strip()
+                        description = parts[2].strip()
+                        param_docs[param_name] = description
+                        current_param = param_name
+                # NumPy style: "param_name : type" on one line, description indented below
+                elif is_numpy_style and " : " in line_stripped and not line.startswith((" ", "\t")):
+                    parts = line_stripped.split(" : ", 1)
+                    param_name = parts[0].strip()
+                    # Skip type info, description comes on next indented lines
+                    if param_name and not any(
+                        keyword in param_name.lower()
+                        for keyword in ["return", "raise", "yield", "example", "note"]
+                    ):
+                        param_docs[param_name] = ""
+                        current_param = param_name
+                # Google style: "param_name: description" or "param_name (type): description"
+                # Also handles mixed-style (NumPy markers with Google param format)
+                elif ":" in line_stripped:
+                    parts = line_stripped.split(":", 1)
+                    if len(parts) == 2:
+                        param_part = parts[0].strip()
+                        description = parts[1].strip()
+                        # Handle "param_name (type)" format
+                        if "(" in param_part:
+                            param_name = param_part.split("(")[0].strip()
+                        else:
+                            param_name = param_part
+                        # Make sure it's not a section header
+                        if param_name and not any(
+                            keyword in param_name.lower()
+                            for keyword in ["return", "raise", "yield", "example", "note"]
+                        ):
                             param_docs[param_name] = description
                             current_param = param_name
+                # Continuation lines (indented description for current param)
+                elif current_param and line.startswith((" ", "\t")) and line_stripped:
+                    if param_docs[current_param]:
+                        param_docs[current_param] += " " + line_stripped
                     else:
-                        # Google/NumPy style
-                        parts = line_stripped.split(":", 1)
-                        if len(parts) == 2:
-                            param_name = parts[0].strip()
-                            description = parts[1].strip()
-                            # Make sure it's not a section header
-                            if (
-                                param_name
-                                and description
-                                and not any(
-                                    keyword in param_name.lower()
-                                    for keyword in ["return", "raise", "yield", "example", "note"]
-                                )
-                            ):
-                                param_docs[param_name] = description
-                                current_param = param_name
-                elif current_param and line_stripped:
-                    # Continuation of previous parameter description
-                    param_docs[current_param] += " " + line_stripped
+                        param_docs[current_param] = line_stripped
 
         return param_docs
 

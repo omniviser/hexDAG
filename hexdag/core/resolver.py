@@ -34,6 +34,7 @@ _user_aliases: dict[str, str] = {}
 # Backwards compatibility: map old short names to full module paths
 _SHORT_NAME_ALIASES: dict[str, str] = {
     # Nodes (old short names)
+    "data_node": "hexdag.builtin.nodes.DataNode",
     "llm_node": "hexdag.builtin.nodes.LLMNode",
     "function_node": "hexdag.builtin.nodes.FunctionNode",
     "agent_node": "hexdag.builtin.nodes.ReActAgentNode",
@@ -41,6 +42,7 @@ _SHORT_NAME_ALIASES: dict[str, str] = {
     "conditional_node": "hexdag.builtin.nodes.ConditionalNode",
     "tool_call_node": "hexdag.builtin.nodes.ToolCallNode",
     # Namespace:name format
+    "core:data_node": "hexdag.builtin.nodes.DataNode",
     "core:llm_node": "hexdag.builtin.nodes.LLMNode",
     "core:function_node": "hexdag.builtin.nodes.FunctionNode",
     "core:agent_node": "hexdag.builtin.nodes.ReActAgentNode",

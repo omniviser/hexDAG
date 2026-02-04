@@ -193,12 +193,18 @@ class TestLiterals:
 class TestSecurityValidation:
     """Test security validations."""
 
-    def test_function_call_blocked(self) -> None:
-        """Test that function calls are blocked."""
+    def test_allowed_function_works(self) -> None:
+        """Test that whitelisted functions are allowed."""
+        # len() is now allowed
+        pred = compile_expression("len(items) > 0")
+        assert pred({"items": [1, 2, 3]}, {}) is True
+        assert pred({"items": []}, {}) is False
+
+    def test_disallowed_function_blocked(self) -> None:
+        """Test that non-whitelisted functions are blocked."""
         with pytest.raises(ExpressionError) as exc_info:
-            compile_expression("len(items) > 0")
-        # Error message indicates Call type is disallowed
-        assert "Disallowed expression type: Call" in str(exc_info.value)
+            compile_expression("dangerous_func(x)")
+        assert "not allowed" in str(exc_info.value)
 
     def test_import_blocked(self) -> None:
         """Test that import is blocked."""

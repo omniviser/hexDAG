@@ -33,6 +33,7 @@
                     "properties": {
                         "config": {
                             "default": null,
+                            "description": "Agent configuration",
                             "type": [
                                 "string",
                                 "null"
@@ -40,6 +41,7 @@
                         },
                         "continuation_prompts": {
                             "default": null,
+                            "description": "Phase-specific prompts",
                             "type": [
                                 "object",
                                 "null"
@@ -47,6 +49,7 @@
                         },
                         "deps": {
                             "default": null,
+                            "description": "Dependencies",
                             "items": {
                                 "type": "string"
                             },
@@ -72,7 +75,8 @@
                                 {
                                     "type": "string"
                                 }
-                            ]
+                            ],
+                            "description": "Initial reasoning prompt"
                         },
                         "output_schema": {
                             "anyOf": [
@@ -83,7 +87,8 @@
                                     "type": "string"
                                 }
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "Custom output schema for tool_end results"
                         }
                     },
                     "required": [
@@ -255,6 +260,7 @@
                     "properties": {
                         "deps": {
                             "default": null,
+                            "description": "List of dependency node names",
                             "items": {
                                 "type": "string"
                             },
@@ -271,10 +277,12 @@
                                 {
                                     "type": "string"
                                 }
-                            ]
+                            ],
+                            "description": "Function to execute (callable or module path string like 'mymodule.myfunc')"
                         },
                         "input_mapping": {
                             "default": null,
+                            "description": "Optional field mapping dict {target_field: \"source.path\"}",
                             "type": [
                                 "object",
                                 "null"
@@ -289,7 +297,8 @@
                                     "type": "string"
                                 }
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "Input schema for validation (if None, inferred from function)"
                         },
                         "output_schema": {
                             "anyOf": [
@@ -300,7 +309,8 @@
                                     "type": "string"
                                 }
                             ],
-                            "default": null
+                            "default": null,
+                            "description": "Output schema for validation (if None, inferred from function)"
                         }
                     },
                     "required": [
@@ -349,26 +359,32 @@
                     "properties": {
                         "deps": {
                             "default": null,
+                            "description": "List of dependency node names.",
                             "type": "string"
                         },
                         "output_schema": {
                             "default": null,
+                            "description": "Expected output schema for structured output. If provided with parse_json=True, the LLM response will be parsed and validated against this schema.",
                             "type": "string"
                         },
                         "parse_json": {
                             "default": false,
+                            "description": "If True, parse the LLM response as JSON and validate against output_schema. Default is False (returns raw text).",
                             "type": "string"
                         },
                         "parse_strategy": {
                             "default": "json",
+                            "description": "",
                             "type": "string"
                         },
                         "prompt_template": {
                             "default": null,
+                            "description": "Template for the user prompt. Supports Jinja2-style {{variable}} syntax. Can be a string or PromptTemplate/ChatPromptTemplate object. Can also be provided as 'template' (alias for YAML compatibility).",
                             "type": "string"
                         },
                         "system_prompt": {
                             "default": null,
+                            "description": "System message to prepend to the conversation.",
                             "type": "string"
                         },
                         "template": {
@@ -513,6 +529,7 @@
                     "properties": {
                         "arguments": {
                             "default": null,
+                            "description": "Arguments to pass to the tool (default: {})",
                             "type": [
                                 "object",
                                 "null"
@@ -520,6 +537,7 @@
                         },
                         "deps": {
                             "default": null,
+                            "description": "Dependencies (typically the LLM node that requested the tool)",
                             "items": {
                                 "type": "string"
                             },
@@ -530,12 +548,14 @@
                         },
                         "tool_call_id": {
                             "default": null,
+                            "description": "Optional ID for tracking (from LLM tool calls)",
                             "type": [
                                 "string",
                                 "null"
                             ]
                         },
                         "tool_name": {
+                            "description": "Full module path to the tool function (e.g., 'mymodule.my_tool')",
                             "type": "string"
                         }
                     },
