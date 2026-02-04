@@ -16,7 +16,7 @@ Conventions:
 """
 
 import asyncio
-import logging
+import time
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 from enum import Enum
@@ -26,8 +26,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
+from hexdag.core.logging import get_logger
 
-logger = logging.getLogger("hexdag.app.application.nodes")
+logger = get_logger(__name__)
 
 CollectMode = Literal["list", "last", "reduce"]
 TieBreak = Literal["first_true"]
@@ -467,6 +468,15 @@ class LoopNode(BaseNodeFactory):
             - "loop": metadata with iterations, final state, stop flags.
             - One of: "outputs" (list), "output" (last), or "reduced" (accumulator).
             """
+            node_logger = logger.bind(node=name, node_type="loop_node")
+            start_time = time.perf_counter()
+
+            # Log loop start
+            node_logger.info(
+                "Starting loop",
+                max_iterations=_max_iter,
+                collect_mode=_collect_mode,
+            )
 
             # Normalize input to dict without external helpers
             data = _normalize_input_data(input_data)
@@ -483,13 +493,30 @@ class LoopNode(BaseNodeFactory):
                 # Safety cap
                 if iteration_count >= _max_iter:
                     stopped_by = StopReason.LIMIT
+                    node_logger.debug(
+                        "Loop reached max iterations",
+                        iteration=iteration_count,
+                        max_iterations=_max_iter,
+                    )
                     break
 
                 # Main condition
                 ok, reason = self._should_continue(_condition, data, state)
                 if not ok:
                     stopped_by = reason or StopReason.CONDITION
+                    node_logger.debug(
+                        "Loop condition returned False",
+                        iteration=iteration_count,
+                        stop_reason=stopped_by.value,
+                    )
                     break
+
+                # Log iteration start at debug level
+                node_logger.debug(
+                    "Loop iteration",
+                    iteration=iteration_count + 1,
+                    state_keys=list(state.keys()),
+                )
 
                 # Body execution (supports async)
                 out = _body_fn(data, state)
@@ -507,10 +534,24 @@ class LoopNode(BaseNodeFactory):
                     stopped_by = StopReason.BREAK_GUARD
                     iteration_count += 1
                     state[_iter_key] = iteration_count
+                    node_logger.debug(
+                        "Break guard triggered",
+                        iteration=iteration_count,
+                    )
                     break
 
                 iteration_count += 1
                 state[_iter_key] = iteration_count
+
+            # Log loop completion
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            node_logger.info(
+                "Loop completed",
+                total_iterations=iteration_count,
+                stopped_by=stopped_by.value,
+                collect_mode=_collect_mode,
+                duration_ms=f"{duration_ms:.2f}",
+            )
 
             # Build final result payload
             return {
@@ -768,6 +809,14 @@ class ConditionalNode(BaseNodeFactory):
             - Normalizes input to dict.
             - For callable predicates, passes (data, state) where state may be provided via ports.
             """
+            node_logger = logger.bind(node=name, node_type="conditional_node")
+
+            # Log evaluation start
+            node_logger.debug(
+                "Evaluating conditions",
+                branch_count=len(_branches),
+                has_else=_else_action is not None,
+            )
 
             # Normalizes input to dict
             data = _normalize_input_data(input_data)
@@ -783,7 +832,11 @@ class ConditionalNode(BaseNodeFactory):
                 try:
                     ok = bool(br["pred"](data, state))
                 except Exception as e:
-                    logger.warning("predicate[%d] raised; treated as False: %s", idx, e)
+                    node_logger.warning(
+                        "Branch predicate raised exception",
+                        branch_index=idx,
+                        error=str(e),
+                    )
                 evaluations.append(ok)
                 if ok and chosen is None:
                     chosen = br["action"]
@@ -803,7 +856,13 @@ class ConditionalNode(BaseNodeFactory):
                 },
             }
 
-            logger.info("Conditional '%s' -> routing: %s", name, chosen)
+            # Log routing decision
+            node_logger.info(
+                "Routing decision",
+                chosen_action=chosen,
+                matched_branch=chosen_idx,
+                used_else=chosen_idx is None and chosen is not None,
+            )
             return result
 
         try:

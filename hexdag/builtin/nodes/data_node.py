@@ -30,8 +30,11 @@ YAML pipeline usage::
 from typing import Any
 
 from hexdag.core.domain.dag import NodeSpec
+from hexdag.core.logging import get_logger
 
 from .base_node_factory import BaseNodeFactory
+
+logger = get_logger(__name__)
 
 
 class DataNode(BaseNodeFactory):
@@ -124,7 +127,16 @@ class DataNode(BaseNodeFactory):
 
         async def data_fn(input_data: Any) -> dict[str, Any]:
             """Return static output, ignoring input data."""
+            node_logger = logger.bind(node=name, node_type="data_node")
+
             _ = input_data  # Explicitly unused
+
+            node_logger.debug(
+                "Returning static data",
+                output_keys=list(static_output.keys()),
+                output_key_count=len(static_output),
+            )
+
             return static_output
 
         # Preserve function metadata for debugging
