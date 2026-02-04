@@ -462,8 +462,20 @@ def get_component_schema(
             full_path = f"{base_module}.{name}"
             component_obj = resolve(full_path)
 
-        # Extract schema using SchemaGenerator
-        schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
+        # For classes (node factories, etc.), instantiate to get callable with __call__ method
+        # This allows SchemaGenerator to introspect the __call__ signature
+        if isinstance(component_obj, type):
+            try:
+                # Try to instantiate without args (most factories work this way)
+                component_instance = component_obj()
+                # Use instance for schema generation (inspects __call__)
+                schema = SchemaGenerator.from_callable(component_instance)  # type: ignore[arg-type]
+            except TypeError:
+                # Can't instantiate without args - fall back to class inspection
+                schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
+        else:
+            # Already a function or instance
+            schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
 
         # Generate example YAML
         yaml_example = ""
@@ -2288,7 +2300,7 @@ def get_extension_guide(component_type: str | None = None) -> str:
     if component_type == "tool":
         return "Use get_custom_tool_guide() for detailed tool documentation."
 
-    return '''# Extending hexDAG - Overview
+    return """# Extending hexDAG - Overview
 
 ## Extension Points
 
@@ -2423,7 +2435,7 @@ Use these MCP tools when building pipelines:
 | `get_custom_adapter_guide()` | Adapter creation guide |
 | `get_custom_node_guide()` | Node creation guide |
 | `get_custom_tool_guide()` | Tool creation guide |
-'''
+"""
 
 
 # Run the server
