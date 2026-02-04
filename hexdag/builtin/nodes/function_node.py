@@ -3,16 +3,20 @@
 import asyncio
 import importlib
 import inspect
+import time
 from collections.abc import Callable
 from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
 from hexdag.core.domain.dag import NodeSpec
+from hexdag.core.logging import get_logger
 from hexdag.core.protocols import is_schema_type
 
 from .base_node_factory import BaseNodeFactory
 from .mapped_input import MappedInput
+
+logger = get_logger(__name__)
 
 
 class FunctionNode(BaseNodeFactory):
@@ -129,9 +133,30 @@ class FunctionNode(BaseNodeFactory):
         accepts_kwargs = any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values())
         param_names = set(sig.parameters.keys())
 
+        # Get function name for logging
+        fn_name = getattr(fn, "__name__", "anonymous")
+
         async def wrapped_fn(input_data: Any, **ports: Any) -> Any:
             """Execute function with explicit port handling."""
-            # Orchestrator handles all validation now - just execute the function
+            node_logger = logger.bind(node=name, node_type="function_node")
+
+            # Log input details at debug level
+            if isinstance(input_data, dict):
+                node_logger.debug(
+                    "Input received",
+                    input_keys=list(input_data.keys()),
+                    input_key_count=len(input_data),
+                )
+            else:
+                node_logger.debug(
+                    "Input received",
+                    input_type=type(input_data).__name__,
+                )
+
+            # Log execution start
+            node_logger.info("Executing function", fn_name=fn_name)
+
+            start_time = time.perf_counter()
 
             # Prepare function call arguments
             if accepts_kwargs:
@@ -141,13 +166,35 @@ class FunctionNode(BaseNodeFactory):
                 # Function has specific parameters, only pass ports that match parameter names
                 call_kwargs = {k: v for k, v in ports.items() if k in param_names}
 
-            # Execute function (handle both sync and async)
-            if asyncio.iscoroutinefunction(fn):
-                result = await fn(input_data, **call_kwargs)
-            else:
-                result = fn(input_data, **call_kwargs)
+            try:
+                # Execute function (handle both sync and async)
+                if asyncio.iscoroutinefunction(fn):
+                    result = await fn(input_data, **call_kwargs)
+                else:
+                    result = fn(input_data, **call_kwargs)
 
-            return result
+                # Log successful completion
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                node_logger.debug(
+                    "Function completed",
+                    fn_name=fn_name,
+                    duration_ms=f"{duration_ms:.2f}",
+                    output_type=type(result).__name__,
+                )
+
+                return result
+
+            except Exception as e:
+                # Log failure
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                node_logger.error(
+                    "Function failed",
+                    fn_name=fn_name,
+                    duration_ms=f"{duration_ms:.2f}",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                raise
 
         # Preserve function metadata
         wrapped_fn.__name__ = getattr(fn, "__name__", f"wrapped_{name}")

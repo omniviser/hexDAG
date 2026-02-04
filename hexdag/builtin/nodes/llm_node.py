@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ValidationError
@@ -227,6 +228,9 @@ class LLMNode(BaseNodeFactory):
 
         async def llm_wrapper(validated_input: dict[str, Any]) -> Any:
             """Execute LLM call with optional parsing."""
+            node_logger = logger.bind(node=name, node_type="llm_node")
+            start_time = time.perf_counter()
+
             llm = get_port("llm")
             if not llm:
                 raise RuntimeError("LLM port not available in execution context")
@@ -237,6 +241,21 @@ class LLMNode(BaseNodeFactory):
                     input_dict = to_dict(validated_input)
                 except TypeError:
                     input_dict = validated_input
+
+                # Log input variables at debug level
+                node_logger.debug(
+                    "Prompt variables",
+                    variables=list(input_dict.keys()),
+                    variable_count=len(input_dict),
+                )
+
+                # Log execution start
+                node_logger.info(
+                    "Calling LLM",
+                    has_system_prompt=system_prompt is not None,
+                    parse_json=parse_json,
+                    parse_strategy=parse_strategy if parse_json else None,
+                )
 
                 # Enhance template with schema instructions if using structured output
                 enhanced_template = template
@@ -249,13 +268,33 @@ class LLMNode(BaseNodeFactory):
                 # Call LLM
                 response = await llm.aresponse(messages)
 
+                # Log LLM response received
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                node_logger.debug(
+                    "LLM response received",
+                    response_length=len(response) if isinstance(response, str) else None,
+                    duration_ms=f"{duration_ms:.2f}",
+                )
+
                 # Parse response if requested
                 if parse_json and output_model:
-                    return self._parse_response(response, output_model, parse_strategy)
+                    result = self._parse_response(response, output_model, parse_strategy)
+                    node_logger.debug(
+                        "Response parsed",
+                        output_type=type(result).__name__,
+                    )
+                    return result
 
                 return response
 
-            except Exception:
+            except Exception as e:
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                node_logger.error(
+                    "LLM call failed",
+                    duration_ms=f"{duration_ms:.2f}",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
                 raise
 
         return llm_wrapper

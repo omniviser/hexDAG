@@ -48,6 +48,11 @@ _SHORT_NAME_ALIASES: dict[str, str] = {
     "core:agent_node": "hexdag.builtin.nodes.ReActAgentNode",
     "core:loop_node": "hexdag.builtin.nodes.LoopNode",
     "core:conditional_node": "hexdag.builtin.nodes.ConditionalNode",
+    # Aliases
+    "static_node": "hexdag.builtin.nodes.DataNode",
+    "core:static_node": "hexdag.builtin.nodes.DataNode",
+    "port_call_node": "hexdag.builtin.nodes.PortCallNode",
+    "core:port_call_node": "hexdag.builtin.nodes.PortCallNode",
 }
 
 

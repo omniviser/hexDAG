@@ -2,6 +2,7 @@
 
 import ast
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
@@ -20,6 +21,8 @@ from hexdag.core.protocols import to_dict
 from .base_node_factory import BaseNodeFactory
 from .llm_node import LLMNode
 from .tool_utils import ToolCallFormat, ToolParser
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from types import MappingProxyType
@@ -254,18 +257,49 @@ class ReActAgentNode(BaseNodeFactory):
 
         async def agent_with_internal_loop(input_data: Any) -> Any:
             """Agent executor with internal loop control."""
+            node_logger = logger.bind(node=name, node_type="agent_node")
+            start_time = time.perf_counter()
+
+            # Log agent start
+            node_logger.info(
+                "Starting agent",
+                max_steps=config.max_steps,
+                tool_call_style=config.tool_call_style.value,
+            )
 
             # Start with initial input
             current_result = input_data
 
             # Run the loop until success condition is met or max iterations reached
-            for _ in range(config.max_steps):
+            for step_num in range(config.max_steps):
+                # Log step start
+                node_logger.debug(
+                    "Agent step starting",
+                    step=step_num + 1,
+                    max_steps=config.max_steps,
+                )
+
                 # Execute single step
                 step_result = await single_step_executor(current_result)
 
                 # If not AgentState, it's the final output
                 if not isinstance(step_result, AgentState):
+                    duration_ms = (time.perf_counter() - start_time) * 1000
+                    node_logger.info(
+                        "Agent completed with direct output",
+                        total_steps=step_num + 1,
+                        duration_ms=f"{duration_ms:.2f}",
+                        output_type=type(step_result).__name__,
+                    )
                     return step_result
+
+                # Log step completion with state info
+                node_logger.debug(
+                    "Agent step completed",
+                    step=step_num + 1,
+                    phase=step_result.current_phase,
+                    tools_used_count=len(step_result.tools_used),
+                )
 
                 # Check success condition
                 if success_condition(step_result):
@@ -275,13 +309,27 @@ class ReActAgentNode(BaseNodeFactory):
                         get_port("event_manager"),
                     )
                     if final_output is not None:
+                        duration_ms = (time.perf_counter() - start_time) * 1000
+                        node_logger.info(
+                            "Agent completed",
+                            total_steps=step_num + 1,
+                            tools_used=step_result.tools_used,
+                            phases=step_result.phase_history,
+                            duration_ms=f"{duration_ms:.2f}",
+                        )
                         return final_output
                     return step_result
 
                 # Continue with next iteration (pass AgentState directly)
                 current_result = step_result
 
-            # If we reach here, return the last result
+            # If we reach here, max steps reached
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            node_logger.warning(
+                "Agent reached max steps",
+                max_steps=config.max_steps,
+                duration_ms=f"{duration_ms:.2f}",
+            )
             return current_result
 
         return agent_with_internal_loop
@@ -501,8 +549,22 @@ carried_data={'key': 'value'})"""
         # Parse tool calls
         tool_calls = self.tool_parser.parse_tool_calls(response, format=config.tool_call_style)
 
+        if tool_calls:
+            logger.debug(
+                "Parsed tool calls",
+                tool_count=len(tool_calls),
+                tools=[tc.name for tc in tool_calls],
+            )
+
         for tool_call in tool_calls:
             try:
+                # Log tool execution
+                logger.debug(
+                    "Executing tool",
+                    tool_name=tool_call.name,
+                    params_preview=str(tool_call.params)[:100],
+                )
+
                 # Execute tool
                 result = await tool_router.acall_tool(tool_call.name, tool_call.params)
 
@@ -514,6 +576,8 @@ carried_data={'key': 'value'})"""
                     context = result.get("context", {})
 
                     if new_phase and new_phase in continuation_prompts:
+                        old_phase = state.current_phase
+
                         if "previous_phase" not in context:
                             context["previous_phase"] = state.current_phase
 
@@ -522,6 +586,14 @@ carried_data={'key': 'value'})"""
                         state.current_phase = new_phase
                         state.phase_history.append(new_phase)
 
+                        # Log phase transition
+                        logger.info(
+                            "Phase transition",
+                            from_phase=old_phase,
+                            to_phase=new_phase,
+                            reason=context.get("reason", ""),
+                        )
+
                         # If there's carried_data, merge it into state.input_data
                         if "carried_data" in context and isinstance(context["carried_data"], dict):
                             state.input_data.update(context["carried_data"])
@@ -529,6 +601,11 @@ carried_data={'key': 'value'})"""
             except Exception as e:
                 error_msg = f"{tool_call.name}: Error - {e}"
                 state.tool_results.append(error_msg)
+                logger.warning(
+                    "Tool execution failed",
+                    tool_name=tool_call.name,
+                    error=str(e),
+                )
 
     def _parse_tool_end_result(self, tool_result: str) -> dict[str, Any] | None:
         """Parse tool_end result string into structured data.
@@ -605,12 +682,10 @@ carried_data={'key': 'value'})"""
 
                 except (ValueError, TypeError) as e:
                     # Validation failed - try next tool_end result
-
-                    logger = get_logger(__name__)
                     logger.debug(
-                        "Failed to validate tool_end result against %s: %s",
-                        output_model.__name__,
-                        e,
+                        "Failed to validate tool_end result",
+                        output_model=output_model.__name__,
+                        error=str(e),
                     )
                     continue  # Skip this tool result and try the next one
 

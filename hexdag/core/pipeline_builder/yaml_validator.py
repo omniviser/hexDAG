@@ -19,6 +19,9 @@ KNOWN_NODE_TYPES = frozenset({
     "core:parser",
     "core:raw_llm",
     "core:tool_call",
+    "core:data",
+    "core:static",
+    "core:port_call",
     # Support module path format too (these are valid when using full paths)
     "function_node",
     "llm_node",
@@ -30,6 +33,9 @@ KNOWN_NODE_TYPES = frozenset({
     "parser_node",
     "raw_llm_node",
     "tool_call_node",
+    "data_node",
+    "static_node",
+    "port_call_node",
 })
 
 
