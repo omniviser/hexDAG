@@ -3,7 +3,7 @@ name = "hexdag"
 version = "0.5.0"
 
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
-authors = [{ name = "hexDAG Team" }]
+authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
 requires-python = "~=3.12.0"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -31,8 +31,6 @@ dependencies = [
     "loguru>=0.7.0",
     "typer>=0.9.0",      # CLI framework (previously optional)
     "rich>=13.0.0",      # Rich terminal output and logging (previously optional)
-    "orjson>=3.10.0",
-    "commitizen>=4.8.3",
 ]
 
 [project.optional-dependencies]

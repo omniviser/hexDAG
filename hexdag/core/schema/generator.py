@@ -58,6 +58,13 @@ class SchemaGenerator:
     def from_callable(factory: Callable, format: str = "dict") -> dict | str:
         """Generate schema from factory __call__ signature.
 
+        Resolution order:
+        1. Check for explicit ``_yaml_schema`` class attribute
+        2. Fall back to ``__call__`` signature introspection
+
+        This allows builder-pattern classes like ConditionalNode to define
+        explicit schemas for YAML/MCP usage.
+
         Args
         ----
             factory: Callable (function, method, or callable class) to introspect
@@ -81,9 +88,22 @@ class SchemaGenerator:
         True
         >>> schema['required']
         ['count']
+
+        >>> # Classes can define explicit schemas
+        >>> class MyNode:
+        ...     _yaml_schema = {"type": "object", "properties": {"foo": {"type": "string"}}}
+        >>> schema = SchemaGenerator.from_callable(MyNode)
+        >>> "foo" in schema.get("properties", {})
+        True
         """
         if format not in ("dict", "yaml", "json"):
             raise ValueError(f"Invalid format: {format}. Must be one of: dict, yaml, json")
+
+        # Check for explicit _yaml_schema class attribute (for builder-pattern nodes)
+        yaml_schema = getattr(factory, "_yaml_schema", None)
+        if yaml_schema and isinstance(yaml_schema, dict):
+            logger.debug(f"Using explicit _yaml_schema for {factory}")
+            return SchemaGenerator._format_output(yaml_schema, format)
 
         try:
             sig = inspect.signature(factory)

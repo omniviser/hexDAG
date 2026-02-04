@@ -432,3 +432,142 @@ class TestComplexScenarios:
         # Other params should be present
         assert "template" in schema["properties"]
         assert "model" in schema["properties"]
+
+
+class TestYamlSchemaAttribute:
+    """Test _yaml_schema class attribute support."""
+
+    def test_explicit_yaml_schema_used(self):
+        """Test that _yaml_schema takes precedence over introspection."""
+
+        class MyNode:
+            _yaml_schema = {
+                "type": "object",
+                "properties": {
+                    "custom_field": {"type": "string", "description": "Custom field"},
+                },
+                "required": ["custom_field"],
+            }
+
+            def __call__(self, name: str, ignored_param: int):
+                pass
+
+        schema = SchemaGenerator.from_callable(MyNode)
+
+        # Should use _yaml_schema, not introspected signature
+        assert "custom_field" in schema["properties"]
+        assert "ignored_param" not in schema["properties"]
+
+    def test_yaml_schema_with_complex_structure(self):
+        """Test _yaml_schema with complex nested structure."""
+
+        class ConditionalNodeLike:
+            _yaml_schema = {
+                "type": "object",
+                "properties": {
+                    "branches": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "condition": {"type": "string"},
+                                "action": {"type": "string"},
+                            },
+                        },
+                    },
+                    "else_action": {"type": "string"},
+                },
+            }
+
+        schema = SchemaGenerator.from_callable(ConditionalNodeLike)
+
+        assert "branches" in schema["properties"]
+        assert schema["properties"]["branches"]["type"] == "array"
+        assert "else_action" in schema["properties"]
+
+    def test_fallback_when_no_yaml_schema(self):
+        """Test fallback to introspection when no _yaml_schema."""
+
+        class SimpleNode:
+            def __call__(self, template: str, model: str = "gpt-4"):
+                pass
+
+        schema = SchemaGenerator.from_callable(SimpleNode())
+
+        # Should introspect __call__ signature
+        assert "template" in schema["properties"]
+        assert "model" in schema["properties"]
+
+    def test_yaml_schema_none_ignored(self):
+        """Test that _yaml_schema = None is ignored."""
+
+        class NodeWithNoneSchema:
+            _yaml_schema = None
+
+            def __call__(self, value: str):
+                pass
+
+        schema = SchemaGenerator.from_callable(NodeWithNoneSchema())
+
+        # Should fallback to introspection
+        assert "value" in schema["properties"]
+
+    def test_yaml_schema_non_dict_ignored(self):
+        """Test that non-dict _yaml_schema is ignored."""
+
+        class NodeWithBadSchema:
+            _yaml_schema = "not a dict"
+
+            def __call__(self, value: str):
+                pass
+
+        schema = SchemaGenerator.from_callable(NodeWithBadSchema())
+
+        # Should fallback to introspection
+        assert "value" in schema["properties"]
+
+    def test_conditional_node_has_schema(self):
+        """Test that real ConditionalNode returns meaningful schema."""
+        from hexdag.builtin.nodes import ConditionalNode
+
+        schema = SchemaGenerator.from_callable(ConditionalNode)
+
+        # Should have branches property from _yaml_schema
+        assert "branches" in schema.get("properties", {})
+        assert "else_action" in schema.get("properties", {})
+
+    def test_loop_node_has_schema(self):
+        """Test that real LoopNode returns meaningful schema."""
+        from hexdag.builtin.nodes import LoopNode
+
+        schema = SchemaGenerator.from_callable(LoopNode)
+
+        # Should have while_condition and body from _yaml_schema
+        assert "while_condition" in schema.get("properties", {})
+        assert "body" in schema.get("properties", {})
+
+    def test_yaml_schema_formats(self):
+        """Test _yaml_schema works with different output formats."""
+
+        class MyNode:
+            _yaml_schema = {
+                "type": "object",
+                "properties": {"foo": {"type": "string"}},
+            }
+
+        # Dict format
+        dict_schema = SchemaGenerator.from_callable(MyNode, format="dict")
+        assert isinstance(dict_schema, dict)
+        assert "foo" in dict_schema["properties"]
+
+        # YAML format
+        yaml_schema = SchemaGenerator.from_callable(MyNode, format="yaml")
+        assert isinstance(yaml_schema, str)
+        parsed = yaml.safe_load(yaml_schema)
+        assert "foo" in parsed["properties"]
+
+        # JSON format
+        json_schema = SchemaGenerator.from_callable(MyNode, format="json")
+        assert isinstance(json_schema, str)
+        parsed = json.loads(json_schema)
+        assert "foo" in parsed["properties"]

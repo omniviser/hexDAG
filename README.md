@@ -1,7 +1,7 @@
 # 🤖 hexDAG - AI Agent Orchestration Framework
 
+[![PyPI version](https://img.shields.io/pypi/v/hexdag.svg)](https://pypi.org/project/hexdag/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12.*-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.3.0--a3-orange.svg)](https://github.com/hexdag/hexdag/releases)
 [![uv: Python package manager](https://img.shields.io/badge/uv-fastest--python--installer-blueviolet?logo=python&logoColor=white)](https://github.com/astral-sh/uv)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -36,12 +36,25 @@ Traditional AI frameworks force you to choose between simplicity and power. hexD
 ### Installation
 
 ```bash
-# Clone and install
+# Install from PyPI
+pip install hexdag
 
+# Or with uv (recommended)
+uv pip install hexdag
 
-git clone https://omniviser@dev.azure.com/omniviser/hexDAG/_git/hexDAG
-cd hexDAG
-uv sync # optional, uv checks packages in each run
+# With optional dependencies
+pip install hexdag[openai]      # OpenAI LLM support
+pip install hexdag[anthropic]   # Anthropic Claude support
+pip install hexdag[all]         # All optional dependencies
+```
+
+#### Development Installation
+
+```bash
+# Clone and install for development
+git clone https://github.com/omniviser/hexdag.git
+cd hexdag
+uv sync
 ```
 
 ### MCP Server for LLM Editors

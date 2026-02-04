@@ -128,8 +128,45 @@
                     "type": "object"
                 },
                 "spec": {
-                    "additionalProperties": false,
-                    "properties": {},
+                    "description": "Multi-branch conditional router for workflow control flow",
+                    "properties": {
+                        "branches": {
+                            "description": "List of condition branches evaluated in order",
+                            "items": {
+                                "properties": {
+                                    "action": {
+                                        "description": "Action name to return if condition matches",
+                                        "type": "string"
+                                    },
+                                    "condition": {
+                                        "description": "Expression like 'node.field == value' or callable",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "condition",
+                                    "action"
+                                ],
+                                "type": "object"
+                            },
+                            "type": "array"
+                        },
+                        "else_action": {
+                            "description": "Default action if no branch conditions match",
+                            "type": "string"
+                        },
+                        "tie_break": {
+                            "default": "first_true",
+                            "description": "Strategy for handling multiple matching branches",
+                            "enum": [
+                                "first_true"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "branches"
+                    ],
                     "type": "object"
                 }
             },
@@ -378,8 +415,46 @@
                     "type": "object"
                 },
                 "spec": {
-                    "additionalProperties": false,
-                    "properties": {},
+                    "description": "Loop control node for iterative processing",
+                    "properties": {
+                        "body": {
+                            "description": "Module path to body function: (data, state) -> Any",
+                            "type": "string"
+                        },
+                        "collect_mode": {
+                            "default": "last",
+                            "description": "How to collect results: last value, all values, or reduced",
+                            "enum": [
+                                "last",
+                                "list",
+                                "reduce"
+                            ],
+                            "type": "string"
+                        },
+                        "initial_state": {
+                            "default": {},
+                            "description": "Initial state dict passed to first iteration",
+                            "type": "object"
+                        },
+                        "iteration_key": {
+                            "default": "loop_iteration",
+                            "description": "Key name for current iteration number in state",
+                            "type": "string"
+                        },
+                        "max_iterations": {
+                            "default": 100,
+                            "description": "Maximum number of iterations before stopping",
+                            "type": "integer"
+                        },
+                        "while_condition": {
+                            "description": "Module path to condition function: (data, state) -> bool",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "while_condition",
+                        "body"
+                    ],
                     "type": "object"
                 }
             },

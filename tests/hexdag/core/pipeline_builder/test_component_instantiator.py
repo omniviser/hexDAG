@@ -11,6 +11,8 @@ from hexdag.core.pipeline_builder.component_instantiator import (
     ComponentInstantiationError,
     ComponentInstantiator,
     ComponentSpec,
+    _resolve_deferred_env_vars,
+    _resolve_string_value,
 )
 
 
@@ -333,3 +335,126 @@ class TestComponentInstantiatorIntegration:
             spec = {"adapter": adapter_path}
             adapter = self.instantiator.instantiate_adapter(spec)
             assert adapter is not None, f"Failed to instantiate {adapter_path}"
+
+
+class TestDeferredEnvVarResolution:
+    """Tests for runtime environment variable resolution."""
+
+    def test_resolve_simple_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test resolving a simple ${VAR} pattern."""
+        monkeypatch.setenv("TEST_API_KEY", "secret123")
+        result = _resolve_string_value("${TEST_API_KEY}")
+        assert result == "secret123"
+
+    def test_resolve_env_var_with_default_uses_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that env var takes precedence over default."""
+        monkeypatch.setenv("TEST_MODEL", "gpt-4-turbo")
+        result = _resolve_string_value("${TEST_MODEL:gpt-4}")
+        assert result == "gpt-4-turbo"
+
+    def test_resolve_env_var_with_default_uses_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that default is used when env var not set."""
+        monkeypatch.delenv("UNSET_VAR", raising=False)
+        result = _resolve_string_value("${UNSET_VAR:default_value}")
+        assert result == "default_value"
+
+    def test_resolve_missing_env_var_raises_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that missing required env var raises error."""
+        monkeypatch.delenv("MISSING_VAR", raising=False)
+        with pytest.raises(ComponentInstantiationError) as exc_info:
+            _resolve_string_value("${MISSING_VAR}")
+        assert "MISSING_VAR" in str(exc_info.value)
+        assert "not set" in str(exc_info.value)
+
+    def test_resolve_env_var_in_middle_of_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test resolving ${VAR} in the middle of a string."""
+        monkeypatch.setenv("HOST", "localhost")
+        result = _resolve_string_value("http://${HOST}:8080/api")
+        assert result == "http://localhost:8080/api"
+
+    def test_resolve_multiple_env_vars_in_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test resolving multiple ${VAR} patterns in one string."""
+        monkeypatch.setenv("DB_HOST", "localhost")
+        monkeypatch.setenv("DB_PORT", "5432")
+        result = _resolve_string_value("postgresql://${DB_HOST}:${DB_PORT}/mydb")
+        assert result == "postgresql://localhost:5432/mydb"
+
+    def test_resolve_dict_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test resolving env vars in dict parameters."""
+        monkeypatch.setenv("API_KEY", "key123")
+        monkeypatch.setenv("MODEL", "gpt-4")
+        params = {
+            "api_key": "${API_KEY}",
+            "model": "${MODEL}",
+            "timeout": 30,
+        }
+        resolved = _resolve_deferred_env_vars(params)
+        assert resolved["api_key"] == "key123"
+        assert resolved["model"] == "gpt-4"
+        assert resolved["timeout"] == 30
+
+    def test_resolve_nested_dict_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test resolving env vars in nested dict parameters."""
+        monkeypatch.setenv("SECRET_TOKEN", "tok123")
+        params = {
+            "auth": {
+                "token": "${SECRET_TOKEN}",
+                "type": "bearer",
+            },
+            "timeout": 60,
+        }
+        resolved = _resolve_deferred_env_vars(params)
+        assert resolved["auth"]["token"] == "tok123"
+        assert resolved["auth"]["type"] == "bearer"
+        assert resolved["timeout"] == 60
+
+    def test_resolve_list_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test resolving env vars in list parameters."""
+        monkeypatch.setenv("ENDPOINT_1", "http://api1.example.com")
+        monkeypatch.setenv("ENDPOINT_2", "http://api2.example.com")
+        params = {
+            "endpoints": ["${ENDPOINT_1}", "${ENDPOINT_2}", "http://static.example.com"],
+        }
+        resolved = _resolve_deferred_env_vars(params)
+        assert resolved["endpoints"][0] == "http://api1.example.com"
+        assert resolved["endpoints"][1] == "http://api2.example.com"
+        assert resolved["endpoints"][2] == "http://static.example.com"
+
+    def test_resolve_empty_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that empty default is allowed."""
+        monkeypatch.delenv("OPTIONAL_VAR", raising=False)
+        result = _resolve_string_value("${OPTIONAL_VAR:}")
+        assert result == ""
+
+    def test_no_resolution_for_non_pattern_strings(self) -> None:
+        """Test that strings without ${} are unchanged."""
+        result = _resolve_string_value("regular string without vars")
+        assert result == "regular string without vars"
+
+    def test_instantiate_adapter_with_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that adapter instantiation resolves env vars."""
+        monkeypatch.setenv("TEST_RESPONSE", "Hello from env!")
+        instantiator = ComponentInstantiator()
+        spec = {
+            "adapter": "hexdag.builtin.adapters.mock.MockLLM",
+            "config": {"default_response": "${TEST_RESPONSE}"},
+        }
+        adapter = instantiator.instantiate_adapter(spec, port_name="llm")
+        assert adapter is not None
+        # The MockLLM should have received the resolved value
+
+    def test_instantiate_adapter_missing_env_var_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that missing env var raises error during instantiation."""
+        monkeypatch.delenv("REQUIRED_API_KEY", raising=False)
+        instantiator = ComponentInstantiator()
+        spec = {
+            "adapter": "hexdag.builtin.adapters.mock.MockLLM",
+            "config": {"api_key": "${REQUIRED_API_KEY}"},
+        }
+        with pytest.raises(ComponentInstantiationError) as exc_info:
+            instantiator.instantiate_adapter(spec, port_name="llm")
+        assert "REQUIRED_API_KEY" in str(exc_info.value)

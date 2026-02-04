@@ -135,6 +135,44 @@ class LoopNode(BaseNodeFactory):
     - Otherwise defaults to "last".
     """
 
+    # Explicit schema for YAML/MCP usage (builder pattern doesn't expose params well)
+    _yaml_schema: dict[str, Any] = {
+        "type": "object",
+        "description": "Loop control node for iterative processing",
+        "properties": {
+            "while_condition": {
+                "type": "string",
+                "description": "Module path to condition function: (data, state) -> bool",
+            },
+            "body": {
+                "type": "string",
+                "description": "Module path to body function: (data, state) -> Any",
+            },
+            "max_iterations": {
+                "type": "integer",
+                "default": 100,
+                "description": "Maximum number of iterations before stopping",
+            },
+            "collect_mode": {
+                "type": "string",
+                "enum": ["last", "list", "reduce"],
+                "default": "last",
+                "description": "How to collect results: last value, all values, or reduced",
+            },
+            "initial_state": {
+                "type": "object",
+                "default": {},
+                "description": "Initial state dict passed to first iteration",
+            },
+            "iteration_key": {
+                "type": "string",
+                "default": "loop_iteration",
+                "description": "Key name for current iteration number in state",
+            },
+        },
+        "required": ["while_condition", "body"],
+    }
+
     def __init__(
         self, name: str | None = None, condition: Callable[[dict, dict], bool] | None = None
     ) -> None:
@@ -161,8 +199,38 @@ class LoopNode(BaseNodeFactory):
         self._name = n
         return self
 
-    def condition(self, fn: Callable[[dict, dict], bool]) -> "LoopNode":
-        """Set the loop continuation condition function."""
+    def condition(self, fn: Callable[[dict, dict], bool] | str) -> "LoopNode":
+        """Set the loop continuation condition function.
+
+        Parameters
+        ----------
+        fn : Callable[[dict, dict], bool] | str
+            Either a callable predicate function that takes (data, state)
+            and returns bool, or a string expression like "state.iteration < 10"
+            that will be compiled into a safe predicate.
+
+        Returns
+        -------
+        LoopNode
+            Self for method chaining.
+
+        Examples
+        --------
+        Using a callable::
+
+            node.condition(lambda d, s: s.get("iteration", 0) < 10)
+
+        Using a string expression::
+
+            node.condition("state.iteration < 10")
+            node.condition("not done and count < max_count")
+        """
+        if isinstance(fn, str):
+            from hexdag.core.expression_parser import compile_expression
+
+            fn = compile_expression(fn)
+        elif not callable(fn):
+            raise ValueError("condition(): fn must be callable or a string expression")
         self._while = fn
         return self
 
@@ -420,6 +488,43 @@ class ConditionalNode(BaseNodeFactory):
     - Input is normalized to dict internally; original input is not echoed back.
     """
 
+    # Explicit schema for YAML/MCP usage (builder pattern doesn't expose params well)
+    _yaml_schema: dict[str, Any] = {
+        "type": "object",
+        "description": "Multi-branch conditional router for workflow control flow",
+        "properties": {
+            "branches": {
+                "type": "array",
+                "description": "List of condition branches evaluated in order",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "condition": {
+                            "type": "string",
+                            "description": "Expression like 'node.field == value' or callable",
+                        },
+                        "action": {
+                            "type": "string",
+                            "description": "Action name to return if condition matches",
+                        },
+                    },
+                    "required": ["condition", "action"],
+                },
+            },
+            "else_action": {
+                "type": "string",
+                "description": "Default action if no branch conditions match",
+            },
+            "tie_break": {
+                "type": "string",
+                "enum": ["first_true"],
+                "default": "first_true",
+                "description": "Strategy for handling multiple matching branches",
+            },
+        },
+        "required": ["branches"],
+    }
+
     def __init__(self, name: str | None = None) -> None:
         super().__init__()
         # builder state
@@ -438,11 +543,43 @@ class ConditionalNode(BaseNodeFactory):
 
     def when(
         self,
-        pred: Callable[[dict, dict], bool],
+        pred: Callable[[dict, dict], bool] | str,
         action: str,
     ) -> "ConditionalNode":
-        if not callable(pred):
-            raise ValueError("when(): pred must be callable")
+        """Add a conditional branch.
+
+        Parameters
+        ----------
+        pred : Callable[[dict, dict], bool] | str
+            Either a callable predicate function that takes (data, state)
+            and returns bool, or a string expression like "action == 'ACCEPT'"
+            that will be compiled into a safe predicate.
+        action : str
+            The action name to return if this branch matches.
+
+        Returns
+        -------
+        ConditionalNode
+            Self for method chaining.
+
+        Examples
+        --------
+        Using a callable::
+
+            node.when(lambda d, s: d.get("status") == "active", "process")
+
+        Using a string expression::
+
+            node.when("status == 'active'", "process")
+            node.when("node.action == 'ACCEPT' and confidence > 0.8", "approve")
+            node.when("state.iteration < 10", "continue")
+        """
+        if isinstance(pred, str):
+            from hexdag.core.expression_parser import compile_expression
+
+            pred = compile_expression(pred)
+        elif not callable(pred):
+            raise ValueError("when(): pred must be callable or a string expression")
         if not isinstance(action, str) or not action:
             raise ValueError("when(): action must be a non-empty string")
         self._branches.append({"pred": pred, "action": action})

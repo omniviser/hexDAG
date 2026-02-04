@@ -43,6 +43,12 @@ allowed_exceptions:
     - "from hexdag.builtin.nodes.mapped_input import FieldMappingRegistry"
     - "from hexdag.builtin.prompts.base import ChatPromptTemplate"
 
+  # ExecutionCoordinator needs FieldExtractor for input_mapping feature
+  # This provides $input.field and node.field path extraction during execution.
+  # Rationale: Input mapping is a core execution feature that reuses existing extraction logic.
+  hexdag/core/orchestration/components/execution_coordinator.py:
+    - "from hexdag.builtin.nodes.mapped_input import FieldExtractor"
+
   # Prompt __init__ re-exports advanced prompts for backward compatibility
   # These were moved to builtin but are still part of core API surface.
   # Rationale: Maintains public API while allowing modular organization.

@@ -465,11 +465,23 @@ def get_component_schema(
         # Extract schema using SchemaGenerator
         schema = SchemaGenerator.from_callable(component_obj)  # type: ignore[arg-type]
 
+        # Generate example YAML
+        yaml_example = ""
+        if isinstance(schema, dict) and schema:
+            yaml_example = SchemaGenerator.generate_example_yaml(name, schema)
+
+        # Extract documentation
+        doc = ""
+        if hasattr(component_obj, "__doc__") and component_obj.__doc__:
+            doc = component_obj.__doc__.strip()
+
         result = {
             "name": name,
             "namespace": namespace,
             "type": component_type,
             "schema": schema,
+            "yaml_example": yaml_example,
+            "documentation": doc,
         }
 
         return json.dumps(result, indent=2)
@@ -481,6 +493,335 @@ def get_component_schema(
                 "component_type": component_type,
                 "name": name,
                 "namespace": namespace,
+            },
+            indent=2,
+        )
+
+
+@mcp.tool()  # type: ignore[misc]
+def get_syntax_reference() -> str:
+    """Get reference for hexDAG YAML syntax including variable references.
+
+    Returns comprehensive documentation on:
+    - $input.field - Reference initial pipeline input
+    - {{node.output}} - Jinja2 template for node outputs
+    - ${ENV_VAR} - Environment variables
+    - input_mapping syntax and usage
+
+    Returns
+    -------
+        Detailed syntax reference documentation
+
+    Examples
+    --------
+        >>> get_syntax_reference()  # doctest: +SKIP
+        # hexDAG Variable Reference Syntax
+        ...
+    """
+    return """# hexDAG Variable Reference Syntax
+
+## 1. Initial Input Reference: $input
+
+Use `$input.field` in `input_mapping` to access the original pipeline input.
+This allows passing data from the initial request through multiple pipeline stages.
+
+```yaml
+nodes:
+  - kind: function_node
+    metadata:
+      name: processor
+    spec:
+      fn: myapp.process
+      input_mapping:
+        load_id: $input.load_id        # Gets initial input's load_id
+        carrier: $input.carrier_mc     # Gets initial input's carrier_mc
+    dependencies: [extractor]
+```
+
+**Key Points:**
+- `$input` refers to the ENTIRE initial pipeline input
+- `$input.field` extracts a specific field from initial input
+- Works regardless of node dependencies
+- Useful for passing request context through the pipeline
+
+## 2. Node Output Reference in Prompt Templates: {{node.field}}
+
+Use Jinja2 syntax in prompt templates to reference previous node outputs.
+
+```yaml
+- kind: llm_node
+  metadata:
+    name: analyzer
+  spec:
+    prompt_template: |
+      Analyze this data:
+      {{extractor.result}}
+
+      Previous analysis:
+      {{validator.summary}}
+```
+
+**Key Points:**
+- Double curly braces `{{}}` for Jinja2 templates
+- `{{node_name.field}}` extracts field from named node's output
+- Only available in `prompt_template` fields
+- Resolved at runtime during LLM call
+
+## 3. Environment Variables: ${VAR}
+
+Environment variables are resolved in two phases:
+
+### Non-Secrets (Build-time resolution)
+```yaml
+spec:
+  ports:
+    llm:
+      config:
+        model: ${MODEL}              # Resolved when YAML is parsed
+        timeout: ${TIMEOUT:30}       # Default value if not set
+```
+
+### Secrets (Runtime resolution)
+Secret-like variables are deferred to runtime for security:
+```yaml
+spec:
+  ports:
+    llm:
+      config:
+        api_key: ${OPENAI_API_KEY}   # Resolved when adapter is created
+```
+
+**Secret Patterns (deferred to runtime):**
+- `*_API_KEY` (e.g., OPENAI_API_KEY)
+- `*_SECRET` (e.g., DB_SECRET)
+- `*_TOKEN` (e.g., AUTH_TOKEN)
+- `*_PASSWORD` (e.g., DB_PASSWORD)
+- `*_CREDENTIAL` (e.g., SERVICE_CREDENTIAL)
+- `SECRET_*` (e.g., SECRET_KEY)
+
+**Default Values:**
+- `${VAR:default}` - Use "default" if VAR is not set
+- `${VAR:}` - Use empty string if VAR is not set
+
+## 4. Input Mapping
+
+The `input_mapping` field transforms input data for a node:
+
+```yaml
+- kind: function_node
+  metadata:
+    name: merger
+  spec:
+    fn: myapp.merge_results
+    input_mapping:
+      # From initial pipeline input
+      request_id: $input.id
+
+      # From specific dependency outputs
+      analysis: analyzer.result
+      validation_status: validator.is_valid
+
+      # Nested path extraction
+      score: analyzer.metadata.confidence_score
+  dependencies: [analyzer, validator]
+```
+
+**Mapping Sources:**
+- `$input.path` - Extract from initial pipeline input
+- `$input` - Entire initial input
+- `node_name.path` - Extract from specific node's output
+- `field_name` - Extract from base input (single dependency case)
+
+## 5. Node Aliases
+
+Define short aliases for node module paths:
+
+```yaml
+spec:
+  aliases:
+    fn: hexdag.builtin.nodes.FunctionNode
+    my_processor: myapp.nodes.ProcessorNode
+  nodes:
+    - kind: fn                    # Uses alias!
+      metadata:
+        name: parser
+      spec:
+        fn: json.loads
+```
+
+## Quick Reference Table
+
+| Syntax | Location | Purpose |
+|--------|----------|---------|
+| `$input.field` | input_mapping | Access initial pipeline input |
+| `$input` | input_mapping | Entire initial input |
+| `{{node.field}}` | prompt_template | Jinja2 template reference |
+| `${VAR}` | Any string value | Environment variable |
+| `${VAR:default}` | Any string value | Env var with default |
+| `node.path` | input_mapping | Dependency output extraction |
+"""
+
+
+@mcp.tool()  # type: ignore[misc]
+def validate_yaml_pipeline_lenient(yaml_content: str) -> str:
+    """Validate YAML pipeline structure without requiring environment variables.
+
+    Use this for CI/CD validation where secrets aren't available.
+    This validates structure only, without instantiating adapters.
+
+    Validates:
+    - YAML syntax
+    - Node structure and dependencies
+    - Port configuration format
+    - Manifest format (apiVersion, kind, metadata, spec)
+
+    Does NOT validate:
+    - Environment variable values
+    - Adapter instantiation
+    - Module path resolution
+
+    Args
+    ----
+        yaml_content: YAML pipeline configuration as a string
+
+    Returns
+    -------
+        JSON string with validation results (success/errors/warnings)
+
+    Examples
+    --------
+        >>> validate_yaml_pipeline_lenient(pipeline_yaml)  # doctest: +SKIP
+        {
+          "valid": true,
+          "message": "Pipeline structure is valid",
+          "node_count": 3,
+          "nodes": ["step1", "step2", "step3"],
+          "warnings": []
+        }
+    """
+    try:
+        # Parse YAML
+        parsed = yaml.safe_load(yaml_content)
+
+        if not isinstance(parsed, dict):
+            return json.dumps(
+                {
+                    "valid": False,
+                    "error": "YAML must be a dictionary",
+                    "error_type": "ParseError",
+                },
+                indent=2,
+            )
+
+        warnings: list[str] = []
+        nodes: list[str] = []
+
+        # Check manifest format
+        if "kind" not in parsed:
+            return json.dumps(
+                {
+                    "valid": False,
+                    "error": "Missing 'kind' field. Use declarative manifest format.",
+                    "error_type": "ManifestError",
+                },
+                indent=2,
+            )
+
+        if "metadata" not in parsed:
+            warnings.append("Missing 'metadata' field")
+
+        if "spec" not in parsed:
+            return json.dumps(
+                {
+                    "valid": False,
+                    "error": "Missing 'spec' field",
+                    "error_type": "ManifestError",
+                },
+                indent=2,
+            )
+
+        spec = parsed.get("spec", {})
+
+        # Check nodes
+        nodes_list = spec.get("nodes", [])
+        if not nodes_list:
+            warnings.append("No nodes defined in pipeline")
+
+        node_ids = set()
+        for i, node in enumerate(nodes_list):
+            if not isinstance(node, dict):
+                return json.dumps(
+                    {
+                        "valid": False,
+                        "error": f"Node {i} is not a dictionary",
+                        "error_type": "NodeError",
+                    },
+                    indent=2,
+                )
+
+            metadata = node.get("metadata", {})
+            node_id = metadata.get("name")
+            if not node_id:
+                warnings.append(f"Node {i} missing 'metadata.name'")
+                node_id = f"unnamed_{i}"
+
+            if node_id in node_ids:
+                return json.dumps(
+                    {
+                        "valid": False,
+                        "error": f"Duplicate node name: {node_id}",
+                        "error_type": "NodeError",
+                    },
+                    indent=2,
+                )
+
+            node_ids.add(node_id)
+            nodes.append(node_id)
+
+            # Check dependencies reference valid nodes
+            deps = node.get("dependencies", [])
+            all_node_names = node_ids | {n.get("metadata", {}).get("name") for n in nodes_list}
+            warnings.extend(
+                f"Node '{node_id}' depends on '{dep}' which may not exist"
+                for dep in deps
+                if dep not in all_node_names
+            )
+
+        # Check ports structure
+        ports = spec.get("ports", {})
+        for port_name, port_config in ports.items():
+            if not isinstance(port_config, dict):
+                warnings.append(f"Port '{port_name}' config is not a dictionary")
+            elif "adapter" not in port_config and "name" not in port_config:
+                warnings.append(f"Port '{port_name}' missing 'adapter' field")
+
+        return json.dumps(
+            {
+                "valid": True,
+                "message": "Pipeline structure is valid",
+                "node_count": len(nodes),
+                "nodes": nodes,
+                "ports": list(ports.keys()),
+                "warnings": warnings,
+            },
+            indent=2,
+        )
+
+    except yaml.YAMLError as e:
+        return json.dumps(
+            {
+                "valid": False,
+                "error": f"YAML parse error: {e}",
+                "error_type": "ParseError",
+            },
+            indent=2,
+        )
+    except Exception as e:
+        return json.dumps(
+            {
+                "valid": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
             },
             indent=2,
         )

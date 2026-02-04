@@ -11,10 +11,14 @@ import pytest
 from hexdag.core.resolver import (
     ResolveError,
     _runtime_components,
+    clear_aliases,
+    get_registered_aliases,
     get_runtime,
+    register_alias,
     register_runtime,
     resolve,
     resolve_function,
+    unregister_alias,
 )
 
 
@@ -256,3 +260,194 @@ class TestResolveIntegration:
 
         result = resolve("hexdag.builtin.macros.ReasoningAgentMacro")
         assert result is ReasoningAgentMacro
+
+
+class TestUserAliases:
+    """Tests for user-defined alias functionality."""
+
+    def setup_method(self) -> None:
+        """Clear user aliases before each test."""
+        clear_aliases()
+
+    def teardown_method(self) -> None:
+        """Clear user aliases after each test."""
+        clear_aliases()
+
+    def test_register_and_resolve_alias(self) -> None:
+        """Test registering and resolving a user alias."""
+        from hexdag.builtin.nodes import FunctionNode
+
+        register_alias("my_func", "hexdag.builtin.nodes.FunctionNode")
+        result = resolve("my_func")
+        assert result is FunctionNode
+
+    def test_alias_takes_precedence_over_builtin(self) -> None:
+        """Test that user alias takes precedence over built-in short names."""
+        from hexdag.builtin.nodes import LLMNode
+
+        # Override the built-in "function_node" alias
+        register_alias("function_node", "hexdag.builtin.nodes.LLMNode")
+        result = resolve("function_node")
+        assert result is LLMNode
+
+    def test_unregister_alias(self) -> None:
+        """Test unregistering an alias."""
+        register_alias("my_alias", "hexdag.builtin.nodes.FunctionNode")
+        assert "my_alias" in get_registered_aliases()
+
+        result = unregister_alias("my_alias")
+        assert result is True
+        assert "my_alias" not in get_registered_aliases()
+
+    def test_unregister_nonexistent_alias(self) -> None:
+        """Test that unregistering nonexistent alias returns False."""
+        result = unregister_alias("nonexistent")
+        assert result is False
+
+    def test_get_registered_aliases(self) -> None:
+        """Test getting all registered aliases."""
+        register_alias("alias1", "hexdag.builtin.nodes.FunctionNode")
+        register_alias("alias2", "hexdag.builtin.nodes.LLMNode")
+
+        aliases = get_registered_aliases()
+        assert aliases == {
+            "alias1": "hexdag.builtin.nodes.FunctionNode",
+            "alias2": "hexdag.builtin.nodes.LLMNode",
+        }
+
+    def test_get_registered_aliases_returns_copy(self) -> None:
+        """Test that get_registered_aliases returns a copy."""
+        register_alias("alias1", "hexdag.builtin.nodes.FunctionNode")
+        aliases = get_registered_aliases()
+
+        # Modifying the returned dict shouldn't affect the internal state
+        aliases["new_alias"] = "some.path"
+        assert "new_alias" not in get_registered_aliases()
+
+    def test_clear_aliases(self) -> None:
+        """Test clearing all aliases."""
+        register_alias("alias1", "hexdag.builtin.nodes.FunctionNode")
+        register_alias("alias2", "hexdag.builtin.nodes.LLMNode")
+
+        clear_aliases()
+        assert get_registered_aliases() == {}
+
+    def test_register_alias_empty_alias_raises(self) -> None:
+        """Test that empty alias raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            register_alias("", "hexdag.builtin.nodes.FunctionNode")
+        assert "empty" in str(exc_info.value).lower()
+
+    def test_register_alias_empty_path_raises(self) -> None:
+        """Test that empty path raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            register_alias("my_alias", "")
+        assert "empty" in str(exc_info.value).lower()
+
+    def test_resolve_alias_invalid_path_raises(self) -> None:
+        """Test that alias pointing to invalid path raises error."""
+        register_alias("bad_alias", "nonexistent.module.Class")
+        with pytest.raises(ResolveError) as exc_info:
+            resolve("bad_alias")
+        assert "not found" in str(exc_info.value)
+
+    def test_multiple_aliases_same_target(self) -> None:
+        """Test multiple aliases pointing to same target."""
+        from hexdag.builtin.nodes import FunctionNode
+
+        register_alias("fn", "hexdag.builtin.nodes.FunctionNode")
+        register_alias("func", "hexdag.builtin.nodes.FunctionNode")
+        register_alias("function", "hexdag.builtin.nodes.FunctionNode")
+
+        assert resolve("fn") is FunctionNode
+        assert resolve("func") is FunctionNode
+        assert resolve("function") is FunctionNode
+
+
+class TestYamlAliasesIntegration:
+    """Integration tests for aliases defined in YAML pipelines."""
+
+    def setup_method(self) -> None:
+        """Clear user aliases before each test."""
+        clear_aliases()
+
+    def teardown_method(self) -> None:
+        """Clear user aliases after each test."""
+        clear_aliases()
+
+    def test_yaml_pipeline_with_aliases(self) -> None:
+        """Test that aliases in YAML spec are registered."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-with-aliases
+spec:
+  aliases:
+    fn: hexdag.builtin.nodes.FunctionNode
+  nodes:
+    - kind: fn
+      metadata:
+        name: my_node
+      spec:
+        fn: json.loads
+      dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "my_node" in graph.nodes
+        # Alias should now be registered
+        assert "fn" in get_registered_aliases()
+
+    def test_yaml_pipeline_multiple_aliases(self) -> None:
+        """Test multiple aliases in YAML."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-multiple-aliases
+spec:
+  aliases:
+    fn: hexdag.builtin.nodes.FunctionNode
+    llm: hexdag.builtin.nodes.LLMNode
+  nodes:
+    - kind: fn
+      metadata:
+        name: processor
+      spec:
+        fn: json.loads
+      dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "fn" in get_registered_aliases()
+        assert "llm" in get_registered_aliases()
+
+    def test_yaml_pipeline_without_aliases(self) -> None:
+        """Test that pipeline without aliases section works."""
+        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-no-aliases
+spec:
+  nodes:
+    - kind: hexdag.builtin.nodes.FunctionNode
+      metadata:
+        name: my_node
+      spec:
+        fn: json.loads
+      dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(yaml_content)
+
+        assert "my_node" in graph.nodes

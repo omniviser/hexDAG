@@ -28,6 +28,9 @@ class ResolveError(Exception):
 # Runtime storage for dynamically created components (e.g., YAML-defined macros)
 _runtime_components: dict[str, type[Any]] = {}
 
+# User-registered aliases (separate from built-in short names)
+_user_aliases: dict[str, str] = {}
+
 # Backwards compatibility: map old short names to full module paths
 _SHORT_NAME_ALIASES: dict[str, str] = {
     # Nodes (old short names)
@@ -75,6 +78,77 @@ def get_runtime(name: str) -> type[Any] | None:
     return _runtime_components.get(name)
 
 
+def register_alias(alias: str, full_path: str) -> None:
+    """Register a user-defined alias for a component path.
+
+    This allows using short names in YAML instead of full module paths.
+    User aliases take precedence over built-in short name aliases.
+
+    Parameters
+    ----------
+    alias : str
+        Short name to use in YAML (e.g., "my_processor")
+    full_path : str
+        Full module path (e.g., "myapp.nodes.ProcessorNode")
+
+    Examples
+    --------
+    >>> register_alias("my_processor", "myapp.nodes.ProcessorNode")
+    >>> resolve("my_processor")  # doctest: +SKIP
+    <class 'myapp.nodes.ProcessorNode'>
+
+    >>> # Use in YAML:
+    >>> # spec:
+    >>> #   aliases:
+    >>> #     my_processor: myapp.nodes.ProcessorNode
+    >>> #   nodes:
+    >>> #     - kind: my_processor  # Uses alias!
+    """
+    if not alias:
+        raise ValueError("Alias cannot be empty")
+    if not full_path:
+        raise ValueError("Full path cannot be empty")
+    _user_aliases[alias] = full_path
+
+
+def unregister_alias(alias: str) -> bool:
+    """Remove a user-registered alias.
+
+    Parameters
+    ----------
+    alias : str
+        The alias to remove
+
+    Returns
+    -------
+    bool
+        True if alias was removed, False if it didn't exist
+    """
+    if alias in _user_aliases:
+        del _user_aliases[alias]
+        return True
+    return False
+
+
+def get_registered_aliases() -> dict[str, str]:
+    """Get a copy of all user-registered aliases.
+
+    Returns
+    -------
+    dict[str, str]
+        Copy of the alias -> full_path mapping
+    """
+    return dict(_user_aliases)
+
+
+def clear_aliases() -> None:
+    """Clear all user-registered aliases.
+
+    This is primarily useful for testing.
+    """
+    _user_aliases.clear()
+
+
 def resolve(kind: str) -> type[Any]:
     """Resolve a kind string to a Python class.
 
@@ -110,6 +184,10 @@ def resolve(kind: str) -> type[Any]:
     # First check runtime components (e.g., YAML-defined macros)
     if runtime_component := get_runtime(kind):
         return runtime_component
+
+    # Check user-registered aliases (higher priority than built-in)
+    if kind in _user_aliases:
+        kind = _user_aliases[kind]
 
     # Check backwards compatibility aliases for legacy short names
     if kind in _SHORT_NAME_ALIASES:

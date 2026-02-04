@@ -266,7 +266,13 @@ repos:
             # Retrieve the branch name from Git
             BRANCH_NAME=$(git symbolic-ref --short HEAD)
 
-            # Define your naming convention regex pattern
+            # Allow main and master branches
+            if [[ $BRANCH_NAME == "main" || $BRANCH_NAME == "master" ]]; then
+                echo "Branch name \"$BRANCH_NAME\" is valid (protected branch)."
+                exit 0
+            fi
+
+            # Define your naming convention regex pattern for feature branches
             PATTERN="^(ci|dependabot\/pip|docs|experiment|feat|fix|refactor|test)\/"\
             "[A-Za-z0-9._-]+$"
 
@@ -276,7 +282,7 @@ repos:
                 exit 0
             else
                 echo "Branch name \"$BRANCH_NAME\" is invalid. " \
-                "It must match the pattern \"$PATTERN\"."
+                "It must match the pattern \"$PATTERN\" or be main/master."
                 exit 1
             fi
             '

@@ -6,6 +6,7 @@ component that handles execution coordination:
 - Observer notifications during execution
 - Policy evaluation for control flow
 - Input preparation and dependency mapping
+- Input mapping transformation (including $input syntax)
 
 The ExecutionCoordinator replaces the separate PolicyCoordinator and InputMapper
 components with a unified interface.
@@ -22,10 +23,13 @@ else:
 
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.exceptions import OrchestratorError
+from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.orchestration.policies.models import PolicyContext, PolicyResponse, PolicySignal
 
 __all__ = ["ExecutionCoordinator"]
+
+logger = get_logger(__name__)
 
 
 class ExecutionCoordinator:
@@ -237,18 +241,109 @@ class ExecutionCoordinator:
         where each piece of data came from. This is especially useful for
         debugging and for nodes that need to treat different dependencies
         differently.
+
+        If the node has an ``input_mapping`` in its params, the prepared input
+        will be transformed according to the mapping. This supports:
+        - ``$input.field`` - Reference the initial pipeline input
+        - ``node_name.field`` - Reference a specific dependency's output
         """
+        # Prepare base input from dependencies
         if not node_spec.deps:
-            return initial_input
-
-        if len(node_spec.deps) == 1:
+            base_input = initial_input
+        elif len(node_spec.deps) == 1:
             dep_name = next(iter(node_spec.deps))
-            return node_results.get(dep_name, initial_input)
+            base_input = node_results.get(dep_name, initial_input)
+        else:
+            # Multiple dependencies - preserve namespace structure
+            base_input = {}
+            for dep_name in node_spec.deps:
+                if dep_name in node_results:
+                    base_input[dep_name] = node_results[dep_name]
 
-        # Multiple dependencies - preserve namespace structure
-        aggregated_data = {}
-        for dep_name in node_spec.deps:
-            if dep_name in node_results:
-                aggregated_data[dep_name] = node_results[dep_name]
+        # Apply input_mapping if present in node params
+        input_mapping = node_spec.params.get("input_mapping") if node_spec.params else None
+        if input_mapping:
+            return self._apply_input_mapping(base_input, input_mapping, initial_input, node_results)
 
-        return aggregated_data
+        return base_input
+
+    def _apply_input_mapping(
+        self,
+        base_input: Any,
+        input_mapping: dict[str, str],
+        initial_input: Any,
+        node_results: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Apply field mapping to transform input data.
+
+        Supports two special syntaxes:
+        - ``$input.field`` - Extract from the initial pipeline input
+        - ``node_name.field`` - Extract from a specific node's output
+
+        Parameters
+        ----------
+        base_input : Any
+            The prepared input from dependencies (may be single value or dict)
+        input_mapping : dict[str, str]
+            Mapping of {target_field: "source_path"}
+        initial_input : Any
+            The original pipeline input (for $input references)
+        node_results : dict[str, Any]
+            Results from all previously executed nodes
+
+        Returns
+        -------
+        dict[str, Any]
+            Transformed input with mapped fields
+
+        Examples
+        --------
+        >>> coordinator = ExecutionCoordinator()
+        >>> mapping = {"load_id": "$input.load_id", "result": "analyzer.output"}
+        >>> # This would extract load_id from initial input and result from analyzer node
+        """
+        from hexdag.builtin.nodes.mapped_input import FieldExtractor
+
+        result: dict[str, Any] = {}
+
+        for target_field, source_path in input_mapping.items():
+            if source_path.startswith("$input."):
+                # Extract from initial pipeline input
+                actual_path = source_path[7:]  # Remove "$input." prefix
+                value = FieldExtractor.extract(
+                    initial_input if isinstance(initial_input, dict) else {"_root": initial_input},
+                    actual_path if isinstance(initial_input, dict) else "_root",
+                )
+                if actual_path and isinstance(initial_input, dict):
+                    value = FieldExtractor.extract(initial_input, actual_path)
+                elif not actual_path:
+                    value = initial_input
+            elif source_path == "$input":
+                # Reference the entire initial input
+                value = initial_input
+            elif "." in source_path:
+                # Check if it's a node_name.field pattern
+                parts = source_path.split(".", 1)
+                node_name, field_path = parts[0], parts[1]
+                if node_name in node_results:
+                    # Extract from specific node's result
+                    value = FieldExtractor.extract(node_results[node_name], field_path)
+                else:
+                    # Fall back to extracting from base_input
+                    value = FieldExtractor.extract(
+                        base_input if isinstance(base_input, dict) else {}, source_path
+                    )
+            else:
+                # Simple field name - extract from base_input
+                value = FieldExtractor.extract(
+                    base_input if isinstance(base_input, dict) else {}, source_path
+                )
+
+            if value is None:
+                logger.warning(
+                    f"input_mapping: '{source_path}' resolved to None for target '{target_field}'"
+                )
+
+            result[target_field] = value
+
+        return result

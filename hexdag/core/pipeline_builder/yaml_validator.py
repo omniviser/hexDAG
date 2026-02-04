@@ -349,6 +349,15 @@ class YamlValidator:
                 params = node.get("spec", {})
                 continue
 
+            # Handle user-registered aliases (e.g., "fn" -> "hexdag.builtin.nodes.FunctionNode")
+            from hexdag.core.resolver import get_registered_aliases
+
+            if kind in get_registered_aliases():
+                # This is a registered alias, skip node type validation
+                # (resolution will happen at build time via resolver)
+                params = node.get("spec", {})
+                continue
+
             if NAMESPACE_SEPARATOR in kind:
                 namespace, node_kind = kind.split(NAMESPACE_SEPARATOR, 1)
             else:

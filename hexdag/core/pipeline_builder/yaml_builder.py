@@ -217,6 +217,10 @@ class YamlPipelineBuilder:
         for plugin in self.preprocess_plugins:
             config = plugin.process(config)
 
+        # Step 4.5: Register user-defined aliases BEFORE validation
+        # so that custom node kinds can pass validation
+        self._register_aliases(config)
+
         # Step 5: Validate structure (after includes are resolved)
         config = self._validate_config(config)
 
@@ -358,10 +362,31 @@ class YamlPipelineBuilder:
             node_config = macro_config
             macro_plugin.build(node_config, self, temp_graph)
 
+    def _register_aliases(self, config: dict[str, Any]) -> None:
+        """Register user-defined aliases from spec.aliases before validation.
+
+        This allows custom node kinds to be used in YAML without requiring
+        full module paths.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            The YAML configuration dict
+        """
+        from hexdag.core.resolver import register_alias
+
+        spec = config.get("spec", {})
+        aliases = spec.get("aliases", {})
+
+        for alias, full_path in aliases.items():
+            register_alias(alias, full_path)
+            logger.debug(f"Registered alias: {alias} -> {full_path}")
+
     def _build_graph(self, config: dict[str, Any]) -> DirectedGraph:
         """Build DirectedGraph using entity plugins."""
         graph = DirectedGraph()
-        nodes_list = config.get("spec", {}).get("nodes", [])
+        spec = config.get("spec", {})
+        nodes_list = spec.get("nodes", [])
 
         for node_config in nodes_list:
             # Find plugin that can handle this entity
