@@ -1520,6 +1520,912 @@ Secret-like environment variables are deferred to runtime:
 """
 
 
+@mcp.tool()  # type: ignore[misc]
+def get_custom_adapter_guide() -> str:
+    """Get a comprehensive guide for creating custom adapters.
+
+    Returns documentation on:
+    - Creating adapters with the @adapter decorator
+    - Secret handling with the secrets parameter
+    - Using custom adapters in YAML pipelines
+    - Testing patterns for adapters
+
+    Returns
+    -------
+        Detailed guide for creating custom adapters
+
+    Examples
+    --------
+        >>> get_custom_adapter_guide()  # doctest: +SKIP
+        # Creating Custom Adapters in hexDAG
+        ...
+    """
+    return '''# Creating Custom Adapters in hexDAG
+
+## Overview
+
+hexDAG uses a decorator-based pattern for creating adapters. Adapters implement
+"ports" (interfaces) that connect your pipelines to external services like LLMs,
+databases, and APIs.
+
+## Quick Start
+
+### Simple Adapter (No Secrets)
+
+```python
+from hexdag.core.registry import adapter
+
+@adapter("cache", name="memory_cache")
+class MemoryCacheAdapter:
+    """Simple in-memory cache adapter."""
+
+    def __init__(self, max_size: int = 100, ttl: int = 3600):
+        self.cache = {}
+        self.max_size = max_size
+        self.ttl = ttl
+
+    async def aget(self, key: str):
+        return self.cache.get(key)
+
+    async def aset(self, key: str, value: any):
+        self.cache[key] = value
+```
+
+### Adapter with Secrets
+
+```python
+from hexdag.core.registry import adapter
+
+@adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
+class OpenAIAdapter:
+    """OpenAI LLM adapter with automatic secret resolution."""
+
+    def __init__(
+        self,
+        api_key: str,           # Auto-resolved from OPENAI_API_KEY env var
+        model: str = "gpt-4",
+        temperature: float = 0.7
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.temperature = temperature
+
+    async def aresponse(self, messages: list) -> str:
+        # Your OpenAI API implementation
+        ...
+```
+
+### Adapter with Multiple Secrets
+
+```python
+@adapter(
+    "database",
+    name="postgres",
+    secrets={
+        "username": "DB_USERNAME",
+        "password": "DB_PASSWORD"
+    }
+)
+class PostgresAdapter:
+    def __init__(
+        self,
+        username: str,          # From DB_USERNAME
+        password: str,          # From DB_PASSWORD
+        host: str = "localhost",
+        port: int = 5432,
+        database: str = "mydb"
+    ):
+        self.connection_string = (
+            f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        )
+```
+
+## The @adapter Decorator
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `port_type` | str | Port this adapter implements ("llm", "memory", "database", etc.) |
+| `name` | str | Unique adapter name for registration |
+| `namespace` | str | Namespace (default: "plugin") |
+| `secrets` | dict | Map of param names to env var names |
+
+### Secret Resolution Order
+
+Secrets are resolved in this order:
+1. **Explicit kwargs** - Values passed directly to `__init__`
+2. **Environment variables** - From the `secrets` mapping
+3. **Memory port** - From orchestrator memory (with `secret:` prefix)
+4. **Error** - If required and no default
+
+## Using Custom Adapters in YAML
+
+### Register Your Adapter
+
+Your adapter module must be importable. Either:
+- Install as a package
+- Add to `PYTHONPATH`
+- Place in `hexdag_plugins/` directory
+
+### Reference in YAML Pipeline
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: my-pipeline
+spec:
+  ports:
+    llm:
+      adapter: mycompany.adapters.CustomLLMAdapter
+      config:
+        api_key: ${MY_API_KEY}
+        model: gpt-4-turbo
+        temperature: 0.5
+
+    database:
+      adapter: mycompany.adapters.PostgresAdapter
+      config:
+        host: ${DB_HOST}
+        port: 5432
+        database: production
+
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: analyzer
+      spec:
+        prompt_template: "Analyze: {{input}}"
+      dependencies: []
+```
+
+### Using Aliases for Cleaner YAML
+
+```yaml
+spec:
+  aliases:
+    my_llm: mycompany.adapters.CustomLLMAdapter
+    my_db: mycompany.adapters.PostgresAdapter
+
+  ports:
+    llm:
+      adapter: my_llm  # Uses alias!
+      config:
+        model: gpt-4
+```
+
+## Plugin Directory Structure
+
+For organized plugin development:
+
+```
+hexdag_plugins/
+└── my_adapter/
+    ├── __init__.py
+    ├── my_adapter.py      # Adapter implementation
+    ├── pyproject.toml     # Dependencies
+    └── tests/
+        └── test_my_adapter.py
+```
+
+### pyproject.toml for Plugin
+
+```toml
+[project]
+name = "hexdag-my-adapter"
+version = "0.1.0"
+dependencies = [
+    "hexdag>=0.2.0",
+    "httpx>=0.25.0",  # Your adapter dependencies
+]
+
+[tool.hexdag]
+plugins = ["hexdag_plugins.my_adapter"]
+```
+
+## Testing Your Adapter
+
+### Unit Test Pattern
+
+```python
+import pytest
+from mycompany.adapters import CustomLLMAdapter
+
+@pytest.fixture
+def adapter():
+    return CustomLLMAdapter(
+        api_key="test-key",
+        model="gpt-4",
+        temperature=0.5
+    )
+
+@pytest.mark.asyncio
+async def test_adapter_response(adapter, mocker):
+    # Mock external API call
+    mock_response = mocker.patch.object(
+        adapter, "_call_api",
+        return_value="Test response"
+    )
+
+    result = await adapter.aresponse([{"role": "user", "content": "Hello"}])
+
+    assert result == "Test response"
+    mock_response.assert_called_once()
+```
+
+### Integration Test with Mock
+
+```python
+from hexdag.builtin.adapters.mock import MockLLM
+
+def test_pipeline_with_mock():
+    """Test pipeline logic without real API calls."""
+    mock_llm = MockLLM(responses=["Analysis complete", "Summary done"])
+
+    # Use mock_llm in your pipeline tests
+```
+
+## Common Port Types
+
+| Port | Purpose | Key Methods |
+|------|---------|-------------|
+| `llm` | Language models | `aresponse(messages) -> str` |
+| `memory` | Key-value storage | `aget(key)`, `aset(key, value)` |
+| `database` | SQL/NoSQL databases | `aexecute_query(sql, params)` |
+| `secret` | Secret management | `aget_secret(name)` |
+| `tool_router` | Tool execution | `acall_tool(name, args)` |
+| `observer_manager` | Event observation | `notify(event)` |
+| `policy_manager` | Policy evaluation | `evaluate(context)` |
+
+## Best Practices
+
+1. **Async First**: Use `async def` for I/O operations
+2. **Type Hints**: Add type annotations for better tooling
+3. **Docstrings**: Document your adapter's purpose and config
+4. **Error Handling**: Wrap external calls in try/except
+5. **Logging**: Use `hexdag.core.logging.get_logger(__name__)`
+6. **Secrets**: Never hardcode secrets; use the `secrets` parameter
+
+## CLI Commands for Plugin Development
+
+```bash
+# Create a new plugin
+hexdag plugin new my_adapter --port llm
+
+# Lint and test
+hexdag plugin lint my_adapter
+hexdag plugin test my_adapter
+
+# Install dependencies
+hexdag plugin install my_adapter
+```
+'''
+
+
+@mcp.tool()  # type: ignore[misc]
+def get_custom_node_guide() -> str:
+    """Get a comprehensive guide for creating custom nodes.
+
+    Returns documentation on:
+    - Creating nodes with the @node decorator
+    - Node factory pattern
+    - Input/output schemas
+    - Using custom nodes in YAML pipelines
+
+    Returns
+    -------
+        Detailed guide for creating custom nodes
+
+    Examples
+    --------
+        >>> get_custom_node_guide()  # doctest: +SKIP
+        # Creating Custom Nodes in hexDAG
+        ...
+    """
+    return '''# Creating Custom Nodes in hexDAG
+
+## Overview
+
+Nodes are the building blocks of hexDAG pipelines. Each node performs a specific
+task and can be connected to other nodes via dependencies.
+
+## Quick Start
+
+### Simple Function Node
+
+The easiest way to create a custom node is using FunctionNode with your own function:
+
+```yaml
+# In YAML - reference any Python function by module path
+- kind: function_node
+  metadata:
+    name: my_processor
+  spec:
+    fn: mycompany.processors.process_data
+  dependencies: []
+```
+
+```python
+# mycompany/processors.py
+def process_data(input_data: dict) -> dict:
+    """Your processing logic."""
+    return {"result": input_data["value"] * 2}
+```
+
+### Custom Node Class
+
+For more complex logic, create a node class:
+
+```python
+from hexdag.core.registry import node
+from hexdag.builtin.nodes import BaseNodeFactory
+from hexdag.core.domain.dag import NodeSpec
+
+@node(name="custom_processor", namespace="plugin")
+class CustomProcessorNode(BaseNodeFactory):
+    """Custom node for specialized processing."""
+
+    def __init__(self):
+        super().__init__()
+
+    def __call__(
+        self,
+        name: str,
+        threshold: float = 0.5,
+        mode: str = "standard",
+        **kwargs
+    ) -> NodeSpec:
+        async def process_fn(input_data: dict) -> dict:
+            # Your async processing logic
+            if input_data.get("score", 0) > threshold:
+                return {"status": "pass", "mode": mode}
+            return {"status": "fail", "mode": mode}
+
+        return NodeSpec(
+            name=name,
+            fn=process_fn,
+            deps=frozenset(kwargs.get("deps", [])),
+            params={"threshold": threshold, "mode": mode},
+        )
+```
+
+## Using Custom Nodes in YAML
+
+### With Full Module Path
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: custom-pipeline
+spec:
+  nodes:
+    - kind: mycompany.nodes.CustomProcessorNode
+      metadata:
+        name: processor
+      spec:
+        threshold: 0.7
+        mode: strict
+      dependencies: []
+```
+
+### With Aliases
+
+```yaml
+spec:
+  aliases:
+    processor: mycompany.nodes.CustomProcessorNode
+
+  nodes:
+    - kind: processor  # Uses alias!
+      metadata:
+        name: my_processor
+      spec:
+        threshold: 0.7
+      dependencies: []
+```
+
+## Node Factory Pattern
+
+hexDAG nodes use the factory pattern:
+
+```python
+class MyNode(BaseNodeFactory):
+    def __call__(self, name: str, **params) -> NodeSpec:
+        # Factory method creates NodeSpec when called
+        return NodeSpec(
+            name=name,
+            fn=self._create_function(**params),
+            deps=frozenset(params.get("deps", [])),
+            params=params,
+        )
+
+    def _create_function(self, **params):
+        async def node_function(input_data):
+            # Actual processing logic
+            return {"result": "processed"}
+        return node_function
+```
+
+## Input/Output Schemas
+
+Define schemas for type validation:
+
+```python
+from pydantic import BaseModel
+
+class ProcessorInput(BaseModel):
+    text: str
+    options: dict = {}
+
+class ProcessorOutput(BaseModel):
+    result: str
+    confidence: float
+
+@node(name="typed_processor", namespace="plugin")
+class TypedProcessorNode(BaseNodeFactory):
+    def __call__(
+        self,
+        name: str,
+        **kwargs
+    ) -> NodeSpec:
+        async def process_fn(input_data: ProcessorInput) -> ProcessorOutput:
+            return ProcessorOutput(
+                result=input_data.text.upper(),
+                confidence=0.95
+            )
+
+        return NodeSpec(
+            name=name,
+            fn=process_fn,
+            in_model=ProcessorInput,
+            out_model=ProcessorOutput,
+            deps=frozenset(kwargs.get("deps", [])),
+        )
+```
+
+### In YAML
+
+```yaml
+- kind: mycompany.nodes.TypedProcessorNode
+  metadata:
+    name: processor
+  spec:
+    input_schema:
+      text: str
+      options: dict
+    output_schema:
+      result: str
+      confidence: float
+  dependencies: []
+```
+
+## Builder Pattern Nodes
+
+For complex configuration, use the builder pattern:
+
+```python
+@node(name="configurable_node", namespace="plugin")
+class ConfigurableNode(BaseNodeFactory):
+    def __init__(self):
+        super().__init__()
+        self._name = None
+        self._config = {}
+        self._validators = []
+
+    def name(self, n: str) -> "ConfigurableNode":
+        self._name = n
+        return self
+
+    def config(self, **kwargs) -> "ConfigurableNode":
+        self._config.update(kwargs)
+        return self
+
+    def validate_with(self, validator) -> "ConfigurableNode":
+        self._validators.append(validator)
+        return self
+
+    def build(self) -> NodeSpec:
+        async def process_fn(input_data):
+            for validator in self._validators:
+                input_data = validator(input_data)
+            return {"processed": True, **self._config}
+
+        return NodeSpec(
+            name=self._name,
+            fn=process_fn,
+            params=self._config,
+        )
+```
+
+Usage:
+```python
+node = (ConfigurableNode()
+    .name("my_node")
+    .config(threshold=0.5, mode="strict")
+    .validate_with(my_validator)
+    .build())
+```
+
+## Providing YAML Schema
+
+For MCP tools to show proper schemas, add `_yaml_schema`:
+
+```python
+@node(name="documented_node", namespace="plugin")
+class DocumentedNode(BaseNodeFactory):
+    # Schema for MCP tools and documentation
+    _yaml_schema = {
+        "type": "object",
+        "properties": {
+            "threshold": {
+                "type": "number",
+                "description": "Processing threshold (0-1)",
+                "default": 0.5
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["standard", "strict", "lenient"],
+                "description": "Processing mode"
+            }
+        },
+        "required": ["mode"]
+    }
+
+    def __call__(self, name: str, threshold: float = 0.5, mode: str = "standard"):
+        ...
+```
+
+## Best Practices
+
+1. **Async Functions**: Use `async def` for the node function
+2. **Immutable**: Don't modify input_data; return new dict
+3. **Type Hints**: Add types for better IDE support
+4. **Docstrings**: Document purpose and parameters
+5. **Small & Focused**: Each node should do one thing well
+6. **Testable**: Design for easy unit testing
+
+## Testing Custom Nodes
+
+```python
+import pytest
+from mycompany.nodes import CustomProcessorNode
+
+@pytest.mark.asyncio
+async def test_custom_processor():
+    # Create node spec
+    node_factory = CustomProcessorNode()
+    node_spec = node_factory(name="test", threshold=0.5)
+
+    # Test the function
+    result = await node_spec.fn({"score": 0.8})
+
+    assert result["status"] == "pass"
+```
+'''
+
+
+@mcp.tool()  # type: ignore[misc]
+def get_custom_tool_guide() -> str:
+    """Get a guide for creating custom tools for agents.
+
+    Returns documentation on creating tools that agents can use
+    during execution.
+
+    Returns
+    -------
+        Guide for creating custom tools
+    """
+    return '''# Creating Custom Tools for hexDAG Agents
+
+## Overview
+
+Tools are functions that agents can invoke during execution. They enable
+agents to interact with external systems, perform calculations, or access data.
+
+## Quick Start
+
+### Simple Tool Function
+
+```python
+from hexdag.core.registry import tool
+
+@tool(name="calculate", namespace="custom", description="Perform calculations")
+def calculate(expression: str) -> str:
+    """Safely evaluate a mathematical expression.
+
+    Args:
+        expression: Math expression like "2 + 2" or "sqrt(16)"
+
+    Returns:
+        Result as a string
+    """
+    import ast
+    import operator
+
+    # Safe evaluation (simplified example)
+    result = eval(expression, {"__builtins__": {}}, {"sqrt": math.sqrt})
+    return str(result)
+```
+
+### Async Tool
+
+```python
+@tool(name="fetch_data", namespace="custom", description="Fetch data from API")
+async def fetch_data(url: str, timeout: int = 30) -> dict:
+    """Fetch JSON data from a URL.
+
+    Args:
+        url: API endpoint URL
+        timeout: Request timeout in seconds
+
+    Returns:
+        JSON response as dict
+    """
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, timeout=timeout)
+        return response.json()
+```
+
+## Tool Schema Generation
+
+Tool schemas are auto-generated from:
+- Function signature (parameter types)
+- Docstring (descriptions)
+- Type hints (for validation)
+
+```python
+@tool(name="search", namespace="custom", description="Search documents")
+def search(
+    query: str,
+    limit: int = 10,
+    filters: dict | None = None
+) -> list[dict]:
+    """Search for documents matching query.
+
+    Args:
+        query: Search query string
+        limit: Maximum results to return (default: 10)
+        filters: Optional filters like {"category": "tech"}
+
+    Returns:
+        List of matching documents
+    """
+    # Implementation
+    ...
+```
+
+This generates schema:
+```json
+{
+  "name": "search",
+  "description": "Search for documents matching query.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {"type": "string", "description": "Search query string"},
+      "limit": {"type": "integer", "default": 10},
+      "filters": {"type": "object", "nullable": true}
+    },
+    "required": ["query"]
+  }
+}
+```
+
+## Using Tools with Agents
+
+### In YAML Pipeline
+
+```yaml
+- kind: agent_node
+  metadata:
+    name: research_agent
+  spec:
+    initial_prompt_template: "Research: {{topic}}"
+    max_steps: 5
+    tools:
+      - mycompany.tools.search
+      - mycompany.tools.fetch_data
+      - mycompany.tools.calculate
+  dependencies: []
+```
+
+### Tool Invocation Format
+
+Agents invoke tools using this format in their output:
+```
+INVOKE_TOOL: tool_name(param1="value", param2=123)
+```
+
+## Built-in Tools
+
+hexDAG provides these built-in tools:
+
+| Tool | Description |
+|------|-------------|
+| `tool_end` | Signal agent completion |
+| `tool_noop` | No operation (thinking step) |
+
+## Best Practices
+
+1. **Type Hints**: Always add parameter and return types
+2. **Docstrings**: Write clear descriptions for LLM understanding
+3. **Error Handling**: Return error messages, don't raise exceptions
+4. **Idempotent**: Tools should be safe to retry
+5. **Async**: Use async for I/O operations
+6. **Validation**: Validate inputs before processing
+'''
+
+
+@mcp.tool()  # type: ignore[misc]
+def get_extension_guide(component_type: str | None = None) -> str:
+    """Get a guide for extending hexDAG with custom components.
+
+    Args
+    ----
+        component_type: Optional specific type (adapter, node, tool, macro, policy)
+                       If not specified, returns overview of all extension points.
+
+    Returns
+    -------
+        Guide for the requested extension type or overview
+
+    Examples
+    --------
+        >>> get_extension_guide()  # doctest: +SKIP
+        # Extending hexDAG - Overview
+        ...
+        >>> get_extension_guide("adapter")  # doctest: +SKIP
+        # See get_custom_adapter_guide() for details
+    """
+    if component_type == "adapter":
+        return "Use get_custom_adapter_guide() for detailed adapter documentation."
+    if component_type == "node":
+        return "Use get_custom_node_guide() for detailed node documentation."
+    if component_type == "tool":
+        return "Use get_custom_tool_guide() for detailed tool documentation."
+
+    return '''# Extending hexDAG - Overview
+
+## Extension Points
+
+hexDAG can be extended at multiple levels:
+
+| Component | Purpose | Decorator |
+|-----------|---------|-----------|
+| **Adapter** | Connect to external services | `@adapter()` |
+| **Node** | Custom processing logic | `@node()` |
+| **Tool** | Agent-callable functions | `@tool()` |
+| **Macro** | Reusable pipeline patterns | `@macro()` |
+| **Policy** | Execution control rules | `@policy()` |
+
+## Quick Reference
+
+### Adapters
+```python
+@adapter("llm", name="my_llm", secrets={"api_key": "MY_API_KEY"})
+class MyLLMAdapter:
+    def __init__(self, api_key: str, model: str = "default"):
+        ...
+```
+→ Use `get_custom_adapter_guide()` for full documentation
+
+### Nodes
+```python
+@node(name="my_node", namespace="plugin")
+class MyNode(BaseNodeFactory):
+    def __call__(self, name: str, **params) -> NodeSpec:
+        ...
+```
+→ Use `get_custom_node_guide()` for full documentation
+
+### Tools
+```python
+@tool(name="my_tool", namespace="plugin", description="Does something")
+def my_tool(param: str) -> str:
+    ...
+```
+→ Use `get_custom_tool_guide()` for full documentation
+
+### Macros
+```python
+@macro(name="my_pattern", namespace="plugin")
+class MyMacro(ConfigurableMacro):
+    def expand(self, **params) -> list[NodeSpec]:
+        # Return list of nodes that implement the pattern
+        ...
+```
+
+### Policies
+```python
+@policy(name="my_policy", description="Custom retry logic")
+class MyPolicy:
+    def __init__(self, max_retries: int = 3):
+        ...
+
+    async def evaluate(self, context: PolicyContext) -> PolicyResponse:
+        ...
+```
+
+## Plugin Structure
+
+Organize extensions in `hexdag_plugins/`:
+
+```
+hexdag_plugins/
+├── my_adapter/
+│   ├── __init__.py
+│   ├── adapter.py
+│   ├── pyproject.toml
+│   └── tests/
+├── my_nodes/
+│   ├── __init__.py
+│   ├── processor.py
+│   └── analyzer.py
+└── my_tools/
+    ├── __init__.py
+    └── search.py
+```
+
+## Using Extensions in YAML
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: extended-pipeline
+spec:
+  # Aliases for cleaner references
+  aliases:
+    my_processor: mycompany.nodes.ProcessorNode
+    my_analyzer: mycompany.nodes.AnalyzerNode
+
+  # Custom adapters
+  ports:
+    llm:
+      adapter: mycompany.adapters.CustomLLMAdapter
+      config:
+        api_key: ${MY_API_KEY}
+
+  # Custom nodes
+  nodes:
+    - kind: my_processor
+      metadata:
+        name: step1
+      spec:
+        mode: fast
+      dependencies: []
+
+    - kind: agent_node
+      metadata:
+        name: agent
+      spec:
+        tools:
+          - mycompany.tools.search  # Custom tool
+          - mycompany.tools.analyze
+      dependencies: [step1]
+```
+
+## MCP Tools for Development
+
+Use these MCP tools when building pipelines:
+
+| Tool | Purpose |
+|------|---------|
+| `list_nodes()` | See available nodes |
+| `list_adapters()` | See available adapters |
+| `get_component_schema()` | Get config schema |
+| `get_syntax_reference()` | Variable syntax help |
+| `validate_yaml_pipeline()` | Validate your YAML |
+| `get_custom_adapter_guide()` | Adapter creation guide |
+| `get_custom_node_guide()` | Node creation guide |
+| `get_custom_tool_guide()` | Tool creation guide |
+'''
+
+
 # Run the server
 if __name__ == "__main__":
     mcp.run()
