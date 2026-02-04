@@ -311,6 +311,11 @@
                             ],
                             "default": null,
                             "description": "Output schema for validation (if None, inferred from function)"
+                        },
+                        "unpack_input": {
+                            "default": false,
+                            "description": "If True, unpack input_mapping fields as individual **kwargs to the function instead of passing as single input_data object. This allows functions with signatures like `fn(load_id, rate, *, db=None)` instead of `fn(input_data, *, db=None)`.",
+                            "type": "boolean"
                         }
                     },
                     "required": [

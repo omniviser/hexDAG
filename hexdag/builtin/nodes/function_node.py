@@ -35,6 +35,7 @@ class FunctionNode(BaseNodeFactory):
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
         deps: list[str] | None = None,
         input_mapping: dict[str, str] | None = None,
+        unpack_input: bool = False,
         **kwargs: Any,
     ) -> NodeSpec:
         """Create a NodeSpec for a function-based node.
@@ -47,6 +48,10 @@ class FunctionNode(BaseNodeFactory):
             output_schema: Output schema for validation (if None, inferred from function)
             deps: List of dependency node names
             input_mapping: Optional field mapping dict {target_field: "source.path"}
+            unpack_input: If True, unpack input_mapping fields as individual **kwargs
+                to the function instead of passing as single input_data object.
+                This allows functions with signatures like `fn(load_id, rate, *, db=None)`
+                instead of `fn(input_data, *, db=None)`.
             **kwargs: Additional parameters
 
         Returns
@@ -58,10 +63,13 @@ class FunctionNode(BaseNodeFactory):
         resolved_fn = self._resolve_function(fn)
 
         # Validate function can be used properly
-        self._validate_function(resolved_fn)
+        self._validate_function(resolved_fn, unpack_input=unpack_input)
 
         if input_mapping is not None:
             kwargs["input_mapping"] = input_mapping
+
+        if unpack_input:
+            kwargs["unpack_input"] = True
 
         if input_mapping and not input_schema:
             # Auto-generate Pydantic model from field mapping
@@ -103,7 +111,9 @@ class FunctionNode(BaseNodeFactory):
         else:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
-        wrapped_fn = self._create_wrapped_function(name, resolved_fn, input_model, output_model)
+        wrapped_fn = self._create_wrapped_function(
+            name, resolved_fn, input_model, output_model, unpack_input=unpack_input
+        )
 
         return NodeSpec(
             name=name,
@@ -120,8 +130,24 @@ class FunctionNode(BaseNodeFactory):
         fn: Callable[..., Any],
         input_model: type[BaseModel] | type | None,
         output_model: type[BaseModel] | type | None,
+        *,
+        unpack_input: bool = False,
     ) -> Callable[..., Any]:
         """Create a simple wrapped function with explicit port handling.
+
+        Parameters
+        ----------
+        name : str
+            Node name for logging
+        fn : Callable[..., Any]
+            The function to wrap
+        input_model : type[BaseModel] | type | None
+            Input model for validation
+        output_model : type[BaseModel] | type | None
+            Output model for validation
+        unpack_input : bool, default=False
+            If True, unpack input_data fields as individual **kwargs to the function
+            instead of passing as single input_data object.
 
         Returns
         -------
@@ -168,10 +194,27 @@ class FunctionNode(BaseNodeFactory):
 
             try:
                 # Execute function (handle both sync and async)
-                if asyncio.iscoroutinefunction(fn):
-                    result = await fn(input_data, **call_kwargs)
+                if unpack_input:
+                    # Unpack input_data fields as individual kwargs
+                    # This allows functions with signatures like fn(load_id, rate, *, db=None)
+                    if isinstance(input_data, dict):
+                        unpacked_kwargs = {**input_data, **call_kwargs}
+                    elif isinstance(input_data, BaseModel):
+                        unpacked_kwargs = {**input_data.model_dump(), **call_kwargs}
+                    else:
+                        # Fallback: try to convert to dict
+                        unpacked_kwargs = {**vars(input_data), **call_kwargs}
+
+                    if asyncio.iscoroutinefunction(fn):
+                        result = await fn(**unpacked_kwargs)
+                    else:
+                        result = fn(**unpacked_kwargs)
                 else:
-                    result = fn(input_data, **call_kwargs)
+                    # Standard behavior: pass input_data as first positional argument
+                    if asyncio.iscoroutinefunction(fn):
+                        result = await fn(input_data, **call_kwargs)
+                    else:
+                        result = fn(input_data, **call_kwargs)
 
                 # Log successful completion
                 duration_ms = (time.perf_counter() - start_time) * 1000
@@ -254,12 +297,13 @@ class FunctionNode(BaseNodeFactory):
         except AttributeError as e:
             raise ValueError(f"Function '{func_name}' not found in module '{module_path}'") from e
 
-    def _validate_function(self, fn: Callable[..., Any]) -> None:
+    def _validate_function(self, fn: Callable[..., Any], *, unpack_input: bool = False) -> None:
         """Validate that function can be properly wrapped.
 
         Args
         ----
             fn: Function to validate
+            unpack_input: If True, function receives unpacked kwargs instead of input_data
 
         Raises
         ------
@@ -269,7 +313,13 @@ class FunctionNode(BaseNodeFactory):
         sig = inspect.signature(fn)
         params = list(sig.parameters.values())
 
-        # Function needs at least one parameter to receive input_data
+        if unpack_input:
+            # With unpack_input, function receives fields as **kwargs
+            # It can have any signature, including just **kwargs
+            # No validation needed - fields are passed as keyword arguments
+            return
+
+        # Standard mode: function needs at least one parameter to receive input_data
         if not params:
             raise ValueError("Function must have at least one parameter to receive input_data")
 

@@ -183,6 +183,7 @@ omit = [
     "*_plugins/*",
     "hexdag/cli/*",    # CLI has separate test suite with 67% coverage
     "hexdag/studio/*", # Studio is new, will add tests in follow-up PR
+    "hexdag/core/docs/*",  # Auto-generated documentation utilities
 ]
 
 [tool.coverage.report]
