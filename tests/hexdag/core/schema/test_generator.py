@@ -224,7 +224,8 @@ class TestDocstringExtraction:
 
             Parameters
             ----------
-            value: The value parameter
+            value : float
+                The value parameter
             """
             pass
 

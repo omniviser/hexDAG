@@ -40,6 +40,9 @@
                             ]
                         },
                         "continuation_prompts": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
                             "default": null,
                             "description": "Phase-specific prompts",
                             "type": [
@@ -59,28 +62,15 @@
                             ]
                         },
                         "main_prompt": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "description": "Initial reasoning prompt"
+                            "description": "Initial reasoning prompt",
+                            "type": "string"
                         },
                         "output_schema": {
                             "anyOf": [
                                 {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
                                     "type": "object"
                                 },
                                 {
@@ -272,6 +262,7 @@
                         "fn": {
                             "anyOf": [
                                 {
+                                    "description": "Module path string (e.g., 'myapp.process') or !py inline function",
                                     "type": "string"
                                 },
                                 {
@@ -281,6 +272,9 @@
                             "description": "Function to execute (callable or module path string like 'mymodule.myfunc')"
                         },
                         "input_mapping": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
                             "default": null,
                             "description": "Optional field mapping dict {target_field: \"source.path\"}",
                             "type": [
@@ -379,7 +373,7 @@
                         },
                         "parse_strategy": {
                             "default": "json",
-                            "description": "",
+                            "description": "JSON parsing strategy: \"json\", \"json_in_markdown\", or \"yaml\". Default is \"json\".",
                             "type": "string"
                         },
                         "prompt_template": {

@@ -43,7 +43,7 @@ Specification for agent_node type
 | `config` | string | null | No | Agent configuration |
 | `continuation_prompts` | object | null | No | Phase-specific prompts |
 | `deps` | array | null | No | Dependencies |
-| `main_prompt` | string | string | Yes | Initial reasoning prompt |
+| `main_prompt` | string | Yes | Initial reasoning prompt |
 | `output_schema` | object | string | No | Custom output schema for tool_end res... |
 
 **Example:**
@@ -117,7 +117,7 @@ Specification for llm_node type
 | `deps` | string | No | List of dependency node names. |
 | `output_schema` | string | No | Expected output schema for structured... |
 | `parse_json` | string | No | If True, parse the LLM response as JS... |
-| `parse_strategy` | string | No |  |
+| `parse_strategy` | string | No | JSON parsing strategy: "json", "json_... |
 | `prompt_template` | string | No | Template for the user prompt. Support... |
 | `system_prompt` | string | No | System message to prepend to the conv... |
 | `template` | string | No |  |

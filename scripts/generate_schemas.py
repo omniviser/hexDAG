@@ -377,7 +377,7 @@ def generate_hexdag_config_schema() -> dict[str, Any]:
     }
 
 
-def save_schema(schema: dict[str, Any], filename: str) -> None:
+def save_schema(schema: dict[str, Any], filename: str, format: str = "json") -> None:
     """Save schema to file with pretty formatting.
 
     Parameters
@@ -386,14 +386,29 @@ def save_schema(schema: dict[str, Any], filename: str) -> None:
         Schema dictionary to save
     filename : str
         Output filename (relative to schemas/ directory)
+    format : str
+        Output format: "json" or "yaml"
     """
+    import io
+
+    import yaml
+
     output_path = SCHEMAS_DIR / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with output_path.open("w") as f:
-        json.dump(schema, f, indent=4, sort_keys=True)
-        f.write("\n")  # Add trailing newline for end-of-file-fixer
+    # Generate content to a string buffer first
+    buffer = io.StringIO()
+    if format == "yaml":
+        yaml.dump(schema, buffer, sort_keys=False, default_flow_style=False)
+    else:
+        json.dump(schema, buffer, indent=4, sort_keys=True)
 
+    content = buffer.getvalue()
+
+    # Ensure exactly one trailing newline (for end-of-file-fixer compatibility)
+    content = content.rstrip("\n") + "\n"
+
+    output_path.write_text(content)
     print(f"✓ Generated {output_path.relative_to(Path.cwd())}")
 
 
@@ -405,13 +420,14 @@ def main() -> int:
     int
         Exit code (0 = success, 1 = error)
     """
-    print("Generating JSON Schema files...")
+    print("Generating schema files (JSON + YAML)...")
     print()
 
     # Generate pipeline schema
     try:
         pipeline_schema = generate_pipeline_schema()
-        save_schema(pipeline_schema, "pipeline-schema.json")
+        save_schema(pipeline_schema, "pipeline-schema.json", format="json")
+        save_schema(pipeline_schema, "pipeline-schema.yaml", format="yaml")
 
         # Count node types
         node_count = len(pipeline_schema.get("$defs", {})) - 2  # -2 for Node and EventHandler
@@ -423,7 +439,8 @@ def main() -> int:
     # Generate policy schema
     try:
         policy_schema = generate_policy_schema()
-        save_schema(policy_schema, "policy-schema.json")
+        save_schema(policy_schema, "policy-schema.json", format="json")
+        save_schema(policy_schema, "policy-schema.yaml", format="yaml")
         print(f"  → Included {len(PolicySignal)} policy signals")
     except Exception as e:
         print(f"Error generating policy schema: {e}", file=sys.stderr)
@@ -432,14 +449,14 @@ def main() -> int:
     # Generate hexDAG config schema
     try:
         config_schema = generate_hexdag_config_schema()
-        save_schema(config_schema, "hexdag-config-schema.json")
+        save_schema(config_schema, "hexdag-config-schema.json", format="json")
         print("  → Generated from existing config schema")
     except Exception as e:
         print(f"Error generating config schema: {e}", file=sys.stderr)
         return 1
 
     print()
-    print("✓ All schemas generated successfully!")
+    print("✓ All schemas generated successfully (JSON + YAML)!")
     print()
     print("To use in VS Code, add to .vscode/settings.json:")
     print(

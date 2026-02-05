@@ -1,0 +1,45 @@
+$schema: http://json-schema.org/draft-07/schema#
+title: hexDAG Policy Configuration
+description: Policy configuration for execution control and error handling
+type: object
+properties:
+  signal:
+    type: string
+    enum:
+    - proceed
+    - retry
+    - skip
+    - fallback
+    - fail
+    description: Policy decision signal
+  context:
+    type: object
+    description: Policy evaluation context
+    properties:
+      event:
+        type: object
+        description: Event that triggered evaluation
+      dag_id:
+        type: string
+        description: DAG identifier
+      node_id:
+        type:
+        - string
+        - 'null'
+        description: Current node (if applicable)
+      wave_index:
+        type: integer
+        description: Current wave index
+      attempt:
+        type: integer
+        description: Attempt number (1-based)
+      error:
+        type:
+        - object
+        - 'null'
+        description: Exception details (if any)
+      metadata:
+        type:
+        - object
+        - 'null'
+        description: Additional context

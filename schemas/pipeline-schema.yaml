@@ -1,0 +1,519 @@
+$schema: http://json-schema.org/draft-07/schema#
+title: hexDAG Pipeline
+description: (auto-generated from builtin nodes)
+type: object
+properties:
+  apiVersion:
+    type: string
+    default: v1
+    description: API version
+  kind:
+    type: string
+    const: Pipeline
+    description: Resource kind (must be 'Pipeline')
+  metadata:
+    type: object
+    properties:
+      name:
+        type: string
+        description: Unique pipeline identifier
+      description:
+        type: string
+        description: Pipeline description
+      author:
+        type: string
+        description: Pipeline author
+      version:
+        type: string
+        description: Semantic version (e.g., 1.0.0)
+      tags:
+        type: array
+        items:
+          type: string
+        description: Categorization tags
+    required:
+    - name
+  spec:
+    type: object
+    properties:
+      nodes:
+        type: array
+        description: List of pipeline nodes
+        items:
+          oneOf:
+          - $ref: '#/$defs/FunctionNodeSpec'
+          - $ref: '#/$defs/LlmNodeSpec'
+          - $ref: '#/$defs/AgentNodeSpec'
+          - $ref: '#/$defs/LoopNodeSpec'
+          - $ref: '#/$defs/ConditionalNodeSpec'
+          - $ref: '#/$defs/Tool_CallNodeSpec'
+      input_schema:
+        type: object
+        description: JSON Schema for pipeline inputs
+      output_schema:
+        type: object
+        description: JSON Schema for pipeline outputs
+      common_field_mappings:
+        type: object
+        description: Reusable field mapping definitions
+      ports:
+        type: object
+        description: Port adapters configuration (LLM, database, memory)
+        additionalProperties:
+          type: object
+          properties:
+            adapter:
+              type: string
+              description: Adapter type
+            params:
+              type: object
+              description: Adapter parameters
+      type_ports:
+        type: object
+        description: Port type mappings
+        additionalProperties:
+          type: string
+      policies:
+        type: object
+        description: Execution policies (retry, timeout, error handling)
+        additionalProperties:
+          type: object
+          properties:
+            type:
+              type: string
+              description: Policy type
+            params:
+              type: object
+              description: Policy parameters
+      events:
+        type: object
+        description: Event handlers for observability
+        properties:
+          on_node_started:
+            type: array
+            items:
+              $ref: '#/$defs/EventHandler'
+          on_node_completed:
+            type: array
+            items:
+              $ref: '#/$defs/EventHandler'
+          on_node_failed:
+            type: array
+            items:
+              $ref: '#/$defs/EventHandler'
+          on_workflow_complete:
+            type: array
+            items:
+              $ref: '#/$defs/EventHandler'
+    required:
+    - nodes
+required:
+- kind
+- metadata
+- spec
+$defs:
+  FunctionNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for function_node type
+    properties:
+      kind:
+        const: function_node
+        description: 'Node type: function_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          fn:
+            anyOf:
+            - type: string
+              description: Module path string (e.g., 'myapp.process') or !py inline
+                function
+            - type: string
+            description: Function to execute (callable or module path string like
+              'mymodule.myfunc')
+          input_schema:
+            anyOf:
+            - type: object
+            - type: string
+            description: Input schema for validation (if None, inferred from function)
+            default: null
+          output_schema:
+            anyOf:
+            - type: object
+            - type: string
+            description: Output schema for validation (if None, inferred from function)
+            default: null
+          deps:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+            description: List of dependency node names
+            default: null
+          input_mapping:
+            type:
+            - object
+            - 'null'
+            additionalProperties:
+              type: string
+            description: 'Optional field mapping dict {target_field: "source.path"}'
+            default: null
+          unpack_input:
+            type: boolean
+            description: If True, unpack input_mapping fields as individual **kwargs
+              to the function instead of passing as single input_data object. This
+              allows functions with signatures like `fn(load_id, rate, *, db=None)`
+              instead of `fn(input_data, *, db=None)`.
+            default: false
+        additionalProperties: false
+        required:
+        - fn
+    required:
+    - kind
+    - metadata
+    - spec
+  LlmNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for llm_node type
+    properties:
+      kind:
+        const: llm_node
+        description: 'Node type: llm_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          prompt_template:
+            type: string
+            description: Template for the user prompt. Supports Jinja2-style {{variable}}
+              syntax. Can be a string or PromptTemplate/ChatPromptTemplate object.
+              Can also be provided as 'template' (alias for YAML compatibility).
+            default: null
+          output_schema:
+            type: string
+            description: Expected output schema for structured output. If provided
+              with parse_json=True, the LLM response will be parsed and validated
+              against this schema.
+            default: null
+          system_prompt:
+            type: string
+            description: System message to prepend to the conversation.
+            default: null
+          parse_json:
+            type: string
+            description: If True, parse the LLM response as JSON and validate against
+              output_schema. Default is False (returns raw text).
+            default: false
+          parse_strategy:
+            type: string
+            description: 'JSON parsing strategy: "json", "json_in_markdown", or "yaml".
+              Default is "json".'
+            default: json
+          deps:
+            type: string
+            description: List of dependency node names.
+            default: null
+          template:
+            type: string
+            default: null
+        additionalProperties: false
+    required:
+    - kind
+    - metadata
+    - spec
+  AgentNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for agent_node type
+    properties:
+      kind:
+        const: agent_node
+        description: 'Node type: agent_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          main_prompt:
+            type: string
+            description: Initial reasoning prompt
+          continuation_prompts:
+            type:
+            - object
+            - 'null'
+            additionalProperties:
+              type: string
+            description: Phase-specific prompts
+            default: null
+          output_schema:
+            anyOf:
+            - type: object
+              additionalProperties:
+                type: string
+            - type: string
+            description: Custom output schema for tool_end results
+            default: null
+          config:
+            type:
+            - string
+            - 'null'
+            description: Agent configuration
+            default: null
+          deps:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+            description: Dependencies
+            default: null
+        additionalProperties: false
+        required:
+        - main_prompt
+    required:
+    - kind
+    - metadata
+    - spec
+  LoopNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for loop_node type
+    properties:
+      kind:
+        const: loop_node
+        description: 'Node type: loop_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        description: Loop control node for iterative processing
+        properties:
+          while_condition:
+            type: string
+            description: 'Module path to condition function: (data, state) -> bool'
+          body:
+            type: string
+            description: 'Module path to body function: (data, state) -> Any'
+          max_iterations:
+            type: integer
+            default: 100
+            description: Maximum number of iterations before stopping
+          collect_mode:
+            type: string
+            enum:
+            - last
+            - list
+            - reduce
+            default: last
+            description: 'How to collect results: last value, all values, or reduced'
+          initial_state:
+            type: object
+            default: {}
+            description: Initial state dict passed to first iteration
+          iteration_key:
+            type: string
+            default: loop_iteration
+            description: Key name for current iteration number in state
+        required:
+        - while_condition
+        - body
+    required:
+    - kind
+    - metadata
+    - spec
+  ConditionalNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for conditional_node type
+    properties:
+      kind:
+        const: conditional_node
+        description: 'Node type: conditional_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        description: Multi-branch conditional router for workflow control flow
+        properties:
+          branches:
+            type: array
+            description: List of condition branches evaluated in order
+            items:
+              type: object
+              properties:
+                condition:
+                  type: string
+                  description: Expression like 'node.field == value' or callable
+                action:
+                  type: string
+                  description: Action name to return if condition matches
+              required:
+              - condition
+              - action
+          else_action:
+            type: string
+            description: Default action if no branch conditions match
+          tie_break:
+            type: string
+            enum:
+            - first_true
+            default: first_true
+            description: Strategy for handling multiple matching branches
+        required:
+        - branches
+    required:
+    - kind
+    - metadata
+    - spec
+  Tool_CallNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for tool_call_node type
+    properties:
+      kind:
+        const: tool_call_node
+        description: 'Node type: tool_call_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          tool_name:
+            type: string
+            description: Full module path to the tool function (e.g., 'mymodule.my_tool')
+          arguments:
+            type:
+            - object
+            - 'null'
+            description: 'Arguments to pass to the tool (default: {})'
+            default: null
+          tool_call_id:
+            type:
+            - string
+            - 'null'
+            description: Optional ID for tracking (from LLM tool calls)
+            default: null
+          deps:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+            description: Dependencies (typically the LLM node that requested the tool)
+            default: null
+        additionalProperties: false
+        required:
+        - tool_name
+    required:
+    - kind
+    - metadata
+    - spec
+  Node:
+    type: object
+    description: Base node structure
+    properties:
+      kind:
+        type: string
+      metadata:
+        type: object
+      spec:
+        type: object
+  EventHandler:
+    type: object
+    description: Event handler configuration
+    properties:
+      type:
+        type: string
+        description: Handler type (e.g., 'alert', 'metrics', 'log')
+        enum:
+        - alert
+        - metrics
+        - log
+        - webhook
+        - callback
+      target:
+        type: string
+        description: Target system (e.g., 'pagerduty', 'datadog', 'slack')
+      severity:
+        type: string
+        description: Alert severity level
+        enum:
+        - low
+        - medium
+        - high
+        - critical
+      tags:
+        type: array
+        items:
+          type: string
+        description: Tags for categorization
+      params:
+        type: object
+        description: Handler-specific parameters
+    required:
+    - type

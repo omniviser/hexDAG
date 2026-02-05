@@ -1,5 +1,9 @@
 """Static data node for returning constant output.
 
+.. deprecated::
+    DataNode is deprecated. Use ExpressionNode directly instead.
+    DataNode already delegates to ExpressionNode internally.
+
 This module provides a DataNode factory for creating nodes that return
 static data without requiring Python functions. Useful for terminal
 nodes like rejection actions or static configuration.
@@ -40,6 +44,7 @@ With template syntax::
           type: "greeting"
 """
 
+import warnings
 from typing import Any
 
 from hexdag.core.domain.dag import NodeSpec
@@ -89,6 +94,10 @@ def _value_to_expression(value: Any) -> str:
 class DataNode(BaseNodeFactory):
     """Static data node factory that returns constant output.
 
+    .. deprecated::
+        DataNode is deprecated. Use ExpressionNode directly instead.
+        This node already delegates to ExpressionNode internally.
+
     This node type eliminates the need for trivial Python functions
     that simply return static dictionaries. The output is defined
     declaratively in the YAML configuration.
@@ -100,10 +109,8 @@ class DataNode(BaseNodeFactory):
     output. Dependencies can still be specified to control execution
     order in the DAG.
 
-    Attributes
-    ----------
-    _yaml_schema : dict
-        JSON Schema for YAML/MCP documentation
+    The YAML schema for this node is auto-generated from the ``__call__`` signature
+    and docstrings using ``SchemaGenerator``.
 
     Examples
     --------
@@ -134,20 +141,7 @@ class DataNode(BaseNodeFactory):
         ... )
     """
 
-    _yaml_schema: dict[str, Any] = {
-        "type": "object",
-        "description": "Static data node returning constant output. "
-        "Supports {{variable}} template syntax for dynamic values. "
-        "Useful for terminal nodes like rejection actions or static configuration.",
-        "properties": {
-            "output": {
-                "type": "object",
-                "description": "Output data to return. Values can be static or use "
-                "{{variable}} template syntax for dynamic content.",
-            },
-        },
-        "required": ["output"],
-    }
+    # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __call__(
         self,
@@ -186,6 +180,12 @@ class DataNode(BaseNodeFactory):
         >>> node.name
         'reject_locked'
         """
+        warnings.warn(
+            "DataNode is deprecated. Use ExpressionNode directly instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # Convert output values to expressions
         expressions: dict[str, str] = {}
         for key, value in output.items():

@@ -2,8 +2,9 @@
 
 import inspect
 import json
+import re
 from collections.abc import Callable
-from typing import Any, get_args
+from typing import Any, get_args, get_origin
 
 import yaml
 
@@ -158,7 +159,17 @@ class SchemaGenerator:
             prop_schema = SchemaGenerator._type_to_json_schema(param_type)
 
             if param_name in param_docs:
-                prop_schema["description"] = param_docs[param_name]
+                doc_text = param_docs[param_name]
+                prop_schema["description"] = doc_text
+
+                # For list[dict] types, try to extract nested structure from docstring
+                if (
+                    prop_schema.get("type") == "array"
+                    and prop_schema.get("items", {}).get("type") == "object"
+                ):
+                    nested_schema = SchemaGenerator._extract_nested_structure(doc_text)
+                    if nested_schema and "properties" in nested_schema:
+                        prop_schema["items"] = nested_schema
 
             if param.default != inspect.Parameter.empty:
                 prop_schema["default"] = param.default
@@ -180,6 +191,40 @@ class SchemaGenerator:
         return SchemaGenerator._format_output(schema, format)
 
     @staticmethod
+    def _is_callable_type(type_hint: Any) -> bool:
+        """Check if type hint is a Callable type.
+
+        Examples
+        --------
+        >>> from collections.abc import Callable
+        >>> SchemaGenerator._is_callable_type(Callable)
+        True
+        >>> SchemaGenerator._is_callable_type(Callable[..., Any])
+        True
+        >>> SchemaGenerator._is_callable_type(str)
+        False
+        """
+        # Check for collections.abc.Callable
+        if type_hint is Callable:
+            return True
+
+        # Check for typing.Callable or parameterized Callable[..., ...]
+        origin = get_origin(type_hint)
+        if origin is Callable:
+            return True
+
+        # Check for callable origin from collections.abc
+        try:
+            from collections.abc import Callable as ABCCallable
+
+            if origin is ABCCallable:
+                return True
+        except ImportError:
+            pass
+
+        return False
+
+    @staticmethod
     def _type_to_json_schema(type_hint: Any) -> dict:
         """Convert Python type hint to JSON Schema type.
 
@@ -189,7 +234,9 @@ class SchemaGenerator:
         - Union types: str | int → anyOf
         - List types: list[str] → array
         - Dict types: dict[str, Any] → object
+        - Callable types: Callable[..., Any] → string (module path)
         - Annotated types: Annotated[int, Field(ge=0)] → min/max
+        - Type aliases: Resolves type aliases to their base Literal/Union types
 
         Args
         ----
@@ -205,6 +252,14 @@ class SchemaGenerator:
         >>> SchemaGenerator._type_to_json_schema(Literal["a", "b"])
         {'type': 'string', 'enum': ['a', 'b']}
         """
+        # Handle Callable types first (before checking other patterns)
+        # Callables are represented as strings (module paths) in YAML
+        if SchemaGenerator._is_callable_type(type_hint):
+            return {
+                "type": "string",
+                "description": "Module path string (e.g., 'myapp.process') or !py inline function",
+            }
+
         if is_annotated_type(type_hint):
             base_type, metadata = get_annotated_metadata(type_hint)
 
@@ -268,8 +323,25 @@ class SchemaGenerator:
                     else:
                         schema["type"] = [schema["type"], "null"]
                 return schema
+
             # Multiple types → anyOf
-            return {"anyOf": [SchemaGenerator._type_to_json_schema(arg) for arg in non_none_args]}
+            # But first, check if any of them are Callable and simplify
+            processed_schemas = [SchemaGenerator._type_to_json_schema(arg) for arg in non_none_args]
+
+            # Deduplicate schemas that have the same structure
+            unique_schemas = []
+            seen = set()
+            for schema in processed_schemas:
+                # Create a hashable representation
+                schema_repr = json.dumps(schema, sort_keys=True)
+                if schema_repr not in seen:
+                    seen.add(schema_repr)
+                    unique_schemas.append(schema)
+
+            if len(unique_schemas) == 1:
+                return unique_schemas[0]
+
+            return {"anyOf": unique_schemas}
 
         if is_list_type(type_hint):
             args = get_args(type_hint)
@@ -281,13 +353,97 @@ class SchemaGenerator:
             }
 
         if is_dict_type(type_hint):
+            args = get_args(type_hint)
+            # If dict has typed values, try to extract schema
+            if len(args) >= 2:
+                value_type = args[1]
+                if value_type is not Any:
+                    return {
+                        "type": "object",
+                        "additionalProperties": SchemaGenerator._type_to_json_schema(value_type),
+                    }
             return {"type": "object"}
 
         if type_hint in SchemaGenerator.BASIC_TYPE_MAP:
             return SchemaGenerator.BASIC_TYPE_MAP[type_hint].copy()
 
+        # Check if it's a type alias that we can resolve
+        # Type aliases like `Mode = Literal[...]` should be resolved
+        if hasattr(type_hint, "__value__"):
+            # Python 3.12+ type aliases have __value__
+            return SchemaGenerator._type_to_json_schema(type_hint.__value__)
+
         # Default to string for unknown types
         return {"type": "string"}
+
+    @staticmethod
+    def _extract_nested_structure(description: str) -> dict[str, Any] | None:
+        """Extract nested object structure from parameter description.
+
+        Parses docstring descriptions that define object structures with fields:
+        - "Each branch has: - condition: str - Expression..."
+        - "Dict with keys: field1: type - description..."
+
+        Args
+        ----
+            description: Parameter description text
+
+        Returns
+        -------
+            dict[str, Any] | None: JSON Schema properties dict if structure found, None otherwise
+
+        Examples
+        --------
+        >>> desc = "List of branches. Each has: - condition: str - The condition"
+        >>> result = SchemaGenerator._extract_nested_structure(desc)
+        >>> "condition" in result.get("properties", {}) if result else False
+        True
+        """
+        if not description:
+            return None
+
+        properties: dict[str, Any] = {}
+
+        # Pattern 1: "- field: type - description" (bullet list style)
+        # Matches lines like "- condition: str - Expression to evaluate"
+        bullet_pattern = re.compile(
+            r"-\s+(\w+):\s*(\w+)?\s*[-–—]?\s*(.*?)(?=\n\s*-|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        matches = bullet_pattern.findall(description)
+
+        for match in matches:
+            field_name = match[0].strip()
+            field_type = match[1].strip() if match[1] else "string"
+            field_desc = match[2].strip() if len(match) > 2 else ""
+
+            # Map common type names to JSON Schema types
+            type_map = {
+                "str": "string",
+                "string": "string",
+                "int": "integer",
+                "integer": "integer",
+                "float": "number",
+                "number": "number",
+                "bool": "boolean",
+                "boolean": "boolean",
+                "list": "array",
+                "array": "array",
+                "dict": "object",
+                "object": "object",
+            }
+
+            json_type = type_map.get(field_type.lower(), "string")
+            prop_schema: dict[str, Any] = {"type": json_type}
+            if field_desc:
+                prop_schema["description"] = field_desc
+
+            properties[field_name] = prop_schema
+
+        if properties:
+            return {"type": "object", "properties": properties}
+
+        return None
 
     @staticmethod
     def _extract_param_docs(func: Callable) -> dict[str, str]:
@@ -428,9 +584,20 @@ class SchemaGenerator:
                     ):
                         param_docs[param_name] = ""
                         current_param = param_name
+                # NumPy style continuation: indented lines are descriptions
+                elif (
+                    is_numpy_style
+                    and current_param
+                    and line.startswith((" ", "\t"))
+                    and line_stripped
+                ):
+                    if param_docs[current_param]:
+                        param_docs[current_param] += " " + line_stripped
+                    else:
+                        param_docs[current_param] = line_stripped
                 # Google style: "param_name: description" or "param_name (type): description"
-                # Also handles mixed-style (NumPy markers with Google param format)
-                elif ":" in line_stripped:
+                # Only applies when NOT in NumPy mode (to avoid conflicts)
+                elif not is_numpy_style and ":" in line_stripped:
                     parts = line_stripped.split(":", 1)
                     if len(parts) == 2:
                         param_part = parts[0].strip()
@@ -447,8 +614,13 @@ class SchemaGenerator:
                         ):
                             param_docs[param_name] = description
                             current_param = param_name
-                # Continuation lines (indented description for current param)
-                elif current_param and line.startswith((" ", "\t")) and line_stripped:
+                # Google style continuation lines (indented description for current param)
+                elif (
+                    not is_numpy_style
+                    and current_param
+                    and line.startswith((" ", "\t"))
+                    and line_stripped
+                ):
                     if param_docs[current_param]:
                         param_docs[current_param] += " " + line_stripped
                     else:
