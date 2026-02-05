@@ -1,14 +1,20 @@
 """Tests for ExpressionNode factory.
 
 This module tests the ExpressionNode factory, which evaluates safe AST-based
-expressions to compute values in YAML pipelines.
+expressions to compute values in YAML pipelines. Also tests merge strategies
+for aggregating outputs from multiple dependency nodes.
 """
 
+import statistics
 from decimal import Decimal
 
 import pytest
 
-from hexdag.builtin.nodes.expression_node import ExpressionNode
+from hexdag.builtin.nodes.expression_node import (
+    ExpressionNode,
+    _apply_merge_strategy,
+    _extract_field,
+)
 
 
 class TestExpressionNodeCreation:
@@ -353,21 +359,255 @@ class TestExpressionNodeErrorHandling:
         assert "nonexistent" not in result
 
 
-class TestExpressionNodeYamlSchema:
-    """Tests for ExpressionNode YAML schema metadata."""
+class TestExpressionNodeValidation:
+    """Tests for ExpressionNode validation."""
 
-    def test_has_yaml_schema(self) -> None:
-        """ExpressionNode has _yaml_schema attribute for documentation."""
-        assert hasattr(ExpressionNode, "_yaml_schema")
+    def test_requires_expressions_or_merge_strategy(self) -> None:
+        """ExpressionNode requires either expressions or merge_strategy."""
+        factory = ExpressionNode()
 
-    def test_yaml_schema_has_required_fields(self) -> None:
-        """ExpressionNode _yaml_schema specifies required fields."""
-        schema = ExpressionNode._yaml_schema
+        with pytest.raises(ValueError, match="Either 'expressions' or 'merge_strategy'"):
+            factory(name="test_node")
 
-        assert "properties" in schema
-        assert "expressions" in schema["properties"]
-        assert "input_mapping" in schema["properties"]
-        assert "output_fields" in schema["properties"]
+    def test_reduce_requires_reducer(self) -> None:
+        """ExpressionNode with merge_strategy='reduce' requires reducer."""
+        factory = ExpressionNode()
 
-        assert "required" in schema
-        assert "expressions" in schema["required"]
+        with pytest.raises(ValueError, match="'reducer' is required"):
+            factory(
+                name="test_node",
+                merge_strategy="reduce",
+                deps=["dep1", "dep2"],
+            )
+
+
+class TestMergeStrategyHelpers:
+    """Tests for merge strategy helper functions."""
+
+    def test_extract_field_with_dict(self) -> None:
+        """_extract_field extracts from dict using dot notation."""
+        data = {"result": {"score": 42, "nested": {"value": 10}}}
+
+        assert _extract_field(data, "result.score") == 42
+        assert _extract_field(data, "result.nested.value") == 10
+        assert _extract_field(data, None) == data
+
+    def test_extract_field_returns_none_for_missing(self) -> None:
+        """_extract_field returns None for missing fields."""
+        data = {"result": {"score": 42}}
+
+        assert _extract_field(data, "result.missing") is None
+        assert _extract_field(data, "nonexistent") is None
+
+    def test_apply_merge_strategy_dict(self) -> None:
+        """_apply_merge_strategy with 'dict' returns passthrough."""
+        input_data = {"node1": {"score": 10}, "node2": {"score": 20}}
+        dep_order = ["node1", "node2"]
+
+        result = _apply_merge_strategy(
+            input_data, "dict", field_path=None, reducer=None, dep_order=dep_order
+        )
+        assert result == input_data
+
+    def test_apply_merge_strategy_dict_with_extract(self) -> None:
+        """_apply_merge_strategy with 'dict' and extract_field."""
+        input_data = {"node1": {"score": 10}, "node2": {"score": 20}}
+        dep_order = ["node1", "node2"]
+
+        result = _apply_merge_strategy(input_data, "dict", "score", None, dep_order)
+        assert result == {"node1": 10, "node2": 20}
+
+    def test_apply_merge_strategy_list(self) -> None:
+        """_apply_merge_strategy with 'list' returns ordered list."""
+        input_data = {"node1": {"score": 10}, "node2": {"score": 20}}
+        dep_order = ["node1", "node2"]
+
+        result = _apply_merge_strategy(input_data, "list", "score", None, dep_order)
+        assert result == [10, 20]
+
+    def test_apply_merge_strategy_first(self) -> None:
+        """_apply_merge_strategy with 'first' returns first non-None."""
+        input_data = {"node1": None, "node2": {"score": 20}, "node3": {"score": 30}}
+        dep_order = ["node1", "node2", "node3"]
+
+        result = _apply_merge_strategy(input_data, "first", "score", None, dep_order)
+        assert result == 20
+
+    def test_apply_merge_strategy_last(self) -> None:
+        """_apply_merge_strategy with 'last' returns last non-None."""
+        input_data = {"node1": {"score": 10}, "node2": {"score": 20}, "node3": None}
+        dep_order = ["node1", "node2", "node3"]
+
+        result = _apply_merge_strategy(input_data, "last", "score", None, dep_order)
+        assert result == 20
+
+    def test_apply_merge_strategy_reduce(self) -> None:
+        """_apply_merge_strategy with 'reduce' applies reducer function."""
+        input_data = {"node1": {"score": 10}, "node2": {"score": 20}, "node3": {"score": 30}}
+        dep_order = ["node1", "node2", "node3"]
+
+        result = _apply_merge_strategy(input_data, "reduce", "score", statistics.mean, dep_order)
+        assert result == 20.0  # mean of [10, 20, 30]
+
+    def test_apply_merge_strategy_reduce_filters_none(self) -> None:
+        """_apply_merge_strategy with 'reduce' filters out None values."""
+        input_data = {"node1": {"score": 10}, "node2": None, "node3": {"score": 30}}
+        dep_order = ["node1", "node2", "node3"]
+
+        result = _apply_merge_strategy(input_data, "reduce", "score", statistics.mean, dep_order)
+        assert result == 20.0  # mean of [10, 30]
+
+
+class TestExpressionNodeMergeStrategies:
+    """Tests for ExpressionNode merge strategy execution."""
+
+    @pytest.mark.asyncio
+    async def test_merge_strategy_list(self) -> None:
+        """ExpressionNode with merge_strategy='list' collects values."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="collect",
+            merge_strategy="list",
+            extract_field="score",
+            deps=["scorer_1", "scorer_2", "scorer_3"],
+        )
+
+        # Simulate multi-dependency input (dict with node names as keys)
+        input_data = {
+            "scorer_1": {"score": 10},
+            "scorer_2": {"score": 20},
+            "scorer_3": {"score": 30},
+        }
+
+        result = await node.fn(input_data)
+        assert result == {"result": [10, 20, 30]}
+
+    @pytest.mark.asyncio
+    async def test_merge_strategy_reduce_with_mean(self) -> None:
+        """ExpressionNode with merge_strategy='reduce' applies reducer."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="average",
+            merge_strategy="reduce",
+            extract_field="score",
+            reducer=statistics.mean,
+            deps=["scorer_1", "scorer_2", "scorer_3"],
+        )
+
+        input_data = {
+            "scorer_1": {"score": 10},
+            "scorer_2": {"score": 20},
+            "scorer_3": {"score": 30},
+        }
+
+        result = await node.fn(input_data)
+        assert result == {"result": 20.0}
+
+    @pytest.mark.asyncio
+    async def test_merge_strategy_reduce_with_module_path(self) -> None:
+        """ExpressionNode with merge_strategy='reduce' resolves module path."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="average",
+            merge_strategy="reduce",
+            extract_field="score",
+            reducer="statistics.mean",  # Module path string
+            deps=["scorer_1", "scorer_2"],
+        )
+
+        input_data = {
+            "scorer_1": {"score": 10},
+            "scorer_2": {"score": 30},
+        }
+
+        result = await node.fn(input_data)
+        assert result == {"result": 20.0}
+
+    @pytest.mark.asyncio
+    async def test_merge_strategy_first(self) -> None:
+        """ExpressionNode with merge_strategy='first' returns first non-None."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="fallback",
+            merge_strategy="first",
+            deps=["primary", "fallback", "cache"],
+        )
+
+        input_data = {
+            "primary": None,
+            "fallback": {"data": "from_fallback"},
+            "cache": {"data": "from_cache"},
+        }
+
+        result = await node.fn(input_data)
+        assert result == {"result": {"data": "from_fallback"}}
+
+    @pytest.mark.asyncio
+    async def test_merge_strategy_last(self) -> None:
+        """ExpressionNode with merge_strategy='last' returns last non-None."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="latest",
+            merge_strategy="last",
+            deps=["v1", "v2", "v3"],
+        )
+
+        input_data = {
+            "v1": {"version": 1},
+            "v2": {"version": 2},
+            "v3": None,
+        }
+
+        result = await node.fn(input_data)
+        assert result == {"result": {"version": 2}}
+
+    @pytest.mark.asyncio
+    async def test_merge_strategy_dict(self) -> None:
+        """ExpressionNode with merge_strategy='dict' returns passthrough."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="collect_all",
+            merge_strategy="dict",
+            deps=["node1", "node2"],
+        )
+
+        input_data = {
+            "node1": {"a": 1},
+            "node2": {"b": 2},
+        }
+
+        result = await node.fn(input_data)
+        assert result == {"result": {"node1": {"a": 1}, "node2": {"b": 2}}}
+
+    @pytest.mark.asyncio
+    async def test_merge_with_expressions(self) -> None:
+        """ExpressionNode can combine merge strategy with expressions."""
+        factory = ExpressionNode()
+
+        node = factory(
+            name="merge_and_calculate",
+            merge_strategy="list",
+            extract_field="score",
+            expressions={
+                "total": "sum(merged)",
+                "average": "sum(merged) / len(merged)",
+            },
+            output_fields=["total", "average"],
+            deps=["s1", "s2", "s3"],
+        )
+
+        input_data = {
+            "s1": {"score": 10},
+            "s2": {"score": 20},
+            "s3": {"score": 30},
+        }
+
+        result = await node.fn(input_data)
+        assert result["total"] == 60
+        assert result["average"] == 20.0

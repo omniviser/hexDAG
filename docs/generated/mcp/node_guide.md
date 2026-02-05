@@ -31,39 +31,46 @@ def process_data(input_data: dict) -> dict:
 
 ### CompositeNode
 
-Unified control flow node for loops and conditionals
+Unified control flow node supporting while, for-each, times, if-else, switch.
 
 **Kind**: `composite_node`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `mode` | `string` | Yes | Control flow mode |
-| `condition` | `string` | No | Condition expression (while, if-else, switch branc... |
-| `items` | `string` | No | Expression resolving to iterable (for-each mode) |
-| `count` | `integer` | No | Number of iterations (times mode) |
-| `branches` | `array` | No | List of condition branches (switch mode) |
-| `body` | `any` | No | Body to execute: module path, !py function, or inl... |
-| `body_pipeline` | `string` | No | Path to external pipeline YAML |
-| `else_body` | `any` | No | Else branch body (if-else, switch) |
-| `else_action` | `string` | No | Else action label for routing (switch without body... |
-| `initial_state` | `object` | No | Initial state dict (while mode) |
-| `state_update` | `object` | No | State update expressions (while mode) |
-| `max_iterations` | `integer` | No | Safety limit for while loops |
-| `concurrency` | `integer` | No | Max concurrent iterations (for-each, times) |
-| `collect` | `string` | No | Result collection mode |
-| `error_handling` | `string` | No | Error handling strategy |
+| `name` | `str` | Yes | Node name (unique identifier in the pipeline) |
+| `mode` | `Literal['while', 'for-each', 'times', 'if-else', 'switch']` | Yes | Control flow mode: while, for-each, times, if-else... |
+| `body` | `str | list[dict[str, typing.Any]] | collections.abc.Callable[..., typing.Any] | None` | No | Body to execute. Can be: - Module path string (e.g... |
+| `body_pipeline` | `str | None` | No | Path to external pipeline YAML file |
+| `condition` | `str | None` | No | Condition expression for while, if-else, or switch... |
+| `items` | `str | None` | No | Expression resolving to iterable for for-each mode |
+| `item_var` | `str` | No | Variable name for current item (default: "item") |
+| `index_var` | `str` | No | Variable name for current index (default: "index") |
+| `count` | `int | None` | No | Number of iterations for times mode |
+| `branches` | `list[dict[str, typing.Any]] | None` | No | List of condition branches for switch mode |
+| `else_body` | `str | list[dict[str, typing.Any]] | None` | No | Body for else branch (if-else, switch with inline ... |
+| `else_action` | `str | None` | No | Action label for else branch (switch routing mode) |
+| `initial_state` | `dict[str, typing.Any] | None` | No | Initial state dict for while mode |
+| `state_update` | `dict[str, str] | None` | No | State update expressions for while mode |
+| `max_iterations` | `int` | No | Safety limit for while loops (default: 100) |
+| `concurrency` | `int` | No | Max concurrent iterations for for-each/times (defa... |
+| `collect` | `Literal['list', 'last', 'first', 'dict', 'reduce']` | No | Result collection mode (default: "list") |
+| `key_field` | `str | None` | No | Field to use as key for dict collection |
+| `reducer` | `str | None` | No | Module path to reducer function for reduce collect... |
+| `error_handling` | `Literal['fail_fast', 'continue', 'collect']` | No | Error handling strategy (default: "fail_fast") |
+| `max_concurrent_nodes` | `int` | No |  |
+| `strict_validation` | `bool` | No |  |
+| `default_node_timeout` | `float | None` | No |  |
+| `deps` | `list[str] | None` | No | Dependency node names |
+| `input_mapping` | `dict[str, str] | None` | No | Field extraction mapping for orchestrator |
 
 **Example:**
 ```yaml
-kind: composite_node
-metadata:
-  name: my_composite_node
-spec:
-  mode: value
-  max_iterations: 100
-  concurrency: 1
-  collect: list
-  error_handling: fail_fast
+- kind: composite_node
+  metadata:
+    name: my_composite
+  spec:
+    # Add configuration here
+  dependencies: []
 ```
 
 ### ConditionalNode
@@ -90,42 +97,51 @@ spec:
 
 ### DataNode
 
-Static data node returning constant output. Supports {{variable}} template syntax for dynamic values. Useful for terminal nodes like rejection actions or static configuration.
+Static data node factory that returns constant output.
 
 **Kind**: `data_node`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `output` | `object` | Yes | Output data to return. Values can be static or use... |
+| `name` | `str` | Yes | Node name (must be unique within the pipeline) |
+| `output` | `dict[str, Any]` | Yes | Output data to return. Values can be: - Static val... |
+| `deps` | `list[str] | None` | No | List of dependency node names for execution orderi... |
 
 **Example:**
 ```yaml
-kind: data_node
-metadata:
-  name: my_data_node
-spec:
-  output: {}
+- kind: data_node
+  metadata:
+    name: my_data
+  spec:
+    # Add configuration here
+  dependencies: []
 ```
 
 ### ExpressionNode
 
-Compute values using safe AST-based expressions or template strings
+Node factory for computing values using safe AST-based expressions.
 
 **Kind**: `expression_node`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `expressions` | `object` | Yes | Mapping of {variable_name: expression_or_template}... |
-| `input_mapping` | `object` | No | Field extraction mapping {local_name: 'node.path'}... |
-| `output_fields` | `array` | No | Fields to include in output. If omitted, all compu... |
+| `name` | `str` | Yes | Node name (unique identifier in the pipeline) |
+| `expressions` | `dict[str, str] | None` | No | Mapping of {variable_name: expression_string}. Exp... |
+| `input_mapping` | `dict[str, str] | None` | No | Field extraction mapping {local_name: "source_node... |
+| `output_fields` | `list[str] | None` | No | Fields to include in output dict. If None, all com... |
+| `deps` | `list[str] | None` | No | Dependency node names (for DAG ordering) |
+| `merge_strategy` | `Literal['dict', 'list', 'first', 'last', 'reduce'] | None` | No | Strategy for merging multiple dependency outputs: ... |
+| `reducer` | `str | collections.abc.Callable[[list[typing.Any]], typing.Any] | None` | No | Module path (e.g., "statistics.mean") or callable ... |
+| `extract_field` | `str | None` | No | Field to extract from each dependency result befor... |
 
 **Example:**
 ```yaml
-kind: expression_node
-metadata:
-  name: my_expression_node
-spec:
-  expressions: {}
+- kind: expression_node
+  metadata:
+    name: my_expression
+  spec:
+    # Add configuration here
+  dependencies: []
 ```
 
 ### FunctionNode
@@ -167,7 +183,7 @@ Unified LLM node - prompt building, API calls, and optional parsing.
 | `output_schema` | `dict[str, Any] | type[BaseModel] | None` | No | Expected output schema for structured output. If p... |
 | `system_prompt` | `str | None` | No | System message to prepend to the conversation. |
 | `parse_json` | `bool` | No | If True, parse the LLM response as JSON and valida... |
-| `parse_strategy` | `str` | No |  |
+| `parse_strategy` | `str` | No | JSON parsing strategy: "json", "json_in_markdown",... |
 | `deps` | `list[str] | None` | No | List of dependency node names. |
 | `template` | `PromptInput | str | None` | No |  |
 

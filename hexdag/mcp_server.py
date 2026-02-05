@@ -72,6 +72,49 @@ def _load_generated_doc(filename: str) -> str | None:
     return None
 
 
+def _create_pipeline_base(
+    name: str,
+    description: str = "",
+    ports: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create base pipeline configuration structure.
+
+    Centralizes pipeline structure creation to avoid duplication.
+
+    Parameters
+    ----------
+    name : str
+        Pipeline name (metadata.name)
+    description : str, optional
+        Pipeline description
+    ports : dict[str, Any] | None, optional
+        Port configurations (llm, memory, etc.)
+
+    Returns
+    -------
+    dict[str, Any]
+        Pipeline configuration dict ready for adding nodes
+    """
+    config: dict[str, Any] = {
+        "apiVersion": "hexdag/v1",
+        "kind": "Pipeline",
+        "metadata": {
+            "name": name,
+        },
+        "spec": {
+            "nodes": [],
+        },
+    }
+
+    if description:
+        config["metadata"]["description"] = description
+
+    if ports:
+        config["spec"]["ports"] = ports
+
+    return config
+
+
 # Create MCP server
 mcp = FastMCP(
     "hexDAG",
@@ -1153,18 +1196,8 @@ def generate_pipeline_template(
                 output_key: result
               dependencies: []
     """
-    # Create basic pipeline structure
-    pipeline = {
-        "apiVersion": "hexdag/v1",
-        "kind": "Pipeline",
-        "metadata": {
-            "name": pipeline_name,
-            "description": description,
-        },
-        "spec": {
-            "nodes": [],
-        },
-    }
+    # Create basic pipeline structure using helper
+    pipeline = _create_pipeline_base(pipeline_name, description)
 
     # Add node templates
     for i, node_type in enumerate(node_types, 1):
@@ -1290,21 +1323,8 @@ def build_yaml_pipeline_interactive(
                 prompt_template: "Analyze: {{input}}"
               dependencies: []
     """
-    pipeline = {
-        "apiVersion": "hexdag/v1",
-        "kind": "Pipeline",
-        "metadata": {
-            "name": pipeline_name,
-            "description": description,
-        },
-        "spec": {
-            "nodes": [],
-        },
-    }
-
-    # Add ports if provided
-    if ports:
-        pipeline["spec"]["ports"] = ports  # type: ignore[index]
+    # Create pipeline using helper
+    pipeline = _create_pipeline_base(pipeline_name, description, ports)
 
     # Add nodes
     for node_def in nodes:
@@ -1388,76 +1408,34 @@ def create_environment_pipelines(
             },
         }
 
+    # Helper to build pipeline for an environment
+    def build_env_pipeline(env_name: str, env_suffix: str, env_ports: dict[str, Any]) -> str:
+        pipeline = _create_pipeline_base(
+            f"{pipeline_name}-{env_name}",
+            f"{description} ({env_suffix})",
+            env_ports,
+        )
+        for node_def in nodes:
+            node = {
+                "kind": node_def["kind"],
+                "metadata": {"name": node_def["name"]},
+                "spec": node_def["spec"],
+                "dependencies": node_def.get("dependencies", []),
+            }
+            pipeline["spec"]["nodes"].append(node)
+        pipeline = _normalize_for_yaml(pipeline)
+        return yaml.dump(pipeline, sort_keys=False, default_flow_style=False)
+
     # Build dev environment
-    pipeline_dev = {
-        "apiVersion": "hexdag/v1",
-        "kind": "Pipeline",
-        "metadata": {
-            "name": f"{pipeline_name}-dev",
-            "description": f"{description} (DEV - Mock Adapters)",
-        },
-        "spec": {"ports": dev_ports, "nodes": []},
-    }
-
-    for node_def in nodes:
-        node = {
-            "kind": node_def["kind"],
-            "metadata": {"name": node_def["name"]},
-            "spec": node_def["spec"],
-            "dependencies": node_def.get("dependencies", []),
-        }
-        pipeline_dev["spec"]["nodes"].append(node)  # type: ignore[index]
-
-    pipeline_dev = _normalize_for_yaml(pipeline_dev)
-    result["dev"] = yaml.dump(pipeline_dev, sort_keys=False, default_flow_style=False)
+    result["dev"] = build_env_pipeline("dev", "DEV - Mock Adapters", dev_ports)
 
     # Build staging environment (if provided)
     if staging_ports:
-        pipeline_staging = {
-            "apiVersion": "hexdag/v1",
-            "kind": "Pipeline",
-            "metadata": {
-                "name": f"{pipeline_name}-staging",
-                "description": f"{description} (STAGING)",
-            },
-            "spec": {"ports": staging_ports, "nodes": []},
-        }
-
-        for node_def in nodes:
-            node = {
-                "kind": node_def["kind"],
-                "metadata": {"name": node_def["name"]},
-                "spec": node_def["spec"],
-                "dependencies": node_def.get("dependencies", []),
-            }
-            pipeline_staging["spec"]["nodes"].append(node)  # type: ignore[index]
-
-        pipeline_staging = _normalize_for_yaml(pipeline_staging)
-        result["staging"] = yaml.dump(pipeline_staging, sort_keys=False, default_flow_style=False)
+        result["staging"] = build_env_pipeline("staging", "STAGING", staging_ports)
 
     # Build production environment (if provided)
     if prod_ports:
-        pipeline_prod = {
-            "apiVersion": "hexdag/v1",
-            "kind": "Pipeline",
-            "metadata": {
-                "name": f"{pipeline_name}-prod",
-                "description": f"{description} (PRODUCTION)",
-            },
-            "spec": {"ports": prod_ports, "nodes": []},
-        }
-
-        for node_def in nodes:
-            node = {
-                "kind": node_def["kind"],
-                "metadata": {"name": node_def["name"]},
-                "spec": node_def["spec"],
-                "dependencies": node_def.get("dependencies", []),
-            }
-            pipeline_prod["spec"]["nodes"].append(node)  # type: ignore[index]
-
-        pipeline_prod = _normalize_for_yaml(pipeline_prod)
-        result["prod"] = yaml.dump(pipeline_prod, sort_keys=False, default_flow_style=False)
+        result["prod"] = build_env_pipeline("prod", "PRODUCTION", prod_ports)
 
     return json.dumps(result, indent=2)
 
@@ -1533,17 +1511,11 @@ def create_environment_pipelines_with_includes(
             },
         }
 
-    # Build base YAML (nodes only)
-    base_pipeline = {
-        "apiVersion": "hexdag/v1",
-        "kind": "Pipeline",
-        "metadata": {
-            "name": f"{pipeline_name}-base",
-            "description": f"{description} (Base Configuration)",
-        },
-        "spec": {"nodes": []},
-    }
-
+    # Build base YAML (nodes only, no ports)
+    base_pipeline = _create_pipeline_base(
+        f"{pipeline_name}-base",
+        f"{description} (Base Configuration)",
+    )
     for node_def in nodes:
         node = {
             "kind": node_def["kind"],
@@ -1551,48 +1523,31 @@ def create_environment_pipelines_with_includes(
             "spec": node_def["spec"],
             "dependencies": node_def.get("dependencies", []),
         }
-        base_pipeline["spec"]["nodes"].append(node)  # type: ignore[index]
-
+        base_pipeline["spec"]["nodes"].append(node)
     base_pipeline = _normalize_for_yaml(base_pipeline)
     result["base"] = yaml.dump(base_pipeline, sort_keys=False, default_flow_style=False)
 
-    # Build dev environment (includes base + dev ports)
-    dev_env = {
-        "include": f"./{pipeline_name}_base.yaml",
-        "metadata": {
-            "name": f"{pipeline_name}-dev",
-            "description": f"{description} (DEV - Mock Adapters)",
-        },
-        "ports": dev_ports,
-    }
-    dev_env = _normalize_for_yaml(dev_env)
-    result["dev"] = yaml.dump(dev_env, sort_keys=False, default_flow_style=False)
+    # Helper to build environment include file
+    def build_env_include(env_name: str, env_suffix: str, env_ports: dict[str, Any]) -> str:
+        env_config = {
+            "include": f"./{pipeline_name}_base.yaml",
+            "metadata": {
+                "name": f"{pipeline_name}-{env_name}",
+                "description": f"{description} ({env_suffix})",
+            },
+            "ports": env_ports,
+        }
+        env_config = _normalize_for_yaml(env_config)
+        return yaml.dump(env_config, sort_keys=False, default_flow_style=False)
 
-    # Build staging environment (if provided)
+    # Build environment include files
+    result["dev"] = build_env_include("dev", "DEV - Mock Adapters", dev_ports)
+
     if staging_ports:
-        staging_env = {
-            "include": f"./{pipeline_name}_base.yaml",
-            "metadata": {
-                "name": f"{pipeline_name}-staging",
-                "description": f"{description} (STAGING)",
-            },
-            "ports": staging_ports,
-        }
-        staging_env = _normalize_for_yaml(staging_env)
-        result["staging"] = yaml.dump(staging_env, sort_keys=False, default_flow_style=False)
+        result["staging"] = build_env_include("staging", "STAGING", staging_ports)
 
-    # Build production environment (if provided)
     if prod_ports:
-        prod_env = {
-            "include": f"./{pipeline_name}_base.yaml",
-            "metadata": {
-                "name": f"{pipeline_name}-prod",
-                "description": f"{description} (PRODUCTION)",
-            },
-            "ports": prod_ports,
-        }
-        prod_env = _normalize_for_yaml(prod_env)
-        result["prod"] = yaml.dump(prod_env, sort_keys=False, default_flow_style=False)
+        result["prod"] = build_env_include("prod", "PRODUCTION", prod_ports)
 
     return json.dumps(result, indent=2)
 
@@ -2643,7 +2598,421 @@ Use these MCP tools when building pipelines:
 | `get_custom_adapter_guide()` | Adapter creation guide |
 | `get_custom_node_guide()` | Node creation guide |
 | `get_custom_tool_guide()` | Tool creation guide |
+| `init_pipeline()` | Create new empty pipeline |
+| `add_node_to_pipeline()` | Add node to pipeline |
+| `remove_node_from_pipeline()` | Remove node from pipeline |
+| `update_node_config()` | Update node configuration |
+| `list_pipeline_nodes()` | List nodes with dependencies |
 """
+
+
+# ============================================================================
+# Pipeline Manipulation Tools
+# ============================================================================
+
+
+def _parse_pipeline_yaml(yaml_content: str) -> tuple[dict[str, Any], str | None]:
+    """Parse pipeline YAML with error handling.
+
+    Parameters
+    ----------
+    yaml_content : str
+        YAML content to parse
+
+    Returns
+    -------
+    tuple[dict[str, Any], str | None]
+        Tuple of (parsed_config, error_message)
+        If error_message is not None, parsed_config will be empty dict
+    """
+    try:
+        config = yaml.safe_load(yaml_content)
+        if not isinstance(config, dict):
+            return {}, "YAML must be a dictionary/object"
+        return config, None
+    except yaml.YAMLError as e:
+        return {}, f"YAML parse error: {e}"
+
+
+def _find_node_by_name(nodes: list[dict[str, Any]], name: str) -> int | None:
+    """Find node index by metadata.name.
+
+    Parameters
+    ----------
+    nodes : list[dict[str, Any]]
+        List of node configurations
+    name : str
+        Node name to find
+
+    Returns
+    -------
+    int | None
+        Index of node if found, None otherwise
+    """
+    for i, node in enumerate(nodes):
+        node_name = node.get("metadata", {}).get("name")
+        if node_name == name:
+            return i
+    return None
+
+
+def _get_node_names(nodes: list[dict[str, Any]]) -> set[str]:
+    """Get set of all node names.
+
+    Parameters
+    ----------
+    nodes : list[dict[str, Any]]
+        List of node configurations
+
+    Returns
+    -------
+    set[str]
+        Set of node names
+    """
+    names = set()
+    for node in nodes:
+        name = node.get("metadata", {}).get("name")
+        if name:
+            names.add(name)
+    return names
+
+
+def _compute_execution_order(nodes: list[dict[str, Any]]) -> list[str]:
+    """Compute topological execution order using Kahn's algorithm.
+
+    Parameters
+    ----------
+    nodes : list[dict[str, Any]]
+        List of node configurations
+
+    Returns
+    -------
+    list[str]
+        Node names in topological order
+    """
+    # Build adjacency list and in-degree count
+    in_degree: dict[str, int] = {}
+    graph: dict[str, list[str]] = {}
+    all_nodes: set[str] = set()
+
+    for node in nodes:
+        name = node.get("metadata", {}).get("name")
+        if not name:
+            continue
+        all_nodes.add(name)
+        in_degree.setdefault(name, 0)
+        graph.setdefault(name, [])
+
+        deps = node.get("dependencies", [])
+        for dep in deps:
+            if dep in all_nodes or dep in in_degree:
+                graph.setdefault(dep, []).append(name)
+                in_degree[name] = in_degree.get(name, 0) + 1
+
+    # Kahn's algorithm
+    queue = [n for n in all_nodes if in_degree.get(n, 0) == 0]
+    result: list[str] = []
+
+    while queue:
+        node = queue.pop(0)
+        result.append(node)
+        for neighbor in graph.get(node, []):
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    return result
+
+
+@mcp.tool()  # type: ignore[misc]
+def init_pipeline(name: str, description: str = "") -> str:
+    """Create a new minimal pipeline YAML configuration.
+
+    Creates an empty pipeline structure ready for adding nodes.
+
+    Parameters
+    ----------
+    name : str
+        Pipeline name (used in metadata.name)
+    description : str, optional
+        Pipeline description
+
+    Returns
+    -------
+    str
+        JSON with {success: bool, yaml_content: str}
+    """
+    # Use centralized helper for pipeline creation
+    config = _create_pipeline_base(name, description)
+    yaml_content = yaml.dump(config, sort_keys=False, default_flow_style=False)
+
+    return json.dumps(
+        {
+            "success": True,
+            "yaml_content": yaml_content,
+            "message": f"Created empty pipeline '{name}'",
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()  # type: ignore[misc]
+def add_node_to_pipeline(yaml_content: str, node_config: dict[str, Any]) -> str:
+    """Add a node to an existing pipeline YAML.
+
+    Parameters
+    ----------
+    yaml_content : str
+        Existing pipeline YAML as string
+    node_config : dict[str, Any]
+        Node configuration with keys:
+        - kind: Node type (e.g., "llm_node", "function_node")
+        - name: Unique node identifier
+        - spec: Node-specific configuration dict
+        - dependencies: Optional list of dependency node names
+
+    Returns
+    -------
+    str
+        JSON with {success: bool, yaml_content: str, warnings: list, node_count: int}
+    """
+    config, error = _parse_pipeline_yaml(yaml_content)
+    if error:
+        return json.dumps({"success": False, "error": error}, indent=2)
+
+    # Validate required fields
+    if "kind" not in node_config:
+        return json.dumps(
+            {"success": False, "error": "node_config must have 'kind' field"}, indent=2
+        )
+    if "name" not in node_config:
+        return json.dumps(
+            {"success": False, "error": "node_config must have 'name' field"}, indent=2
+        )
+
+    # Get or create nodes list
+    spec = config.setdefault("spec", {})
+    nodes = spec.setdefault("nodes", [])
+
+    # Check for duplicate name
+    existing_names = _get_node_names(nodes)
+    node_name = node_config["name"]
+    if node_name in existing_names:
+        return json.dumps(
+            {"success": False, "error": f"Node '{node_name}' already exists"}, indent=2
+        )
+
+    # Build node structure
+    new_node: dict[str, Any] = {
+        "kind": node_config["kind"],
+        "metadata": {"name": node_name},
+        "spec": node_config.get("spec", {}),
+        "dependencies": node_config.get("dependencies", []),
+    }
+
+    # Check for missing dependencies (warn, don't fail)
+    deps = node_config.get("dependencies", [])
+    warnings: list[str] = [
+        f"Dependency '{dep}' not found in pipeline" for dep in deps if dep not in existing_names
+    ]
+
+    nodes.append(new_node)
+
+    yaml_output = yaml.dump(config, sort_keys=False, default_flow_style=False)
+
+    return json.dumps(
+        {
+            "success": True,
+            "yaml_content": yaml_output,
+            "node_count": len(nodes),
+            "warnings": warnings if warnings else None,
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()  # type: ignore[misc]
+def remove_node_from_pipeline(yaml_content: str, node_name: str) -> str:
+    """Remove a node from a pipeline YAML.
+
+    Parameters
+    ----------
+    yaml_content : str
+        Existing pipeline YAML as string
+    node_name : str
+        Name of the node to remove
+
+    Returns
+    -------
+    str
+        JSON with {success: bool, yaml_content: str, warnings: list}
+        Warns if other nodes depend on the removed node.
+    """
+    config, error = _parse_pipeline_yaml(yaml_content)
+    if error:
+        return json.dumps({"success": False, "error": error}, indent=2)
+
+    nodes = config.get("spec", {}).get("nodes", [])
+
+    # Find node index
+    node_idx = _find_node_by_name(nodes, node_name)
+    if node_idx is None:
+        return json.dumps({"success": False, "error": f"Node '{node_name}' not found"}, indent=2)
+
+    # Check for dependents
+    warnings: list[str] = []
+    for node in nodes:
+        deps = node.get("dependencies", [])
+        if node_name in deps:
+            dependent_name = node.get("metadata", {}).get("name", "unknown")
+            warnings.append(f"Node '{dependent_name}' depends on '{node_name}'")
+
+    # Remove the node
+    nodes.pop(node_idx)
+
+    yaml_output = yaml.dump(config, sort_keys=False, default_flow_style=False)
+
+    return json.dumps(
+        {
+            "success": True,
+            "yaml_content": yaml_output,
+            "node_count": len(nodes),
+            "removed": True,
+            "warnings": warnings if warnings else None,
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()  # type: ignore[misc]
+def update_node_config(yaml_content: str, node_name: str, config_updates: dict[str, Any]) -> str:
+    """Update a node's configuration in pipeline YAML.
+
+    Parameters
+    ----------
+    yaml_content : str
+        Existing pipeline YAML as string
+    node_name : str
+        Name of the node to update
+    config_updates : dict[str, Any]
+        Updates to apply:
+        - spec: Dict of spec fields to merge/update
+        - dependencies: New dependencies list (replaces existing)
+        - kind: New node type (use with caution)
+
+    Returns
+    -------
+    str
+        JSON with {success: bool, yaml_content: str}
+    """
+    config, error = _parse_pipeline_yaml(yaml_content)
+    if error:
+        return json.dumps({"success": False, "error": error}, indent=2)
+
+    nodes = config.get("spec", {}).get("nodes", [])
+
+    # Find node index
+    node_idx = _find_node_by_name(nodes, node_name)
+    if node_idx is None:
+        return json.dumps({"success": False, "error": f"Node '{node_name}' not found"}, indent=2)
+
+    node = nodes[node_idx]
+    warnings: list[str] = []
+
+    # Apply updates
+    if "spec" in config_updates:
+        # Deep merge spec updates
+        node_spec = node.setdefault("spec", {})
+        for key, value in config_updates["spec"].items():
+            node_spec[key] = value
+
+    if "dependencies" in config_updates:
+        # Replace dependencies
+        node["dependencies"] = config_updates["dependencies"]
+
+    if "kind" in config_updates:
+        # Change node type (warn user)
+        old_kind = node.get("kind")
+        new_kind = config_updates["kind"]
+        if old_kind != new_kind:
+            warnings.append(f"Changed node type from '{old_kind}' to '{new_kind}'")
+        node["kind"] = new_kind
+
+    yaml_output = yaml.dump(config, sort_keys=False, default_flow_style=False)
+
+    return json.dumps(
+        {
+            "success": True,
+            "yaml_content": yaml_output,
+            "warnings": warnings if warnings else None,
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()  # type: ignore[misc]
+def list_pipeline_nodes(yaml_content: str) -> str:
+    """List all nodes in a pipeline with their dependencies.
+
+    Parameters
+    ----------
+    yaml_content : str
+        Pipeline YAML as string
+
+    Returns
+    -------
+    str
+        JSON with:
+        {
+            success: bool,
+            pipeline_name: str,
+            node_count: int,
+            nodes: [{name, kind, dependencies, dependents}],
+            execution_order: [str]
+        }
+    """
+    config, error = _parse_pipeline_yaml(yaml_content)
+    if error:
+        return json.dumps({"success": False, "error": error}, indent=2)
+
+    pipeline_name = config.get("metadata", {}).get("name", "unknown")
+    nodes = config.get("spec", {}).get("nodes", [])
+
+    # Build node info with reverse dependencies
+    node_infos: list[dict[str, Any]] = []
+    all_names = _get_node_names(nodes)
+
+    # Build reverse dependency map
+    dependents_map: dict[str, list[str]] = {name: [] for name in all_names}
+    for node in nodes:
+        node_name = node.get("metadata", {}).get("name")
+        deps = node.get("dependencies", [])
+        for dep in deps:
+            if dep in dependents_map:
+                dependents_map[dep].append(node_name)
+
+    for node in nodes:
+        node_name = node.get("metadata", {}).get("name", "unknown")
+        node_infos.append({
+            "name": node_name,
+            "kind": node.get("kind", "unknown"),
+            "dependencies": node.get("dependencies", []),
+            "dependents": dependents_map.get(node_name, []),
+        })
+
+    # Compute execution order
+    execution_order = _compute_execution_order(nodes)
+
+    return json.dumps(
+        {
+            "success": True,
+            "pipeline_name": pipeline_name,
+            "node_count": len(nodes),
+            "nodes": node_infos,
+            "execution_order": execution_order,
+        },
+        indent=2,
+    )
 
 
 # Run the server

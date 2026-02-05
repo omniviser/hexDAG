@@ -1,9 +1,9 @@
 """LoopNode for creating loop control nodes with conditional execution.
 
 .. deprecated::
-    LoopNode and ConditionalNode are deprecated. Use ControlFlowNode instead:
-    - LoopNode → ControlFlowNode with mode='while'
-    - ConditionalNode → ControlFlowNode with mode='switch'
+    LoopNode and ConditionalNode are deprecated. Use CompositeNode instead:
+    - LoopNode → CompositeNode with mode='while'
+    - ConditionalNode → CompositeNode with mode='switch'
 
 This module provides:
 - LoopNode: iterative control with a single while_condition,
@@ -22,6 +22,7 @@ Conventions:
 
 import asyncio
 import time
+import warnings
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 from enum import Enum
@@ -126,8 +127,8 @@ class LoopNode(BaseNodeFactory):
     """Advanced loop control node (functional-only).
 
     .. deprecated::
-        LoopNode is deprecated. Use ControlFlowNode with mode='while' instead.
-        See hexdag.builtin.nodes.control_flow_node for the new unified API.
+        LoopNode is deprecated. Use CompositeNode with mode='while' instead.
+        See hexdag.builtin.nodes.composite_node for the new unified API.
 
     Key points:
     - Single controlling predicate: while_condition(data, state) -> bool (required).
@@ -418,6 +419,13 @@ class LoopNode(BaseNodeFactory):
                 initial_state:
                   counter: 0
         """
+        warnings.warn(
+            "LoopNode is deprecated. Use CompositeNode with mode='while' instead. "
+            "See hexdag.builtin.nodes.composite_node for the unified API.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         from hexdag.core.expression_parser import compile_expression
         from hexdag.core.resolver import resolve
 
@@ -599,8 +607,8 @@ class ConditionalNode(BaseNodeFactory):
     """Multi-branch conditional router (functional-only, breaking change).
 
     .. deprecated::
-        ConditionalNode is deprecated. Use ControlFlowNode with mode='switch' instead.
-        See hexdag.builtin.nodes.control_flow_node for the new unified API.
+        ConditionalNode is deprecated. Use CompositeNode with mode='switch' instead.
+        See hexdag.builtin.nodes.composite_node for the new unified API.
 
     API:
     - branches: list of {"pred": Callable[[dict, dict], bool], "action": str}
@@ -794,6 +802,13 @@ class ConditionalNode(BaseNodeFactory):
                     action: manual_review
                 else_action: default_handler
         """
+        warnings.warn(
+            "ConditionalNode is deprecated. Use CompositeNode with mode='switch' instead. "
+            "See hexdag.builtin.nodes.composite_node for the unified API.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         from hexdag.core.expression_parser import compile_expression
 
         # Determine source of branches: builder state or YAML parameters

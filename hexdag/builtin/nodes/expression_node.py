@@ -5,8 +5,8 @@ expressions, eliminating the need for boilerplate Python code when performing
 calculations and transformations in YAML pipelines.
 
 Similar to n8n's "Set Node" (Edit Fields), ExpressionNode is designed for
-data transformation and computation, while ConditionalNode handles routing
-decisions.
+data transformation and computation. It also supports merge strategies for
+aggregating outputs from multiple upstream dependency nodes.
 
 Examples
 --------
@@ -57,22 +57,158 @@ Template syntax for string formatting::
           # Expression syntax for computation
           total: "price * quantity"
         output_fields: [message, greeting, total]
+
+Merge strategies for multi-dependency aggregation::
+
+    # Collect scores from multiple nodes into a list
+    - kind: expression_node
+      metadata:
+        name: collect_scores
+      spec:
+        merge_strategy: list
+        extract_field: score
+      dependencies: [scorer_1, scorer_2, scorer_3]
+
+    # Calculate average score using reduce
+    - kind: expression_node
+      metadata:
+        name: average_score
+      spec:
+        merge_strategy: reduce
+        extract_field: score
+        reducer: "statistics.mean"
+      dependencies: [scorer_1, scorer_2, scorer_3]
+
+    # Get first successful result (fallback pattern)
+    - kind: expression_node
+      metadata:
+        name: get_result
+      spec:
+        merge_strategy: first
+      dependencies: [primary, fallback, cache]
 """
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Literal
 
 from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.expression_parser import evaluate_expression
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt.template import PromptTemplate
+from hexdag.core.resolver import resolve_function
 
 logger = get_logger(__name__)
+
+# Type alias for merge strategies
+MergeStrategy = Literal["dict", "list", "first", "last", "reduce"]
 
 
 def _is_template(expr: str) -> bool:
     """Check if expression uses template syntax (contains {{ }})."""
     return "{{" in expr and "}}" in expr
+
+
+def _extract_field(value: Any, field: str | None) -> Any:
+    """Extract a field from a value if specified.
+
+    Parameters
+    ----------
+    value : Any
+        The value to extract from
+    field : str | None
+        Dot-notation field path to extract (e.g., "result.score")
+
+    Returns
+    -------
+    Any
+        The extracted field value, or the original value if no field specified
+    """
+    if field is None:
+        return value
+
+    result = value
+    for part in field.split("."):
+        if isinstance(result, dict):
+            result = result.get(part)
+        elif hasattr(result, part):
+            result = getattr(result, part)
+        else:
+            return None
+    return result
+
+
+def _apply_merge_strategy(
+    input_data: dict[str, Any],
+    strategy: MergeStrategy,
+    field_path: str | None,
+    reducer: Callable[[list[Any]], Any] | None,
+    dep_order: list[str],
+) -> Any:
+    """Apply merge strategy to multi-dependency input.
+
+    Parameters
+    ----------
+    input_data : dict[str, Any]
+        Dict of {node_name: result} from dependencies
+    strategy : MergeStrategy
+        The merge strategy to apply
+    field_path : str | None
+        Field to extract from each result before merging (dot notation)
+    reducer : Callable | None
+        Reducer function for 'reduce' strategy
+    dep_order : list[str]
+        Ordered list of dependency names for consistent ordering
+
+    Returns
+    -------
+    Any
+        The merged result
+    """
+    # Get values in dependency order, extracting field if specified
+    values = []
+    for dep in dep_order:
+        if dep in input_data:
+            val = _extract_field(input_data[dep], field_path)
+            values.append(val)
+
+    match strategy:
+        case "dict":
+            # Return as-is (passthrough) or with field extraction
+            if field_path:
+                return {
+                    dep: _extract_field(input_data[dep], field_path)
+                    for dep in dep_order
+                    if dep in input_data
+                }
+            return dict(input_data)
+
+        case "list":
+            return values
+
+        case "first":
+            for val in values:
+                if val is not None:
+                    return val
+            return None
+
+        case "last":
+            for val in reversed(values):
+                if val is not None:
+                    return val
+            return None
+
+        case "reduce":
+            if reducer is None:
+                raise ValueError("reducer is required for 'reduce' strategy")
+            # Filter out None values
+            non_none_values = [v for v in values if v is not None]
+            if not non_none_values:
+                return None
+            return reducer(non_none_values)
+
+        case _:
+            raise ValueError(f"Unknown merge strategy: {strategy}")
 
 
 class ExpressionNode(BaseNodeFactory):
@@ -83,68 +219,51 @@ class ExpressionNode(BaseNodeFactory):
     2. Evaluating chained expressions in definition order
     3. Filtering output to specified fields
 
-    This node uses the same safe expression parser as ConditionalNode, but
-    returns computed values instead of routing decisions.
+    It also supports merge strategies for aggregating outputs from multiple
+    upstream dependency nodes:
+    - dict: Return {node_name: result, ...} (default passthrough)
+    - list: Return [result1, result2, ...] in dependency order
+    - first: Return first non-None result
+    - last: Return last non-None result
+    - reduce: Apply reducer function (e.g., statistics.mean)
 
-    Attributes
-    ----------
-    _yaml_schema : dict
-        JSON Schema for YAML validation and documentation
+    This node uses the same safe expression parser as CompositeNode, but
+    returns computed values instead of routing decisions.
 
     See Also
     --------
-    ConditionalNode : For routing decisions based on conditions
+    CompositeNode : For control flow (loops, conditionals)
     FunctionNode : For complex logic requiring full Python functions
     """
 
-    _yaml_schema: dict[str, Any] = {
-        "type": "object",
-        "description": "Compute values using safe AST-based expressions or template strings",
-        "properties": {
-            "expressions": {
-                "type": "object",
-                "description": "Mapping of {variable_name: expression_or_template}. "
-                "Expressions are evaluated in order and can reference earlier variables. "
-                "Use {{variable}} syntax for string templates, or Python expressions.",
-                "additionalProperties": {"type": "string"},
-            },
-            "input_mapping": {
-                "type": "object",
-                "description": "Field extraction mapping {local_name: 'node.path'}. "
-                "Handled by orchestrator before node execution.",
-                "additionalProperties": {"type": "string"},
-            },
-            "output_fields": {
-                "type": "array",
-                "description": "Fields to include in output. If omitted, all computed "
-                "expressions are returned.",
-                "items": {"type": "string"},
-            },
-        },
-        "required": ["expressions"],
-    }
+    # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __call__(
         self,
         name: str,
-        expressions: dict[str, str],
+        expressions: dict[str, str] | None = None,
         input_mapping: dict[str, str] | None = None,
         output_fields: list[str] | None = None,
         deps: list[str] | None = None,
+        # Merge strategy parameters
+        merge_strategy: MergeStrategy | None = None,
+        reducer: str | Callable[[list[Any]], Any] | None = None,
+        extract_field: str | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Create an ExpressionNode for computing values.
+        """Create an ExpressionNode for computing values or merging dependencies.
 
         Parameters
         ----------
         name : str
             Node name (unique identifier in the pipeline)
-        expressions : dict[str, str]
+        expressions : dict[str, str] | None
             Mapping of {variable_name: expression_string}.
             Expressions are evaluated in definition order and can reference:
             - Input fields from input_mapping
             - Earlier computed variables
             - Whitelisted functions (len, max, min, Decimal, etc.)
+            Optional when using merge_strategy.
         input_mapping : dict[str, str] | None
             Field extraction mapping {local_name: "source_node.field_path"}.
             Handled by the orchestrator's ExecutionCoordinator before node runs.
@@ -153,6 +272,19 @@ class ExpressionNode(BaseNodeFactory):
             are returned.
         deps : list[str] | None
             Dependency node names (for DAG ordering)
+        merge_strategy : MergeStrategy | None
+            Strategy for merging multiple dependency outputs:
+            - "dict": Return {node_name: result} passthrough (default for multi-dep)
+            - "list": Return [result1, result2, ...] in dependency order
+            - "first": Return first non-None result
+            - "last": Return last non-None result
+            - "reduce": Apply reducer function to values
+        reducer : str | Callable | None
+            Module path (e.g., "statistics.mean") or callable for 'reduce' strategy.
+            The function receives a list of values and returns a single result.
+        extract_field : str | None
+            Field to extract from each dependency result before merging.
+            Uses dot notation (e.g., "result.score").
         **kwargs : Any
             Additional parameters passed to NodeSpec
 
@@ -163,7 +295,7 @@ class ExpressionNode(BaseNodeFactory):
 
         Examples
         --------
-        Programmatic usage::
+        Programmatic usage for expressions::
 
             node = ExpressionNode()(
                 name="calculate_total",
@@ -180,21 +312,48 @@ class ExpressionNode(BaseNodeFactory):
                 deps=["product", "order"],
             )
 
+        Programmatic usage for merging::
+
+            node = ExpressionNode()(
+                name="average_score",
+                merge_strategy="reduce",
+                extract_field="score",
+                reducer="statistics.mean",
+                deps=["scorer_1", "scorer_2", "scorer_3"],
+            )
+
         Notes
         -----
         ValueError may be raised at runtime if an expression fails to evaluate
         or references undefined variables.
         """
+        # Validate: either expressions or merge_strategy must be provided
+        if expressions is None and merge_strategy is None:
+            raise ValueError("Either 'expressions' or 'merge_strategy' must be provided")
+
+        # Validate: reducer is required for reduce strategy
+        if merge_strategy == "reduce" and reducer is None:
+            raise ValueError("'reducer' is required when merge_strategy='reduce'")
+
         # Store input_mapping in params for orchestrator to handle
         if input_mapping is not None:
             kwargs["input_mapping"] = input_mapping
 
-        # Capture for closure
-        _expressions = expressions
-        _output_fields = output_fields or list(expressions.keys())
+        # Resolve reducer if it's a string module path (e.g., "statistics.mean")
+        resolved_reducer: Callable[[list[Any]], Any] | None = None
+        if reducer is not None:
+            resolved_reducer = resolve_function(reducer) if isinstance(reducer, str) else reducer
 
-        async def expression_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
-            """Evaluate all expressions and return computed values.
+        # Capture for closure
+        _expressions = expressions or {}
+        _output_fields = output_fields or list(_expressions.keys()) if _expressions else None
+        _merge_strategy = merge_strategy
+        _reducer = resolved_reducer
+        _extract_field = extract_field
+        _dep_order = list(deps or [])
+
+        async def expression_fn(input_data: Any, **ports: Any) -> dict[str, Any] | Any:
+            """Evaluate expressions and/or apply merge strategy.
 
             Parameters
             ----------
@@ -205,10 +364,38 @@ class ExpressionNode(BaseNodeFactory):
 
             Returns
             -------
-            dict[str, Any]
-                Computed values filtered to output_fields
+            dict[str, Any] | Any
+                Computed values filtered to output_fields, or merged result
             """
             node_logger = logger.bind(node=name, node_type="expression_node")
+
+            # Apply merge strategy first if specified
+            if _merge_strategy is not None and isinstance(input_data, dict):
+                node_logger.info(
+                    "Applying merge strategy",
+                    strategy=_merge_strategy,
+                    extract_field=_extract_field,
+                    dep_count=len(_dep_order),
+                )
+                merged = _apply_merge_strategy(
+                    input_data=input_data,
+                    strategy=_merge_strategy,
+                    field_path=_extract_field,
+                    reducer=_reducer,
+                    dep_order=_dep_order,
+                )
+
+                # If no expressions, return merged result directly
+                if not _expressions:
+                    node_logger.info(
+                        "Merge complete (no expressions)",
+                        result_type=type(merged).__name__,
+                    )
+                    return {"result": merged}
+
+                # Otherwise, make merged result available for expressions
+                input_data = merged if isinstance(merged, dict) else {"merged": merged}
+
             node_logger.info(
                 "Evaluating expressions",
                 expression_count=len(_expressions),
@@ -263,7 +450,8 @@ class ExpressionNode(BaseNodeFactory):
 
             # Filter to output_fields only
             result: dict[str, Any] = {}
-            for field in _output_fields:
+            fields_to_output = _output_fields or list(_expressions.keys())
+            for field in fields_to_output:
                 if field in context:
                     result[field] = context[field]
                 else:

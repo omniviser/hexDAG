@@ -83,10 +83,8 @@ class CompositeNode(BaseNodeFactory):
     - Inline body: When body/body_pipeline specified → execute within node
     - Yield to downstream: When no body → yield state to dependent nodes
 
-    Attributes
-    ----------
-    _yaml_schema : dict
-        JSON Schema for YAML validation and documentation
+    The YAML schema for this node is auto-generated from the ``__call__`` signature
+    and docstrings using ``SchemaGenerator``.
 
     See Also
     --------
@@ -94,86 +92,7 @@ class CompositeNode(BaseNodeFactory):
     ConditionalNode : Deprecated, use CompositeNode with mode='switch'
     """
 
-    _yaml_schema: dict[str, Any] = {
-        "type": "object",
-        "description": "Unified control flow node for loops and conditionals",
-        "properties": {
-            "mode": {
-                "type": "string",
-                "enum": ["while", "for-each", "times", "if-else", "switch"],
-                "description": "Control flow mode",
-            },
-            "condition": {
-                "type": "string",
-                "description": "Condition expression (while, if-else, switch branches)",
-            },
-            "items": {
-                "type": "string",
-                "description": "Expression resolving to iterable (for-each mode)",
-            },
-            "count": {
-                "type": "integer",
-                "description": "Number of iterations (times mode)",
-            },
-            "branches": {
-                "type": "array",
-                "description": "List of condition branches (switch mode)",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "condition": {"type": "string"},
-                        "body": {},
-                        "action": {"type": "string"},
-                    },
-                },
-            },
-            "body": {
-                "description": "Body to execute: module path, !py function, or inline nodes",
-            },
-            "body_pipeline": {
-                "type": "string",
-                "description": "Path to external pipeline YAML",
-            },
-            "else_body": {
-                "description": "Else branch body (if-else, switch)",
-            },
-            "else_action": {
-                "type": "string",
-                "description": "Else action label for routing (switch without body)",
-            },
-            "initial_state": {
-                "type": "object",
-                "description": "Initial state dict (while mode)",
-            },
-            "state_update": {
-                "type": "object",
-                "description": "State update expressions (while mode)",
-            },
-            "max_iterations": {
-                "type": "integer",
-                "default": 100,
-                "description": "Safety limit for while loops",
-            },
-            "concurrency": {
-                "type": "integer",
-                "default": 1,
-                "description": "Max concurrent iterations (for-each, times)",
-            },
-            "collect": {
-                "type": "string",
-                "enum": ["list", "last", "first", "dict", "reduce"],
-                "default": "list",
-                "description": "Result collection mode",
-            },
-            "error_handling": {
-                "type": "string",
-                "enum": ["fail_fast", "continue", "collect"],
-                "default": "fail_fast",
-                "description": "Error handling strategy",
-            },
-        },
-        "required": ["mode"],
-    }
+    # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __init__(self, base_path: Path | None = None) -> None:
         """Initialize CompositeNode factory.
