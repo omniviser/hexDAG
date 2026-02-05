@@ -28,6 +28,7 @@ Example usage::
     orchestrator = Orchestrator(config=config)
 """
 
+from hexdag.core.orchestration.body_executor import BodyExecutor, BodyExecutorError
 from hexdag.core.orchestration.components import CheckpointManager
 from hexdag.core.orchestration.models import (
     CheckpointState,
@@ -36,8 +37,10 @@ from hexdag.core.orchestration.models import (
 )
 
 __all__ = [
-    "OrchestratorConfig",
+    "BodyExecutor",
+    "BodyExecutorError",
+    "CheckpointManager",
     "CheckpointState",
     "NodeExecutionContext",
-    "CheckpointManager",
+    "OrchestratorConfig",
 ]

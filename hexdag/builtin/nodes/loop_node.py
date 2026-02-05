@@ -1,5 +1,10 @@
 """LoopNode for creating loop control nodes with conditional execution.
 
+.. deprecated::
+    LoopNode and ConditionalNode are deprecated. Use ControlFlowNode instead:
+    - LoopNode → ControlFlowNode with mode='while'
+    - ConditionalNode → ControlFlowNode with mode='switch'
+
 This module provides:
 - LoopNode: iterative control with a single while_condition,
 state preservation, and result collection by convention.
@@ -119,6 +124,10 @@ def _apply_on_iteration_end(
 
 class LoopNode(BaseNodeFactory):
     """Advanced loop control node (functional-only).
+
+    .. deprecated::
+        LoopNode is deprecated. Use ControlFlowNode with mode='while' instead.
+        See hexdag.builtin.nodes.control_flow_node for the new unified API.
 
     Key points:
     - Single controlling predicate: while_condition(data, state) -> bool (required).
@@ -588,6 +597,10 @@ class LoopNode(BaseNodeFactory):
 
 class ConditionalNode(BaseNodeFactory):
     """Multi-branch conditional router (functional-only, breaking change).
+
+    .. deprecated::
+        ConditionalNode is deprecated. Use ControlFlowNode with mode='switch' instead.
+        See hexdag.builtin.nodes.control_flow_node for the new unified API.
 
     API:
     - branches: list of {"pred": Callable[[dict, dict], bool], "action": str}

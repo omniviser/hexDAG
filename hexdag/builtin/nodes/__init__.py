@@ -8,6 +8,7 @@ See hexdag.builtin.nodes._discovery for the auto-discovery mechanism.
 """
 
 from .agent_node import ReActAgentNode
+from .composite_node import CompositeNode
 from .data_node import DataNode
 from .expression_node import ExpressionNode
 from .function_node import FunctionNode
@@ -17,6 +18,7 @@ from .port_call_node import PortCallNode
 from .tool_call_node import ToolCallNode
 
 __all__ = [
+    "CompositeNode",
     "ConditionalNode",
     "DataNode",
     "ExpressionNode",

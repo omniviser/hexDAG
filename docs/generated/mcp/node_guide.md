@@ -29,6 +29,43 @@ def process_data(input_data: dict) -> dict:
 
 ## Available Node Types
 
+### CompositeNode
+
+Unified control flow node for loops and conditionals
+
+**Kind**: `composite_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mode` | `string` | Yes | Control flow mode |
+| `condition` | `string` | No | Condition expression (while, if-else, switch branc... |
+| `items` | `string` | No | Expression resolving to iterable (for-each mode) |
+| `count` | `integer` | No | Number of iterations (times mode) |
+| `branches` | `array` | No | List of condition branches (switch mode) |
+| `body` | `any` | No | Body to execute: module path, !py function, or inl... |
+| `body_pipeline` | `string` | No | Path to external pipeline YAML |
+| `else_body` | `any` | No | Else branch body (if-else, switch) |
+| `else_action` | `string` | No | Else action label for routing (switch without body... |
+| `initial_state` | `object` | No | Initial state dict (while mode) |
+| `state_update` | `object` | No | State update expressions (while mode) |
+| `max_iterations` | `integer` | No | Safety limit for while loops |
+| `concurrency` | `integer` | No | Max concurrent iterations (for-each, times) |
+| `collect` | `string` | No | Result collection mode |
+| `error_handling` | `string` | No | Error handling strategy |
+
+**Example:**
+```yaml
+kind: composite_node
+metadata:
+  name: my_composite_node
+spec:
+  mode: value
+  max_iterations: 100
+  concurrency: 1
+  collect: list
+  error_handling: fail_fast
+```
+
 ### ConditionalNode
 
 Multi-branch conditional router for workflow control flow
