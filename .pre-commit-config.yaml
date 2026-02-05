@@ -116,7 +116,7 @@ repos:
     rev: 1.8.6
     hooks:
       - id: bandit
-        args: [-ll]  # Only report Medium and High severity
+        args: [-ll, -c, pyproject.toml]  # Medium/High severity, load config for skips
         exclude: ^(tests/|hexdag_plugins/|hexdag/studio/)
 
   # Security - Dependency vulnerabilities

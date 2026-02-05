@@ -608,3 +608,365 @@ class TestManifestValidation:
         result = self.validator.validate(config)
         assert not result.is_valid
         assert any("Invalid type" in err for err in result.errors)
+
+
+class TestCompositeNodeValidation:
+    """Tests for composite_node validation."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.validator = YamlValidator()
+
+    def test_composite_valid_while_mode(self):
+        """Test valid composite_node with while mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "loop"},
+                        "spec": {
+                            "mode": "while",
+                            "condition": "state.count < 5",
+                            "initial_state": {"count": 0},
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+    def test_composite_valid_foreach_mode(self):
+        """Test valid composite_node with for-each mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "process_items"},
+                        "spec": {
+                            "mode": "for-each",
+                            "items": "$input.items",
+                            "concurrency": 5,
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+    def test_composite_valid_times_mode(self):
+        """Test valid composite_node with times mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "repeat"},
+                        "spec": {
+                            "mode": "times",
+                            "count": 10,
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+    def test_composite_valid_if_else_mode(self):
+        """Test valid composite_node with if-else mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "branch"},
+                        "spec": {
+                            "mode": "if-else",
+                            "condition": "status == 'active'",
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+    def test_composite_valid_switch_mode(self):
+        """Test valid composite_node with switch mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "router"},
+                        "spec": {
+                            "mode": "switch",
+                            "branches": [
+                                {"condition": "action == 'accept'", "action": "approve"},
+                                {"condition": "action == 'reject'", "action": "deny"},
+                            ],
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+    def test_composite_missing_mode(self):
+        """Test composite_node fails without mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "node"},
+                        "spec": {},  # Missing 'mode'
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("mode" in err.lower() for err in result.errors)
+
+    def test_composite_invalid_mode(self):
+        """Test composite_node fails with invalid mode."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "node"},
+                        "spec": {"mode": "invalid_mode"},
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("invalid" in err.lower() and "mode" in err.lower() for err in result.errors)
+
+    def test_composite_while_missing_condition(self):
+        """Test while mode fails without condition."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "loop"},
+                        "spec": {"mode": "while"},  # Missing 'condition'
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("condition" in err.lower() for err in result.errors)
+
+    def test_composite_foreach_missing_items(self):
+        """Test for-each mode fails without items."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "process"},
+                        "spec": {"mode": "for-each"},  # Missing 'items'
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("items" in err.lower() for err in result.errors)
+
+    def test_composite_times_missing_count(self):
+        """Test times mode fails without count."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "repeat"},
+                        "spec": {"mode": "times"},  # Missing 'count'
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("count" in err.lower() for err in result.errors)
+
+    def test_composite_times_invalid_count_type(self):
+        """Test times mode fails with non-integer count."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "repeat"},
+                        "spec": {"mode": "times", "count": "five"},  # Invalid type
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("integer" in err.lower() for err in result.errors)
+
+    def test_composite_switch_missing_branches(self):
+        """Test switch mode fails without branches."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "router"},
+                        "spec": {"mode": "switch"},  # Missing 'branches'
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("branches" in err.lower() for err in result.errors)
+
+    def test_composite_body_and_body_pipeline_exclusive(self):
+        """Test body and body_pipeline are mutually exclusive."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "node"},
+                        "spec": {
+                            "mode": "times",
+                            "count": 5,
+                            "body": "myapp.process",
+                            "body_pipeline": "./process.yaml",  # Both specified
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("both" in err.lower() and "body" in err.lower() for err in result.errors)
+
+    def test_composite_inline_body_validation(self):
+        """Test inline body node validation."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "composite_node",
+                        "metadata": {"name": "node"},
+                        "spec": {
+                            "mode": "for-each",
+                            "items": "$input.items",
+                            "body": [
+                                {"kind": "expression_node", "spec": {}},  # Valid
+                                {"spec": {}},  # Invalid - missing 'kind'
+                            ],
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("kind" in err.lower() for err in result.errors)
+
+
+class TestPyTagValidation:
+    """Tests for !py tag validation."""
+
+    def test_validate_py_source_valid(self):
+        """Test validation of valid Python source."""
+        from hexdag.core.pipeline_builder.py_tag import validate_py_source
+
+        source = """
+def process(item, index, state, **ports):
+    return item * 2
+"""
+        errors = validate_py_source(source)
+        assert errors == []
+
+    def test_validate_py_source_async_valid(self):
+        """Test validation of valid async Python source."""
+        from hexdag.core.pipeline_builder.py_tag import validate_py_source
+
+        source = """
+async def process(item, index, state, **ports):
+    await asyncio.sleep(0)
+    return item
+"""
+        errors = validate_py_source(source)
+        assert errors == []
+
+    def test_validate_py_source_syntax_error(self):
+        """Test validation catches syntax errors."""
+        from hexdag.core.pipeline_builder.py_tag import validate_py_source
+
+        source = "def process( invalid"
+        errors = validate_py_source(source)
+        assert len(errors) == 1
+        assert "Syntax error" in errors[0]
+
+    def test_validate_py_source_no_function(self):
+        """Test validation catches missing function."""
+        from hexdag.core.pipeline_builder.py_tag import validate_py_source
+
+        source = "x = 1\ny = 2"
+        errors = validate_py_source(source)
+        assert len(errors) == 1
+        assert "must define a function" in errors[0]
+
+    def test_validate_py_source_empty(self):
+        """Test validation catches empty source."""
+        from hexdag.core.pipeline_builder.py_tag import validate_py_source
+
+        errors = validate_py_source("")
+        assert len(errors) == 1
+        assert "empty" in errors[0].lower()
+
+    def test_validate_py_source_whitespace_only(self):
+        """Test validation catches whitespace-only source."""
+        from hexdag.core.pipeline_builder.py_tag import validate_py_source
+
+        errors = validate_py_source("   \n\t  ")
+        assert len(errors) == 1
+        assert "empty" in errors[0].lower()

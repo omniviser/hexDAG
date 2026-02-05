@@ -157,6 +157,75 @@ class _SchemaValidator:
         if node_type in ("function", "function_node") and "fn" not in spec:
             errors.append("Missing required field 'fn'")
 
+        # Composite nodes require mode
+        if node_type in ("composite", "composite_node"):
+            errors.extend(self._validate_composite_spec(spec))
+
+        return errors
+
+    def _validate_composite_spec(self, spec: dict[str, Any]) -> list[str]:
+        """Validate composite_node specific requirements.
+
+        Parameters
+        ----------
+        spec : dict[str, Any]
+            Node specification from YAML manifest
+
+        Returns
+        -------
+        list[str]
+            List of validation error messages
+        """
+        errors: list[str] = []
+
+        if "mode" not in spec:
+            errors.append("Missing required field 'mode'")
+            return errors
+
+        mode = spec.get("mode")
+        valid_modes = ("while", "for-each", "times", "if-else", "switch")
+        if mode not in valid_modes:
+            errors.append(f"Invalid mode '{mode}'. Valid modes: {', '.join(valid_modes)}")
+            return errors
+
+        # Mode-specific validation
+        match mode:
+            case "while":
+                if "condition" not in spec:
+                    errors.append("Mode 'while' requires 'condition' field")
+            case "for-each":
+                if "items" not in spec:
+                    errors.append("Mode 'for-each' requires 'items' field")
+            case "times":
+                if "count" not in spec:
+                    errors.append("Mode 'times' requires 'count' field")
+                elif not isinstance(spec.get("count"), int):
+                    errors.append("Field 'count' must be an integer")
+            case "if-else":
+                if "condition" not in spec:
+                    errors.append("Mode 'if-else' requires 'condition' field")
+            case "switch":
+                if "branches" not in spec:
+                    errors.append("Mode 'switch' requires 'branches' field")
+                elif not isinstance(spec.get("branches"), list):
+                    errors.append("Field 'branches' must be a list")
+
+        # Validate body field if present (can be string, list, or callable from !py)
+        body = spec.get("body")
+        body_pipeline = spec.get("body_pipeline")
+
+        if body is not None and body_pipeline is not None:
+            errors.append("Cannot specify both 'body' and 'body_pipeline'")
+
+        # If body is a callable (from !py tag), it's already validated at parse time
+        # If body is a list, it should be inline nodes
+        if isinstance(body, list):
+            for i, node_config in enumerate(body):
+                if not isinstance(node_config, dict):
+                    errors.append(f"body[{i}] must be a node configuration dict")
+                elif "kind" not in node_config:
+                    errors.append(f"body[{i}] missing required 'kind' field")
+
         return errors
 
 
