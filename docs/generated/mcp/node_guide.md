@@ -70,6 +70,27 @@ spec:
   output: {}
 ```
 
+### ExpressionNode
+
+Compute values using safe AST-based expressions
+
+**Kind**: `expression_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `expressions` | `object` | Yes | Mapping of {variable_name: expression_string}. Exp... |
+| `input_mapping` | `object` | No | Field extraction mapping {local_name: 'node.path'}... |
+| `output_fields` | `array` | No | Fields to include in output. If omitted, all compu... |
+
+**Example:**
+```yaml
+kind: expression_node
+metadata:
+  name: my_expression_node
+spec:
+  expressions: {}
+```
+
 ### FunctionNode
 
 Simple factory for creating function-based nodes with optional Pydantic validation.

@@ -7,36 +7,28 @@ from hexdag.core.domain.dag import DirectedGraph
 # Separator for namespace:name format
 NAMESPACE_SEPARATOR = ":"
 
-# Known node types for validation (discovered from hexdag.builtin.nodes)
-KNOWN_NODE_TYPES = frozenset({
-    "core:function",
-    "core:llm",
-    "core:agent",
-    "core:loop",
-    "core:conditional",
-    "core:passthrough",
-    "core:prompt",
-    "core:parser",
-    "core:raw_llm",
-    "core:tool_call",
-    "core:data",
-    "core:static",
-    "core:port_call",
-    # Support module path format too (these are valid when using full paths)
-    "function_node",
-    "llm_node",
-    "agent_node",
-    "loop_node",
-    "conditional_node",
-    "passthrough_node",
-    "prompt_node",
-    "parser_node",
-    "raw_llm_node",
-    "tool_call_node",
-    "data_node",
-    "static_node",
-    "port_call_node",
-})
+# Lazy-loaded known node types (derived from resolver's builtin aliases)
+_known_node_types: frozenset[str] | None = None
+
+
+def _get_known_node_types() -> frozenset[str]:
+    """Lazily load known node types from resolver's builtin aliases.
+
+    This derives valid node types from the aliases registered by hexdag.builtin,
+    maintaining hexagonal architecture (core doesn't import from builtin).
+    Types are cached after first load.
+    """
+    global _known_node_types
+    if _known_node_types is None:
+        from hexdag.core.resolver import get_builtin_aliases
+
+        _known_node_types = frozenset(get_builtin_aliases().keys())
+    return _known_node_types
+
+
+# Keep KNOWN_NODE_TYPES as a module-level reference for backwards compatibility
+# in tests that may import it directly.
+KNOWN_NODE_TYPES = _get_known_node_types()
 
 
 class ValidationReport:
@@ -202,9 +194,9 @@ class YamlValidator:
         if self._provided_node_types is not None:
             return self._provided_node_types
 
-        # Otherwise, use known node types
+        # Otherwise, use auto-discovered node types
         if self._cached_node_types is None:
-            self._cached_node_types = KNOWN_NODE_TYPES
+            self._cached_node_types = _get_known_node_types()
 
         return self._cached_node_types
 

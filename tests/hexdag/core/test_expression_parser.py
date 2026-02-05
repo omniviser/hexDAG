@@ -1,8 +1,15 @@
 """Tests for the expression parser module."""
 
+from decimal import Decimal
+
 import pytest
 
-from hexdag.core.expression_parser import ExpressionError, compile_expression
+from hexdag.core.expression_parser import (
+    ALLOWED_FUNCTIONS,
+    ExpressionError,
+    compile_expression,
+    evaluate_expression,
+)
 
 
 class TestBasicComparisons:
@@ -310,3 +317,239 @@ class TestChainedComparisons:
         assert pred({"value": 100}, {}) is True
         assert pred({"value": -1}, {}) is False
         assert pred({"value": 101}, {}) is False
+
+
+class TestTernaryConditional:
+    """Test ternary conditional expressions (a if condition else b)."""
+
+    def test_simple_ternary(self) -> None:
+        """Test simple ternary conditional."""
+        pred = compile_expression("'yes' if active else 'no'")
+        assert pred({"active": True}, {}) is True  # 'yes' is truthy
+        # Use evaluate_expression for actual value
+        result = evaluate_expression("'yes' if active else 'no'", {"active": True})
+        assert result == "yes"
+        result = evaluate_expression("'yes' if active else 'no'", {"active": False})
+        assert result == "no"
+
+    def test_ternary_with_comparison(self) -> None:
+        """Test ternary with comparison condition."""
+        result = evaluate_expression("'high' if score > 80 else 'low'", {"score": 90})
+        assert result == "high"
+        result = evaluate_expression("'high' if score > 80 else 'low'", {"score": 70})
+        assert result == "low"
+
+    def test_ternary_with_numeric_result(self) -> None:
+        """Test ternary returning numeric values."""
+        result = evaluate_expression("10 if flag else 0", {"flag": True})
+        assert result == 10
+        result = evaluate_expression("10 if flag else 0", {"flag": False})
+        assert result == 0
+
+    def test_nested_ternary(self) -> None:
+        """Test nested ternary conditionals."""
+        expr = "'high' if score > 80 else ('medium' if score > 50 else 'low')"
+        assert evaluate_expression(expr, {"score": 90}) == "high"
+        assert evaluate_expression(expr, {"score": 70}) == "medium"
+        assert evaluate_expression(expr, {"score": 30}) == "low"
+
+    def test_ternary_with_boolean_operators(self) -> None:
+        """Test ternary with complex boolean condition."""
+        expr = "'approved' if score > 80 and verified else 'pending'"
+        assert evaluate_expression(expr, {"score": 90, "verified": True}) == "approved"
+        assert evaluate_expression(expr, {"score": 90, "verified": False}) == "pending"
+        assert evaluate_expression(expr, {"score": 70, "verified": True}) == "pending"
+
+    def test_ternary_with_function_calls(self) -> None:
+        """Test ternary with function calls in branches."""
+        expr = "upper(name) if uppercase else lower(name)"
+        assert evaluate_expression(expr, {"name": "John", "uppercase": True}) == "JOHN"
+        assert evaluate_expression(expr, {"name": "John", "uppercase": False}) == "john"
+
+    def test_ternary_in_conditional_node_context(self) -> None:
+        """Test ternary expressions as used in ConditionalNode."""
+        # Common pattern: selecting discount based on customer tier
+        expr = "0.2 if tier == 'gold' else (0.1 if tier == 'silver' else 0)"
+        assert evaluate_expression(expr, {"tier": "gold"}) == 0.2
+        assert evaluate_expression(expr, {"tier": "silver"}) == 0.1
+        assert evaluate_expression(expr, {"tier": "bronze"}) == 0
+
+
+class TestDecimalSupport:
+    """Test Decimal type support for financial calculations."""
+
+    def test_decimal_in_allowed_functions(self) -> None:
+        """Test that Decimal is in ALLOWED_FUNCTIONS."""
+        assert "Decimal" in ALLOWED_FUNCTIONS
+        assert ALLOWED_FUNCTIONS["Decimal"] is Decimal
+
+    def test_decimal_creation(self) -> None:
+        """Test creating Decimal values."""
+        result = evaluate_expression("Decimal('0.1')", {})
+        assert result == Decimal("0.1")
+        assert isinstance(result, Decimal)
+
+    def test_decimal_arithmetic(self) -> None:
+        """Test Decimal arithmetic operations."""
+        # Addition
+        result = evaluate_expression("Decimal('0.1') + Decimal('0.2')", {})
+        assert result == Decimal("0.3")
+
+        # Subtraction
+        result = evaluate_expression("Decimal('1.0') - Decimal('0.3')", {})
+        assert result == Decimal("0.7")
+
+        # Multiplication
+        result = evaluate_expression("Decimal('2.5') * Decimal('0.4')", {})
+        assert result == Decimal("1.00")
+
+        # Division
+        result = evaluate_expression("Decimal('1.0') / Decimal('3.0')", {})
+        assert result == Decimal("1.0") / Decimal("3.0")
+
+    def test_decimal_comparison(self) -> None:
+        """Test Decimal comparisons."""
+        pred = compile_expression("Decimal('0.1') + Decimal('0.2') == Decimal('0.3')")
+        assert pred({}, {}) is True  # Decimal avoids float precision issues
+
+    def test_decimal_with_variables(self) -> None:
+        """Test Decimal with variable values."""
+        result = evaluate_expression("Decimal(str(price)) * Decimal('0.9')", {"price": 100.0})
+        assert result == Decimal("90.0")
+
+    def test_decimal_ternary_discount(self) -> None:
+        """Test Decimal in ternary expression for discount calculation."""
+        expr = "Decimal('0.10') if count == 0 else Decimal('0.03')"
+        assert evaluate_expression(expr, {"count": 0}) == Decimal("0.10")
+        assert evaluate_expression(expr, {"count": 1}) == Decimal("0.03")
+
+    def test_decimal_complex_calculation(self) -> None:
+        """Test complex Decimal calculation like in negotiation flow."""
+        # Calculate: offered_rate * (1 - discount)
+        expr = "Decimal(str(offered_rate)) * (Decimal('1') - Decimal('0.1'))"
+        result = evaluate_expression(expr, {"offered_rate": 2.50})
+        assert result == Decimal("2.250")
+
+    def test_decimal_max_function(self) -> None:
+        """Test max function with Decimal values."""
+        result = evaluate_expression(
+            "max(Decimal('1.5'), Decimal('2.0'), Decimal('1.8'))",
+            {},
+        )
+        assert result == Decimal("2.0")
+
+    def test_decimal_to_float_conversion(self) -> None:
+        """Test converting Decimal result to float."""
+        result = evaluate_expression("float(Decimal('2.25'))", {})
+        assert result == 2.25
+        assert isinstance(result, float)
+
+
+class TestAdditionalFunctions:
+    """Test additional allowed functions (pow, format)."""
+
+    def test_pow_function(self) -> None:
+        """Test pow function."""
+        assert "pow" in ALLOWED_FUNCTIONS
+        result = evaluate_expression("pow(2, 3)", {})
+        assert result == 8
+
+        result = evaluate_expression("pow(value, 2)", {"value": 5})
+        assert result == 25
+
+    def test_pow_with_decimal(self) -> None:
+        """Test pow with Decimal (for compound interest etc.)."""
+        result = evaluate_expression("pow(Decimal('1.05'), 2)", {})
+        # Note: pow with Decimal might return float, that's OK
+        assert abs(float(result) - 1.1025) < 0.0001
+
+    def test_format_function(self) -> None:
+        """Test format function."""
+        assert "format" in ALLOWED_FUNCTIONS
+        result = evaluate_expression("format(value, '.2f')", {"value": 3.14159})
+        assert result == "3.14"
+
+    def test_format_with_decimal(self) -> None:
+        """Test format with Decimal."""
+        result = evaluate_expression("format(Decimal('1234.5'), ',.2f')", {})
+        assert result == "1,234.50"
+
+
+class TestConditionalNodeExpressions:
+    """Test expressions commonly used in ConditionalNode."""
+
+    def test_negotiation_rate_comparison(self) -> None:
+        """Test rate comparison expression."""
+        pred = compile_expression("extract_offer.rate <= get_context.load.target_rate")
+        data = {
+            "extract_offer": {"rate": 2.0},
+            "get_context": {"load": {"target_rate": 2.5}},
+        }
+        assert pred(data, {}) is True
+
+        data["extract_offer"]["rate"] = 3.0
+        assert pred(data, {}) is False
+
+    def test_confidence_threshold(self) -> None:
+        """Test confidence threshold expression."""
+        pred = compile_expression(
+            "extract_offer.confidence < get_context.system_config.confidence_threshold"
+        )
+        data = {
+            "extract_offer": {"confidence": 0.4},
+            "get_context": {"system_config": {"confidence_threshold": 0.5}},
+        }
+        assert pred(data, {}) is True
+
+        data["extract_offer"]["confidence"] = 0.6
+        assert pred(data, {}) is False
+
+    def test_status_check(self) -> None:
+        """Test status equality check."""
+        pred = compile_expression("get_context.negotiation.status != 'ACTIVE'")
+        data = {"get_context": {"negotiation": {"status": "CLOSED"}}}
+        assert pred(data, {}) is True
+
+        data["get_context"]["negotiation"]["status"] = "ACTIVE"
+        assert pred(data, {}) is False
+
+    def test_boolean_flag_check(self) -> None:
+        """Test boolean flag check."""
+        pred = compile_expression("get_context.load.winner_locked == True")
+        data = {"get_context": {"load": {"winner_locked": True}}}
+        assert pred(data, {}) is True
+
+        data["get_context"]["load"]["winner_locked"] = False
+        assert pred(data, {}) is False
+
+    def test_combined_conditions(self) -> None:
+        """Test multiple conditions combined with 'and'."""
+        pred = compile_expression(
+            "extract_offer.confidence >= 0.8 and "
+            "extract_offer.rate <= get_context.target_rate and "
+            "get_context.status == 'ACTIVE'"
+        )
+        data = {
+            "extract_offer": {"confidence": 0.9, "rate": 2.0},
+            "get_context": {"target_rate": 2.5, "status": "ACTIVE"},
+        }
+        assert pred(data, {}) is True
+
+        # Fail on confidence
+        data["extract_offer"]["confidence"] = 0.7
+        assert pred(data, {}) is False
+
+    def test_null_safe_access(self) -> None:
+        """Test handling of missing/null values."""
+        pred = compile_expression("default(node.value, 0) > 5")
+        assert pred({"node": {"value": 10}}, {}) is True
+        assert pred({"node": {"value": None}}, {}) is False
+        assert pred({"node": {}}, {}) is False
+
+    def test_counter_count_condition(self) -> None:
+        """Test counter count for discount selection."""
+        # First counter (count == 0) gets higher discount
+        expr = "Decimal('0.10') if counter_count == 0 else Decimal('0.03')"
+        assert evaluate_expression(expr, {"counter_count": 0}) == Decimal("0.10")
+        assert evaluate_expression(expr, {"counter_count": 1}) == Decimal("0.03")
+        assert evaluate_expression(expr, {"counter_count": 5}) == Decimal("0.03")
