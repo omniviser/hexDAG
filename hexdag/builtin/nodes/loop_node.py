@@ -564,6 +564,9 @@ class LoopNode(BaseNodeFactory):
                 },
             }
 
+        # Extract framework-level parameters from kwargs
+        framework = self.extract_framework_params(kwargs)
+
         # Map DirectedGraph-related arguments to NodeSpec fields
         try:
             params_model = NodeParams(**kwargs)
@@ -577,6 +580,9 @@ class LoopNode(BaseNodeFactory):
             out_model=params_model.out_model,
             deps=frozenset(params_model.deps),
             params=params_model.model_dump(exclude_none=True),
+            timeout=framework["timeout"],
+            max_retries=framework["max_retries"],
+            when=framework["when"],
         )
 
 
@@ -865,6 +871,9 @@ class ConditionalNode(BaseNodeFactory):
             )
             return result
 
+        # Extract framework-level parameters from kwargs
+        framework = self.extract_framework_params(kwargs)
+
         try:
             params_model = NodeParams(**kwargs)
         except Exception as e:
@@ -877,4 +886,7 @@ class ConditionalNode(BaseNodeFactory):
             out_model=params_model.out_model,
             deps=frozenset(params_model.deps),
             params=params_model.model_dump(exclude_none=True),
+            timeout=framework["timeout"],
+            max_retries=framework["max_retries"],
+            when=framework["when"],
         )

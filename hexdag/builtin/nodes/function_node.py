@@ -115,6 +115,9 @@ class FunctionNode(BaseNodeFactory):
             name, resolved_fn, input_model, output_model, unpack_input=unpack_input
         )
 
+        # Extract framework-level parameters from kwargs
+        framework = self.extract_framework_params(kwargs)
+
         return NodeSpec(
             name=name,
             fn=wrapped_fn,
@@ -122,6 +125,9 @@ class FunctionNode(BaseNodeFactory):
             out_model=output_model,
             deps=frozenset(deps or []),
             params=kwargs,
+            timeout=framework["timeout"],
+            max_retries=framework["max_retries"],
+            when=framework["when"],
         )
 
     def _create_wrapped_function(
@@ -442,4 +448,7 @@ class FunctionNode(BaseNodeFactory):
             out_model=node.out_model,
             deps=node.deps,
             params=new_params,
+            timeout=node.timeout,
+            max_retries=node.max_retries,
+            when=node.when,
         )

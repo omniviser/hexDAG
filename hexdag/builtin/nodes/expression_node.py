@@ -40,6 +40,23 @@ Financial calculations with Decimal::
           floor_val: "Decimal(str(rate_floor or 0))"
           counter_amount: "float(max(Decimal(str(offered_rate)) * (1 - discount), floor_val))"
         output_fields: [counter_amount]
+
+Template syntax for string formatting::
+
+    - kind: expression_node
+      metadata:
+        name: format_response
+      spec:
+        input_mapping:
+          name: "user.name"
+          quantity: "order.quantity"
+        expressions:
+          # Template syntax for strings (detected by {{ }})
+          message: "{{name}} ordered {{quantity}} items"
+          greeting: "Hello {{name}}!"
+          # Expression syntax for computation
+          total: "price * quantity"
+        output_fields: [message, greeting, total]
 """
 
 from typing import Any
@@ -48,8 +65,14 @@ from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.expression_parser import evaluate_expression
 from hexdag.core.logging import get_logger
+from hexdag.core.orchestration.prompt.template import PromptTemplate
 
 logger = get_logger(__name__)
+
+
+def _is_template(expr: str) -> bool:
+    """Check if expression uses template syntax (contains {{ }})."""
+    return "{{" in expr and "}}" in expr
 
 
 class ExpressionNode(BaseNodeFactory):
@@ -76,12 +99,13 @@ class ExpressionNode(BaseNodeFactory):
 
     _yaml_schema: dict[str, Any] = {
         "type": "object",
-        "description": "Compute values using safe AST-based expressions",
+        "description": "Compute values using safe AST-based expressions or template strings",
         "properties": {
             "expressions": {
                 "type": "object",
-                "description": "Mapping of {variable_name: expression_string}. "
-                "Expressions are evaluated in order and can reference earlier variables.",
+                "description": "Mapping of {variable_name: expression_or_template}. "
+                "Expressions are evaluated in order and can reference earlier variables. "
+                "Use {{variable}} syntax for string templates, or Python expressions.",
                 "additionalProperties": {"type": "string"},
             },
             "input_mapping": {
@@ -202,17 +226,30 @@ class ExpressionNode(BaseNodeFactory):
             # Evaluate expressions in definition order (supports chaining)
             for var_name, expr in _expressions.items():
                 try:
-                    value = evaluate_expression(expr, context, state={})
+                    # Check if expression uses template syntax ({{ }})
+                    if _is_template(expr):
+                        # Use PromptTemplate for string rendering
+                        template = PromptTemplate(expr)
+                        value = template.render(**context)
+                        node_logger.debug(
+                            "Template rendered",
+                            variable=var_name,
+                            template=expr,
+                            result_type=type(value).__name__,
+                        )
+                    else:
+                        # Use expression parser for computation
+                        value = evaluate_expression(expr, context, state={})
+                        node_logger.debug(
+                            "Expression evaluated",
+                            variable=var_name,
+                            expression=expr,
+                            result_type=type(value).__name__,
+                        )
                     context[var_name] = value
-                    node_logger.debug(
-                        "Expression evaluated",
-                        variable=var_name,
-                        expression=expr,
-                        result_type=type(value).__name__,
-                    )
                 except Exception as e:
                     node_logger.error(
-                        "Expression evaluation failed",
+                        "Expression/template evaluation failed",
                         variable=var_name,
                         expression=expr,
                         error=str(e),
@@ -246,6 +283,9 @@ class ExpressionNode(BaseNodeFactory):
         expression_fn.__name__ = f"expression_{name}"
         expression_fn.__doc__ = f"Expression node: {name}"
 
+        # Extract framework-level parameters from kwargs
+        framework = self.extract_framework_params(kwargs)
+
         return NodeSpec(
             name=name,
             fn=expression_fn,
@@ -253,4 +293,7 @@ class ExpressionNode(BaseNodeFactory):
             out_model=None,  # Returns dict output
             deps=frozenset(deps or []),
             params=kwargs,
+            timeout=framework["timeout"],
+            max_retries=framework["max_retries"],
+            when=framework["when"],
         )
