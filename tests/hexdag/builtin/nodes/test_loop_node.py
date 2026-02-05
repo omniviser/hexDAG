@@ -637,3 +637,214 @@ spec:
 
         router = graph.nodes["router"]
         assert "analyzer" in router.deps
+
+
+class TestConditionalNodeAdvancedExpressions:
+    """Test ConditionalNode with advanced expression features."""
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_function_calls(self) -> None:
+        """Test conditions using whitelisted function calls."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "len(items) > 0", "action": "process"},
+                {"condition": "len(items) == 0", "action": "skip"},
+            ],
+            else_action="error",
+        )
+
+        result = await node_spec.fn({"items": [1, 2, 3]})
+        assert result["result"] == "process"
+
+        result = await node_spec.fn({"items": []})
+        assert result["result"] == "skip"
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_string_functions(self) -> None:
+        """Test conditions using string functions."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "upper(status) == 'ACTIVE'", "action": "process"},
+                {"condition": "lower(status) == 'pending'", "action": "wait"},
+            ],
+            else_action="skip",
+        )
+
+        result = await node_spec.fn({"status": "active"})
+        assert result["result"] == "process"
+
+        result = await node_spec.fn({"status": "PENDING"})
+        assert result["result"] == "wait"
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_default_function(self) -> None:
+        """Test conditions using default() for null handling."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "default(value, 0) > 10", "action": "high"},
+                {"condition": "default(value, 0) > 0", "action": "low"},
+            ],
+            else_action="zero",
+        )
+
+        result = await node_spec.fn({"value": 20})
+        assert result["result"] == "high"
+
+        result = await node_spec.fn({"value": 5})
+        assert result["result"] == "low"
+
+        result = await node_spec.fn({"value": None})
+        assert result["result"] == "zero"
+
+        result = await node_spec.fn({})  # Missing key
+        assert result["result"] == "zero"
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_arithmetic(self) -> None:
+        """Test conditions with arithmetic expressions."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "price * quantity > 1000", "action": "large_order"},
+                {"condition": "price * quantity > 100", "action": "medium_order"},
+            ],
+            else_action="small_order",
+        )
+
+        result = await node_spec.fn({"price": 50, "quantity": 30})
+        assert result["result"] == "large_order"
+
+        result = await node_spec.fn({"price": 10, "quantity": 20})
+        assert result["result"] == "medium_order"
+
+        result = await node_spec.fn({"price": 5, "quantity": 10})
+        assert result["result"] == "small_order"
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_min_max(self) -> None:
+        """Test conditions using min/max functions."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "max(score_a, score_b, score_c) >= 90", "action": "excellent"},
+                {"condition": "min(score_a, score_b, score_c) >= 70", "action": "passing"},
+            ],
+            else_action="needs_improvement",
+        )
+
+        result = await node_spec.fn({"score_a": 85, "score_b": 95, "score_c": 80})
+        assert result["result"] == "excellent"
+
+        result = await node_spec.fn({"score_a": 75, "score_b": 80, "score_c": 70})
+        assert result["result"] == "passing"
+
+        result = await node_spec.fn({"score_a": 75, "score_b": 65, "score_c": 70})
+        assert result["result"] == "needs_improvement"
+
+    @pytest.mark.asyncio
+    async def test_conditional_negotiation_scenario(self) -> None:
+        """Test ConditionalNode with realistic negotiation conditions."""
+        node_spec = ConditionalNode()(
+            "route_action",
+            branches=[
+                # Winner already locked - reject
+                {"condition": "get_context.load.winner_locked == True", "action": "reject"},
+                # Low confidence - escalate
+                {"condition": "extract_offer.confidence < 0.5", "action": "escalate"},
+                # Negotiation not active - reject
+                {"condition": "get_context.negotiation.status != 'ACTIVE'", "action": "reject"},
+                # Rate acceptable - accept
+                {
+                    "condition": "extract_offer.rate <= get_context.load.target_rate",
+                    "action": "accept",
+                },
+            ],
+            else_action="counter",
+        )
+
+        # Test: Winner locked
+        result = await node_spec.fn({
+            "get_context": {
+                "load": {"winner_locked": True, "target_rate": 2.5},
+                "negotiation": {"status": "ACTIVE"},
+            },
+            "extract_offer": {"rate": 2.0, "confidence": 0.9},
+        })
+        assert result["result"] == "reject"
+
+        # Test: Low confidence
+        result = await node_spec.fn({
+            "get_context": {
+                "load": {"winner_locked": False, "target_rate": 2.5},
+                "negotiation": {"status": "ACTIVE"},
+            },
+            "extract_offer": {"rate": 2.0, "confidence": 0.3},
+        })
+        assert result["result"] == "escalate"
+
+        # Test: Rate acceptable
+        result = await node_spec.fn({
+            "get_context": {
+                "load": {"winner_locked": False, "target_rate": 2.5},
+                "negotiation": {"status": "ACTIVE"},
+            },
+            "extract_offer": {"rate": 2.0, "confidence": 0.9},
+        })
+        assert result["result"] == "accept"
+
+        # Test: Rate too high - counter
+        result = await node_spec.fn({
+            "get_context": {
+                "load": {"winner_locked": False, "target_rate": 2.0},
+                "negotiation": {"status": "ACTIVE"},
+            },
+            "extract_offer": {"rate": 2.5, "confidence": 0.9},
+        })
+        assert result["result"] == "counter"
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_coalesce(self) -> None:
+        """Test conditions using coalesce() for multiple fallbacks."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "coalesce(primary, secondary, 0) > 100", "action": "high"},
+            ],
+            else_action="low",
+        )
+
+        # Primary value present
+        result = await node_spec.fn({"primary": 150, "secondary": 50})
+        assert result["result"] == "high"
+
+        # Only secondary value
+        result = await node_spec.fn({"primary": None, "secondary": 150})
+        assert result["result"] == "high"
+
+        # Both null - falls back to 0
+        result = await node_spec.fn({"primary": None, "secondary": None})
+        assert result["result"] == "low"
+
+    @pytest.mark.asyncio
+    async def test_conditional_with_isnone_isempty(self) -> None:
+        """Test conditions using isnone() and isempty()."""
+        node_spec = ConditionalNode()(
+            "router",
+            branches=[
+                {"condition": "isnone(value)", "action": "null_value"},
+                {"condition": "isempty(items)", "action": "empty_list"},
+            ],
+            else_action="has_data",
+        )
+
+        result = await node_spec.fn({"value": None, "items": [1, 2]})
+        assert result["result"] == "null_value"
+
+        result = await node_spec.fn({"value": 10, "items": []})
+        assert result["result"] == "empty_list"
+
+        result = await node_spec.fn({"value": 10, "items": [1]})
+        assert result["result"] == "has_data"

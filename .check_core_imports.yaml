@@ -62,3 +62,10 @@ allowed_exceptions:
     - "from hexdag.builtin.adapters.mock import MockLLM"
     - "from hexdag.builtin.adapters.openai import OpenAIAdapter"
     - "from hexdag.builtin.adapters.anthropic import AnthropicAdapter"
+
+  # Resolver imports builtin.nodes to trigger auto-discovery and alias registration
+  # This is a lazy import inside _ensure_builtin_bootstrapped(), not a module-level dependency.
+  # Rationale: Enables auto-discovery of node factories without hardcoding builtin knowledge.
+  # The builtin module self-registers via register_builtin_aliases() - core provides the hook.
+  hexdag/core/resolver.py:
+    - "import hexdag.builtin.nodes  # noqa: F401"

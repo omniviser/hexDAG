@@ -48,6 +48,7 @@ import ast
 import operator
 from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from hexdag.core.logging import get_logger
@@ -138,6 +139,10 @@ ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "coalesce": lambda *args: next((a for a in args if a is not None), None),
     "isnone": lambda x: x is None,
     "isempty": lambda x: x is None or x == "" or x == [] or x == {},
+    # Financial/precision math functions
+    "Decimal": Decimal,
+    "pow": pow,
+    "format": format,
 }
 
 
@@ -180,6 +185,7 @@ def _validate_ast(node: ast.AST, expression: str) -> None:
         ast.BoolOp,
         ast.UnaryOp,
         ast.BinOp,
+        ast.IfExp,  # Ternary conditional: a if condition else b
         ast.Attribute,
         ast.Subscript,
         ast.Name,
@@ -366,6 +372,13 @@ def _evaluate_node(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -
         if unary_op_func is None:
             raise ExpressionError("", f"Unsupported unary op: {type(node.op).__name__}")
         return unary_op_func(operand)
+
+    if isinstance(node, ast.IfExp):
+        # Handle ternary conditional: a if condition else b
+        condition = _evaluate_node(node.test, data, state)
+        if condition:
+            return _evaluate_node(node.body, data, state)
+        return _evaluate_node(node.orelse, data, state)
 
     if isinstance(node, ast.List):
         return [_evaluate_node(elt, data, state) for elt in node.elts]

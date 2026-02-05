@@ -31,29 +31,49 @@ _runtime_components: dict[str, type[Any]] = {}
 # User-registered aliases (separate from built-in short names)
 _user_aliases: dict[str, str] = {}
 
-# Backwards compatibility: map old short names to full module paths
-_SHORT_NAME_ALIASES: dict[str, str] = {
-    # Nodes (old short names)
-    "data_node": "hexdag.builtin.nodes.DataNode",
-    "llm_node": "hexdag.builtin.nodes.LLMNode",
-    "function_node": "hexdag.builtin.nodes.FunctionNode",
-    "agent_node": "hexdag.builtin.nodes.ReActAgentNode",
-    "loop_node": "hexdag.builtin.nodes.LoopNode",
-    "conditional_node": "hexdag.builtin.nodes.ConditionalNode",
-    "tool_call_node": "hexdag.builtin.nodes.ToolCallNode",
-    # Namespace:name format
-    "core:data_node": "hexdag.builtin.nodes.DataNode",
-    "core:llm_node": "hexdag.builtin.nodes.LLMNode",
-    "core:function_node": "hexdag.builtin.nodes.FunctionNode",
-    "core:agent_node": "hexdag.builtin.nodes.ReActAgentNode",
-    "core:loop_node": "hexdag.builtin.nodes.LoopNode",
-    "core:conditional_node": "hexdag.builtin.nodes.ConditionalNode",
-    # Aliases
-    "static_node": "hexdag.builtin.nodes.DataNode",
-    "core:static_node": "hexdag.builtin.nodes.DataNode",
-    "port_call_node": "hexdag.builtin.nodes.PortCallNode",
-    "core:port_call_node": "hexdag.builtin.nodes.PortCallNode",
-}
+# Builtin aliases registered by hexdag.builtin during bootstrap
+_builtin_aliases: dict[str, str] = {}
+
+# Flag to track if builtin has been bootstrapped
+_builtin_bootstrapped: bool = False
+
+
+def register_builtin_aliases(aliases: dict[str, str]) -> None:
+    """Register builtin node aliases (called by hexdag.builtin during bootstrap).
+
+    This allows the builtin package to register its auto-discovered aliases
+    without core needing to import from builtin (maintaining hexagonal architecture).
+
+    Parameters
+    ----------
+    aliases : dict[str, str]
+        Mapping of alias -> full module path
+    """
+    global _builtin_bootstrapped
+    _builtin_aliases.update(aliases)
+    _builtin_bootstrapped = True
+
+
+def _ensure_builtin_bootstrapped() -> None:
+    """Ensure builtin aliases are loaded (triggers bootstrap if needed)."""
+    global _builtin_bootstrapped
+    if not _builtin_bootstrapped:
+        # Import builtin to trigger its bootstrap which calls register_builtin_aliases
+        import hexdag.builtin.nodes  # noqa: F401
+
+        _builtin_bootstrapped = True
+
+
+def get_builtin_aliases() -> dict[str, str]:
+    """Get a copy of all builtin aliases.
+
+    Returns
+    -------
+    dict[str, str]
+        Copy of the alias -> full_path mapping
+    """
+    _ensure_builtin_bootstrapped()
+    return dict(_builtin_aliases)
 
 
 def register_runtime(name: str, component: type[Any]) -> None:
@@ -196,9 +216,10 @@ def resolve(kind: str) -> type[Any]:
     if kind in _user_aliases:
         kind = _user_aliases[kind]
 
-    # Check backwards compatibility aliases for legacy short names
-    if kind in _SHORT_NAME_ALIASES:
-        kind = _SHORT_NAME_ALIASES[kind]
+    # Check builtin aliases (registered by hexdag.builtin during bootstrap)
+    _ensure_builtin_bootstrapped()
+    if kind in _builtin_aliases:
+        kind = _builtin_aliases[kind]
 
     if "." not in kind:
         raise ResolveError(
