@@ -144,6 +144,40 @@ class BaseNodeFactory(ABC):
             # _hexdag_required_ports is added dynamically by @node decorator
             wrapper_fn._hexdag_required_ports = self.__class__._hexdag_required_ports  # pyright: ignore[reportAttributeAccessIssue]  # noqa: B010
 
+    @staticmethod
+    def extract_framework_params(kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Extract framework-level parameters from kwargs.
+
+        This method provides a single place to extract NodeSpec framework params
+        (timeout, max_retries, when) from kwargs. All node factories should use
+        this to ensure consistent handling.
+
+        Parameters
+        ----------
+        kwargs : dict[str, Any]
+            Keyword arguments to extract from (modified in place)
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary with keys: timeout, max_retries, when
+            Values are None if not present in kwargs
+
+        Examples
+        --------
+        >>> kwargs = {"when": "status == 'active'", "timeout": 30, "other": "value"}
+        >>> framework = BaseNodeFactory.extract_framework_params(kwargs)
+        >>> framework
+        {'timeout': 30, 'max_retries': None, 'when': "status == 'active'"}
+        >>> kwargs
+        {'other': 'value'}
+        """
+        return {
+            "timeout": kwargs.pop("timeout", None),
+            "max_retries": kwargs.pop("max_retries", None),
+            "when": kwargs.pop("when", None),
+        }
+
     def create_node_with_mapping(
         self,
         name: str,
@@ -158,8 +192,7 @@ class BaseNodeFactory(ABC):
         self._copy_required_ports_to_wrapper(wrapped_fn)
 
         # Extract framework-level parameters from kwargs
-        timeout = kwargs.pop("timeout", None)
-        max_retries = kwargs.pop("max_retries", None)
+        framework = self.extract_framework_params(kwargs)
 
         input_model = self.create_pydantic_model(f"{name}Input", input_schema)
         output_model = self.create_pydantic_model(f"{name}Output", output_schema)
@@ -171,8 +204,9 @@ class BaseNodeFactory(ABC):
             out_model=output_model,
             deps=frozenset(deps or []),
             params=kwargs,
-            timeout=timeout,
-            max_retries=max_retries,
+            timeout=framework["timeout"],
+            max_retries=framework["max_retries"],
+            when=framework["when"],
         )
 
     @abstractmethod

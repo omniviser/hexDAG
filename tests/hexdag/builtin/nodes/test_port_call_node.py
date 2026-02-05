@@ -408,7 +408,8 @@ class TestStaticNodeAlias:
         )
 
         assert node.name == "reject_locked"
-        assert node.params["output"]["action"] == "REJECTED"
+        # Note: DataNode now delegates to ExpressionNode internally,
+        # so we test behavior (execution) rather than internal params structure
 
     @pytest.mark.asyncio
     async def test_static_node_execution(self) -> None:

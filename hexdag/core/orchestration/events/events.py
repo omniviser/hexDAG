@@ -177,6 +177,29 @@ class NodeCancelled(Event):
         return f"🚫 Node '{self.name}' cancelled: {self.reason or 'unknown'}"
 
 
+@dataclass(slots=True)
+class NodeSkipped(Event):
+    """A node execution was skipped due to when clause evaluation.
+
+    Attributes
+    ----------
+    name : str
+        Node name
+    wave_index : int
+        Wave index where node was scheduled
+    reason : str | None
+        Reason for skipping (e.g., "when clause 'status == active' evaluated to False")
+    """
+
+    name: str
+    wave_index: int
+    reason: str | None = None
+
+    def log_message(self) -> str:
+        """Format log message for node skip event."""
+        return f"⏭️ Node '{self.name}' skipped: {self.reason or 'unknown'}"
+
+
 # Wave events
 @dataclass(slots=True)
 class WaveStarted(Event):

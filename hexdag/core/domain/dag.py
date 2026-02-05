@@ -59,6 +59,7 @@ class NodeSpec:
     - Input/output types for validation (Pydantic models or legacy types)
     - Dependencies (explicit and computed)
     - Arbitrary metadata parameters
+    - Optional conditional execution via `when` expression
 
     Supports fluent chaining via .after() method.
     """
@@ -71,6 +72,7 @@ class NodeSpec:
     params: dict[str, Any] = field(default_factory=dict)
     timeout: float | None = None  # Optional timeout in seconds for this node
     max_retries: int | None = None  # Optional max retries for this node (1 = no retries)
+    when: str | None = None  # Optional expression to evaluate before execution
 
     def __post_init__(self) -> None:
         """Ensure deps and params are immutable, and intern strings for performance."""

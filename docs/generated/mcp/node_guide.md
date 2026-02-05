@@ -53,13 +53,13 @@ spec:
 
 ### DataNode
 
-Static data node returning constant output. Useful for terminal nodes like rejection actions or static configuration.
+Static data node returning constant output. Supports {{variable}} template syntax for dynamic values. Useful for terminal nodes like rejection actions or static configuration.
 
 **Kind**: `data_node`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `output` | `object` | Yes | Static output data to return. Can be any JSON-seri... |
+| `output` | `object` | Yes | Output data to return. Values can be static or use... |
 
 **Example:**
 ```yaml
@@ -72,13 +72,13 @@ spec:
 
 ### ExpressionNode
 
-Compute values using safe AST-based expressions
+Compute values using safe AST-based expressions or template strings
 
 **Kind**: `expression_node`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `expressions` | `object` | Yes | Mapping of {variable_name: expression_string}. Exp... |
+| `expressions` | `object` | Yes | Mapping of {variable_name: expression_or_template}... |
 | `input_mapping` | `object` | No | Field extraction mapping {local_name: 'node.path'}... |
 | `output_fields` | `array` | No | Fields to include in output. If omitted, all compu... |
 

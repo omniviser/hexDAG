@@ -86,8 +86,10 @@ async def run_research_agent(
                 "I'll search for information about this topic. INVOKE_TOOL: search(query='research query')",
                 "Let me analyze this further. INVOKE_TOOL: search(query='detailed analysis')",
                 "Let me search for more context. INVOKE_TOOL: search(query='additional context')",
-                "Based on my comprehensive research across multiple sources, here are the key findings: "
-                "[Mock comprehensive research results with multiple insights and data points]",
+                (
+                    "Based on my comprehensive research across multiple sources, here are the key findings: "
+                    "[Mock comprehensive research results with multiple insights and data points]"
+                ),
             ],
             delay_seconds=0.05,
         )

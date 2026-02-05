@@ -16,6 +16,7 @@ from .events import (
     NodeCancelled,
     NodeCompleted,
     NodeFailed,
+    NodeSkipped,
     NodeStarted,
     PipelineCancelled,
     PipelineCompleted,
@@ -42,7 +43,7 @@ from .observers import (
 )
 
 # Event taxonomy - grouped event types for observer filtering
-NODE_LIFECYCLE_EVENTS = (NodeStarted, NodeCompleted, NodeFailed, NodeCancelled)
+NODE_LIFECYCLE_EVENTS = (NodeStarted, NodeCompleted, NodeFailed, NodeCancelled, NodeSkipped)
 WAVE_EVENTS = (WaveStarted, WaveCompleted)
 PIPELINE_EVENTS = (PipelineStarted, PipelineCompleted, PipelineCancelled)
 LLM_EVENTS = (LLMPromptSent, LLMResponseReceived)
@@ -63,6 +64,7 @@ __all__ = [
     "NodeCompleted",
     "NodeFailed",
     "NodeCancelled",
+    "NodeSkipped",
     "WaveStarted",
     "WaveCompleted",
     "PipelineStarted",

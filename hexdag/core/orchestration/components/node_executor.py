@@ -19,9 +19,16 @@ else:
 from hexdag.core.context import get_observer_manager, get_policy_manager, set_current_node_name
 from hexdag.core.domain.dag import NodeSpec, ValidationError
 from hexdag.core.exceptions import OrchestratorError
+from hexdag.core.expression_parser import ExpressionError, compile_expression
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
-from hexdag.core.orchestration.events import NodeCancelled, NodeCompleted, NodeFailed, NodeStarted
+from hexdag.core.orchestration.events import (
+    NodeCancelled,
+    NodeCompleted,
+    NodeFailed,
+    NodeSkipped,
+    NodeStarted,
+)
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.orchestration.policies.models import PolicySignal
 
@@ -145,6 +152,42 @@ class NodeExecutor:
                     validated_input = node_input
             else:
                 validated_input = node_input
+
+            # Evaluate when clause - skip node if condition evaluates to False
+            if node_spec.when:
+                try:
+                    predicate = compile_expression(node_spec.when)
+                    # Build data context from validated input
+                    data_context = validated_input if isinstance(validated_input, dict) else {}
+                    condition_result = predicate(data_context, {})
+
+                    if not condition_result:
+                        logger.info(
+                            "Node '{node}' skipped: when clause '{when}' evaluated to False",
+                            node=node_name,
+                            when=node_spec.when,
+                        )
+                        # Emit NodeSkipped event
+                        skip_event = NodeSkipped(
+                            name=node_name,
+                            wave_index=wave_index,
+                            reason=f"when clause '{node_spec.when}' evaluated to False",
+                        )
+                        await policy_coordinator.notify_observer(observer_mgr, skip_event)
+
+                        return {
+                            "_skipped": True,
+                            "reason": f"when clause '{node_spec.when}' evaluated to False",
+                        }
+                except ExpressionError as e:
+                    logger.error(
+                        "Invalid when clause expression for node '{node}': {error}",
+                        node=node_name,
+                        error=e,
+                    )
+                    raise NodeExecutionError(
+                        node_name, ValueError(f"Invalid when clause: {e}")
+                    ) from e
 
             # Set current node name for port-level event attribution
             set_current_node_name(node_name)
