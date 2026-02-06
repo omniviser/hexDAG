@@ -1,13 +1,12 @@
 """Execution context for orchestrator components.
 
 This module provides async-safe context management for cross-cutting concerns
-like observer management and policy management. This eliminates parameter
-drilling and provides a clean way to access these services throughout the
-execution call stack.
+like observer management. This eliminates parameter drilling and provides a
+clean way to access these services throughout the execution call stack.
 
 The context is automatically propagated through async call chains, making
-observer_manager, policy_manager, and other orchestration services available
-to all components without explicit parameter passing.
+observer_manager and other orchestration services available to all components
+without explicit parameter passing.
 """
 
 from __future__ import annotations
@@ -18,15 +17,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from hexdag.core.ports.observer_manager import ObserverManagerPort
-    from hexdag.core.ports.policy_manager import PolicyManagerPort
 
 # Context variables for orchestrator components (async-safe)
 _observer_manager_context: ContextVar[ObserverManagerPort | None] = ContextVar(
     "observer_manager", default=None
-)
-
-_policy_manager_context: ContextVar[PolicyManagerPort | None] = ContextVar(
-    "policy_manager", default=None
 )
 
 _run_id_context: ContextVar[str | None] = ContextVar("run_id", default=None)
@@ -95,35 +89,6 @@ def get_observer_manager() -> ObserverManagerPort | None:
             await observer_manager.notify(NodeStarted(...))
     """
     return _observer_manager_context.get()
-
-
-# ============================================================================
-# Policy Manager Context
-# ============================================================================
-
-
-def set_policy_manager(manager: PolicyManagerPort | None) -> None:
-    """Set policy manager for current async execution context.
-
-    This should be called by the orchestrator at the start of DAG execution.
-
-    Parameters
-    ----------
-    manager : PolicyManagerPort | None
-        Policy manager instance, or None to clear context
-    """
-    _policy_manager_context.set(manager)
-
-
-def get_policy_manager() -> PolicyManagerPort | None:
-    """Get policy manager from current async execution context.
-
-    Returns
-    -------
-    PolicyManagerPort | None
-        Current policy manager, or None if not in orchestrator context
-    """
-    return _policy_manager_context.get()
 
 
 # ============================================================================
@@ -269,20 +234,18 @@ class ExecutionContext:
 
         async with ExecutionContext(
             observer_manager=observer,
-            policy_manager=policy,
             run_id="run-123",
             ports=all_ports
         ):
             # All components can access context
             result = await execute_dag(dag, inputs)
             # IMPORTANT: All observer notifications and hooks complete here
-        # Context cleaned up here - observers/policies no longer accessible
+        # Context cleaned up here - observers no longer accessible
     """
 
     def __init__(
         self,
         observer_manager: ObserverManagerPort | None = None,
-        policy_manager: PolicyManagerPort | None = None,
         run_id: str | None = None,
         ports: dict[str, Any] | None = None,
     ):
@@ -292,22 +255,18 @@ class ExecutionContext:
         ----------
         observer_manager : ObserverManagerPort | None
             Observer manager for event emission
-        policy_manager : PolicyManagerPort | None
-            Policy manager for policy evaluation
         run_id : str | None
             Unique run identifier
         ports : dict[str, Any] | None
             Ports dictionary with all adapters
         """
         self.observer_manager = observer_manager
-        self.policy_manager = policy_manager
         self.run_id = run_id
         self.ports = ports
 
     def __enter__(self) -> ExecutionContext:
         """Set up execution context (sync context manager)."""
         set_observer_manager(self.observer_manager)
-        set_policy_manager(self.policy_manager)
         set_run_id(self.run_id)
         set_ports(self.ports)
         return self
@@ -319,7 +278,6 @@ class ExecutionContext:
     async def __aenter__(self) -> ExecutionContext:
         """Set up execution context (async context manager)."""
         set_observer_manager(self.observer_manager)
-        set_policy_manager(self.policy_manager)
         set_run_id(self.run_id)
         set_ports(self.ports)
         return self
@@ -340,7 +298,6 @@ def clear_execution_context() -> None:
     Useful for cleanup after orchestrator execution or in tests.
     """
     _observer_manager_context.set(None)
-    _policy_manager_context.set(None)
     _run_id_context.set(None)
     _ports_context.set(None)
     _current_graph_context.set(None)

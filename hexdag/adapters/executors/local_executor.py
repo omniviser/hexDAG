@@ -210,7 +210,7 @@ class LocalExecutor:
                 node_spec=node_spec,
                 node_input=node_input,
                 context=execution_context,
-                policy_coordinator=self._execution_coordinator,
+                coordinator=self._execution_coordinator,
                 wave_index=task.wave_index,
                 validate=task.should_validate,
                 **task.params,

@@ -18,7 +18,6 @@ if TYPE_CHECKING:
         DatabasePort,
         Memory,
         ObserverManagerPort,
-        PolicyManagerPort,
         ToolRouter,
     )
 
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
         | DatabasePort
         | Memory
         | ObserverManagerPort
-        | PolicyManagerPort
         | ToolRouter
         | Any  # Allow Any for backward compatibility with custom ports
     )
@@ -166,19 +164,6 @@ class PortsBuilder:
         """
         return self._add_port("observer_manager", manager)
 
-    def with_policy_manager(self, manager: PolicyManagerPort) -> Self:
-        """Add a policy manager for execution control.
-
-        Args
-        ----
-            manager: Policy manager for controlling execution flow
-
-        Returns
-        -------
-            Self for method chaining
-        """
-        return self._add_port("policy_manager", manager)
-
     # External Integrations
     # ---------------------
 
@@ -203,7 +188,6 @@ class PortsBuilder:
 
         This method provides sensible defaults:
         - LocalObserverManager for event observation
-        - LocalPolicyManager for policy management
         - MockLLM for testing (should be overridden in production)
 
         Returns
@@ -216,14 +200,6 @@ class PortsBuilder:
                 from hexdag.builtin.adapters.local import LocalObserverManager
 
                 self._ports["observer_manager"] = LocalObserverManager()
-            except ImportError:
-                pass  # Optional dependency
-
-        if "policy_manager" not in self._ports:
-            try:
-                from hexdag.builtin.adapters.local import LocalPolicyManager
-
-                self._ports["policy_manager"] = LocalPolicyManager()
             except ImportError:
                 pass  # Optional dependency
 

@@ -46,6 +46,7 @@ import yaml
 from mcp.server.fastmcp import FastMCP
 
 from hexdag.core.pipeline_builder import YamlPipelineBuilder
+from hexdag.core.pipeline_builder.tag_discovery import discover_tags, get_tag_schema
 from hexdag.core.resolver import ResolveError, resolve
 from hexdag.core.schema import SchemaGenerator
 
@@ -453,50 +454,61 @@ def list_macros() -> str:
 
 
 @mcp.tool()  # type: ignore[misc]
-def list_policies() -> str:
-    """List all available policies in the hexDAG registry.
+def list_tags() -> str:
+    """List all available YAML custom tags.
+
+    Returns detailed information about each tag including:
+    - Tag name (e.g., "!py", "!include")
+    - Description
+    - Module path
+    - Syntax examples
+    - Security warnings (if applicable)
 
     Returns
     -------
-        JSON string with available policies and their descriptions
+        JSON string with available tags and their documentation
 
     Examples
     --------
-        >>> list_policies()  # doctest: +SKIP
-        [
-          {
-            "name": "retry_policy",
-            "namespace": "core",
-            "description": "Retry failed operations"
+        >>> list_tags()  # doctest: +SKIP
+        {
+          "!py": {
+            "name": "!py",
+            "description": "Compile inline Python code into callable functions",
+            "module": "hexdag.core.pipeline_builder.py_tag",
+            "syntax": ["!py | <python_code>  # Inline Python code block"],
+            "is_registered": true,
+            "security_warning": "Executes arbitrary Python code..."
+          },
+          "!include": {
+            "name": "!include",
+            "description": "Include content from external YAML files",
+            "module": "hexdag.core.pipeline_builder.include_tag",
+            "syntax": ["!include ./path/to/file.yaml"],
+            "is_registered": true
           }
-        ]
-    """
-    from hexdag.builtin import policies as builtin_policies
-
-    policies_list: list[dict[str, Any]] = []
-
-    # Scan builtin policies module
-    for name in dir(builtin_policies):
-        if name.startswith("_"):
-            continue
-
-        obj = getattr(builtin_policies, name, None)
-        if obj is None or not isinstance(obj, type):
-            continue
-
-        # Check if it's a policy class (ends with Policy)
-        if not name.endswith("Policy"):
-            continue
-
-        policy_info = {
-            "name": name,
-            "namespace": "core",
-            "module_path": f"hexdag.builtin.policies.{name}",
-            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
         }
-        policies_list.append(policy_info)
+    """
+    tags = discover_tags()
 
-    return json.dumps(policies_list, indent=2)
+    # Format for MCP response - include essential info
+    result: dict[str, dict[str, Any]] = {}
+    for tag_name, tag_info in tags.items():
+        result[tag_name] = {
+            "name": tag_info["name"],
+            "description": tag_info["description"],
+            "module": tag_info["module"],
+            "syntax": tag_info["syntax"],
+            "is_registered": tag_info["is_registered"],
+        }
+
+        # Add security warning for !py
+        if tag_name == "!py":
+            result[tag_name]["security_warning"] = (
+                "Executes arbitrary Python code. Only use with trusted YAML files."
+            )
+
+    return json.dumps(result, indent=2)
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -514,9 +526,9 @@ def get_component_schema(
 
     Args
     ----
-        component_type: Type of component (node, adapter, tool, macro, policy)
-        name: Component name (class name or full module path)
-        namespace: Component namespace (default: "core") - ignored if full path provided
+        component_type: Type of component (node, adapter, tool, macro, policy, tag)
+        name: Component name (class name, full module path, or tag name like "!py")
+        namespace: Component namespace (default: "core") - ignored for tags
 
     Returns
     -------
@@ -538,7 +550,20 @@ def get_component_schema(
           ],
           "yaml_example": "..."
         }
+
+        >>> get_component_schema("tag", "!py")  # doctest: +SKIP
+        {
+          "name": "!py",
+          "type": "tag",
+          "description": "Compile inline Python code into callable functions",
+          "schema": {...},
+          "yaml_example": "body: !py |\\n  async def process(...):\\n    return item * 2"
+        }
     """
+    # Handle tag component type
+    if component_type == "tag":
+        return _get_tag_schema_response(name)
+
     try:
         # If name is a full module path, resolve directly
         if "." in name:
@@ -615,6 +640,82 @@ def get_component_schema(
                 "component_type": component_type,
                 "name": name,
                 "namespace": namespace,
+            },
+            indent=2,
+        )
+
+
+def _get_tag_schema_response(name: str) -> str:
+    """Get schema information for a YAML custom tag.
+
+    Parameters
+    ----------
+    name : str
+        Tag name (e.g., "!py" or "!include")
+
+    Returns
+    -------
+    str
+        JSON string with tag schema information
+    """
+    try:
+        # Normalize tag name (add ! prefix if missing)
+        tag_name = name if name.startswith("!") else f"!{name}"
+
+        schema = get_tag_schema(tag_name)
+
+        # Generate YAML examples based on tag type
+        yaml_examples: dict[str, str] = {
+            "!py": """body: !py |
+  async def process(item, index, state, **ports):
+      '''Process an item.'''
+      return item * 2""",
+            "!include": """# Simple include:
+nodes:
+  - !include ./shared/validation_nodes.yaml
+
+# Include with variables:
+nodes:
+  - !include
+    path: ./templates/processor.yaml
+    vars:
+      node_name: custom_processor
+      timeout: 30""",
+        }
+
+        result: dict[str, Any] = {
+            "name": schema["name"],
+            "type": "tag",
+            "namespace": "core",
+            "description": schema["description"],
+            "schema": schema.get("input_schema", {}),
+            "output": schema.get("output", {}),
+            "documentation": schema.get("documentation", ""),
+            "syntax": schema.get("syntax", []),
+            "yaml_example": yaml_examples.get(tag_name, ""),
+        }
+
+        # Add security warning if present
+        if "security_warning" in schema:
+            result["security_warning"] = schema["security_warning"]
+
+        return json.dumps(result, indent=2)
+
+    except ValueError as e:
+        return json.dumps(
+            {
+                "error": str(e),
+                "component_type": "tag",
+                "name": name,
+            },
+            indent=2,
+        )
+    except Exception as e:
+        return json.dumps(
+            {
+                "error": str(e),
+                "component_type": "tag",
+                "name": name,
             },
             indent=2,
         )
@@ -1933,7 +2034,6 @@ def test_pipeline_with_mock():
 | `secret` | Secret management | `aget_secret(name)` |
 | `tool_router` | Tool execution | `acall_tool(name, args)` |
 | `observer_manager` | Event observation | `notify(event)` |
-| `policy_manager` | Policy evaluation | `evaluate(context)` |
 
 ## Best Practices
 

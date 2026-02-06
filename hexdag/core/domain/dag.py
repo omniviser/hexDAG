@@ -60,8 +60,34 @@ class NodeSpec:
     - Dependencies (explicit and computed)
     - Arbitrary metadata parameters
     - Optional conditional execution via `when` expression
+    - Retry configuration with exponential backoff
 
     Supports fluent chaining via .after() method.
+
+    Retry Configuration
+    -------------------
+    Nodes can be configured to automatically retry on failure with exponential
+    backoff. This is useful for handling transient errors like rate limits,
+    network timeouts, or temporary service unavailability.
+
+    - max_retries: Number of retry attempts (1 = no retries, 3 = two retries)
+    - retry_delay: Initial delay in seconds before first retry (default: 1.0)
+    - retry_backoff: Multiplier for exponential backoff (default: 2.0)
+    - retry_max_delay: Maximum delay cap in seconds (default: 60.0)
+
+    Example YAML configuration::
+
+        - kind: llm_node
+          metadata:
+            name: api_caller
+          spec:
+            max_retries: 3
+            retry_delay: 1.0
+            retry_backoff: 2.0
+            retry_max_delay: 30.0
+            # ... other params
+
+    This would retry with delays: 1s, 2s, 4s (capped at 30s if it exceeded).
     """
 
     name: str
@@ -72,6 +98,9 @@ class NodeSpec:
     params: dict[str, Any] = field(default_factory=dict)
     timeout: float | None = None  # Optional timeout in seconds for this node
     max_retries: int | None = None  # Optional max retries for this node (1 = no retries)
+    retry_delay: float | None = None  # Initial delay in seconds before first retry
+    retry_backoff: float | None = None  # Multiplier for exponential backoff (default: 2.0)
+    retry_max_delay: float | None = None  # Maximum delay cap in seconds (default: 60.0)
     when: str | None = None  # Optional expression to evaluate before execution
 
     def __post_init__(self) -> None:

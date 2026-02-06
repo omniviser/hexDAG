@@ -149,8 +149,8 @@ class BaseNodeFactory(ABC):
         """Extract framework-level parameters from kwargs.
 
         This method provides a single place to extract NodeSpec framework params
-        (timeout, max_retries, when) from kwargs. All node factories should use
-        this to ensure consistent handling.
+        (timeout, max_retries, retry config, when) from kwargs. All node factories
+        should use this to ensure consistent handling.
 
         Parameters
         ----------
@@ -160,21 +160,36 @@ class BaseNodeFactory(ABC):
         Returns
         -------
         dict[str, Any]
-            Dictionary with keys: timeout, max_retries, when
-            Values are None if not present in kwargs
+            Dictionary with keys: timeout, max_retries, retry_delay, retry_backoff,
+            retry_max_delay, when. Values are None if not present in kwargs.
 
         Examples
         --------
-        >>> kwargs = {"when": "status == 'active'", "timeout": 30, "other": "value"}
+        >>> kwargs = {
+        ...     "when": "status == 'active'", "timeout": 30,
+        ...     "max_retries": 3, "other": "value"
+        ... }
         >>> framework = BaseNodeFactory.extract_framework_params(kwargs)
-        >>> framework
-        {'timeout': 30, 'max_retries': None, 'when': "status == 'active'"}
+        >>> framework["timeout"]
+        30
+        >>> framework["max_retries"]
+        3
         >>> kwargs
         {'other': 'value'}
+
+        With retry backoff configuration::
+
+        >>> kwargs = {"max_retries": 3, "retry_delay": 1.0, "retry_backoff": 2.0}
+        >>> framework = BaseNodeFactory.extract_framework_params(kwargs)
+        >>> framework["retry_delay"]
+        1.0
         """
         return {
             "timeout": kwargs.pop("timeout", None),
             "max_retries": kwargs.pop("max_retries", None),
+            "retry_delay": kwargs.pop("retry_delay", None),
+            "retry_backoff": kwargs.pop("retry_backoff", None),
+            "retry_max_delay": kwargs.pop("retry_max_delay", None),
             "when": kwargs.pop("when", None),
         }
 
@@ -206,6 +221,9 @@ class BaseNodeFactory(ABC):
             params=kwargs,
             timeout=framework["timeout"],
             max_retries=framework["max_retries"],
+            retry_delay=framework["retry_delay"],
+            retry_backoff=framework["retry_backoff"],
+            retry_max_delay=framework["retry_max_delay"],
             when=framework["when"],
         )
 

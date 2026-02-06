@@ -14,7 +14,7 @@ else:
 logger = get_logger(__name__)
 
 # Port names to skip during cleanup
-MANAGER_PORT_NAMES = frozenset({"observer_manager", "policy_manager"})
+MANAGER_PORT_NAMES = frozenset({"observer_manager"})
 
 
 class AdapterLifecycleManager:

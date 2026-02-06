@@ -31,7 +31,6 @@ from hexdag.core.ports.llm import (
 )
 from hexdag.core.ports.memory import Memory
 from hexdag.core.ports.observer_manager import ObserverManagerPort
-from hexdag.core.ports.policy_manager import PolicyManagerPort
 from hexdag.core.ports.secret import SecretPort
 from hexdag.core.ports.tool_router import ToolRouter
 
@@ -51,7 +50,6 @@ __all__ = [
     "LLM",
     "Memory",
     "ObserverManagerPort",
-    "PolicyManagerPort",
     "SecretPort",
     "SupportsEmbedding",  # New - unified embedding support in LLM port
     "SupportsFunctionCalling",

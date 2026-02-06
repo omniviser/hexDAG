@@ -38,7 +38,7 @@ logger = get_logger(__name__)
 
 # Constants
 DEFAULT_SECRET_PREFIX = "secret:"  # nosec B105 - Not a password, it's a key prefix
-MANAGER_PORT_NAMES = frozenset({"observer_manager", "policy_manager"})
+MANAGER_PORT_NAMES = frozenset({"observer_manager"})
 LATENCY_PRECISION = 1
 CLEANUP_METHODS = ["aclose", "ashutdown", "cleanup"]
 

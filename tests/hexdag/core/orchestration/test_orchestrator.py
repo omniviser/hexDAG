@@ -1079,37 +1079,6 @@ class TestOrchestrator:
         assert results["node1"] == 2
 
     @pytest.mark.asyncio
-    async def test_pipeline_timeout_via_policy(self):
-        """Test that PolicyManager can set pipeline-level timeout."""
-        from hexdag.core.orchestration.events import PipelineStarted
-        from hexdag.core.orchestration.policies.models import PolicyResponse, PolicySignal
-
-        class PipelineTimeoutPolicy:
-            def __init__(self, timeout: float):
-                self.timeout = timeout
-
-            async def evaluate(self, policy_context):
-                if isinstance(policy_context.event, PipelineStarted):
-                    return PolicyResponse(
-                        signal=PolicySignal.PROCEED, data={"timeout": self.timeout}
-                    )
-                return PolicyResponse(signal=PolicySignal.PROCEED)
-
-        async def slow_task(data: str, **ports) -> str:
-            await asyncio.sleep(2)
-            return f"processed: {data}"
-
-        graph = DirectedGraph()
-        graph.add(NodeSpec(name="slow_node", fn=slow_task))
-
-        # Pipeline timeout of 1 second (task needs 2 seconds)
-        orch = Orchestrator(ports={"policy_manager": PipelineTimeoutPolicy(timeout=1.0)})
-
-        # Should timeout and return partial results (empty)
-        results = await orch.run(graph, "test_data")
-        assert results == {}
-
-    @pytest.mark.asyncio
     async def test_node_timeout_via_nodespec(self):
         """Test that NodeSpec.timeout works for individual nodes."""
 

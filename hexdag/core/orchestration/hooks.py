@@ -160,7 +160,6 @@ class PreDagHookManager:
         ports={"llm": openai, "database": postgres},
         context=context,
         observer_manager=observer,
-        policy_manager=policy,
         pipeline_name="my_pipeline"
         )
     """
@@ -283,7 +282,6 @@ class PostDagHookManager:
         ports=ports,
         context=context,
         observer_manager=observer,
-        policy_manager=policy,
         pipeline_name="my_pipeline",
         pipeline_status="success",
         node_results=results,

@@ -2,14 +2,12 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
-from hexdag.builtin.adapters.local import LocalObserverManager, LocalPolicyManager
+from hexdag.builtin.adapters.local import LocalObserverManager
 from hexdag.core.orchestration.events.decorators import (
-    EVENT_METADATA_ATTR,
-    control_handler,
     observer,
 )
 from hexdag.core.orchestration.events.events import (
@@ -25,7 +23,6 @@ from hexdag.core.orchestration.events.events import (
     WaveCompleted,
     WaveStarted,
 )
-from hexdag.core.orchestration.policies.models import PolicyContext, PolicyResponse, PolicySignal
 
 
 class TestNodeEvents:
@@ -222,84 +219,6 @@ class RecordingErrorHandler:
 
 class TestDecoratorIntegrations:
     """Tests covering function-level decorator metadata usage."""
-
-    def test_control_handler_metadata_used_by_policy_manager(self):
-        """Policy manager should respect decorator metadata when registering functions."""
-
-        events_seen: list[str] = []
-
-        @control_handler(
-            "retry_on_fail",
-            priority=10,
-            event_types={NodeFailed},
-            description="Retry when nodes fail",
-        )
-        def retry_policy(event, context) -> PolicyResponse:
-            events_seen.append(type(event).__name__)
-            return PolicyResponse(signal=PolicySignal.RETRY)
-
-        metadata = getattr(retry_policy, EVENT_METADATA_ATTR)
-        assert metadata.name == "retry_on_fail"
-        assert metadata.priority == 10
-        assert metadata.event_types == {NodeFailed}
-        assert metadata.description == "Retry when nodes fail"
-
-        manager = LocalPolicyManager()
-        subscription_id = manager.register(retry_policy)
-
-        policy = manager._subscriptions[subscription_id]
-        stored_metadata = manager._policy_metadata[policy]
-
-        assert stored_metadata["priority"] == 10
-        assert stored_metadata["name"] == "retry_on_fail"
-        assert stored_metadata["description"] == "Retry when nodes fail"
-        assert stored_metadata["event_types"] == {NodeFailed}
-        assert stored_metadata["keep_alive"] is True
-
-        context = PolicyContext(
-            event=NodeFailed(name="node", wave_index=0, error=RuntimeError("boom")),
-            dag_id="demo",
-        )
-        result = asyncio.run(policy.evaluate(context))
-
-        assert isinstance(result, PolicyResponse)
-        assert result.signal is PolicySignal.RETRY
-        assert events_seen == ["NodeFailed"]
-
-        assert manager.unsubscribe(subscription_id) is True
-
-    def test_control_handler_requires_policy_response_annotation(self):
-        """Registering a function without PolicyResponse return annotation fails."""
-
-        @control_handler("bad_return")
-        def bad_policy(event, context) -> str:
-            return "not-a-response"
-
-        manager = LocalPolicyManager()
-
-        with pytest.raises(TypeError):
-            manager.register(bad_policy)
-
-    def test_control_handler_runtime_must_return_policy_response(self):
-        """Function policies must return PolicyResponse instances at runtime."""
-
-        @control_handler("bad_runtime")
-        def bad_runtime(event, context) -> PolicyResponse:
-            return cast("PolicyResponse", "not-a-response")
-
-        manager = LocalPolicyManager()
-        subscription_id = manager.register(bad_runtime)
-        policy = manager._subscriptions[subscription_id]
-
-        context = PolicyContext(
-            event=NodeFailed(name="n", wave_index=0, error=RuntimeError()),
-            dag_id="demo",
-        )
-
-        with pytest.raises(TypeError):
-            asyncio.run(policy.evaluate(context))
-
-        assert manager.unsubscribe(subscription_id)
 
     @pytest.mark.asyncio
     async def test_observer_metadata_filters_and_respects_timeout(self):

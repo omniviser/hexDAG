@@ -57,16 +57,13 @@ class WaveExecutor:
         node_results: dict[str, Any],
         initial_input: Any,
         context: NodeExecutionContext,
-        policy_coordinator: Any,  # PolicyCoordinator
+        coordinator: Any,  # ExecutionCoordinator
         timeout: float | None,
         validate: bool,
         **kwargs: Any,
     ) -> bool:
         """Execute all waves with optional timeout."""
-        from hexdag.core.context import (
-            get_observer_manager,
-            get_policy_manager,
-        )
+        from hexdag.core.context import get_observer_manager
 
         try:
             async with asyncio.timeout(timeout):
@@ -74,12 +71,7 @@ class WaveExecutor:
                     wave_start_time = time.time()
 
                     wave_event = WaveStarted(wave_index=wave_idx, nodes=wave)
-                    await policy_coordinator.notify_observer(get_observer_manager(), wave_event)
-
-                    wave_response = await policy_coordinator.evaluate_policy(
-                        get_policy_manager(), wave_event, context, wave_index=wave_idx
-                    )
-                    policy_coordinator.check_policy_signal(wave_response, f"Wave {wave_idx}")
+                    await coordinator.notify_observer(get_observer_manager(), wave_event)
 
                     wave_results = await self._execute_wave(
                         wave=wave,
@@ -98,7 +90,7 @@ class WaveExecutor:
                         wave_index=wave_idx,
                         duration_ms=(time.time() - wave_start_time) * 1000,
                     )
-                    await policy_coordinator.notify_observer(get_observer_manager(), wave_completed)
+                    await coordinator.notify_observer(get_observer_manager(), wave_completed)
 
             return False
 

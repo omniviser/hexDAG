@@ -123,7 +123,6 @@ class TestPreDagHookManager:
         # Execute
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports=ports,
         ):
@@ -161,7 +160,6 @@ class TestPreDagHookManager:
         # Execute - should not raise
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports=ports,
         ):
@@ -195,7 +193,6 @@ class TestPreDagHookManager:
         with pytest.raises(OrchestratorError, match="Health check failed"):
             async with ExecutionContext(
                 observer_manager=None,
-                policy_manager=None,
                 run_id="test-run",
                 ports=ports,
             ):
@@ -231,7 +228,6 @@ class TestPreDagHookManager:
         # Execute
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports=ports,
         ):
@@ -271,7 +267,6 @@ class TestPreDagHookManager:
         # Execute
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={},
         ):
@@ -294,7 +289,6 @@ class TestPreDagHookManager:
         ports = {
             "llm": adapter,
             "observer_manager": "should_be_skipped",
-            "policy_manager": "should_be_skipped",
         }
 
         config = HookConfig(enable_health_checks=True)
@@ -303,7 +297,6 @@ class TestPreDagHookManager:
         # Execute
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports=ports,
         ):
@@ -340,7 +333,6 @@ class TestPostDagHookManager:
         # Execute
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports=ports,
         ):
@@ -372,7 +364,6 @@ class TestPostDagHookManager:
         # Execute with failed status
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={"llm": adapter},
         ):
@@ -403,7 +394,6 @@ class TestPostDagHookManager:
         # Execute with success status
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={"llm": adapter},
         ):
@@ -440,7 +430,6 @@ class TestPostDagHookManager:
         # Execute
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={},
         ):
@@ -489,7 +478,6 @@ class TestPostHookCleanupRobustness:
         # Execute: First inject secrets, then try cleanup with failing hook
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={"memory": mock_memory, "secret": mock_secret},
         ):
@@ -552,7 +540,6 @@ class TestPostHookCleanupRobustness:
 
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={"memory": BrokenMemory(), "test_adapter": mock_adapter},
         ):
@@ -602,7 +589,6 @@ class TestPostHookCleanupRobustness:
 
         async with ExecutionContext(
             observer_manager=None,
-            policy_manager=None,
             run_id="test-run",
             ports={"memory": mock_memory, "secret": mock_secret, "adapter": mock_adapter},
         ):

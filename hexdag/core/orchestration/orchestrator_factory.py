@@ -140,14 +140,7 @@ class OrchestratorFactory:
             if additional_ports:
                 global_ports.update(additional_ports)
 
-        # Step 2: Instantiate policies from policy specs
-        policies = self._instantiate_policies(pipeline_config.policies)
-
-        # Step 3: Subscribe policies to policy manager if available
-        if "policy_manager" in global_ports and policies:
-            self._subscribe_policies_to_manager(global_ports["policy_manager"], policies)
-
-        # Step 4: Create orchestrator with configured ports
+        # Step 2: Create orchestrator with configured ports
         orchestrator = Orchestrator(
             max_concurrent_nodes=max_concurrent_nodes,
             ports=ports_config if ports_config else global_ports,
@@ -156,9 +149,8 @@ class OrchestratorFactory:
         )
 
         logger.info(
-            "✅ Orchestrator created with {} ports and {} policies",
+            "✅ Orchestrator created with {} ports",
             len(global_ports),
-            len(policies),
         )
 
         return orchestrator
@@ -194,61 +186,6 @@ class OrchestratorFactory:
                 raise
 
         return ports
-
-    def _instantiate_policies(self, policy_specs: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        """Instantiate policy instances from policy specifications.
-
-        Parameters
-        ----------
-        policy_specs : dict[str, dict[str, Any]]
-            Map of policy_name -> policy dict spec
-
-        Returns
-        -------
-        dict[str, Any]
-            Map of policy_name -> policy_instance
-        """
-        policies = {}
-
-        for policy_name, policy_spec in policy_specs.items():
-            try:
-                logger.debug("Instantiating policy: {} = {}", policy_name, policy_spec)
-                policy = self.component_instantiator.instantiate_policy(policy_spec, policy_name)
-                policies[policy_name] = policy
-                logger.debug("✅ Policy instantiated: {}", policy_name)
-            except Exception as e:
-                logger.error(
-                    "Failed to instantiate policy '{}' from spec '{}': {}",
-                    policy_name,
-                    policy_spec,
-                    e,
-                )
-                raise
-
-        return policies
-
-    def _subscribe_policies_to_manager(self, policy_manager: Any, policies: dict[str, Any]) -> None:
-        """Subscribe policy instances to the policy manager.
-
-        Parameters
-        ----------
-        policy_manager : Any
-            Policy manager port instance
-        policies : dict[str, Any]
-            Map of policy_name -> policy_instance
-        """
-        if not hasattr(policy_manager, "subscribe"):
-            logger.warning(
-                "Policy manager does not have 'subscribe' method, skipping policy subscription"
-            )
-            return
-
-        for policy_name, policy in policies.items():
-            try:
-                policy_manager.subscribe(policy)
-                logger.debug("Subscribed policy '{}' to policy manager", policy_name)
-            except Exception as e:
-                logger.warning("Failed to subscribe policy '{}': {}", policy_name, e)
 
     def _build_ports_configuration(
         self, pipeline_config: PipelineConfig, additional_ports: dict[str, Any] | None
