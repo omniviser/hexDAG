@@ -92,7 +92,7 @@ export default function Canvas({ onNodeSelect, selectedNodeId }: CanvasProps) {
         setTimeout(() => {
           const currentNodes = useStudioStore.getState().nodes
           const deletedIds = deletions.map((d) => d.id)
-          const newNodes = currentNodes.filter((n) => !deletedIds.includes(n.id))
+          const newNodes = currentNodes.filter((n: HexdagNodeType) => !deletedIds.includes(n.id))
           setStoreNodes(newNodes)
           syncCanvasToYaml()
 

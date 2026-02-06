@@ -247,7 +247,7 @@ function PluginCard({
                 Adapters ({plugin.adapters.length})
               </h4>
               <div className="grid grid-cols-2 gap-2">
-                {plugin.adapters.map((adapter, idx) => {
+                {plugin.adapters.map((adapter: PluginAdapter, idx: number) => {
                   const Icon = getAdapterIcon(adapter)
                   const color = getPortTypeColor(adapter.port_type)
                   return (
@@ -300,7 +300,7 @@ function PluginCard({
                 Nodes ({plugin.nodes.length})
               </h4>
               <div className="grid grid-cols-2 gap-2">
-                {plugin.nodes.map((node, idx) => (
+                {plugin.nodes.map((node: PluginNode, idx: number) => (
                   <NodeCard key={idx} node={node} />
                 ))}
               </div>

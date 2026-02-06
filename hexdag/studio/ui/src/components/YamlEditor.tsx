@@ -3,6 +3,7 @@ import Editor, { type OnMount, type OnChange } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 import { useStudioStore } from '../lib/store'
 import { validateYaml } from '../lib/api'
+import type { ValidationError } from '../types'
 
 export default function YamlEditor() {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -124,7 +125,7 @@ export default function YamlEditor() {
       if (monacoRef.current && editorRef.current) {
         const model = editorRef.current.getModel()
         if (model) {
-          const markers: Monaco.editor.IMarkerData[] = result.errors.map((err) => ({
+          const markers: Monaco.editor.IMarkerData[] = result.errors.map((err: ValidationError) => ({
             severity: err.severity === 'error'
               ? monacoRef.current!.MarkerSeverity.Error
               : err.severity === 'warning'
