@@ -56,9 +56,9 @@ jobs:
         run: |
           echo "Current version: $(cz version)"
           if [ "${{ inputs.release_type }}" == "dev" ]; then
-            cz bump --yes --changelog --devrelease 1
+            cz bump --yes --devrelease 1
           else
-            cz bump --yes --changelog
+            cz bump --yes
           fi
           echo "New version: $(cz version)"
 
