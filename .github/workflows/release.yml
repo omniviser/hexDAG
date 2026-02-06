@@ -28,7 +28,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     environment:
-      name: ${{ inputs.publish_to == 'testpypi' && 'hexDAGtest' || 'pypi' }}
+      name: ${{ inputs.publish_to }}
       url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag/' || 'https://test.pypi.org/project/hexdag/' }}
 
     steps:
@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "Current version: $(cz version)"
           if [ "${{ inputs.release_type }}" == "dev" ]; then
-            cz bump --yes --changelog --prerelease dev
+            cz bump --yes --changelog --devrelease 1
           else
             cz bump --yes --changelog
           fi
