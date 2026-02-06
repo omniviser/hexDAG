@@ -1,0 +1,87 @@
+name: Release to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev      # 0.5.0 -> 0.5.1.dev0 or 0.5.1.dev0 -> 0.5.1.dev1
+          - stable   # 0.5.1.dev2 -> 0.5.1
+      publish_to:
+        description: 'Publish to'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi  # Test first
+          - pypi      # Production
+
+permissions:
+  contents: write  # For pushing tags
+  id-token: write  # For trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.publish_to == 'testpypi' && 'hexDAGtest' || 'pypi' }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag/' || 'https://test.pypi.org/project/hexdag/' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install commitizen build
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: |
+          echo "Current version: $(cz version)"
+          if [ "${{ inputs.release_type }}" == "dev" ]; then
+            cz bump --yes --changelog --prerelease dev
+          else
+            cz bump --yes --changelog
+          fi
+          echo "New version: $(cz version)"
+
+      - name: Get new version
+        id: version
+        run: echo "version=$(cz version)" >> $GITHUB_OUTPUT
+
+      - name: Build package
+        run: |
+          rm -rf dist/ build/
+          python -m build
+
+      - name: Publish to Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Publish to PyPI
+        if: inputs.publish_to == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Push version bump and tag
+        run: |
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin v${{ steps.version.outputs.version }}
