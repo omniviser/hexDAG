@@ -7,7 +7,6 @@ from hexdag.core.context.execution_context import (
     get_current_node_name,
     get_node_results,
     get_observer_manager,
-    get_policy_manager,
     get_port,
     get_ports,
     get_run_id,
@@ -15,7 +14,6 @@ from hexdag.core.context.execution_context import (
     set_current_node_name,
     set_node_results,
     set_observer_manager,
-    set_policy_manager,
     set_ports,
     set_run_id,
 )
@@ -27,7 +25,6 @@ __all__ = [
     "get_current_node_name",
     "get_node_results",
     "get_observer_manager",
-    "get_policy_manager",
     "get_port",
     "get_ports",
     "get_run_id",
@@ -35,7 +32,6 @@ __all__ = [
     "set_current_node_name",
     "set_node_results",
     "set_observer_manager",
-    "set_policy_manager",
     "set_ports",
     "set_run_id",
 ]

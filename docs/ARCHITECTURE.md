@@ -110,15 +110,13 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 │  │  ├──────────────────────────────────────────────────────┤  │     │
 │  │  │  Execution Context Management                        │  │     │
 │  │  │  ├─ Ports Configuration                              │  │     │
-│  │  │  ├─ Event System                                     │  │     │
-│  │  │  ├─ Policy Coordination                              │  │     │
+│  │  │  ├─ Event System (Observer notifications)            │  │     │
 │  │  │  └─ Resource Management                              │  │     │
 │  │  │                                                       │  │     │
 │  │  │  Wave Execution Pipeline                             │  │     │
 │  │  │  ├─ Pre-DAG Hooks                                    │  │     │
 │  │  │  ├─ Wave-by-Wave Execution                           │  │     │
 │  │  │  │   ├─ InputMapper → Resolve dependencies           │  │     │
-│  │  │  │   ├─ PolicyCoordinator → Policy evaluation        │  │     │
 │  │  │  │   ├─ Parallel Execution (asyncio.gather)          │  │     │
 │  │  │  │   └─ Result Collection                            │  │     │
 │  │  │  └─ Post-DAG Hooks                                   │  │     │
@@ -144,9 +142,7 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 │  │  ├──────────────────────────────────────────────────────┤  │     │
 │  │  │  1. Input Resolution                                 │  │     │
 │  │  │     └─ InputMapper resolves {{dep.field}} refs       │  │     │
-│  │  │  2. Policy Pre-Checks                                │  │     │
-│  │  │     └─ PolicyCoordinator evaluates policies          │  │     │
-│  │  │  3. Input Validation                                 │  │     │
+│  │  │  2. Input Validation                                 │  │     │
 │  │  │     └─ Pydantic validation via in_model              │  │     │
 │  │  │  4. Function Execution                               │  │     │
 │  │  │     └─ async fn(ExecutionContext) → result           │  │     │
@@ -195,7 +191,7 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 │  │  │  ├─ PipelineStarted / PipelineCompleted             │  │     │
 │  │  │  ├─ WaveStarted / WaveCompleted                      │  │     │
 │  │  │  ├─ NodeStarted / NodeCompleted / NodeFailed         │  │     │
-│  │  │  ├─ ValidationError / PolicyEvaluated                │  │     │
+│  │  │  ├─ ValidationError                                  │  │     │
 │  │  │  └─ Custom Events                                    │  │     │
 │  │  │                                                       │  │     │
 │  │  │  Observers:                                           │  │     │
@@ -230,7 +226,7 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 class ComponentMetadata:
     """Metadata for a registered component."""
     name: str                    # Unique identifier
-    component_type: ComponentType  # node, adapter, tool, policy, observer
+    component_type: ComponentType  # node, adapter, tool, observer
     factory: InstanceFactory     # Callable to create instances
     namespace: str               # Logical grouping (core, plugin, etc.)
     description: str | None      # Human-readable description
@@ -239,7 +235,7 @@ class ComponentMetadata:
 
 **Registration Pattern**:
 ```python
-from hexdag.core.registry import adapter, node, tool, policy
+from hexdag.core.registry import adapter, node, tool
 
 @adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
 class OpenAIAdapter:
@@ -411,7 +407,6 @@ spec:
 │  │  • Create ExecutionContext                          │     │
 │  │  • Initialize Ports (LLM, Memory, etc)              │     │
 │  │  • Setup Event System                               │     │
-│  │  • Initialize Policy Coordinator                    │     │
 │  │  • Call adapter.asetup() for all adapters           │     │
 │  └─────────────────────────────────────────────────────┘     │
 │                        ↓                                      │
@@ -436,26 +431,22 @@ spec:
 │  │    │        • Resolve {{dep.field}} refs       │     │     │
 │  │    │        • Merge with node params           │     │     │
 │  │    │                                           │     │     │
-│  │    │  b. Policy Pre-Evaluation                 │     │     │
-│  │    │     └─ PolicyCoordinator.evaluate()       │     │     │
-│  │    │        • Can skip or modify execution     │     │     │
+│  │    │  b. Emit NodeStarted event                │     │     │
 │  │    │                                           │     │     │
-│  │    │  c. Emit NodeStarted event                │     │     │
-│  │    │                                           │     │     │
-│  │    │  d. Input Validation                      │     │     │
+│  │    │  c. Input Validation                      │     │     │
 │  │    │     └─ node.validate_input(data)          │     │     │
 │  │    │        • Pydantic model validation        │     │     │
 │  │    │                                           │     │     │
-│  │    │  e. Function Execution                    │     │     │
+│  │    │  d. Function Execution                    │     │     │
 │  │    │     └─ await node.fn(context, **inputs)   │     │     │
 │  │    │        • Timeout handling                 │     │     │
 │  │    │        • Error capture                    │     │     │
 │  │    │                                           │     │     │
-│  │    │  f. Output Validation                     │     │     │
+│  │    │  e. Output Validation                     │     │     │
 │  │    │     └─ node.validate_output(result)       │     │     │
 │  │    │        • Pydantic model validation        │     │     │
 │  │    │                                           │     │     │
-│  │    │  g. Result Storage                        │     │     │
+│  │    │  f. Result Storage                        │     │     │
 │  │    │     └─ context.set_result(node, result)   │     │     │
 │  │    │                                           │     │     │
 │  │    │  h. Emit NodeCompleted event              │     │     │
@@ -486,9 +477,9 @@ spec:
 **Key Orchestrator Components**:
 
 1. **InputMapper**: Resolves template expressions like `{{dep.field}}`
-2. **PolicyCoordinator**: Evaluates policies (retry, timeout, circuit breaker)
-3. **ExecutionContext**: Thread-safe context for ports, results, and metadata
-4. **WaveExecutor**: Manages parallel execution within a wave
+2. **ExecutionContext**: Thread-safe context for ports, results, and metadata
+3. **WaveExecutor**: Manages parallel execution within a wave
+4. **ExecutionCoordinator**: Handles observer notifications and input mapping
 5. **EventManager**: Emits events for observability
 
 ### 5. Ports & Adapters (Hexagonal Architecture)
@@ -642,9 +633,6 @@ NodeFailed(node_name, error, traceback)
 
 # Validation events
 ValidationError(node_name, error_details)
-
-# Policy events
-PolicyEvaluated(policy_name, decision, context)
 ```
 
 ---
@@ -802,9 +790,6 @@ PolicyEvaluated(policy_name, decision, context)
 │     │  ├─ registry.get(adapter_name) → Get adapter            │
 │     │  ├─ adapter(**params) → Create instance                 │
 │     │  └─ Store in ports dict                                 │
-│     ├─ For each policy in config.policies:                    │
-│     │  ├─ registry.get(policy_name) → Get policy              │
-│     │  └─ Store in policy coordinator                         │
 │     └─ Setup event system                                     │
 │                                                               │
 │  4. Orchestrator.run(graph, input_data)                       │
@@ -982,29 +967,7 @@ class PerformanceMonitor:
             await metrics_client.record(node_name, duration)
 ```
 
-### 5. Custom Policies
-
-```python
-from hexdag.core.registry import policy
-
-@policy(name="rate_limit", description="Rate limiting policy")
-class RateLimitPolicy:
-    def __init__(self, max_requests: int = 100, window: int = 60):
-        self.max_requests = max_requests
-        self.window = window
-
-    async def evaluate(self, context) -> PolicyResponse:
-        # Check rate limits
-        if await rate_limiter.is_allowed(context.node_name):
-            return PolicyResponse(allowed=True)
-        else:
-            return PolicyResponse(
-                allowed=False,
-                reason="Rate limit exceeded"
-            )
-```
-
-### 6. Custom Hooks
+### 5. Custom Hooks
 
 ```python
 # Pre-DAG hook to validate input

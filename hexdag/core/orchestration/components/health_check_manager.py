@@ -17,7 +17,7 @@ from hexdag.core.protocols import HealthCheckable
 logger = get_logger(__name__)
 
 # Constants
-MANAGER_PORT_NAMES = frozenset({"observer_manager", "policy_manager"})
+MANAGER_PORT_NAMES = frozenset({"observer_manager"})
 LATENCY_PRECISION = 1  # Decimal places for latency display
 
 

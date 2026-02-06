@@ -30,7 +30,6 @@ from hexdag.builtin.nodes import (
     ReActAgentNode,
     ToolCallNode,
 )
-from hexdag.core.orchestration.policies.models import PolicySignal
 from hexdag.core.schema.generator import SchemaGenerator
 
 # Add project root to path for imports
@@ -296,62 +295,6 @@ def generate_pipeline_schema() -> dict[str, Any]:
     return schema
 
 
-def generate_policy_schema() -> dict[str, Any]:
-    """Generate JSON Schema for policy configuration.
-
-    Returns
-    -------
-    dict[str, Any]
-        JSON Schema for policy files
-    """
-    schema: dict[str, Any] = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "title": "hexDAG Policy Configuration",
-        "description": "Policy configuration for execution control and error handling",
-        "type": "object",
-        "properties": {
-            "signal": {
-                "type": "string",
-                "enum": [s.value for s in PolicySignal],
-                "description": "Policy decision signal",
-            },
-            "context": {
-                "type": "object",
-                "description": "Policy evaluation context",
-                "properties": {
-                    "event": {
-                        "type": "object",
-                        "description": "Event that triggered evaluation",
-                    },
-                    "dag_id": {"type": "string", "description": "DAG identifier"},
-                    "node_id": {
-                        "type": ["string", "null"],
-                        "description": "Current node (if applicable)",
-                    },
-                    "wave_index": {
-                        "type": "integer",
-                        "description": "Current wave index",
-                    },
-                    "attempt": {
-                        "type": "integer",
-                        "description": "Attempt number (1-based)",
-                    },
-                    "error": {
-                        "type": ["object", "null"],
-                        "description": "Exception details (if any)",
-                    },
-                    "metadata": {
-                        "type": ["object", "null"],
-                        "description": "Additional context",
-                    },
-                },
-            },
-        },
-    }
-
-    return schema
-
-
 def generate_hexdag_config_schema() -> dict[str, Any]:
     """Generate JSON Schema for [tool.hexdag] configuration in pyproject.toml.
 
@@ -434,16 +377,6 @@ def main() -> int:
         print(f"  → Included {node_count} node types")
     except Exception as e:
         print(f"Error generating pipeline schema: {e}", file=sys.stderr)
-        return 1
-
-    # Generate policy schema
-    try:
-        policy_schema = generate_policy_schema()
-        save_schema(policy_schema, "policy-schema.json", format="json")
-        save_schema(policy_schema, "policy-schema.yaml", format="yaml")
-        print(f"  → Included {len(PolicySignal)} policy signals")
-    except Exception as e:
-        print(f"Error generating policy schema: {e}", file=sys.stderr)
         return 1
 
     # Generate hexDAG config schema

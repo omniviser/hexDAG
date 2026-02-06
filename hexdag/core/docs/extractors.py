@@ -371,8 +371,6 @@ class DocExtractor:
             return "embedding"
         if "observer" in name_lower:
             return "observer_manager"
-        if "policy" in name_lower:
-            return "policy_manager"
 
         # Check implemented protocols via base classes
         for base in cls.__mro__:

@@ -13,10 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from hexdag.core.ports.observer_manager import ObserverManagerPort
-    from hexdag.core.ports.policy_manager import PolicyManagerPort
 else:
     ObserverManagerPort = Any
-    PolicyManagerPort = Any
 
 from hexdag.core.context import (
     ExecutionContext,
@@ -53,7 +51,6 @@ from .events import (
     PipelineCompleted,
     PipelineStarted,
 )
-from .policies.models import PolicyResponse
 
 logger = get_logger(__name__)
 
@@ -256,24 +253,6 @@ class Orchestrator:
         """Notify observer if it exists (delegates to ExecutionCoordinator)."""
         await self._execution_coordinator.notify_observer(observer_manager, event)
 
-    async def _evaluate_policy(
-        self,
-        policy_manager: PolicyManagerPort | None,
-        event: Any,
-        context: NodeExecutionContext,
-        node_id: str | None = None,
-        wave_index: int | None = None,
-        attempt: int = 1,
-    ) -> PolicyResponse:
-        """Evaluate policy and create context (delegates to ExecutionCoordinator)."""
-        return await self._execution_coordinator.evaluate_policy(
-            policy_manager, event, context, node_id, wave_index, attempt
-        )
-
-    def _check_policy_signal(self, response: PolicyResponse, context: str) -> None:
-        """Check policy signal and raise error if not PROCEED."""
-        self._execution_coordinator.check_policy_signal(response, context)
-
     def _validate_port_types(self, ports: dict[str, Any]) -> None:
         """Validate that orchestrator ports match expected types.
 
@@ -284,7 +263,7 @@ class Orchestrator:
         Notes
         -----
         This provides helpful warnings if ports don't match expected protocols.
-        Currently checks observer_manager and policy_manager.
+        Currently checks observer_manager.
         """
         # Check observer_manager if provided
         if "observer_manager" in ports:
@@ -293,15 +272,6 @@ class Orchestrator:
                 logger.warning(
                     f"Port 'observer_manager' doesn't have 'notify' method. "
                     f"Expected ObserverManagerPort, got {type(obs).__name__}"
-                )
-
-        # Check policy_manager if provided
-        if "policy_manager" in ports:
-            policy = ports["policy_manager"]
-            if not hasattr(policy, "evaluate"):
-                logger.warning(
-                    f"Port 'policy_manager' doesn't have 'evaluate' method. "
-                    f"Expected PolicyManagerPort, got {type(policy).__name__}"
                 )
 
     def _validate_required_ports(
@@ -381,7 +351,6 @@ class Orchestrator:
                 .with_llm(OpenAIAdapter())
                 .with_database(PostgresAdapter())
                 .with_observer_manager(LocalObserverManager())
-                .with_policy_manager(LocalPolicyManager())
             )
             ```
         """
@@ -407,10 +376,6 @@ class Orchestrator:
         Supports both traditional dictionary-based ports and the new PortsBuilder
         for additional_ports parameter. When using PortsBuilder, it will be
         automatically converted to a dictionary before merging with base ports.
-
-        Timeout behavior is controlled by PolicyManager. Policies can provide:
-        - `timeout` in response.data dict for pipeline-level timeout
-        - Checked at PipelineStarted event evaluation
 
         Args
         ----
@@ -509,7 +474,6 @@ class Orchestrator:
         pipeline_start_time = time.time()
 
         observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
-        policy_manager: PolicyManagerPort | None = all_ports.get("policy_manager")
 
         wrapped_ports = wrap_ports_with_observability(all_ports)
 
@@ -519,7 +483,6 @@ class Orchestrator:
 
         async with ExecutionContext(
             observer_manager=observer_manager,
-            policy_manager=policy_manager,
             run_id=run_id,
             ports=wrapped_ports,
         ):
@@ -533,7 +496,7 @@ class Orchestrator:
             )
             context.metadata["pre_dag_hooks"] = pre_hook_results
 
-            # Fire pipeline started event and check control
+            # Fire pipeline started event
             event = PipelineStarted(
                 name=pipeline_name,
                 total_waves=len(waves),
@@ -541,14 +504,7 @@ class Orchestrator:
             )
             await self._notify_observer(observer_manager, event)
 
-            # Evaluate policy for pipeline start - policy can provide timeout
-            policy_response = await self._evaluate_policy(policy_manager, event, context)
-            self._check_policy_signal(policy_response, "Pipeline start")
-
             timeout = None
-            if policy_response.data and isinstance(policy_response.data, dict):
-                timeout = policy_response.data.get("timeout")
-
             pipeline_status: PipelineStatus = PipelineStatus.SUCCESS
             pipeline_error: BaseException | None = None
             cancelled = False

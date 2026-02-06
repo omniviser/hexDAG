@@ -464,25 +464,6 @@ class MyNode(BaseNodeFactory):
         ...
 ```
 
-### Creating Policies
-
-**✅ CORRECT:**
-```python
-from hexdag.core.registry import policy
-
-@policy(name="retry_policy", description="Retry failed operations")
-class RetryPolicy:
-    """Simple policy - no Config class needed."""
-
-    def __init__(self, max_retries: int = 3, backoff: float = 1.0):
-        self.max_retries = max_retries
-        self.backoff = backoff
-
-    async def evaluate(self, context):
-        # Use self.max_retries, self.backoff
-        ...
-```
-
 ### Creating Tools
 
 **✅ CORRECT:**
@@ -633,10 +614,6 @@ builder.preprocess_plugins[1] = EnvironmentVariablePlugin(defer_secrets=False)
 **Nodes:**
 - Use `@node` decorator
 - Parameters passed directly from YAML to `__call__` method
-
-**Policies:**
-- Use `@policy` decorator
-- Simple `__init__` with typed parameters
 
 **Tools:**
 - Use typed function signatures

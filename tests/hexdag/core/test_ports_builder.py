@@ -55,17 +55,6 @@ class TestPortsBuilder:
         assert builder.has("observer_manager")
         assert builder.get("observer_manager") is mock_observer
 
-    def test_with_policy_manager(self):
-        """Test adding policy manager."""
-        mock_policy = Mock()
-        builder = PortsBuilder()
-
-        result = builder.with_policy_manager(mock_policy)
-
-        assert result is builder
-        assert builder.has("policy_manager")
-        assert builder.get("policy_manager") is mock_policy
-
     def test_with_memory(self):
         """Test adding memory port."""
         mock_memory = Mock()
@@ -386,9 +375,9 @@ class TestPortsBuilderEnhanced:
 
         builder = PortsBuilder().with_defaults().for_type("agent", llm=openai_llm)
 
-        # Should have default observer_manager and policy_manager from with_defaults()
+        # Should have default observer_manager from with_defaults()
         ports_dict = builder.build()
-        assert "observer_manager" in ports_dict or "policy_manager" in ports_dict
+        assert "observer_manager" in ports_dict
 
         # Agent nodes should get OpenAI override
         config = builder.build_configuration()

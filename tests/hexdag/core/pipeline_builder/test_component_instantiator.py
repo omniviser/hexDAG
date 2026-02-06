@@ -160,63 +160,6 @@ class TestInstantiateAdapter:
         assert adapter is not None
 
 
-class TestInstantiatePolicy:
-    """Tests for instantiate_policy method."""
-
-    def setup_method(self) -> None:
-        """Set up test fixtures."""
-        self.instantiator = ComponentInstantiator()
-
-    def test_instantiate_retry_policy(self) -> None:
-        """Test instantiating RetryPolicy."""
-        spec = {
-            "name": "hexdag.builtin.policies.execution_policies.RetryPolicy",
-            "params": {"max_retries": 5},
-        }
-        policy = self.instantiator.instantiate_policy(spec, policy_name="retry")
-        assert policy is not None
-        assert policy.max_retries == 5
-
-    def test_instantiate_timeout_policy(self) -> None:
-        """Test instantiating TimeoutPolicy."""
-        spec = {
-            "name": "hexdag.builtin.policies.execution_policies.TimeoutPolicy",
-            "params": {"timeout_seconds": 60.0},
-        }
-        policy = self.instantiator.instantiate_policy(spec, policy_name="timeout")
-        assert policy is not None
-        assert policy.timeout_seconds == 60.0
-
-    def test_instantiate_policy_with_defaults(self) -> None:
-        """Test instantiating policy without custom params."""
-        spec = {"name": "hexdag.builtin.policies.execution_policies.RetryPolicy"}
-        policy = self.instantiator.instantiate_policy(spec, policy_name="retry")
-        assert policy is not None
-
-    def test_instantiate_nonexistent_policy_raises_error(self) -> None:
-        """Test that nonexistent policy raises error."""
-        spec = {"name": "nonexistent.module.Policy"}
-        with pytest.raises(ComponentInstantiationError) as exc_info:
-            self.instantiator.instantiate_policy(spec, policy_name="test")
-        assert "could not be resolved" in str(exc_info.value)
-
-    def test_instantiate_policy_with_extra_params_accepted(self) -> None:
-        """Test that extra params are accepted (passed as kwargs)."""
-        spec = {
-            "name": "hexdag.builtin.policies.execution_policies.RetryPolicy",
-            "params": {"extra_param": True},
-        }
-        # RetryPolicy accepts **kwargs, so extra params don't raise
-        policy = self.instantiator.instantiate_policy(spec, policy_name="retry")
-        assert policy is not None
-
-    def test_instantiate_policy_without_policy_name(self) -> None:
-        """Test instantiating policy without policy_name."""
-        spec = {"name": "hexdag.builtin.policies.execution_policies.RetryPolicy"}
-        policy = self.instantiator.instantiate_policy(spec)
-        assert policy is not None
-
-
 class TestInstantiatePorts:
     """Tests for instantiate_ports method."""
 
@@ -251,43 +194,6 @@ class TestInstantiatePorts:
             self.instantiator.instantiate_ports(ports_config)
 
 
-class TestInstantiatePolicies:
-    """Tests for instantiate_policies method."""
-
-    def setup_method(self) -> None:
-        """Set up test fixtures."""
-        self.instantiator = ComponentInstantiator()
-
-    def test_instantiate_multiple_policies(self) -> None:
-        """Test instantiating multiple policies."""
-        policies_config = {
-            "retry": {
-                "name": "hexdag.builtin.policies.execution_policies.RetryPolicy",
-                "params": {"max_retries": 3},
-            },
-            "timeout": {
-                "name": "hexdag.builtin.policies.execution_policies.TimeoutPolicy",
-                "params": {"timeout_seconds": 60.0},
-            },
-        }
-        policies = self.instantiator.instantiate_policies(policies_config)
-        assert len(policies) == 2
-
-    def test_instantiate_empty_policies(self) -> None:
-        """Test instantiating empty policies config."""
-        policies = self.instantiator.instantiate_policies({})
-        assert policies == []
-
-    def test_instantiate_policies_with_one_failure_raises_error(self) -> None:
-        """Test that one failed policy raises error."""
-        policies_config = {
-            "good": {"name": "hexdag.builtin.policies.execution_policies.RetryPolicy"},
-            "bad": {"name": "nonexistent.Policy"},
-        }
-        with pytest.raises(ComponentInstantiationError):
-            self.instantiator.instantiate_policies(policies_config)
-
-
 class TestComponentInstantiatorIntegration:
     """Integration tests for ComponentInstantiator."""
 
@@ -307,18 +213,10 @@ class TestComponentInstantiatorIntegration:
                 "config": {},
             },
         }
-        policies_config = {
-            "retry": {
-                "name": "hexdag.builtin.policies.execution_policies.RetryPolicy",
-                "params": {"max_retries": 3},
-            },
-        }
 
         ports = self.instantiator.instantiate_ports(ports_config)
-        policies = self.instantiator.instantiate_policies(policies_config)
 
         assert len(ports) == 2
-        assert len(policies) == 1
         assert "llm" in ports
         assert "memory" in ports
 

@@ -293,11 +293,9 @@ class PgVectorAdapter:
             filter_params = []
             if filters:
                 conditions = []
-                param_idx = 2  # $1 is the query vector
-                for key, value in filters.items():
+                for param_idx, (key, value) in enumerate(filters.items(), start=2):
                     conditions.append(f"metadata->>'{key}' = ${param_idx}")
                     filter_params.append(value)
-                    param_idx += 1
                 where_clause = "WHERE " + " AND ".join(conditions)
 
             # Build final query

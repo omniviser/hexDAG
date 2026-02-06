@@ -92,12 +92,6 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `LocalObserverManager` | Local standalone implementation of observer manager. |
 
-### policy_manager
-
-| Adapter | Description |
-|---------|-------------|
-| `LocalPolicyManager` | Local policy manager using WeakSet and heapq for efficient m... |
-
 ### secret
 
 | Adapter | Description |

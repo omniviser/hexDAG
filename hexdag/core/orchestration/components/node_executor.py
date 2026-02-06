@@ -11,14 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from hexdag.core.ports.observer_manager import ObserverManagerPort
-    from hexdag.core.ports.policy_manager import PolicyManagerPort
 else:
     ObserverManagerPort = Any
-    PolicyManagerPort = Any
 
-from hexdag.core.context import get_observer_manager, get_policy_manager, set_current_node_name
+from hexdag.core.context import get_observer_manager, set_current_node_name
 from hexdag.core.domain.dag import NodeSpec, ValidationError
-from hexdag.core.exceptions import OrchestratorError
 from hexdag.core.expression_parser import ExpressionError, compile_expression
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
@@ -30,7 +27,6 @@ from hexdag.core.orchestration.events import (
     NodeStarted,
 )
 from hexdag.core.orchestration.models import NodeExecutionContext
-from hexdag.core.orchestration.policies.models import PolicySignal
 
 logger = get_logger(__name__)
 
@@ -60,8 +56,8 @@ class NodeExecutor:
 
     - **Input validation**: Validates input data using node's input model
     - **Event emission**: Fires NodeStarted, NodeCompleted, NodeFailed events
-    - **Policy evaluation**: Checks policies before and after execution
     - **Timeout handling**: Enforces per-node and global timeouts
+    - **Retry logic**: Exponential backoff retry on failure
     - **Output validation**: Validates output data using node's output model
     - **Error handling**: Converts exceptions to NodeExecutionError
 
@@ -77,11 +73,8 @@ class NodeExecutor:
             node_name="my_node",
             node_spec=NodeSpec("my_node", my_function),
             node_input={"data": "value"},
-            ports={"llm": llm_adapter},
             context=execution_context,
-            policy_coordinator=coordinator,
-            observer_manager=observer,
-            policy_manager=policy,
+            coordinator=coordinator,
             wave_index=0
         )
     """
@@ -122,19 +115,40 @@ class NodeExecutor:
         node_spec: NodeSpec,
         node_input: Any,
         context: NodeExecutionContext,
-        policy_coordinator: ExecutionCoordinator,
+        coordinator: ExecutionCoordinator,
         wave_index: int = 0,
         validate: bool = True,
         **kwargs: Any,
     ) -> Any:
         """Execute a single node with full lifecycle management.
-        ...     wave_index=1
-        ... )
+
+        Parameters
+        ----------
+        node_name : str
+            Name of the node being executed.
+        node_spec : NodeSpec
+            Node specification containing function and validation.
+        node_input : Any
+            Input data for the node.
+        context : NodeExecutionContext
+            Execution context with ports and configuration.
+        coordinator : ExecutionCoordinator
+            Coordinator for observer notifications.
+        wave_index : int, default=0
+            Index of the execution wave.
+        validate : bool, default=True
+            Whether to validate input/output.
+        **kwargs : Any
+            Additional keyword arguments passed to the node function.
+
+        Returns
+        -------
+        Any
+            The validated output from the node execution.
         """
         node_start_time = time.time()
 
         observer_mgr = get_observer_manager()
-        policy_mgr = get_policy_manager()
 
         try:
             # Input validation
@@ -173,7 +187,7 @@ class NodeExecutor:
                             wave_index=wave_index,
                             reason=f"when clause '{node_spec.when}' evaluated to False",
                         )
-                        await policy_coordinator.notify_observer(observer_mgr, skip_event)
+                        await coordinator.notify_observer(observer_mgr, skip_event)
 
                         return {
                             "_skipped": True,
@@ -192,33 +206,25 @@ class NodeExecutor:
             # Set current node name for port-level event attribution
             set_current_node_name(node_name)
 
-            # Fire node started event and check policy
+            # Fire node started event
             start_event = NodeStarted(
                 name=node_name,
                 wave_index=wave_index,
                 dependencies=tuple(node_spec.deps),
             )
-            await policy_coordinator.notify_observer(observer_mgr, start_event)
-
-            # Evaluate policy for node start
-            start_response = await policy_coordinator.evaluate_policy(
-                policy_mgr, start_event, context, node_id=node_name, wave_index=wave_index
-            )
-
-            if start_response.signal == PolicySignal.SKIP:
-                return start_response.data
-            if start_response.signal == PolicySignal.FAIL:
-                raise OrchestratorError(f"Node '{node_name}' blocked: {start_response.data}")
-            if start_response.signal != PolicySignal.PROCEED:
-                raise OrchestratorError(
-                    f"Node '{node_name}' blocked: {start_response.signal.value}"
-                )
+            await coordinator.notify_observer(observer_mgr, start_event)
 
             # Determine timeout: node_spec.timeout > orchestrator default
             node_timeout = node_spec.timeout or self.default_node_timeout
 
             # Determine max retries: node_spec.max_retries or 1 (no retries)
             max_retries = node_spec.max_retries or 1
+
+            # Exponential backoff configuration (with sensible defaults)
+            retry_delay = node_spec.retry_delay or 1.0  # Initial delay: 1 second
+            retry_backoff = node_spec.retry_backoff or 2.0  # Backoff multiplier: 2x
+            retry_max_delay = node_spec.retry_max_delay or 60.0  # Max delay: 60 seconds
+
             last_error: Exception | None = None
             raw_output: Any = None  # Initialize to satisfy type checker
 
@@ -240,24 +246,40 @@ class NodeExecutor:
                     timeout_value = node_timeout if node_timeout is not None else 0.0
                     last_error = NodeTimeoutError(node_name, timeout_value, e)
                     if attempt < max_retries:
+                        # Calculate exponential backoff delay
+                        delay = min(
+                            retry_delay * (retry_backoff ** (attempt - 1)),
+                            retry_max_delay,
+                        )
                         logger.debug(
-                            "Node '{node}' timeout ({attempt}/{max_retries}), retrying...",
+                            "Node '{node}' timeout ({attempt}/{max_retries}), "
+                            "retrying in {delay:.2f}s...",
                             node=node_name,
                             attempt=attempt,
                             max_retries=max_retries,
+                            delay=delay,
                         )
+                        await asyncio.sleep(delay)
                         continue
                     raise last_error from e
                 except Exception as e:
                     last_error = e
                     if attempt < max_retries:
+                        # Calculate exponential backoff delay
+                        delay = min(
+                            retry_delay * (retry_backoff ** (attempt - 1)),
+                            retry_max_delay,
+                        )
                         logger.debug(
-                            "Node '{node}' error ({attempt}/{max_retries}): {error}, retrying...",
+                            "Node '{node}' error ({attempt}/{max_retries}): {error}, "
+                            "retrying in {delay:.2f}s...",
                             node=node_name,
                             attempt=attempt,
                             max_retries=max_retries,
                             error=e,
+                            delay=delay,
                         )
+                        await asyncio.sleep(delay)
                         continue
                     raise
             else:
@@ -288,7 +310,7 @@ class NodeExecutor:
                 result=validated_output,
                 duration_ms=(time.time() - node_start_time) * 1000,
             )
-            await policy_coordinator.notify_observer(observer_mgr, complete_event)
+            await coordinator.notify_observer(observer_mgr, complete_event)
 
             # Clear current node name
             set_current_node_name(None)
@@ -302,7 +324,7 @@ class NodeExecutor:
                 wave_index=wave_index,
                 reason="timeout",
             )
-            await policy_coordinator.notify_observer(observer_mgr, cancel_event)
+            await coordinator.notify_observer(observer_mgr, cancel_event)
             set_current_node_name(None)  # Clear on timeout
             raise  # Re-raise original timeout error
 
@@ -318,15 +340,7 @@ class NodeExecutor:
                 wave_index=wave_index,
                 error=validation_err,
             )
-            await policy_coordinator.notify_observer(observer_mgr, fail_event)
-
-            # Evaluate policy for validation failure
-            fail_response = await policy_coordinator.evaluate_policy(
-                policy_mgr, fail_event, context, node_id=node_name, wave_index=wave_index
-            )
-
-            if fail_response.signal == PolicySignal.RETRY:
-                raise  # Let orchestrator retry
+            await coordinator.notify_observer(observer_mgr, fail_event)
 
             # Wrap and propagate
             set_current_node_name(None)  # Clear on validation error
@@ -339,15 +353,7 @@ class NodeExecutor:
                 wave_index=wave_index,
                 error=runtime_err,
             )
-            await policy_coordinator.notify_observer(observer_mgr, fail_event)
-
-            # Evaluate policy
-            fail_response = await policy_coordinator.evaluate_policy(
-                policy_mgr, fail_event, context, node_id=node_name, wave_index=wave_index
-            )
-
-            if fail_response.signal == PolicySignal.RETRY:
-                raise
+            await coordinator.notify_observer(observer_mgr, fail_event)
 
             set_current_node_name(None)  # Clear on runtime error
             raise NodeExecutionError(node_name, runtime_err) from runtime_err
