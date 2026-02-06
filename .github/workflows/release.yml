@@ -65,6 +65,11 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
+      - name: Push version bump and tag
+        run: |
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin v${{ steps.version.outputs.version }}
+
       - name: Set package name for Test PyPI
         if: inputs.publish_to == 'testpypi'
         run: |
@@ -84,8 +89,3 @@ jobs:
       - name: Publish to PyPI
         if: inputs.publish_to == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
-
-      - name: Push version bump and tag
-        run: |
-          git push origin HEAD:${{ github.ref_name }}
-          git push origin v${{ steps.version.outputs.version }}
