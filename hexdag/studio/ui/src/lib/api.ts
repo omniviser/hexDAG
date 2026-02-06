@@ -65,7 +65,16 @@ async function apiRequest<T>(
 
 // File operations
 export async function listFiles(path: string = '.'): Promise<FileInfo[]> {
-  return apiRequest<FileInfo[]>(`/files?path=${encodeURIComponent(path)}`)
+  const response = await apiRequest<FileInfo[] | { files: FileInfo[]; root?: string }>(`/files?path=${encodeURIComponent(path)}`)
+  // Handle both array response and object with files property
+  if (Array.isArray(response)) {
+    return response
+  }
+  if (response && typeof response === 'object' && 'files' in response && Array.isArray(response.files)) {
+    return response.files
+  }
+  console.warn('Unexpected files response format:', response)
+  return []
 }
 
 export async function readFile(path: string): Promise<FileContent> {
