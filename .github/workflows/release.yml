@@ -53,18 +53,17 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Bump version
+        id: version
         run: |
-          echo "Current version: $(cz version)"
+          echo "Current version: $(cz version --project)"
           if [ "${{ inputs.release_type }}" == "dev" ]; then
             cz bump --yes --devrelease 1
           else
             cz bump --yes
           fi
-          echo "New version: $(cz version)"
-
-      - name: Get new version
-        id: version
-        run: echo "version=$(cz version)" >> $GITHUB_OUTPUT
+          NEW_VERSION=$(cz version --project)
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set package name for Test PyPI
         if: inputs.publish_to == 'testpypi'
