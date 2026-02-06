@@ -1,5 +1,6 @@
 import { CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react'
 import { useStudioStore } from '../lib/store'
+import type { ValidationError } from '../types'
 
 export default function ValidationPanel() {
   const { validation } = useStudioStore()
@@ -15,8 +16,8 @@ export default function ValidationPanel() {
     )
   }
 
-  const errorCount = validation.errors.filter((e) => e.severity === 'error').length
-  const warningCount = validation.errors.filter((e) => e.severity === 'warning').length
+  const errorCount = validation.errors.filter((e: ValidationError) => e.severity === 'error').length
+  const warningCount = validation.errors.filter((e: ValidationError) => e.severity === 'warning').length
 
   return (
     <div className="h-full flex flex-col">
@@ -68,7 +69,7 @@ export default function ValidationPanel() {
           </div>
         )}
 
-        {validation.errors.map((error, index) => (
+        {validation.errors.map((error: ValidationError, index: number) => (
           <div
             key={index}
             className={`

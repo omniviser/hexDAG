@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { nodeTemplates } from '../lib/nodeTemplates'
 import { getAllPluginNodes, type PluginNode } from '../lib/api'
+import type { NodeTemplate } from '../types'
 
 const iconMap: Record<string, typeof Code> = {
   Code,
@@ -60,7 +61,7 @@ export default function NodePalette() {
 
       // Group nodes by plugin
       const groupedNodes = nodes.reduce(
-        (acc, node) => {
+        (acc: Record<string, PluginNode[]>, node: PluginNode) => {
           const plugin = node.plugin || 'unknown'
           if (!acc[plugin]) {
             acc[plugin] = []
@@ -72,7 +73,7 @@ export default function NodePalette() {
       )
 
       setPluginNodeSections(
-        Object.entries(groupedNodes).map(([plugin, nodes]) => ({
+        Object.entries(groupedNodes).map(([plugin, nodes]: [string, PluginNode[]]) => ({
           plugin,
           nodes,
           expanded: true,
@@ -134,7 +135,7 @@ export default function NodePalette() {
           </button>
           {builtinExpanded && (
             <div className="px-2 pb-2 space-y-1">
-              {nodeTemplates.map((template) => {
+              {nodeTemplates.map((template: NodeTemplate) => {
                 const Icon = iconMap[template.icon] || Box
                 return (
                   <div

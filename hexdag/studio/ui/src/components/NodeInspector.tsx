@@ -5,7 +5,7 @@ import { getNodeTemplate, nodeTemplates } from '../lib/nodeTemplates'
 import PythonEditor from './PythonEditor'
 import PortsEditor from './PortsEditor'
 import NodePortsSection from './NodePortsSection'
-import type { HexdagNode } from '../types'
+import type { HexdagNode, HexdagEdge, NodeTemplate } from '../types'
 
 interface NodeInspectorProps {
   nodeId: string | null
@@ -16,7 +16,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
   const { nodes, setNodes, edges, setEdges, syncCanvasToYaml } = useStudioStore()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['general', 'spec']))
 
-  const node = nodes.find((n) => n.id === nodeId)
+  const node = nodes.find((n: HexdagNode) => n.id === nodeId)
   const template = node ? getNodeTemplate(node.data.kind) : null
 
   // Show PortsEditor when no node is selected
@@ -36,7 +36,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
 
   const updateNode = (updates: Partial<HexdagNode['data']>) => {
     setNodes(
-      nodes.map((n) =>
+      nodes.map((n: HexdagNode) =>
         n.id === nodeId
           ? { ...n, data: { ...n.data, ...updates } }
           : n
@@ -60,14 +60,14 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
     if (!newName || newName === nodeId) return
 
     // Check for duplicates
-    if (nodes.some((n) => n.id === newName)) {
+    if (nodes.some((n: HexdagNode) => n.id === newName)) {
       alert('A node with this name already exists')
       return
     }
 
     // Update node id
     setNodes(
-      nodes.map((n) =>
+      nodes.map((n: HexdagNode) =>
         n.id === nodeId
           ? { ...n, id: newName, data: { ...n.data, label: newName } }
           : n
@@ -76,7 +76,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
 
     // Update edges
     setEdges(
-      edges.map((e) => ({
+      edges.map((e: HexdagEdge) => ({
         ...e,
         id: e.id.replace(nodeId, newName),
         source: e.source === nodeId ? newName : e.source,
@@ -100,8 +100,8 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
   const deleteNode = () => {
     if (!confirm(`Delete node "${nodeId}"?`)) return
 
-    setNodes(nodes.filter((n) => n.id !== nodeId))
-    setEdges(edges.filter((e) => e.source !== nodeId && e.target !== nodeId))
+    setNodes(nodes.filter((n: HexdagNode) => n.id !== nodeId))
+    setEdges(edges.filter((e: HexdagEdge) => e.source !== nodeId && e.target !== nodeId))
     syncCanvasToYaml()
     onClose()
   }
@@ -109,7 +109,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
   const duplicateNode = () => {
     let newName = `${nodeId}_copy`
     let counter = 1
-    while (nodes.some((n) => n.id === newName)) {
+    while (nodes.some((n: HexdagNode) => n.id === newName)) {
       newName = `${nodeId}_copy_${counter}`
       counter++
     }
@@ -132,7 +132,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
   }
 
   // Get dependencies (incoming edges)
-  const dependencies = edges.filter((e) => e.target === nodeId).map((e) => e.source)
+  const dependencies = edges.filter((e: HexdagEdge) => e.target === nodeId).map((e: HexdagEdge) => e.source)
 
   return (
     <div className="h-full flex flex-col bg-hex-surface">
@@ -198,7 +198,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
               onChange={(e) => changeNodeKind(e.target.value)}
               className="w-full bg-hex-bg border border-hex-border rounded px-2 py-1.5 text-xs text-hex-text focus:border-hex-accent focus:outline-none"
             >
-              {nodeTemplates.map((t) => (
+              {nodeTemplates.map((t: NodeTemplate) => (
                 <option key={t.kind} value={t.kind}>
                   {t.label}
                 </option>
@@ -211,7 +211,7 @@ export default function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
               {dependencies.length === 0 ? (
                 <div className="text-[10px] text-hex-text-muted italic">No dependencies</div>
               ) : (
-                dependencies.map((dep) => (
+                dependencies.map((dep: string) => (
                   <div
                     key={dep}
                     className="flex items-center gap-2 text-xs bg-hex-bg rounded px-2 py-1"
