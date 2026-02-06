@@ -57,9 +57,9 @@ jobs:
         run: |
           echo "Current version: $(cz version --project)"
           if [ "${{ inputs.release_type }}" == "dev" ]; then
-            cz bump --yes --devrelease 1
+            cz bump --yes --devrelease 1 || echo "No commits to bump, using current version"
           else
-            cz bump --yes
+            cz bump --yes || echo "No commits to bump, using current version"
           fi
           NEW_VERSION=$(cz version --project)
           echo "New version: $NEW_VERSION"
@@ -67,8 +67,9 @@ jobs:
 
       - name: Push version bump and tag
         run: |
-          git push origin HEAD:${{ github.ref_name }}
-          git push origin v${{ steps.version.outputs.version }}
+          git push origin HEAD:${{ github.ref_name }} || echo "Nothing to push"
+          git tag -f v${{ steps.version.outputs.version }}
+          git push origin v${{ steps.version.outputs.version }} --force || echo "Tag already exists"
 
       - name: Set package name for Test PyPI
         if: inputs.publish_to == 'testpypi'
