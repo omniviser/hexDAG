@@ -148,14 +148,15 @@ export async function getAllPluginNodes(): Promise<PluginNode[]> {
     const plugins = await listPlugins()
     const nodes: PluginNode[] = []
 
-    plugins.forEach((plugin) => {
-      plugin.nodes.forEach((node) => {
+    for (const plugin of plugins) {
+      const pluginNodes = Array.isArray(plugin.nodes) ? plugin.nodes : []
+      for (const node of pluginNodes) {
         nodes.push({
           ...node,
           plugin: plugin.name,
         })
-      })
-    })
+      }
+    }
 
     return nodes
   } catch (error) {
@@ -169,14 +170,15 @@ export async function getAllPluginAdapters(): Promise<PluginAdapter[]> {
     const plugins = await listPlugins()
     const adapters: PluginAdapter[] = []
 
-    plugins.forEach((plugin) => {
-      plugin.adapters.forEach((adapter) => {
+    for (const plugin of plugins) {
+      const pluginAdapters = Array.isArray(plugin.adapters) ? plugin.adapters : []
+      for (const adapter of pluginAdapters) {
         adapters.push({
           ...adapter,
           plugin: plugin.name,
         })
-      })
-    })
+      }
+    }
 
     return adapters
   } catch (error) {
@@ -187,7 +189,16 @@ export async function getAllPluginAdapters(): Promise<PluginAdapter[]> {
 
 export async function listPlugins(): Promise<PluginInfo[]> {
   try {
-    return await apiRequest<PluginInfo[]>('/plugins')
+    const response = await apiRequest<PluginInfo[] | { plugins: PluginInfo[] }>('/plugins')
+    // Handle both array response and object with plugins property
+    if (Array.isArray(response)) {
+      return response
+    }
+    if (response && typeof response === 'object' && 'plugins' in response && Array.isArray(response.plugins)) {
+      return response.plugins
+    }
+    console.warn('Unexpected plugins response format:', response)
+    return []
   } catch (error) {
     console.error('Failed to list plugins:', error)
     return []
