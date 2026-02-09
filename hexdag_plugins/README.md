@@ -61,13 +61,21 @@ The `pyproject.toml` contains all configuration:
 
 ## Using Plugins
 
-Plugins are discovered when installed:
+Plugins are used by referencing their full module path in YAML:
+
+```yaml
+spec:
+  ports:
+    database:
+      adapter: hexdag_plugins.mysql_adapter.MySQLAdapter
+```
+
+Or import directly in Python:
 
 ```python
-from hexdag.core.registry import global_registry
+from hexdag_plugins.mysql_adapter import MySQLAdapter
 
-# Get plugin
-adapter = global_registry.get("database", "mysql")
+adapter = MySQLAdapter(host="localhost", database="mydb")
 ```
 
 That's it! No complex scripts or build tools needed.

@@ -26,7 +26,6 @@ class TestListNodes:
             node = nodes[0]
             assert "kind" in node
             assert "name" in node
-            assert "namespace" in node
             assert "module_path" in node
             assert "description" in node
 
@@ -68,7 +67,6 @@ class TestListAdapters:
         if adapters:
             adapter = adapters[0]
             assert "name" in adapter
-            assert "namespace" in adapter
             assert "module_path" in adapter
             assert "port_type" in adapter
             assert "description" in adapter
@@ -132,20 +130,8 @@ class TestListTools:
         if tools:
             tool = tools[0]
             assert "name" in tool
-            assert "namespace" in tool
             assert "module_path" in tool
             assert "description" in tool
-
-    def test_list_tools_filter_by_namespace(self):
-        """Test filtering tools by namespace."""
-        core_tools = list_tools(namespace="core")
-        for tool in core_tools:
-            assert tool["namespace"] == "core"
-
-    def test_list_tools_nonexistent_namespace(self):
-        """Test that nonexistent namespace returns empty list."""
-        tools = list_tools(namespace="nonexistent")
-        assert tools == []
 
 
 class TestListMacros:
@@ -162,7 +148,6 @@ class TestListMacros:
         if macros:
             macro = macros[0]
             assert "name" in macro
-            assert "namespace" in macro
             assert "module_path" in macro
             assert "description" in macro
 

@@ -196,8 +196,7 @@ nodes:
 ### Python Implementation
 
 ```python
-from hexdag.core.macros import ConfigurableMacro, MacroConfig
-from hexdag.core.registry import macro
+from hexdag.core.configurable import ConfigurableMacro, MacroConfig
 from pydantic import Field
 
 class CustomMacroConfig(MacroConfig):
@@ -205,7 +204,6 @@ class CustomMacroConfig(MacroConfig):
     custom_param: str = Field(description="Custom parameter")
     another_param: int = Field(default=10)
 
-@macro(name="custom_pattern")
 class CustomMacro(ConfigurableMacro[CustomMacroConfig]):
     """A custom reusable pattern."""
 
@@ -232,9 +230,9 @@ class CustomMacro(ConfigurableMacro[CustomMacroConfig]):
         return graph
 ```
 
-### Registration
+### Using Custom Macros
 
-Custom macros are automatically registered when decorated:
+Reference macros by their full module path in YAML:
 
 ```python
 # Your macro is now available in YAML
@@ -295,7 +293,6 @@ def test_custom_macro():
 For runtime flexibility:
 
 ```python
-@macro(name="dynamic_pattern", expansion_strategy=ExpansionStrategy.DYNAMIC)
 class DynamicMacro(ConfigurableMacro):
     """Expands differently based on runtime context."""
 
@@ -364,10 +361,9 @@ See working examples:
 
 ## API Reference
 
-- `ConfigurableMacro`: Base class for macros
+- `ConfigurableMacro`: Base class for macros (`hexdag.core.configurable`)
 - `MacroConfig`: Base configuration class
-- `@macro`: Decorator for registration
-- `ExpansionStrategy`: Expansion timing options
+- `YamlMacro`: YAML-defined macro class (`hexdag.core.yaml_macro`)
 
 ---
 

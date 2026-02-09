@@ -1,212 +1,241 @@
-"""Tests for LoopNode and ConditionalNode with string expressions."""
+"""Tests for CompositeNode control flow patterns.
+
+These tests cover the CompositeNode unified control flow API which replaces
+the deprecated ConditionalNode (mode='switch') and LoopNode (mode='while').
+"""
 
 import pytest
 
-from hexdag.builtin.nodes.loop_node import ConditionalNode, LoopNode
+from hexdag.builtin.nodes.composite_node import CompositeNode
 
 
-class TestConditionalNodeWithExpressions:
-    """Test ConditionalNode with string expression predicates."""
+class TestCompositeNodeSwitchExpressions:
+    """Test CompositeNode switch mode with string expression predicates."""
 
-    def test_when_with_string_expression(self) -> None:
-        """Test when() accepts string expressions."""
-        node = ConditionalNode("test_cond")
-        node.when("action == 'ACCEPT'", "approve")
-        node.when("action == 'REJECT'", "reject")
-        node.otherwise("review")
+    def test_switch_with_string_expression(self) -> None:
+        """Test switch mode accepts string expressions."""
+        node_spec = CompositeNode()(
+            name="test_cond",
+            mode="switch",
+            branches=[
+                {"condition": "action == 'ACCEPT'", "action": "approve"},
+                {"condition": "action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        assert node_spec.name == "test_cond"
 
-        spec = node.build()
-        assert spec.name == "test_cond"
+    def test_switch_with_nested_expression(self) -> None:
+        """Test switch mode with nested attribute access."""
+        node_spec = CompositeNode()(
+            name="test_cond",
+            mode="switch",
+            branches=[
+                {"condition": "result.action == 'ACCEPT'", "action": "approve"},
+                {"condition": "result.action == 'REJECT'", "action": "reject"},
+            ],
+        )
+        assert node_spec.name == "test_cond"
 
-    def test_when_with_nested_expression(self) -> None:
-        """Test when() with nested attribute access."""
-        node = ConditionalNode("test_cond")
-        node.when("result.action == 'ACCEPT'", "approve")
-        node.when("result.action == 'REJECT'", "reject")
+    def test_switch_with_complex_expression(self) -> None:
+        """Test switch mode with complex boolean expressions."""
+        node_spec = CompositeNode()(
+            name="test_cond",
+            mode="switch",
+            branches=[
+                {"condition": "action == 'ACCEPT' and confidence > 0.8", "action": "approve"},
+                {"condition": "action == 'REJECT' or confidence < 0.2", "action": "reject"},
+            ],
+        )
+        assert node_spec.name == "test_cond"
 
-        spec = node.build()
-        assert spec.name == "test_cond"
+    def test_switch_with_membership(self) -> None:
+        """Test switch mode with in operator."""
+        node_spec = CompositeNode()(
+            name="test_cond",
+            mode="switch",
+            branches=[
+                {"condition": "status in ['active', 'pending']", "action": "process"},
+                {"condition": "status not in ['active', 'pending']", "action": "skip"},
+            ],
+        )
+        assert node_spec.name == "test_cond"
 
-    def test_when_with_complex_expression(self) -> None:
-        """Test when() with complex boolean expressions."""
-        node = ConditionalNode("test_cond")
-        node.when("action == 'ACCEPT' and confidence > 0.8", "approve")
-        node.when("action == 'REJECT' or confidence < 0.2", "reject")
-
-        spec = node.build()
-        assert spec.name == "test_cond"
-
-    def test_when_with_membership(self) -> None:
-        """Test when() with in operator."""
-        node = ConditionalNode("test_cond")
-        node.when("status in ['active', 'pending']", "process")
-        node.when("status not in ['active', 'pending']", "skip")
-
-        spec = node.build()
-        assert spec.name == "test_cond"
-
-    def test_when_mixed_callable_and_string(self) -> None:
-        """Test mixing callable and string predicates."""
-        node = ConditionalNode("test_cond")
-        node.when(lambda d, s: d.get("fast") is True, "quick_path")
-        node.when("action == 'ACCEPT'", "approve")
-
-        spec = node.build()
-        assert spec.name == "test_cond"
-
-    def test_when_invalid_string_raises_error(self) -> None:
+    def test_switch_invalid_string_raises_error(self) -> None:
         """Test that invalid string expression raises error at compile time."""
         from hexdag.core.expression_parser import ExpressionError
 
-        node = ConditionalNode("test_cond")
         with pytest.raises(ExpressionError):
-            node.when("action == ==", "invalid")
-
-    def test_when_non_string_non_callable_raises(self) -> None:
-        """Test that non-string non-callable raises ValueError."""
-        node = ConditionalNode("test_cond")
-        with pytest.raises(ValueError, match="callable or a string expression"):
-            node.when(123, "invalid")  # type: ignore
+            CompositeNode()(
+                name="test_cond",
+                mode="switch",
+                branches=[{"condition": "action == ==", "action": "invalid"}],
+            )
 
 
-class TestConditionalNodeExecution:
-    """Test ConditionalNode execution with string expressions."""
+class TestCompositeNodeSwitchExecution:
+    """Test CompositeNode switch mode execution with string expressions."""
 
     @pytest.mark.asyncio
     async def test_simple_expression_execution(self) -> None:
-        """Test executing conditional with simple expression."""
-        node = ConditionalNode("router")
-        node.when("action == 'ACCEPT'", "approve")
-        node.when("action == 'REJECT'", "reject")
-        node.otherwise("review")
-
-        spec = node.build()
-        result = await spec.fn({"action": "ACCEPT"})
+        """Test executing switch with simple expression."""
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
+            branches=[
+                {"condition": "action == 'ACCEPT'", "action": "approve"},
+                {"condition": "action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        result = await node_spec.fn({"action": "ACCEPT"})
 
         assert result["result"] == "approve"
         assert result["metadata"]["matched_branch"] == 0
 
     @pytest.mark.asyncio
     async def test_nested_attribute_execution(self) -> None:
-        """Test executing conditional with nested attribute access."""
-        node = ConditionalNode("router")
-        node.when("node.result.action == 'ACCEPT'", "approve")
-        node.when("node.result.action == 'REJECT'", "reject")
-        node.otherwise("review")
-
-        spec = node.build()
-        result = await spec.fn({"node": {"result": {"action": "REJECT"}}})
+        """Test executing switch with nested attribute access."""
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
+            branches=[
+                {"condition": "node.result.action == 'ACCEPT'", "action": "approve"},
+                {"condition": "node.result.action == 'REJECT'", "action": "reject"},
+            ],
+            else_action="review",
+        )
+        result = await node_spec.fn({"node": {"result": {"action": "REJECT"}}})
 
         assert result["result"] == "reject"
         assert result["metadata"]["matched_branch"] == 1
 
     @pytest.mark.asyncio
     async def test_complex_expression_execution(self) -> None:
-        """Test executing conditional with complex expression."""
-        node = ConditionalNode("router")
-        node.when("action == 'ACCEPT' and confidence > 0.8", "high_confidence_approve")
-        node.when("action == 'ACCEPT' and confidence <= 0.8", "low_confidence_approve")
-        node.otherwise("review")
-
-        spec = node.build()
+        """Test executing switch with complex expression."""
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
+            branches=[
+                {
+                    "condition": "action == 'ACCEPT' and confidence > 0.8",
+                    "action": "high_confidence_approve",
+                },
+                {
+                    "condition": "action == 'ACCEPT' and confidence <= 0.8",
+                    "action": "low_confidence_approve",
+                },
+            ],
+            else_action="review",
+        )
 
         # High confidence
-        result = await spec.fn({"action": "ACCEPT", "confidence": 0.95})
+        result = await node_spec.fn({"action": "ACCEPT", "confidence": 0.95})
         assert result["result"] == "high_confidence_approve"
 
         # Low confidence
-        result = await spec.fn({"action": "ACCEPT", "confidence": 0.5})
+        result = await node_spec.fn({"action": "ACCEPT", "confidence": 0.5})
         assert result["result"] == "low_confidence_approve"
 
     @pytest.mark.asyncio
     async def test_else_action_execution(self) -> None:
         """Test fallback to else_action."""
-        node = ConditionalNode("router")
-        node.when("status == 'done'", "complete")
-        node.otherwise("pending")
-
-        spec = node.build()
-        result = await spec.fn({"status": "processing"})
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
+            branches=[
+                {"condition": "status == 'done'", "action": "complete"},
+            ],
+            else_action="pending",
+        )
+        result = await node_spec.fn({"status": "processing"})
 
         assert result["result"] == "pending"
         assert result["metadata"]["matched_branch"] is None
 
     @pytest.mark.asyncio
     async def test_membership_execution(self) -> None:
-        """Test executing conditional with membership test."""
-        node = ConditionalNode("router")
-        node.when("category in ['urgent', 'critical']", "priority")
-        node.when("category in ['normal', 'low']", "standard")
-        node.otherwise("review")
+        """Test executing switch with membership test."""
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
+            branches=[
+                {"condition": "category in ['urgent', 'critical']", "action": "priority"},
+                {"condition": "category in ['normal', 'low']", "action": "standard"},
+            ],
+            else_action="review",
+        )
 
-        spec = node.build()
-
-        result = await spec.fn({"category": "urgent"})
+        result = await node_spec.fn({"category": "urgent"})
         assert result["result"] == "priority"
 
-        result = await spec.fn({"category": "normal"})
+        result = await node_spec.fn({"category": "normal"})
         assert result["result"] == "standard"
 
-        result = await spec.fn({"category": "unknown"})
+        result = await node_spec.fn({"category": "unknown"})
         assert result["result"] == "review"
 
 
-class TestLoopNodeWithExpressions:
-    """Test LoopNode with string expression conditions."""
+class TestCompositeNodeWhileExpressions:
+    """Test CompositeNode while mode with string expression conditions."""
 
     def test_condition_with_string_expression(self) -> None:
-        """Test condition() accepts string expressions."""
-        node = LoopNode("test_loop")
-        node.condition("state.iteration < 10")
-        node.do(lambda d, s: {"processed": True})
-
-        spec = node.build()
-        assert spec.name == "test_loop"
+        """Test while condition accepts string expressions."""
+        node_spec = CompositeNode()(
+            name="test_loop",
+            mode="while",
+            condition="state.iteration < 10",
+            initial_state={"iteration": 0},
+            state_update={"iteration": "state.iteration + 1"},
+            body=lambda d, **ports: {"processed": True},
+        )
+        assert node_spec.name == "test_loop"
 
     def test_condition_with_complex_expression(self) -> None:
-        """Test condition() with complex boolean expression."""
-        node = LoopNode("test_loop")
-        node.condition("state.iteration < 10 and not state.done")
-        node.do(lambda d, s: {"processed": True})
-
-        spec = node.build()
-        assert spec.name == "test_loop"
+        """Test while condition with complex boolean expression."""
+        node_spec = CompositeNode()(
+            name="test_loop",
+            mode="while",
+            condition="state.iteration < 10 and not state.done",
+            initial_state={"iteration": 0, "done": False},
+            state_update={"iteration": "state.iteration + 1"},
+            body=lambda d, **ports: {"processed": True},
+        )
+        assert node_spec.name == "test_loop"
 
     def test_condition_with_data_and_state(self) -> None:
-        """Test condition referencing both data and state."""
-        node = LoopNode("test_loop")
-        node.condition("items_processed < total_items and state.iteration < 100")
-        node.do(lambda d, s: {"processed": True})
-
-        spec = node.build()
-        assert spec.name == "test_loop"
-
-    def test_condition_non_string_non_callable_raises(self) -> None:
-        """Test that non-string non-callable raises ValueError."""
-        node = LoopNode("test_loop")
-        with pytest.raises(ValueError, match="callable or a string expression"):
-            node.condition(42)  # type: ignore
+        """Test while condition referencing both data and state."""
+        node_spec = CompositeNode()(
+            name="test_loop",
+            mode="while",
+            condition="items_processed < total_items and state.iteration < 100",
+            initial_state={"iteration": 0},
+            state_update={"iteration": "state.iteration + 1"},
+            body=lambda d, **ports: {"processed": True},
+        )
+        assert node_spec.name == "test_loop"
 
 
-class TestLoopNodeExecution:
-    """Test LoopNode execution with string expressions."""
+class TestCompositeNodeWhileExecution:
+    """Test CompositeNode while mode execution with string expressions.
+
+    Note: These tests use state.iteration which is automatically set to 0,
+    then incremented by CompositeNode after each loop iteration.
+    """
 
     @pytest.mark.asyncio
     async def test_simple_loop_execution(self) -> None:
-        """Test loop with simple iteration condition.
-
-        Note: The loop's iteration key is 'loop_iteration' by default,
-        and we need to handle None safely (first iteration has no key set yet).
-        """
-        node = LoopNode("counter")
-        # Use comparison that handles None: iteration counter starts undefined
-        node.condition(lambda d, s: s.get("loop_iteration", 0) < 3)
-        node.do(lambda d, s: s.get("loop_iteration", 0))
-        node.max_iterations(10)
-        node.collect_list()
-
-        spec = node.build()
-        result = await spec.fn({})
+        """Test loop with simple iteration condition using built-in iteration tracking."""
+        node_spec = CompositeNode()(
+            name="counter",
+            mode="while",
+            condition="state.iteration < 3",
+            initial_state={"iteration": 0},
+            body=lambda d, **ports: d["iteration"],
+            max_iterations=10,
+            collect="list",
+        )
+        result = await node_spec.fn({})
 
         assert result["result"] == [0, 1, 2]
         assert result["metadata"]["iterations"] == 3
@@ -214,18 +243,16 @@ class TestLoopNodeExecution:
     @pytest.mark.asyncio
     async def test_string_expression_with_init_state(self) -> None:
         """Test loop with string expression and initialized state."""
-        node = LoopNode("counter_expr")
-        # Initialize count in state so expression can evaluate
-        node.init_state({"count": 0})
-        node.condition("state.count < 3")
-        node.do(lambda d, s: s.get("count", 0))
-        # Update count after each iteration
-        node.on_iteration_end(lambda s, _: {**s, "count": s.get("count", 0) + 1})
-        node.max_iterations(10)
-        node.collect_list()
-
-        spec = node.build()
-        result = await spec.fn({})
+        node_spec = CompositeNode()(
+            name="counter_expr",
+            mode="while",
+            condition="state.iteration < 3",
+            initial_state={"iteration": 0},
+            body=lambda d, **ports: d["iteration"],
+            max_iterations=10,
+            collect="list",
+        )
+        result = await node_spec.fn({})
 
         assert result["result"] == [0, 1, 2]
         assert result["metadata"]["iterations"] == 3
@@ -233,18 +260,16 @@ class TestLoopNodeExecution:
     @pytest.mark.asyncio
     async def test_loop_with_data_condition(self) -> None:
         """Test loop that checks data values with string expression."""
-        node = LoopNode("processor")
-        # Initialize state with iteration=0 so expression can evaluate properly
-        node.init_state({"iteration": 0})
-        node.condition("state.iteration < max_iterations")
-        node.do(lambda d, s: d.get("max_iterations", 0) - s.get("iteration", 0))
-        # Update state after each iteration
-        node.on_iteration_end(lambda s, _: {**s, "iteration": s.get("iteration", 0) + 1})
-        node.max_iterations(100)
-        node.collect_list()
-
-        spec = node.build()
-        result = await spec.fn({"max_iterations": 3})
+        node_spec = CompositeNode()(
+            name="processor",
+            mode="while",
+            condition="state.iteration < max_iterations",
+            initial_state={"iteration": 0},
+            body=lambda d, **ports: d["max_iterations"] - d["iteration"],
+            max_iterations=100,
+            collect="list",
+        )
+        result = await node_spec.fn({"max_iterations": 3})
 
         assert result["result"] == [3, 2, 1]
         assert result["metadata"]["iterations"] == 3
@@ -256,59 +281,74 @@ class TestYamlIntegration:
     @pytest.mark.asyncio
     async def test_llm_output_routing(self) -> None:
         """Test routing based on simulated LLM output structure."""
-        # Simulates output from an LLM node that returns action decisions
-        node = ConditionalNode("llm_router")
-        node.when("determine_action.result.action == 'ACCEPT'", "approve_path")
-        node.when("determine_action.result.action == 'REJECT'", "reject_path")
-        node.when("determine_action.result.action == 'NEEDS_REVIEW'", "review_path")
-        node.otherwise("error_path")
-
-        spec = node.build()
+        node_spec = CompositeNode()(
+            name="llm_router",
+            mode="switch",
+            branches=[
+                {
+                    "condition": "determine_action.result.action == 'ACCEPT'",
+                    "action": "approve_path",
+                },
+                {
+                    "condition": "determine_action.result.action == 'REJECT'",
+                    "action": "reject_path",
+                },
+                {
+                    "condition": "determine_action.result.action == 'NEEDS_REVIEW'",
+                    "action": "review_path",
+                },
+            ],
+            else_action="error_path",
+        )
 
         # Test ACCEPT
-        result = await spec.fn({
+        result = await node_spec.fn({
             "determine_action": {"result": {"action": "ACCEPT", "confidence": 0.95}}
         })
         assert result["result"] == "approve_path"
 
         # Test REJECT
-        result = await spec.fn({
+        result = await node_spec.fn({
             "determine_action": {"result": {"action": "REJECT", "reason": "Missing docs"}}
         })
         assert result["result"] == "reject_path"
 
         # Test unknown action
-        result = await spec.fn({"determine_action": {"result": {"action": "UNKNOWN"}}})
+        result = await node_spec.fn({"determine_action": {"result": {"action": "UNKNOWN"}}})
         assert result["result"] == "error_path"
 
     @pytest.mark.asyncio
     async def test_confidence_threshold_routing(self) -> None:
         """Test routing based on confidence scores."""
-        node = ConditionalNode("confidence_router")
-        node.when("score >= 0.9", "high_confidence")
-        node.when("score >= 0.7 and score < 0.9", "medium_confidence")
-        node.when("score >= 0.5 and score < 0.7", "low_confidence")
-        node.otherwise("reject")
+        node_spec = CompositeNode()(
+            name="confidence_router",
+            mode="switch",
+            branches=[
+                {"condition": "score >= 0.9", "action": "high_confidence"},
+                {"condition": "score >= 0.7 and score < 0.9", "action": "medium_confidence"},
+                {"condition": "score >= 0.5 and score < 0.7", "action": "low_confidence"},
+            ],
+            else_action="reject",
+        )
 
-        spec = node.build()
-
-        assert (await spec.fn({"score": 0.95}))["result"] == "high_confidence"
-        assert (await spec.fn({"score": 0.85}))["result"] == "medium_confidence"
-        assert (await spec.fn({"score": 0.6}))["result"] == "low_confidence"
-        assert (await spec.fn({"score": 0.3}))["result"] == "reject"
+        assert (await node_spec.fn({"score": 0.95}))["result"] == "high_confidence"
+        assert (await node_spec.fn({"score": 0.85}))["result"] == "medium_confidence"
+        assert (await node_spec.fn({"score": 0.6}))["result"] == "low_confidence"
+        assert (await node_spec.fn({"score": 0.3}))["result"] == "reject"
 
 
-class TestConditionalNodeYamlMode:
-    """Test ConditionalNode with YAML-style direct parameter passing.
+class TestCompositeNodeSwitchYamlMode:
+    """Test CompositeNode switch mode with YAML-style direct parameter passing.
 
     These tests verify the YAML mode where branches and else_action are passed
-    directly to __call__() instead of using the fluent API (.when().otherwise()).
+    directly to __call__().
     """
 
     def test_yaml_branches_basic(self) -> None:
         """Test __call__ with branches parameter (YAML mode)."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "action == 'ACCEPT'", "action": "approve"},
                 {"condition": "action == 'REJECT'", "action": "reject"},
@@ -319,60 +359,61 @@ class TestConditionalNodeYamlMode:
 
     def test_yaml_branches_without_else(self) -> None:
         """Test YAML mode works without else_action."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "status == 'done'", "action": "complete"},
             ],
         )
         assert node_spec.name == "router"
 
-    @pytest.mark.asyncio
-    async def test_yaml_branches_empty_uses_else(self) -> None:
-        """Test that empty branches list falls back to else_action."""
-        node_spec = ConditionalNode()(
-            "router",
-            branches=[],
-            else_action="fallback",
-        )
-        assert node_spec.name == "router"
-
-        # With empty branches, always use else_action
-        result = await node_spec.fn({"action": "anything"})
-        assert result["result"] == "fallback"
-        assert result["metadata"]["matched_branch"] is None
+    def test_yaml_branches_empty_raises_error(self) -> None:
+        """Test that empty branches list raises validation error."""
+        with pytest.raises(ValueError, match="branches"):
+            CompositeNode()(
+                name="router",
+                mode="switch",
+                branches=[],
+                else_action="fallback",
+            )
 
     def test_yaml_branch_missing_condition_raises(self) -> None:
         """Test that branch without condition raises error."""
         with pytest.raises(ValueError, match="condition"):
-            ConditionalNode()(
-                "router",
+            CompositeNode()(
+                name="router",
+                mode="switch",
                 branches=[{"action": "approve"}],
             )
 
-    def test_yaml_branch_missing_action_raises(self) -> None:
-        """Test that branch without action raises error."""
-        with pytest.raises(ValueError, match="action"):
-            ConditionalNode()(
-                "router",
-                branches=[{"condition": "x == 1"}],
-            )
+    def test_yaml_branch_without_action_allowed(self) -> None:
+        """Test that branch without action is allowed (uses body or routing mode)."""
+        # CompositeNode allows branches without action for execution mode
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
+            branches=[{"condition": "x == 1"}],  # No action, will return None
+        )
+        assert node_spec.name == "router"
 
     def test_yaml_invalid_expression_raises(self) -> None:
         """Test that invalid expression raises error at build time."""
         from hexdag.core.expression_parser import ExpressionError
 
         with pytest.raises(ExpressionError):
-            ConditionalNode()(
-                "router",
+            CompositeNode()(
+                name="router",
+                mode="switch",
                 branches=[{"condition": "invalid ==== syntax", "action": "fail"}],
             )
 
     @pytest.mark.asyncio
     async def test_yaml_execution_matches_first(self) -> None:
         """Test YAML mode execution matches first branch."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "action == 'ACCEPT'", "action": "approve"},
                 {"condition": "action == 'REJECT'", "action": "reject"},
@@ -386,8 +427,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_execution_matches_second(self) -> None:
         """Test YAML mode execution matches second branch."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "action == 'ACCEPT'", "action": "approve"},
                 {"condition": "action == 'REJECT'", "action": "reject"},
@@ -401,8 +443,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_execution_else_fallback(self) -> None:
         """Test YAML mode falls back to else_action."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "status == 'done'", "action": "complete"},
             ],
@@ -415,8 +458,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_execution_no_match_no_else(self) -> None:
         """Test YAML mode returns None when no match and no else_action."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "status == 'done'", "action": "complete"},
             ],
@@ -428,8 +472,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_complex_expressions(self) -> None:
         """Test YAML mode with complex boolean expressions."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "score >= 0.9 and confidence > 0.8", "action": "high"},
                 {"condition": "score >= 0.5", "action": "medium"},
@@ -443,8 +488,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_nested_attribute_access(self) -> None:
         """Test YAML mode with nested attribute expressions."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "result.action == 'ACCEPT'", "action": "approve"},
                 {"condition": "result.action == 'REJECT'", "action": "reject"},
@@ -457,8 +503,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_membership_operators(self) -> None:
         """Test YAML mode with in/not in operators."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "status in ['active', 'pending']", "action": "process"},
                 {"condition": "status not in ['active', 'pending', 'done']", "action": "skip"},
@@ -472,8 +519,9 @@ class TestConditionalNodeYamlMode:
     @pytest.mark.asyncio
     async def test_yaml_deep_nested_access(self) -> None:
         """Test YAML mode with deeply nested attribute access."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "llm.response.decision.action == 'ACCEPT'", "action": "approve"},
             ],
@@ -485,11 +533,11 @@ class TestConditionalNodeYamlMode:
         assert result["result"] == "approve"
 
 
-class TestYamlPipelineConditionalNode:
-    """Test ConditionalNode through YamlPipelineBuilder."""
+class TestYamlPipelineCompositeNode:
+    """Test CompositeNode through YamlPipelineBuilder."""
 
-    def test_yaml_pipeline_conditional_builds(self) -> None:
-        """Test conditional_node builds correctly from YAML."""
+    def test_yaml_pipeline_switch_builds(self) -> None:
+        """Test composite_node builds correctly from YAML."""
         from hexdag.core.pipeline_builder import YamlPipelineBuilder
 
         yaml_content = """
@@ -499,10 +547,11 @@ metadata:
   name: test-conditional
 spec:
   nodes:
-    - kind: conditional_node
+    - kind: composite_node
       metadata:
         name: router
       spec:
+        mode: switch
         branches:
           - condition: "action == 'ACCEPT'"
             action: approve
@@ -516,8 +565,8 @@ spec:
         assert graph.nodes["router"].name == "router"
 
     @pytest.mark.asyncio
-    async def test_yaml_pipeline_conditional_executes(self) -> None:
-        """Test conditional_node executes correctly from YAML pipeline."""
+    async def test_yaml_pipeline_switch_executes(self) -> None:
+        """Test composite_node executes correctly from YAML pipeline."""
         from hexdag.core.pipeline_builder import YamlPipelineBuilder
 
         yaml_content = """
@@ -527,10 +576,11 @@ metadata:
   name: test-conditional
 spec:
   nodes:
-    - kind: conditional_node
+    - kind: composite_node
       metadata:
         name: router
       spec:
+        mode: switch
         branches:
           - condition: "action == 'ACCEPT'"
             action: approve
@@ -555,8 +605,8 @@ spec:
         result = await router.fn({"action": "UNKNOWN"})
         assert result["result"] == "review"
 
-    def test_yaml_pipeline_conditional_without_else(self) -> None:
-        """Test conditional_node in YAML without else_action."""
+    def test_yaml_pipeline_switch_without_else(self) -> None:
+        """Test composite_node in YAML without else_action."""
         from hexdag.core.pipeline_builder import YamlPipelineBuilder
 
         yaml_content = """
@@ -566,10 +616,11 @@ metadata:
   name: test-conditional-no-else
 spec:
   nodes:
-    - kind: conditional_node
+    - kind: composite_node
       metadata:
         name: router
       spec:
+        mode: switch
         branches:
           - condition: "status == 'done'"
             action: complete
@@ -578,8 +629,8 @@ spec:
         graph, config = builder.build_from_yaml_string(yaml_content)
         assert "router" in graph.nodes
 
-    def test_yaml_pipeline_conditional_complex_expressions(self) -> None:
-        """Test conditional_node in YAML with complex expressions."""
+    def test_yaml_pipeline_switch_complex_expressions(self) -> None:
+        """Test composite_node in YAML with complex expressions."""
         from hexdag.core.pipeline_builder import YamlPipelineBuilder
 
         yaml_content = """
@@ -589,10 +640,11 @@ metadata:
   name: test-conditional-complex
 spec:
   nodes:
-    - kind: conditional_node
+    - kind: composite_node
       metadata:
         name: confidence_router
       spec:
+        mode: switch
         branches:
           - condition: "score >= 0.9 and confidence > 0.8"
             action: high_confidence
@@ -605,8 +657,8 @@ spec:
         assert "confidence_router" in graph.nodes
 
     @pytest.mark.asyncio
-    async def test_yaml_pipeline_conditional_with_dependencies(self) -> None:
-        """Test conditional_node in YAML with dependencies."""
+    async def test_yaml_pipeline_switch_with_dependencies(self) -> None:
+        """Test composite_node in YAML with dependencies."""
         from hexdag.core.pipeline_builder import YamlPipelineBuilder
 
         yaml_content = """
@@ -621,10 +673,11 @@ spec:
         name: analyzer
       spec:
         fn: "json.loads"
-    - kind: conditional_node
+    - kind: composite_node
       metadata:
         name: router
       spec:
+        mode: switch
         branches:
           - condition: "action == 'ACCEPT'"
             action: approve
@@ -639,14 +692,15 @@ spec:
         assert "analyzer" in router.deps
 
 
-class TestConditionalNodeAdvancedExpressions:
-    """Test ConditionalNode with advanced expression features."""
+class TestCompositeNodeSwitchAdvancedExpressions:
+    """Test CompositeNode switch mode with advanced expression features."""
 
     @pytest.mark.asyncio
-    async def test_conditional_with_function_calls(self) -> None:
+    async def test_switch_with_function_calls(self) -> None:
         """Test conditions using whitelisted function calls."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "len(items) > 0", "action": "process"},
                 {"condition": "len(items) == 0", "action": "skip"},
@@ -661,10 +715,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "skip"
 
     @pytest.mark.asyncio
-    async def test_conditional_with_string_functions(self) -> None:
+    async def test_switch_with_string_functions(self) -> None:
         """Test conditions using string functions."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "upper(status) == 'ACTIVE'", "action": "process"},
                 {"condition": "lower(status) == 'pending'", "action": "wait"},
@@ -679,10 +734,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "wait"
 
     @pytest.mark.asyncio
-    async def test_conditional_with_default_function(self) -> None:
+    async def test_switch_with_default_function(self) -> None:
         """Test conditions using default() for null handling."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "default(value, 0) > 10", "action": "high"},
                 {"condition": "default(value, 0) > 0", "action": "low"},
@@ -703,10 +759,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "zero"
 
     @pytest.mark.asyncio
-    async def test_conditional_with_arithmetic(self) -> None:
+    async def test_switch_with_arithmetic(self) -> None:
         """Test conditions with arithmetic expressions."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "price * quantity > 1000", "action": "large_order"},
                 {"condition": "price * quantity > 100", "action": "medium_order"},
@@ -724,10 +781,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "small_order"
 
     @pytest.mark.asyncio
-    async def test_conditional_with_min_max(self) -> None:
+    async def test_switch_with_min_max(self) -> None:
         """Test conditions using min/max functions."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "max(score_a, score_b, score_c) >= 90", "action": "excellent"},
                 {"condition": "min(score_a, score_b, score_c) >= 70", "action": "passing"},
@@ -745,10 +803,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "needs_improvement"
 
     @pytest.mark.asyncio
-    async def test_conditional_negotiation_scenario(self) -> None:
-        """Test ConditionalNode with realistic negotiation conditions."""
-        node_spec = ConditionalNode()(
-            "route_action",
+    async def test_switch_negotiation_scenario(self) -> None:
+        """Test CompositeNode switch with realistic negotiation conditions."""
+        node_spec = CompositeNode()(
+            name="route_action",
+            mode="switch",
             branches=[
                 # Winner already locked - reject
                 {"condition": "get_context.load.winner_locked == True", "action": "reject"},
@@ -806,10 +865,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "counter"
 
     @pytest.mark.asyncio
-    async def test_conditional_with_coalesce(self) -> None:
+    async def test_switch_with_coalesce(self) -> None:
         """Test conditions using coalesce() for multiple fallbacks."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "coalesce(primary, secondary, 0) > 100", "action": "high"},
             ],
@@ -829,10 +889,11 @@ class TestConditionalNodeAdvancedExpressions:
         assert result["result"] == "low"
 
     @pytest.mark.asyncio
-    async def test_conditional_with_isnone_isempty(self) -> None:
+    async def test_switch_with_isnone_isempty(self) -> None:
         """Test conditions using isnone() and isempty()."""
-        node_spec = ConditionalNode()(
-            "router",
+        node_spec = CompositeNode()(
+            name="router",
+            mode="switch",
             branches=[
                 {"condition": "isnone(value)", "action": "null_value"},
                 {"condition": "isempty(items)", "action": "empty_list"},

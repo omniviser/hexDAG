@@ -12,7 +12,6 @@ Uses core SchemaGenerator for schema extraction - thin wrapper over core functio
 
 from __future__ import annotations
 
-import importlib
 import logging
 from typing import Any
 
@@ -23,8 +22,28 @@ from hexdag.core.schema import SchemaGenerator
 logger = logging.getLogger(__name__)
 
 
+def is_builtin(module_path: str) -> bool:
+    """Check if a module_path refers to a built-in component.
+
+    Parameters
+    ----------
+    module_path : str
+        Full import path (e.g., "hexdag.builtin.nodes.LLMNode")
+
+    Returns
+    -------
+    bool
+        True if this is a built-in hexDAG component
+    """
+    return module_path.startswith("hexdag.builtin.")
+
+
 def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
     """List all available node types with schemas.
+
+    Discovers nodes from:
+    1. Builtin nodes (hexdag.builtin.nodes.*)
+    2. User plugin paths (HEXDAG_PLUGIN_PATHS env var or set_user_plugin_paths())
 
     Parameters
     ----------
@@ -37,8 +56,7 @@ def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
         List of node info dicts with keys:
         - kind: Node type alias (e.g., "llm_node")
         - name: Class name (e.g., "LLMNode")
-        - namespace: Component namespace (e.g., "core")
-        - module_path: Full import path
+        - module_path: Full import path (unique identifier)
         - description: Short description from docstring
         - parameters: Optional dict with "required" and "optional" lists
         - schema: Optional JSON Schema dict
@@ -49,10 +67,13 @@ def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
     >>> any(n["kind"] == "llm_node" for n in nodes)
     True
     """
+    from hexdag.core.discovery import discover_user_plugins
+
     aliases = get_builtin_aliases()
     seen_classes: set[str] = set()
     nodes: list[dict[str, Any]] = []
 
+    # 1. Discover builtin nodes
     for alias, full_path in aliases.items():
         # Only include primary aliases (snake_case without namespace prefix)
         if ":" in alias:
@@ -122,7 +143,6 @@ def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
         node_info: dict[str, Any] = {
             "kind": alias,
             "name": cls.__name__,
-            "namespace": "core",
             "module_path": full_path,
             "description": description,
         }
@@ -134,15 +154,29 @@ def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
 
         nodes.append(node_info)
 
+    # 2. Discover user plugin nodes (HEXDAG_PLUGIN_PATHS env var)
+    for plugin_info in discover_user_plugins():
+        for node in plugin_info.get("nodes", []):
+            # Avoid duplicates
+            module_path = node.get("module_path", "")
+            if module_path in seen_classes:
+                continue
+            seen_classes.add(module_path)
+            # Remove namespace if present (we use module_path for identification)
+            node_copy = {k: v for k, v in node.items() if k != "namespace"}
+            nodes.append(node_copy)
+
     return sorted(nodes, key=lambda x: x["kind"])
 
 
 def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     """List all available adapters.
 
-    Discovers adapters from:
+    Discovers adapters dynamically from four sources:
     1. hexdag.builtin.adapters.* (builtin adapters)
-    2. hexdag_plugins.* (plugin adapters)
+    2. hexdag_plugins.* (installed plugin packages)
+    3. User plugin paths (HEXDAG_PLUGIN_PATHS env var or set_user_plugin_paths())
+    4. User-configured modules from hexdag.toml/pyproject.toml
 
     Parameters
     ----------
@@ -154,9 +188,8 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     list[dict]
         List of adapter info dicts with keys:
         - name: Adapter class name
-        - namespace: Component namespace (e.g., "core" or "plugins")
         - port_type: Port type the adapter implements
-        - module_path: Full import path
+        - module_path: Full import path (unique identifier)
         - description: Short description from docstring
 
     Examples
@@ -165,100 +198,73 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     >>> all(a["port_type"] == "llm" for a in adapters)
     True
     """
+    from hexdag.core.discovery import (
+        discover_adapters_in_package,
+        discover_plugins,
+        discover_user_modules,
+        discover_user_plugins,
+    )
+
     adapters: list[dict[str, Any]] = []
-    seen_classes: set[str] = set()
 
-    # Scan builtin adapters submodules
-    adapter_modules = [
-        ("hexdag.builtin.adapters.mock", "llm", "core"),
-        ("hexdag.builtin.adapters.openai", "llm", "core"),
-        ("hexdag.builtin.adapters.anthropic", "llm", "core"),
-        ("hexdag.builtin.adapters.memory", "memory", "core"),
-        ("hexdag.builtin.adapters.database.sqlite", "database", "core"),
-        ("hexdag.builtin.adapters.secret", "secret", "core"),
-    ]
+    # 1. Discover builtin adapters dynamically
+    adapters.extend(discover_adapters_in_package("hexdag.builtin.adapters", detect_port_type))
 
-    # Also scan hexdag_plugins for plugin adapters
-    # Plugin convention: hexdag_plugins/<plugin_name>/adapters/ or hexdag_plugins/<plugin_name>/
-    try:
-        import pkgutil
-
-        import hexdag_plugins
-
-        for module_info in pkgutil.iter_modules(hexdag_plugins.__path__):
-            plugin_name = module_info.name
-            # Try structured layout first: hexdag_plugins/<plugin>/adapters/
-            adapter_modules.append((
+    # 2. Discover plugin adapters (hexdag_plugins namespace)
+    for plugin_name in discover_plugins():
+        # Try structured layout: hexdag_plugins/<plugin>/adapters/
+        adapters.extend(
+            discover_adapters_in_package(
                 f"hexdag_plugins.{plugin_name}.adapters",
-                "unknown",
-                f"plugins.{plugin_name}",
-            ))
-            # Also scan root of plugin (for flat layout like azure/)
-            adapter_modules.append((
+                detect_port_type,
+            )
+        )
+        # Also try flat layout: hexdag_plugins/<plugin>/
+        adapters.extend(
+            discover_adapters_in_package(
                 f"hexdag_plugins.{plugin_name}",
-                "unknown",
-                f"plugins.{plugin_name}",
-            ))
-    except ImportError:
-        pass
+                detect_port_type,
+            )
+        )
 
-    for module_path, guessed_port, namespace in adapter_modules:
-        try:
-            module = importlib.import_module(module_path)
-        except ImportError:
-            continue
+    # 3. Discover user plugin paths (HEXDAG_PLUGIN_PATHS env var)
+    for plugin_info in discover_user_plugins():
+        for adapter in plugin_info.get("adapters", []):
+            # Remove namespace if present
+            adapter_copy = {k: v for k, v in adapter.items() if k != "namespace"}
+            adapters.append(adapter_copy)
 
-        for name in dir(module):
-            if name.startswith("_"):
-                continue
+    # 4. Discover user-configured modules from hexdag.toml
+    for user_module in discover_user_modules():
+        # Try as adapters subpackage
+        adapters.extend(
+            discover_adapters_in_package(
+                f"{user_module}.adapters" if not user_module.endswith(".adapters") else user_module,
+                detect_port_type,
+            )
+        )
+        # Also try the module directly (flat layout)
+        adapters.extend(
+            discover_adapters_in_package(
+                user_module,
+                detect_port_type,
+            )
+        )
 
-            obj = getattr(module, name, None)
-            if obj is None or not isinstance(obj, type):
-                continue
+    # Filter by port type if specified
+    if port_type:
+        adapters = [a for a in adapters if a["port_type"] == port_type]
 
-            # Check if it's an adapter class (ends with Adapter or adapter-like)
-            if not (name.endswith("Adapter") or name.endswith("Memory") or name.endswith("LLM")):
-                continue
+    # Remove duplicates (same class discovered via multiple paths)
+    seen: set[str] = set()
+    unique_adapters: list[dict[str, Any]] = []
+    for adapter in adapters:
+        key = adapter["module_path"]
+        if key not in seen:
+            seen.add(key)
+            unique_adapters.append(adapter)
 
-            # Avoid duplicates
-            full_path = f"{module_path}.{name}"
-            if full_path in seen_classes:
-                continue
-            seen_classes.add(full_path)
-
-            # Get actual port type using protocol inspection (preferred) or name guessing
-            actual_port = detect_port_type(obj)
-            # Fallback to module-based guess if still unknown
-            if actual_port == "unknown" and guessed_port != "unknown":
-                actual_port = guessed_port
-
-            # Filter by port type if specified (after determining actual type)
-            if port_type and actual_port != port_type:
-                continue
-
-            # Get secrets from decorator
-            secrets_dict = getattr(obj, "_hexdag_secrets", {})
-            secrets = list(secrets_dict.keys()) if secrets_dict else []
-
-            # Use core SchemaGenerator for config schema
-            try:
-                config_schema = SchemaGenerator.from_callable(obj.__init__)
-            except Exception:
-                config_schema = {"type": "object", "properties": {}}
-
-            adapter_info = {
-                "name": name,
-                "namespace": namespace,
-                "module_path": full_path,
-                "port_type": actual_port,
-                "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
-                "config_schema": config_schema,
-                "secrets": secrets,
-            }
-
-            adapters.append(adapter_info)
-
-    return sorted(adapters, key=lambda x: (x["port_type"], x["name"]))
+    return sorted(unique_adapters, key=lambda x: (x["port_type"], x["name"]))
 
 
 def detect_port_type(adapter_class: type) -> str:
@@ -339,21 +345,20 @@ def detect_port_type(adapter_class: type) -> str:
     return "unknown"
 
 
-def list_tools(namespace: str | None = None) -> list[dict[str, Any]]:
+def list_tools() -> list[dict[str, Any]]:
     """List all available tools.
 
-    Parameters
-    ----------
-    namespace : str | None
-        Optional filter by namespace (e.g., "core")
+    Discovers tools dynamically from three levels:
+    1. hexdag.builtin.tools.builtin_tools (builtin tools)
+    2. hexdag_plugins.*/tools (plugin tools)
+    3. User-configured modules from hexdag.toml/pyproject.toml
 
     Returns
     -------
     list[dict]
         List of tool info dicts with keys:
         - name: Tool function name
-        - namespace: Component namespace (e.g., "core")
-        - module_path: Full import path
+        - module_path: Full import path (unique identifier)
         - description: Short description from docstring
 
     Examples
@@ -362,45 +367,47 @@ def list_tools(namespace: str | None = None) -> list[dict[str, Any]]:
     >>> any(t["name"] == "tool_end" for t in tools)
     True
     """
-    from hexdag.builtin.tools import builtin_tools
+    from hexdag.core.discovery import (
+        discover_plugins,
+        discover_tools_in_module,
+        discover_user_modules,
+    )
 
     tools: list[dict[str, Any]] = []
+    seen: set[str] = set()
 
-    # Filter by namespace if specified (only core namespace for builtin)
-    if namespace and namespace != "core":
-        return tools
+    def add_tools(tool_list: list[dict[str, Any]]) -> None:
+        for tool in tool_list:
+            module_path = tool.get("module_path", "")
+            if module_path not in seen:
+                seen.add(module_path)
+                tools.append(tool)
 
-    # Scan builtin tools module
-    for name in dir(builtin_tools):
-        if name.startswith("_"):
-            continue
+    # 1. Discover builtin tools
+    add_tools(discover_tools_in_module("hexdag.builtin.tools.builtin_tools"))
 
-        obj = getattr(builtin_tools, name, None)
-        if obj is None:
-            continue
+    # 2. Discover plugin tools
+    for plugin_name in discover_plugins():
+        add_tools(discover_tools_in_module(f"hexdag_plugins.{plugin_name}.tools"))
 
-        # Check if it's a callable (function or class)
-        if not callable(obj):
-            continue
-
-        # Skip non-tool items
-        if name in ("Any", "TypeVar", "TYPE_CHECKING"):
-            continue
-
-        tool_info = {
-            "name": name,
-            "namespace": "core",
-            "module_path": f"hexdag.builtin.tools.{name}",
-            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
-        }
-
-        tools.append(tool_info)
+    # 3. Discover user-configured tools
+    for user_module in discover_user_modules():
+        # Try as tools submodule
+        add_tools(
+            discover_tools_in_module(
+                f"{user_module}.tools" if not user_module.endswith(".tools") else user_module
+            )
+        )
 
     return sorted(tools, key=lambda x: x["name"])
 
 
 def list_macros() -> list[dict[str, Any]]:
     """List all available macros.
+
+    Discovers macros dynamically from:
+    1. hexdag.builtin.macros (builtin macros)
+    2. hexdag_plugins.*/macros (plugin macros)
 
     Macros are reusable pipeline templates that expand into subgraphs.
 
@@ -409,8 +416,7 @@ def list_macros() -> list[dict[str, Any]]:
     list[dict]
         List of macro info dicts with keys:
         - name: Macro class name
-        - namespace: Component namespace (e.g., "core")
-        - module_path: Full import path
+        - module_path: Full import path (unique identifier)
         - description: Short description from docstring
 
     Examples
@@ -419,30 +425,24 @@ def list_macros() -> list[dict[str, Any]]:
     >>> any(m["name"] == "ReasoningAgentMacro" for m in macros)
     True
     """
-    from hexdag.builtin import macros as builtin_macros
+    from hexdag.core.discovery import discover_macros_in_module, discover_plugins
 
     macros: list[dict[str, Any]] = []
+    seen: set[str] = set()
 
-    # Scan builtin macros module
-    for name in dir(builtin_macros):
-        if name.startswith("_"):
-            continue
+    def add_macros(macro_list: list[dict[str, Any]]) -> None:
+        for macro in macro_list:
+            module_path = macro.get("module_path", "")
+            if module_path not in seen:
+                seen.add(module_path)
+                macros.append(macro)
 
-        obj = getattr(builtin_macros, name, None)
-        if obj is None or not isinstance(obj, type):
-            continue
+    # Discover builtin macros
+    add_macros(discover_macros_in_module("hexdag.builtin.macros"))
 
-        # Check if it's a macro class (ends with Macro)
-        if not name.endswith("Macro"):
-            continue
-
-        macro_info = {
-            "name": name,
-            "namespace": "core",
-            "module_path": f"hexdag.builtin.macros.{name}",
-            "description": (obj.__doc__ or "No description available").split("\n")[0].strip(),
-        }
-        macros.append(macro_info)
+    # Discover plugin macros
+    for plugin_name in discover_plugins():
+        add_macros(discover_macros_in_module(f"hexdag_plugins.{plugin_name}.macros"))
 
     return sorted(macros, key=lambda x: x["name"])
 
@@ -488,7 +488,7 @@ def list_tags() -> list[dict[str, Any]]:
     return sorted(tags, key=lambda x: x["name"])
 
 
-def get_component_schema(component_type: str, name: str, namespace: str = "core") -> dict[str, Any]:
+def get_component_schema(component_type: str, name: str) -> dict[str, Any]:
     """Get detailed schema for a specific component.
 
     Parameters
@@ -496,9 +496,7 @@ def get_component_schema(component_type: str, name: str, namespace: str = "core"
     component_type : str
         Type of component: "node", "adapter", "tool", "macro", "tag"
     name : str
-        Component name (e.g., "llm_node", "OpenAIAdapter", "!py")
-    namespace : str
-        Component namespace (default: "core")
+        Component name or module_path (e.g., "llm_node", "OpenAIAdapter", "!py")
 
     Returns
     -------
@@ -512,19 +510,19 @@ def get_component_schema(component_type: str, name: str, namespace: str = "core"
     True
     """
     if component_type == "node":
-        return _get_node_schema(name, namespace)
+        return _get_node_schema(name)
     if component_type == "adapter":
-        return _get_adapter_schema(name, namespace)
+        return _get_adapter_schema(name)
     if component_type == "tool":
-        return _get_tool_schema(name, namespace)
+        return _get_tool_schema(name)
     if component_type == "macro":
-        return _get_macro_schema(name, namespace)
+        return _get_macro_schema(name)
     if component_type == "tag":
         return _get_tag_schema(name)
     return {"error": f"Unknown component type: {component_type}"}
 
 
-def _get_node_schema(name: str, namespace: str) -> dict[str, Any]:
+def _get_node_schema(name: str) -> dict[str, Any]:
     """Get schema for a node type."""
     try:
         cls = resolve(name)
@@ -546,7 +544,7 @@ def _get_node_schema(name: str, namespace: str) -> dict[str, Any]:
         return {"error": f"Cannot generate schema for '{name}': {e}"}
 
 
-def _get_adapter_schema(name: str, namespace: str) -> dict[str, Any]:
+def _get_adapter_schema(name: str) -> dict[str, Any]:
     """Get schema for an adapter."""
     try:
         from hexdag.builtin import adapters as builtin_adapters
@@ -563,7 +561,7 @@ def _get_adapter_schema(name: str, namespace: str) -> dict[str, Any]:
         return {"error": f"Cannot generate schema for adapter '{name}': {e}"}
 
 
-def _get_tool_schema(name: str, namespace: str) -> dict[str, Any]:
+def _get_tool_schema(name: str) -> dict[str, Any]:
     """Get schema for a tool."""
     try:
         from hexdag.builtin.tools import builtin_tools
@@ -580,7 +578,7 @@ def _get_tool_schema(name: str, namespace: str) -> dict[str, Any]:
         return {"error": f"Cannot generate schema for tool '{name}': {e}"}
 
 
-def _get_macro_schema(name: str, namespace: str) -> dict[str, Any]:
+def _get_macro_schema(name: str) -> dict[str, Any]:
     """Get schema for a macro."""
     try:
         from hexdag.builtin import macros as builtin_macros

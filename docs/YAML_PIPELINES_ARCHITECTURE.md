@@ -143,7 +143,6 @@ kind: Pipeline
 metadata:
   name: my-pipeline
   description: Pipeline description
-  namespace: custom  # Optional: for multi-environment support
 spec:
   nodes:
     - kind: llm_node
@@ -159,7 +158,7 @@ spec:
 **Key Fields:**
 - `apiVersion` - Schema version (currently `v1`)
 - `kind` - Resource type (`Pipeline`, `macro_invocation`)
-- `metadata` - Name, description, namespace, annotations
+- `metadata` - Name, description, annotations
 - `spec` - Pipeline specification (nodes, ports, policies)
 
 #### **2. Plugin Architecture**
@@ -265,7 +264,7 @@ Macros enable reusable pipeline templates:
   metadata:
     name: my_rag_instance
   spec:
-    macro: "core:rag_pipeline"  # namespace:name format
+    macro: "rag_pipeline"  # macro name or full module path
     config:
       chunk_size: 512
       top_k: 5
@@ -284,7 +283,6 @@ apiVersion: v1
 kind: Pipeline
 metadata:
   name: dev-pipeline
-  namespace: dev
 spec:
   nodes: [...]
 ---
@@ -292,7 +290,6 @@ apiVersion: v1
 kind: Pipeline
 metadata:
   name: prod-pipeline
-  namespace: prod
 spec:
   nodes: [...]
 ```
@@ -301,12 +298,12 @@ Select environment: `builder.build_from_yaml_string(yaml, environment="prod")`
 
 #### **7. Node Type Resolution**
 
-Nodes are resolved from the registry using namespaced references:
+Nodes are resolved using the module path resolver:
 
 ```yaml
-- kind: llm_node              # Resolves to core:llm_node
-- kind: core:agent_node       # Explicit namespace
-- kind: plugin:custom_node    # Plugin namespace
+- kind: llm_node                              # Built-in alias
+- kind: hexdag.builtin.nodes.LLMNode          # Full module path
+- kind: mypackage.nodes.CustomNode            # Custom node
 ```
 
 #### **8. Function Node with Module Path Strings**
@@ -387,44 +384,46 @@ fn: "json.__version__"
 
 ## 🔧 Layer 3: Registry System
 
-### Design Philosophy: Component Discovery and Management
+### Design Philosophy: Component Discovery and Resolution
 
-The registry provides a centralized system for discovering and managing components.
+Components are resolved by their full Python module path using the resolver system.
 
 #### **Current Features**
 
 **1. Component Types:**
-- Nodes (via `@node` decorator)
-- Macros (via `@macro` decorator)
-- Adapters (via `@adapter` decorator)
-- Tools (via `@tool` decorator)
-- Policies (via `@policy` decorator)
+- Nodes (extend `BaseNodeFactory`)
+- Macros (extend `ConfigurableMacro`)
+- Adapters (implement port interfaces like `LLM`, `Memory`, `Database`)
+- Tools (plain functions with type hints)
 
-**2. Namespace Management:**
-- `core` - Built-in components from `hexdag.builtin`
-- `plugin` - Plugin-provided components
-- Custom namespaces - User-defined
-
-**3. Registration API:**
+**2. Component Resolution:**
 
 ```python
-from hexdag.core.registry import node, registry
+from hexdag.core.resolver import resolve
 
-# Decorator-based registration
-@node(name="custom_processor", namespace="myapp")
-class CustomProcessor(BaseNodeFactory):
-    def __call__(self, name: str, **params):
-        # Build NodeSpec
-        ...
-
-# Programmatic access
-component = registry.get("custom_processor", namespace="myapp")
+# Resolve components by module path
+CustomProcessor = resolve("myapp.nodes.CustomProcessor")
+MyAdapter = resolve("myapp.adapters.MyAdapter")
 ```
 
-**4. Discovery:**
-- List all components: `registry.list(component_type="node")`
-- Search by namespace: `registry.list(namespace="core")`
-- Get metadata: `registry.get_metadata("llm_node")`
+**3. Using in YAML:**
+
+```yaml
+# Reference components by full module path
+nodes:
+  - kind: myapp.nodes.CustomProcessor
+    metadata:
+      name: processor1
+
+# Built-in aliases available for convenience
+nodes:
+  - kind: llm_node  # Alias for hexdag.builtin.nodes.LLMNode
+```
+
+**4. Built-in Aliases:**
+- `llm_node` → `hexdag.builtin.nodes.LLMNode`
+- `function_node` → `hexdag.builtin.nodes.FunctionNode`
+- `agent_node` → `hexdag.builtin.nodes.AgentNode`
 
 ---
 

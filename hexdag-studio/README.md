@@ -104,6 +104,75 @@ hexdag-studio/
 └── examples/               # Example pipelines for testing
 ```
 
+## Component Discovery
+
+hexdag-studio uses a **unified component discovery system** that provides a single source of truth for all nodes, adapters, tools, and macros. This eliminates duplicates and ensures consistency across the UI.
+
+### How It Works
+
+All component discovery is handled by `hexdag.api.components`, which the Studio delegates to. Components are uniquely identified by their **module path** (the Python import path).
+
+```
+module_path examples:
+├── hexdag.builtin.nodes.LLMNode          → Built-in (core)
+├── hexdag.builtin.adapters.mock.MockLLM  → Built-in (core)
+├── hexdag_plugins.mysql_adapter.MySQLAdapter → Plugin: mysql_adapter
+├── hexdag_plugins.azure.AzureOpenAI      → Plugin: azure
+└── mycompany.adapters.CustomLLM          → User plugin: mycompany
+```
+
+### Component Identification
+
+The system determines where a component belongs based on its `module_path`:
+
+| Module Path Pattern | Classification |
+|---------------------|----------------|
+| `hexdag.builtin.*` | Built-in (core) - shown in "Core Nodes" |
+| `hexdag_plugins.<name>.*` | Official plugin - grouped by `<name>` |
+| `<package>.*` | User plugin - grouped by top-level package |
+
+### API Endpoints
+
+| Endpoint | Returns |
+|----------|---------|
+| `/api/registry/nodes` | Built-in nodes only (from `hexdag.builtin.*`) |
+| `/api/registry/adapters` | All adapters with `plugin` field |
+| `/api/plugins` | Plugin metadata grouped by module path |
+| `/api/plugins/nodes/all` | Plugin nodes only (excludes built-in) |
+| `/api/plugins/adapters/all` | All adapters with `plugin` field |
+
+### No Duplicates
+
+Since `module_path` is the unique identifier:
+- Each component appears exactly once
+- Built-in nodes appear in "Core Nodes" section
+- Plugin nodes appear under their respective plugin
+- No overlap between `/registry` and `/plugins` endpoints
+
+### Using in YAML
+
+Reference components by their module path:
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+spec:
+  ports:
+    llm:
+      adapter: hexdag_plugins.azure.AzureOpenAI  # Plugin adapter
+      config:
+        model: gpt-4
+    database:
+      adapter: mycompany.adapters.PostgresAdapter  # User adapter
+  nodes:
+    - kind: llm_node  # Built-in (alias)
+      metadata:
+        name: analyzer
+    - kind: hexdag_plugins.etl.TransformNode  # Plugin node
+      metadata:
+        name: transformer
+```
+
 ## Plugin System
 
 hexdag-studio discovers plugins from the `hexdag_plugins/` directory or custom paths specified via `--plugin`. Plugins can provide custom **nodes** and **adapters**.
@@ -265,12 +334,12 @@ __all__ = [
 ```python
 """Custom adapters for my plugin."""
 
+import os
 from typing import Any
-from hexdag.core.registry import adapter
+from hexdag.core.ports.database import Database
 
-@adapter("database", name="my_database", secrets={"password": "MY_DB_PASSWORD"})
-class MyDatabaseAdapter:
-    """Custom database adapter."""
+class MyDatabaseAdapter(Database):
+    """Custom database adapter implementing Database port."""
 
     def __init__(
         self,
@@ -278,9 +347,10 @@ class MyDatabaseAdapter:
         port: int = 5432,
         database: str = "mydb",
         username: str = "user",
-        password: str = "",  # Resolved from MY_DB_PASSWORD env var
+        password: str | None = None,
         **kwargs: Any,
     ) -> None:
+        password = password or os.environ.get("MY_DB_PASSWORD", "")
         self.connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
 
     async def aexecute_query(self, query: str) -> list[dict]:
@@ -288,19 +358,18 @@ class MyDatabaseAdapter:
         ...
 
 
-@adapter("llm", name="my_api")
 class MyAPIAdapter:
     """Custom API adapter."""
 
     def __init__(
         self,
         endpoint: str,
-        api_key: str = "",
+        api_key: str | None = None,
         timeout: float = 30.0,
         **kwargs: Any,
     ) -> None:
         self.endpoint = endpoint
-        self.api_key = api_key
+        self.api_key = api_key or os.environ.get("MY_API_KEY", "")
         self.timeout = timeout
 
     async def aresponse(self, messages: list) -> str:
@@ -308,15 +377,15 @@ class MyAPIAdapter:
         ...
 ```
 
+Use in YAML: `adapter: my_plugin.adapters.MyDatabaseAdapter`
+
 ### 5. Create Nodes (`nodes.py`)
 
 ```python
 """Custom nodes for my plugin."""
 
-from hexdag.core.registry import node
 from hexdag.builtin.nodes import BaseNodeFactory
 
-@node(name="my_processor", namespace="my_plugin")
 class MyProcessorNode(BaseNodeFactory):
     """Custom data processor node."""
 
@@ -331,14 +400,16 @@ class MyProcessorNode(BaseNodeFactory):
         ...
 ```
 
+Use in YAML: `kind: my_plugin.nodes.MyProcessorNode`
+
 ### 6. Final Directory Structure
 
 ```
 ~/my-hexdag-plugins/my_custom_plugin/
 ├── __init__.py          # Exports via __all__
 ├── pyproject.toml       # Dependencies
-├── adapters.py          # @adapter decorated classes
-├── nodes.py             # @node decorated classes
+├── adapters.py          # Adapter classes implementing port interfaces
+├── nodes.py             # Node classes extending BaseNodeFactory
 └── tests/               # Optional tests
     └── test_adapters.py
 ```
@@ -393,17 +464,16 @@ spec:
 
 ```python
 # my_plugin/__init__.py
+import os
 from typing import Any
+from hexdag.core.ports.llm import LLM
 
-from hexdag.core.registry import adapter
-
-@adapter("llm", name="my_llm")
-class MyLLMAdapter:
-    """Custom LLM adapter."""
+class MyLLMAdapter(LLM):
+    """Custom LLM adapter implementing the LLM port interface."""
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         model: str = "default-model",
         temperature: float = 0.7,
         max_tokens: int | None = None,
@@ -418,7 +488,7 @@ class MyLLMAdapter:
             max_tokens: Maximum tokens in response.
             **kwargs: Additional options.
         """
-        self.api_key = api_key
+        self.api_key = api_key or os.environ.get("MY_LLM_API_KEY")
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -429,6 +499,8 @@ class MyLLMAdapter:
 
 __all__ = ["MyLLMAdapter"]
 ```
+
+Use in YAML: `adapter: my_plugin.MyLLMAdapter`
 
 ### Why Explicit Parameters Matter
 
@@ -475,10 +547,8 @@ def __init__(
 ### Creating Nodes
 
 ```python
-from hexdag.core.registry import node
 from hexdag.builtin.nodes import BaseNodeFactory
 
-@node(name="my_node", namespace="my_plugin")
 class MyNode(BaseNodeFactory):
     """Custom processing node."""
 

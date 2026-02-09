@@ -331,9 +331,9 @@ class TestPortCallNodeWithOrchestrator:
         mock_db.save_record.assert_called_once_with(name="test", value=42)
 
     @pytest.mark.asyncio
-    async def test_with_data_node_dependency(self) -> None:
-        """Test port_call_node with DataNode dependency."""
-        from hexdag.builtin.nodes.data_node import DataNode
+    async def test_with_expression_node_dependency(self) -> None:
+        """Test port_call_node with ExpressionNode dependency."""
+        from hexdag.builtin.nodes.expression_node import ExpressionNode
         from hexdag.core.domain.dag import DirectedGraph
         from hexdag.core.orchestration.orchestrator import Orchestrator
 
@@ -342,10 +342,11 @@ class TestPortCallNodeWithOrchestrator:
         mock_db.save_record = AsyncMock(return_value={"saved": True})
 
         # Create nodes
-        data_factory = DataNode()
-        data_node = data_factory(
+        expr_factory = ExpressionNode()
+        expr_node = expr_factory(
             name="static_config",
-            output={"action": "ACCEPT", "reason": "Approved"},
+            expressions={"action": "'ACCEPT'", "reason": "'Approved'"},
+            output_fields=["action", "reason"],
         )
 
         port_factory = PortCallNode()
@@ -358,7 +359,7 @@ class TestPortCallNodeWithOrchestrator:
 
         # Build DAG
         graph = DirectedGraph()
-        graph.add(data_node)
+        graph.add(expr_node)
         graph.add(port_node)
 
         # Create orchestrator and run

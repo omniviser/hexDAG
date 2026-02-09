@@ -4,28 +4,28 @@ Mock adapter implementations for testing and development without external depend
 
 ## Loading Mock Adapters
 
-Mock adapters are **not loaded by default**. To use them, you have two options:
-
-### Option 1: Load via Configuration File
+Mock adapters can be imported directly from the builtin package:
 
 ```python
-from hexdag.core.bootstrap import bootstrap_registry
-
-# Load mock adapters explicitly
-bootstrap_registry("hexdag/adapters/mock/hexdag.toml")
-```
-
-### Option 2: Direct Import
-
-```python
-from hexdag.adapters.mock.mock_llm import MockLLM
-from hexdag.adapters.mock.mock_database import MockDatabaseAdapter
-from hexdag.adapters.mock.mock_tool_router import MockToolRouter
+from hexdag.builtin.adapters.mock.mock_llm import MockLLM
+from hexdag.builtin.adapters.mock.mock_database import MockDatabaseAdapter
+from hexdag.builtin.adapters.mock.mock_tool_router import MockToolRouter
 
 # Create instances directly
 llm = MockLLM()
 db = MockDatabaseAdapter()
 router = MockToolRouter()
+```
+
+Or reference them by their full module path in YAML pipelines:
+
+```yaml
+spec:
+  ports:
+    llm:
+      adapter: hexdag.builtin.adapters.mock.MockLLM
+      config:
+        responses: ["Custom response"]
 ```
 
 ## Available Mock Adapters
@@ -34,9 +34,10 @@ router = MockToolRouter()
 Simulates LLM responses without API calls.
 
 ```python
+from hexdag.builtin.adapters.mock.mock_llm import MockLLM
 from hexdag.core.ports.llm import Message
 
-llm = registry.get("mock_llm", namespace="plugin")
+llm = MockLLM(responses=["Hello! How can I help?"])
 messages = [Message(role="user", content="Hello!")]
 response = await llm.aresponse(messages)
 ```
@@ -45,7 +46,9 @@ response = await llm.aresponse(messages)
 Provides sample e-commerce data for testing database operations.
 
 ```python
-db = registry.get("mock_database", namespace="plugin")
+from hexdag.builtin.adapters.mock.mock_database import MockDatabaseAdapter
+
+db = MockDatabaseAdapter()
 schemas = await db.aget_table_schemas()
 results = await db.aexecute_query("SELECT * FROM customers LIMIT 5")
 ```
@@ -54,27 +57,37 @@ results = await db.aexecute_query("SELECT * FROM customers LIMIT 5")
 Simulates tool execution with predefined responses.
 
 ```python
-router = registry.get("mock_tool_router", namespace="plugin")
+from hexdag.builtin.adapters.mock.mock_tool_router import MockToolRouter
+
+router = MockToolRouter()
 tools = router.get_available_tools()
 result = await router.acall_tool("calculate", {"expression": "2 + 2"})
 ```
 
-## Configuration
+## Configuration in YAML
 
-Mock adapters can be configured via the `hexdag.toml` file:
+Configure mock adapters directly in your YAML pipeline:
 
-```toml
-[settings.mock_llm]
-responses = ["Custom response 1", "Custom response 2"]
-delay_seconds = 0.1
+```yaml
+spec:
+  ports:
+    llm:
+      adapter: hexdag.builtin.adapters.mock.MockLLM
+      config:
+        responses: ["Response 1", "Response 2"]
+        delay_seconds: 0.1
 
-[settings.mock_database]
-enable_sample_data = true
-delay_seconds = 0.0
+    database:
+      adapter: hexdag.builtin.adapters.mock.MockDatabaseAdapter
+      config:
+        enable_sample_data: true
+        delay_seconds: 0.0
 
-[settings.mock_tool_router]
-available_tools = ["search", "calculate", "get_weather"]
-raise_on_unknown_tool = true
+    tool_router:
+      adapter: hexdag.builtin.adapters.mock.MockToolRouter
+      config:
+        available_tools: ["search", "calculate", "get_weather"]
+        raise_on_unknown_tool: true
 ```
 
 ## Use Cases

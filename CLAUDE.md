@@ -306,7 +306,6 @@ hexDAG enforces async-first architecture through:
 
 1. **Static Analysis** - `scripts/check_async_io.py` scans for blocking I/O in async functions
 2. **Runtime Warnings** - `hexdag/core/utils/async_warnings.py` detects blocking operations at runtime
-3. **Adapter Decorator Integration** - `@adapter` decorator automatically wraps async methods
 
 #### Running the Async I/O Checker
 
@@ -336,26 +335,6 @@ def sync_helper():
     return open('file.txt').read()
 ```
 
-#### Adapter Decorator with Async Monitoring
-
-```python
-from hexdag.core.registry.decorators import adapter
-
-# Default: warnings enabled
-@adapter("database", name="sqlite")
-class SQLiteAdapter:
-    async def aexecute_query(self, sql):
-        # This will be monitored for blocking I/O
-        pass
-
-# Disable warnings for intentional sync I/O
-@adapter("database", name="local_db", warn_sync_io=False)
-class LocalDBAdapter:
-    async def aexecute_query(self, sql):
-        # No warnings - intentional sync I/O
-        pass
-```
-
 See `docs/async_io_enforcement.md` for complete documentation.
 
 ### Error Handling
@@ -363,262 +342,107 @@ See `docs/async_io_enforcement.md` for complete documentation.
 - Maintain error context and node information
 - Event emission for error tracking
 
-## Component Configuration (Simplified Pattern)
+## Component Resolution
 
-### Overview
+hexDAG uses a **module path resolver** for component discovery. Components (nodes, adapters, tools) are referenced by their full Python module path.
 
-hexDAG uses a **simplified decorator-based pattern** for component configuration:
-- **No Config classes required** - just plain `__init__` signatures
-- **Secrets declared in decorator** - explicit and clean
-- **Automatic secret resolution** - from environment or memory
-- **Type-safe** - leverages Python type hints and Pydantic
+### How It Works
 
-### Creating Adapters with Secrets
-
-**✅ CORRECT - Decorator-based (preferred):**
 ```python
-from hexdag.core.registry import adapter
+from hexdag.core.resolver import resolve
 
-@adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
-class OpenAIAdapter:
-    """OpenAI adapter with automatic secret resolution."""
+# Resolve a node class
+LLMNode = resolve("hexdag.builtin.nodes.LLMNode")
 
-    def __init__(
-        self,
-        api_key: str,  # ← Auto-resolved from OPENAI_API_KEY env var
-        model: str = "gpt-4",
-        temperature: float = 0.7
-    ):
-        self.api_key = api_key
-        self.model = model
-        self.temperature = temperature
+# Resolve an adapter class
+MockLLM = resolve("hexdag.builtin.adapters.mock.MockLLM")
 
-    async def aresponse(self, messages):
-        # Use self.api_key, self.model, etc.
-        ...
+# Resolve a custom component
+MyNode = resolve("myapp.nodes.MyNode")
 ```
 
-**Multiple secrets:**
-```python
-@adapter(
-    "database",
-    name="postgres",
-    secrets={
-        "username": "DB_USERNAME",
-        "password": "DB_PASSWORD"
-    }
-)
-class PostgresAdapter:
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        host: str = "localhost",
-        port: int = 5432
-    ):
-        self.connection = f"postgresql://{username}:{password}@{host}:{port}"
-```
+### Using in YAML Pipelines
 
-### Creating Adapters without Secrets
+Components are referenced by module path in YAML:
 
-**✅ CORRECT:**
-```python
-@adapter("cache", name="memory_cache")
-class MemoryCacheAdapter:
-    """Simple adapter - no secrets needed."""
-
-    def __init__(
-        self,
-        max_size: int = 100,
-        ttl: int = 3600
-    ):
-        self.cache = {}
-        self.max_size = max_size
-        self.ttl = ttl
-
-    async def aget(self, key: str):
-        return self.cache.get(key)
-```
-
-### Creating Nodes
-
-**✅ CORRECT:**
-```python
-from hexdag.core.registry import node
-
-@node(name="my_node", namespace="core")
-class MyNode(BaseNodeFactory):
-    """Custom node - no Config class needed."""
-
-    def __init__(self):
-        super().__init__()
-
-    def __call__(
-        self,
-        name: str,
-        timeout: float = 30.0,
-        max_retries: int = 3,
-        **kwargs
-    ):
-        # Parameters are passed directly from YAML
-        ...
-```
-
-### Creating Tools
-
-**✅ CORRECT:**
-```python
-from hexdag.core.registry import tool
-
-@tool(name="my_tool", namespace="custom", description="Does something useful")
-def my_tool(input_param: str, threshold: int = 10) -> str:
-    """Tool function with typed parameters.
-
-    Args:
-        input_param: Input string to process
-        threshold: Processing threshold (default: 10)
-
-    Returns:
-        Processed result
-    """
-    # For tools, the function signature IS the configuration
-    # Type hints define input schema
-    # Docstring provides descriptions
-    return f"Processed: {input_param}"
-```
-
-### Secret Resolution
-
-Secrets are automatically resolved in this order:
-1. **Explicit kwargs** (highest priority)
-2. **Environment variables** (from decorator `secrets` mapping)
-3. **Memory port** (from orchestrator, with `secret:` prefix)
-4. **Error** (if parameter has no default value)
-
-**Example:**
-```python
-# Set environment variable
-os.environ["OPENAI_API_KEY"] = "sk-..."
-
-# Secret auto-resolved from env
-adapter = OpenAIAdapter()  # ✅ api_key resolved
-
-# Explicit value overrides env
-adapter = OpenAIAdapter(api_key="explicit-key")  # ✅ Uses explicit value
-```
-
-### Deferred Secret Resolution (YAML + KeyVault)
-
-**New in v0.2:** hexDAG now supports **deferred secret resolution** for KeyVault/SecretPort workflows. Secret-like environment variables in YAML are preserved at build-time and resolved at runtime.
-
-#### Secret Patterns (Deferred to Runtime)
-
-The following patterns are automatically detected and deferred:
-- `*_API_KEY` - API keys (e.g., `OPENAI_API_KEY`)
-- `*_SECRET` - Generic secrets (e.g., `DB_SECRET`)
-- `*_TOKEN` - Authentication tokens (e.g., `AUTH_TOKEN`)
-- `*_PASSWORD` - Passwords (e.g., `DB_PASSWORD`)
-- `*_CREDENTIAL` - Credentials (e.g., `SERVICE_CREDENTIAL`)
-- `SECRET_*` - Secrets with prefix (e.g., `SECRET_KEY`)
-
-#### Usage Example
-
-**YAML Pipeline:**
 ```yaml
 apiVersion: hexdag/v1
 kind: Pipeline
 metadata:
-  name: production-pipeline
+  name: my-pipeline
 spec:
   ports:
     llm:
-      adapter: openai
+      adapter: hexdag.builtin.adapters.openai.OpenAIAdapter
       config:
-        api_key: ${OPENAI_API_KEY}  # ✅ Deferred to runtime
-        model: ${MODEL}              # ✅ Resolved at build-time (non-secret)
+        model: gpt-4
   nodes:
-    - kind: llm_node
+    - kind: hexdag.builtin.nodes.LLMNode
       metadata:
         name: analyzer
       spec:
         prompt_template: "Analyze: {{input}}"
 ```
 
-**Build Without Secrets:**
-```python
-# CI/CD environment - no secrets present
-graph, config = YamlPipelineBuilder().build_from_yaml_file("pipeline.yaml")
-# ✅ Builds successfully - secrets deferred
+### Built-in Aliases
+
+For convenience, built-in nodes have short aliases:
+
+```yaml
+# These are equivalent:
+- kind: llm_node                           # Short alias
+- kind: hexdag.builtin.nodes.LLMNode       # Full path
 ```
 
-**Runtime Resolution (Production):**
+Available aliases: `llm_node`, `function_node`, `agent_node`, `loop_node`, `conditional_node`
+
+### Creating Custom Components
+
+**Adapters** implement port interfaces:
+
 ```python
-# Production - secrets from KeyVault
-orchestrator = Orchestrator(
-    secret_port=KeyVaultAdapter(...),  # Loads secrets into memory
-    memory=InMemoryMemory(),
-)
-await orchestrator.run(graph, ...)  # ✅ Secrets resolved from memory
+from hexdag.core.ports.llm import LLM
+
+class MyLLMAdapter(LLM):
+    def __init__(self, model: str = "gpt-4", api_key: str | None = None):
+        self.model = model
+        self.api_key = api_key
+
+    async def aresponse(self, messages: list[dict]) -> str:
+        # Your implementation
+        ...
 ```
 
-**Runtime Resolution (Local Dev):**
-```python
-# Local dev - secrets from environment
-os.environ["OPENAI_API_KEY"] = "sk-..."
-os.environ["MODEL"] = "gpt-4"
+**Nodes** extend BaseNodeFactory:
 
-graph, config = YamlPipelineBuilder().build_from_yaml_file("pipeline.yaml")
-orchestrator = Orchestrator()
-await orchestrator.run(graph, ...)  # ✅ Secrets resolved from environment
+```python
+from hexdag.builtin.nodes import BaseNodeFactory
+from hexdag.core.domain import NodeSpec
+
+class MyNode(BaseNodeFactory):
+    def __call__(self, name: str, config: dict, **kwargs) -> NodeSpec:
+        async def process(inputs: dict, context):
+            return {"result": "processed"}
+
+        return NodeSpec(id=name, fn=process)
 ```
 
-#### Benefits
+**Tools** are plain functions with type hints:
 
-1. **Build Without Secrets** - Parse/validate YAML in CI/CD without secrets present
-2. **KeyVault Support** - Runtime injection via SecretPort → Memory
-3. **Environment Separation** - Different secrets for dev/staging/prod
-4. **Backward Compatible** - Non-secret variables resolved at build-time (existing behavior)
-5. **Opt-out Available** - Disable with `defer_secrets=False` if needed
-
-#### Legacy Behavior
-
-To restore legacy behavior (all variables resolved at build-time):
 ```python
-builder = YamlPipelineBuilder()
-# Disable secret deferral for specific plugin
-builder.preprocess_plugins[1] = EnvironmentVariablePlugin(defer_secrets=False)
+def search_database(query: str, limit: int = 10) -> list[dict]:
+    """Search the database for matching records.
+
+    Args:
+        query: Search query string
+        limit: Maximum number of results
+
+    Returns:
+        List of matching records
+    """
+    # Your implementation
+    return results
 ```
-
-### Benefits of the Simplified Pattern
-
-1. **70% Less Code** - From 13 lines to 4 lines per adapter
-2. **Explicit Configuration** - Secrets declared in decorator, visible at a glance
-3. **Clean Signatures** - `__init__` uses plain typed parameters
-4. **Type Safety** - Leverages Python type hints and runtime validation
-5. **Easy Testing** - Direct parameter passing, no Config mocking needed
-6. **YAML Compatible** - Full support for declarative pipelines
-
-### Validation Rules
-
-✅ **All new components MUST:**
-
-**Adapters with Secrets:**
-- Use `secrets` parameter in `@adapter` decorator
-- Declare secret mapping: `secrets={"param_name": "ENV_VAR"}`
-- Clean `__init__` signatures with typed parameters
-
-**Adapters without Secrets:**
-- Simple `@adapter` decorator without `secrets`
-- Plain `__init__` with typed parameters and defaults
-
-**Nodes:**
-- Use `@node` decorator
-- Parameters passed directly from YAML to `__call__` method
-
-**Tools:**
-- Use typed function signatures
-- Include comprehensive docstrings
-- Type hints for automatic schema generation
 
 ### Explicit `__init__` Parameters (Convention)
 
@@ -639,14 +463,6 @@ class MockLLM(LLM):
         mock_tool_calls: list[dict[str, Any]] | None = None,
         **kwargs: Any,  # Keep for forward compatibility
     ) -> None:
-        """Initialize mock LLM.
-
-        Args:
-            responses: Mock response(s) to return.
-            delay_seconds: Simulated latency in seconds.
-            mock_tool_calls: Tool call configurations for testing.
-            **kwargs: Additional options for forward compatibility.
-        """
         self.responses = responses or ['{"result": "Mock response"}']
         self.delay_seconds = delay_seconds
         self.mock_tool_calls = mock_tool_calls
@@ -660,27 +476,6 @@ class MockLLM(LLM):
         self.responses = kwargs.get("responses", ['{"result": "Mock"}'])
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
 ```
-
-**Schema generation result:**
-```python
-# Explicit params → rich schema
-SchemaGenerator.from_callable(MockLLM.__init__)
-# Returns: {"properties": {"responses": {...}, "delay_seconds": {...}}}
-
-# kwargs-only → empty schema
-SchemaGenerator.from_callable(BadMockLLM.__init__)
-# Returns: {"properties": {}}  # Users can't see config options!
-```
-
-**Best practices:**
-1. Always use explicit typed parameters for all configurable options
-2. Keep `**kwargs` at the end for forward compatibility
-3. Add docstrings with Args section for description extraction
-4. Use `| None` for optional parameters with `None` default
-
-### Legacy Code
-
-Some existing adapters use the old `ConfigurableAdapter` pattern with Config classes. These still work but are deprecated. New code should use the simplified decorator pattern. See [SIMPLIFIED_PATTERN.md](docs/SIMPLIFIED_PATTERN.md) for migration guide.
 
 ## Working with YAML Pipelines
 

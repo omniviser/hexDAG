@@ -96,7 +96,7 @@ metadata:
 
 Defines the structure for declarative YAML pipeline manifests. **This schema includes only the core builtin node types** (function, llm, agent, loop, conditional).
 
-> **Note on Plugin Nodes**: Plugin-provided node types (e.g., `my-plugin:custom_node`) are validated at runtime by the registry. The base schema accepts any node kind matching the pattern `namespace:node_type`. Plugins can generate their own namespace-specific schemas for enhanced IDE support.
+> **Note on Plugin Nodes**: Plugin-provided node types (e.g., `mypackage.nodes.CustomNode`) are validated at runtime by the resolver. The base schema accepts any node kind. Plugins can generate their own schemas for enhanced IDE support.
 
 **Usage in YAML files:**
 
@@ -383,14 +383,14 @@ Regenerate schemas when:
 
 ### Plugin Schema Generation
 
-Plugins can generate their own namespace-specific schemas for enhanced IDE support:
+Plugins can generate their own schemas for enhanced IDE support:
 
 ```python
 from scripts.generate_schemas import generate_pipeline_schema
 import json
 
-# Generate schema for your plugin namespace
-plugin_schema = generate_pipeline_schema(namespace="my-plugin")
+# Generate schema including your plugin's node types
+plugin_schema = generate_pipeline_schema()
 
 # Save to your plugin directory
 with open("my-plugin/schema.json", "w") as f:
@@ -401,10 +401,10 @@ This creates a schema that includes your plugin's custom node types alongside th
 
 ### Schema Versioning
 
-Schemas follow the HexDAG version. They're marked as `(auto-generated from {namespace} namespace)` in their description.
+Schemas follow the HexDAG version.
 
-**Core schema** (`pipeline-schema.json`): Contains only builtin nodes from the `core` namespace
-**Plugin schemas**: Each plugin can generate its own namespace-specific schema
+**Core schema** (`pipeline-schema.json`): Contains the builtin node types
+**Plugin schemas**: Each plugin can generate its own schema
 
 Current schema version: **v0.3.0-a2**
 

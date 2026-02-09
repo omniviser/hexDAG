@@ -255,16 +255,14 @@ uv run python -m hexdag --mcp
 
 ### Components Not Showing Up
 
-1. Verify your hexDAG config is loaded:
+1. Verify your components can be imported:
    ```bash
-   export HEXDAG_CONFIG_PATH=/path/to/hexdag.toml
-   python -c "from hexdag.core.bootstrap import ensure_bootstrapped; from hexdag.core.registry import registry; ensure_bootstrapped(); print(len(registry._components))"
+   python -c "from hexdag.core.resolver import resolve; print(resolve('hexdag.builtin.nodes.LLMNode'))"
    ```
 
-2. Check that plugins are listed in your config:
-   ```toml
-   [tool.hexdag]
-   plugins = ["my_custom_plugin"]
+2. Check that your plugin is on the Python path:
+   ```bash
+   python -c "import my_custom_plugin; print(my_custom_plugin)"
    ```
 
 ### Permission Issues

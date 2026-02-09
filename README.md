@@ -85,6 +85,52 @@ The MCP server provides LLMs with tools to:
 - Get component schemas and documentation
 - Auto-discover custom plugins from your `pyproject.toml`
 
+#### Custom Adapters and Plugins
+
+hexDAG supports three levels of component discovery:
+1. **Builtin** - Core adapters and nodes from `hexdag.builtin`
+2. **Plugins** - Community plugins from the `hexdag_plugins` namespace
+3. **User-authored** - Your custom adapters and nodes
+
+To make your custom components discoverable by MCP server, hexdag-studio, and the Python API, use the `HEXDAG_PLUGIN_PATHS` environment variable:
+
+```bash
+# Set custom plugin paths (colon-separated on Unix, semicolon on Windows)
+export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
+
+# Now MCP server, Studio, and API all discover your components
+uv run python -m hexdag --mcp
+```
+
+**Claude Desktop with custom plugins:**
+```json
+{
+  "mcpServers": {
+    "hexdag": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "hexdag", "--mcp"],
+      "env": {
+        "HEXDAG_PLUGIN_PATHS": "/path/to/my_adapters:/path/to/my_nodes"
+      }
+    }
+  }
+}
+```
+
+**Programmatic configuration:**
+```python
+from hexdag.core.discovery import set_user_plugin_paths
+from pathlib import Path
+
+# Configure custom plugin paths
+set_user_plugin_paths([Path("./my_adapters"), Path("./my_nodes")])
+
+# Now list_adapters() and list_nodes() include your components
+from hexdag.api.components import list_adapters, list_nodes
+adapters = list_adapters()  # Includes your custom adapters
+nodes = list_nodes()        # Includes your custom nodes
+```
+
 See [examples/mcp/](examples/mcp/) for detailed configuration guides.
 
 ### Your First Agent Workflow

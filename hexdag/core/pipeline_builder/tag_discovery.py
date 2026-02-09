@@ -3,6 +3,19 @@
 This module provides functions to discover available YAML custom tags
 and extract documentation from their constructors.
 
+Tags are discovered from:
+1. Builtin tags in hexdag.core.pipeline_builder (modules ending with _tag)
+2. Plugin tags registered via entry points (hexdag.tags group)
+
+Plugin Tag Registration
+-----------------------
+Plugins can register custom YAML tags via pyproject.toml::
+
+    [project.entry-points."hexdag.tags"]
+    "!mytag" = "myplugin.tags:mytag_constructor"
+
+The constructor function will receive (loader, node) arguments per PyYAML convention.
+
 Usage
 -----
 >>> from hexdag.core.pipeline_builder.tag_discovery import discover_tags
@@ -15,30 +28,123 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import pkgutil
 from functools import lru_cache
 from typing import Any
 
 import yaml
 
-# Tag metadata registry
-# Maps tag name -> (module, constructor_func, description)
-_TAG_REGISTRY: dict[str, tuple[str, str, str]] = {
-    "!py": (
-        "hexdag.core.pipeline_builder.py_tag",
-        "py_constructor",
-        "Compile inline Python code into callable functions",
-    ),
-    "!include": (
-        "hexdag.core.pipeline_builder.include_tag",
-        "include_constructor",
-        "Include content from external YAML files",
-    ),
-}
+
+def _discover_builtin_tags() -> dict[str, tuple[str, str, str]]:
+    """Discover builtin tags from hexdag.core.pipeline_builder package.
+
+    Scans for modules ending with '_tag' and looks for constructor functions
+    following the naming pattern '<tagname>_constructor'.
+
+    Returns
+    -------
+    dict[str, tuple[str, str, str]]
+        Mapping of tag name to (module_path, constructor_name, description)
+    """
+    tags: dict[str, tuple[str, str, str]] = {}
+
+    try:
+        package = importlib.import_module("hexdag.core.pipeline_builder")
+        if not hasattr(package, "__path__"):
+            return tags
+
+        for _finder, name, _ispkg in pkgutil.iter_modules(package.__path__):
+            # Look for modules ending with _tag (e.g., py_tag, include_tag)
+            if not name.endswith("_tag"):
+                continue
+
+            module_path = f"hexdag.core.pipeline_builder.{name}"
+
+            try:
+                module = importlib.import_module(module_path)
+            except ImportError:
+                continue
+
+            # Derive tag name and constructor name from module name
+            # py_tag -> !py, py_constructor
+            # include_tag -> !include, include_constructor
+            tag_base = name[:-4]  # Remove '_tag' suffix
+            tag_name = f"!{tag_base}"
+            constructor_name = f"{tag_base}_constructor"
+
+            # Check if constructor exists in module
+            constructor = getattr(module, constructor_name, None)
+            if constructor is None:
+                continue
+
+            # Get description from constructor docstring
+            description = (
+                (inspect.getdoc(constructor) or f"YAML {tag_name} tag").split("\n")[0].strip()
+            )
+
+            tags[tag_name] = (module_path, constructor_name, description)
+
+    except ImportError:
+        pass
+
+    return tags
+
+
+def _discover_plugin_tags() -> dict[str, tuple[str, str, str]]:
+    """Discover custom tags from plugin entry points.
+
+    Plugins can register custom YAML tags via pyproject.toml::
+
+        [project.entry-points."hexdag.tags"]
+        "!mytag" = "myplugin.tags:mytag_constructor"
+
+    Returns
+    -------
+    dict[str, tuple[str, str, str]]
+        Mapping of tag name to (module_path, constructor_name, description)
+    """
+    tags: dict[str, tuple[str, str, str]] = {}
+
+    try:
+        from importlib.metadata import entry_points
+
+        eps = entry_points(group="hexdag.tags")
+        for ep in eps:
+            try:
+                # Load the constructor to get its docstring
+                constructor = ep.load()
+                description = (
+                    (inspect.getdoc(constructor) or "Custom tag from plugin").split("\n")[0].strip()
+                )
+
+                # Parse entry point value: "module.path:function_name"
+                if ":" in ep.value:
+                    module_path, func_name = ep.value.rsplit(":", 1)
+                else:
+                    # Fallback: assume the whole value is a module with __call__
+                    module_path = ep.value
+                    func_name = "__call__"
+
+                # Normalize tag name (ensure ! prefix)
+                tag_name = ep.name if ep.name.startswith("!") else f"!{ep.name}"
+                tags[tag_name] = (module_path, func_name, description)
+            except Exception:
+                # Skip broken entry points silently
+                pass
+    except Exception:
+        # importlib.metadata not available or entry_points failed
+        pass
+
+    return tags
 
 
 @lru_cache(maxsize=1)
 def discover_tags() -> dict[str, dict[str, Any]]:
     """Discover all registered YAML custom tags with their metadata.
+
+    Discovers tags from:
+    1. Builtin tags in hexdag.core.pipeline_builder (auto-discovered)
+    2. Plugin tags via entry points (hexdag.tags group)
 
     Returns
     -------
@@ -51,6 +157,7 @@ def discover_tags() -> dict[str, dict[str, Any]]:
         - documentation: Full docstring
         - syntax: Syntax patterns
         - is_registered: Whether tag is registered with YAML SafeLoader
+        - source: "builtin" or "plugin"
 
     Examples
     --------
@@ -58,12 +165,20 @@ def discover_tags() -> dict[str, dict[str, Any]]:
     >>> "!py" in tags
     True
     >>> tags["!py"]["description"]
-    'Compile inline Python code into callable functions'
+    'Compile !py tagged Python code into a callable function.'
     """
     result: dict[str, dict[str, Any]] = {}
 
-    for tag_name, (module_path, constructor_name, description) in _TAG_REGISTRY.items():
+    # Discover builtin tags dynamically
+    for tag_name, (module_path, constructor_name, description) in _discover_builtin_tags().items():
         tag_info = _extract_tag_info(tag_name, module_path, constructor_name, description)
+        tag_info["source"] = "builtin"
+        result[tag_name] = tag_info
+
+    # Discover plugin tags (can override builtins if desired)
+    for tag_name, (module_path, constructor_name, description) in _discover_plugin_tags().items():
+        tag_info = _extract_tag_info(tag_name, module_path, constructor_name, description)
+        tag_info["source"] = "plugin"
         result[tag_name] = tag_info
 
     return result
@@ -287,3 +402,11 @@ def get_known_tag_names() -> frozenset[str]:
     True
     """
     return frozenset(discover_tags().keys())
+
+
+def clear_tag_cache() -> None:
+    """Clear the tag discovery cache.
+
+    Useful for testing or when plugins are dynamically loaded/unloaded.
+    """
+    discover_tags.cache_clear()

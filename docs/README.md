@@ -115,10 +115,10 @@ Auto-generated documentation for all registered components:
 - **[Tools](tools.md)** - Built-in and custom tools
 - **[Ports](ports.md)** - Interface definitions
 
-#### **[Namespaces]()**
-Components organized by namespace:
-- **[Core Namespace](core.md)** - Built-in components
-- **[Plugin Namespace](plugin.md)** - Plugin-provided components
+#### **[Components]()**
+Components organized by type:
+- **[Built-in](core.md)** - hexDAG built-in components
+- **[Plugins](plugin.md)** - Plugin-provided components
 
 ### Planning & Development
 

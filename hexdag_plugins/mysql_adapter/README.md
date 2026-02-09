@@ -106,18 +106,26 @@ asyncio.run(main())
 
 ### Integration with hexDAG
 
-The adapter automatically registers with hexDAG's registry system:
+Use the adapter in YAML pipelines by referencing its full module path:
+
+```yaml
+# pipeline.yaml
+spec:
+  ports:
+    database:
+      adapter: hexdag_plugins.mysql_adapter.MySQLAdapter
+      config:
+        host: localhost
+        user: root
+        password: ${DB_PASSWORD}
+```
+
+Or instantiate directly in Python:
 
 ```python
-from hexdag.core.bootstrap import bootstrap_registry
-from hexdag.core.registry import registry
+from hexdag_plugins.mysql_adapter import MySQLAdapter
 
-# Bootstrap with MySQL plugin
-bootstrap_registry()
-
-# Get MySQL adapter from registry
-mysql_info = registry.get_info("mysql", namespace="plugin")
-adapter = mysql_info.get_instance(
+adapter = MySQLAdapter(
     host="localhost",
     user="root",
     password="password"

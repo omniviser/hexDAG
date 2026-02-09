@@ -23,7 +23,7 @@ class TestGetNodeTypes:
             assert "kind" in node
             assert "name" in node
             assert "description" in node
-            assert "namespace" in node
+            assert "module_path" in node
             assert "color" in node
             assert "icon" in node
             assert "default_spec" in node
@@ -109,14 +109,6 @@ class TestGetTools:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-
-    def test_get_tools_filter_by_namespace(self, client: TestClient):
-        """Test filtering tools by namespace."""
-        response = client.get("/api/registry/tools?namespace=core")
-        assert response.status_code == 200
-        data = response.json()
-        for tool in data:
-            assert tool["namespace"] == "core"
 
 
 class TestGetMacros:

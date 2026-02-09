@@ -338,10 +338,8 @@ Comprehensive logging and monitoring:
 
 ```python
 # hexdag/builtin/observers/azure_appinsights.py
-from hexdag.core.registry import observer
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
-@observer(name="appinsights")
 class AppInsightsObserver:
     """Azure Application Insights observer for pipeline telemetry."""
 
