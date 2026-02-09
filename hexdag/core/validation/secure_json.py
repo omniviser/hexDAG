@@ -12,6 +12,7 @@ ErrorCode = Literal[
     "invalid_syntax",
     "unrecoverable",
     "no_json_found",
+    "yaml_error",
 ]
 
 
@@ -85,10 +86,41 @@ class SafeJSON:
             return SafeJSONResult(error="unrecoverable", message="Unrecoverable JSON")
 
     def loads_from_text(self, text: str) -> SafeJSONResult:
+        """Extract and parse JSON from mixed text (LLM output, markdown, etc.).
+
+        Tries in order: ```json blocks → generic code blocks → raw JSON match.
+        Then applies size/depth validation and cleanup.
+        """
         candidate = self._extract_json(text)
         if not candidate:
             return SafeJSONResult(error="no_json_found", message="No JSON found in text")
         return self.loads(candidate)
+
+    def loads_yaml(self, text: str) -> SafeJSONResult:
+        """Parse YAML text with size validation.
+
+        Uses ``yaml.safe_load`` for parsing. Only size is checked (YAML depth
+        estimation is not straightforward), so callers relying on depth limits
+        should prefer JSON where possible.
+        """
+        import yaml
+
+        if len(text.encode("utf-8")) > self.max_size_bytes:
+            return SafeJSONResult(error="too_large", message="YAML exceeds size limit")
+
+        try:
+            data = yaml.safe_load(text)
+            return SafeJSONResult(data=data)
+        except yaml.YAMLError as e:
+            return SafeJSONResult(error="yaml_error", message=str(e))
+
+    def loads_yaml_from_text(self, text: str) -> SafeJSONResult:
+        """Extract YAML from markdown code blocks and parse it.
+
+        Tries ```yaml blocks first, then generic code blocks, finally raw text.
+        """
+        candidate = self._extract_yaml(text)
+        return self.loads_yaml(candidate)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -112,6 +144,19 @@ class SafeJSON:
             return match.group(1).strip()
         match = re.search(r"[\[{][\s\S]*[\]}]", text)
         return match.group(0).strip() if match else None
+
+    @staticmethod
+    def _extract_yaml(text: str) -> str:
+        """Extract YAML content from markdown code blocks or return raw text."""
+        if not text:
+            return text
+        match = re.search(r"```ya?ml\s*([\s\S]*?)```", text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        match = re.search(r"```\s*([\s\S]*?)```", text)
+        if match:
+            return match.group(1).strip()
+        return text.strip()
 
     @staticmethod
     def _estimate_depth(text: str) -> int:

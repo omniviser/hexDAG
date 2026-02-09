@@ -124,3 +124,142 @@ def test_secure_loader_handles_minor_llm_formatting_and_pydantic_validation():
     result = M.model_validate(data)
     assert result.a == 1
     assert result.b == [1, 2]
+
+
+# ── YAML parsing tests ──────────────────────────────────────────────
+
+
+def test_loads_yaml_simple():
+    text = "key: value\ncount: 42\n"
+    result = SafeJSON().loads_yaml(text)
+    assert result.ok
+    assert result.data == {"key": "value", "count": 42}
+
+
+def test_loads_yaml_rejects_large_input():
+    large = "x: " + "a" * 2000
+    result = SafeJSON(max_size_bytes=1000).loads_yaml(large)
+    assert result.error == "too_large"
+
+
+def test_loads_yaml_invalid_yaml():
+    result = SafeJSON().loads_yaml(":::\n  - ][bad")
+    assert result.error == "yaml_error"
+
+
+def test_loads_yaml_nested():
+    text = """
+outer:
+  inner:
+    value: 1
+  list:
+    - a
+    - b
+"""
+    result = SafeJSON().loads_yaml(text)
+    assert result.ok
+    assert result.data["outer"]["inner"]["value"] == 1
+    assert result.data["outer"]["list"] == ["a", "b"]
+
+
+def test_loads_yaml_from_text_fenced_block():
+    text = """Here is the config:
+```yaml
+name: test
+count: 5
+```
+"""
+    result = SafeJSON().loads_yaml_from_text(text)
+    assert result.ok
+    assert result.data == {"name": "test", "count": 5}
+
+
+def test_loads_yaml_from_text_yml_block():
+    text = """Output:
+```yml
+items:
+  - one
+  - two
+```
+"""
+    result = SafeJSON().loads_yaml_from_text(text)
+    assert result.ok
+    assert result.data["items"] == ["one", "two"]
+
+
+def test_loads_yaml_from_text_generic_block():
+    text = """Result:
+```
+key: value
+```
+"""
+    result = SafeJSON().loads_yaml_from_text(text)
+    assert result.ok
+    assert result.data == {"key": "value"}
+
+
+def test_loads_yaml_from_text_raw():
+    text = "name: test\ncount: 42"
+    result = SafeJSON().loads_yaml_from_text(text)
+    assert result.ok
+    assert result.data == {"name": "test", "count": 42}
+
+
+# ── _extract_yaml tests ─────────────────────────────────────────────
+
+
+def test_extract_yaml_from_yaml_block():
+    text = "```yaml\nfoo: bar\n```"
+    assert SafeJSON._extract_yaml(text) == "foo: bar"
+
+
+def test_extract_yaml_from_yml_block():
+    text = "```yml\nfoo: bar\n```"
+    assert SafeJSON._extract_yaml(text) == "foo: bar"
+
+
+def test_extract_yaml_from_generic_block():
+    text = "```\nfoo: bar\n```"
+    assert SafeJSON._extract_yaml(text) == "foo: bar"
+
+
+def test_extract_yaml_raw_text():
+    assert SafeJSON._extract_yaml("foo: bar") == "foo: bar"
+
+
+def test_extract_yaml_empty():
+    assert SafeJSON._extract_yaml("") == ""
+
+
+# ── loads_from_text integration (JSON strategies) ────────────────────
+
+
+def test_loads_from_text_plain_json():
+    result = SafeJSON().loads_from_text('{"key": "value"}')
+    assert result.ok
+    assert result.data == {"key": "value"}
+
+
+def test_loads_from_text_json_in_markdown():
+    text = 'Here is JSON:\n```json\n{"a": 1}\n```\n'
+    result = SafeJSON().loads_from_text(text)
+    assert result.ok
+    assert result.data == {"a": 1}
+
+
+def test_loads_from_text_json_with_comments_in_markdown():
+    text = '```json\n{"a": 1, // comment\n"b": 2}\n```'
+    result = SafeJSON().loads_from_text(text)
+    assert result.ok
+    assert result.data == {"a": 1, "b": 2}
+
+
+def test_loads_from_text_no_json():
+    result = SafeJSON().loads_from_text("just plain text with no JSON")
+    assert result.error == "no_json_found"
+
+
+def test_loads_from_text_array():
+    result = SafeJSON().loads_from_text("Result: [1, 2, 3]")
+    assert result.ok
+    assert result.data == [1, 2, 3]
