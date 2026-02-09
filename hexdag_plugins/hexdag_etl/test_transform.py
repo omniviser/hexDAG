@@ -14,7 +14,11 @@ node_factory = PandasTransformNode()
 
 # Build operations
 operations = [
-    {"type": "transform", "method": "pandas.DataFrame.sort_values", "kwargs": {"by": "amount", "ascending": False}},
+    {
+        "type": "transform",
+        "method": "pandas.DataFrame.sort_values",
+        "kwargs": {"by": "amount", "ascending": False},
+    },
     {
         "type": "transform",
         "method": "pandas.DataFrame.assign",

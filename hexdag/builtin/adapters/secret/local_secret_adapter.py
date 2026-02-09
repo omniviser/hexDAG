@@ -53,15 +53,22 @@ class LocalSecretAdapter:
     allow_empty: bool
     _cache: dict[str, Secret]
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        env_prefix: str = "",
+        allow_empty: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """Initialize local secret adapter.
 
         Args
         ----
-            **kwargs: Configuration options (env_prefix, allow_empty)
+            env_prefix: Prefix for environment variable names (e.g., "MYAPP_").
+            allow_empty: Allow empty secret values. Default: False.
+            **kwargs: Additional options for forward compatibility.
         """
-        self.env_prefix = kwargs.get("env_prefix", "")
-        self.allow_empty = kwargs.get("allow_empty", False)
+        self.env_prefix = env_prefix
+        self.allow_empty = allow_empty
 
         self._cache: dict[str, Secret] = {}
 

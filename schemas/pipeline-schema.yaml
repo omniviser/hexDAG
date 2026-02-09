@@ -136,49 +136,8 @@ $defs:
         type: object
         properties:
           fn:
-            anyOf:
-            - type: string
-              description: Module path string (e.g., 'myapp.process') or !py inline
-                function
-            - type: string
-            description: Function to execute (callable or module path string like
-              'mymodule.myfunc')
-          input_schema:
-            anyOf:
-            - type: object
-            - type: string
-            description: Input schema for validation (if None, inferred from function)
-            default: null
-          output_schema:
-            anyOf:
-            - type: object
-            - type: string
-            description: Output schema for validation (if None, inferred from function)
-            default: null
-          deps:
-            type:
-            - array
-            - 'null'
-            items:
-              type: string
-            description: List of dependency node names
-            default: null
-          input_mapping:
-            type:
-            - object
-            - 'null'
-            additionalProperties:
-              type: string
-            description: 'Optional field mapping dict {target_field: "source.path"}'
-            default: null
-          unpack_input:
-            type: boolean
-            description: If True, unpack input_mapping fields as individual **kwargs
-              to the function instead of passing as single input_data object. This
-              allows functions with signatures like `fn(load_id, rate, *, db=None)`
-              instead of `fn(input_data, *, db=None)`.
-            default: false
-        additionalProperties: false
+            type: string
+            description: Module path string (e.g., 'myapp.process')
         required:
         - fn
     required:
@@ -210,38 +169,27 @@ $defs:
         properties:
           prompt_template:
             type: string
-            description: Template for the user prompt. Supports Jinja2-style {{variable}}
-              syntax. Can be a string or PromptTemplate/ChatPromptTemplate object.
-              Can also be provided as 'template' (alias for YAML compatibility).
-            default: null
+            description: Template for the user prompt (Jinja2-style {{variable}} syntax)
           output_schema:
-            type: string
-            description: Expected output schema for structured output. If provided
-              with parse_json=True, the LLM response will be parsed and validated
-              against this schema.
-            default: null
+            type: object
+            description: Expected output schema for structured output validation
           system_prompt:
             type: string
-            description: System message to prepend to the conversation.
-            default: null
+            description: System message to prepend to the conversation
           parse_json:
-            type: string
-            description: If True, parse the LLM response as JSON and validate against
-              output_schema. Default is False (returns raw text).
+            type: boolean
             default: false
+            description: Parse the LLM response as JSON
           parse_strategy:
             type: string
-            description: 'JSON parsing strategy: "json", "json_in_markdown", or "yaml".
-              Default is "json".'
+            enum:
+            - json
+            - json_in_markdown
+            - yaml
             default: json
-          deps:
-            type: string
-            description: List of dependency node names.
-            default: null
-          template:
-            type: string
-            default: null
-        additionalProperties: false
+            description: JSON parsing strategy
+        required:
+        - prompt_template
     required:
     - kind
     - metadata
@@ -293,14 +241,6 @@ $defs:
             - string
             - 'null'
             description: Agent configuration
-            default: null
-          deps:
-            type:
-            - array
-            - 'null'
-            items:
-              type: string
-            description: Dependencies
             default: null
         additionalProperties: false
         required:
@@ -457,14 +397,6 @@ $defs:
             - string
             - 'null'
             description: Optional ID for tracking (from LLM tool calls)
-            default: null
-          deps:
-            type:
-            - array
-            - 'null'
-            items:
-              type: string
-            description: Dependencies (typically the LLM node that requested the tool)
             default: null
         additionalProperties: false
         required:

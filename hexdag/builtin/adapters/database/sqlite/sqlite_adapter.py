@@ -4,7 +4,7 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import aiosqlite
 
@@ -12,6 +12,9 @@ from hexdag.core.logging import get_logger
 from hexdag.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
+
+# Convention: SQLite journal mode options for dropdown menus in Studio UI
+SQLiteJournalMode = Literal["WAL", "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "OFF"]
 
 
 class SQLiteAdapter:
@@ -22,20 +25,34 @@ class SQLiteAdapter:
     All operations are fully async using aiosqlite.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        db_path: str = ":memory:",
+        timeout: float = 5.0,
+        journal_mode: SQLiteJournalMode = "WAL",
+        foreign_keys: bool = True,
+        read_only: bool = False,
+        check_same_thread: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """Initialize SQLite adapter.
 
         Args
         ----
-            **kwargs: Configuration options (db_path, timeout, etc.)
+            db_path: Path to SQLite database file, or ":memory:" for in-memory DB.
+            timeout: Connection timeout in seconds. Default: 5.0.
+            journal_mode: SQLite journal mode (WAL, DELETE, etc). Default: "WAL".
+            foreign_keys: Enable foreign key constraints. Default: True.
+            read_only: Open database in read-only mode. Default: False.
+            check_same_thread: SQLite same-thread check. Default: False.
+            **kwargs: Additional options for forward compatibility.
         """
-        db_path = kwargs.get("db_path", ":memory:")
         self.db_path = Path(db_path) if db_path != ":memory:" else db_path
-        self.check_same_thread = kwargs.get("check_same_thread", False)
-        self.timeout = kwargs.get("timeout", 5.0)
-        self.journal_mode = kwargs.get("journal_mode", "WAL")
-        self.foreign_keys = kwargs.get("foreign_keys", True)
-        self.read_only = kwargs.get("read_only", False)
+        self.check_same_thread = check_same_thread
+        self.timeout = timeout
+        self.journal_mode = journal_mode
+        self.foreign_keys = foreign_keys
+        self.read_only = read_only
 
         self.connection: aiosqlite.Connection | None = None
 

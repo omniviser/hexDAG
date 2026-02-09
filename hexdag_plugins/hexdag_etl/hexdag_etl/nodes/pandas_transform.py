@@ -4,20 +4,22 @@ import asyncio
 import importlib
 from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
-from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 from pydantic import BaseModel
+
+from .base_node_factory import BaseNodeFactory
+
+# Convention: Pandas operation types for dropdown menus in Studio UI
+PandasOperationType = Literal["transform", "map", "filter", "assign"]
 
 
 class PandasOperation(BaseModel):
     """Single pandas operation configuration."""
 
-    type: str = "transform"
+    type: PandasOperationType = "transform"
     """Operation type: 'transform', 'map', 'filter', 'assign'"""
 
     method: str | None = None
@@ -36,7 +38,6 @@ class PandasOperation(BaseModel):
     """Filter condition expression (for 'filter' operations)"""
 
 
-@node(name="pandas_transform_node", subtype=NodeSubtype.FUNCTION, namespace="etl")
 class PandasTransformNode(BaseNodeFactory):
     """Node factory for multi-operation pandas transforms.
 
@@ -119,6 +120,10 @@ class PandasTransformNode(BaseNodeFactory):
               format: parquet
               compression: snappy
     """
+
+    # Studio UI metadata
+    _hexdag_icon = "Table"
+    _hexdag_color = "#8b5cf6"  # violet-500
 
     def __call__(
         self,
@@ -257,7 +262,7 @@ class PandasTransformNode(BaseNodeFactory):
                     raise ValueError(f"Could not convert input to DataFrame: {e}")
 
             # Execute operations sequentially
-            for i, op in enumerate(operations):
+            for _i, op in enumerate(operations):
                 df = await self._execute_operation(df, op, loaded_dfs if input_artifacts else [df])
 
             # Store output artifact if specified
@@ -322,17 +327,16 @@ class PandasTransformNode(BaseNodeFactory):
         if op_type == "transform":
             return await self._execute_transform(df, op, input_dfs)
 
-        elif op_type == "map":
+        if op_type == "map":
             return await self._execute_map(df, op)
 
-        elif op_type == "filter":
+        if op_type == "filter":
             return await self._execute_filter(df, op)
 
-        elif op_type == "assign":
+        if op_type == "assign":
             return await self._execute_assign(df, op)
 
-        else:
-            raise ValueError(f"Unknown operation type: {op_type}")
+        raise ValueError(f"Unknown operation type: {op_type}")
 
     async def _execute_transform(
         self, df: pd.DataFrame, op: PandasOperation, input_dfs: list[pd.DataFrame]
@@ -362,8 +366,7 @@ class PandasTransformNode(BaseNodeFactory):
         # Prepare arguments (resolve template expressions)
         args = []
         if op.args:
-            for arg in op.args:
-                args.append(self._resolve_arg(arg, df, input_dfs))
+            args.extend(self._resolve_arg(arg, df, input_dfs) for arg in op.args)
 
         # Prepare keyword arguments
         kwargs = {}
@@ -478,20 +481,9 @@ class PandasTransformNode(BaseNodeFactory):
                     # It's a DataFrame method: pandas.DataFrame.method_name
                     method_name = parts[2]
                     return getattr(pd.DataFrame, method_name)
-                else:
-                    # It's a module-level function like pandas.merge
-                    module_path = ".".join(parts[:-1])
-                    attr_path = parts[-1]
-                    module = importlib.import_module(module_path)
-                    method = getattr(module, attr_path)
-
-                    if not callable(method):
-                        raise ValueError(f"'{method_path}' is not callable")
-
-                    return method
-            else:
-                # Standard module attribute resolution
-                module_path, attr_path = method_path.rsplit(".", 1)
+                # It's a module-level function like pandas.merge
+                module_path = ".".join(parts[:-1])
+                attr_path = parts[-1]
                 module = importlib.import_module(module_path)
                 method = getattr(module, attr_path)
 
@@ -499,6 +491,15 @@ class PandasTransformNode(BaseNodeFactory):
                     raise ValueError(f"'{method_path}' is not callable")
 
                 return method
+            # Standard module attribute resolution
+            module_path, attr_path = method_path.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            method = getattr(module, attr_path)
+
+            if not callable(method):
+                raise ValueError(f"'{method_path}' is not callable")
+
+            return method
         except Exception as e:
             raise ValueError(f"Could not resolve method '{method_path}': {e}") from e
 
@@ -533,15 +534,14 @@ class PandasTransformNode(BaseNodeFactory):
                 # Handle special variables
                 if expr == "df":
                     return df
-                elif expr.startswith("input_artifacts["):
+                if expr.startswith("input_artifacts["):
                     # Extract index
                     idx_match = re.search(r"input_artifacts\[(\d+)\]", expr)
                     if idx_match:
                         idx = int(idx_match.group(1))
                         if 0 <= idx < len(input_dfs):
                             return input_dfs[idx]
-                        else:
-                            raise IndexError(f"input_artifacts[{idx}] out of range")
+                        raise IndexError(f"input_artifacts[{idx}] out of range")
 
                 # Try to evaluate as Python expression
                 try:

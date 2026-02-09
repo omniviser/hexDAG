@@ -1,10 +1,11 @@
 """Schema generator - converts Python signatures to JSON Schema."""
 
+import contextlib
 import inspect
 import json
 import re
 from collections.abc import Callable
-from typing import Any, get_args, get_origin
+from typing import Any, get_args, get_origin, get_type_hints
 
 import yaml
 
@@ -53,6 +54,20 @@ class SchemaGenerator:
         list: {"type": "array"},
         None: {"type": "null"},
         type(None): {"type": "null"},
+    }
+
+    # Framework parameters to skip when generating config schemas for nodes.
+    # These are internal/structural parameters, not user-configurable options.
+    FRAMEWORK_PARAMS = {
+        # Node structure params
+        "name",
+        "deps",
+        "dependencies",
+        # Function node internal params (fn defines behavior, schemas are inferred)
+        "fn",
+        "input_schema",
+        "input_mapping",
+        "unpack_input",
     }
 
     @staticmethod
@@ -132,6 +147,12 @@ class SchemaGenerator:
                 first_non_self_param = pname
                 break
 
+        # Resolve string annotations to actual types (handles PEP 563)
+        # Use include_extras=True to preserve Annotated metadata for Field constraints
+        type_hints: dict[str, Any] = {}
+        with contextlib.suppress(Exception):
+            type_hints = get_type_hints(factory, include_extras=True)
+
         for param_name, param in sig.parameters.items():
             # Skip special parameters
             if param_name in ("self", "cls", "args", "kwargs"):
@@ -141,6 +162,10 @@ class SchemaGenerator:
             if param_name == "name" and param_name == first_non_self_param:
                 continue
 
+            # Skip framework/structural parameters (not user config)
+            if param_name in SchemaGenerator.FRAMEWORK_PARAMS:
+                continue
+
             # Skip *args and **kwargs
             if param.kind in (
                 inspect.Parameter.VAR_POSITIONAL,
@@ -148,7 +173,8 @@ class SchemaGenerator:
             ):
                 continue
 
-            param_type = param.annotation
+            # Get resolved type from type_hints, fall back to annotation
+            param_type = type_hints.get(param_name, param.annotation)
 
             # Skip if no type annotation
             if param_type == inspect.Parameter.empty:

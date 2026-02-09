@@ -1,23 +1,32 @@
 """SQL extraction and loading nodes for database operations."""
 
-from typing import Any
+from typing import Any, Literal
 
 from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 
+# Convention: SQL load modes for dropdown menus in Studio UI
+SqlLoadMode = Literal["append", "replace", "truncate_insert", "merge"]
 
-@node(name="sql_extract", subtype=NodeSubtype.TOOL, namespace="etl")
+
 class SQLExtractNode(BaseNodeFactory):
     """Extract data from SQL databases.
 
     Placeholder implementation - to be completed with full SQLAlchemy integration.
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Database"
+    _hexdag_color = "#3b82f6"  # blue-500
+
     def __call__(
-        self, name: str, query: str, database: str | None = None, deps: list[str] | None = None, **kwargs: Any
+        self,
+        name: str,
+        query: str,
+        database: str | None = None,
+        deps: list[str] | None = None,
+        **kwargs: Any,
     ) -> NodeSpec:
         """Create SQL extract node.
 
@@ -42,7 +51,10 @@ class SQLExtractNode(BaseNodeFactory):
 
         async def wrapped_fn(input_data: dict, **ports: dict) -> dict:
             """Placeholder implementation."""
-            return {"output": [], "metadata": {"query": query, "database": database, "status": "placeholder"}}
+            return {
+                "output": [],
+                "metadata": {"query": query, "database": database, "status": "placeholder"},
+            }
 
         wrapped_fn.__name__ = f"sql_extract_{name}"
 
@@ -56,18 +68,21 @@ class SQLExtractNode(BaseNodeFactory):
         )
 
 
-@node(name="sql_load", subtype=NodeSubtype.TOOL, namespace="etl")
 class SQLLoadNode(BaseNodeFactory):
     """Load data into SQL databases.
 
     Placeholder implementation - to be completed with SQLAlchemy integration.
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "DatabaseBackup"
+    _hexdag_color = "#22c55e"  # green-500
+
     def __call__(
         self,
         name: str,
         table: str,
-        mode: str = "append",
+        mode: SqlLoadMode = "append",
         database: str | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
@@ -80,8 +95,8 @@ class SQLLoadNode(BaseNodeFactory):
             Node name
         table : str
             Target table name
-        mode : str
-            Load mode: "append", "replace", "truncate_insert", "merge"
+        mode : SqlLoadMode
+            Load mode: 'append', 'replace', 'truncate_insert', 'merge'
         database : str, optional
             Database connection reference
         deps : list, optional

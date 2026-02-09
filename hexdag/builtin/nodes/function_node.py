@@ -27,6 +27,22 @@ class FunctionNode(BaseNodeFactory):
     All configuration is passed dynamically through __call__() parameters.
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Code"
+    _hexdag_color = "#3b82f6"  # blue-500
+
+    # Explicit schema for Studio UI
+    _yaml_schema = {
+        "type": "object",
+        "properties": {
+            "fn": {
+                "type": "string",
+                "description": "Module path string (e.g., 'myapp.process')",
+            },
+        },
+        "required": ["fn"],
+    }
+
     def __call__(
         self,
         name: str,

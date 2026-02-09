@@ -1,15 +1,15 @@
 """API extraction node for HTTP/REST API data extraction."""
 
-from typing import Any
+from typing import Any, Literal
 
 from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 
 from .base_node_factory import BaseNodeFactory
 
+# Convention: HTTP methods for dropdown menus in Studio UI
+HttpMethod = Literal["GET", "POST", "PUT", "DELETE", "PATCH"]
 
-@node(name="api_extract", subtype=NodeSubtype.TOOL, namespace="etl")
+
 class APIExtractNode(BaseNodeFactory):
     """Extract data from REST APIs with pagination, authentication, and error handling.
 
@@ -48,11 +48,15 @@ class APIExtractNode(BaseNodeFactory):
               format: json
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Globe"
+    _hexdag_color = "#06b6d4"  # cyan-500
+
     def __call__(
         self,
         name: str,
         endpoint: str,
-        method: str = "GET",
+        method: HttpMethod = "GET",
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         auth: dict[str, Any] | None = None,
@@ -73,8 +77,8 @@ class APIExtractNode(BaseNodeFactory):
             Node name
         endpoint : str
             API endpoint URL
-        method : str
-            HTTP method: "GET", "POST", "PUT", "DELETE"
+        method : HttpMethod
+            HTTP method: 'GET', 'POST', 'PUT', 'DELETE', 'PATCH'
         params : dict, optional
             Query parameters or request body
         headers : dict, optional

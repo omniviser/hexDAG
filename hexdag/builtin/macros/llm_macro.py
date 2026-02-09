@@ -7,7 +7,7 @@ Note: With the unified LLMNode, this macro is now a thin wrapper.
 Consider using LLMNode directly for simpler use cases.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -38,7 +38,7 @@ class LLMMacroConfig(MacroConfig):
     template: PromptInput
     output_schema: dict[str, type] | type[BaseModel] | None = None
     system_prompt: str | None = None
-    parse_strategy: str = "json"
+    parse_strategy: Literal["json", "json_in_markdown", "yaml"] = "json"
 
     @field_validator("output_schema", mode="before")
     @classmethod

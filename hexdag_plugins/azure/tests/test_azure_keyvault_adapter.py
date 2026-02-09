@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hexdag_plugins.azure.azure_keyvault_adapter import AzureKeyVaultAdapter
+from hexdag_plugins.azure.adapters.keyvault import AzureKeyVaultAdapter
 
 
 @pytest.fixture

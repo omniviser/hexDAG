@@ -44,7 +44,15 @@ def create_sample_data():
                 "emma@example.com",
             ],
             "country": ["USA", "UK", "USA", "Canada", "Australia"],
-            "signup_date": pd.to_datetime(["2024-01-15", "2024-02-20", "2024-03-10", "2024-01-25", "2024-04-05"]),
+            "signup_date": pd.to_datetime(
+                [
+                    "2024-01-15",
+                    "2024-02-20",
+                    "2024-03-10",
+                    "2024-01-25",
+                    "2024-04-05",
+                ]
+            ),
         }
     )
 
@@ -53,7 +61,16 @@ def create_sample_data():
         {
             "transaction_id": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008"],
             "customer_id": ["C001", "C001", "C002", "C003", "C004", "C005", "C001", "C003"],
-            "product": ["Widget A", "Gadget B", "Widget A", "Book C", "Gadget B", "Widget A", "Book D", "Gadget C"],
+            "product": [
+                "Widget A",
+                "Gadget B",
+                "Widget A",
+                "Book C",
+                "Gadget B",
+                "Widget A",
+                "Book D",
+                "Gadget C",
+            ],
             "category": [
                 "Electronics",
                 "Electronics",

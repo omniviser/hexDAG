@@ -93,6 +93,10 @@ class ToolCallNode(BaseNodeFactory):
         # Ports injected automatically for tools that need them
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Wrench"
+    _hexdag_color = "#f97316"  # orange-500
+
     def __init__(self, **kwargs: Any) -> None:
         """Initialize ToolCallNode."""
         super().__init__()

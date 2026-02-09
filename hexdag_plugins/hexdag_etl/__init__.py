@@ -35,19 +35,21 @@ Example Pipeline:
 
 # Re-export from the inner module (using relative import to inner hexdag_etl package)
 from .hexdag_etl import (
+    APIExtractNode,
     FileReaderNode,
     FileWriterNode,
-    OutlookReaderNode,
-    OutlookSenderNode,
     PandasTransformNode,
+    SQLExtractNode,
+    SQLLoadNode,
     __version__,
 )
 
 __all__ = [
     "__version__",
+    "APIExtractNode",
     "FileReaderNode",
     "FileWriterNode",
-    "OutlookReaderNode",
-    "OutlookSenderNode",
     "PandasTransformNode",
+    "SQLExtractNode",
+    "SQLLoadNode",
 ]

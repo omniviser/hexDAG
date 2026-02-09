@@ -50,17 +50,6 @@
                                 "null"
                             ]
                         },
-                        "deps": {
-                            "default": null,
-                            "description": "Dependencies",
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
                         "main_prompt": {
                             "description": "Initial reasoning prompt",
                             "type": "string"
@@ -246,70 +235,10 @@
                     "type": "object"
                 },
                 "spec": {
-                    "additionalProperties": false,
                     "properties": {
-                        "deps": {
-                            "default": null,
-                            "description": "List of dependency node names",
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
                         "fn": {
-                            "anyOf": [
-                                {
-                                    "description": "Module path string (e.g., 'myapp.process') or !py inline function",
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "description": "Function to execute (callable or module path string like 'mymodule.myfunc')"
-                        },
-                        "input_mapping": {
-                            "additionalProperties": {
-                                "type": "string"
-                            },
-                            "default": null,
-                            "description": "Optional field mapping dict {target_field: \"source.path\"}",
-                            "type": [
-                                "object",
-                                "null"
-                            ]
-                        },
-                        "input_schema": {
-                            "anyOf": [
-                                {
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null,
-                            "description": "Input schema for validation (if None, inferred from function)"
-                        },
-                        "output_schema": {
-                            "anyOf": [
-                                {
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null,
-                            "description": "Output schema for validation (if None, inferred from function)"
-                        },
-                        "unpack_input": {
-                            "default": false,
-                            "description": "If True, unpack input_mapping fields as individual **kwargs to the function instead of passing as single input_data object. This allows functions with signatures like `fn(load_id, rate, *, db=None)` instead of `fn(input_data, *, db=None)`.",
-                            "type": "boolean"
+                            "description": "Module path string (e.g., 'myapp.process')",
+                            "type": "string"
                         }
                     },
                     "required": [
@@ -354,43 +283,38 @@
                     "type": "object"
                 },
                 "spec": {
-                    "additionalProperties": false,
                     "properties": {
-                        "deps": {
-                            "default": null,
-                            "description": "List of dependency node names.",
-                            "type": "string"
-                        },
                         "output_schema": {
-                            "default": null,
-                            "description": "Expected output schema for structured output. If provided with parse_json=True, the LLM response will be parsed and validated against this schema.",
-                            "type": "string"
+                            "description": "Expected output schema for structured output validation",
+                            "type": "object"
                         },
                         "parse_json": {
                             "default": false,
-                            "description": "If True, parse the LLM response as JSON and validate against output_schema. Default is False (returns raw text).",
-                            "type": "string"
+                            "description": "Parse the LLM response as JSON",
+                            "type": "boolean"
                         },
                         "parse_strategy": {
                             "default": "json",
-                            "description": "JSON parsing strategy: \"json\", \"json_in_markdown\", or \"yaml\". Default is \"json\".",
+                            "description": "JSON parsing strategy",
+                            "enum": [
+                                "json",
+                                "json_in_markdown",
+                                "yaml"
+                            ],
                             "type": "string"
                         },
                         "prompt_template": {
-                            "default": null,
-                            "description": "Template for the user prompt. Supports Jinja2-style {{variable}} syntax. Can be a string or PromptTemplate/ChatPromptTemplate object. Can also be provided as 'template' (alias for YAML compatibility).",
+                            "description": "Template for the user prompt (Jinja2-style {{variable}} syntax)",
                             "type": "string"
                         },
                         "system_prompt": {
-                            "default": null,
-                            "description": "System message to prepend to the conversation.",
-                            "type": "string"
-                        },
-                        "template": {
-                            "default": null,
+                            "description": "System message to prepend to the conversation",
                             "type": "string"
                         }
                     },
+                    "required": [
+                        "prompt_template"
+                    ],
                     "type": "object"
                 }
             },
@@ -531,17 +455,6 @@
                             "description": "Arguments to pass to the tool (default: {})",
                             "type": [
                                 "object",
-                                "null"
-                            ]
-                        },
-                        "deps": {
-                            "default": null,
-                            "description": "Dependencies (typically the LLM node that requested the tool)",
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
                                 "null"
                             ]
                         },

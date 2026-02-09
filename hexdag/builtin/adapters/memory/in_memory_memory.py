@@ -23,16 +23,25 @@ class InMemoryMemory(Memory):
     - Reset functionality
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        max_size: int | None = 1000,
+        delay_seconds: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
         """Initialize the in-memory storage.
 
         Parameters
         ----------
+        max_size : int | None
+            Maximum number of items to store. None for unlimited. Default: 1000.
+        delay_seconds : float
+            Simulated latency in seconds for operations. Default: 0.0.
         **kwargs : Any
-            Configuration options (max_size, delay_seconds)
+            Additional options for forward compatibility.
         """
-        self.max_size = kwargs.get("max_size", 1000)
-        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
+        self.max_size = max_size
+        self.delay_seconds = delay_seconds
 
         # State (not from config)
         self.storage: dict[str, Any] = {}

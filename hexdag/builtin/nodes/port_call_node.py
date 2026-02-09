@@ -108,6 +108,10 @@ class PortCallNode(BaseNodeFactory):
         True
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Plug"
+    _hexdag_color = "#84cc16"  # lime-500
+
     def __call__(
         self,
         name: str,

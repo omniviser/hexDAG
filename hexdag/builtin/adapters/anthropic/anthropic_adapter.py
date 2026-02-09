@@ -1,12 +1,12 @@
 """Anthropic adapter for LLM interactions."""
 
 import os
-from typing import Any
+from typing import Any, Literal
 
 from anthropic import AsyncAnthropic
 
 from hexdag.core.logging import get_logger
-from hexdag.core.ports.llm import MessageList
+from hexdag.core.ports.llm import LLM, MessageList
 from hexdag.core.types import (
     PositiveInt,
     RetryCount,
@@ -17,8 +17,19 @@ from hexdag.core.types import (
 
 logger = get_logger(__name__)
 
+# Convention: Anthropic model options for dropdown menus in Studio UI
+AnthropicModel = Literal[
+    "claude-sonnet-4-20250514",
+    "claude-opus-4-20250514",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+]
 
-class AnthropicAdapter:
+
+class AnthropicAdapter(LLM):
     """Anthropic implementation of the LLM port.
 
     This adapter provides integration with Anthropic's Claude models through
@@ -36,7 +47,7 @@ class AnthropicAdapter:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: AnthropicModel = "claude-3-5-sonnet-20241022",
         temperature: Temperature01 = 0.7,
         max_tokens: PositiveInt = 4096,
         top_p: TopP = 1.0,

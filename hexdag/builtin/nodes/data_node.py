@@ -141,6 +141,10 @@ class DataNode(BaseNodeFactory):
         ... )
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Calculator"
+    _hexdag_color = "#06b6d4"  # cyan-500 (same as ExpressionNode)
+
     # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __call__(

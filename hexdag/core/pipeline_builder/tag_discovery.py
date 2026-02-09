@@ -120,6 +120,12 @@ def _extract_tag_info(
         # Extract syntax patterns
         tag_info["syntax"] = _get_tag_syntax(tag_name)
 
+        # Add security warning for tags that execute arbitrary code
+        if tag_name == "!py":
+            tag_info["security_warning"] = (
+                "Executes arbitrary Python code. Only use with trusted YAML files."
+            )
+
     except (ImportError, AttributeError) as e:
         tag_info["error"] = str(e)
 
@@ -216,6 +222,11 @@ def get_tag_schema(tag_name: str) -> dict[str, Any]:
         schema["security_warning"] = (
             "Executes arbitrary Python code. Only use with trusted YAML files."
         )
+        # Add schema and yaml_example for MCP compatibility
+        schema["schema"] = schema["input_schema"]
+        schema["yaml_example"] = """body: !py |
+  async def process(item, index, state, **ports):
+      return item * 2"""
 
     elif normalized_name == "!include":
         schema["input_schema"] = {
@@ -245,6 +256,16 @@ def get_tag_schema(tag_name: str) -> dict[str, Any]:
             "type": "any",
             "description": "Parsed YAML content from the included file",
         }
+        # Add schema and yaml_example for MCP compatibility
+        schema["schema"] = schema["input_schema"]
+        schema["yaml_example"] = """# Simple include
+nodes: !include ./shared/nodes.yaml
+
+# Include with variable substitution
+config: !include
+  path: ./templates/config.yaml
+  vars:
+    env: production"""
 
     return schema
 

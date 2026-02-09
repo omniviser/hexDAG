@@ -9,12 +9,14 @@ from hexdag.core.context.execution_context import (
     get_observer_manager,
     get_port,
     get_ports,
+    get_ports_config,
     get_run_id,
     set_current_graph,
     set_current_node_name,
     set_node_results,
     set_observer_manager,
     set_ports,
+    set_ports_config,
     set_run_id,
 )
 
@@ -27,11 +29,13 @@ __all__ = [
     "get_observer_manager",
     "get_port",
     "get_ports",
+    "get_ports_config",
     "get_run_id",
     "set_current_graph",
     "set_current_node_name",
     "set_node_results",
     "set_observer_manager",
     "set_ports",
+    "set_ports_config",
     "set_run_id",
 ]

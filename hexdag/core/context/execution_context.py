@@ -28,6 +28,9 @@ _run_id_context: ContextVar[str | None] = ContextVar("run_id", default=None)
 # Ports stored as immutable MappingProxyType to prevent race conditions in concurrent execution
 _ports_context: ContextVar[MappingProxyType[str, Any] | None] = ContextVar("ports", default=None)
 
+# PortsConfiguration for per-node port resolution
+_ports_config_context: ContextVar[Any | None] = ContextVar("ports_config", default=None)
+
 # Dynamic graph context - for runtime expansion support
 _current_graph_context: ContextVar[Any | None] = ContextVar(
     "current_graph", default=None
@@ -151,8 +154,33 @@ def get_ports() -> MappingProxyType[str, Any] | None:
     return _ports_context.get()
 
 
+def set_ports_config(ports_config: Any) -> None:
+    """Set PortsConfiguration for per-node port resolution.
+
+    Parameters
+    ----------
+    ports_config : PortsConfiguration | None
+        Configuration with global, type-level, and per-node port overrides
+    """
+    _ports_config_context.set(ports_config)
+
+
+def get_ports_config() -> Any | None:
+    """Get PortsConfiguration from execution context.
+
+    Returns
+    -------
+    PortsConfiguration | None
+        Ports configuration if set, None otherwise
+    """
+    return _ports_config_context.get()
+
+
 def get_port(port_name: str) -> Any:
     """Get a specific port from current async execution context.
+
+    If PortsConfiguration is set and a current node name is available,
+    resolves per-node port overrides automatically.
 
     Parameters
     ----------
@@ -172,6 +200,18 @@ def get_port(port_name: str) -> Any:
         if (llm := get_port("llm")):
             response = await llm.aresponse(messages)
     """
+    # Try per-node resolution if PortsConfiguration is available
+    ports_config = _ports_config_context.get()
+    current_node = _current_node_name_context.get()
+
+    if ports_config is not None and current_node is not None:
+        # Use PortsConfiguration.resolve_ports for per-node overrides
+        # This handles: per-node > per-type > global resolution
+        resolved = ports_config.resolve_ports(current_node, None)
+        if port_name in resolved:
+            return resolved[port_name].port
+
+    # Fall back to global ports
     ports = _ports_context.get()
     if ports is None:
         return None
@@ -300,8 +340,10 @@ def clear_execution_context() -> None:
     _observer_manager_context.set(None)
     _run_id_context.set(None)
     _ports_context.set(None)
+    _ports_config_context.set(None)
     _current_graph_context.set(None)
     _node_results_context.set(None)
+    _current_node_name_context.set(None)
 
 
 # ============================================================================

@@ -92,6 +92,10 @@ class CompositeNode(BaseNodeFactory):
     ConditionalNode : Deprecated, use CompositeNode with mode='switch'
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Layers"
+    _hexdag_color = "#6366f1"  # indigo-500
+
     # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __init__(self, base_path: Path | None = None) -> None:
