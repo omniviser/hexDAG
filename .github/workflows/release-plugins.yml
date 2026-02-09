@@ -1,0 +1,87 @@
+name: Release hexdag-plugins to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0, 0.1.1)'
+        required: true
+        type: string
+      publish_to:
+        description: 'Publish to'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi  # Test first
+          - pypi      # Production
+
+permissions:
+  contents: write  # For pushing tags
+  id-token: write  # For trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.publish_to }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag-plugins/' || 'https://test.pypi.org/project/hexdag-plugins-test/' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update version in pyproject.toml
+        working-directory: hexdag_plugins
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' pyproject.toml
+          echo "Updated version to ${{ inputs.version }}"
+          cat pyproject.toml | head -10
+
+      - name: Set package name for Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        working-directory: hexdag_plugins
+        run: |
+          sed -i 's/^name = "hexdag-plugins"/name = "hexdag-plugins-test"/' pyproject.toml
+
+      - name: Build package
+        working-directory: hexdag_plugins
+        run: |
+          rm -rf dist/ build/
+          python -m build
+
+      - name: Create and push tag
+        if: inputs.publish_to == 'pypi'
+        run: |
+          git tag -f plugins-v${{ inputs.version }}
+          git push origin plugins-v${{ inputs.version }} --force || echo "Tag already exists"
+
+      - name: Publish to Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: hexdag_plugins/dist/
+
+      - name: Publish to PyPI
+        if: inputs.publish_to == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: hexdag_plugins/dist/

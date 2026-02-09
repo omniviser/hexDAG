@@ -1,0 +1,64 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: complex-workflow
+  description: Complex pipeline with multiple node types for comprehensive testing
+spec:
+  ports:
+    llm:
+      adapter: mock_llm
+      config:
+        model: gpt-4
+  nodes:
+    - kind: function_node
+      metadata:
+        name: fetch_data
+      spec:
+        fn: copy.copy
+      dependencies: []
+    - kind: composite_node
+      metadata:
+        name: route_by_type
+      spec:
+        mode: if-else
+        condition: input.get('type') == 'premium'
+        then_body: []
+        else_body: []
+      dependencies:
+        - fetch_data
+    - kind: llm_node
+      metadata:
+        name: premium_analysis
+      spec:
+        prompt_template: "Deep analysis for premium user: {{fetch_data}}"
+        ports:
+          llm:
+            adapter: MockLLM
+            config: {}
+      dependencies:
+        - route_by_type
+    - kind: function_node
+      metadata:
+        name: standard_analysis
+      spec:
+        fn: copy.deepcopy
+      dependencies:
+        - route_by_type
+    - kind: composite_node
+      metadata:
+        name: process_items
+      spec:
+        mode: for-each
+        items: input.get('items', [])
+        body: []
+        max_iterations: 10
+      dependencies:
+        - premium_analysis
+        - standard_analysis
+    - kind: function_node
+      metadata:
+        name: final_output
+      spec:
+        fn: json.dumps
+      dependencies:
+        - process_items

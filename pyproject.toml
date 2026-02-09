@@ -71,11 +71,7 @@ notebooks = [
     "matplotlib>=3.8.0", # Plotting for visualization
     "pandas>=2.1.0",     # Data analysis (common in notebooks)
 ]
-studio = [
-    "fastapi>=0.109.0",   # Web framework for studio server
-    "uvicorn>=0.27.0",    # ASGI server
-    "watchfiles>=0.21.0", # File watching for hot reload
-]
+studio = ["hexdag-studio>=0.1.0"]  # Visual Studio UI for hexDAG pipelines
 all = [
     "hexdag[viz]",
     "hexdag[openai]",
@@ -153,6 +149,10 @@ packages = ["hexdag", "hexdag_plugins"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["hexdag", "hexdag_plugins"]
+
+# For local development with uv - points to local packages not yet on PyPI
+[tool.uv.sources]
+hexdag-studio = { path = "hexdag-studio", editable = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -479,6 +479,8 @@ exclude = [
     "examples/mcp",                           # MCP examples use optional MCP-specific dependencies (tavily)
     "tests",                                  # Test files use dev dependencies
     "hexdag_plugins",                         # External plugin directories
+    "hexdag-studio",                          # Separate package with its own dependencies
+    "hexdag-studio/.venv",                    # Nested venv in studio package
 ]
 
 # Per-rule ignores for specific packages

@@ -57,6 +57,37 @@ Thank you for your interest in contributing to hexDAG! This document provides gu
 - **Test coverage** for new functionality
 - **Pre-commit hooks** must pass
 
+### Adapter/Component `__init__` Convention
+
+**IMPORTANT:** All adapter and component `__init__` methods MUST use explicit typed parameters (not just `**kwargs`). This enables automatic config schema generation for Studio UI, MCP server, and API documentation.
+
+```python
+# ✅ CORRECT - Explicit parameters generate config schemas
+class MyAdapter:
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "default",
+        temperature: float = 0.7,
+        **kwargs: Any,  # Keep for forward compatibility
+    ) -> None:
+        """Initialize adapter.
+
+        Args:
+            api_key: API key for authentication.
+            model: Model to use.
+            temperature: Sampling temperature.
+        """
+        ...
+
+# ❌ WRONG - kwargs-only generates empty schema
+class MyAdapter:
+    def __init__(self, **kwargs: Any) -> None:
+        self.model = kwargs.get("model", "default")  # Not visible in UI!
+```
+
+See `CLAUDE.md` section "Explicit `__init__` Parameters (Convention)" for full details.
+
 ## Testing
 
 ```bash

@@ -1,0 +1,49 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: diamond-dag-pipeline
+  description: Diamond pattern with parallel branches for testing layout
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: data_source
+      spec:
+        fn: copy.copy
+      dependencies: []
+    - kind: llm_node
+      metadata:
+        name: analyzer_a
+      spec:
+        prompt_template: "Analyze aspect A of the data: {{data_source}}"
+      dependencies:
+        - data_source
+    - kind: llm_node
+      metadata:
+        name: analyzer_b
+      spec:
+        prompt_template: "Analyze aspect B of the data: {{data_source}}"
+      dependencies:
+        - data_source
+    - kind: function_node
+      metadata:
+        name: aggregator
+      spec:
+        fn: copy.deepcopy
+      dependencies:
+        - analyzer_a
+        - analyzer_b
+  environments:
+    local:
+      ports:
+        llm:
+          adapter: MockLLM
+          config:
+            responses: hello
+            delay_seconds: 5
+        memory:
+          adapter: InMemoryMemory
+    dev:
+      ports:
+        database:
+          adapter: SQLiteAdapter

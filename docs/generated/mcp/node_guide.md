@@ -152,22 +152,15 @@ Simple factory for creating function-based nodes with optional Pydantic validati
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `str` | Yes | Node name |
-| `fn` | `collections.abc.Callable[..., typing.Any] | str` | Yes | Function to execute (callable or module path strin... |
-| `input_schema` | `dict[str, typing.Any] | type[pydantic.main.BaseModel] | None` | No | Input schema for validation (if None, inferred fro... |
-| `output_schema` | `dict[str, typing.Any] | type[pydantic.main.BaseModel] | None` | No | Output schema for validation (if None, inferred fr... |
-| `deps` | `list[str] | None` | No | List of dependency node names |
-| `input_mapping` | `dict[str, str] | None` | No | Optional field mapping dict {target_field: "source... |
-| `unpack_input` | `bool` | No | If True, unpack input_mapping fields as individual... |
+| `fn` | `string` | Yes | Module path string (e.g., 'myapp.process') |
 
 **Example:**
 ```yaml
-- kind: function_node
-  metadata:
-    name: my_function
-  spec:
-    # Add configuration here
-  dependencies: []
+kind: function_node
+metadata:
+  name: my_function_node
+spec:
+  fn: value
 ```
 
 ### LLMNode
@@ -178,23 +171,21 @@ Unified LLM node - prompt building, API calls, and optional parsing.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `str` | Yes | Node name (must be unique in the graph) |
-| `prompt_template` | `PromptInput | str | None` | No | Template for the user prompt. Supports Jinja2-styl... |
-| `output_schema` | `dict[str, Any] | type[BaseModel] | None` | No | Expected output schema for structured output. If p... |
-| `system_prompt` | `str | None` | No | System message to prepend to the conversation. |
-| `parse_json` | `bool` | No | If True, parse the LLM response as JSON and valida... |
-| `parse_strategy` | `str` | No | JSON parsing strategy: "json", "json_in_markdown",... |
-| `deps` | `list[str] | None` | No | List of dependency node names. |
-| `template` | `PromptInput | str | None` | No |  |
+| `prompt_template` | `string` | Yes | Template for the user prompt (Jinja2-style {{varia... |
+| `output_schema` | `object` | No | Expected output schema for structured output valid... |
+| `system_prompt` | `string` | No | System message to prepend to the conversation |
+| `parse_json` | `boolean` | No | Parse the LLM response as JSON |
+| `parse_strategy` | `string` | No | JSON parsing strategy |
 
 **Example:**
 ```yaml
-- kind: l_l_m_node
-  metadata:
-    name: my_l_l_m
-  spec:
-    # Add configuration here
-  dependencies: []
+kind: l_l_m_node
+metadata:
+  name: my_l_l_m_node
+spec:
+  prompt_template: value
+  parse_json: false
+  parse_strategy: json
 ```
 
 ### LoopNode

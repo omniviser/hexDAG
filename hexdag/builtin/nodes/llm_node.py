@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
@@ -28,10 +28,14 @@ from .base_node_factory import BaseNodeFactory
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from hexdag.core.domain.dag import NodeSpec
-    from hexdag.core.orchestration.prompt import PromptInput, TemplateType
+# Runtime imports needed for get_type_hints() to resolve annotations for SchemaGenerator
+from hexdag.core.domain.dag import NodeSpec  # noqa: TC001
+from hexdag.core.orchestration.prompt import PromptInput, TemplateType  # noqa: TC001
 
 logger = get_logger(__name__)
+
+# Convention: Parse strategy options for dropdown menus in Studio UI
+ParseStrategy = Literal["json", "json_in_markdown", "yaml"]
 
 
 def _convert_dicts_to_messages(message_dicts: list[dict[str, str]]) -> list[Message]:
@@ -101,6 +105,41 @@ class LLMNode(BaseNodeFactory):
               confidence: float
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Brain"
+    _hexdag_color = "#8b5cf6"  # violet-500
+
+    # Explicit schema for Studio UI (excludes internal alias 'template')
+    _yaml_schema = {
+        "type": "object",
+        "properties": {
+            "prompt_template": {
+                "type": "string",
+                "description": "Template for the user prompt (Jinja2-style {{variable}} syntax)",
+            },
+            "output_schema": {
+                "type": "object",
+                "description": "Expected output schema for structured output validation",
+            },
+            "system_prompt": {
+                "type": "string",
+                "description": "System message to prepend to the conversation",
+            },
+            "parse_json": {
+                "type": "boolean",
+                "default": False,
+                "description": "Parse the LLM response as JSON",
+            },
+            "parse_strategy": {
+                "type": "string",
+                "enum": ["json", "json_in_markdown", "yaml"],
+                "default": "json",
+                "description": "JSON parsing strategy",
+            },
+        },
+        "required": ["prompt_template"],
+    }
+
     def __init__(self, **kwargs: Any) -> None:
         """Initialize LLMNode."""
         super().__init__()
@@ -112,7 +151,7 @@ class LLMNode(BaseNodeFactory):
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
         system_prompt: str | None = None,
         parse_json: bool = False,
-        parse_strategy: str = "json",
+        parse_strategy: ParseStrategy = "json",
         deps: list[str] | None = None,
         template: PromptInput | str | None = None,  # Alias for prompt_template (YAML compat)
         **kwargs: Any,

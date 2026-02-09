@@ -42,7 +42,6 @@ Specification for agent_node type
 |-----------|------|----------|-------------|
 | `config` | string | null | No | Agent configuration |
 | `continuation_prompts` | object | null | No | Phase-specific prompts |
-| `deps` | array | null | No | Dependencies |
 | `main_prompt` | string | Yes | Initial reasoning prompt |
 | `output_schema` | object | string | No | Custom output schema for tool_end res... |
 
@@ -88,12 +87,7 @@ Specification for function_node type
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `deps` | array | null | No | List of dependency node names |
-| `fn` | string | string | Yes | Function to execute (callable or modu... |
-| `input_mapping` | object | null | No | Optional field mapping dict {target_f... |
-| `input_schema` | object | string | No | Input schema for validation (if None,... |
-| `output_schema` | object | string | No | Output schema for validation (if None... |
-| `unpack_input` | boolean | No | If True, unpack input_mapping fields ... |
+| `fn` | string | Yes | Module path string (e.g., 'myapp.proc... |
 
 **Example:**
 
@@ -114,13 +108,11 @@ Specification for llm_node type
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `deps` | string | No | List of dependency node names. |
-| `output_schema` | string | No | Expected output schema for structured... |
-| `parse_json` | string | No | If True, parse the LLM response as JS... |
-| `parse_strategy` | string | No | JSON parsing strategy: "json", "json_... |
-| `prompt_template` | string | No | Template for the user prompt. Support... |
+| `output_schema` | object | No | Expected output schema for structured... |
+| `parse_json` | boolean | No | Parse the LLM response as JSON |
+| `parse_strategy` | `"json`" | `"json_in_markdown`" | `"yaml`" | No | JSON parsing strategy |
+| `prompt_template` | string | Yes | Template for the user prompt (Jinja2-... |
 | `system_prompt` | string | No | System message to prepend to the conv... |
-| `template` | string | No |  |
 
 **Example:**
 
@@ -129,6 +121,7 @@ Specification for llm_node type
   metadata:
     name: my_llm
   spec:
+    prompt_template: # required
   dependencies: []
 ```
 
@@ -168,7 +161,6 @@ Specification for tool_call_node type
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `arguments` | object | null | No | Arguments to pass to the tool (defaul... |
-| `deps` | array | null | No | Dependencies (typically the LLM node ... |
 | `tool_call_id` | string | null | No | Optional ID for tracking (from LLM to... |
 | `tool_name` | string | Yes | Full module path to the tool function... |
 

@@ -96,3 +96,7 @@ hexdag_plugins/*/*.egg-info/
 hexdag/studio/ui/node_modules/
 hexdag/studio/ui/dist/
 hexdag/studio/ui/.vite/
+
+# hexdag-studio standalone package (UI)
+hexdag-studio/ui/node_modules/
+hexdag-studio/ui/.vite/

@@ -19,7 +19,6 @@ from pathlib import Path
 from scripts.generate_schemas import (
     generate_hexdag_config_schema,
     generate_pipeline_schema,
-    generate_policy_schema,
 )
 
 SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
@@ -92,12 +91,6 @@ def main() -> int:
             "Pipeline schema",
             SCHEMAS_DIR / "pipeline-schema.json",
             generate_pipeline_schema,
-            {},
-        ),
-        (
-            "Policy schema",
-            SCHEMAS_DIR / "policy-schema.json",
-            generate_policy_schema,
             {},
         ),
         (

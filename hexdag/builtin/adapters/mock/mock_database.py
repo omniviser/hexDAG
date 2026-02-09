@@ -13,15 +13,22 @@ class MockDatabaseAdapter(DatabasePort):
     enable_sample_data: bool
     delay_seconds: float
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        enable_sample_data: bool = True,
+        delay_seconds: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
         """Initialize with configuration.
 
         Args
         ----
-            **kwargs: Configuration options (enable_sample_data, delay_seconds)
+            enable_sample_data: Include sample schema data (customers, orders, etc). Default: True.
+            delay_seconds: Simulated latency in seconds for operations. Default: 0.0.
+            **kwargs: Additional options for forward compatibility.
         """
-        self.enable_sample_data = kwargs.get("enable_sample_data", True)
-        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
+        self.enable_sample_data = enable_sample_data
+        self.delay_seconds = delay_seconds
 
         if not self.enable_sample_data:
             self._table_schemas: dict[str, dict[str, Any]] = {}

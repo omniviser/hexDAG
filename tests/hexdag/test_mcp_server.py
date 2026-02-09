@@ -73,7 +73,7 @@ class TestGetComponentSchemaTags:
 
         result = json.loads(get_component_schema("tag", "!py"))
         assert result["name"] == "!py"
-        assert result["type"] == "tag"
+        assert result["type"] == "yaml_tag"
         assert "schema" in result
         assert "yaml_example" in result
 
@@ -83,7 +83,7 @@ class TestGetComponentSchemaTags:
 
         result = json.loads(get_component_schema("tag", "!include"))
         assert result["name"] == "!include"
-        assert result["type"] == "tag"
+        assert result["type"] == "yaml_tag"
 
     def test_get_tag_schema_without_prefix(self) -> None:
         """Tag lookup should work without ! prefix."""

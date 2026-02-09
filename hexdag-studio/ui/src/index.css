@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  background: #0f0f1a;
+  color: #e4e4e7;
+  overflow: hidden;
+}
+
+/* React Flow customization */
+.react-flow__node {
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.react-flow__edge-path {
+  stroke: #6366f1;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #818cf8;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: #6366f1;
+  border: 2px solid #1a1a2e;
+}
+
+.react-flow__handle:hover {
+  background: #818cf8;
+}
+
+.react-flow__background {
+  background: #0f0f1a;
+}
+
+.react-flow__minimap {
+  background: #1a1a2e;
+  border: 1px solid #2a2a3e;
+  border-radius: 4px;
+}
+
+.react-flow__controls {
+  background: #1a1a2e;
+  border: 1px solid #2a2a3e;
+  border-radius: 4px;
+}
+
+.react-flow__controls-button {
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a2a3e;
+  fill: #a1a1aa;
+}
+
+.react-flow__controls-button:hover {
+  background: #2a2a3e;
+}
+
+/* Monaco editor */
+.monaco-editor {
+  padding-top: 8px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a4e;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a5e;
+}

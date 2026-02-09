@@ -5,14 +5,16 @@ supporting CSV, Parquet, JSON, and Excel formats.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
-from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.registry import node
-from hexdag.core.registry.models import NodeSubtype
 from pydantic import BaseModel
+
+from .base_node_factory import BaseNodeFactory
+
+# Convention: File format options for dropdown menus in Studio UI
+FileFormat = Literal["csv", "parquet", "json", "jsonl", "excel", "feather", "pickle"]
 
 
 class FileReaderOutput(BaseModel):
@@ -33,7 +35,6 @@ class FileWriterOutput(BaseModel):
     success: bool
 
 
-@node(name="file_reader_node", subtype=NodeSubtype.FUNCTION, namespace="etl")
 class FileReaderNode(BaseNodeFactory):
     """Node for reading data files into DataFrames.
 
@@ -77,11 +78,15 @@ class FileReaderNode(BaseNodeFactory):
           dependencies: []
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "FileInput"
+    _hexdag_color = "#10b981"  # emerald-500
+
     def __call__(
         self,
         name: str,
         file_path: str,
-        format: str | None = None,
+        format: FileFormat | None = None,
         options: dict[str, Any] | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
@@ -94,8 +99,8 @@ class FileReaderNode(BaseNodeFactory):
             Node name
         file_path : str
             Path to the input file (relative to workspace or absolute)
-        format : str, optional
-            File format: 'csv', 'parquet', 'json', 'excel'
+        format : FileFormat, optional
+            File format: 'csv', 'parquet', 'json', 'jsonl', 'excel', 'feather', 'pickle'
             Auto-detected from extension if not specified
         options : dict, optional
             Additional options passed to pandas read function
@@ -210,7 +215,6 @@ class FileReaderNode(BaseNodeFactory):
         return read_file
 
 
-@node(name="file_writer_node", subtype=NodeSubtype.FUNCTION, namespace="etl")
 class FileWriterNode(BaseNodeFactory):
     """Node for writing DataFrames to files.
 
@@ -247,11 +251,15 @@ class FileWriterNode(BaseNodeFactory):
             - transform_data
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "FileOutput"
+    _hexdag_color = "#f59e0b"  # amber-500
+
     def __call__(
         self,
         name: str,
         file_path: str,
-        format: str | None = None,
+        format: FileFormat | None = None,
         input_key: str = "data",
         options: dict[str, Any] | None = None,
         create_dirs: bool = True,
@@ -266,8 +274,8 @@ class FileWriterNode(BaseNodeFactory):
             Node name
         file_path : str
             Path for the output file
-        format : str, optional
-            File format: 'csv', 'parquet', 'json', 'excel'
+        format : FileFormat, optional
+            File format: 'csv', 'parquet', 'json', 'jsonl', 'excel', 'feather', 'pickle'
             Auto-detected from extension if not specified
         input_key : str
             Key in input data containing the DataFrame (default: 'data')
@@ -357,11 +365,11 @@ class FileWriterNode(BaseNodeFactory):
                 df = input_data.get(input_key)
                 if df is None:
                     # Try to find a DataFrame in the input
-                    for key, value in input_data.items():
+                    for value in input_data.values():
                         if isinstance(value, pd.DataFrame):
                             df = value
                             break
-                        elif isinstance(value, dict) and "data" in value:
+                        if isinstance(value, dict) and "data" in value:
                             df = value["data"]
                             break
             elif isinstance(input_data, pd.DataFrame):

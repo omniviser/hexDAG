@@ -1,0 +1,98 @@
+name: Release hexdag-studio to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0, 0.1.1)'
+        required: true
+        type: string
+      publish_to:
+        description: 'Publish to'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi  # Test first
+          - pypi      # Production
+
+permissions:
+  contents: write  # For pushing tags
+  id-token: write  # For trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.publish_to }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag-studio/' || 'https://test.pypi.org/project/hexdag-studio-test/' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update version in pyproject.toml
+        working-directory: hexdag-studio
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' pyproject.toml
+          echo "Updated version to ${{ inputs.version }}"
+          cat pyproject.toml | head -10
+
+      - name: Build UI
+        working-directory: hexdag-studio/ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set package name for Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        working-directory: hexdag-studio
+        run: |
+          sed -i 's/^name = "hexdag-studio"/name = "hexdag-studio-test"/' pyproject.toml
+
+      - name: Build package
+        working-directory: hexdag-studio
+        run: |
+          rm -rf dist/ build/
+          python -m build
+
+      - name: Create and push tag
+        if: inputs.publish_to == 'pypi'
+        run: |
+          git tag -f studio-v${{ inputs.version }}
+          git push origin studio-v${{ inputs.version }} --force || echo "Tag already exists"
+
+      - name: Publish to Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: hexdag-studio/dist/
+
+      - name: Publish to PyPI
+        if: inputs.publish_to == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: hexdag-studio/dist/

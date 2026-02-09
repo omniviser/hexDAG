@@ -620,6 +620,64 @@ builder.preprocess_plugins[1] = EnvironmentVariablePlugin(defer_secrets=False)
 - Include comprehensive docstrings
 - Type hints for automatic schema generation
 
+### Explicit `__init__` Parameters (Convention)
+
+**IMPORTANT:** All adapter/component `__init__` methods MUST use **explicit typed parameters** instead of `**kwargs` for configuration. This enables automatic schema generation via `SchemaGenerator`.
+
+**Why this matters:**
+- `SchemaGenerator.from_callable()` introspects `__init__` signatures to generate JSON Schema
+- Studio UI, MCP server, and API all use these schemas to show configuration options
+- `**kwargs`-only signatures result in **empty schemas** - users can't see what options exist
+
+**✅ CORRECT - Explicit parameters:**
+```python
+class MockLLM(LLM):
+    def __init__(
+        self,
+        responses: str | list[str] | None = None,
+        delay_seconds: float = 0.0,
+        mock_tool_calls: list[dict[str, Any]] | None = None,
+        **kwargs: Any,  # Keep for forward compatibility
+    ) -> None:
+        """Initialize mock LLM.
+
+        Args:
+            responses: Mock response(s) to return.
+            delay_seconds: Simulated latency in seconds.
+            mock_tool_calls: Tool call configurations for testing.
+            **kwargs: Additional options for forward compatibility.
+        """
+        self.responses = responses or ['{"result": "Mock response"}']
+        self.delay_seconds = delay_seconds
+        self.mock_tool_calls = mock_tool_calls
+```
+
+**❌ WRONG - kwargs-only (generates empty schema):**
+```python
+class MockLLM(LLM):
+    def __init__(self, **kwargs: Any) -> None:
+        # SchemaGenerator can't see these options!
+        self.responses = kwargs.get("responses", ['{"result": "Mock"}'])
+        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
+```
+
+**Schema generation result:**
+```python
+# Explicit params → rich schema
+SchemaGenerator.from_callable(MockLLM.__init__)
+# Returns: {"properties": {"responses": {...}, "delay_seconds": {...}}}
+
+# kwargs-only → empty schema
+SchemaGenerator.from_callable(BadMockLLM.__init__)
+# Returns: {"properties": {}}  # Users can't see config options!
+```
+
+**Best practices:**
+1. Always use explicit typed parameters for all configurable options
+2. Keep `**kwargs` at the end for forward compatibility
+3. Add docstrings with Args section for description extraction
+4. Use `| None` for optional parameters with `None` default
+
 ### Legacy Code
 
 Some existing adapters use the old `ConfigurableAdapter` pattern with Config classes. These still work but are deprecated. New code should use the simplified decorator pattern. See [SIMPLIFIED_PATTERN.md](docs/SIMPLIFIED_PATTERN.md) for migration guide.

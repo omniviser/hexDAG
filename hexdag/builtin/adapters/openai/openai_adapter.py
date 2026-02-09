@@ -32,6 +32,22 @@ from hexdag.core.types import (
 
 logger = get_logger(__name__)
 
+# Convention: OpenAI model options for dropdown menus in Studio UI
+OpenAIModel = Literal[
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo",
+]
+
+# Convention: OpenAI embedding model options for dropdown menus in Studio UI
+OpenAIEmbeddingModel = Literal[
+    "text-embedding-3-small",
+    "text-embedding-3-large",
+    "text-embedding-ada-002",
+]
+
 
 class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision, SupportsEmbedding):
     """Unified OpenAI implementation of the LLM port.
@@ -56,7 +72,7 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "gpt-4o-mini",
+        model: OpenAIModel = "gpt-4o-mini",
         temperature: Temperature02 = 0.7,
         max_tokens: TokenCount | None = None,
         response_format: Literal["text", "json_object"] = "text",
@@ -67,7 +83,7 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
         system_prompt: str | None = None,
         timeout: TimeoutSeconds = 60.0,
         max_retries: RetryCount = 2,
-        embedding_model: str = "text-embedding-3-small",
+        embedding_model: OpenAIEmbeddingModel = "text-embedding-3-small",
         embedding_dimensions: int | None = None,
         **kwargs: Any,  # ← For extra params like organization, base_url
     ):

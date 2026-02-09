@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hexdag_plugins.azure.azure_blob_adapter import AzureBlobAdapter
+from hexdag_plugins.azure.adapters.blob import AzureBlobAdapter
 
 
 @pytest.fixture

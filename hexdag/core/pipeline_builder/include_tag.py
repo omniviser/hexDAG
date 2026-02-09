@@ -134,9 +134,10 @@ def include_constructor(loader: yaml.SafeLoader, node: yaml.Node) -> Any:
     elif isinstance(node, yaml.MappingNode):
         # Use deep=True to fully construct nested mappings (like vars)
         mapping = loader.construct_mapping(node, deep=True)
-        include_path = mapping.get("path")
-        if not include_path:
+        path_value = mapping.get("path")
+        if not path_value:
             raise IncludeTagError("!include mapping requires 'path' key")
+        include_path = str(path_value)
         vars_dict = mapping.get("vars", {})
 
     else:

@@ -23,6 +23,7 @@ from hexdag.core.context import (
     set_current_graph,
     set_node_results,
     set_ports,
+    set_ports_config,
 )
 from hexdag.core.domain.dag import DirectedGraph, DirectedGraphError
 from hexdag.core.exceptions import OrchestratorError
@@ -32,7 +33,6 @@ from hexdag.core.orchestration.components import ExecutionCoordinator
 from hexdag.core.orchestration.components.lifecycle_manager import (
     HookConfig,
     LifecycleManager,
-    PipelineStatus,
     PostDagHookConfig,
 )
 from hexdag.core.orchestration.constants import (
@@ -41,16 +41,13 @@ from hexdag.core.orchestration.constants import (
     EXECUTOR_CONTEXT_NODE_RESULTS,
 )
 from hexdag.core.orchestration.events import WaveCompleted, WaveStarted
+from hexdag.core.orchestration.hook_context import PipelineStatus
 from hexdag.core.orchestration.models import PortsConfiguration
 from hexdag.core.orchestration.port_wrappers import wrap_ports_with_observability
-from hexdag.core.ports.executor import ExecutionTask, ExecutorPort
+from hexdag.core.ports.executor import ExecutionResult, ExecutionTask, ExecutorPort
 from hexdag.core.ports_builder import PortsBuilder
 
-from .events import (
-    PipelineCancelled,
-    PipelineCompleted,
-    PipelineStarted,
-)
+from .events import PipelineCancelled, PipelineCompleted, PipelineStarted
 
 logger = get_logger(__name__)
 
@@ -233,8 +230,11 @@ class Orchestrator:
         self.ports_config: PortsConfiguration | None
         if isinstance(ports, PortsConfiguration):
             self.ports_config = ports
+            # Note: global_ports is stored as tuple after __post_init__, convert to dict
             self.ports = (
-                {k: v.port for k, v in ports.global_ports.items()} if ports.global_ports else {}
+                {k: v.port for k, v in dict(ports.global_ports).items()}
+                if ports.global_ports
+                else {}
             )
         else:
             self.ports_config = None
@@ -317,6 +317,38 @@ class Orchestrator:
                 error_msg += f"  Node '{node_name}': {', '.join(ports)}\n"
             error_msg += f"\nAvailable ports: {', '.join(available_ports.keys())}"
             raise OrchestratorError(error_msg)
+
+    def _check_wave_results_for_failures(self, wave_results: dict[str, ExecutionResult]) -> None:
+        """Check wave results for failures and raise appropriate errors.
+
+        Parameters
+        ----------
+        wave_results : dict[str, ExecutionResult]
+            Results from executing a wave of nodes
+
+        Raises
+        ------
+        OrchestratorError
+            If any node in the wave failed
+        """
+        failed_nodes = [
+            (name, result)
+            for name, result in wave_results.items()
+            if result.status == PipelineStatus.FAILED
+        ]
+
+        if failed_nodes:
+            # Collect all failures into one error message
+            error_parts = []
+            for node_name, result in failed_nodes:
+                error_type = result.error_type or "Unknown"
+                error_msg = result.error or "No error message"
+                error_parts.append(f"  - Node '{node_name}' ({error_type}): {error_msg}")
+
+            raise OrchestratorError(
+                f"Pipeline execution failed. {len(failed_nodes)} node(s) failed:\n"
+                + "\n".join(error_parts)
+            )
 
     @classmethod
     def from_builder(
@@ -488,6 +520,9 @@ class Orchestrator:
         ):
             set_current_graph(graph)
             set_node_results(node_results)
+            # Set PortsConfiguration for per-node port resolution
+            if self.ports_config is not None:
+                set_ports_config(self.ports_config)
 
             # PRE-DAG LIFECYCLE: Execute before pipeline starts
             pre_hook_results = await self._lifecycle_manager.pre_execute(
@@ -671,8 +706,10 @@ class Orchestrator:
                     # Execute wave using executor
                     wave_results = await self.executor.aexecute_wave(tasks)
 
-                    # Note: Failures propagate as NodeExecutionError from executor,
-                    # so we only see SUCCESS results here
+                    # Check for failed nodes and raise errors
+                    self._check_wave_results_for_failures(wave_results)
+
+                    # Store successful results
                     for node_name, result in wave_results.items():
                         node_results[node_name] = result.output
 

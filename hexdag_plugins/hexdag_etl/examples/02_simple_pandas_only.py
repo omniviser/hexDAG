@@ -24,7 +24,7 @@ import hexdag_etl  # noqa: F401
 
 def create_sample_data():
     """Create a simple DataFrame."""
-    df = pd.DataFrame(
+    return pd.DataFrame(
         {
             "customer_id": ["C001", "C002", "C003", "C004", "C005"],
             "name": ["Alice", "Bob", "Carol", "David", "Emma"],
@@ -32,7 +32,6 @@ def create_sample_data():
             "category": ["A", "B", "A", "C", "B"],
         }
     )
-    return df
 
 
 def main():

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from hexdag.core.ports.llm import Message
 
-from hexdag_plugins.azure.azure_openai_adapter import AzureOpenAIAdapter
+from hexdag_plugins.azure.adapters.openai import AzureOpenAIAdapter
 
 
 @pytest.fixture

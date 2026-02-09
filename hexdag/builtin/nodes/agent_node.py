@@ -116,6 +116,10 @@ class ReActAgentNode(BaseNodeFactory):
     ```
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Bot"
+    _hexdag_color = "#ec4899"  # pink-500
+
     def __init__(self, **kwargs: Any) -> None:
         """Initialize with dependencies."""
         self.llm_node = LLMNode()

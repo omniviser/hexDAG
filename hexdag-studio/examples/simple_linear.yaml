@@ -1,0 +1,27 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: simple-linear-pipeline
+  description: A simple 3-node linear pipeline for testing basic layout
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: input_processor
+      spec:
+        fn: "copy.copy"
+      dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: transform
+      spec:
+        fn: "copy.deepcopy"
+      dependencies: [input_processor]
+
+    - kind: function_node
+      metadata:
+        name: output_formatter
+      spec:
+        fn: "json.dumps"
+      dependencies: [transform]

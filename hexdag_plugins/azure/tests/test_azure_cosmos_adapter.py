@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hexdag_plugins.azure.azure_cosmos_adapter import AzureCosmosAdapter
+from hexdag_plugins.azure.adapters.cosmos import AzureCosmosAdapter
 
 
 @pytest.fixture

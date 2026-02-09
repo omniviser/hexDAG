@@ -146,6 +146,10 @@ class LoopNode(BaseNodeFactory):
     - Otherwise defaults to "last".
     """
 
+    # Studio UI metadata
+    _hexdag_icon = "Layers"
+    _hexdag_color = "#6366f1"  # indigo-500 (same as CompositeNode)
+
     # Explicit schema for YAML/MCP usage (builder pattern doesn't expose params well)
     _yaml_schema: dict[str, Any] = {
         "type": "object",
@@ -628,6 +632,10 @@ class ConditionalNode(BaseNodeFactory):
     - Functional-only predicates (no strings, no eval).
     - Input is normalized to dict internally; original input is not echoed back.
     """
+
+    # Studio UI metadata
+    _hexdag_icon = "Layers"
+    _hexdag_color = "#6366f1"  # indigo-500 (same as CompositeNode)
 
     # Explicit schema for YAML/MCP usage (builder pattern doesn't expose params well)
     _yaml_schema: dict[str, Any] = {

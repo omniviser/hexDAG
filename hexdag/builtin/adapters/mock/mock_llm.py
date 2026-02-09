@@ -22,32 +22,39 @@ class MockLLM(LLM):
     call_count: int
     last_messages: MessageList | None
     should_raise: bool
-    mock_tool_calls: list[dict[str, Any] | list[dict[str, Any]]] | None
+    mock_tool_calls: list[dict[str, Any]] | None
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        responses: str | list[str] | None = None,
+        delay_seconds: float = 0.0,
+        mock_tool_calls: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Initialize with configuration.
 
         Args
         ----
-            **kwargs: Configuration options
-                - responses: List of text responses or single response string
-                - delay_seconds: Delay before returning responses
-                - mock_tool_calls: List of tool call configurations for testing
+            responses: Mock response(s) to return. Can be a single string or list of strings.
+                Each call cycles through the list. Defaults to '{"result": "Mock response"}'.
+            delay_seconds: Simulated latency in seconds before returning response.
+            mock_tool_calls: List of tool call configurations for testing tool-using agents.
+                Each entry should have 'id', 'name', and 'arguments' keys.
+            **kwargs: Additional options for forward compatibility.
         """
-        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
+        self.delay_seconds = delay_seconds
 
         # Process responses (convert to list if needed)
-        responses = kwargs.get("responses")
         if responses is not None:
             if isinstance(responses, str):
                 self.responses = [responses]
             else:
-                self.responses = responses
+                self.responses = list(responses)
         else:
             self.responses = ['{"result": "Mock response"}']
 
         # Process mock tool calls
-        self.mock_tool_calls = kwargs.get("mock_tool_calls")
+        self.mock_tool_calls = mock_tool_calls
 
         # Non-config state
         self.call_count = 0
