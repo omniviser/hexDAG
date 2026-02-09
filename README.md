@@ -15,7 +15,7 @@ hexDAG revolutionizes AI development by making agent orchestration and data scie
 Traditional AI frameworks force you to choose between simplicity and power. hexDAG delivers both through:
 
 - **🤖 Agent-First Design**: Build complex multi-agent systems with simple YAML
-- **📊 Data Science Ready**: Mix AI agents with traditional data processing seamlessly
+- **📊 Data Processing Ready**: Mix AI agents with traditional data processing seamlessly
 - **🌊 Real-Time Streaming**: See agent thoughts and memory operations as they happen
 - **🔧 Low-Code Development**: Non-technical users can create sophisticated workflows
 - **🏢 Enterprise Grade**: Production-ready with comprehensive monitoring and control
@@ -182,6 +182,7 @@ graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
 
 orchestrator = Orchestrator()
 result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
+```
 
 ## 📚 Documentation & Learning
 
@@ -196,7 +197,7 @@ Learn hexDAG through comprehensive, working Jupyter notebooks:
 **Advanced Features:**
 - **[06. Dynamic Reasoning Agent](notebooks/06_dynamic_reasoning_agent.ipynb)** - Advanced agent patterns
 - **[Advanced Few-shot & Retry](notebooks/advanced_fewshot_and_retry.ipynb)** - Error handling and examples
-- **[Composable LLM Architecture](notebooks/composable_llm_architecture.ipynb)** - Modular AI systems
+- **[YAML Includes & Composition](notebooks/03_yaml_includes_and_composition.ipynb)** - Modular pipeline composition
 
 **All notebooks execute successfully:** `✅ All notebook(s) validated successfully!`
 
@@ -249,14 +250,11 @@ uv run pytest
 # Code quality checks
 uv run pre-commit run --all-files
 
-# Build documentation
-uv run docs-build        # Build HTML documentation
-uv run docs-clean        # Clean build directory
-uv run docs-rebuild      # Clean and rebuild
-uv run docs-check        # Build with warnings as errors
-uv run docs-autobuild    # Auto-rebuild on file changes
-
-# Documentation will be in docs/build/html/
+# Build documentation (via MkDocs)
+uv run hexdag docs build            # Build HTML documentation
+uv run hexdag docs build --clean    # Clean and rebuild
+uv run hexdag docs build --strict   # Build with warnings as errors
+uv run hexdag docs serve            # Live-reload dev server
 ```
 
 ## 🌟 Key Features
@@ -266,13 +264,13 @@ uv run docs-autobuild    # Auto-rebuild on file changes
 - Parallel specialist agents for diverse perspectives
 - Hierarchical agent networks with supervisor patterns
 
-### 📊 Data Science Integration
+### 📊 Data Processing Integration
 - Mix AI agents with traditional data processing
 - Real-time streaming for Jupyter notebooks
-- Built-in support for popular ML frameworks
+- Extensible adapter system for custom integrations
 
 ### 🌊 Real-Time Streaming
-- WebSocket-based agent action streaming
+- Async event-driven streaming of agent actions
 - Memory operation visualization
 - Interactive debugging and control
 
@@ -280,7 +278,7 @@ uv run docs-autobuild    # Auto-rebuild on file changes
 - YAML-based workflow definitions
 - Template system for reusable patterns
 - Automatic field mapping between nodes
-- Visual workflow editor (coming soon)
+- Interactive Studio UI for building and testing workflows (`hexdag studio`)
 
 ### 🔄 Smart Data Mapping
 - **Automatic Input Mapping**: Define how data flows between nodes with simple mappings
