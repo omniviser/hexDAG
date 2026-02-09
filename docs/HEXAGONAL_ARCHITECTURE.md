@@ -73,20 +73,29 @@ class MemoryPort(Protocol):
 
 ## 🔄 Adapters: The Implementation
 
-Adapters implement **how** to fulfill the port contracts:
+Adapters implement **how** to fulfill the port contracts. They are plain Python classes that implement the port interface:
 
 ```python
-@adapter("llm", name="openai")
 class OpenAIAdapter:
-    """OpenAI implementation of LLM port."""
+    """OpenAI implementation of LLM port.
+
+    Referenced in YAML as: hexdag.builtin.adapters.openai.OpenAIAdapter
+    """
+
+    def __init__(self, api_key: str, model: str = "gpt-4"):
+        self.api_key = api_key
+        self.model = model
 
     async def agenerate(self, messages, **kwargs):
         # Actual OpenAI API calls
         return await self.client.chat.completions.create(...)
 
-@adapter("llm", name="mock")
+
 class MockLLMAdapter:
-    """Test implementation for fast, deterministic testing."""
+    """Test implementation for fast, deterministic testing.
+
+    Referenced in YAML as: hexdag.builtin.adapters.mock.MockLLM
+    """
 
     async def agenerate(self, messages, **kwargs):
         # Return predictable test responses
@@ -131,15 +140,21 @@ async def test_complex_workflow():
 
 ```python
 # Adding a new LLM provider takes minutes, not days
-@adapter("llm", name="cohere")
 class CohereAdapter:
+    """Cohere implementation of LLM port.
+
+    Referenced by full module path in YAML:
+    adapters:
+      llm:
+        adapter: mypackage.adapters.CohereAdapter
+    """
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+
     async def agenerate(self, messages, **kwargs):
         # Your Cohere implementation
         pass
-
-# Immediately available in YAML:
-# adapters:
-#   llm: cohere
 ```
 
 ### 4. **Business Logic Stays Pure**

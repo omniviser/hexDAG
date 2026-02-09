@@ -23,12 +23,10 @@ pip install -e .
 Store intermediate data between pipeline nodes:
 
 ```python
-from hexdag.core.registry import registry
+from hexdag_plugins.hexdag_etl import LocalArtifactStore
 
-# Get artifact store adapter
-artifact_store = registry.get("local", namespace="etl")(
-    base_path="/tmp/etl_artifacts"
-)
+# Create artifact store adapter
+artifact_store = LocalArtifactStore(base_path="/tmp/etl_artifacts")
 
 # Write artifact
 await artifact_store.write(

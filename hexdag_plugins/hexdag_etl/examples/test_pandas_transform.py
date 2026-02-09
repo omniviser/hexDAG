@@ -10,22 +10,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 
-def test_node_registration():
-    """Test that node is discoverable."""
-    print("Testing node registration...")
-
-    # List all registered nodes
-    from hexdag.core.registry import registry
+def test_node_importable():
+    """Test that node is importable."""
+    print("Testing node import...")
 
     try:
-        # Try to get pandas_transform
-        pandas_factory = registry.get("pandas_transform", namespace="etl")
-        print(f"✓ PandasTransformNode factory: {pandas_factory}")
-        print(f"✓ PandasTransformNode class: {pandas_factory.__class__}")
+        from hexdag_plugins.hexdag_etl.hexdag_etl import PandasTransformNode
+
+        print(f"✓ PandasTransformNode: {PandasTransformNode}")
+
+        # Test instantiation
+        factory = PandasTransformNode()
+        print(f"✓ Factory instance: {factory}")
         return True
     except Exception as e:
-        print(f"❌ Error getting pandas_transform: {e}")
-        print("  This is expected if nodes aren't auto-registered yet")
+        print(f"❌ Error importing PandasTransformNode: {e}")
         return False
 
 
@@ -70,7 +69,7 @@ if __name__ == "__main__":
     print("Testing Pandas Transform Node")
     print("=" * 80)
 
-    reg_ok = test_node_registration()
+    reg_ok = test_node_importable()
     yaml_ok = test_yaml_parsing()
 
     if reg_ok and yaml_ok:

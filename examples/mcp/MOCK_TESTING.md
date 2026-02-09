@@ -304,11 +304,11 @@ def get_llm_adapter():
 ## 🔍 Verification Commands
 
 ```bash
-# Test 1: Verify mock adapters are available
+# Test 1: Verify mock adapters can be imported
 uv run python -c "
-from hexdag.core.registry import registry
-print('Mock LLM:', registry.get('mock_llm', namespace='plugin'))
-print('Mock Tools:', registry.get('mock_tool_router', namespace='plugin'))
+from hexdag.builtin.adapters.mock import MockLLM, MockToolRouter
+print('Mock LLM:', MockLLM)
+print('Mock Tool Router:', MockToolRouter)
 "
 
 # Test 2: Build pipeline with mocks

@@ -152,10 +152,9 @@ class LLM(Protocol):
 
 **Adapters (Implementations):**
 ```python
-from hexdag.core.registry import adapter
-
-@adapter("llm", name="openai")
 class OpenAIAdapter(LLM):
+    """OpenAI LLM adapter implementing the LLM port interface."""
+
     async def aresponse(self, messages: list[dict]) -> str:
         # Actual OpenAI API call
         return response
@@ -186,21 +185,20 @@ nodes:
     depends_on: [step1]
 ```
 
-#### 7. **Registry** - Component Management
-Central hub for discovering and managing all framework components:
+#### 7. **Resolver** - Component Resolution
+Components are resolved by their full module path:
 
 ```python
-from hexdag.core.registry import registry
+from hexdag.core.resolver import resolve
 
-# Get component
-llm = registry.get("openai", namespace="core")
+# Resolve a component by module path
+OpenAIAdapter = resolve("hexdag.builtin.adapters.openai.OpenAIAdapter")
 
-# List all components
-components = registry.list_components()
+# Use built-in aliases for convenience
+LLMNode = resolve("llm_node")  # Resolves to hexdag.builtin.nodes.LLMNode
 
-# Register custom component
-@adapter("database", name="custom_db")
-class CustomDB: ...
+# Custom components use full paths
+MyAdapter = resolve("myapp.adapters.CustomDB")
 ```
 
 ### How Entities Work Together

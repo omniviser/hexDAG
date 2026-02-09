@@ -146,8 +146,7 @@ def get_custom_adapter_guide() -> str:
     """Get a comprehensive guide for creating custom adapters.
 
     Returns documentation on:
-    - Creating adapters with the @adapter decorator
-    - Secret handling with the secrets parameter
+    - Creating adapters by implementing port interfaces
     - Using custom adapters in YAML pipelines
     - Testing patterns for adapters
 
@@ -164,18 +163,38 @@ def get_custom_adapter_guide() -> str:
 
 ## Overview
 
-hexDAG uses a decorator-based pattern for creating adapters. Adapters implement
-"ports" (interfaces) that connect your pipelines to external services like LLMs,
-databases, and APIs.
+Adapters implement "ports" (interfaces) that connect your pipelines to external
+services like LLMs, databases, and APIs. They are plain Python classes that
+implement the required port interface.
 
 ## Quick Start
 
-### Simple Adapter (No Secrets)
+### LLM Adapter Example
 
 ```python
-from hexdag.core.registry import adapter
+from hexdag.core.ports.llm import LLM
 
-@adapter("cache", name="memory_cache")
+class MyLLMAdapter(LLM):
+    """Custom LLM adapter."""
+
+    def __init__(
+        self,
+        model: str = "gpt-4",
+        api_key: str | None = None,
+        temperature: float = 0.7
+    ):
+        self.model = model
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.temperature = temperature
+
+    async def aresponse(self, messages: list[dict]) -> str:
+        # Your implementation here
+        ...
+```
+
+### Cache Adapter Example
+
+```python
 class MemoryCacheAdapter:
     """Simple in-memory cache adapter."""
 
@@ -191,39 +210,18 @@ class MemoryCacheAdapter:
         self.cache[key] = value
 ```
 
-### Adapter with Secrets
-
-```python
-from hexdag.core.registry import adapter
-
-@adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
-class OpenAIAdapter:
-    """OpenAI LLM adapter with automatic secret resolution."""
-
-    def __init__(
-        self,
-        api_key: str,  # Auto-resolved from OPENAI_API_KEY env var
-        model: str = "gpt-4",
-        temperature: float = 0.7
-    ):
-        self.api_key = api_key
-        self.model = model
-        self.temperature = temperature
-
-    async def aresponse(self, messages):
-        # Use self.api_key, self.model, etc.
-        ...
-```
-
 ## Using in YAML
+
+Reference adapters by their full module path:
 
 ```yaml
 spec:
   ports:
     llm:
-      adapter: mypackage.adapters.OpenAIAdapter
+      adapter: mypackage.adapters.MyLLMAdapter
       config:
         model: gpt-4-turbo
+        temperature: 0.5
 ```
 '''
 
@@ -232,8 +230,7 @@ def get_custom_node_guide() -> str:
     """Get a comprehensive guide for creating custom nodes.
 
     Returns documentation on:
-    - Creating nodes with the @node decorator
-    - Node factory pattern
+    - Creating nodes with the node factory pattern
     - Input/output schemas
     - Using custom nodes in YAML pipelines
 
@@ -256,11 +253,9 @@ and passes results to dependent nodes.
 ## Node Factory Pattern
 
 ```python
-from hexdag.core.registry import node
 from hexdag.core.domain import NodeSpec
 from hexdag.builtin.nodes import BaseNodeFactory
 
-@node(name="my_processor", namespace="custom")
 class MyProcessorNode(BaseNodeFactory):
     """Custom data processor node."""
 
@@ -285,9 +280,11 @@ class MyProcessorNode(BaseNodeFactory):
 
 ## Using in YAML
 
+Reference nodes by their full module path:
+
 ```yaml
 nodes:
-  - kind: my_processor
+  - kind: mypackage.nodes.MyProcessorNode
     metadata:
       name: processor1
     spec:
@@ -305,7 +302,7 @@ def get_custom_tool_guide() -> str:
     Returns documentation on:
     - Creating tools as Python functions
     - Tool schemas and descriptions
-    - Registering tools with agents
+    - Using tools with agents
 
     Returns
     -------
@@ -323,7 +320,9 @@ def get_custom_tool_guide() -> str:
 Tools are functions that agents can use during their reasoning process.
 They provide capabilities like web search, database queries, etc.
 
-## Simple Tool
+Tools are plain Python functions with type hints and docstrings.
+
+## Creating a Tool
 
 ```python
 def search_database(query: str, limit: int = 10) -> list[dict]:
@@ -340,7 +339,9 @@ def search_database(query: str, limit: int = 10) -> list[dict]:
     return results
 ```
 
-## Registering with Agent
+## Using Tools with Agents
+
+Reference tools by their full module path in YAML:
 
 ```yaml
 nodes:
@@ -354,6 +355,13 @@ nodes:
       initial_prompt_template: |
         Research the following topic: {{input}}
 ```
+
+## Tool Requirements
+
+- **Type hints**: Required for automatic schema generation
+- **Docstring**: Provides description for the LLM
+- **Args section**: Documents each parameter
+- **Returns section**: Documents return type
 '''
 
 
@@ -386,23 +394,42 @@ hexDAG can be extended with custom components:
 
 ## 1. Custom Adapters
 Connect to external services (LLMs, databases, APIs).
+Implement port interfaces (e.g., `LLM`, `Memory`, `Database`).
 Use `get_custom_adapter_guide()` for details.
 
 ## 2. Custom Nodes
 Create new processing logic for pipelines.
+Extend `BaseNodeFactory` and implement the `__call__` method.
 Use `get_custom_node_guide()` for details.
 
 ## 3. Custom Tools
 Add capabilities for agents to use.
+Create functions with type hints and docstrings.
 Use `get_custom_tool_guide()` for details.
 
 ## Quick Reference
 
-| Component | Decorator | Purpose |
-|-----------|-----------|---------|
-| Adapter | `@adapter("port_type", name="name")` | External service integration |
-| Node | `@node(name="name", namespace="ns")` | Pipeline processing step |
-| Tool | Function with docstring | Agent capability |
+| Component | Pattern | Purpose |
+|-----------|---------|---------|
+| Adapter | Implement port interface | External service integration |
+| Node | Extend BaseNodeFactory | Pipeline processing step |
+| Tool | Function with type hints | Agent capability |
+
+## Using Custom Components in YAML
+
+Reference components by their full module path:
+
+```yaml
+spec:
+  ports:
+    llm:
+      adapter: mypackage.adapters.MyLLMAdapter
+  nodes:
+    - kind: mypackage.nodes.MyNode
+      spec:
+        tools:
+          - mypackage.tools.my_tool
+```
 """
 
 

@@ -221,29 +221,37 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 - **Validation**: Ensure component uniqueness and correctness
 
 **Component Types**:
+- **Nodes**: Pipeline processing steps (LLMNode, FunctionNode, AgentNode)
+- **Adapters**: Port implementations (OpenAIAdapter, MockLLM)
+- **Tools**: Functions for agent use
+- **Macros**: Reusable pipeline templates
+
+**Component Resolution**:
+
+Components are resolved by full module path using `hexdag.core.resolver`:
+
 ```python
-@dataclass
-class ComponentMetadata:
-    """Metadata for a registered component."""
-    name: str                    # Unique identifier
-    component_type: ComponentType  # node, adapter, tool, observer
-    factory: InstanceFactory     # Callable to create instances
-    namespace: str               # Logical grouping (core, plugin, etc.)
-    description: str | None      # Human-readable description
-    schema: dict | None          # JSON schema for configuration
+from hexdag.core.resolver import resolve
+
+# Resolve components by module path
+OpenAIAdapter = resolve("hexdag.builtin.adapters.openai.OpenAIAdapter")
+MyNode = resolve("myapp.nodes.MyNode")
 ```
 
-**Registration Pattern**:
-```python
-from hexdag.core.registry import adapter, node, tool
+**Creating Custom Components**:
 
-@adapter("llm", name="openai", secrets={"api_key": "OPENAI_API_KEY"})
-class OpenAIAdapter:
+```python
+# Custom adapter - implement port interface
+from hexdag.core.ports.llm import LLM
+
+class OpenAIAdapter(LLM):
     def __init__(self, api_key: str, model: str = "gpt-4"):
         self.api_key = api_key
         self.model = model
 
-@node(name="my_node", namespace="core")
+# Custom node - extend BaseNodeFactory
+from hexdag.builtin.nodes import BaseNodeFactory
+
 class MyNode(BaseNodeFactory):
     def __call__(self, name: str, timeout: float = 30.0, **kwargs):
         return NodeSpec(...)
@@ -533,18 +541,15 @@ spec:
 │  │    (Concrete Implementations)                 │           │
 │  ├───────────────────────────────────────────────┤           │
 │  │                                               │           │
-│  │  @adapter("llm", name="openai")              │           │
-│  │  class OpenAIAdapter:                        │           │
+│  │  class OpenAIAdapter(LLM):                   │           │
 │  │      async def aresponse(...) -> str:        │           │
 │  │          # OpenAI API call                    │           │
 │  │                                               │           │
-│  │  @adapter("llm", name="anthropic")           │           │
-│  │  class AnthropicAdapter:                     │           │
+│  │  class AnthropicAdapter(LLM):                │           │
 │  │      async def aresponse(...) -> str:        │           │
 │  │          # Anthropic API call                 │           │
 │  │                                               │           │
-│  │  @adapter("memory", name="redis")            │           │
-│  │  class RedisMemoryAdapter:                   │           │
+│  │  class RedisMemoryAdapter(Memory):           │           │
 │  │      async def aget(...) -> Any:             │           │
 │  │          # Redis GET operation                │           │
 │  │                                               │           │
@@ -779,7 +784,7 @@ ValidationError(node_name, error_details)
 │  2. YamlPipelineBuilder.build_from_yaml_file()                │
 │     ├─ Parse YAML                                             │
 │     ├─ For each node:                                         │
-│     │  ├─ registry.get(node_type) → Get factory               │
+│     │  ├─ resolve(node_type) → Get factory class              │
 │     │  ├─ factory(**params) → Create NodeSpec                 │
 │     │  └─ graph.add(node_spec)                                │
 │     ├─ graph.validate()                                       │
@@ -787,7 +792,7 @@ ValidationError(node_name, error_details)
 │                                                               │
 │  3. Create Orchestrator                                       │
 │     ├─ For each port in config.ports:                         │
-│     │  ├─ registry.get(adapter_name) → Get adapter            │
+│     │  ├─ resolve(adapter_path) → Get adapter class           │
 │     │  ├─ adapter(**params) → Create instance                 │
 │     │  └─ Store in ports dict                                 │
 │     └─ Setup event system                                     │
@@ -818,8 +823,8 @@ ValidationError(node_name, error_details)
 │                  Adapter Lifecycle Hooks                      │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
-│  @adapter("database", name="postgres")                        │
-│  class PostgresAdapter:                                       │
+│  class PostgresAdapter(Database):                             │
+│  # Implements Database port interface                                       │
 │      def __init__(self, connection_string: str):              │
 │          self.connection_string = connection_string           │
 │          self.pool = None  # Initialize later                 │
@@ -887,11 +892,12 @@ hexDAG provides multiple extension points for customization:
 
 ### 1. Custom Nodes
 
-```python
-from hexdag.core.registry import node
-from hexdag.core.domain.dag import NodeSpec
+Extend `BaseNodeFactory` and reference by full module path:
 
-@node(name="custom_processor", namespace="myapp")
+```python
+from hexdag.core.domain.dag import NodeSpec
+from hexdag.builtin.nodes import BaseNodeFactory
+
 class CustomProcessorNode(BaseNodeFactory):
     def __call__(self, name: str, config: dict, **kwargs):
         async def process(ctx: ExecutionContext, **inputs):
@@ -907,15 +913,16 @@ class CustomProcessorNode(BaseNodeFactory):
         )
 ```
 
+Use in YAML: `kind: myapp.nodes.CustomProcessorNode`
+
 ### 2. Custom Adapters
 
-```python
-from hexdag.core.registry import adapter
+Implement the port interface (e.g., `LLM`, `Memory`, `Database`):
 
-@adapter("cache", name="custom_cache", secrets={"api_key": "CACHE_API_KEY"})
+```python
 class CustomCacheAdapter:
-    def __init__(self, api_key: str, ttl: int = 3600):
-        self.api_key = api_key
+    def __init__(self, api_key: str | None = None, ttl: int = 3600):
+        self.api_key = api_key or os.environ.get("CACHE_API_KEY")
         self.ttl = ttl
 
     async def asetup(self):
@@ -931,12 +938,13 @@ class CustomCacheAdapter:
         pass
 ```
 
+Use in YAML: `adapter: myapp.adapters.CustomCacheAdapter`
+
 ### 3. Custom Tools
 
-```python
-from hexdag.core.registry import tool
+Tools are plain functions with type hints and docstrings:
 
-@tool(name="web_search", namespace="myapp", description="Search the web")
+```python
 def web_search(query: str, limit: int = 10) -> list[dict]:
     """Search the web for information.
 
@@ -951,13 +959,15 @@ def web_search(query: str, limit: int = 10) -> list[dict]:
     return search_results
 ```
 
+Use in YAML: `tools: [myapp.tools.web_search]`
+
 ### 4. Custom Observers
 
+Implement the observer interface:
+
 ```python
-from hexdag.core.registry import observer
 from hexdag.core.orchestration.events import NodeCompleted
 
-@observer(name="performance_monitor", namespace="myapp")
 class PerformanceMonitor:
     async def on_event(self, event):
         if isinstance(event, NodeCompleted):

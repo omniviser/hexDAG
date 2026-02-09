@@ -17,7 +17,7 @@ Formats:
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PipelineConfig(BaseModel):
@@ -110,6 +110,8 @@ class PipelineConfig(BaseModel):
     ```
     """
 
+    model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
+
     # Global configuration
     ports: dict[str, dict[str, Any]] = Field(
         default_factory=dict, description="Global adapter configurations"
@@ -126,8 +128,3 @@ class PipelineConfig(BaseModel):
 
     # Node configurations (handled by existing builder)
     nodes: list[dict[str, Any]] = Field(default_factory=list, description="Node specifications")
-
-    class Config:
-        """Pydantic model configuration."""
-
-        extra = "allow"  # Allow additional fields for extensibility

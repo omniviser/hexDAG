@@ -258,17 +258,17 @@ Explain the hexDAG YAML pipeline structure
    What MCP tools do you have access to?
    ```
 
-2. **Check that hexDAG registry is loaded:**
+2. **Check that hexDAG components can be resolved:**
    ```bash
    uv run python -c "
-   from hexdag.core.bootstrap import ensure_bootstrapped
-   from hexdag.core.registry import registry
-   ensure_bootstrapped()
-   print(f'Registry has {len(registry._components)} components')
+   from hexdag.core.resolver import resolve, get_builtin_aliases
+   aliases = get_builtin_aliases()
+   print(f'Available aliases: {len(aliases)}')
+   print('LLMNode:', resolve('llm_node'))
    "
    ```
 
-   Should output: `Registry has 41 components` (or more if you have plugins)
+   Should output the available built-in node aliases and resolve successfully.
 
 ### Permission Errors
 

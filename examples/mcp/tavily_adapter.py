@@ -2,21 +2,18 @@
 
 This adapter provides integration with Tavily's AI-powered search API,
 enabling web search capabilities for research agents.
+
+Tools are plain functions with type hints and docstrings.
+Reference in YAML as: tools: [examples.mcp.tavily_adapter.tavily_search]
 """
 
 from typing import Any
 
 from hexdag.core.logging import get_logger
-from hexdag.core.registry import tool
 
 logger = get_logger(__name__)
 
 
-@tool(
-    name="tavily_search",
-    namespace="research",
-    description="Search the web using Tavily AI-powered search engine. Returns comprehensive search results with context.",
-)
 async def tavily_search(
     query: str,
     search_depth: str = "advanced",
@@ -137,11 +134,6 @@ async def tavily_search(
         }
 
 
-@tool(
-    name="tavily_qna_search",
-    namespace="research",
-    description="Quick Q&A search using Tavily. Returns a direct answer to a question without full search results.",
-)
 async def tavily_qna_search(query: str) -> str:
     """Quick question-answering search using Tavily's Q&A endpoint.
 

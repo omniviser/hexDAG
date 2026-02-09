@@ -24,7 +24,7 @@ hexdag plugin install redis_adapter
 
 ```
 hexdag_plugins/my_adapter/
-├── my_adapter.py        # Implement @adapter decorator
+├── my_adapter.py        # Implement port interface
 ├── pyproject.toml       # Dependencies
 └── tests/               # Plugin tests
 ```
@@ -61,19 +61,14 @@ The plugin system is based on two key concepts:
 - **Adapters**: Concrete implementations of ports that integrate with specific services
 
 ```python
-# Port definition (interface)
-from hexdag.core.registry import port
+# Port definition (interface) - defined in hexdag.core.ports
+from hexdag.core.ports.llm import LLM
 
-@port(name="llm")
-class LLM:
+class LLM(Protocol):
     """Abstract interface for language models."""
-    async def aresponse(self, messages: list[Message]) -> str:
-        raise NotImplementedError
+    async def aresponse(self, messages: list[Message]) -> str: ...
 
-# Adapter implementation
-from hexdag.core.registry import adapter
-
-@adapter(name="openai_llm", implements_port="llm", namespace="plugin")
+# Adapter implementation - implements the port interface
 class OpenAILLM(LLM):
     """OpenAI implementation of the LLM port."""
     async def aresponse(self, messages: list[Message]) -> str:
@@ -81,18 +76,18 @@ class OpenAILLM(LLM):
         return response
 ```
 
-### Component Registry
+### Component Resolution
 
-The registry is the central hub that manages all components:
+Components are resolved by their full module path:
 
 ```python
-from hexdag.core.registry import registry
+from hexdag.core.resolver import resolve
 
-# Get a component
-llm = registry.get("openai_llm", namespace="plugin")
+# Resolve a component by module path
+OpenAILLM = resolve("mycompany.adapters.OpenAILLM")
 
-# List all components
-components = registry.list_components()
+# Use in YAML pipelines
+# adapter: mycompany.adapters.OpenAILLM
 ```
 
 ## Plugin Loading Process
@@ -183,19 +178,28 @@ max_tokens = 2000
 
 ### Loading Custom Configurations
 
+HexDAG loads plugins through the standard Python import mechanism. Configure plugins
+in your `pyproject.toml` or directly import them:
+
 ```python
-from hexdag.core.bootstrap import bootstrap_registry
+# Import plugins directly by their module path
+from hexdag_plugins.redis_adapter import RedisAdapter
 
-# Load main configuration
-bootstrap_registry()  # Uses pyproject.toml
+# Or use the resolver to load by path string
+from hexdag.core.resolver import resolve
 
-# Load specific configuration
-bootstrap_registry("path/to/custom/hexdag.toml")
+RedisAdapter = resolve("hexdag_plugins.redis_adapter.RedisAdapter")
+```
 
-# Load with environment-specific config
-import os
-env = os.getenv("ENVIRONMENT", "development")
-bootstrap_registry(f"config/{env}/hexdag.toml")
+For environment-specific configuration, use environment variables in your YAML:
+
+```yaml
+spec:
+  ports:
+    llm:
+      adapter: mycompany.adapters.CustomLLM
+      config:
+        api_key: ${LLM_API_KEY}  # Resolved from environment
 ```
 
 ## Creating Custom Plugins
@@ -204,40 +208,30 @@ bootstrap_registry(f"config/{env}/hexdag.toml")
 
 ```python
 # my_company/adapters/custom_llm.py
-from hexdag.core.ports import LLM, Message
-from hexdag.core.registry import adapter
-from pydantic import BaseModel, Field
+from hexdag.core.ports.llm import LLM
+import os
 
-# Configuration model
-class CustomLLMConfig(BaseModel):
-    """Configuration for custom LLM."""
-    api_url: str = Field(description="API endpoint URL")
-    api_key: str = Field(description="API key")
-    timeout: float = Field(default=30.0, description="Request timeout")
-
-# Adapter implementation
-@adapter(
-    name="custom_llm",
-    implements_port="llm",
-    namespace="plugin"
-)
 class CustomLLM(LLM):
     """Custom LLM implementation."""
 
-    def __init__(self, config: CustomLLMConfig | None = None):
-        self.config = config or CustomLLMConfig(
-            api_url="https://api.example.com",
-            api_key="default-key"
-        )
+    def __init__(
+        self,
+        api_url: str = "https://api.example.com",
+        api_key: str | None = None,
+        timeout: float = 30.0
+    ):
+        self.api_url = api_url
+        self.api_key = api_key or os.environ.get("CUSTOM_LLM_API_KEY")
+        self.timeout = timeout
 
-    async def aresponse(self, messages: list[Message]) -> str:
+    async def aresponse(self, messages: list[dict]) -> str:
         # Your implementation here
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                self.config.api_url,
-                json={"messages": [m.dict() for m in messages]},
-                headers={"Authorization": f"Bearer {self.config.api_key}"},
-                timeout=self.config.timeout
+                self.api_url,
+                json={"messages": messages},
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=self.timeout
             )
             return response.json()["content"]
 ```
@@ -295,15 +289,27 @@ pool_size = 10
 
 ### Step 5: Use Your Plugin
 
+Reference your adapter by its full module path in YAML:
+
+```yaml
+# pipeline.yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+spec:
+  ports:
+    llm:
+      adapter: my_company.adapters.CustomLLM
+      config:
+        api_url: https://api.mycompany.com/v1/chat
+        timeout: 60.0
+```
+
+Or instantiate directly in Python:
+
 ```python
-from hexdag.core.bootstrap import bootstrap_registry
-from hexdag.core.registry import registry
+from my_company.adapters import CustomLLM
 
-# Load your plugin
-bootstrap_registry("my_company/hexdag.toml")
-
-# Use your adapter
-llm = registry.get("custom_llm", namespace="plugin")
+llm = CustomLLM(api_url="https://api.mycompany.com/v1/chat")
 response = await llm.aresponse(messages)
 ```
 
@@ -388,11 +394,10 @@ class MyAdapterConfig(BaseModel):
 ### 2. Error Handling
 
 ```python
-@adapter(name="robust_adapter", implements_port="llm", namespace="plugin")
 class RobustAdapter(LLM):
     """Adapter with proper error handling."""
 
-    async def aresponse(self, messages: list[Message]) -> str:
+    async def aresponse(self, messages: list[dict]) -> str:
         try:
             # Attempt operation
             return await self._call_api(messages)
@@ -469,11 +474,12 @@ api_key_env = "CUSTOM_API_KEY"
 
 ## Usage
 
-```python
-from hexdag.core.registry import registry
-
-llm = registry.get("custom_llm", namespace="plugin")
-response = await llm.aresponse(messages)
+```yaml
+# In YAML pipeline
+spec:
+  ports:
+    llm:
+      adapter: my_company.adapters.CustomLLM
 ```
 ```
 
@@ -483,11 +489,9 @@ response = await llm.aresponse(messages)
 
 ```python
 # simple_memory.py
-from hexdag.core.ports import Memory
-from hexdag.core.registry import adapter
+from hexdag.core.ports.memory import Memory
 from typing import Any
 
-@adapter(name="simple_memory", implements_port="memory", namespace="plugin")
 class SimpleMemory(Memory):
     """Simple in-memory storage."""
 
@@ -504,20 +508,21 @@ class SimpleMemory(Memory):
         self.data.pop(key, None)
 ```
 
+Use in YAML: `adapter: my_company.adapters.SimpleMemory`
+
 ### Example 2: Database Adapter with Connection Pooling
 
 ```python
 # postgres_adapter.py
 import asyncpg
-from hexdag.core.ports import DatabasePort
-from hexdag.core.registry import adapter
+from hexdag.core.ports.database import Database
 
-@adapter(name="postgres_db", implements_port="database", namespace="plugin")
-class PostgreSQLAdapter(DatabasePort):
+class PostgreSQLAdapter(Database):
     """PostgreSQL database adapter."""
 
-    def __init__(self, config: PostgresConfig):
-        self.config = config
+    def __init__(self, connection_string: str, pool_size: int = 10):
+        self.connection_string = connection_string
+        self.pool_size = pool_size
         self.pool = None
 
     async def connect(self):
@@ -544,62 +549,68 @@ class PostgreSQLAdapter(DatabasePort):
 
 ```python
 # multi_llm_adapter.py
-from hexdag.core.ports import LLM
-from hexdag.core.registry import adapter, registry
+from hexdag.core.ports.llm import LLM
+from hexdag.core.resolver import resolve
 
-@adapter(name="multi_llm", implements_port="llm", namespace="plugin")
 class MultiProviderLLM(LLM):
     """Adapter that can switch between multiple LLM providers."""
 
-    def __init__(self, config: MultiLLMConfig):
-        self.config = config
-        self.providers = {}
+    def __init__(
+        self,
+        providers: dict[str, str],  # name -> module path
+        default_provider: str = "openai"
+    ):
+        self.provider_instances = {}
 
-        # Load configured providers
-        for provider_name in config.providers:
-            self.providers[provider_name] = registry.get(
-                provider_name,
-                namespace="plugin"
-            )
+        # Instantiate configured providers
+        for name, module_path in providers.items():
+            provider_cls = resolve(module_path)
+            self.provider_instances[name] = provider_cls()
 
-        self.current_provider = config.default_provider
+        self.current_provider = default_provider
 
-    async def aresponse(self, messages: list[Message]) -> str:
+    async def aresponse(self, messages: list[dict]) -> str:
         """Route to current provider."""
-        provider = self.providers[self.current_provider]
+        provider = self.provider_instances[self.current_provider]
         return await provider.aresponse(messages)
 
     def switch_provider(self, provider_name: str):
         """Switch active provider."""
-        if provider_name not in self.providers:
+        if provider_name not in self.provider_instances:
             raise ValueError(f"Unknown provider: {provider_name}")
         self.current_provider = provider_name
 ```
 
-### Example 4: Loading Plugins Conditionally
+### Example 4: Environment-Specific Configuration
+
+Use different YAML pipeline files for different environments:
+
+```yaml
+# config/production/pipeline.yaml
+spec:
+  ports:
+    llm:
+      adapter: hexdag.builtin.adapters.openai.OpenAIAdapter
+      config:
+        model: gpt-4
+
+# config/testing/pipeline.yaml
+spec:
+  ports:
+    llm:
+      adapter: hexdag.builtin.adapters.mock.MockLLM
+```
 
 ```python
 # main.py
-from hexdag.core.bootstrap import bootstrap_registry
 import os
+from hexdag import YamlPipelineBuilder
 
-# Determine environment
 environment = os.getenv("ENVIRONMENT", "development")
+pipeline_path = f"config/{environment}/pipeline.yaml"
 
-if environment == "production":
-    # Load production adapters
-    bootstrap_registry("config/production/hexdag.toml")
-elif environment == "testing":
-    # Load mock adapters for testing
-    bootstrap_registry("hexdag/adapters/mock/hexdag.toml")
-else:
-    # Load local adapters for development
-    bootstrap_registry("config/development/hexdag.toml")
-
-# Now use the appropriate adapters
-from hexdag.core.registry import registry
-
-llm = registry.get("llm", namespace="plugin")  # Gets environment-appropriate LLM
+builder = YamlPipelineBuilder()
+graph, config = builder.build_from_yaml_file(pipeline_path)
 ```
 
 ## Advanced Topics
@@ -631,15 +642,9 @@ for plugin in plugins:
 
 ```python
 # versioned_adapter.py
-from hexdag.core.registry import adapter
 from packaging import version
+from hexdag.core.ports.llm import LLM
 
-@adapter(
-    name="versioned_llm",
-    implements_port="llm",
-    namespace="plugin",
-    metadata={"version": "2.0.0", "min_hexdag_version": "1.0.0"}
-)
 class VersionedLLM(LLM):
     """Adapter with version information."""
 
@@ -657,16 +662,15 @@ class VersionedLLM(LLM):
 
 ```python
 # lifecycle_adapter.py
-@adapter(name="lifecycle_llm", implements_port="llm", namespace="plugin")
 class LifecycleLLM(LLM):
     """Adapter with lifecycle management."""
 
-    async def initialize(self):
+    async def asetup(self):
         """Called when adapter is first created."""
         await self._connect_to_service()
         await self._warm_up_cache()
 
-    async def shutdown(self):
+    async def aclose(self):
         """Called when adapter is being destroyed."""
         await self._disconnect()
         await self._cleanup_resources()
@@ -684,10 +688,10 @@ class LifecycleLLM(LLM):
 
 ### Common Issues
 
-1. **Plugin not found in registry**
-   - Check that the plugin module is in the `plugins` list in configuration
-   - Verify the adapter has the `@adapter` decorator
-   - Ensure the namespace is correct (usually "plugin")
+1. **Plugin not found**
+   - Check that the full module path is correct in your YAML configuration
+   - Verify the adapter class implements the port interface
+   - Ensure the module is on the Python path
 
 2. **Port not implemented error**
    - Verify the adapter class inherits from the port interface
@@ -712,8 +716,9 @@ Enable debug logging to troubleshoot plugin loading:
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-from hexdag.core.bootstrap import bootstrap_registry
-bootstrap_registry("hexdag.toml")  # Will show detailed loading logs
+# The resolver logs detailed information when resolving component paths
+from hexdag.core.resolver import resolve
+adapter = resolve("mycompany.adapters.CustomAdapter")  # Logs resolution details
 ```
 
 ## Summary

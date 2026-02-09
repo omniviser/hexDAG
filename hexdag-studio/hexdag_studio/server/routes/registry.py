@@ -20,7 +20,7 @@ class NodeTypeInfo(BaseModel):
     kind: str
     name: str
     description: str
-    namespace: str
+    module_path: str
     color: str
     icon: str
     default_spec: dict[str, Any]
@@ -97,11 +97,19 @@ def _kind_to_label(kind: str) -> str:
     return label.title()
 
 
+def _is_builtin(module_path: str) -> bool:
+    """Check if a module_path refers to a built-in component."""
+    return module_path.startswith("hexdag.builtin.")
+
+
 def get_builtin_nodes(include_deprecated: bool = False) -> list[NodeTypeInfo]:
-    """Get built-in hexDAG node types using the unified API.
+    """Get built-in (core) hexDAG node types using the unified API.
 
     Uses hexdag.api.components.list_nodes() for discovery,
     then adds Studio-specific UI metadata (colors, icons, etc.).
+
+    Only returns nodes from hexdag.builtin.* to avoid duplicates with
+    plugin nodes which are served by /plugins endpoints.
     """
     # Use unified API to get nodes
     api_nodes = api.components.list_nodes()
@@ -110,13 +118,17 @@ def get_builtin_nodes(include_deprecated: bool = False) -> list[NodeTypeInfo]:
 
     for node_data in api_nodes:
         kind = node_data.get("kind", "")
-        namespace = node_data.get("namespace", "core")
+        module_path = node_data.get("module_path", "")
+
+        # Only include built-in nodes - plugins are served by /plugins
+        if not _is_builtin(module_path):
+            continue
 
         # Skip deprecated nodes if not requested
         if kind in DEPRECATED_NODES and not include_deprecated:
             continue
 
-        # Get namespace prefix for plugin nodes
+        # Get base kind for UI metadata lookup
         base_kind = kind.split(":")[-1] if ":" in kind else kind
 
         nodes.append(
@@ -124,7 +136,7 @@ def get_builtin_nodes(include_deprecated: bool = False) -> list[NodeTypeInfo]:
                 kind=kind,
                 name=node_data.get("name", _kind_to_label(kind)),
                 description=node_data.get("description", f"{_kind_to_label(kind)} node"),
-                namespace=namespace,
+                module_path=module_path,
                 # Studio-specific UI metadata
                 color=NODE_COLORS.get(base_kind, "#6b7280"),
                 icon=NODE_ICONS.get(base_kind, "Box"),
@@ -168,80 +180,52 @@ async def get_node_type(kind: str) -> NodeTypeInfo | dict[str, str]:
 # Additional endpoints for feature parity with MCP
 
 
-@router.get("/adapters")
-async def get_adapters(
-    port_type: str | None = None, include_plugins: bool = True
-) -> list[dict[str, Any]]:
-    """Get all available adapters (built-in and from plugins).
+def _module_path_to_plugin(module_path: str) -> str:
+    """Convert module_path to plugin name, or 'builtin' for built-in components."""
+    if module_path.startswith("hexdag.builtin."):
+        return "builtin"
+    if module_path.startswith("hexdag_plugins."):
+        parts = module_path.split(".")
+        if len(parts) >= 2:
+            return parts[1]
+    # User plugin - use top-level package
+    parts = module_path.split(".")
+    return parts[0] if parts else "unknown"
 
-    Uses the unified hexdag.api.components module for built-in adapters,
-    plus discovers plugin adapters for Studio.
+
+@router.get("/adapters")
+async def get_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
+    """Get all available adapters from unified API.
+
+    Uses the unified hexdag.api.components module for all adapters.
+    Adds plugin name based on module_path.
 
     Args:
         port_type: Optional filter by port type (llm, memory, database, secret)
-        include_plugins: Whether to include plugin adapters (default: True)
     """
-    # Get built-in adapters from unified API
+    # Get all adapters from unified API (already deduplicated)
     adapters = api.components.list_adapters(port_type)
 
-    # Add plugin marker for built-in adapters
-    for adapter in adapters:
-        adapter["plugin"] = "builtin"
-
-    # Include plugin adapters if requested
-    if include_plugins:
-        from hexdag_studio.server.routes.plugins import discover_plugins
-
-        plugins = discover_plugins()
-        for plugin in plugins:
-            for adapter in plugin.adapters:
-                # Filter by port type if specified
-                if port_type and adapter.get("port_type") != port_type:
-                    continue
-                adapter_copy = dict(adapter)
-                adapter_copy["plugin"] = plugin.name
-                adapters.append(adapter_copy)
-
-    return adapters
+    # Add plugin marker based on module_path
+    return [
+        {**adapter, "plugin": _module_path_to_plugin(adapter.get("module_path", ""))}
+        for adapter in adapters
+    ]
 
 
 @router.get("/tools")
-async def get_tools(
-    namespace: str | None = None, include_plugins: bool = True
-) -> list[dict[str, Any]]:
-    """Get all available tools (built-in and from plugins).
+async def get_tools() -> list[dict[str, Any]]:
+    """Get all available tools from unified API.
 
-    Uses the unified hexdag.api.components module for built-in tools,
-    plus discovers plugin tools for Studio.
-
-    Args:
-        namespace: Optional filter by namespace
-        include_plugins: Whether to include plugin tools (default: True)
+    Uses the unified hexdag.api.components module for all tools.
     """
-    # Get built-in tools from unified API
-    tools = api.components.list_tools(namespace)
+    # Get all tools from unified API
+    tools = api.components.list_tools()
 
-    # Add plugin marker for built-in tools
-    for tool in tools:
-        tool["plugin"] = "builtin"
-
-    # Include plugin tools if requested (future support)
-    # Plugins don't currently export tools, but this is ready for when they do
-    if include_plugins:
-        from hexdag_studio.server.routes.plugins import discover_plugins
-
-        plugins = discover_plugins()
-        for plugin in plugins:
-            # Check if plugin has tools (future feature)
-            plugin_tools = getattr(plugin, "tools", [])
-            for tool in plugin_tools:
-                if namespace and tool.get("namespace") != namespace:
-                    continue
-                tool_copy = dict(tool)
-                tool_copy["plugin"] = plugin.name
-                tools.append(tool_copy)
-
-    return tools
+    # Add plugin marker based on module_path
+    return [
+        {**tool, "plugin": _module_path_to_plugin(tool.get("module_path", ""))} for tool in tools
+    ]
 
 
 @router.get("/macros")
@@ -266,7 +250,6 @@ async def get_tags() -> list[dict[str, Any]]:
 async def get_component_schema(
     component_type: str,
     name: str,
-    namespace: str = "core",
 ) -> dict[str, Any]:
     """Get detailed schema for a specific component.
 
@@ -274,7 +257,6 @@ async def get_component_schema(
 
     Args:
         component_type: Type of component (node, adapter, tool, macro, tag)
-        name: Component name
-        namespace: Component namespace (default: core)
+        name: Component name or module_path
     """
-    return api.components.get_component_schema(component_type, name, namespace)
+    return api.components.get_component_schema(component_type, name)

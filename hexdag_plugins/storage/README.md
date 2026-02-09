@@ -51,13 +51,10 @@ uv pip install -e '.[storage-postgresql]'
 ### Vector Stores
 
 ```python
-from hexdag.core.registry import registry
-from hexdag.core.bootstrap import bootstrap_registry
-
-bootstrap_registry()
+from hexdag_plugins.storage import InMemoryVectorStore
 
 # In-memory (for testing)
-vector_store = registry.get("in_memory_vector", namespace="storage")()
+vector_store = InMemoryVectorStore()
 await vector_store.aadd_documents(
     documents=[{"text": "Python"}],
     embeddings=[[0.1, 0.2, 0.3]]
@@ -65,7 +62,9 @@ await vector_store.aadd_documents(
 results = await vector_store.asearch("", query_embedding=[0.1, 0.2, 0.3])
 
 # PostgreSQL + pgvector (production)
-pgvector = registry.get("pgvector", namespace="storage")(
+from hexdag_plugins.storage import PgVectorStore
+
+pgvector = PgVectorStore(
     connection_string="postgresql+asyncpg://localhost/mydb",
     pool_size=10,
     table_name="embeddings",
@@ -78,10 +77,10 @@ await pgvector.aadd_documents(documents, embeddings)
 ### File Storage
 
 ```python
+from hexdag_plugins.storage import LocalFileStorage
+
 # Local file storage
-storage = registry.get("local", namespace="storage")(
-    base_path="./data"
-)
+storage = LocalFileStorage(base_path="./data")
 
 # Upload file
 await storage.aupload("document.pdf", "docs/document.pdf")

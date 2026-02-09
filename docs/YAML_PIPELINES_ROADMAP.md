@@ -18,13 +18,12 @@
 
 **Objective:** Build unified registry architecture for component discovery
 
-### 1.1 Core Registry System (`hexdag.core.registry`) ✅
+### 1.1 Component Resolution System (`hexdag.core.resolver`) ✅
 
-* ✅ **Component Registry:** Unified registry for all component types
-* ✅ **Decorator-based registration:** `@node`, `@macro`, `@adapter`, `@tool`, `@policy`
-* ✅ **Namespace management:** `core`, `plugin`, custom namespaces
-* ✅ **Discovery API:** List, search, and retrieve components by type/namespace
-* ✅ **Metadata system:** Tags, descriptions, component metadata
+* ✅ **Module Path Resolver:** Resolve components by full Python module path
+* ✅ **Built-in Aliases:** Short names for built-in components (e.g., `llm_node`)
+* ✅ **User Aliases:** Register custom short names for your components
+* ✅ **Runtime Components:** Support for dynamically created components
 
 ### 1.2 Component Types Supported ✅
 
@@ -34,11 +33,11 @@
 * ✅ **Tools:** Agent tool functions with automatic schema generation
 * ✅ **Policies:** Governance and validation components (basic support)
 
-### 1.3 Registry Features ✅
+### 1.3 Resolver Features ✅
 
-* ✅ **Type-based resolution:** Get components by type and namespace
-* ✅ **Bootstrap system:** Automatic registration of built-in components
-* ✅ **Lazy loading:** Components registered on-demand
+* ✅ **Module path resolution:** Import components by their Python path
+* ✅ **Auto-discovery:** Built-in aliases registered at startup
+* ✅ **Lazy loading:** Components imported on-demand
 * ✅ **Error handling:** Clear error messages for missing components
 
 ---
@@ -69,7 +68,7 @@
 
 * ✅ **MacroEntityPlugin:** Expand `macro_invocation` into subgraphs
 * ✅ **NodeEntityPlugin:** Build all node types from YAML
-* ✅ **Namespace resolution:** Support `namespace:name` format
+* ✅ **Module path resolution:** Support full Python module paths
 * ✅ **Dependency handling:** Explicit dependencies via `dependencies` field
 
 ### 2.4 YAML Manifest Format ✅
@@ -80,7 +79,6 @@ kind: Pipeline
 metadata:
   name: my-pipeline
   description: Pipeline description
-  namespace: custom  # Multi-environment support
 spec:
   nodes:
     - kind: llm_node
@@ -276,7 +274,7 @@ spec:
 ### ✅ Currently Available
 
 - **Core Engine:** Full DAG orchestration with async execution
-- **Registry System:** Component discovery and namespace management
+- **Resolver System:** Component discovery via module paths
 - **YAML Builder:** K8s-style manifests with plugin architecture
 - **Environment Variables:** `${VAR}` resolution with defaults
 - **Jinja2 Templating:** Dynamic YAML with context
@@ -285,7 +283,7 @@ spec:
 
 ### 📋 Future Roadmap
 
-- **Advanced Registry:** Versioning, staging, lifecycle management
+- **Component Versioning:** Version management for components
 - **Macro Library:** Rich collection of coordination patterns
 - **Policy Framework:** Governance and compliance enforcement
 - **Multi-Orchestrator:** Specialized execution environments

@@ -23,20 +23,43 @@ Example Claude Desktop config::
       "mcpServers": {
         "hexdag": {
           "command": "uv",
-          "args": ["run", "python", "-m", "hexdag.mcp_server"]
+          "args": ["run", "python", "-m", "hexdag.mcp_server"],
+          "env": {
+            "HEXDAG_PLUGIN_PATHS": "/path/to/custom/adapters:/path/to/custom/nodes"
+          }
         }
       }
     }
+
+Custom Plugin Paths
+-------------------
+Set HEXDAG_PLUGIN_PATHS environment variable to discover custom adapters/nodes.
+Multiple paths are separated by the OS path separator (`:` on Unix, `;` on Windows).
+
+Example::
+
+    export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
+    uv run mcp dev hexdag/mcp_server.py
 """
 
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from hexdag import api
+
+# Configure user plugin paths from environment variable
+# This allows MCP users to discover custom adapters/nodes
+if plugin_paths := os.environ.get("HEXDAG_PLUGIN_PATHS"):
+    from hexdag.core.discovery import set_user_plugin_paths
+
+    paths = [Path(p) for p in plugin_paths.split(os.pathsep) if p]
+    set_user_plugin_paths(paths)
 
 # Create MCP server
 mcp = FastMCP(
@@ -55,24 +78,25 @@ def list_nodes() -> str:
     """List all available node types with auto-generated documentation.
 
     Returns detailed information about each node type including:
-    - Node name, namespace, and module path
+    - Node name and module path (unique identifier)
     - Description (from docstring)
     - Parameters summary (from _yaml_schema if available)
     - Required vs optional parameters
 
     Returns
     -------
-        JSON string with available nodes grouped by namespace
+        JSON string with available nodes grouped by source (builtin vs plugin)
     """
     nodes = api.components.list_nodes()
-    # Group by namespace
-    by_namespace: dict[str, list[dict[str, Any]]] = {"core": []}
+    # Group by source (determined from module_path)
+    by_source: dict[str, list[dict[str, Any]]] = {"builtin": [], "plugins": []}
     for node in nodes:
-        ns = node.get("namespace", "core")
-        if ns not in by_namespace:
-            by_namespace[ns] = []
-        by_namespace[ns].append(node)
-    return json.dumps(by_namespace, indent=2)
+        module_path = node.get("module_path", "")
+        if api.components.is_builtin(module_path):
+            by_source["builtin"].append(node)
+        else:
+            by_source["plugins"].append(node)
+    return json.dumps(by_source, indent=2)
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -99,26 +123,23 @@ def list_adapters(port_type: str | None = None) -> str:
 
 
 @mcp.tool()  # type: ignore[misc]
-def list_tools(namespace: str | None = None) -> str:
+def list_tools() -> str:
     """List all available tools in the hexDAG registry.
-
-    Args
-    ----
-        namespace: Optional filter by namespace (e.g., "core", "user", "plugin")
 
     Returns
     -------
-        JSON string with available tools and their schemas
+        JSON string with available tools grouped by source (builtin vs plugin)
     """
-    tools = api.components.list_tools(namespace)
-    # Group by namespace
-    by_namespace: dict[str, list[dict[str, Any]]] = {"core": []}
+    tools = api.components.list_tools()
+    # Group by source (determined from module_path)
+    by_source: dict[str, list[dict[str, Any]]] = {"builtin": [], "plugins": []}
     for tool in tools:
-        ns = tool.get("namespace", "core")
-        if ns not in by_namespace:
-            by_namespace[ns] = []
-        by_namespace[ns].append(tool)
-    return json.dumps(by_namespace, indent=2)
+        module_path = tool.get("module_path", "")
+        if api.components.is_builtin(module_path):
+            by_source["builtin"].append(tool)
+        else:
+            by_source["plugins"].append(tool)
+    return json.dumps(by_source, indent=2)
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -162,7 +183,6 @@ def list_tags() -> str:
 def get_component_schema(
     component_type: str,
     name: str,
-    namespace: str = "core",
 ) -> str:
     """Get detailed schema for a specific component.
 
@@ -171,15 +191,13 @@ def get_component_schema(
     component_type : str
         Type of component: "node", "adapter", "tool", "macro", "tag"
     name : str
-        Component name (e.g., "llm_node", "OpenAIAdapter", "!py")
-    namespace : str
-        Component namespace (default: "core")
+        Component name or module_path (e.g., "llm_node", "OpenAIAdapter", "!py")
 
     Returns
     -------
         JSON Schema for the component
     """
-    schema = api.components.get_component_schema(component_type, name, namespace)
+    schema = api.components.get_component_schema(component_type, name)
     return json.dumps(schema, indent=2)
 
 
