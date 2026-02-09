@@ -27,6 +27,7 @@ from hexdag.core.orchestration.events import (
     NodeStarted,
 )
 from hexdag.core.orchestration.models import NodeExecutionContext
+from hexdag.core.validation.retry import RetryConfig, execute_with_retry
 
 logger = get_logger(__name__)
 
@@ -217,75 +218,38 @@ class NodeExecutor:
             # Determine timeout: node_spec.timeout > orchestrator default
             node_timeout = node_spec.timeout or self.default_node_timeout
 
-            # Determine max retries: node_spec.max_retries or 1 (no retries)
-            max_retries = node_spec.max_retries or 1
+            # Build retry config from node spec fields
+            retry_config = RetryConfig.from_node_spec_fields(
+                max_retries=node_spec.max_retries,
+                retry_delay=node_spec.retry_delay,
+                retry_backoff=node_spec.retry_backoff,
+                retry_max_delay=node_spec.retry_max_delay,
+            )
 
-            # Exponential backoff configuration (with sensible defaults)
-            retry_delay = node_spec.retry_delay or 1.0  # Initial delay: 1 second
-            retry_backoff = node_spec.retry_backoff or 2.0  # Backoff multiplier: 2x
-            retry_max_delay = node_spec.retry_max_delay or 60.0  # Max delay: 60 seconds
+            async def _run_with_timeout() -> Any:
+                if node_timeout:
+                    async with asyncio.timeout(node_timeout):
+                        return await self._execute_function(node_spec, validated_input, kwargs)
+                return await self._execute_function(node_spec, validated_input, kwargs)
 
-            last_error: Exception | None = None
-            raw_output: Any = None  # Initialize to satisfy type checker
+            def _on_retry(attempt: int, max_retries: int, error: Exception, delay: float) -> None:
+                logger.debug(
+                    "Node '{node}' error ({attempt}/{max_retries}): {error}, "
+                    "retrying in {delay:.2f}s...",
+                    node=node_name,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    error=error,
+                    delay=delay,
+                )
 
-            for attempt in range(1, max_retries + 1):
-                try:
-                    if node_timeout:
-                        async with asyncio.timeout(node_timeout):
-                            raw_output = await self._execute_function(
-                                node_spec, validated_input, kwargs
-                            )
-                    else:
-                        raw_output = await self._execute_function(
-                            node_spec, validated_input, kwargs
-                        )
-                    break  # Success - exit retry loop
-                except TimeoutError as e:
-                    # node_timeout is guaranteed to be set here because TimeoutError
-                    # only occurs when timeout is set
-                    timeout_value = node_timeout if node_timeout is not None else 0.0
-                    last_error = NodeTimeoutError(node_name, timeout_value, e)
-                    if attempt < max_retries:
-                        # Calculate exponential backoff delay
-                        delay = min(
-                            retry_delay * (retry_backoff ** (attempt - 1)),
-                            retry_max_delay,
-                        )
-                        logger.debug(
-                            "Node '{node}' timeout ({attempt}/{max_retries}), "
-                            "retrying in {delay:.2f}s...",
-                            node=node_name,
-                            attempt=attempt,
-                            max_retries=max_retries,
-                            delay=delay,
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                    raise last_error from e
-                except Exception as e:
-                    last_error = e
-                    if attempt < max_retries:
-                        # Calculate exponential backoff delay
-                        delay = min(
-                            retry_delay * (retry_backoff ** (attempt - 1)),
-                            retry_max_delay,
-                        )
-                        logger.debug(
-                            "Node '{node}' error ({attempt}/{max_retries}): {error}, "
-                            "retrying in {delay:.2f}s...",
-                            node=node_name,
-                            attempt=attempt,
-                            max_retries=max_retries,
-                            error=e,
-                            delay=delay,
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                    raise
-            else:
-                # Loop completed without break - should not happen but handle it
-                if last_error:
-                    raise last_error
+            try:
+                raw_output = await execute_with_retry(
+                    _run_with_timeout, retry_config, on_retry=_on_retry
+                )
+            except TimeoutError as e:
+                timeout_value = node_timeout if node_timeout is not None else 0.0
+                raise NodeTimeoutError(node_name, timeout_value, e) from e
 
             # Output validation
             if validate:

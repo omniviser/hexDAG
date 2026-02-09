@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
 from hexdag.core.context import get_port, get_ports
+from hexdag.core.domain.agent_tools import AgentToolRouter
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt import PromptInput
@@ -489,7 +490,41 @@ carried_data={'key': 'value'})"""
             Updated agent state after step execution
         """
         event_manager = ports.get("event_manager")
-        tool_router = ports.get("tool_router", UnifiedToolRouter())
+        base_router = ports.get("tool_router", UnifiedToolRouter())
+
+        # Create phase change callback that mutates state
+        def _handle_phase_change(result: dict[str, Any]) -> None:
+            new_phase = result.get("new_phase")
+            context = result.get("context", {})
+            if new_phase and new_phase in continuation_prompts:
+                old_phase = state.current_phase
+                if "previous_phase" not in context:
+                    context["previous_phase"] = state.current_phase
+                state.phase_contexts[new_phase] = context
+                state.current_phase = new_phase
+                state.phase_history.append(new_phase)
+                logger.info(
+                    "Phase transition",
+                    from_phase=old_phase,
+                    to_phase=new_phase,
+                    reason=context.get("reason", ""),
+                )
+                if "carried_data" in context and isinstance(context["carried_data"], dict):
+                    state.input_data.update(context["carried_data"])
+
+        # Register agent lifecycle tools alongside user tools
+        agent_tool_router = AgentToolRouter(on_phase_change=_handle_phase_change)
+        tool_router = UnifiedToolRouter(
+            routers={
+                "agent": agent_tool_router,
+                **(base_router.routers if isinstance(base_router, UnifiedToolRouter) else {}),
+            }
+        )
+        # For unprefixed tool calls, try user routers first, agent tools as fallback
+        if isinstance(base_router, UnifiedToolRouter) and base_router.default_router:
+            tool_router.default_router = base_router.default_router
+        else:
+            tool_router.default_router = agent_tool_router
 
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"
@@ -516,10 +551,8 @@ carried_data={'key': 'value'})"""
 
         response = await self._get_llm_response(enhanced_prompt, llm_input, ports, node_step_name)
 
-        # Process tools and phase changes
-        await self._process_tools_and_phases(
-            response, state, tool_router, continuation_prompts, config, event_manager
-        )
+        # Process tool calls — phase changes are handled by the callback
+        await self._process_tools(response, state, tool_router, config, event_manager)
 
         state.reasoning_steps.append(f"Step {current_step}: {response}")
         state.response = response
@@ -537,16 +570,19 @@ carried_data={'key': 'value'})"""
         """
         return "tool_end" in response.lower() or "Tool_END" in response
 
-    async def _process_tools_and_phases(
+    async def _process_tools(
         self,
         response: str,
         state: AgentState,
         tool_router: ToolRouter | None,
-        continuation_prompts: dict[str, PromptInput],
         config: AgentConfig,
         event_manager: Any,
     ) -> None:
-        """Process tool calls and phase changes."""
+        """Process tool calls from LLM response.
+
+        Phase changes are handled automatically by the ``AgentToolRouter``
+        callback registered in ``_execute_single_step``.
+        """
         if not tool_router:
             return
 
@@ -562,45 +598,19 @@ carried_data={'key': 'value'})"""
 
         for tool_call in tool_calls:
             try:
-                # Log tool execution
                 logger.debug(
                     "Executing tool",
                     tool_name=tool_call.name,
                     params_preview=str(tool_call.params)[:100],
                 )
 
-                # Execute tool
+                # Route through unified interface — agent lifecycle tools
+                # (tool_end, change_phase) are handled by AgentToolRouter,
+                # user tools by their respective routers.
                 result = await tool_router.acall_tool(tool_call.name, tool_call.params)
 
                 state.tool_results.append(f"{tool_call.name}: {result}")
                 state.tools_used.append(tool_call.name)
-
-                if tool_call.name == "change_phase" and isinstance(result, dict):
-                    new_phase = result.get("new_phase")
-                    context = result.get("context", {})
-
-                    if new_phase and new_phase in continuation_prompts:
-                        old_phase = state.current_phase
-
-                        if "previous_phase" not in context:
-                            context["previous_phase"] = state.current_phase
-
-                        state.phase_contexts[new_phase] = context
-
-                        state.current_phase = new_phase
-                        state.phase_history.append(new_phase)
-
-                        # Log phase transition
-                        logger.info(
-                            "Phase transition",
-                            from_phase=old_phase,
-                            to_phase=new_phase,
-                            reason=context.get("reason", ""),
-                        )
-
-                        # If there's carried_data, merge it into state.input_data
-                        if "carried_data" in context and isinstance(context["carried_data"], dict):
-                            state.input_data.update(context["carried_data"])
 
             except Exception as e:
                 error_msg = f"{tool_call.name}: Error - {e}"

@@ -10,7 +10,6 @@ for all LLM interactions. It combines:
 from __future__ import annotations
 
 import json
-import re
 import time
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -22,6 +21,7 @@ from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.ports.llm import Message
 from hexdag.core.protocols import to_dict
+from hexdag.core.validation.secure_json import SafeJSON
 
 from .base_node_factory import BaseNodeFactory
 
@@ -421,41 +421,32 @@ Example: {example_json}
             )
             raise ParseError(error_msg) from e
 
-    def _parse_json(self, text: str) -> dict[str, Any]:
-        """Parse JSON from text."""
-        cleaned = text.strip()
+    _safe_json = SafeJSON()
 
-        try:
-            result: dict[str, Any] = json.loads(cleaned)
-            return result
-        except json.JSONDecodeError:
-            # Try to extract JSON from surrounding text
-            json_match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group(1))  # type: ignore[no-any-return]
-            raise
+    def _parse_json(self, text: str) -> dict[str, Any]:
+        """Parse JSON from text, with extraction from surrounding prose."""
+        result = self._safe_json.loads_from_text(text)
+        if result.ok:
+            return result.data  # type: ignore[return-value]
+        # Fall back to direct parse for better error messages
+        return json.loads(text.strip())  # type: ignore[no-any-return]
 
     def _parse_json_in_markdown(self, text: str) -> dict[str, Any]:
         """Extract and parse JSON from markdown code blocks."""
-        code_block_pattern = r"```(?:json)?\s*(.*?)\s*```"
-        matches = re.findall(code_block_pattern, text, re.DOTALL)
-
-        if matches:
-            for block in matches:
-                try:
-                    result: dict[str, Any] = json.loads(block)
-                    return result
-                except json.JSONDecodeError:
-                    continue
-
-        return self._parse_json(text)
+        result = self._safe_json.loads_from_text(text)
+        if result.ok:
+            return result.data  # type: ignore[return-value]
+        # loads_from_text already tries code blocks → raw JSON
+        return json.loads(text.strip())  # type: ignore[no-any-return]
 
     def _parse_yaml(self, text: str) -> dict[str, Any]:
         """Parse YAML from text."""
+        result = self._safe_json.loads_yaml_from_text(text)
+        if result.ok:
+            return result.data  # type: ignore[return-value]
         import yaml
 
-        result: dict[str, Any] = yaml.safe_load(text)
-        return result
+        return yaml.safe_load(text)  # type: ignore[no-any-return]
 
     # Error Messages
     # --------------
