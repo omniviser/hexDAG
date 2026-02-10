@@ -79,7 +79,7 @@ EVENT_REGISTRY: dict[str, EventSpec] = {
     "LLMResponseReceived": EventSpec(
         "llm:response",
         {"node": "node_name"},
-        ("response", "duration_ms"),
+        ("response", "duration_ms", "usage"),
     ),
     "ToolCalled": EventSpec(
         "tool:called",
@@ -335,6 +335,7 @@ class LLMResponseReceived(Event):
     node_name: str
     response: str
     duration_ms: float
+    usage: dict[str, int] | None = None
 
     def log_message(self) -> str:
         """Format log message for LLM response event.

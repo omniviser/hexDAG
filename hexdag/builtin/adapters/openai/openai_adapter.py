@@ -16,7 +16,9 @@ from hexdag.core.ports.llm import (
     SupportsEmbedding,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsUsageTracking,
     SupportsVision,
+    TokenUsage,
     ToolCall,
     VisionMessage,
 )
@@ -49,7 +51,13 @@ OpenAIEmbeddingModel = Literal[
 ]
 
 
-class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision, SupportsEmbedding):
+class OpenAIAdapter(
+    SupportsGeneration,
+    SupportsFunctionCalling,
+    SupportsVision,
+    SupportsEmbedding,
+    SupportsUsageTracking,
+):
     """Unified OpenAI implementation of the LLM port.
 
     This adapter provides integration with OpenAI's models for:
@@ -150,6 +158,15 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
             client_kwargs["base_url"] = base_url
 
         self.client = AsyncOpenAI(**client_kwargs)
+        self._last_usage: TokenUsage | None = None
+
+    async def aclose(self) -> None:
+        """Close the underlying httpx client and release connection pool resources."""
+        await self.client.close()
+
+    def get_last_usage(self) -> TokenUsage | None:
+        """Return token usage from the most recent LLM API call."""
+        return self._last_usage
 
     async def aresponse(self, messages: MessageList) -> str | None:
         """Generate a response using OpenAI's modern API format.
@@ -192,6 +209,15 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
 
             # Make API call with modern format
             response = await self.client.chat.completions.create(**request_params)
+
+            # Capture token usage
+            self._last_usage = None
+            if response.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
 
             if response.choices and len(response.choices) > 0:
                 message = response.choices[0].message
@@ -260,6 +286,15 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
             # Make API call
             response = await self.client.chat.completions.create(**request_params)
 
+            # Capture token usage
+            self._last_usage = None
+            if response.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
+
             if not response.choices or len(response.choices) == 0:
                 logger.warning("No choices in OpenAI response")
                 return LLMResponse(content=None, tool_calls=None)
@@ -282,7 +317,12 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
                     for tc in message.tool_calls
                 ]
 
-            return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=finish_reason)
+            return LLMResponse(
+                content=content,
+                tool_calls=tool_calls,
+                finish_reason=finish_reason,
+                usage=self._last_usage,
+            )
 
         except Exception as e:
             logger.error(f"OpenAI API error with tools: {e}", exc_info=True)
@@ -360,6 +400,15 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
 
             # Make API call
             response = await self.client.chat.completions.create(**request_params)
+
+            # Capture token usage
+            self._last_usage = None
+            if response.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
 
             if response.choices and len(response.choices) > 0:
                 message = response.choices[0].message
@@ -462,6 +511,15 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
             # Make API call
             response = await self.client.chat.completions.create(**request_params)
 
+            # Capture token usage
+            self._last_usage = None
+            if response.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
+
             if not response.choices or len(response.choices) == 0:
                 logger.warning("No choices in OpenAI vision+tools response")
                 return LLMResponse(content=None, tool_calls=None)
@@ -485,7 +543,10 @@ class OpenAIAdapter(SupportsGeneration, SupportsFunctionCalling, SupportsVision,
                 ]
 
             return LLMResponse(
-                content=content, tool_calls=tool_calls_list, finish_reason=finish_reason
+                content=content,
+                tool_calls=tool_calls_list,
+                finish_reason=finish_reason,
+                usage=self._last_usage,
             )
 
         except Exception as e:

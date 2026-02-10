@@ -35,8 +35,10 @@ from .events import (
 # Observer implementations
 from .observers import (
     AlertingObserver,
+    CostProfilerObserver,
     DataQualityObserver,
     ExecutionTracerObserver,
+    NodeCostMetrics,
     PerformanceMetricsObserver,
     ResourceMonitorObserver,
     SimpleLoggingObserver,
@@ -56,6 +58,7 @@ HEALTH_EVENTS = (HealthCheckCompleted,)
 ALL_NODE_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS
 ALL_EXECUTION_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS + PIPELINE_EVENTS
 ALL_MONITORING_EVENTS = NODE_LIFECYCLE_EVENTS + LLM_EVENTS + TOOL_EVENTS + POLICY_EVENTS
+COST_PROFILING_EVENTS = PIPELINE_EVENTS + NODE_LIFECYCLE_EVENTS + WAVE_EVENTS + LLM_EVENTS
 
 __all__ = [
     # Events
@@ -89,6 +92,9 @@ __all__ = [
     "SimpleLoggingObserver",
     "ResourceMonitorObserver",
     "DataQualityObserver",
+    "CostProfilerObserver",
+    # Observer Models
+    "NodeCostMetrics",
     # Event Taxonomy
     "NODE_LIFECYCLE_EVENTS",
     "WAVE_EVENTS",
@@ -101,4 +107,5 @@ __all__ = [
     "ALL_NODE_EVENTS",
     "ALL_EXECUTION_EVENTS",
     "ALL_MONITORING_EVENTS",
+    "COST_PROFILING_EVENTS",
 ]

@@ -191,15 +191,23 @@ class LocalObserverManager:
         self._event_filters.pop(observer_id, None)
         self._observer_timeouts.pop(observer_id, None)
         self._observer_semaphores.pop(observer_id, None)
+        self._observer_refs.pop(observer_id, None)
 
     def _store_observer(self, observer_id: str, observer: Any, keep_alive: bool) -> None:
         """Store observer with appropriate reference type."""
         if self._use_weak_refs:
             try:
                 self._weak_handlers[observer_id] = observer
-                self._observer_refs[observer_id] = weakref.ref(
-                    observer, lambda _: self._on_observer_deleted(observer_id)
-                )
+                manager_ref = weakref.ref(self)
+
+                def _weak_callback(
+                    _: Any, oid: str = observer_id, mref: weakref.ref = manager_ref
+                ) -> None:
+                    manager = mref()
+                    if manager is not None:
+                        manager._on_observer_deleted(oid)
+
+                self._observer_refs[observer_id] = weakref.ref(observer, _weak_callback)
                 if keep_alive:
                     self._strong_refs[observer_id] = observer
             except TypeError:
@@ -375,7 +383,7 @@ class LocalObserverManager:
 
         self.clear()
         if not self._executor_shutdown:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=True)
             self._executor_shutdown = True
 
     def __len__(self) -> int:

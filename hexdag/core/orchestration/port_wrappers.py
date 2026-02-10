@@ -21,7 +21,13 @@ from hexdag.core.orchestration.events import (
     ToolCalled,
     ToolCompleted,
 )
-from hexdag.core.ports.llm import LLM, LLMResponse, MessageList, SupportsGeneration
+from hexdag.core.ports.llm import (
+    LLM,
+    LLMResponse,
+    MessageList,
+    SupportsGeneration,
+    SupportsUsageTracking,
+)
 
 logger = get_logger(__name__)
 
@@ -100,11 +106,25 @@ class ObservableLLMWrapper:
 
         duration_ms = (time.perf_counter() - start_time) * 1000
 
+        # Extract usage via SupportsUsageTracking protocol
+        usage_dict = None
+        if isinstance(self._llm, SupportsUsageTracking) and (
+            last_usage := self._llm.get_last_usage()
+        ):
+            usage_dict = {
+                "input_tokens": last_usage.input_tokens,
+                "output_tokens": last_usage.output_tokens,
+                "total_tokens": last_usage.total_tokens,
+            }
+
         # Emit response received event (OBSERVABILITY)
         if observer_mgr := get_observer_manager():
             await observer_mgr.notify(
                 LLMResponseReceived(
-                    node_name=node_name, response=response or "", duration_ms=duration_ms
+                    node_name=node_name,
+                    response=response or "",
+                    duration_ms=duration_ms,
+                    usage=usage_dict,
                 )
             )
 
@@ -151,11 +171,31 @@ class ObservableLLMWrapper:
         response = await self._llm.aresponse_with_tools(messages, tools, tool_choice, **kwargs)
         duration_ms = (time.perf_counter() - start_time) * 1000
 
+        # Extract usage from LLMResponse or via SupportsUsageTracking protocol
+        usage_dict = None
+        if response.usage:
+            usage_dict = {
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+                "total_tokens": response.usage.total_tokens,
+            }
+        elif isinstance(self._llm, SupportsUsageTracking) and (
+            last_usage := self._llm.get_last_usage()
+        ):
+            usage_dict = {
+                "input_tokens": last_usage.input_tokens,
+                "output_tokens": last_usage.output_tokens,
+                "total_tokens": last_usage.total_tokens,
+            }
+
         # Emit response received event
         if observer_mgr := get_observer_manager():
             await observer_mgr.notify(
                 LLMResponseReceived(
-                    node_name=node_name, response=response.content or "", duration_ms=duration_ms
+                    node_name=node_name,
+                    response=response.content or "",
+                    duration_ms=duration_ms,
+                    usage=usage_dict,
                 )
             )
 

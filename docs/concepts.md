@@ -115,29 +115,48 @@ Conditional execution:
     false_branch: [retry]
 ```
 
-## Event System
+## Event System & Observability
 
-Monitor workflow execution through events:
+Monitor workflow execution through the observer pattern:
+
+### Built-in Observers
+
+| Observer | Purpose |
+|----------|---------|
+| `PerformanceMetricsObserver` | Node timing, success rates, execution counts |
+| `CostProfilerObserver` | Token usage, cost estimation, bottleneck detection |
+| `AlertingObserver` | Threshold-based alerts for slow/failing nodes |
+| `ResourceMonitorObserver` | Concurrency tracking, wave-level parallelism |
+| `DataQualityObserver` | Null/empty/error detection in node outputs |
+| `ExecutionTracerObserver` | Full event trace with timing for debugging |
+
+### Cost Profiling Example
 
 ```python
-from hexdag.builtin.events import (
-    EventBus,
-    NodeStarted,
-    NodeCompleted,
-    NodeFailed,
-    DAGStarted,
-    DAGCompleted
+from hexdag.core.orchestration.events import (
+    CostProfilerObserver,
+    COST_PROFILING_EVENTS,
 )
 
-event_bus = EventBus()
-event_bus.subscribe(NodeStarted, lambda e: print(f"Started: {e.node_name}"))
+profiler = CostProfilerObserver(model="gpt-4o-mini")
+observer_manager.register(profiler.handle, event_types=COST_PROFILING_EVENTS)
+
+# ... run pipeline ...
+
+print(profiler.format_report())
+# Pipeline: customer-support-v2
+# Total tokens:  4,230 (est. $0.013)
+# Total latency: 3.2s
+# Bottleneck:    researcher (2.1s, 3,100 tokens)
 ```
 
-Available events:
+### Available Events
 
-- `DAGStarted` / `DAGCompleted` - Workflow lifecycle
+- `PipelineStarted` / `PipelineCompleted` - Pipeline lifecycle
 - `NodeStarted` / `NodeCompleted` / `NodeFailed` - Node execution
-- `ValidationError` - Schema validation failures
+- `WaveStarted` / `WaveCompleted` - Wave-level parallelism
+- `LLMPromptSent` / `LLMResponseReceived` - LLM interactions (with token usage)
+- `ToolCalled` / `ToolCompleted` - Tool execution
 
 ## Validation Framework
 

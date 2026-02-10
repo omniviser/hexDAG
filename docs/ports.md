@@ -104,10 +104,29 @@ Port interface for Large Language Models (LLMs).
     may use various backends (OpenAI, Anthropic, local models, etc.) but
     must provide the aresponse method for generating text from messages.
 
-    Optional Methods
-    ----------------
+    Optional Protocols
+    ------------------
     Adapters may optionally implement:
+    - **SupportsGeneration**: Text generation via `aresponse()`
+    - **SupportsFunctionCalling**: Native tool calling via `aresponse_with_tools()`
+    - **SupportsVision**: Multimodal vision via `aresponse_with_vision()`
+    - **SupportsEmbedding**: Embedding generation via `aembed()`
+    - **SupportsUsageTracking**: Token usage tracking via `get_last_usage()`
     - ahealth_check(): Verify LLM API connectivity and availability
+
+    SupportsUsageTracking
+    ---------------------
+    Adapters that track token usage implement `get_last_usage() -> TokenUsage | None`.
+    This enables the `CostProfilerObserver` to compute per-node costs without
+    changing the `SupportsGeneration.aresponse() -> str | None` return type.
+
+    ```python
+    from hexdag.core.ports.llm import SupportsUsageTracking, TokenUsage
+
+    class MyAdapter(LLM, SupportsUsageTracking):
+        def get_last_usage(self) -> TokenUsage | None:
+            return self._last_usage  # Set after each API call
+    ```
 
 **Metadata:**
 
