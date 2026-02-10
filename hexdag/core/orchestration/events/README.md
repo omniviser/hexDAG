@@ -144,6 +144,36 @@ if response.signal == ControlSignal.RETRY:
     pass
 ```
 
+### Cost Profiling
+```python
+from hexdag.core.orchestration.events import (
+    CostProfilerObserver,
+    COST_PROFILING_EVENTS,
+)
+
+# Create a profiler with model-specific pricing
+profiler = CostProfilerObserver(model="gpt-4o-mini")
+
+# Register for all cost-relevant events
+observer_manager.register(
+    profiler.handle,
+    event_types=COST_PROFILING_EVENTS
+)
+
+# ... run pipeline ...
+
+# Get structured report (for programmatic use)
+report = profiler.get_report()
+# report["total_tokens"], report["estimated_cost"], report["bottlenecks"]
+
+# Get human-readable report (for CLI/logging)
+print(profiler.format_report())
+# Pipeline: my-pipeline
+# Total tokens:  4,230 (est. $0.013)
+# Total latency: 3.2s
+# Bottleneck:    researcher (2.1s, 3,100 tokens)
+```
+
 ### Event Type Filtering
 ```python
 # Observer only for tool events - 90% fewer invocations
@@ -293,6 +323,7 @@ manager.register(
 
 ## 🔮 Future Enhancements
 
+- [x] **Cost Profiling** - Token usage tracking, cost estimation, and bottleneck detection
 - [ ] **Event Replay** - Debugging with event history
 - [ ] **Event Persistence** - Durable event storage
 - [ ] **Distributed Streaming** - Kafka/Pulsar integration

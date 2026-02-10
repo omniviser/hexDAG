@@ -115,11 +115,14 @@ class PgVectorAdapter:
             except Exception as e:
                 logger.warning(f"Could not verify pgvector extension: {e}")
 
-    async def disconnect(self) -> None:
+    async def aclose(self) -> None:
         """Close database connection pool."""
         if self.pool:
             await self.pool.close()
             self.pool = None
+
+    # Backward-compatible alias
+    disconnect = aclose
 
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables.

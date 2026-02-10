@@ -12,6 +12,7 @@ from .core_observers import (
     ResourceMonitorObserver,
     SimpleLoggingObserver,
 )
+from .cost_profiler import CostProfilerObserver, NodeCostMetrics
 from .models import Alert, AlertSeverity, AlertType, NodeMetrics
 
 __all__ = [
@@ -22,9 +23,11 @@ __all__ = [
     "SimpleLoggingObserver",
     "ResourceMonitorObserver",
     "DataQualityObserver",
+    "CostProfilerObserver",
     # Observer Models
     "Alert",
     "AlertType",
     "AlertSeverity",
     "NodeMetrics",
+    "NodeCostMetrics",
 ]

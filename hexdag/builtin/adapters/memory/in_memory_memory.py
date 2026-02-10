@@ -34,7 +34,8 @@ class InMemoryMemory(Memory):
         Parameters
         ----------
         max_size : int | None
-            Maximum number of items to store. None for unlimited. Default: 1000.
+            Maximum number of items to store and access history records to
+            retain. None for unlimited. Default: 1000.
         delay_seconds : float
             Simulated latency in seconds for operations. Default: 0.0.
         **kwargs : Any
@@ -71,6 +72,8 @@ class InMemoryMemory(Memory):
             "found": key in self.storage,
             "timestamp": asyncio.get_event_loop().time(),
         })
+        if self.max_size is not None and len(self.access_history) > self.max_size:
+            self.access_history = self.access_history[-self.max_size :]
 
         return result
 
@@ -108,6 +111,8 @@ class InMemoryMemory(Memory):
             "value_type": type(value).__name__,
             "timestamp": asyncio.get_event_loop().time(),
         })
+        if self.max_size is not None and len(self.access_history) > self.max_size:
+            self.access_history = self.access_history[-self.max_size :]
 
     def clear(self) -> None:
         """Clear all stored data."""

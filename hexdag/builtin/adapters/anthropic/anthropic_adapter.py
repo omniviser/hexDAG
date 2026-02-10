@@ -6,7 +6,7 @@ from typing import Any, Literal
 from anthropic import AsyncAnthropic
 
 from hexdag.core.logging import get_logger
-from hexdag.core.ports.llm import LLM, MessageList
+from hexdag.core.ports.llm import LLM, MessageList, SupportsUsageTracking, TokenUsage
 from hexdag.core.types import (
     PositiveInt,
     RetryCount,
@@ -29,7 +29,7 @@ AnthropicModel = Literal[
 ]
 
 
-class AnthropicAdapter(LLM):
+class AnthropicAdapter(LLM, SupportsUsageTracking):
     """Anthropic implementation of the LLM port.
 
     This adapter provides integration with Anthropic's Claude models through
@@ -103,6 +103,15 @@ class AnthropicAdapter(LLM):
             client_kwargs["base_url"] = base_url
 
         self.client = AsyncAnthropic(**client_kwargs)
+        self._last_usage: TokenUsage | None = None
+
+    async def aclose(self) -> None:
+        """Close the underlying httpx client and release connection pool resources."""
+        await self.client.close()
+
+    def get_last_usage(self) -> TokenUsage | None:
+        """Return token usage from the most recent LLM API call."""
+        return self._last_usage
 
     async def aresponse(self, messages: MessageList) -> str | None:
         """Generate a response using Anthropic's API.
@@ -148,6 +157,15 @@ class AnthropicAdapter(LLM):
                 request_params["stop_sequences"] = stop_sequences
 
             response = await self.client.messages.create(**request_params)
+
+            # Capture token usage
+            self._last_usage = None
+            if response.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    total_tokens=response.usage.input_tokens + response.usage.output_tokens,
+                )
 
             if response.content and len(response.content) > 0:
                 first_content = response.content[0]

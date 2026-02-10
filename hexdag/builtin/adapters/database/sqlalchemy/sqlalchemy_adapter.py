@@ -38,11 +38,14 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsS
             # Force reflection after any schema changes
             await conn.run_sync(self._metadata.reflect)
 
-    async def disconnect(self) -> None:
+    async def aclose(self) -> None:
         """Close database connection."""
         if self.engine:
             await self.engine.dispose()
             self.engine = None
+
+    # Backward-compatible alias
+    disconnect = aclose
 
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """

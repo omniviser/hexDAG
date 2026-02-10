@@ -27,12 +27,31 @@ class ToolCall(BaseModel):
     arguments: dict[str, Any]
 
 
+class TokenUsage(BaseModel):
+    """Token usage from an LLM API call.
+
+    Attributes
+    ----------
+    input_tokens : int
+        Number of tokens in the prompt/input
+    output_tokens : int
+        Number of tokens in the completion/output
+    total_tokens : int
+        Total tokens (input + output)
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+
 class LLMResponse(BaseModel):
     """Response from LLM with optional tool calls."""
 
     content: str | None
     tool_calls: list[ToolCall] | None = None
     finish_reason: str | None = None
+    usage: TokenUsage | None = None
 
 
 @runtime_checkable
@@ -425,6 +444,46 @@ class SupportsVision(Protocol):
 
             response = await llm.aresponse_with_vision_and_tools(messages, tools)
             # LLM sees image, identifies product, and calls identify_product tool
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsUsageTracking(Protocol):
+    """Optional protocol for LLM adapters that track token usage.
+
+    Adapters implementing this protocol expose usage data from the last API call,
+    enabling cost profiling and token budgeting without changing the core
+    SupportsGeneration return type.
+
+    Examples
+    --------
+    Implementing usage tracking::
+
+        class MyAdapter(SupportsGeneration, SupportsUsageTracking):
+            def __init__(self):
+                self._last_usage: TokenUsage | None = None
+
+            async def aresponse(self, messages):
+                response = await self._call_api(messages)
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
+                return response.content
+
+            def get_last_usage(self) -> TokenUsage | None:
+                return self._last_usage
+    """
+
+    def get_last_usage(self) -> TokenUsage | None:
+        """Return token usage from the most recent LLM API call.
+
+        Returns
+        -------
+        TokenUsage | None
+            Token usage data, or None if not available
         """
         ...
 

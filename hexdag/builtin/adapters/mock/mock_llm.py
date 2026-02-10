@@ -3,13 +3,13 @@
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.ports.llm import LLM, MessageList
+from hexdag.core.ports.llm import LLM, MessageList, SupportsUsageTracking, TokenUsage
 
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-class MockLLM(LLM):
+class MockLLM(LLM, SupportsUsageTracking):
     """Mock implementation of the LLM interface for testing.
 
     The LLM port interface is stateless, but this mock provides testing utilities like response
@@ -29,6 +29,7 @@ class MockLLM(LLM):
         responses: str | list[str] | None = None,
         delay_seconds: float = 0.0,
         mock_tool_calls: list[dict[str, Any]] | None = None,
+        mock_usage: dict[str, int] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize with configuration.
@@ -40,9 +41,13 @@ class MockLLM(LLM):
             delay_seconds: Simulated latency in seconds before returning response.
             mock_tool_calls: List of tool call configurations for testing tool-using agents.
                 Each entry should have 'id', 'name', and 'arguments' keys.
+            mock_usage: Token usage to return from get_last_usage(). Dict with
+                'input_tokens', 'output_tokens', 'total_tokens' keys.
             **kwargs: Additional options for forward compatibility.
         """
         self.delay_seconds = delay_seconds
+        self.mock_usage = mock_usage
+        self._last_usage: TokenUsage | None = None
 
         # Process responses (convert to list if needed)
         if responses is not None:
@@ -93,7 +98,18 @@ class MockLLM(LLM):
             response = self.responses[-1]  # Repeat last response
 
         self.call_count += 1
+
+        # Set mock token usage if configured
+        if self.mock_usage:
+            self._last_usage = TokenUsage(**self.mock_usage)
+        else:
+            self._last_usage = None
+
         return response
+
+    def get_last_usage(self) -> TokenUsage | None:
+        """Return token usage from the most recent LLM API call."""
+        return self._last_usage
 
     async def aresponse_with_tools(
         self,
