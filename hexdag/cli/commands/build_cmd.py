@@ -13,6 +13,11 @@ from rich.console import Console
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "build"
+_CLI_HELP = "Build Docker containers for pipelines"
+_CLI_TYPE = "command"
+_CLI_FUNC = "build"
+
 # Valid identifier pattern for pipeline names (alphanumeric, dash, underscore only)
 _VALID_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 

@@ -11,6 +11,10 @@ from rich.table import Table
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "plugins"
+_CLI_HELP = "Manage plugins and adapters"
+_CLI_TYPE = "typer"
+
 
 class OutputFormat(StrEnum):
     """Output format options."""

@@ -15,7 +15,7 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.ports.tool_router import ToolRouter
+from hexdag.core.ports.tool_router import ToolRouter, tool_schema_from_callable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -87,11 +87,14 @@ class AgentToolRouter(ToolRouter):
 
     def get_tool_schema(self, tool_name: str) -> dict[str, Any]:
         """Return schema for an agent lifecycle tool."""
-        return _TOOL_SCHEMAS.get(tool_name, {})
+        fn = self._tools.get(tool_name)
+        if fn is None:
+            return {}
+        return tool_schema_from_callable(fn)
 
     def get_all_tool_schemas(self) -> dict[str, dict[str, Any]]:
         """Return schemas for all agent lifecycle tools."""
-        return {name: self.get_tool_schema(name) for name in self._tools}
+        return {name: tool_schema_from_callable(fn) for name, fn in self._tools.items()}
 
 
 # ── Tool implementations ────────────────────────────────────────────
@@ -129,51 +132,3 @@ def _change_phase(
         context["metadata"] = metadata
 
     return {"action": "change_phase", "new_phase": phase, "context": context}
-
-
-# ── Schemas ──────────────────────────────────────────────────────────
-
-_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
-    TOOL_END: {
-        "description": (
-            "End agent execution and return structured output matching the output schema."
-        ),
-        "parameters": [
-            {
-                "name": "**kwargs",
-                "description": "Key-value pairs matching the agent's output schema",
-                "type": "Any",
-                "required": True,
-            },
-        ],
-    },
-    CHANGE_PHASE: {
-        "description": "Transition the agent to a different reasoning phase.",
-        "parameters": [
-            {
-                "name": "phase",
-                "description": "The new phase name to transition to",
-                "type": "str",
-                "required": True,
-            },
-            {
-                "name": "reason",
-                "description": "Explanation for why the phase change is occurring",
-                "type": "str",
-                "required": False,
-            },
-            {
-                "name": "carried_data",
-                "description": "Data to carry forward from the previous phase",
-                "type": "dict",
-                "required": False,
-            },
-            {
-                "name": "target_output",
-                "description": "Expected output format or goal for the new phase",
-                "type": "str",
-                "required": False,
-            },
-        ],
-    },
-}

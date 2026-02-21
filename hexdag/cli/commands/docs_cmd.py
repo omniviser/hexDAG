@@ -10,6 +10,10 @@ from rich.panel import Panel
 app = typer.Typer(help="Generate and serve documentation with MkDocs")
 console = Console()
 
+_CLI_NAME = "docs"
+_CLI_HELP = "Generate and serve documentation"
+_CLI_TYPE = "typer"
+
 
 @app.command("build")
 def build_docs(

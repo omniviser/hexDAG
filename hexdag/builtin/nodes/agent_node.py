@@ -117,6 +117,8 @@ class ReActAgentNode(BaseNodeFactory):
     ```
     """
 
+    __aliases__ = ("agent_node",)
+
     # Studio UI metadata
     _hexdag_icon = "Bot"
     _hexdag_color = "#ec4899"  # pink-500

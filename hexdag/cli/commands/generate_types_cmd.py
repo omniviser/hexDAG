@@ -10,6 +10,11 @@ from rich.table import Table
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "generate-types"
+_CLI_HELP = "Generate type stubs from YAML pipelines"
+_CLI_TYPE = "command"
+_CLI_FUNC = "generate_types"
+
 
 def _python_type_to_str(annotation: Any) -> str:
     """Convert a Python type annotation to a string representation.

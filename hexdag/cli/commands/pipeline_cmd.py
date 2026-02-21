@@ -11,6 +11,10 @@ from rich.table import Table
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "pipeline"
+_CLI_HELP = "Pipeline validation and execution"
+_CLI_TYPE = "typer"
+
 
 @app.command("validate")
 def validate_pipeline(

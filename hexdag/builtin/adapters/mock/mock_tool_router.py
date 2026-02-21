@@ -29,28 +29,43 @@ class MockToolRouter(ToolRouter):
         self.delay_seconds = kwargs.get("delay_seconds", 0.0)
         self.raise_on_unknown_tool = kwargs.get("raise_on_unknown_tool", False)
 
-        # Default mock tools
+        # Default mock tools — parameters use list format matching ToolRouter contract
         self.tools: dict[str, dict[str, Any]] = {
             "search": {
                 "name": "search",
                 "description": "Search for information",
-                "parameters": {
-                    "query": {"type": "string", "description": "Search query"},
-                },
+                "parameters": [
+                    {
+                        "name": "query",
+                        "type": "string",
+                        "description": "Search query",
+                        "required": True,
+                    },
+                ],
             },
             "calculate": {
                 "name": "calculate",
                 "description": "Perform calculations",
-                "parameters": {
-                    "expression": {"type": "string", "description": "Math expression"},
-                },
+                "parameters": [
+                    {
+                        "name": "expression",
+                        "type": "string",
+                        "description": "Math expression",
+                        "required": True,
+                    },
+                ],
             },
             "get_weather": {
                 "name": "get_weather",
                 "description": "Get weather information",
-                "parameters": {
-                    "location": {"type": "string", "description": "Location name"},
-                },
+                "parameters": [
+                    {
+                        "name": "location",
+                        "type": "string",
+                        "description": "Location name",
+                        "required": True,
+                    },
+                ],
             },
         }
 
@@ -59,7 +74,7 @@ class MockToolRouter(ToolRouter):
                 self.tools[tool_name] = {
                     "name": tool_name,
                     "description": f"Mock tool: {tool_name}",
-                    "parameters": {},
+                    "parameters": [],
                 }
 
         self.call_history: list[dict[str, Any]] = []
