@@ -6,6 +6,16 @@ from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
 from hexdag.core.orchestration.components.input_mapper import InputMapper
 
+# ============================================================================
+# Helpers for skip propagation tests
+# ============================================================================
+
+SKIPPED_RESULT = {"_skipped": True, "reason": "when clause evaluated to False"}
+
+
+async def noop_fn(input_data):
+    return {"processed": input_data}
+
 
 class TestInputMapper:
     """Test InputMapper component."""
@@ -391,3 +401,150 @@ class TestInputMappingWithExecutionCoordinator:
         assert process_input["load"] == {"id": "LOAD001"}
         assert process_input["carrier"] == {"mc": "MC123"}
         assert process_input["original_rate"] == 1500.00
+
+
+# ============================================================================
+# Tests: ExecutionCoordinator.prepare_node_input skip propagation
+# ============================================================================
+
+
+class TestPrepareNodeInputSkipPropagation:
+    """Test that prepare_node_input returns skip marker when all deps skipped."""
+
+    @pytest.fixture()
+    def coordinator(self) -> ExecutionCoordinator:
+        return ExecutionCoordinator()
+
+    def test_all_deps_skipped_returns_skip_marker(self, coordinator) -> None:
+        """When all dependencies are skipped, return upstream skip marker."""
+        node_spec = NodeSpec("downstream", noop_fn, deps={"a", "b"})
+        node_results = {"a": SKIPPED_RESULT, "b": SKIPPED_RESULT}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, "initial")
+
+        assert isinstance(result, dict)
+        assert result["_skipped"] is True
+        assert result["_upstream_skipped"] is True
+
+    def test_single_dep_skipped_returns_skip_marker(self, coordinator) -> None:
+        """Single skipped dependency also propagates skip."""
+        node_spec = NodeSpec("downstream", noop_fn, deps={"a"})
+        node_results = {"a": SKIPPED_RESULT}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, "initial")
+
+        assert isinstance(result, dict)
+        assert result["_upstream_skipped"] is True
+
+    def test_some_deps_skipped_returns_real_input(self, coordinator) -> None:
+        """When only some deps are skipped, return normal input (not skip marker)."""
+        node_spec = NodeSpec("downstream", noop_fn, deps={"a", "b"})
+        node_results = {"a": SKIPPED_RESULT, "b": {"data": "real"}}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, "initial")
+
+        assert isinstance(result, dict)
+        assert "_upstream_skipped" not in result
+        assert "a" in result  # namespace dict with both deps
+        assert "b" in result
+
+    def test_no_deps_returns_initial_input(self, coordinator) -> None:
+        """No deps -> initial_input, unchanged behavior."""
+        node_spec = NodeSpec("start", noop_fn)
+        result = coordinator.prepare_node_input(node_spec, {}, "initial")
+        assert result == "initial"
+
+    def test_deps_not_skipped_returns_normal_input(self, coordinator) -> None:
+        """Normal (non-skipped) deps -> normal input, unchanged behavior."""
+        node_spec = NodeSpec("downstream", noop_fn, deps={"a"})
+        node_results = {"a": {"data": "real"}}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, "initial")
+
+        assert result == {"data": "real"}
+        assert "_upstream_skipped" not in result
+
+
+# ============================================================================
+# Tests: Defensive _apply_input_mapping handling non-string values
+# ============================================================================
+
+
+class TestInputMappingDefensive:
+    """Test that _apply_input_mapping handles non-string source_path values."""
+
+    @pytest.fixture()
+    def coordinator(self) -> ExecutionCoordinator:
+        return ExecutionCoordinator()
+
+    def test_dict_value_used_directly(self, coordinator) -> None:
+        """input_mapping with dict value should store it directly, not crash."""
+        input_mapping = {
+            "response": {"nested": "structure"},  # type: ignore[dict-item]
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={},
+            node_results={},
+        )
+
+        assert result["response"] == {"nested": "structure"}
+
+    def test_list_value_used_directly(self, coordinator) -> None:
+        """input_mapping with list value should store it directly, not crash."""
+        input_mapping = {
+            "items": [1, 2, 3],  # type: ignore[dict-item]
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={},
+            node_results={},
+        )
+
+        assert result["items"] == [1, 2, 3]
+
+    def test_int_value_used_directly(self, coordinator) -> None:
+        """input_mapping with int value should store it directly, not crash."""
+        input_mapping = {
+            "count": 42,  # type: ignore[dict-item]
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={},
+            node_results={},
+        )
+
+        assert result["count"] == 42
+
+    def test_string_values_unchanged(self, coordinator) -> None:
+        """Normal string values should work as before (regression check)."""
+        input_mapping = {
+            "user_name": "$input.name",
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={"name": "Alice"},
+            node_results={},
+        )
+
+        assert result["user_name"] == "Alice"
+
+    def test_mixed_string_and_dict_values(self, coordinator) -> None:
+        """Mix of string and non-string values should handle each correctly."""
+        input_mapping = {
+            "user_name": "$input.name",
+            "config": {"key": "value"},  # type: ignore[dict-item]
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={"name": "Alice"},
+            node_results={},
+        )
+
+        assert result["user_name"] == "Alice"
+        assert result["config"] == {"key": "value"}

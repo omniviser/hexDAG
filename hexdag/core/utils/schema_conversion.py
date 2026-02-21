@@ -19,6 +19,14 @@ VALID_TYPE_NAMES: dict[str, Any] = {
 }
 
 
+def is_valid_type_name(name: str) -> bool:
+    """Check if a type name is valid, including nullable variants (e.g. ``str?``)."""
+    if name in VALID_TYPE_NAMES:
+        return True
+    base = name[:-1]
+    return name.endswith("?") and base in VALID_TYPE_NAMES and base != "Any"
+
+
 @singledispatch
 def normalize_schema(schema: Any) -> Any:
     """Normalize schema to use Python types (accepts both string names and type objects).
@@ -53,12 +61,14 @@ def _(schema: dict) -> dict[str, type]:
     for key, value in schema.items():
         if isinstance(value, str):
             # String type name - convert to actual type
-            if value not in VALID_TYPE_NAMES:
+            if not is_valid_type_name(value):
                 valid_names = ", ".join(sorted(VALID_TYPE_NAMES.keys()))
                 raise ValueError(
-                    f"Invalid type '{value}' for field '{key}'. Supported types: {valid_names}"
+                    f"Invalid type '{value}' for field '{key}'. "
+                    f"Supported types: {valid_names} (append ? for nullable)"
                 )
-            converted[key] = VALID_TYPE_NAMES[value]
+            # Base types → Python type; nullable (?-suffixed) → pass through
+            converted[key] = VALID_TYPE_NAMES.get(value, value)
         elif isinstance(value, dict):
             # Nested schema - recurse
             converted[key] = normalize_schema(value)

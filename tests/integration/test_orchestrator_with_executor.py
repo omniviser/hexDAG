@@ -271,3 +271,115 @@ class TestOrchestratorWithExecutor:
         assert hasattr(executor, "aexecute_wave")
         assert callable(executor.aexecute_node)
         assert callable(executor.aexecute_wave)
+
+
+# ============================================================================
+# Skip propagation integration tests
+# ============================================================================
+
+
+async def passthrough(input_data, **ports):
+    """Pass input through unchanged."""
+    return input_data
+
+
+async def transform(input_data, **ports):
+    """Transform input data."""
+    if isinstance(input_data, dict):
+        return {**input_data, "transformed": True}
+    return {"value": input_data, "transformed": True}
+
+
+class TestSkipPropagation:
+    """Test that skip propagates through dependency chains."""
+
+    @pytest.mark.asyncio()
+    async def test_linear_chain_skip_propagation(self) -> None:
+        """A -> B -> C: if A is skipped, B and C should also be skipped."""
+        graph = DirectedGraph()
+
+        # Node A: skipped by when clause (condition always false)
+        graph += NodeSpec("node_a", passthrough, when="False")
+        # Node B: depends on A, no when clause
+        graph += NodeSpec("node_b", transform, deps={"node_a"})
+        # Node C: depends on B, no when clause
+        graph += NodeSpec("node_c", transform, deps={"node_b"})
+
+        orchestrator = Orchestrator()
+        results = await orchestrator.run(graph, {"data": "input"})
+
+        # All three should be skipped
+        assert results["node_a"]["_skipped"] is True
+        assert results["node_b"]["_skipped"] is True
+        assert results["node_b"]["_upstream_skipped"] is True
+        assert results["node_c"]["_skipped"] is True
+        assert results["node_c"]["_upstream_skipped"] is True
+
+    @pytest.mark.asyncio()
+    async def test_partial_skip_with_two_branches(self) -> None:
+        """Branch A skipped, branch B runs. Node C depends on both -> runs with B's result.
+
+        Graph:
+          A (skipped) -+
+                        +- C
+          B (runs)    -+
+        """
+        graph = DirectedGraph()
+
+        # Branch A: skipped
+        graph += NodeSpec("branch_a", passthrough, when="False")
+        # Branch B: runs normally
+        graph += NodeSpec("branch_b", transform)
+        # Node C: depends on both A and B
+        graph += NodeSpec("node_c", passthrough, deps={"branch_a", "branch_b"})
+
+        orchestrator = Orchestrator()
+        results = await orchestrator.run(graph, {"data": "input"})
+
+        # A is skipped
+        assert results["branch_a"]["_skipped"] is True
+        # B ran normally
+        assert results["branch_b"]["transformed"] is True
+        # C should NOT be skipped (one dep is alive)
+        assert "_skipped" not in results["node_c"] or results["node_c"].get("_skipped") is not True
+
+    @pytest.mark.asyncio()
+    async def test_both_branches_skipped_propagates(self) -> None:
+        """Both branches skipped -> downstream is also skipped.
+
+        Graph:
+          A (skipped) -+
+                        +- C (should be skipped)
+          B (skipped) -+
+        """
+        graph = DirectedGraph()
+
+        graph += NodeSpec("branch_a", passthrough, when="False")
+        graph += NodeSpec("branch_b", passthrough, when="False")
+        graph += NodeSpec("node_c", passthrough, deps={"branch_a", "branch_b"})
+
+        orchestrator = Orchestrator()
+        results = await orchestrator.run(graph, {"data": "input"})
+
+        assert results["branch_a"]["_skipped"] is True
+        assert results["branch_b"]["_skipped"] is True
+        assert results["node_c"]["_skipped"] is True
+        assert results["node_c"]["_upstream_skipped"] is True
+
+    @pytest.mark.asyncio()
+    async def test_when_condition_skip_does_not_affect_independent_nodes(self) -> None:
+        """Skipping one node shouldn't affect independent (non-dependent) nodes.
+
+        Graph:
+          A (skipped)     B (runs independently)
+        """
+        graph = DirectedGraph()
+
+        graph += NodeSpec("node_a", passthrough, when="False")
+        graph += NodeSpec("node_b", transform)  # No deps -- independent
+
+        orchestrator = Orchestrator()
+        results = await orchestrator.run(graph, {"data": "input"})
+
+        assert results["node_a"]["_skipped"] is True
+        assert results["node_b"]["transformed"] is True

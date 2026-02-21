@@ -12,6 +12,7 @@ import pytest
 from hexdag.core.utils.schema_conversion import (
     VALID_TYPE_NAMES,
     convert_yaml_schema,
+    is_valid_type_name,
     normalize_schema,
 )
 
@@ -156,6 +157,49 @@ class TestNormalizeSchemaDict:
             normalize_schema(schema)
         assert "invalid value" in str(exc_info.value)
         assert "field" in str(exc_info.value)
+
+
+class TestNullableTypes:
+    """Tests for nullable type syntax (str?, int?, etc.)."""
+
+    def test_nullable_types_accepted(self) -> None:
+        """normalize_schema accepts ?-suffixed types and passes them through."""
+        result = normalize_schema({"name": "str?", "count": "int?"})
+        assert result == {"name": "str?", "count": "int?"}
+
+    def test_all_nullable_variants_accepted(self) -> None:
+        for t in ("str?", "int?", "float?", "bool?", "list?", "dict?"):
+            result = normalize_schema({"field": t})
+            assert result == {"field": t}
+
+    def test_mixed_required_and_nullable(self) -> None:
+        schema = {"rate": "float", "origin": "str?", "mc_number": "str?"}
+        result = normalize_schema(schema)
+        assert result["rate"] is float
+        assert result["origin"] == "str?"
+        assert result["mc_number"] == "str?"
+
+    def test_invalid_nullable_raises_error(self) -> None:
+        with pytest.raises(ValueError, match="Invalid type 'invalid\\?'"):
+            normalize_schema({"field": "invalid?"})
+
+
+class TestIsValidTypeName:
+    """Tests for is_valid_type_name helper."""
+
+    def test_base_types(self) -> None:
+        for t in ("str", "int", "float", "bool", "list", "dict", "Any"):
+            assert is_valid_type_name(t)
+
+    def test_nullable_types(self) -> None:
+        for t in ("str?", "int?", "float?", "bool?", "list?", "dict?"):
+            assert is_valid_type_name(t)
+
+    def test_invalid_types(self) -> None:
+        assert not is_valid_type_name("invalid")
+        assert not is_valid_type_name("invalid?")
+        assert not is_valid_type_name("Any?")
+        assert not is_valid_type_name("")
 
 
 class TestConvertYamlSchema:

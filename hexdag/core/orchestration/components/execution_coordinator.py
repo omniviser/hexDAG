@@ -141,6 +141,17 @@ class ExecutionCoordinator:
         - ``$input.field`` - Reference the initial pipeline input
         - ``node_name.field`` - Reference a specific dependency's output
         """
+        # Propagate skip: if ALL dependencies were skipped, return skip marker
+        # so downstream nodes are auto-skipped (no need for explicit when clause)
+        if node_spec.deps:
+            all_skipped = all(
+                isinstance(node_results.get(dep), dict)
+                and node_results.get(dep, {}).get("_skipped")
+                for dep in node_spec.deps
+            )
+            if all_skipped:
+                return {"_skipped": True, "_upstream_skipped": True}
+
         # Prepare base input from dependencies
         if not node_spec.deps:
             base_input = initial_input
@@ -251,6 +262,15 @@ class ExecutionCoordinator:
         result: dict[str, Any] = {}
 
         for target_field, source_path in input_mapping.items():
+            # Guard against non-string values (e.g., from malformed YAML or !include)
+            if not isinstance(source_path, str):
+                logger.warning(  # type: ignore[unreachable]
+                    f"input_mapping: value for '{target_field}' is "
+                    f"{type(source_path).__name__}, expected str. Using value directly."
+                )
+                result[target_field] = source_path
+                continue
+
             # Check if this is an expression that needs evaluation
             if self._is_expression(source_path):
                 value = self._evaluate_expression(

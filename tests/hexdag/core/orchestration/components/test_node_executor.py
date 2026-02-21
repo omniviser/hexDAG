@@ -15,7 +15,13 @@ from hexdag.core.orchestration.components.node_executor import (
     NodeExecutor,
     NodeTimeoutError,
 )
-from hexdag.core.orchestration.events import NodeCancelled, NodeCompleted, NodeFailed, NodeStarted
+from hexdag.core.orchestration.events import (
+    NodeCancelled,
+    NodeCompleted,
+    NodeFailed,
+    NodeSkipped,
+    NodeStarted,
+)
 from hexdag.core.orchestration.models import NodeExecutionContext
 
 
@@ -954,3 +960,98 @@ class TestRetryConfigInNodeSpec:
         assert node_spec.retry_delay is None
         assert node_spec.retry_backoff is None
         assert node_spec.retry_max_delay is None
+
+
+# ============================================================================
+# Tests: NodeExecutor auto-skip on upstream skip
+# ============================================================================
+
+
+async def noop_fn(input_data):
+    return {"processed": input_data}
+
+
+class TestNodeExecutorUpstreamSkip:
+    """Test that NodeExecutor auto-skips when input has _upstream_skipped."""
+
+    @pytest.fixture()
+    def executor(self) -> NodeExecutor:
+        return NodeExecutor(strict_validation=False)
+
+    @pytest.fixture()
+    def coordinator(self) -> ExecutionCoordinator:
+        return ExecutionCoordinator()
+
+    @pytest.fixture()
+    def observer(self) -> MockObserverManager:
+        return MockObserverManager()
+
+    @pytest.mark.asyncio()
+    async def test_auto_skips_on_upstream_skip(self, executor, coordinator, observer) -> None:
+        """NodeExecutor should auto-skip when input has _upstream_skipped flag."""
+        node_spec = NodeSpec("downstream", noop_fn)
+        upstream_skip_input = {"_skipped": True, "_upstream_skipped": True}
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="downstream",
+                node_spec=node_spec,
+                node_input=upstream_skip_input,
+                context=NodeExecutionContext(dag_id="test", node_id="downstream"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+            )
+
+        assert result["_skipped"] is True
+        assert result["_upstream_skipped"] is True
+        # Should have emitted NodeSkipped event
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 1
+        assert "upstream" in skip_events[0].reason
+
+    @pytest.mark.asyncio()
+    async def test_runs_normally_without_skip(self, executor, coordinator, observer) -> None:
+        """Normal input -> node executes normally (regression check)."""
+        node_spec = NodeSpec("normal", noop_fn)
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="normal",
+                node_spec=node_spec,
+                node_input={"data": "hello"},
+                context=NodeExecutionContext(dag_id="test", node_id="normal"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+            )
+
+        assert result == {"processed": {"data": "hello"}}
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 0
+
+    @pytest.mark.asyncio()
+    async def test_does_not_skip_on_regular_skipped_result(
+        self, executor, coordinator, observer
+    ) -> None:
+        """Input with _skipped but NOT _upstream_skipped should not auto-skip.
+
+        This preserves backward compat -- only upstream propagation triggers auto-skip.
+        """
+        node_spec = NodeSpec("downstream", noop_fn)
+        # This is a regular skipped result, not an upstream propagation
+        regular_skip = {"_skipped": True, "reason": "when clause"}
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="downstream",
+                node_spec=node_spec,
+                node_input=regular_skip,
+                context=NodeExecutionContext(dag_id="test", node_id="downstream"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+            )
+
+        # Should have executed normally (noop_fn processes the input)
+        assert result == {"processed": {"_skipped": True, "reason": "when clause"}}
