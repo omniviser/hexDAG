@@ -1,7 +1,16 @@
-"""Environment variable resolution plugin.
+"""Environment variable resolution plugin — Phase 1 of the rendering pipeline.
 
-Resolves ``${VAR}`` and ``${VAR:default}`` patterns in YAML values with
-support for deferred secret resolution (build-time vs runtime).
+Resolves ``${VAR}`` and ``${VAR:default}`` patterns at build time.
+Secret-like variables (``*_API_KEY``, ``*_SECRET``, ``*_TOKEN``,
+``*_PASSWORD``, ``*_CREDENTIAL``) are deferred to Phase 3b runtime
+resolution in ``component_instantiator._resolve_deferred_env_vars()``.
+
+Error messages are prefixed with ``[Phase 1: Environment Variable Resolution]``.
+
+See Also
+--------
+- ``preprocessing/template.py`` — Phase 2: Jinja2 rendering
+- ``component_instantiator.py`` — Phase 3b: deferred resolution
 """
 
 from __future__ import annotations
@@ -136,7 +145,13 @@ def _resolve_env_vars_str(
         if env_value is None:
             if default is not None:
                 return default
-            raise YamlPipelineBuilderError(f"Environment variable '${{{var_name}}}' not set")
+            raise YamlPipelineBuilderError(
+                f"[Phase 1: Environment Variable Resolution] "
+                f"Environment variable '${{{var_name}}}' is not set and has no default.\n"
+                f"  In: {obj}\n"
+                f"  Hint: Use ${{{var_name}:default_value}} to provide a default, "
+                f"or set the variable before building the pipeline."
+            )
         return env_value
 
     resolved = pattern.sub(replacer, obj)

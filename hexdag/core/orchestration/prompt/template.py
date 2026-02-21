@@ -1,7 +1,15 @@
-"""Simple and secure prompt template system for hexdag.
+"""Simple and secure prompt template system — Phase 3 of the rendering pipeline.
 
-This module provides a lightweight template engine that handles variable substitution and nested
-object access without the security risks of full template engines like Jinja2.
+This module handles ``{{variable}}`` substitution at **runtime** when nodes
+execute and dependency outputs are available. Uses a lightweight engine
+(not Jinja2) for security — no code execution, loops, or conditionals.
+
+Error messages are prefixed with ``[Phase 3: Runtime Template Rendering]``.
+
+See Also
+--------
+- ``pipeline_builder/preprocessing/template.py`` — Phase 2: build-time Jinja2
+- ``pipeline_builder/preprocessing/env_vars.py`` — Phase 1: ``${VAR}`` resolution
 """
 
 from __future__ import annotations
@@ -154,10 +162,15 @@ class PromptTemplate:
         missing_vars = [var for var in self.input_vars if var not in kwargs]
 
         if missing_vars:
+            preview = self.template[:200] + ("..." if len(self.template) > 200 else "")
             raise MissingVariableError(
+                f"[Phase 3: Runtime Template Rendering] "
                 f"Missing required template variables: {missing_vars}. "
                 f"Required variables: {self.input_vars}. "
-                f"Provided variables: {list(kwargs.keys())}"
+                f"Provided variables: {list(kwargs.keys())}\n"
+                f"  Template: {preview}\n"
+                f"  Hint: Ensure upstream nodes produce outputs with these keys, "
+                f"or check the 'dependencies' list in the YAML node spec."
             )
 
         # Perform variable substitution
@@ -172,7 +185,14 @@ class PromptTemplate:
                 value = self._get_nested_value(kwargs, var_path)
                 return str(value)
             except (KeyError, AttributeError) as e:
-                raise MissingVariableError(f"Cannot access variable '{var_path}': {e}") from e
+                preview = self.template[:200] + ("..." if len(self.template) > 200 else "")
+                raise MissingVariableError(
+                    f"[Phase 3: Runtime Template Rendering] "
+                    f"Cannot access variable '{var_path}': {e}\n"
+                    f"  Template: {preview}\n"
+                    f"  Hint: Ensure the upstream node outputs a structure "
+                    f"containing '{var_path}'."
+                ) from e
 
         return re.sub(pattern, replace_var, result)
 

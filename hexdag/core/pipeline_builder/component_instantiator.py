@@ -1,11 +1,13 @@
-"""Component instantiator for creating adapters and policies from YAML specs.
+"""Component instantiator — includes Phase 3b of the rendering pipeline.
 
-This module handles:
-- Parsing native YAML dict component specifications
-- Resolving components via module paths
-- Instantiating adapters with configuration
-- Instantiating policies with configuration
-- Runtime resolution of deferred environment variables
+Handles deferred ``${VAR}`` resolution: secret-like variables preserved
+during Phase 1 are resolved here at adapter/policy instantiation time.
+
+Error messages for deferred resolution are prefixed with
+``[Phase 3b: Deferred Secret Resolution]``.
+
+Also handles: parsing YAML component specs, resolving module paths,
+instantiating adapters and policies with configuration.
 """
 
 import os
@@ -112,8 +114,12 @@ def _resolve_string_value(value: str) -> str:
                 logger.debug(f"Using default value for ${{{var_name}}}")
                 return default
             raise ComponentInstantiationError(
-                f"Environment variable '{var_name}' is not set and no default provided. "
-                f"Set the environment variable or use ${{​{var_name}:default}} syntax."
+                f"[Phase 3b: Deferred Secret Resolution] "
+                f"Environment variable '{var_name}' is not set and no default provided.\n"
+                f"  In: {value}\n"
+                f"  Hint: This variable was deferred from build-time (secret pattern match). "
+                f"Set the environment variable before running the pipeline, "
+                f"or use ${{{var_name}:default}} syntax."
             )
 
         logger.debug(f"Resolved ${{{var_name}}} from environment")

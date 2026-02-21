@@ -1,7 +1,16 @@
-"""Jinja2 template rendering plugin with two-phase rendering strategy.
+"""Jinja2 template rendering plugin — Phase 2 of the rendering pipeline.
 
-Build-time rendering for metadata and config, runtime preservation for
-node specs and pipeline outputs.
+Build-time rendering for metadata and config; runtime preservation for
+node specs and pipeline outputs. Templates inside node ``spec`` fields
+(where ``kind != "Pipeline"``) and ``outputs`` fields are **skipped** to
+preserve them for Phase 3 runtime rendering via ``PromptTemplate``.
+
+Error messages are prefixed with ``[Phase 2: Build-Time Template Rendering]``.
+
+See Also
+--------
+- ``preprocessing/env_vars.py`` — Phase 1: ``${VAR}`` resolution
+- ``core/orchestration/prompt/template.py`` — Phase 3: runtime rendering
 """
 
 from __future__ import annotations
@@ -99,11 +108,20 @@ def _render_templates_str(obj: str, context: dict[str, Any], env: Any) -> str | 
         return rendered
     except TemplateSyntaxError as e:
         raise YamlPipelineBuilderError(
-            f"Invalid Jinja2 template syntax: {e}\nTemplate: {obj}"
+            f"[Phase 2: Build-Time Template Rendering] "
+            f"Invalid Jinja2 template syntax: {e}\n"
+            f"  Template: {obj}\n"
+            f"  Hint: If this template should render at runtime with node outputs, "
+            f"place it inside a node's 'spec' field where it is automatically preserved."
         ) from e
     except UndefinedError as e:
         raise YamlPipelineBuilderError(
-            f"Undefined variable in template: {e}\nTemplate: {obj}"
+            f"[Phase 2: Build-Time Template Rendering] "
+            f"Undefined variable in template: {e}\n"
+            f"  Template: {obj}\n"
+            f"  Hint: Build-time variables must be defined in the YAML config "
+            f"(e.g., under 'spec.variables'). If this references node outputs, "
+            f"move it inside a node's 'spec' field for runtime rendering."
         ) from e
 
 
