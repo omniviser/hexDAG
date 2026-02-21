@@ -125,6 +125,7 @@ class ReActAgentNode(BaseNodeFactory):
         """Initialize with dependencies."""
         self.llm_node = LLMNode()
         self.tool_parser = ToolParser()
+        self._tool_instructions_cache: str | None = None
 
     def __call__(
         self,
@@ -223,6 +224,9 @@ class ReActAgentNode(BaseNodeFactory):
         Callable[..., Any]
             Agent function with internal loop control
         """
+
+        # Clear tool instructions cache for each new agent run
+        self._tool_instructions_cache = None
 
         async def single_step_executor(input_data: Any) -> Any:
             """Execute single reasoning step."""
@@ -389,11 +393,16 @@ class ReActAgentNode(BaseNodeFactory):
     def _build_tool_instructions(self, tool_router: ToolRouter, config: AgentConfig) -> str:
         """Build tool usage instructions based on the configured format.
 
+        Cached across agent steps since tool schemas don't change during execution.
+
         Returns
         -------
         str
             Tool usage instructions text
         """
+        if self._tool_instructions_cache is not None:
+            return self._tool_instructions_cache
+
         tool_schemas = tool_router.get_all_tool_schemas()
         if not tool_schemas:
             return "\n## No tools available"
@@ -408,13 +417,15 @@ class ReActAgentNode(BaseNodeFactory):
         # Generate format-specific usage guidelines
         usage_guidelines = self._get_format_specific_guidelines(config.tool_call_style)
 
-        return f"""
+        result = f"""
 ## Available Tools
 {tools_text}
 
 ## Usage Guidelines
 {usage_guidelines}
 """
+        self._tool_instructions_cache = result
+        return result
 
     def _get_format_specific_guidelines(self, format_style: ToolCallFormat) -> str:
         """Generate format-specific tool calling guidelines.

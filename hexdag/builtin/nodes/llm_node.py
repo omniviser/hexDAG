@@ -21,6 +21,7 @@ from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.ports.llm import Message
 from hexdag.core.protocols import to_dict
+from hexdag.core.utils.caching import KeyedCache
 from hexdag.core.validation.secure_json import SafeJSON
 
 from .base_node_factory import BaseNodeFactory
@@ -36,6 +37,10 @@ logger = get_logger(__name__)
 
 # Convention: Parse strategy options for dropdown menus in Studio UI
 ParseStrategy = Literal["json", "json_in_markdown", "yaml"]
+
+# Cache for schema instruction strings keyed by Pydantic model class.
+# Schema generation is deterministic per model class so this is safe.
+_SCHEMA_INSTRUCTION_CACHE: KeyedCache[str] = KeyedCache()
 
 
 def _convert_dicts_to_messages(message_dicts: list[dict[str, str]]) -> list[Message]:
@@ -366,23 +371,30 @@ class LLMNode(BaseNodeFactory):
         return template + schema_instruction
 
     def _create_schema_instruction(self, output_model: type[BaseModel]) -> str:
-        """Create schema instruction for structured output."""
-        schema = output_model.model_json_schema()
+        """Create schema instruction for structured output.
 
-        fields_info = []
-        if "properties" in schema:
-            for field_name, field_schema in schema["properties"].items():
-                field_type = field_schema.get("type", "any")
-                field_desc = field_schema.get("description", "")
-                desc_part = f" - {field_desc}" if field_desc else ""
-                fields_info.append(f"  - {field_name}: {field_type}{desc_part}")
+        Cached per model class — schema generation is deterministic.
+        """
 
-        fields_text = "\n".join(fields_info) if fields_info else "  - (no specific fields defined)"
+        def _build() -> str:
+            schema = output_model.model_json_schema()
 
-        example_data = {field: f"<{field}_value>" for field in schema.get("properties", {})}
-        example_json = json.dumps(example_data, indent=2)
+            fields_info = []
+            if "properties" in schema:
+                for field_name, field_schema in schema["properties"].items():
+                    field_type = field_schema.get("type", "any")
+                    field_desc = field_schema.get("description", "")
+                    desc_part = f" - {field_desc}" if field_desc else ""
+                    fields_info.append(f"  - {field_name}: {field_type}{desc_part}")
 
-        return f"""
+            fields_text = (
+                "\n".join(fields_info) if fields_info else "  - (no specific fields defined)"
+            )
+
+            example_data = {field: f"<{field}_value>" for field in schema.get("properties", {})}
+            example_json = json.dumps(example_data, indent=2)
+
+            return f"""
 
 ## Output Format
 Respond with valid JSON matching this schema:
@@ -390,6 +402,8 @@ Respond with valid JSON matching this schema:
 
 Example: {example_json}
 """
+
+        return _SCHEMA_INSTRUCTION_CACHE.get_or_create(output_model, _build)
 
     # Response Parsing
     # ----------------
