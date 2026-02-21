@@ -161,3 +161,53 @@ class TestNullableSchema:
         instance = model()
         for field in ("s", "i", "f", "b", "l", "d"):
             assert getattr(instance, field) is None
+
+
+class TestPydanticModelCaching:
+    """Tests for Pydantic model creation caching."""
+
+    @pytest.fixture
+    def factory(self):
+        return MockNodeFactory()
+
+    def test_same_schema_returns_cached_model(self, factory):
+        """Identical schema dicts return the exact same model class."""
+        schema = {"name": str, "age": int}
+        model1 = factory.create_pydantic_model("CachedModel", schema)
+        model2 = factory.create_pydantic_model("CachedModel", schema)
+        assert model1 is model2
+
+    def test_different_schemas_return_different_models(self, factory):
+        """Different schemas produce different model classes."""
+        model1 = factory.create_pydantic_model("Model1", {"name": str})
+        model2 = factory.create_pydantic_model("Model1", {"email": str})
+        assert model1 is not model2
+
+    def test_different_names_same_schema_return_different_models(self, factory):
+        """Same schema but different model names are cached separately."""
+        schema = {"name": str}
+        model1 = factory.create_pydantic_model("InputModel", schema)
+        model2 = factory.create_pydantic_model("OutputModel", schema)
+        assert model1 is not model2
+
+    def test_cached_model_still_works(self, factory):
+        """Cached models can still create valid instances."""
+        schema = {"name": str, "value": int}
+        model = factory.create_pydantic_model("WorkingModel", schema)
+        instance = model(name="test", value=42)
+        assert instance.name == "test"
+        assert instance.value == 42
+
+        # Get from cache and verify it still works
+        model2 = factory.create_pydantic_model("WorkingModel", schema)
+        instance2 = model2(name="other", value=99)
+        assert instance2.name == "other"
+
+    def test_basemodel_passthrough_not_cached(self, factory):
+        """Existing BaseModel subclasses are returned as-is, not cached."""
+
+        class MyModel(BaseModel):
+            x: int
+
+        result = factory.create_pydantic_model("Ignored", MyModel)
+        assert result is MyModel

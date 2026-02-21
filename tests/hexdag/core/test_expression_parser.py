@@ -553,3 +553,27 @@ class TestConditionalNodeExpressions:
         assert evaluate_expression(expr, {"counter_count": 0}) == Decimal("0.10")
         assert evaluate_expression(expr, {"counter_count": 1}) == Decimal("0.03")
         assert evaluate_expression(expr, {"counter_count": 5}) == Decimal("0.03")
+
+
+class TestCompileExpressionCaching:
+    """Test that compile_expression uses lru_cache correctly."""
+
+    def test_same_expression_returns_same_predicate(self) -> None:
+        """Identical expression strings return the exact same callable object."""
+        pred1 = compile_expression("status == 'active'")
+        pred2 = compile_expression("status == 'active'")
+        assert pred1 is pred2
+
+    def test_different_expressions_return_different_predicates(self) -> None:
+        pred1 = compile_expression("x > 0")
+        pred2 = compile_expression("x < 0")
+        assert pred1 is not pred2
+
+    def test_cached_predicate_still_works(self) -> None:
+        """Cached predicates produce correct results with different data."""
+        pred = compile_expression("count > 5 and active == True")
+        assert pred({"count": 10, "active": True}, {}) is True
+        assert pred({"count": 3, "active": True}, {}) is False
+        # Call again — same object from cache
+        pred2 = compile_expression("count > 5 and active == True")
+        assert pred2({"count": 10, "active": True}, {}) is True

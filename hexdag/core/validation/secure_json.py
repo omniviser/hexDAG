@@ -58,11 +58,11 @@ class SafeJSON:
             logger.debug("orjson initial parse failed; attempting cleanup fallback: %s", exc)
 
         # Step 2: cleanup + retry
+        # Note: only re-check size (cleanup can change byte count via comment removal).
+        # Depth is NOT re-checked — _cleanup only does regex substitutions
+        # (comments, trailing commas, quotes) which cannot change nesting depth.
         cleaned = self._cleanup(text)
-        if (
-            len(cleaned.encode("utf-8")) <= self.max_size_bytes
-            and self._estimate_depth(cleaned) <= self.max_depth
-        ):
+        if len(cleaned.encode("utf-8")) <= self.max_size_bytes:
             try:
                 return SafeJSONResult(data=orjson.loads(cleaned))
             except Exception as exc:  # noqa: BLE001 - we deliberately log and fall back

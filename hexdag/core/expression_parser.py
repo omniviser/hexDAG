@@ -49,6 +49,7 @@ import operator
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import lru_cache
 from typing import Any
 
 from hexdag.core.logging import get_logger
@@ -450,6 +451,7 @@ def _collect_attribute_path(node: ast.Attribute) -> list[str]:
     return list(reversed(path))
 
 
+@lru_cache(maxsize=256)
 def compile_expression(expression: str) -> Callable[[dict[str, Any], dict[str, Any]], bool]:
     """Compile a string expression into a safe predicate function.
 

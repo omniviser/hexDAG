@@ -10,6 +10,21 @@ from pydantic import BaseModel, create_model
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.protocols import is_schema_type
+from hexdag.core.utils.caching import KeyedCache, schema_cache_key
+
+# Module-level cache for dynamically created Pydantic models.
+_MODEL_CACHE: KeyedCache[type[BaseModel]] = KeyedCache()
+
+# String type names mapping used during model creation
+_TYPE_MAP: dict[str, Any] = {
+    "str": str,
+    "int": int,
+    "float": float,
+    "bool": bool,
+    "list": list,
+    "dict": dict,
+    "Any": Any,
+}
 
 
 class BaseNodeFactory(ABC):
@@ -23,6 +38,8 @@ class BaseNodeFactory(ABC):
     ) -> type[BaseModel] | None:
         """Create a Pydantic model from a schema.
 
+        Uses a module-level cache to avoid recreating identical models.
+
         Raises
         ------
         ValueError
@@ -32,44 +49,33 @@ class BaseNodeFactory(ABC):
             return None
 
         if is_schema_type(schema):
-            return schema  # type: ignore[return-value]  # is_schema_type checks for BaseModel subclass
+            # is_schema_type checks for BaseModel subclass
+            return schema  # type: ignore[return-value]
 
         if isinstance(schema, dict):
-            # String type names mapping (for when field_type is a string)
-            type_map = {
-                "str": str,
-                "int": int,
-                "float": float,
-                "bool": bool,
-                "list": list,
-                "dict": dict,
-                "Any": Any,
-            }
+            cache_key = (name, schema_cache_key(schema))
 
-            field_definitions: dict[str, Any] = {}
-            for field_name, field_type in schema.items():
-                # Dispatch based on field_type's type using match pattern
-                match field_type:
-                    case str():
-                        # String type names - convert to actual types
-                        if field_type.endswith("?"):
-                            base = field_type[:-1]
-                            actual_type = type_map.get(base, Any)
-                            field_definitions[field_name] = (actual_type | None, None)
-                        else:
-                            actual_type = type_map.get(field_type, Any)
-                            field_definitions[field_name] = (actual_type, ...)
-                    case type():
-                        # Already a type
-                        field_definitions[field_name] = (field_type, ...)
-                    case tuple():
-                        # Already in the correct format (type, default)
-                        field_definitions[field_name] = field_type
-                    case _:
-                        # Unknown type specification - use Any
-                        field_definitions[field_name] = (Any, ...)
+            def _build_model() -> type[BaseModel]:
+                field_definitions: dict[str, Any] = {}
+                for field_name, field_type in schema.items():
+                    match field_type:
+                        case str():
+                            if field_type.endswith("?"):
+                                base = field_type[:-1]
+                                actual_type = _TYPE_MAP.get(base, Any)
+                                field_definitions[field_name] = (actual_type | None, None)
+                            else:
+                                actual_type = _TYPE_MAP.get(field_type, Any)
+                                field_definitions[field_name] = (actual_type, ...)
+                        case type():
+                            field_definitions[field_name] = (field_type, ...)
+                        case tuple():
+                            field_definitions[field_name] = field_type
+                        case _:
+                            field_definitions[field_name] = (Any, ...)
+                return create_model(name, **field_definitions)
 
-            return create_model(name, **field_definitions)
+            return _MODEL_CACHE.get_or_create(cache_key, _build_model)
 
         # At this point, schema should be a type
         try:
@@ -147,7 +153,9 @@ class BaseNodeFactory(ABC):
         """
         if hasattr(self.__class__, "_hexdag_required_ports"):
             # _hexdag_required_ports is added dynamically by @node decorator
-            wrapper_fn._hexdag_required_ports = self.__class__._hexdag_required_ports  # pyright: ignore[reportAttributeAccessIssue]  # noqa: B010
+            wrapper_fn._hexdag_required_ports = (  # noqa: B010
+                self.__class__._hexdag_required_ports  # pyright: ignore[reportAttributeAccessIssue]
+            )
 
     @staticmethod
     def extract_framework_params(kwargs: dict[str, Any]) -> dict[str, Any]:
