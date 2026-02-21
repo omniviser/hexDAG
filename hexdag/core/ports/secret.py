@@ -1,12 +1,17 @@
 """Port interface for secret management (KeyVault, AWS Secrets Manager, etc.)."""
 
+import os
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from hexdag.core.logging import get_logger
 
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
     from hexdag.core.ports.memory import Memory
     from hexdag.core.types import Secret
+
+logger = get_logger(__name__)
 
 
 @runtime_checkable
@@ -25,6 +30,7 @@ class SecretPort(Protocol):
     Optional Methods
     ----------------
     Adapters may optionally implement:
+    - load_to_environ(): Load secrets into os.environ (has default impl)
     - ahealth_check(): Verify secret service connectivity and authentication
     """
 
@@ -99,6 +105,68 @@ class SecretPort(Protocol):
             api_key = await memory.aget("secret:OPENAI_API_KEY")
         """
         ...
+
+    async def load_to_environ(
+        self,
+        keys: list[str] | None = None,
+        prefix: str = "",
+        overwrite: bool = False,
+    ) -> dict[str, str]:
+        """Load secrets into ``os.environ`` for ``${VAR}`` resolution.
+
+        This enables YAML pipelines to use ``${OPENAI_API_KEY}`` in port
+        configs — the secret is fetched from the vault and placed in
+        ``os.environ`` *before* adapters are instantiated.
+
+        Key names are normalised: hyphens become underscores and the result
+        is upper-cased (e.g. ``OPENAI-API-KEY`` → ``OPENAI_API_KEY``).
+
+        Adapters may override this for bulk-loading optimisations.
+
+        Args
+        ----
+            keys: Secret keys to load. If None, loads all (via ``alist_secret_names``).
+            prefix: Env-var name prefix (e.g. ``"MYAPP_"``).
+            overwrite: Overwrite existing env vars (default: False).
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of env-var name → status (``"loaded"`` or ``"skipped"``).
+
+        Examples
+        --------
+        Example usage::
+
+            vault = AzureKeyVaultAdapter(vault_url="https://my-vault.vault.azure.net")
+            await vault.load_to_environ(keys=["OPENAI-API-KEY"])
+            # os.environ["OPENAI_API_KEY"] is now set
+        """
+        results: dict[str, str] = {}
+
+        if keys is None:
+            keys = await self.alist_secret_names()
+
+        for key in keys:
+            env_var_name = f"{prefix}{key.replace('-', '_').upper()}"
+
+            if not overwrite and env_var_name in os.environ:
+                logger.debug(f"Skipping '{env_var_name}' (already set)")
+                results[env_var_name] = "skipped"
+                continue
+
+            try:
+                secret = await self.aget_secret(key)
+                os.environ[env_var_name] = secret.get()
+                results[env_var_name] = "loaded"
+                logger.debug(f"Loaded '{key}' → env:{env_var_name}")
+            except (KeyError, ValueError, RuntimeError) as e:
+                logger.warning(f"Failed to load secret '{key}' to environ: {e}")
+                results[env_var_name] = f"error: {e}"
+
+        loaded = sum(1 for v in results.values() if v == "loaded")
+        logger.info(f"Loaded {loaded}/{len(keys)} secrets into os.environ")
+        return results
 
     async def alist_secret_names(self) -> list[str]:
         """List all available secret names (optional).

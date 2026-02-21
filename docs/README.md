@@ -21,6 +21,7 @@ Welcome to the hexDAG documentation! This guide will help you navigate the docum
    - [Core Concepts](concepts.md) - Understand the architecture
 
 ### Building Production Workflows?
+- **[🚀 PipelineRunner](PIPELINE_RUNNER.md)** - One-liner pipeline execution with auto secret loading
 - **[🔧 Implementation Guide](IMPLEMENTATION_GUIDE.md)** - Comprehensive production guide (36KB)
 - **[⌨️ CLI Reference](CLI_REFERENCE.md)** - Complete CLI documentation (22KB)
 - **[📊 Examples Directory](../examples/)** - 40+ working code examples
@@ -51,6 +52,14 @@ Essential hexDAG concepts and architecture patterns.
 - Validation and type safety
 
 ### User Guides
+
+#### **[🚀 PipelineRunner](PIPELINE_RUNNER.md)**
+The recommended way to run YAML pipelines:
+- One-liner execution from file or string
+- Automatic secret loading (Azure KeyVault, etc.)
+- Port overrides for testing
+- Dry-run validation
+- CLI integration (`hexdag pipeline run`)
 
 #### **[📝 Node Types](node-types.md)**
 Comprehensive guide to all available node types:

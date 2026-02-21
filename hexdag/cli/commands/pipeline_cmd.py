@@ -391,8 +391,41 @@ def run_pipeline(
             help="Show detailed execution information",
         ),
     ] = False,
+    environment: Annotated[
+        str | None,
+        typer.Option(
+            "--env",
+            "-e",
+            help="Pipeline environment (for multi-document YAML)",
+        ),
+    ] = None,
+    max_concurrent: Annotated[
+        int,
+        typer.Option(
+            "--max-concurrent",
+            help="Maximum concurrent nodes",
+        ),
+    ] = 10,
+    timeout: Annotated[
+        float | None,
+        typer.Option(
+            "--timeout",
+            help="Default node timeout in seconds",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate pipeline without executing",
+        ),
+    ] = False,
 ) -> None:
-    """Execute a pipeline with optional input data."""
+    """Execute a pipeline with optional input data.
+
+    Automatically instantiates ports from YAML configuration and loads
+    secrets from any configured secret provider.
+    """
     import asyncio
 
     if not pipeline_path.exists():
@@ -401,7 +434,7 @@ def run_pipeline(
 
     try:
         # Parse input data
-        inputs = {}
+        inputs: dict = {}
         if input_data:
             try:
                 inputs = json.loads(input_data)
@@ -419,24 +452,35 @@ def run_pipeline(
                 console.print(f"[red]Error: Invalid JSON in input file: {e}[/red]")
                 raise typer.Exit(1)
 
-        # Import hexdag components
-        from hexdag import Orchestrator, YamlPipelineBuilder
+        from hexdag.core.pipeline_runner import PipelineRunner
 
-        if verbose:
-            console.print(f"[cyan]Loading pipeline: {pipeline_path}[/cyan]")
+        runner = PipelineRunner(
+            max_concurrent_nodes=max_concurrent,
+            default_node_timeout=timeout,
+            environment=environment,
+        )
 
-        builder = YamlPipelineBuilder()
-        graph, pipeline_config = builder.build_from_yaml_file(str(pipeline_path))
-
-        if verbose:
-            console.print(f"[dim]Pipeline: {pipeline_config.metadata.get('name', 'unnamed')}[/dim]")
-            console.print(f"[dim]Nodes: {len(graph.nodes)}[/dim]\n")
+        # Dry-run mode: validate only
+        if dry_run:
+            console.print(f"[cyan]Validating pipeline: {pipeline_path}[/cyan]")
+            issues = asyncio.run(
+                runner.validate(pipeline_path=pipeline_path, environment=environment)
+            )
+            if issues:
+                console.print("\n[red]Validation issues:[/red]")
+                for issue in issues:
+                    console.print(f"  [red]✗[/red] {issue}")
+                raise typer.Exit(1)
+            console.print("[green]✓ Pipeline validation passed[/green]")
+            return
 
         # Execute pipeline
+        if verbose:
+            console.print(f"[cyan]Loading and executing pipeline: {pipeline_path}[/cyan]")
+
         console.print("[cyan]Executing pipeline...[/cyan]")
 
-        orchestrator = Orchestrator()
-        result = asyncio.run(orchestrator.run(graph, inputs))
+        result = asyncio.run(runner.run(pipeline_path, input_data=inputs, environment=environment))
 
         # Display results
         if verbose:
@@ -466,11 +510,9 @@ def run_pipeline(
             output_data = {}
             for k, v in result.items():
                 try:
-                    # Try to serialize directly
                     json.dumps({k: v})
                     output_data[k] = v
                 except (TypeError, ValueError):
-                    # Fall back to string representation
                     output_data[k] = str(v)
 
             with open(output_file, "w") as f:
