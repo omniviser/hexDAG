@@ -10,7 +10,6 @@ for all LLM interactions. It combines:
 from __future__ import annotations
 
 import json
-import time
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ValidationError
@@ -22,6 +21,7 @@ from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.ports.llm import Message
 from hexdag.core.protocols import to_dict
 from hexdag.core.utils.caching import KeyedCache
+from hexdag.core.utils.node_timer import node_timer
 from hexdag.core.validation.secure_json import SafeJSON
 
 from .base_node_factory import BaseNodeFactory
@@ -273,73 +273,72 @@ class LLMNode(BaseNodeFactory):
         async def llm_wrapper(validated_input: dict[str, Any]) -> Any:
             """Execute LLM call with optional parsing."""
             node_logger = logger.bind(node=name, node_type="llm_node")
-            start_time = time.perf_counter()
 
             llm = get_port("llm")
             if not llm:
                 raise RuntimeError("LLM port not available in execution context")
 
-            try:
-                # Convert input to dict if needed
+            with node_timer() as t:
                 try:
-                    input_dict = to_dict(validated_input)
-                except TypeError:
-                    input_dict = validated_input
+                    # Convert input to dict if needed
+                    try:
+                        input_dict = to_dict(validated_input)
+                    except TypeError:
+                        input_dict = validated_input
 
-                # Log input variables at debug level
-                node_logger.debug(
-                    "Prompt variables",
-                    variables=list(input_dict.keys()),
-                    variable_count=len(input_dict),
-                )
-
-                # Log execution start
-                node_logger.info(
-                    "Calling LLM",
-                    has_system_prompt=system_prompt is not None,
-                    parse_json=parse_json,
-                    parse_strategy=parse_strategy if parse_json else None,
-                )
-
-                # Enhance template with schema instructions if using structured output
-                enhanced_template = template
-                if parse_json and output_model:
-                    enhanced_template = self._enhance_template_with_schema(template, output_model)
-
-                # Generate messages from template
-                messages = self._generate_messages(enhanced_template, input_dict, system_prompt)
-
-                # Call LLM
-                response = await llm.aresponse(messages)
-
-                # Log LLM response received
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                node_logger.debug(
-                    "LLM response received",
-                    response_length=len(response) if isinstance(response, str) else None,
-                    duration_ms=f"{duration_ms:.2f}",
-                )
-
-                # Parse response if requested
-                if parse_json and output_model:
-                    result = self._parse_response(response, output_model, parse_strategy)
+                    # Log input variables at debug level
                     node_logger.debug(
-                        "Response parsed",
-                        output_type=type(result).__name__,
+                        "Prompt variables",
+                        variables=list(input_dict.keys()),
+                        variable_count=len(input_dict),
                     )
-                    return result
 
-                return response
+                    # Log execution start
+                    node_logger.info(
+                        "Calling LLM",
+                        has_system_prompt=system_prompt is not None,
+                        parse_json=parse_json,
+                        parse_strategy=parse_strategy if parse_json else None,
+                    )
 
-            except Exception as e:
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                node_logger.error(
-                    "LLM call failed",
-                    duration_ms=f"{duration_ms:.2f}",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                )
-                raise
+                    # Enhance template with schema instructions if using structured output
+                    enhanced_template = template
+                    if parse_json and output_model:
+                        enhanced_template = self._enhance_template_with_schema(
+                            template, output_model
+                        )
+
+                    # Generate messages from template
+                    messages = self._generate_messages(enhanced_template, input_dict, system_prompt)
+
+                    # Call LLM
+                    response = await llm.aresponse(messages)
+
+                    node_logger.debug(
+                        "LLM response received",
+                        response_length=len(response) if isinstance(response, str) else None,
+                        duration_ms=t.duration_str,
+                    )
+
+                    # Parse response if requested
+                    if parse_json and output_model:
+                        result = self._parse_response(response, output_model, parse_strategy)
+                        node_logger.debug(
+                            "Response parsed",
+                            output_type=type(result).__name__,
+                        )
+                        return result
+
+                    return response
+
+                except Exception as e:
+                    node_logger.error(
+                        "LLM call failed",
+                        duration_ms=t.duration_str,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+                    raise
 
         return llm_wrapper
 
@@ -413,13 +412,10 @@ Example: {example_json}
     ) -> BaseModel:
         """Parse LLM response into structured output."""
         try:
-            if strategy == "json":
-                parsed_data = self._parse_json(response)
-            elif strategy == "json_in_markdown":
-                parsed_data = self._parse_json_in_markdown(response)
-            elif strategy == "yaml":
+            if strategy == "yaml":
                 parsed_data = self._parse_yaml(response)
             else:
+                # "json", "json_in_markdown", and default all use the same path
                 parsed_data = self._parse_json(response)
 
         except (json.JSONDecodeError, ValueError, SyntaxError) as e:
@@ -438,19 +434,11 @@ Example: {example_json}
     _safe_json = SafeJSON()
 
     def _parse_json(self, text: str) -> dict[str, Any]:
-        """Parse JSON from text, with extraction from surrounding prose."""
+        """Parse JSON from text, including extraction from markdown code blocks."""
         result = self._safe_json.loads_from_text(text)
         if result.ok:
             return result.data  # type: ignore[return-value]
         # Fall back to direct parse for better error messages
-        return json.loads(text.strip())  # type: ignore[no-any-return]
-
-    def _parse_json_in_markdown(self, text: str) -> dict[str, Any]:
-        """Extract and parse JSON from markdown code blocks."""
-        result = self._safe_json.loads_from_text(text)
-        if result.ok:
-            return result.data  # type: ignore[return-value]
-        # loads_from_text already tries code blocks → raw JSON
         return json.loads(text.strip())  # type: ignore[no-any-return]
 
     def _parse_yaml(self, text: str) -> dict[str, Any]:

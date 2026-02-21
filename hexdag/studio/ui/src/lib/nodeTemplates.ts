@@ -36,29 +36,6 @@ export const nodeTemplates: NodeTemplate[] = [
     requiredPorts: ['llm', 'tool_router'],
   },
   {
-    kind: 'conditional_node',
-    label: 'Conditional',
-    description: 'Conditional branching',
-    icon: 'GitBranch',
-    color: '#f59e0b', // amber-500
-    defaultSpec: {
-      condition: '',
-      if_true: null,
-      if_false: null,
-    },
-  },
-  {
-    kind: 'loop_node',
-    label: 'Loop',
-    description: 'Iterative processing',
-    icon: 'Repeat',
-    color: '#10b981', // emerald-500
-    defaultSpec: {
-      iterations: 1,
-      body: null,
-    },
-  },
-  {
     kind: 'input_node',
     label: 'Input',
     description: 'Pipeline input',
@@ -110,8 +87,6 @@ const defaultColors: Record<string, string> = {
   function: '#3b82f6',
   llm: '#8b5cf6',
   agent: '#ec4899',
-  conditional: '#f59e0b',
-  loop: '#10b981',
   input: '#06b6d4',
   output: '#14b8a6',
   transform: '#f97316',

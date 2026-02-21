@@ -56,7 +56,6 @@ YAML usage - switch for routing (no body)::
 """
 
 import asyncio
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -67,6 +66,8 @@ from hexdag.core.expression_parser import compile_expression, evaluate_expressio
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.body_executor import BodyExecutor
 from hexdag.core.orchestration.models import NodeExecutionContext
+from hexdag.core.utils.input_normalization import normalize_input
+from hexdag.core.utils.node_timer import node_timer
 
 logger = get_logger(__name__)
 
@@ -86,10 +87,6 @@ class CompositeNode(BaseNodeFactory):
     The YAML schema for this node is auto-generated from the ``__call__`` signature
     and docstrings using ``SchemaGenerator``.
 
-    See Also
-    --------
-    LoopNode : Deprecated, use CompositeNode with mode='while'
-    ConditionalNode : Deprecated, use CompositeNode with mode='switch'
     """
 
     # Studio UI metadata
@@ -256,15 +253,9 @@ class CompositeNode(BaseNodeFactory):
         async def composite_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute control flow logic based on mode."""
             node_logger = logger.bind(node=name, node_type="composite_node", mode=_mode)
-            start_time = time.perf_counter()
 
             # Normalize input
-            if hasattr(input_data, "model_dump"):
-                data = input_data.model_dump()
-            elif isinstance(input_data, dict):
-                data = dict(input_data)
-            else:
-                data = {"input": input_data}
+            data = normalize_input(input_data)
 
             # Create execution context
             context = NodeExecutionContext(dag_id=name, node_id=name)
@@ -287,89 +278,89 @@ class CompositeNode(BaseNodeFactory):
             )
 
             # Dispatch to mode handler
-            match _mode:
-                case "while":
-                    result = await _execute_while(
-                        data=data,
-                        condition=_condition,
-                        initial_state=_initial_state,
-                        state_update=_state_update,
-                        max_iterations=_max_iterations,
-                        body=_body,
-                        body_pipeline=_body_pipeline,
-                        executor=executor,
-                        context=context,
-                        ports=ports,
-                        collect=_collect,
-                        key_field=_key_field,
-                        error_handling=_error_handling,
-                        node_logger=node_logger,
-                    )
-                case "for-each":
-                    result = await _execute_foreach(
-                        data=data,
-                        items_expr=_items,
-                        item_var=_item_var,
-                        index_var=_index_var,
-                        concurrency=_concurrency,
-                        body=_body,
-                        body_pipeline=_body_pipeline,
-                        executor=executor,
-                        context=context,
-                        ports=ports,
-                        collect=_collect,
-                        key_field=_key_field,
-                        error_handling=_error_handling,
-                        node_logger=node_logger,
-                    )
-                case "times":
-                    result = await _execute_times(
-                        data=data,
-                        count=_count or 0,
-                        index_var=_index_var,
-                        concurrency=_concurrency,
-                        body=_body,
-                        body_pipeline=_body_pipeline,
-                        executor=executor,
-                        context=context,
-                        ports=ports,
-                        collect=_collect,
-                        key_field=_key_field,
-                        error_handling=_error_handling,
-                        node_logger=node_logger,
-                    )
-                case "if-else":
-                    result = await _execute_if_else(
-                        data=data,
-                        condition=_condition,
-                        body=_body,
-                        body_pipeline=_body_pipeline,
-                        else_body=_else_body,
-                        executor=executor,
-                        context=context,
-                        ports=ports,
-                        node_logger=node_logger,
-                    )
-                case "switch":
-                    result = await _execute_switch(
-                        data=data,
-                        branches=_branches,
-                        else_body=_else_body,
-                        else_action=_else_action,
-                        executor=executor,
-                        context=context,
-                        ports=ports,
-                        node_logger=node_logger,
-                    )
-                case _:
-                    raise ValueError(f"Unknown mode: {_mode}")
+            with node_timer() as t:
+                match _mode:
+                    case "while":
+                        result = await _execute_while(
+                            data=data,
+                            condition=_condition,
+                            initial_state=_initial_state,
+                            state_update=_state_update,
+                            max_iterations=_max_iterations,
+                            body=_body,
+                            body_pipeline=_body_pipeline,
+                            executor=executor,
+                            context=context,
+                            ports=ports,
+                            collect=_collect,
+                            key_field=_key_field,
+                            error_handling=_error_handling,
+                            node_logger=node_logger,
+                        )
+                    case "for-each":
+                        result = await _execute_foreach(
+                            data=data,
+                            items_expr=_items,
+                            item_var=_item_var,
+                            index_var=_index_var,
+                            concurrency=_concurrency,
+                            body=_body,
+                            body_pipeline=_body_pipeline,
+                            executor=executor,
+                            context=context,
+                            ports=ports,
+                            collect=_collect,
+                            key_field=_key_field,
+                            error_handling=_error_handling,
+                            node_logger=node_logger,
+                        )
+                    case "times":
+                        result = await _execute_times(
+                            data=data,
+                            count=_count or 0,
+                            index_var=_index_var,
+                            concurrency=_concurrency,
+                            body=_body,
+                            body_pipeline=_body_pipeline,
+                            executor=executor,
+                            context=context,
+                            ports=ports,
+                            collect=_collect,
+                            key_field=_key_field,
+                            error_handling=_error_handling,
+                            node_logger=node_logger,
+                        )
+                    case "if-else":
+                        result = await _execute_if_else(
+                            data=data,
+                            condition=_condition,
+                            body=_body,
+                            body_pipeline=_body_pipeline,
+                            else_body=_else_body,
+                            executor=executor,
+                            context=context,
+                            ports=ports,
+                            node_logger=node_logger,
+                        )
+                    case "switch":
+                        result = await _execute_switch(
+                            data=data,
+                            branches=_branches,
+                            else_body=_else_body,
+                            else_action=_else_action,
+                            executor=executor,
+                            context=context,
+                            ports=ports,
+                            node_logger=node_logger,
+                        )
+                    case _:
+                        raise ValueError(f"Unknown mode: {_mode}")
 
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            result["metadata"]["duration_ms"] = duration_ms
+            result["metadata"]["duration_ms"] = t.duration_ms
 
             node_logger.info(
                 "Control flow completed",
-                duration_ms=f"{duration_ms:.2f}",
+                duration_ms=t.duration_str,
                 stopped_by=result["metadata"].get("stopped_by"),
             )
 
@@ -379,19 +370,13 @@ class CompositeNode(BaseNodeFactory):
         composite_fn.__name__ = f"composite_{name}"
         composite_fn.__doc__ = f"Composite node: {name} (mode={mode})"
 
-        # Extract framework-level parameters
-        framework = self.extract_framework_params(kwargs)
-
-        return NodeSpec(
+        return self.create_node_with_mapping(
             name=name,
-            fn=composite_fn,
-            in_model=None,
-            out_model=None,
-            deps=frozenset(deps or []),
-            params=kwargs,
-            timeout=framework["timeout"],
-            max_retries=framework["max_retries"],
-            when=framework["when"],
+            wrapped_fn=composite_fn,
+            input_schema=None,
+            output_schema=None,
+            deps=deps,
+            **kwargs,
         )
 
     def _validate_mode_params(

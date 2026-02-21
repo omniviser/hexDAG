@@ -26,10 +26,13 @@ spec:
 | Node Kind | Description |
 |-----------|-------------|
 | `agent_node` | Specification for agent_node type |
-| `conditional_node` | Specification for conditional_node type |
+| `composite_node` | Specification for composite_node type |
+| `data_node` | Specification for data_node type |
+| `expression_node` | Specification for expression_node type |
 | `function_node` | Specification for function_node type |
 | `llm_node` | Specification for llm_node type |
-| `loop_node` | Specification for loop_node type |
+| `port_call_node` | Specification for port_call_node type |
+| `reasoning_agent_node` | Specification for reasoning_agent_node type |
 | `tool_call_node` | Specification for tool_call_node type |
 
 ### agent_node
@@ -56,26 +59,90 @@ Specification for agent_node type
   dependencies: []
 ```
 
-### conditional_node
+### composite_node
 
-Multi-branch conditional router for workflow control flow
+Specification for composite_node type
 
 **Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `branches` | list[object] | Yes | List of condition branches evaluated ... |
-| `else_action` | string | No | Default action if no branch condition... |
-| `tie_break` | `"first_true`" | No | Strategy for handling multiple matchi... |
+| `body` | string | list[object] | No | Body to execute. Can be: - Module pat... |
+| `body_pipeline` | string | null | No | Path to external pipeline YAML file |
+| `branches` | array | null | No | List of condition branches for switch... |
+| `collect` | `"list`" | `"last`" | `"first`" | No | Result collection mode (default: "list") |
+| `concurrency` | integer | No | Max concurrent iterations for for-eac... |
+| `condition` | string | null | No | Condition expression for while, if-el... |
+| `count` | integer | null | No | Number of iterations for times mode |
+| `default_node_timeout` | number | null | No |  |
+| `else_action` | string | null | No | Action label for else branch (switch ... |
+| `else_body` | string | list[object] | No | Body for else branch (if-else, switch... |
+| `error_handling` | `"fail_fast`" | `"continue`" | `"collect`" | No | Error handling strategy (default: "fa... |
+| `index_var` | string | No | Variable name for current index (defa... |
+| `initial_state` | object | null | No | Initial state dict for while mode |
+| `item_var` | string | No | Variable name for current item (defau... |
+| `items` | string | null | No | Expression resolving to iterable for ... |
+| `key_field` | string | null | No | Field to use as key for dict collection |
+| `max_concurrent_nodes` | integer | No |  |
+| `max_iterations` | integer | No | Safety limit for while loops (default... |
+| `mode` | `"while`" | `"for-each`" | `"times`" | Yes | Control flow mode: while, for-each, t... |
+| `reducer` | string | null | No | Module path to reducer function for r... |
+| `state_update` | object | null | No | State update expressions for while mode |
+| `strict_validation` | boolean | No |  |
 
 **Example:**
 
 ```yaml
-- kind: conditional_node
+- kind: composite_node
   metadata:
-    name: my_conditional
+    name: my_composite
   spec:
-    branches: # required
+    mode: # required
+  dependencies: []
+```
+
+### data_node
+
+Specification for data_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `output` | object | Yes | Output data to return. Values can be:... |
+
+**Example:**
+
+```yaml
+- kind: data_node
+  metadata:
+    name: my_data
+  spec:
+    output: # required
+  dependencies: []
+```
+
+### expression_node
+
+Specification for expression_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `expressions` | object | null | No | Mapping of {variable_name: expression... |
+| `extract_field` | string | null | No | Field to extract from each dependency... |
+| `merge_strategy` | `"dict`" | `"list`" | `"first`" | No | Strategy for merging multiple depende... |
+| `output_fields` | array | null | No | Fields to include in output dict. If ... |
+| `reducer` | string | string | No | Module path (e.g., "statistics.mean")... |
+
+**Example:**
+
+```yaml
+- kind: expression_node
+  metadata:
+    name: my_expression
+  spec:
   dependencies: []
 ```
 
@@ -125,30 +192,53 @@ Specification for llm_node type
   dependencies: []
 ```
 
-### loop_node
+### port_call_node
 
-Loop control node for iterative processing
+Specification for port_call_node type
 
 **Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `body` | string | Yes | Module path to body function: (data, ... |
-| `collect_mode` | `"last`" | `"list`" | `"reduce`" | No | How to collect results: last value, a... |
-| `initial_state` | object | No | Initial state dict passed to first it... |
-| `iteration_key` | string | No | Key name for current iteration number... |
-| `max_iterations` | integer | No | Maximum number of iterations before s... |
-| `while_condition` | string | Yes | Module path to condition function: (d... |
+| `fallback` | string | No | Value to return if the port is not av... |
+| `has_fallback` | string | No | Set to True to enable fallback behavi... |
+| `method` | string | Yes | Method name to invoke on the port |
+| `output_schema` | string | No | Optional schema for validating/struct... |
+| `port` | string | Yes | Name of the port to call (e.g., "data... |
 
 **Example:**
 
 ```yaml
-- kind: loop_node
+- kind: port_call_node
   metadata:
-    name: my_loop
+    name: my_port_call
   spec:
-    while_condition: # required
-    body: # required
+    port: # required
+    method: # required
+  dependencies: []
+```
+
+### reasoning_agent_node
+
+Specification for reasoning_agent_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `config` | string | null | No | Agent configuration |
+| `continuation_prompts` | object | null | No | Phase-specific prompts |
+| `main_prompt` | string | Yes | Initial reasoning prompt |
+| `output_schema` | object | string | No | Custom output schema for tool_end res... |
+
+**Example:**
+
+```yaml
+- kind: reasoning_agent_node
+  metadata:
+    name: my_reasoning_agent
+  spec:
+    main_prompt: # required
   dependencies: []
 ```
 

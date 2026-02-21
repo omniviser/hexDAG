@@ -78,7 +78,7 @@ class SchemaGenerator:
         1. Check for explicit ``_yaml_schema`` class attribute
         2. Fall back to ``__call__`` signature introspection
 
-        This allows builder-pattern classes like ConditionalNode to define
+        This allows builder-pattern classes to define
         explicit schemas for YAML/MCP usage.
 
         Args

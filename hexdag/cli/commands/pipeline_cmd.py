@@ -193,8 +193,6 @@ def generate_graph(
                 color = "lightyellow"
             elif node_type in ["function", "function_node"]:
                 color = "lightgray"
-            elif node_type in ["conditional", "conditional_node"]:
-                color = "orange"
 
             dot.node(node_id, label=label, fillcolor=color)
 

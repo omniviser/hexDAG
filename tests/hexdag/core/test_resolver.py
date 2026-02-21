@@ -120,8 +120,6 @@ class TestResolve:
             "llm_node",
             "function_node",
             "agent_node",
-            "loop_node",
-            "conditional_node",
             "tool_call_node",
         ]
         for name in legacy_names:
