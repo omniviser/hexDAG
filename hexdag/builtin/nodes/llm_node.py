@@ -124,7 +124,13 @@ class LLMNode(BaseNodeFactory):
             },
             "output_schema": {
                 "type": "object",
-                "description": "Expected output schema for structured output validation",
+                "description": (
+                    "Expected output schema for structured output validation. "
+                    "Field values can be basic types (str, int, float, bool) "
+                    "or sanitized types: currency, flexible_bool, score, "
+                    "upper_str, lower_str, nullable_str, trimmed_str. "
+                    "Custom types can be defined in spec.custom_types."
+                ),
             },
             "system_prompt": {
                 "type": "string",

@@ -20,10 +20,15 @@ VALID_TYPE_NAMES: dict[str, Any] = {
 
 
 def is_valid_type_name(name: str) -> bool:
-    """Check if a type name is valid, including nullable variants (e.g. ``str?``)."""
+    """Check if a type name is valid, including nullable variants and sanitized types."""
     if name in VALID_TYPE_NAMES:
         return True
-    base = name[:-1]
+
+    from hexdag.core.validation.sanitized_types import get_type
+
+    base = name.rstrip("?")
+    if get_type(base) is not None:
+        return True
     return name.endswith("?") and base in VALID_TYPE_NAMES and base != "Any"
 
 
@@ -62,10 +67,14 @@ def _(schema: dict) -> dict[str, type]:
         if isinstance(value, str):
             # String type name - convert to actual type
             if not is_valid_type_name(value):
+                from hexdag.core.validation.sanitized_types import get_available_types
+
                 valid_names = ", ".join(sorted(VALID_TYPE_NAMES.keys()))
+                sanitized_names = ", ".join(sorted(get_available_types()))
+                hint = f" Sanitized types: {sanitized_names}" if sanitized_names else ""
                 raise ValueError(
                     f"Invalid type '{value}' for field '{key}'. "
-                    f"Supported types: {valid_names} (append ? for nullable)"
+                    f"Supported types: {valid_names} (append ? for nullable).{hint}"
                 )
             # Base types → Python type; nullable (?-suffixed) → pass through
             converted[key] = VALID_TYPE_NAMES.get(value, value)
