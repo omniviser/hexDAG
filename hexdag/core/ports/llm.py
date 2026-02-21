@@ -119,8 +119,8 @@ class LLM(Protocol):
                 ...
     """
 
-    # No required methods - adapters must implement at least one protocol
-    pass
+    # No required methods — adapters must implement at least one sub-protocol
+    # (SupportsGeneration, SupportsFunctionCalling, SupportsEmbedding, etc.).
 
     async def aresponse_with_tools(
         self,

@@ -9,7 +9,6 @@ Primary Components (Recommended):
 
 Execution Components (Keep Unchanged):
 - NodeExecutor: Executes individual nodes with validation and timeout
-- WaveExecutor: Executes waves of parallel nodes with concurrency control
 - CheckpointManager: Manages checkpoint save/restore and graph filtering
 
 Deprecated Components (Use Unified Managers Instead):
@@ -35,7 +34,6 @@ from hexdag.core.orchestration.components.node_executor import (
     NodeExecutor,
     NodeTimeoutError,
 )
-from hexdag.core.orchestration.components.wave_executor import WaveExecutor
 
 # Deprecated classes - lazy loaded via __getattr__
 _DEPRECATED_MAPPING: dict[str, tuple[str, str, str]] = {
@@ -93,5 +91,4 @@ __all__ = [
     "NodeExecutor",
     "NodeTimeoutError",
     "OrchestratorError",
-    "WaveExecutor",
 ]

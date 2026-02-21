@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 from hexdag.core.context import ExecutionContext
-from hexdag.core.domain.dag import NodeSpec, ValidationError
+from hexdag.core.domain.dag import NodeSpec, NodeValidationError
 from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
 from hexdag.core.orchestration.components.node_executor import (
     NodeExecutionError,
@@ -227,7 +227,7 @@ class TestNodeExecutor:
         )
 
         # In strict mode, validation error becomes NodeExecutionError
-        with pytest.raises((ValidationError, NodeExecutionError)):
+        with pytest.raises((NodeValidationError, NodeExecutionError)):
             async with ExecutionContext(
                 observer_manager=observer,
                 run_id="test-run",

@@ -10,8 +10,10 @@ import re
 from functools import lru_cache
 from typing import Any
 
+from hexdag.core.exceptions import HexDAGError
 
-class PromptTemplateError(Exception):
+
+class PromptTemplateError(HexDAGError):
     """Base exception for prompt template errors."""
 
 

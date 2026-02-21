@@ -10,7 +10,6 @@ This allows centralized control over infrastructure interactions without
 polluting business logic in nodes and macros.
 """
 
-import time
 from typing import Any
 
 from hexdag.core.context import get_current_node_name, get_observer_manager
@@ -28,6 +27,7 @@ from hexdag.core.ports.llm import (
     SupportsGeneration,
     SupportsUsageTracking,
 )
+from hexdag.core.utils.node_timer import Timer
 
 logger = get_logger(__name__)
 
@@ -93,7 +93,7 @@ class ObservableLLMWrapper:
         #         raise RateLimitError("LLM rate limit exceeded")
 
         # Call underlying LLM
-        start_time = time.perf_counter()
+        llm_timer = Timer()
 
         # Check if the adapter supports generation
         if isinstance(self._llm, SupportsGeneration):
@@ -104,7 +104,7 @@ class ObservableLLMWrapper:
                 "It must implement SupportsGeneration protocol."
             )
 
-        duration_ms = (time.perf_counter() - start_time) * 1000
+        duration_ms = llm_timer.duration_ms
 
         # Extract usage via SupportsUsageTracking protocol
         usage_dict = None
@@ -167,9 +167,9 @@ class ObservableLLMWrapper:
             )
 
         # Call underlying LLM
-        start_time = time.perf_counter()
+        llm_timer = Timer()
         response = await self._llm.aresponse_with_tools(messages, tools, tool_choice, **kwargs)
-        duration_ms = (time.perf_counter() - start_time) * 1000
+        duration_ms = llm_timer.duration_ms
 
         # Extract usage from LLMResponse or via SupportsUsageTracking protocol
         usage_dict = None
@@ -262,10 +262,9 @@ class ObservableToolRouterWrapper:
         #         raise AuthorizationError(f"Tool '{tool_name}' not authorized")
 
         # Call underlying tool
-        start_time = time.perf_counter()
+        tool_timer = Timer()
         try:
             result = await self._tool_router.acall_tool(tool_name, params)
-            duration_ms = (time.perf_counter() - start_time) * 1000
 
             # Emit tool completed event (OBSERVABILITY)
             if observer_mgr := get_observer_manager():
@@ -274,15 +273,14 @@ class ObservableToolRouterWrapper:
                         node_name=node_name,
                         tool_name=tool_name,
                         result=result,
-                        duration_ms=duration_ms,
+                        duration_ms=tool_timer.duration_ms,
                     )
                 )
 
             return result
 
         except Exception as e:
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(f"Tool '{tool_name}' failed in {duration_ms:.2f}ms: {e}")
+            logger.error(f"Tool '{tool_name}' failed in {tool_timer.duration_str}ms: {e}")
 
             # Still emit completed event with error info
             if observer_mgr := get_observer_manager():
@@ -291,7 +289,7 @@ class ObservableToolRouterWrapper:
                         node_name=node_name,
                         tool_name=tool_name,
                         result={"error": str(e)},
-                        duration_ms=duration_ms,
+                        duration_ms=tool_timer.duration_ms,
                     )
                 )
 
@@ -341,10 +339,13 @@ def wrap_tool_router_port(tool_router: Any) -> Any:
 def wrap_ports_with_observability(ports: dict[str, Any]) -> dict[str, Any]:
     """Wrap all ports with event-emitting wrappers.
 
-    This wraps:
-    - LLM ports: Emit LLMPromptSent/LLMResponseReceived events
-    - ToolRouter ports: Emit ToolCalled/ToolCompleted events
-    - (Future: Database, Memory, etc.)
+    Uses protocol-based detection (``hasattr``) instead of hardcoded port
+    names so that any port implementing the expected interface gets wrapped,
+    regardless of its dictionary key.
+
+    Currently wraps:
+    - LLM ports (``aresponse``): Emit LLMPromptSent/LLMResponseReceived events
+    - ToolRouter ports (``acall_tool``): Emit ToolCalled/ToolCompleted events
 
     Parameters
     ----------
@@ -358,9 +359,9 @@ def wrap_ports_with_observability(ports: dict[str, Any]) -> dict[str, Any]:
     """
     wrapped = {}
     for name, port in ports.items():
-        if name == "llm":
+        if hasattr(port, "aresponse"):
             wrapped[name] = wrap_llm_port(port)
-        elif name == "tool_router":
+        elif hasattr(port, "acall_tool"):
             wrapped[name] = wrap_tool_router_port(port)
         else:
             wrapped[name] = port

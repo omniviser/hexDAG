@@ -5,7 +5,6 @@ concurrently where possible using asyncio.gather().
 """
 
 import asyncio
-import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -46,6 +45,7 @@ from hexdag.core.orchestration.models import PortsConfiguration
 from hexdag.core.orchestration.port_wrappers import wrap_ports_with_observability
 from hexdag.core.ports.executor import ExecutionResult, ExecutionTask, ExecutorPort
 from hexdag.core.ports_builder import PortsBuilder
+from hexdag.core.utils.node_timer import Timer
 
 from .events import PipelineCancelled, PipelineCompleted, PipelineStarted
 
@@ -503,7 +503,7 @@ class Orchestrator:
 
         node_results: dict[str, Any] = {}
         waves = graph.waves()
-        pipeline_start_time = time.time()
+        pipeline_timer = Timer()
 
         observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
 
@@ -581,7 +581,7 @@ class Orchestrator:
                 if pipeline_error is not None:
                     pipeline_status = PipelineStatus.FAILED
                 # Fire appropriate completion/cancellation event
-                duration_ms = (time.time() - pipeline_start_time) * 1000
+                duration_ms = pipeline_timer.duration_ms
 
                 if cancelled:
                     pipeline_cancelled = PipelineCancelled(
@@ -681,7 +681,7 @@ class Orchestrator:
 
                 while wave_idx < len(waves):
                     wave = waves[wave_idx]
-                    wave_start_time = time.time()
+                    wave_timer = Timer()
 
                     # Fire wave started event
                     wave_event = WaveStarted(wave_index=wave_idx + 1, nodes=wave)
@@ -718,7 +718,7 @@ class Orchestrator:
                     # Fire wave completed event
                     wave_completed = WaveCompleted(
                         wave_index=wave_idx + 1,
-                        duration_ms=(time.time() - wave_start_time) * 1000,
+                        duration_ms=wave_timer.duration_ms,
                     )
                     await self._notify_observer(get_observer_manager(), wave_completed)
 
@@ -791,7 +791,7 @@ class Orchestrator:
         """
         executed_nodes: set[str] = set()
         iteration = 0
-        start_time = time.time()
+        dynamic_timer = Timer()
 
         logger.info(f"Starting dynamic execution (max_iterations={max_iterations})")
 
@@ -799,7 +799,7 @@ class Orchestrator:
             iteration += 1
 
             # Check timeout
-            if timeout and (time.time() - start_time) > timeout:
+            if timeout and dynamic_timer.duration_ms > timeout * 1000:
                 logger.warning("Dynamic execution timeout reached")
                 return True  # Cancelled
 
