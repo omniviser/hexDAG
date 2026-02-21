@@ -928,7 +928,7 @@ Main configuration file. Auto-discovered in this order:
 modules = [
     "hexdag.core.ports",
     "hexdag.builtin.nodes",
-    "hexdag.tools.builtin_tools",
+    "hexdag.core.domain.agent_tools",
 ]
 
 # Plugins

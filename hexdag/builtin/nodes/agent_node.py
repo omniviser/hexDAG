@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
-from hexdag.builtin.adapters.unified_tool_router import UnifiedToolRouter
 from hexdag.core.context import get_port, get_ports
-from hexdag.core.domain.agent_tools import AgentToolRouter
+from hexdag.core.domain.agent_tools import CHANGE_PHASE, TOOL_END, change_phase, tool_end
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt import PromptInput
@@ -84,6 +83,7 @@ class AgentConfig:
 
     max_steps: int = 20
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
+    tools: dict[str, str] | None = None
 
 
 class Agent:
@@ -95,10 +95,14 @@ class Agent:
         Maximum number of reasoning steps (default: 20)
     tool_call_style : ToolCallFormat
         Format for tool calls - MIXED, FUNCTION_CALL, or JSON (default: MIXED)
+    tools : dict[str, str] | None
+        Per-agent tools mapping tool_name to module path string.
+        Resolved at execution time via ToolRouter.
     """
 
     max_steps: int = 20
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
+    tools: dict[str, str] | None = None
 
 
 class ReActAgentNode(BaseNodeFactory):
@@ -500,7 +504,7 @@ carried_data={'key': 'value'})"""
             Updated agent state after step execution
         """
         event_manager = ports.get("event_manager")
-        base_router = ports.get("tool_router", UnifiedToolRouter())
+        base_router = ports.get("tool_router")
 
         # Create phase change callback that mutates state
         def _handle_phase_change(result: dict[str, Any]) -> None:
@@ -522,19 +526,24 @@ carried_data={'key': 'value'})"""
                 if "carried_data" in context and isinstance(context["carried_data"], dict):
                     state.input_data.update(context["carried_data"])
 
-        # Register agent lifecycle tools alongside user tools
-        agent_tool_router = AgentToolRouter(on_phase_change=_handle_phase_change)
-        tool_router = UnifiedToolRouter(
-            routers={
-                "agent": agent_tool_router,
-                **(base_router.routers if isinstance(base_router, UnifiedToolRouter) else {}),
+        # Wrap change_phase with callback
+        def _change_phase_with_callback(**kw: Any) -> dict[str, Any]:
+            result = change_phase(**kw)
+            _handle_phase_change(result)
+            return result
+
+        # Build tool router: lifecycle tools + per-agent tools + shared pipeline tools
+        tool_router = ToolRouter(
+            tools={
+                TOOL_END: tool_end,
+                CHANGE_PHASE: _change_phase_with_callback,
             }
         )
-        # For unprefixed tool calls, try user routers first, agent tools as fallback
-        if isinstance(base_router, UnifiedToolRouter) and base_router.default_router:
-            tool_router.default_router = base_router.default_router
-        else:
-            tool_router.default_router = agent_tool_router
+        if config.tools:
+            agent_tools_router = ToolRouter(tools=config.tools)
+            tool_router.add_tools_from(agent_tools_router)
+        if base_router and isinstance(base_router, ToolRouter):
+            tool_router.add_tools_from(base_router)
 
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"
@@ -590,8 +599,8 @@ carried_data={'key': 'value'})"""
     ) -> None:
         """Process tool calls from LLM response.
 
-        Phase changes are handled automatically by the ``AgentToolRouter``
-        callback registered in ``_execute_single_step``.
+        Phase changes are handled automatically by the lifecycle callback
+        registered in ``_execute_single_step``.
         """
         if not tool_router:
             return
@@ -614,9 +623,8 @@ carried_data={'key': 'value'})"""
                     params_preview=str(tool_call.params)[:100],
                 )
 
-                # Route through unified interface — agent lifecycle tools
-                # (tool_end, change_phase) are handled by AgentToolRouter,
-                # user tools by their respective routers.
+                # Route through single ToolRouter — lifecycle tools
+                # (tool_end, change_phase) and user tools all in one router.
                 result = await tool_router.acall_tool(tool_call.name, tool_call.params)
 
                 state.tool_results.append(f"{tool_call.name}: {result}")

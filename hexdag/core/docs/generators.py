@@ -331,8 +331,9 @@ class GuideGenerator:
                 for param in tool.parameters:
                     opt = "" if param.required else ", optional"
                     default = f" Default: `{param.default}`" if param.default else ""
+                    desc_part = f" {param.description}" if param.description else ""
                     lines.append(
-                        f"- `{param.name}` (`{param.type_hint}`{opt}): {param.description}{default}"
+                        f"- `{param.name}` (`{param.type_hint}`{opt}):{desc_part}{default}"
                     )
                 lines.append("")
 
@@ -354,7 +355,7 @@ class GuideGenerator:
             '    initial_prompt_template: "Research: {{topic}}"',
             "    max_steps: 5",
             "    tools:",
-            "      - hexdag.builtin.tools.builtin_tools.tool_end",
+            "      - hexdag.core.domain.agent_tools.tool_end",
             "      - mycompany.tools.search",
             "  dependencies: []",
             "```",

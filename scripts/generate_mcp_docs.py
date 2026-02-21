@@ -152,13 +152,13 @@ def collect_tools() -> list[ToolDoc]:
     tools = []
 
     try:
-        from hexdag.builtin.tools import builtin_tools
+        from hexdag.core.domain import agent_tools
 
-        for name in dir(builtin_tools):
+        for name in dir(agent_tools):
             if name.startswith("_"):
                 continue
 
-            obj = getattr(builtin_tools, name, None)
+            obj = getattr(agent_tools, name, None)
             if obj is None:
                 continue
 

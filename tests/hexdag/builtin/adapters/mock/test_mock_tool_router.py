@@ -138,7 +138,7 @@ class TestMockToolRouter:
 
     def test_add_tool_dynamically(self, router):
         """Test adding new tools dynamically."""
-        router.add_tool(
+        router.add_mock_tool(
             "dynamic_tool",
             "A dynamically added tool",
             {"input": {"type": "string", "description": "Input parameter"}},

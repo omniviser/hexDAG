@@ -438,7 +438,7 @@ def get_default_config() -> HexDAGConfig:
             "hexdag.builtin.nodes",
             "hexdag.builtin.adapters.mock",
             "hexdag.builtin.adapters.local",
-            "hexdag.builtin.tools.builtin_tools",
+            "hexdag.core.domain.agent_tools",
         ],
         settings={
             "log_level": "INFO",

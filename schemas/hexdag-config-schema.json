@@ -78,7 +78,7 @@
             "default": [
                 "hexdag.core.ports",
                 "hexdag.builtin.nodes",
-                "hexdag.builtin.tools.builtin_tools"
+                "hexdag.core.domain.agent_tools"
             ],
             "items": {
                 "type": "string"

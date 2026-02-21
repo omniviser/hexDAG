@@ -349,7 +349,7 @@ def list_tools() -> list[dict[str, Any]]:
     """List all available tools.
 
     Discovers tools dynamically from three levels:
-    1. hexdag.builtin.tools.builtin_tools (builtin tools)
+    1. hexdag.core.domain.agent_tools (builtin tools)
     2. hexdag_plugins.*/tools (plugin tools)
     3. User-configured modules from hexdag.toml/pyproject.toml
 
@@ -384,7 +384,7 @@ def list_tools() -> list[dict[str, Any]]:
                 tools.append(tool)
 
     # 1. Discover builtin tools
-    add_tools(discover_tools_in_module("hexdag.builtin.tools.builtin_tools"))
+    add_tools(discover_tools_in_module("hexdag.core.domain.agent_tools"))
 
     # 2. Discover plugin tools
     for plugin_name in discover_plugins():
@@ -564,9 +564,9 @@ def _get_adapter_schema(name: str) -> dict[str, Any]:
 def _get_tool_schema(name: str) -> dict[str, Any]:
     """Get schema for a tool."""
     try:
-        from hexdag.builtin.tools import builtin_tools
+        from hexdag.core.domain import agent_tools
 
-        fn = getattr(builtin_tools, name, None)
+        fn = getattr(agent_tools, name, None)
         if fn is None:
             return {"error": f"Tool '{name}' not found"}
 

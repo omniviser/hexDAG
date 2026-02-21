@@ -410,7 +410,7 @@ class TestGetDefaultConfig:
         assert "hexdag.builtin.nodes" in config.modules
         assert "hexdag.builtin.adapters.mock" in config.modules
         assert "hexdag.builtin.adapters.local" in config.modules
-        assert "hexdag.builtin.tools.builtin_tools" in config.modules
+        assert "hexdag.core.domain.agent_tools" in config.modules
 
     def test_default_config_settings(self) -> None:
         """Test default config has expected settings."""

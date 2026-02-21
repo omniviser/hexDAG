@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from .unified_tool_router import UnifiedToolRouter  # noqa: F401
+from typing import Any
 
 # Backward compatibility aliases: old name -> canonical name
 _COMPAT_ALIASES: dict[str, str] = {
-    "FunctionBasedToolRouter": "UnifiedToolRouter",
+    "FunctionToolRouter": "ToolRouter",
 }
 
-__all__: tuple[str, ...] = ("UnifiedToolRouter",)
+__all__: tuple[str, ...] = ()
 
 
 def __getattr__(name: str) -> Any:
@@ -33,6 +30,20 @@ def __getattr__(name: str) -> Any:
     AttributeError
         If the requested name is not found in any adapter module.
     """
+    # ToolRouter lives in core/ports, not in this package
+    if name == "ToolRouter":
+        from hexdag.core.ports.tool_router import ToolRouter
+
+        globals()["ToolRouter"] = ToolRouter
+        return ToolRouter
+
+    # Backward compat: UnifiedToolRouter → ToolRouter
+    if name in ("UnifiedToolRouter", "FunctionBasedToolRouter"):
+        from hexdag.core.ports.tool_router import ToolRouter
+
+        globals()[name] = ToolRouter
+        return ToolRouter
+
     # Resolve backward-compat aliases
     canonical = _COMPAT_ALIASES.get(name, name)
 

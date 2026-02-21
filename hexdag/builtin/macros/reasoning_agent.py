@@ -27,9 +27,8 @@ from hexdag.builtin.nodes.function_node import FunctionNode
 from hexdag.builtin.nodes.llm_node import LLMNode
 from hexdag.builtin.nodes.tool_utils import (
     ToolCallFormat,
-    ToolDefinition,
     ToolParser,
-    ToolSchemaConverter,
+    tool_schema_to_openai,
 )
 from hexdag.builtin.prompts.tool_prompts import get_tool_prompt_for_format
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
@@ -378,26 +377,18 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
 
     def _build_tool_schemas_for_native(self, allowed_tools: list[str]) -> list[dict[str, Any]]:
         """Build OpenAI-format tool schemas for native calling."""
+        from hexdag.core.ports.tool_router import tool_schema_from_callable
+
         schemas = []
         for tool_name in allowed_tools:
             try:
-                # Resolve tool function to get its docstring
                 tool_fn = resolve_function(tool_name)
-                description = tool_fn.__doc__ or f"Tool {tool_name}"
-                # Take first line of docstring
-                description = description.split("\n")[0].strip()
-
-                # Build ToolDefinition
-                tool_def = ToolDefinition(
+                raw_schema = tool_schema_from_callable(tool_fn)
+                schema = tool_schema_to_openai(
                     name=tool_name,
-                    simplified_description=description,
-                    detailed_description=description,
-                    parameters=[],
-                    examples=[],
+                    description=raw_schema.get("description", f"Tool {tool_name}"),
+                    parameters=raw_schema.get("parameters", []),
                 )
-
-                # Convert to OpenAI format
-                schema = ToolSchemaConverter.to_openai_schema(tool_def)
                 schemas.append(schema)
             except Exception as e:
                 logger.warning(f"Could not build schema for tool {tool_name}: {e}")

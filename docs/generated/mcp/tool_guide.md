@@ -28,19 +28,19 @@ def calculate(expression: str) -> str:
 Change the agent's reasoning phase with typed context.
 
 **Parameters:**
-- `phase` (`str`): The new phase name to transition to
-- `previous_phase` (`str | None`, optional): The phase being transitioned from (auto-filled if not provided) Default: `None`
-- `reason` (`str | None`, optional): Explanation for why the phase change is occurring Default: `None`
-- `carried_data` (`dict[str, typing.Any] | None`, optional): Data to carry forward from the previous phase Default: `None`
-- `target_output` (`str | None`, optional): Expected output format or goal for the new phase Default: `None`
-- `iteration` (`int | None`, optional): Current iteration number if in a loop or retry scenario Default: `None`
-- `metadata` (`dict[str, typing.Any] | None`, optional): Additional metadata about the phase transition Default: `None`
+- `phase` (`str`):
+- `previous_phase` (`str | None`, optional): Default: `None`
+- `reason` (`str | None`, optional): Default: `None`
+- `carried_data` (`dict[str, typing.Any] | None`, optional): Default: `None`
+- `target_output` (`str | None`, optional): Default: `None`
+- `iteration` (`int | None`, optional): Default: `None`
+- `metadata` (`dict[str, typing.Any] | None`, optional): Default: `None`
 
 **Returns:** `dict[str, Any]`
 
 ### tool_end
 
-End tool execution with structured output.
+End agent execution with structured output.
 
 **Returns:** `dict[str, Any]`
 
@@ -114,7 +114,7 @@ List all tables in the database.
     initial_prompt_template: "Research: {{topic}}"
     max_steps: 5
     tools:
-      - hexdag.builtin.tools.builtin_tools.tool_end
+      - hexdag.core.domain.agent_tools.tool_end
       - mycompany.tools.search
   dependencies: []
 ```
@@ -133,7 +133,7 @@ INVOKE_TOOL: tool_name(param1="value", param2=123)
 | Tool | Description | Return Type |
 |------|-------------|-------------|
 | `change_phase` | Change the agent's reasoning phase with ... | `dict[str, Any]` |
-| `tool_end` | End tool execution with structured outpu... | `dict[str, Any]` |
+| `tool_end` | End agent execution with structured outp... | `dict[str, Any]` |
 | `database_query_sync` | Execute a database query synchronously. | `list[dict[str, Any]]` |
 
 ### Asynchronous Tools
