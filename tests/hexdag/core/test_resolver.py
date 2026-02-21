@@ -183,9 +183,9 @@ class TestResolveFunction:
 
     def test_resolve_builtin_tool(self) -> None:
         """Test resolving a builtin tool function."""
-        from hexdag.builtin.tools.builtin_tools import tool_end
+        from hexdag.core.domain.agent_tools import tool_end
 
-        result = resolve_function("hexdag.builtin.tools.builtin_tools.tool_end")
+        result = resolve_function("hexdag.core.domain.agent_tools.tool_end")
         assert result is tool_end
 
     def test_resolve_function_without_dot_raises_error(self) -> None:

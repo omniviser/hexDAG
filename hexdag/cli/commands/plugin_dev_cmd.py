@@ -466,9 +466,128 @@ def install_plugin(
         raise typer.Exit(1)
 
 
+def _get_scripts_dir() -> Path:
+    """Get the scripts directory path (relative to project root)."""
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "scripts").exists():
+            return current / "scripts"
+        current = current.parent
+    return Path.cwd() / "scripts"
+
+
+# Convention check scripts and their default scope arguments
+_CONVENTION_CHECKS: list[dict[str, str]] = [
+    {
+        "script": "check_exception_hierarchy.py",
+        "name": "Exception hierarchy",
+        "path_arg": "--path",
+    },
+    {
+        "script": "check_port_protocols.py",
+        "name": "Port protocols",
+        "path_arg": "--path",
+    },
+    {
+        "script": "check_timer_usage.py",
+        "name": "Timer usage",
+        "path_arg": "--path",
+    },
+    {
+        "script": "check_init_params.py",
+        "name": "Init params",
+        "path_arg": "--path",
+    },
+]
+
+
+def _run_convention_checks(
+    target_path: str,
+    label: str,
+    verbose: bool = False,
+) -> bool:
+    """Run all convention check scripts against a target path.
+
+    Args
+    ----
+        target_path: Path to check (e.g., 'hexdag/' or 'hexdag_plugins/azure/')
+        label: Display label for the target
+        verbose: Show detailed output
+
+    Returns
+    -------
+        True if all checks passed
+    """
+    scripts_dir = _get_scripts_dir()
+    all_passed = True
+
+    for check in _CONVENTION_CHECKS:
+        script_path = scripts_dir / check["script"]
+        if not script_path.exists():
+            if verbose:
+                console.print(f"  [yellow]Script not found: {script_path}[/yellow]")
+            continue
+
+        cmd = [sys.executable, str(script_path), check["path_arg"], target_path]
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
+
+        if result.returncode == 0:
+            if verbose:
+                console.print(f"  [green]✓[/green] {check['name']}: {result.stdout.strip()}")
+        else:
+            all_passed = False
+            console.print(f"  [red]✗[/red] {check['name']} failed for {label}")
+            if result.stdout:
+                console.print(result.stdout)
+
+    return all_passed
+
+
+@app.command("conventions")
+def check_conventions(
+    name: Annotated[
+        str | None, typer.Argument(help="Plugin name (omit to check core only)")
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Verbose output")] = False,
+) -> None:
+    """Run convention checks (exception hierarchy, protocols, timer, init params).
+
+    Without arguments, checks hexdag/ core only.
+    With a plugin name, checks both core and the plugin.
+    """
+    console.print("[bold]Running convention checks...[/bold]\n")
+
+    # Always check core
+    console.print("[cyan]Checking hexdag/ core...[/cyan]")
+    core_ok = _run_convention_checks("hexdag", "core", verbose=verbose)
+
+    plugin_ok = True
+    if name:
+        plugin_dir = get_plugin_dir()
+        plugin_path = plugin_dir / name
+
+        if not plugin_path.exists():
+            console.print(f"[red]Plugin '{name}' not found[/red]")
+            raise typer.Exit(1)
+
+        console.print(f"\n[cyan]Checking plugin {name}...[/cyan]")
+        plugin_ok = _run_convention_checks(str(plugin_path), name, verbose=verbose)
+
+    if core_ok and plugin_ok:
+        console.print("\n[green]✓ All convention checks passed![/green]")
+    else:
+        console.print("\n[red]✗ Some convention checks failed[/red]")
+        raise typer.Exit(1)
+
+
 @app.command("check-all")
-def check_all_plugins() -> None:
-    """Run lint and test for all plugins."""
+def check_all_plugins(
+    conventions: Annotated[
+        bool, typer.Option("--conventions/--no-conventions", help="Run convention checks")
+    ] = True,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Verbose output")] = False,
+) -> None:
+    """Run lint, test, and convention checks for all plugins."""
     plugin_dir = get_plugin_dir()
 
     if not plugin_dir.exists():
@@ -485,9 +604,16 @@ def check_all_plugins() -> None:
         console.print("[yellow]No plugins found[/yellow]")
         return
 
+    # Run core convention checks first
+    core_conventions_ok = True
+    if conventions:
+        console.print("[bold]Checking hexdag/ core conventions...[/bold]")
+        core_conventions_ok = _run_convention_checks("hexdag", "core", verbose=verbose)
+        console.print()
+
     console.print(f"[bold]Checking {len(plugins)} plugins...[/bold]\n")
 
-    results = []
+    results: list[tuple[str, bool, bool, bool]] = []
     for plugin_name in plugins:
         console.print(f"[cyan]Checking {plugin_name}...[/cyan]")
 
@@ -505,7 +631,13 @@ def check_all_plugins() -> None:
         except typer.Exit:
             test_success = False
 
-        results.append((plugin_name, lint_success, test_success))
+        # Conventions
+        conv_success = True
+        if conventions:
+            plugin_path = plugin_dir / plugin_name
+            conv_success = _run_convention_checks(str(plugin_path), plugin_name, verbose=verbose)
+
+        results.append((plugin_name, lint_success, test_success, conv_success))
         console.print()  # Add spacing
 
     # Summary
@@ -514,18 +646,31 @@ def check_all_plugins() -> None:
     table.add_column("Plugin", style="cyan")
     table.add_column("Lint", style="green")
     table.add_column("Test", style="green")
+    if conventions:
+        table.add_column("Conventions", style="green")
 
-    for plugin_name, lint_ok, test_ok in results:
+    for plugin_name, lint_ok, test_ok, conv_ok in results:
         lint_status = "[green]✓[/green]" if lint_ok else "[red]✗[/red]"
         test_status = "[green]✓[/green]" if test_ok else "[red]✗[/red]"
-        table.add_row(plugin_name, lint_status, test_status)
+        if conventions:
+            conv_status = "[green]✓[/green]" if conv_ok else "[red]✗[/red]"
+            table.add_row(plugin_name, lint_status, test_status, conv_status)
+        else:
+            table.add_row(plugin_name, lint_status, test_status)
+
+    if conventions and not core_conventions_ok:
+        table.add_row("[bold]hexdag/ core[/bold]", "-", "-", "[red]✗[/red]")
 
     console.print(table)
 
-    if all(lint_ok and test_ok for _, lint_ok, test_ok in results):
+    all_ok = all(lint_ok and test_ok and conv_ok for _, lint_ok, test_ok, conv_ok in results)
+    if conventions:
+        all_ok = all_ok and core_conventions_ok
+
+    if all_ok:
         console.print("\n[green]✓ All plugins passed checks![/green]")
     else:
-        console.print("\n[red]✗ Some plugins failed checks[/red]")
+        console.print("\n[red]✗ Some checks failed[/red]")
         raise typer.Exit(1)
 
 

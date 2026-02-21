@@ -18,16 +18,25 @@ class MockToolRouter(ToolRouter):
     raise_on_unknown_tool: bool
     tools: dict[str, dict[str, Any]]
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        available_tools: list[str] | None = None,
+        delay_seconds: float = 0.0,
+        raise_on_unknown_tool: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """Initialize mock tool router.
 
         Args
         ----
-            **kwargs: Configuration options
+            available_tools: List of tool names to make available (default: [])
+            delay_seconds: Delay before returning results (default: 0.0)
+            raise_on_unknown_tool: Raise error for unknown tools (default: False)
+            **kwargs: Additional configuration options
         """
-        self.available_tools = kwargs.get("available_tools", [])
-        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
-        self.raise_on_unknown_tool = kwargs.get("raise_on_unknown_tool", False)
+        self.available_tools = available_tools or []
+        self.delay_seconds = delay_seconds
+        self.raise_on_unknown_tool = raise_on_unknown_tool
 
         # Default mock tools — parameters use list format matching ToolRouter contract
         self.tools: dict[str, dict[str, Any]] = {
@@ -231,7 +240,7 @@ class MockToolRouter(ToolRouter):
         """Get the history of tool calls for testing."""
         return self.call_history.copy()
 
-    def add_tool(self, name: str, description: str, parameters: dict[str, Any]) -> None:
+    def add_mock_tool(self, name: str, description: str, parameters: dict[str, Any]) -> None:
         """Add a new mock tool for testing.
 
         Args

@@ -223,6 +223,8 @@ _ADAPTER_ALIASES: dict[str, str] = {
     "InMemoryMemory": "hexdag.builtin.adapters.memory.InMemoryMemory",
     "MockDatabaseAdapter": "hexdag.builtin.adapters.mock.MockDatabaseAdapter",
     "MockToolRouter": "hexdag.builtin.adapters.mock.MockToolRouter",
+    "ToolRouter": "hexdag.core.ports.tool_router.ToolRouter",
+    "UnifiedToolRouter": "hexdag.core.ports.tool_router.ToolRouter",
 }
 
 
@@ -285,10 +287,12 @@ def _create_default_ports() -> dict[str, Any]:
     """Create default mock ports for execution."""
     from hexdag.builtin.adapters.memory import InMemoryMemory
     from hexdag.builtin.adapters.mock import MockLLM
+    from hexdag.core.ports.tool_router import ToolRouter
 
     return {
         "llm": MockLLM(),
         "memory": InMemoryMemory(),
+        "tool_router": ToolRouter(),
     }
 
 

@@ -26,17 +26,22 @@ class MockEmbedding:
     last_images: list[ImageInput]
     should_raise: bool
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        dimensions: int = 1536,
+        delay_seconds: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
         """Initialize with configuration.
 
         Args
         ----
-            **kwargs: Configuration options
-                - dimensions: Embedding vector dimensions (default: 1536)
-                - delay_seconds: Delay before returning embeddings (default: 0.0)
+            dimensions: Embedding vector dimensions (default: 1536)
+            delay_seconds: Delay before returning embeddings (default: 0.0)
+            **kwargs: Additional configuration options
         """
-        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
-        self.dimensions = kwargs.get("dimensions", 1536)
+        self.delay_seconds = delay_seconds
+        self.dimensions = dimensions
 
         # Non-config state
         self.call_count = 0

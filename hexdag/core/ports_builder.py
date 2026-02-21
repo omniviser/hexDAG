@@ -21,21 +21,11 @@ if TYPE_CHECKING:
         ToolRouter,
     )
 
-    # Type alias for all valid port types
-    PortType = (
-        LLM
-        | APICall
-        | DatabasePort
-        | Memory
-        | ObserverManagerPort
-        | ToolRouter
-        | Any  # Allow Any for backward compatibility with custom ports
-    )
-else:
-    # At runtime, just use Any (backward compatible)
-    PortType = Any
-
 from hexdag.core.orchestration.models import PortConfig, PortsConfiguration
+
+# PortType includes Any for backward compat with custom ports,
+# so the entire union collapses to Any for both mypy and runtime.
+type PortType = Any
 
 
 class PortsBuilder:

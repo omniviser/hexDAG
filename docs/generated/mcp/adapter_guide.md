@@ -103,9 +103,7 @@ Secrets declared with `secret()` are resolved in this order:
 | Adapter | Description |
 |---------|-------------|
 | `MockToolRouter` | Mock implementation of ToolRouter for testing. |
-| `ToolRouter` | Protocol for routing tool calls. |
-| `ToolRouter` | Protocol for routing tool calls. |
-| `UnifiedToolRouter` | ToolRouter adapter that supports multiple tool sources with ... |
+| `ToolRouter` | Concrete tool router that wraps plain Python functions. |
 
 ## Using Adapters in YAML
 

@@ -108,6 +108,33 @@ repos:
 
         pass_filenames: false
 
+  # Plugin convention checks (only run on hexdag_plugins/ files)
+  - repo: local
+    hooks:
+      - id: check-exception-hierarchy-plugins
+        name: Check plugin exception hierarchy
+        entry: uv run python scripts/check_exception_hierarchy.py --path hexdag_plugins/
+        language: system
+        files: ^hexdag_plugins/.*\.py$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-timer-usage-plugins
+        name: Check plugin Timer usage
+        entry: uv run python scripts/check_timer_usage.py --path hexdag_plugins/
+        language: system
+        files: ^hexdag_plugins/.*\.py$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-init-params-plugins
+        name: Check plugin adapter __init__ params
+        entry: uv run python scripts/check_init_params.py --path hexdag_plugins/
+        language: system
+        files: ^hexdag_plugins/.*\.py$
+        stages: [pre-commit]
+        pass_filenames: false
+
   # ============================================================================
   # Main code hooks (exclude plugins)
   # ============================================================================
@@ -192,6 +219,38 @@ repos:
         entry: uv run python scripts/check_notebooks.py
         language: system
         files: ^notebooks/.*\.ipynb$
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-exception-hierarchy
+        name: Check exception classes inherit from HexDAGError
+        entry: uv run python scripts/check_exception_hierarchy.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-port-protocols
+        name: Check Protocol methods use ... not pass
+        entry: uv run python scripts/check_port_protocols.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-timer-usage
+        name: Check Timer usage instead of inline time calls
+        entry: uv run python scripts/check_timer_usage.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-init-params
+        name: Check adapter __init__ has explicit typed params
+        entry: uv run python scripts/check_init_params.py
+        language: system
+        types: [python]
         stages: [pre-commit]
         pass_filenames: false
 

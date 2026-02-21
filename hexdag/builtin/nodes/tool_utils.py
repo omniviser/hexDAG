@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from hexdag.core.validation.secure_json import SafeJSON
 
 
@@ -20,56 +18,6 @@ class ToolCallFormat(StrEnum):
     FUNCTION_CALL = "function_call"  # INVOKE_TOOL: tool_name(param1='value1')
     JSON = "json"  # INVOKE_TOOL: {"tool": "tool_name", "params": {...}}
     MIXED = "mixed"  # Support both formats
-
-
-class ToolParameter(BaseModel):
-    """Definition of a tool parameter."""
-
-    name: str = Field(..., description="Parameter name")
-    description: str = Field(..., description="Parameter description")
-    param_type: str = Field(default="str", description="Parameter type")
-    required: bool = Field(default=True, description="Whether parameter is required")
-    default: Any = Field(default=None, description="Default value if not required")
-
-
-class ToolDefinition(BaseModel):
-    """Complete tool definition with descriptions and parameters."""
-
-    name: str = Field(..., description="Tool name")
-    simplified_description: str = Field(..., description="Brief tool description")
-    detailed_description: str = Field(..., description="Detailed tool description")
-    parameters: list[ToolParameter] = Field(default_factory=list, description="Tool parameters")
-    examples: list[str] = Field(default_factory=list, description="Usage examples")
-
-    def to_simplified_string(self) -> str:
-        """Convert to simplified string format.
-
-        Returns
-        -------
-        str
-            Simplified string representation of the tool
-        """
-        return f"{self.name}: {self.simplified_description}"
-
-    def to_detailed_string(self) -> str:
-        """Convert to detailed string format.
-
-        Returns
-        -------
-        str
-            Detailed string representation of the tool with parameters and examples
-        """
-        lines = [f"Tool: {self.name}", f"Description: {self.detailed_description}", "Parameters:"]
-
-        for param in self.parameters:
-            req_str = "required" if param.required else "optional"
-            lines.append(f"  - {param.name} ({param.param_type}, {req_str}): {param.description}")
-
-        if self.examples:
-            lines.append("Examples:")
-            lines.extend(f"  {example}" for example in self.examples)
-
-        return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,192 +147,64 @@ class ToolParser:
         return params
 
 
-class ToolSchemaConverter:
-    """Convert ToolDefinition to various LLM provider formats."""
+def tool_schema_to_openai(
+    name: str,
+    description: str,
+    parameters: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Convert a tool schema (plain dict) to OpenAI function calling format.
 
-    @staticmethod
-    def to_openai_schema(tool_def: ToolDefinition) -> dict[str, Any]:
-        """Convert ToolDefinition to OpenAI function calling format.
+    Works directly with the schema dicts from ``tool_schema_from_callable()``,
+    avoiding the need for wrapper classes.
 
-        Args
-        ----
-            tool_def: Tool definition to convert
+    Parameters
+    ----------
+    name : str
+        Tool name
+    description : str
+        Tool description
+    parameters : list[dict[str, Any]]
+        Parameter list from ``tool_schema_from_callable()``
 
-        Returns
-        -------
-        dict[str, Any]
-            OpenAI-compatible tool schema
-        """
-        properties = {}
-        required = []
+    Returns
+    -------
+    dict[str, Any]
+        OpenAI-compatible tool schema
+    """
+    type_mapping = {
+        "str": "string",
+        "int": "integer",
+        "float": "number",
+        "bool": "boolean",
+        "list": "array",
+        "dict": "object",
+    }
 
-        for param in tool_def.parameters:
-            # Map Python types to JSON Schema types
-            json_type = ToolSchemaConverter._python_type_to_json_type(param.param_type)
+    properties: dict[str, Any] = {}
+    required: list[str] = []
 
-            properties[param.name] = {"type": json_type, "description": param.description}
-
-            if param.required:
-                required.append(param.name)
-
-        return {
-            "type": "function",
-            "function": {
-                "name": tool_def.name,
-                "description": tool_def.detailed_description,
-                "parameters": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                },
-            },
+    for param in parameters:
+        param_name = param.get("name", "")
+        if param_name.startswith("**"):
+            continue
+        base_type = param.get("type", "str").split("[")[0].strip()
+        json_type = type_mapping.get(base_type, "string")
+        properties[param_name] = {
+            "type": json_type,
+            "description": param.get("description", ""),
         }
+        if param.get("required", False):
+            required.append(param_name)
 
-    @staticmethod
-    def to_anthropic_schema(tool_def: ToolDefinition) -> dict[str, Any]:
-        """Convert ToolDefinition to Anthropic tool use format.
-
-        Args
-        ----
-            tool_def: Tool definition to convert
-
-        Returns
-        -------
-        dict[str, Any]
-            Anthropic-compatible tool schema
-        """
-        properties = {}
-        required = []
-
-        for param in tool_def.parameters:
-            json_type = ToolSchemaConverter._python_type_to_json_type(param.param_type)
-
-            properties[param.name] = {"type": json_type, "description": param.description}
-
-            if param.required:
-                required.append(param.name)
-
-        return {
-            "name": tool_def.name,
-            "description": tool_def.detailed_description,
-            "input_schema": {
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
                 "type": "object",
                 "properties": properties,
                 "required": required,
             },
-        }
-
-    @staticmethod
-    def _python_type_to_json_type(python_type: str) -> str:
-        """Map Python type strings to JSON Schema types.
-
-        Args
-        ----
-            python_type: Python type as string (e.g., "str", "int")
-
-        Returns
-        -------
-        str
-            JSON Schema type
-        """
-        type_mapping = {
-            "str": "string",
-            "int": "integer",
-            "float": "number",
-            "bool": "boolean",
-            "list": "array",
-            "dict": "object",
-        }
-
-        # Handle generic types like list[str], dict[str, int]
-        base_type = python_type.split("[")[0].strip()
-
-        return type_mapping.get(base_type, "string")
-
-
-class ToolDescriptionManager:
-    """Manage tool descriptions with simplified/detailed views."""
-
-    def __init__(self) -> None:
-        """Initialize tool description manager."""
-        self.tools: dict[str, ToolDefinition] = {}
-
-    def register_tool(self, tool_def: ToolDefinition) -> None:
-        """Register a tool definition.
-
-        Parameters
-        ----------
-        tool_def : ToolDefinition
-            The tool definition to register
-        """
-        self.tools[tool_def.name] = tool_def
-
-    def register_tools(self, tool_defs: list[ToolDefinition]) -> None:
-        """Register multiple tool definitions.
-
-        Parameters
-        ----------
-        tool_defs : list[ToolDefinition]
-            List of tool definitions to register
-        """
-        for tool_def in tool_defs:
-            self.register_tool(tool_def)
-
-    def get_simplified_descriptions(self) -> str:
-        """Get simplified tool descriptions for prompt.
-
-        Returns
-        -------
-        str
-            Formatted string with simplified tool descriptions
-        """
-        lines = ["Available tools:"]
-
-        lines.extend(f"- {tool.to_simplified_string()}" for tool in self.tools.values())
-
-        return "\n".join(lines)
-
-    def get_detailed_descriptions(self) -> str:
-        """Get detailed tool descriptions for prompt.
-
-        Returns
-        -------
-        str
-            Formatted string with detailed tool descriptions
-        """
-        lines = ["Available tools (detailed):"]
-
-        for tool in self.tools.values():
-            lines.append(tool.to_detailed_string())
-            lines.append("")  # Add spacing between tools
-
-        return "\n".join(lines)
-
-    def get_detailed_description(self, tool_name: str) -> str:
-        """Get detailed description for a specific tool.
-
-        Returns
-        -------
-        str
-            Detailed description of the specified tool
-        """
-        tool = self.tools.get(tool_name)
-        if not tool:
-            return f"No description available for tool: {tool_name}"
-
-        return tool.to_detailed_string()
-
-    def create_tool_check_function(self) -> Any:
-        """Create a function that returns detailed tool descriptions.
-
-        Returns
-        -------
-        Callable[[str], str]
-            Async function that takes a tool name and returns its detailed description
-        """
-
-        async def check_tool_description(tool_name: str) -> str:
-            """Get detailed description for a tool."""
-            return self.get_detailed_description(tool_name)
-
-        return check_tool_description
+        },
+    }
