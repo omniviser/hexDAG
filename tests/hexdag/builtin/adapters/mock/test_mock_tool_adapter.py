@@ -142,7 +142,7 @@ class TestMockToolAdapter:
         assert schema == {
             "name": "search_customers",
             "description": "Mock tool: search_customers",
-            "parameters": {},
+            "parameters": [],
         }
 
         # Unknown tool returns empty schema

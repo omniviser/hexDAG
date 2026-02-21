@@ -13,6 +13,10 @@ from rich.console import Console
 app = typer.Typer(name="studio", help="Local-first visual editor for pipelines")
 console = Console()
 
+_CLI_NAME = "studio"
+_CLI_HELP = "Visual editor for pipelines"
+_CLI_TYPE = "typer"
+
 
 @app.callback(invoke_without_command=True)
 def studio(

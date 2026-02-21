@@ -13,6 +13,10 @@ from rich.table import Table
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "plugin"
+_CLI_HELP = "Plugin development commands"
+_CLI_TYPE = "typer"
+
 
 def get_plugin_dir() -> Path:
     """Get the hexdag_plugins directory path."""

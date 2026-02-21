@@ -14,6 +14,11 @@ from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "validate"
+_CLI_HELP = "Validate YAML pipeline files"
+_CLI_TYPE = "command"
+_CLI_FUNC = "validate"
+
 
 @app.command()
 def validate(

@@ -113,7 +113,7 @@ class MockToolAdapter(ToolRouter):
             return {
                 "name": tool_name,
                 "description": f"Mock tool: {tool_name}",
-                "parameters": {},  # Mock doesn't validate parameters
+                "parameters": [],  # Mock doesn't validate parameters
             }
 
         return {}

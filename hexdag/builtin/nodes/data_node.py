@@ -94,6 +94,8 @@ def _value_to_expression(value: Any) -> str:
 class DataNode(BaseNodeFactory):
     """Static data node factory that returns constant output.
 
+    __aliases__ declares backward-compatible names for YAML resolution.
+
     .. deprecated::
         DataNode is deprecated. Use ExpressionNode directly instead.
         This node already delegates to ExpressionNode internally.
@@ -140,6 +142,8 @@ class DataNode(BaseNodeFactory):
         ...     deps=["user_lookup"]
         ... )
     """
+
+    __aliases__ = ("static_node",)
 
     # Studio UI metadata
     _hexdag_icon = "Calculator"

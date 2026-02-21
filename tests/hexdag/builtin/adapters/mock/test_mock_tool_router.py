@@ -100,7 +100,8 @@ class TestMockToolRouter:
         assert schema["name"] == "search"
         assert "description" in schema
         assert "parameters" in schema
-        assert "query" in schema["parameters"]
+        param_names = [p["name"] for p in schema["parameters"]]
+        assert "query" in param_names
 
         # Test unknown tool
         with pytest.raises(KeyError, match="Tool not found: nonexistent"):

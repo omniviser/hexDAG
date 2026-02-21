@@ -1,7 +1,54 @@
 """Port interface for Tool Routers."""
 
+import inspect
 from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
+
+
+def tool_schema_from_callable(fn: Any) -> dict[str, Any]:
+    """Auto-generate a tool schema from a function's signature and docstring.
+
+    Returns a dict matching the ToolRouter schema contract::
+
+        {"description": "...", "parameters": [{"name": ..., "type": ..., "required": ...}, ...]}
+
+    Parameters
+    ----------
+    fn : callable
+        The function to introspect
+
+    Returns
+    -------
+    dict[str, Any]
+        Tool schema with description and parameters list
+    """
+    description = (fn.__doc__ or "").split("\n")[0].strip()
+    sig = inspect.signature(fn)
+
+    parameters: list[dict[str, Any]] = []
+    for name, param in sig.parameters.items():
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            parameters.append({
+                "name": f"**{name}",
+                "description": "Key-value pairs matching the agent's output schema",
+                "type": "Any",
+                "required": True,
+            })
+            continue
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            continue
+
+        annotation = param.annotation
+        type_name = getattr(annotation, "__name__", str(annotation))
+        type_name = type_name.replace("typing.", "").replace(" | None", "")
+
+        parameters.append({
+            "name": name,
+            "type": type_name,
+            "required": param.default is inspect.Parameter.empty,
+        })
+
+    return {"description": description, "parameters": parameters}
 
 
 @runtime_checkable

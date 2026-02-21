@@ -11,6 +11,10 @@ from rich.prompt import Confirm, Prompt
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "create"
+_CLI_HELP = "Create pipeline templates from schemas"
+_CLI_TYPE = "typer"
+
 
 @app.command("pipeline")
 def create_pipeline(

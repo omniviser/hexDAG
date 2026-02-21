@@ -10,6 +10,10 @@ from rich.prompt import Confirm
 app = typer.Typer()
 console = Console()
 
+_CLI_NAME = "init"
+_CLI_HELP = "Initialize a new HexDAG project"
+_CLI_TYPE = "typer"
+
 
 @app.callback(invoke_without_command=True)
 def init(

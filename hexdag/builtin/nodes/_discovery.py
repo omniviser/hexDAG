@@ -83,6 +83,7 @@ def discover_node_factories() -> dict[str, str]:
                 isinstance(attr, type)
                 and issubclass(attr, BaseNodeFactory)
                 and attr is not BaseNodeFactory
+                and attr.__name__ == attr_name  # skip module-level aliases
             ):
                 full_path = f"hexdag.builtin.nodes.{attr_name}"
                 snake_name = _to_snake_case(attr_name)
@@ -96,18 +97,12 @@ def discover_node_factories() -> dict[str, str]:
                     base = snake_name[:-5]
                     aliases[f"core:{base}"] = full_path  # core:llm
 
-    # Add backwards compatibility aliases for legacy names
-    # static_node -> DataNode
-    if "data_node" in aliases:
-        aliases["static_node"] = aliases["data_node"]
-        aliases["core:static_node"] = aliases["data_node"]
-        aliases["core:static"] = aliases["data_node"]
-
-    # agent_node -> ReActAgentNode (legacy alias)
-    if "re_act_agent_node" in aliases:
-        aliases["agent_node"] = aliases["re_act_agent_node"]
-        aliases["core:agent_node"] = aliases["re_act_agent_node"]
-        aliases["core:agent"] = aliases["re_act_agent_node"]
+                # Register __aliases__ declared on the class itself
+                for alias in getattr(attr, "__aliases__", ()):
+                    aliases[alias] = full_path
+                    aliases[f"core:{alias}"] = full_path
+                    if alias.endswith("_node"):
+                        aliases[f"core:{alias[:-5]}"] = full_path
 
     return aliases
 

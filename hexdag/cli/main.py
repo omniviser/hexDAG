@@ -1,5 +1,7 @@
 """HexDAG CLI - Main entrypoint."""
 
+import importlib
+import pkgutil
 import sys
 
 try:
@@ -13,18 +15,7 @@ except ImportError:
     print("  uv pip install hexdag[cli]")
     sys.exit(1)
 
-from hexdag.cli.commands import (
-    build_cmd,
-    create_cmd,
-    docs_cmd,
-    generate_types_cmd,
-    init_cmd,
-    pipeline_cmd,
-    plugin_dev_cmd,
-    plugins_cmd,
-    studio_cmd,
-    validate_cmd,
-)
+import hexdag.cli.commands as _commands_pkg
 
 app = typer.Typer(
     name="hexdag",
@@ -36,19 +27,23 @@ app = typer.Typer(
 
 console = Console()
 
-app.add_typer(init_cmd.app, name="init", help="Initialize a new HexDAG project")
-app.add_typer(plugins_cmd.app, name="plugins", help="Manage plugins and adapters")
-app.add_typer(plugin_dev_cmd.app, name="plugin", help="Plugin development commands")
-app.add_typer(pipeline_cmd.app, name="pipeline", help="Pipeline validation and execution")
-app.add_typer(create_cmd.app, name="create", help="Create pipeline templates from schemas")
-app.add_typer(docs_cmd.app, name="docs", help="Generate and serve documentation")
-app.add_typer(studio_cmd.app, name="studio", help="Visual editor for pipelines")
-
-app.command(name="build", help="Build Docker containers for pipelines")(build_cmd.build)
-app.command(name="validate", help="Validate YAML pipeline files")(validate_cmd.validate)
-app.command(name="generate-types", help="Generate type stubs from YAML pipelines")(
-    generate_types_cmd.generate_types
-)
+# Auto-discover CLI commands from hexdag.cli.commands package.
+# Each command module declares _CLI_NAME, _CLI_HELP, _CLI_TYPE,
+# and optionally _CLI_FUNC (for standalone commands).
+for _info in pkgutil.iter_modules(_commands_pkg.__path__):
+    if _info.name.startswith("_"):
+        continue
+    _mod = importlib.import_module(f"hexdag.cli.commands.{_info.name}")
+    _cli_type = getattr(_mod, "_CLI_TYPE", None)
+    if _cli_type is None:
+        continue
+    _name = _mod._CLI_NAME
+    _help = _mod._CLI_HELP
+    if _cli_type == "typer":
+        app.add_typer(_mod.app, name=_name, help=_help)
+    elif _cli_type == "command":
+        _func_name = _mod._CLI_FUNC
+        app.command(name=_name, help=_help)(getattr(_mod, _func_name))
 
 
 @app.callback(invoke_without_command=True)
