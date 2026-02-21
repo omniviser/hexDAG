@@ -6,9 +6,11 @@ Tests the end-to-end secret management flow including:
 - LocalSecretAdapter with Orchestrator
 - Secret injection and cleanup hooks
 - LLM adapters using SecretField()
+- AzureKeyVaultAdapter → os.environ → ${VAR} resolution
 """
 
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,6 +21,7 @@ from hexdag.builtin.adapters.secret.local_secret_adapter import LocalSecretAdapt
 from hexdag.core.domain.dag import DirectedGraph, NodeSpec
 from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig
 from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.core.pipeline_builder.component_instantiator import _resolve_deferred_env_vars
 from hexdag.core.types import Secret
 
 # Note: Tests for deprecated ConfigurableAdapter pattern have been removed.
@@ -402,3 +405,124 @@ async def test_secret_isolation_between_pipelines():
 
     finally:
         del os.environ["SHARED_KEY"]
+
+
+# ===================================================================
+# AzureKeyVaultAdapter → os.environ → ${VAR} Resolution Tests
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_keyvault_load_to_environ_then_resolve_env_vars():
+    """Test Key Vault secrets loaded into os.environ are resolved by ${VAR} syntax."""
+    from hexdag_plugins.azure.adapters.keyvault import AzureKeyVaultAdapter
+
+    adapter = AzureKeyVaultAdapter(
+        vault_url="https://test-vault.vault.azure.net",
+        use_managed_identity=True,
+    )
+
+    # Mock Key Vault client to return a secret
+    mock_secret = MagicMock()
+    mock_secret.value = "sk-from-keyvault-123"
+
+    mock_client = MagicMock()
+    mock_client.get_secret.return_value = mock_secret
+
+    # Ensure env var is not set
+    os.environ.pop("OPENAI_API_KEY", None)
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        try:
+            # Step 1: Load vault secrets into os.environ
+            results = await adapter.load_to_environ(keys=["OPENAI-API-KEY"])
+            assert results["OPENAI_API_KEY"] == "loaded"
+            assert os.environ["OPENAI_API_KEY"] == "sk-from-keyvault-123"
+
+            # Step 2: Verify ${VAR} resolution picks up the env var
+            resolved = _resolve_deferred_env_vars({"api_key": "${OPENAI_API_KEY}"})
+            assert resolved["api_key"] == "sk-from-keyvault-123"
+
+        finally:
+            os.environ.pop("OPENAI_API_KEY", None)
+
+
+@pytest.mark.asyncio
+async def test_keyvault_aget_secret_returns_secret_wrapper():
+    """Test aget_secret() returns proper Secret wrapper for orchestrator integration."""
+    from hexdag_plugins.azure.adapters.keyvault import AzureKeyVaultAdapter
+
+    adapter = AzureKeyVaultAdapter(
+        vault_url="https://test-vault.vault.azure.net",
+        use_managed_identity=True,
+    )
+
+    mock_secret = MagicMock()
+    mock_secret.value = "db-password-456"
+
+    mock_client = MagicMock()
+    mock_client.get_secret.return_value = mock_secret
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        secret = await adapter.aget_secret("DB-PASSWORD")
+
+        # Must return Secret wrapper (not raw string)
+        assert isinstance(secret, Secret)
+        assert secret.get() == "db-password-456"
+        assert str(secret) == "<SECRET>"
+
+
+@pytest.mark.asyncio
+async def test_keyvault_orchestrator_hook_integration():
+    """Test AzureKeyVaultAdapter works with orchestrator secret hooks."""
+    from hexdag_plugins.azure.adapters.keyvault import AzureKeyVaultAdapter
+
+    adapter = AzureKeyVaultAdapter(
+        vault_url="https://test-vault.vault.azure.net",
+        use_managed_identity=True,
+    )
+
+    mock_secret = MagicMock()
+    mock_secret.value = "hook-secret-789"
+
+    mock_client = MagicMock()
+    mock_client.get_secret.return_value = mock_secret
+
+    secrets_captured = {}
+
+    def capture_secrets(x=None, **kwargs):
+        """Capture secrets from Memory during execution."""
+        from hexdag.core.context import get_port
+
+        memory = get_port("memory")
+        if memory:
+            secrets_captured["value"] = memory.storage.get("secret:MY-VAULT-SECRET")
+        return "captured"
+
+    graph = DirectedGraph()
+    graph.add(NodeSpec(name="capture", fn=capture_secrets, deps=set()))
+
+    memory = InMemoryMemory()
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        orchestrator = Orchestrator(
+            ports={
+                "memory": memory,
+                "secret": adapter,
+            },
+            pre_hook_config=HookConfig(
+                enable_secret_injection=True,
+                secret_keys=["MY-VAULT-SECRET"],
+            ),
+            post_hook_config=PostDagHookConfig(
+                enable_secret_cleanup=True,
+            ),
+        )
+
+        await orchestrator.run(graph, None)
+
+        # Secret should have been available during execution
+        assert secrets_captured["value"] == "hook-secret-789"
+
+        # Secret should be cleaned up after execution
+        assert await memory.aget("secret:MY-VAULT-SECRET") is None
