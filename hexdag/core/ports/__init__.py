@@ -8,10 +8,8 @@ from hexdag.core.ports.database import (
     SupportsRawSQL,
     SupportsReadOnly,
     SupportsStreamingQuery,
-    SupportsVectorSearch,
     TableSchema,
 )
-from hexdag.core.ports.embedding import Embedding
 from hexdag.core.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -26,6 +24,7 @@ from hexdag.core.ports.llm import (
     SupportsEmbedding,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsUsageTracking,
     SupportsVision,
     VisionMessage,
 )
@@ -33,13 +32,13 @@ from hexdag.core.ports.memory import Memory
 from hexdag.core.ports.observer_manager import ObserverManagerPort
 from hexdag.core.ports.secret import SecretPort
 from hexdag.core.ports.tool_router import ToolRouter
+from hexdag.core.ports.vector_search import SupportsVectorSearch
 
 __all__ = [
     "APICall",
     "ColumnSchema",
     "ColumnType",
     "DatabasePort",
-    "Embedding",  # Deprecated - kept for backward compatibility
     "ExecutionResult",
     "ExecutionTask",
     "ExecutorPort",
@@ -51,12 +50,13 @@ __all__ = [
     "Memory",
     "ObserverManagerPort",
     "SecretPort",
-    "SupportsEmbedding",  # New - unified embedding support in LLM port
+    "SupportsEmbedding",
     "SupportsFunctionCalling",
-    "SupportsGeneration",  # New - text generation support in LLM port
+    "SupportsGeneration",
     "SupportsRawSQL",
     "SupportsReadOnly",
     "SupportsStreamingQuery",
+    "SupportsUsageTracking",
     "SupportsVectorSearch",
     "SupportsVision",
     "TableSchema",

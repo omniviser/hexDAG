@@ -4,6 +4,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from hexdag.core.logging import get_logger
+from hexdag.core.ports.secret import SecretPort
 from hexdag.core.types import Secret
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class LocalSecretAdapter:
+class LocalSecretAdapter(SecretPort):
     """Local secret adapter that reads from environment variables.
 
     This adapter implements the SecretPort interface using local environment

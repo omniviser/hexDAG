@@ -6,7 +6,14 @@ from typing import Any, Literal
 from anthropic import AsyncAnthropic
 
 from hexdag.core.logging import get_logger
-from hexdag.core.ports.llm import LLM, MessageList, SupportsUsageTracking, TokenUsage
+from hexdag.core.ports.llm import (
+    LLM,
+    MessageList,
+    SupportsFunctionCalling,
+    SupportsGeneration,
+    SupportsUsageTracking,
+    TokenUsage,
+)
 from hexdag.core.types import (
     PositiveInt,
     RetryCount,
@@ -29,7 +36,7 @@ AnthropicModel = Literal[
 ]
 
 
-class AnthropicAdapter(LLM, SupportsUsageTracking):
+class AnthropicAdapter(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTracking):
     """Anthropic implementation of the LLM port.
 
     This adapter provides integration with Anthropic's Claude models through

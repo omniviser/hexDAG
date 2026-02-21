@@ -3,13 +3,20 @@
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.ports.llm import LLM, MessageList, SupportsUsageTracking, TokenUsage
+from hexdag.core.ports.llm import (
+    LLM,
+    MessageList,
+    SupportsFunctionCalling,
+    SupportsGeneration,
+    SupportsUsageTracking,
+    TokenUsage,
+)
 
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-class MockLLM(LLM, SupportsUsageTracking):
+class MockLLM(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTracking):
     """Mock implementation of the LLM interface for testing.
 
     The LLM port interface is stateless, but this mock provides testing utilities like response

@@ -32,7 +32,6 @@ from hexdag.builtin.nodes.tool_utils import (
 )
 from hexdag.builtin.prompts.tool_prompts import get_tool_prompt_for_format
 from hexdag.core.configurable import ConfigurableMacro, MacroConfig
-from hexdag.core.context import get_port
 from hexdag.core.domain.dag import DirectedGraph
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.prompt import PromptTemplate
@@ -83,7 +82,7 @@ class ReasoningAgentMacro(ConfigurableMacro):
     Automatically detects and adapts to LLM adapter capabilities:
     - **Native mode**: OpenAI/Anthropic/Gemini → clean prompts, structured tool calls
     - **Text mode**: Local/other LLMs → INVOKE_TOOL: parsing from text
-    - **Runtime adaptive**: Checks hasattr(llm, 'aresponse_with_tools') at execution time
+    - **Runtime adaptive**: Checks isinstance(llm, SupportsFunctionCalling) at execution time
 
     This adaptive approach enables:
     1. **Fallback Policy Support**: When a node fails and policy switches adapters,
@@ -220,23 +219,6 @@ Continue reasoning. Use tools if needed to gather more information."""
         async def normalize_response(input_data: str, **kwargs: Any) -> dict[str, Any]:
             """Normalize LLM response to unified format with tool parsing."""
             text = input_data if isinstance(input_data, str) else str(input_data)
-
-            # Try native tool calling if LLM port supports it
-            llm_port = get_port("llm")
-            has_tool_support = (
-                llm_port and hasattr(llm_port, "aresponse_with_tools") and tool_schemas
-            )
-
-            if has_tool_support:
-                # Check if adapter actually implements aresponse_with_tools
-                for cls in llm_port.__class__.__mro__:
-                    if (
-                        cls.__name__ not in ["LLM", "Protocol", "object"]
-                        and "aresponse_with_tools" in cls.__dict__
-                    ):
-                        # Native tool calling available but we already got text response
-                        # Parse any tool calls from the text (in case it includes them)
-                        break
 
             # Text-based - parse tool calls from text
             parsed_calls = ToolParser.parse_tool_calls(text, format=config.tool_format)

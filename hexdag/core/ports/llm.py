@@ -1,12 +1,9 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    from hexdag.core.ports.healthcheck import HealthStatus
 
 
 class Message(BaseModel):
@@ -121,80 +118,10 @@ class LLM(Protocol):
 
     # No required methods — adapters must implement at least one sub-protocol
     # (SupportsGeneration, SupportsFunctionCalling, SupportsEmbedding, etc.).
-
-    async def aresponse_with_tools(
-        self,
-        messages: MessageList,
-        tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
-    ) -> LLMResponse:
-        """Generate response with native tool calling support (optional).
-
-        This method enables native tool calling for LLM providers that support it
-        (OpenAI, Anthropic, Gemini, etc.). If not implemented, the framework will
-        fall back to text-based tool calling using INVOKE_TOOL: directives.
-
-        Args
-        ----
-            messages: Conversation messages
-            tools: Tool definitions in provider-specific format
-            tool_choice: Tool selection strategy ("auto", "none", or specific tool)
-
-        Returns
-        -------
-        LLMResponse
-            Response with content and optional tool calls
-
-        Examples
-        --------
-        OpenAI-style tool calling::
-
-            tools = [{
-                "type": "function",
-                "function": {
-                    "name": "search",
-                    "description": "Search the web",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"query": {"type": "string"}},
-                        "required": ["query"]
-                    }
-                }
-            }]
-
-            response = await llm.aresponse_with_tools(messages, tools)
-            # response.content: "Let me search for that"
-            # response.tool_calls: [{"id": "call_123", "name": "search", "arguments": {...}}]
-        """
-        ...
-
-    async def ahealth_check(self) -> "HealthStatus":
-        """Check LLM adapter health and connectivity (optional).
-
-        Adapters should verify:
-        - API connectivity to the LLM service
-        - Model availability
-        - Authentication status
-        - Rate limit status (if applicable)
-
-        This method is optional. If not implemented, the adapter will be
-        considered healthy by default.
-
-        Returns
-        -------
-        HealthStatus
-            Current health status with details about connectivity and availability
-
-        Examples
-        --------
-        OpenAI adapter health check::
-
-            status = await openai_adapter.ahealth_check()
-            status.status  # "healthy", "degraded", or "unhealthy"
-            status.latency_ms  # Time taken for health check
-            status.details  # {"model": "gpt-4", "rate_limit_remaining": 100}
-        """
-        ...
+    #
+    # Tool calling lives on SupportsFunctionCalling, NOT here.
+    # Health checks are adapter-specific, NOT protocol-mandated.
+    ...
 
 
 @runtime_checkable

@@ -8,12 +8,13 @@ from typing import Any
 
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.database import DatabasePort
+from hexdag.core.ports.memory import Memory
 from hexdag.core.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
 
 
-class SQLiteMemoryAdapter:
+class SQLiteMemoryAdapter(Memory):
     """Memory adapter backed by SQLite database.
 
     Provides persistent key-value storage using SQLite, bridging the

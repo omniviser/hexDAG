@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 from hexdag.core.logging import get_logger
 from hexdag.core.ports.healthcheck import HealthStatus
 from hexdag.core.ports.llm import (
+    LLM,
     ImageInput,
     LLMResponse,
     MessageList,
@@ -52,6 +53,7 @@ OpenAIEmbeddingModel = Literal[
 
 
 class OpenAIAdapter(
+    LLM,
     SupportsGeneration,
     SupportsFunctionCalling,
     SupportsVision,

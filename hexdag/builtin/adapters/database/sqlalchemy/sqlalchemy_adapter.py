@@ -10,14 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from hexdag.core.ports.database import (
     ColumnSchema,
     DatabasePort,
-    SupportsIndexes,
     SupportsRawSQL,
-    SupportsStatistics,
     TableSchema,
 )
 
 
-class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL, SupportsIndexes, SupportsStatistics):
+class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL):
     """Adapter for SQLAlchemy-supported databases."""
 
     def __init__(self, dsn: str) -> None:

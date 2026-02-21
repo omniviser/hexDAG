@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from hexdag.core.logging import get_logger
+from hexdag.core.ports.memory import Memory
 
 logger = get_logger(__name__)
 
@@ -35,7 +36,7 @@ class FileFormat(StrEnum):
     TEXT = "text"
 
 
-class FileMemoryAdapter:
+class FileMemoryAdapter(Memory):
     """Memory adapter backed by file system.
 
     Provides persistent key-value storage using files, with support for

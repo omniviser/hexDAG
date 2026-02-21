@@ -81,8 +81,10 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `InMemoryMemory` | In-memory implementation of Memory for testing. |
 | `Memory` | Protocol for long-term memory storage and retrieval. |
+| `Memory` | Protocol for long-term memory storage and retrieval. |
 | `SQLiteMemoryAdapter` | Memory adapter backed by SQLite database. |
 | `FileMemoryAdapter` | Memory adapter backed by file system. |
+| `Memory` | Protocol for long-term memory storage and retrieval. |
 | `Memory` | Protocol for long-term memory storage and retrieval. |
 | `Memory` | Protocol for long-term memory storage and retrieval. |
 
