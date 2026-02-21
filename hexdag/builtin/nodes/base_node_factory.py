@@ -60,7 +60,15 @@ class BaseNodeFactory(ABC):
                 for field_name, field_type in schema.items():
                     match field_type:
                         case str():
-                            if field_type.endswith("?"):
+                            from hexdag.core.validation.sanitized_types import get_type
+
+                            base_name = field_type.rstrip("?")
+                            sanitized = get_type(base_name)
+                            if sanitized is not None:
+                                # Sanitized type: Annotated[base | None, BeforeValidator(cleaner)]
+                                # Already nullable — default to None
+                                field_definitions[field_name] = (sanitized, None)
+                            elif field_type.endswith("?"):
                                 base = field_type[:-1]
                                 actual_type = _TYPE_MAP.get(base, Any)
                                 field_definitions[field_name] = (actual_type | None, None)

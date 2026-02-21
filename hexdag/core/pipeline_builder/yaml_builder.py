@@ -221,6 +221,10 @@ class YamlPipelineBuilder:
         # so that custom node kinds can pass validation
         self._register_aliases(config)
 
+        # Step 4.6: Register custom sanitized types BEFORE validation
+        # so that output_schema type names can pass validation
+        self._register_custom_types(config)
+
         # Step 5: Validate structure (after includes are resolved)
         config = self._validate_config(config)
 
@@ -381,6 +385,26 @@ class YamlPipelineBuilder:
         for alias, full_path in aliases.items():
             register_alias(alias, full_path)
             logger.debug(f"Registered alias: {alias} -> {full_path}")
+
+    def _register_custom_types(self, config: dict[str, Any]) -> None:
+        """Register custom sanitized types from ``spec.custom_types`` before validation.
+
+        This allows output_schema fields to use custom type names defined
+        declaratively in the pipeline YAML.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            The YAML configuration dict
+        """
+        from hexdag.core.validation.sanitized_types import register_type_from_config
+
+        spec = config.get("spec", {})
+        custom_types = spec.get("custom_types", {})
+
+        for type_name, type_config in custom_types.items():
+            register_type_from_config(type_name, type_config)
+            logger.debug(f"Registered custom type: {type_name}")
 
     def _build_graph(self, config: dict[str, Any]) -> DirectedGraph:
         """Build DirectedGraph using entity plugins."""

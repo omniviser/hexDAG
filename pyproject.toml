@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.5.0.dev6"
+version = "0.5.0.dev7"
 
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
 authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
