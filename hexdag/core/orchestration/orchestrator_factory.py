@@ -4,13 +4,19 @@ This factory bridges the gap between declarative YAML configuration and the
 runtime orchestrator, instantiating adapters and policies from their specs.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.orchestrator import Orchestrator
 from hexdag.core.pipeline_builder.component_instantiator import ComponentInstantiator
 from hexdag.core.pipeline_builder.pipeline_config import PipelineConfig
 from hexdag.core.ports_builder import PortsBuilder
+
+if TYPE_CHECKING:
+    from hexdag.core.orchestration.components.lifecycle_manager import (
+        HookConfig,
+        PostDagHookConfig,
+    )
 
 logger = get_logger(__name__)
 
@@ -52,6 +58,8 @@ class OrchestratorFactory:
         strict_validation: bool = False,
         default_node_timeout: float | None = None,
         additional_ports: dict[str, Any] | None = None,
+        pre_hook_config: "HookConfig | None" = None,
+        post_hook_config: "PostDagHookConfig | None" = None,
     ) -> Orchestrator:
         """Create an orchestrator instance from pipeline configuration.
 
@@ -67,6 +75,10 @@ class OrchestratorFactory:
             Default timeout in seconds for each node, by default None
         additional_ports : dict[str, Any] | None, optional
             Additional ports to merge with configured ports, by default None
+        pre_hook_config : HookConfig | None, optional
+            Configuration for pre-DAG hooks (health checks, secrets, etc.)
+        post_hook_config : PostDagHookConfig | None, optional
+            Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
 
         Returns
         -------
@@ -146,6 +158,8 @@ class OrchestratorFactory:
             ports=ports_config if ports_config else global_ports,
             strict_validation=strict_validation,
             default_node_timeout=default_node_timeout,
+            pre_hook_config=pre_hook_config,
+            post_hook_config=post_hook_config,
         )
 
         logger.info(

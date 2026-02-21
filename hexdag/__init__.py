@@ -4,6 +4,7 @@ A modular, deterministic, and extensible architecture for orchestrating LLM-powe
 traditional code with YAML pipeline configuration.
 """
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 # Version is defined in pyproject.toml and read dynamically
@@ -14,33 +15,63 @@ try:
 except Exception:
     __version__ = "0.0.0.dev0"  # Fallback for development installs
 
-# Core framework exports
+# Node factories (still useful for programmatic DAG building)
 from hexdag.builtin.nodes import (
     FunctionNode,
     LLMNode,
     ReActAgentNode,
 )
-from hexdag.core.domain import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import Orchestrator
+
+# Templating system
 from hexdag.core.orchestration.prompt import FewShotPromptTemplate, PromptTemplate
 
-# YAML Workflow Builder
-from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+# Primary API — the recommended entry point for running YAML pipelines
+from hexdag.core.pipeline_runner import PipelineRunner
 
-# Port interfaces
+# Port interfaces (needed for writing custom adapters)
 from hexdag.core.ports import LLM, APICall, DatabasePort, ToolRouter
-
-# Import resolver for component resolution
-from hexdag.core.resolver import resolve, resolve_function
 
 # Define placeholders for lazy-loaded adapters to satisfy __all__ checking
 # These will be replaced by __getattr__ when accessed
 if TYPE_CHECKING:
     from hexdag.builtin.adapters.memory import InMemoryMemory
     from hexdag.builtin.adapters.mock import MockDatabaseAdapter, MockLLM
+    from hexdag.core.domain import DirectedGraph, NodeSpec
+    from hexdag.core.orchestration.orchestrator import Orchestrator
+    from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+    from hexdag.core.resolver import resolve, resolve_function
 
 
-# Lazy loading for adapters and optional modules to avoid circular imports
+# Deprecated top-level exports — use submodule imports or PipelineRunner instead.
+_DEPRECATED_IMPORTS: dict[str, tuple[str, str]] = {
+    "Orchestrator": (
+        "hexdag.core.orchestration.orchestrator",
+        "Use PipelineRunner or import from 'hexdag.core.orchestration.orchestrator'.",
+    ),
+    "YamlPipelineBuilder": (
+        "hexdag.core.pipeline_builder.yaml_builder",
+        "Use PipelineRunner or import from 'hexdag.core.pipeline_builder.yaml_builder'.",
+    ),
+    "DirectedGraph": (
+        "hexdag.core.domain",
+        "Import from 'hexdag.core.domain' instead.",
+    ),
+    "NodeSpec": (
+        "hexdag.core.domain",
+        "Import from 'hexdag.core.domain' instead.",
+    ),
+    "resolve": (
+        "hexdag.core.resolver",
+        "Import from 'hexdag.core.resolver' instead.",
+    ),
+    "resolve_function": (
+        "hexdag.core.resolver",
+        "Import from 'hexdag.core.resolver' instead.",
+    ),
+}
+
+
+# Lazy loading for adapters, deprecated exports, and optional modules
 def __getattr__(name: str) -> Any:
     """Lazy import for adapters and optional components.
 
@@ -51,6 +82,19 @@ def __getattr__(name: str) -> Any:
     AttributeError
         If the requested attribute does not exist
     """
+    # Deprecated exports — still work but emit a warning
+    if name in _DEPRECATED_IMPORTS:
+        import importlib
+
+        module_path, message = _DEPRECATED_IMPORTS[name]
+        warnings.warn(
+            f"Importing {name!r} from 'hexdag' is deprecated. {message}",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        mod = importlib.import_module(module_path)
+        return getattr(mod, name)
+
     # Mock adapters
     if name == "MockLLM":
         from hexdag.builtin.adapters.mock import MockLLM as _MockLLM
@@ -85,14 +129,8 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     # Version
     "__version__",
-    # Module Resolution
-    "resolve",
-    "resolve_function",
-    # Core Framework - DAG Building and Execution
-    "Orchestrator",
-    "DirectedGraph",
-    "NodeSpec",
-    "YamlPipelineBuilder",
+    # Primary API
+    "PipelineRunner",
     # Node Factories
     "FunctionNode",
     "LLMNode",
@@ -109,4 +147,11 @@ __all__ = [
     "InMemoryMemory",
     "MockLLM",
     "MockDatabaseAdapter",
+    # Deprecated (still importable with warning)
+    "Orchestrator",
+    "DirectedGraph",
+    "NodeSpec",
+    "YamlPipelineBuilder",
+    "resolve",
+    "resolve_function",
 ]
