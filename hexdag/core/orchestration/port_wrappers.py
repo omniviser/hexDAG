@@ -24,9 +24,11 @@ from hexdag.core.ports.llm import (
     LLM,
     LLMResponse,
     MessageList,
+    SupportsFunctionCalling,
     SupportsGeneration,
     SupportsUsageTracking,
 )
+from hexdag.core.ports.tool_router import ToolRouter
 from hexdag.core.utils.node_timer import Timer
 
 logger = get_logger(__name__)
@@ -166,7 +168,13 @@ class ObservableLLMWrapper:
                 )
             )
 
-        # Call underlying LLM
+        # Call underlying LLM (must support function calling)
+        if not isinstance(self._llm, SupportsFunctionCalling):
+            raise NotImplementedError(
+                f"LLM adapter {type(self._llm).__name__} does not support function calling. "
+                "It must implement SupportsFunctionCalling protocol."
+            )
+
         llm_timer = Timer()
         response = await self._llm.aresponse_with_tools(messages, tools, tool_choice, **kwargs)
         duration_ms = llm_timer.duration_ms
@@ -301,7 +309,7 @@ class ObservableToolRouterWrapper:
 
 
 def wrap_llm_port(llm: Any) -> Any:
-    """Wrap LLM port with event emission if it implements the LLM protocol.
+    """Wrap LLM port with event emission if it implements SupportsGeneration.
 
     Parameters
     ----------
@@ -311,9 +319,9 @@ def wrap_llm_port(llm: Any) -> Any:
     Returns
     -------
     Any
-        Wrapped LLM if it has aresponse method, otherwise original object
+        Wrapped LLM if it supports generation, otherwise original object
     """
-    if hasattr(llm, "aresponse"):
+    if isinstance(llm, SupportsGeneration):
         return ObservableLLMWrapper(llm)
     return llm
 
@@ -329,9 +337,9 @@ def wrap_tool_router_port(tool_router: Any) -> Any:
     Returns
     -------
     Any
-        Wrapped tool router if it has acall_tool method, otherwise original object
+        Wrapped tool router if it is a ToolRouter, otherwise original object
     """
-    if hasattr(tool_router, "acall_tool"):
+    if isinstance(tool_router, ToolRouter):
         return ObservableToolRouterWrapper(tool_router)
     return tool_router
 
@@ -339,13 +347,12 @@ def wrap_tool_router_port(tool_router: Any) -> Any:
 def wrap_ports_with_observability(ports: dict[str, Any]) -> dict[str, Any]:
     """Wrap all ports with event-emitting wrappers.
 
-    Uses protocol-based detection (``hasattr``) instead of hardcoded port
-    names so that any port implementing the expected interface gets wrapped,
-    regardless of its dictionary key.
+    Uses ``isinstance`` protocol checks to detect wrappable ports,
+    regardless of their dictionary key.
 
     Currently wraps:
-    - LLM ports (``aresponse``): Emit LLMPromptSent/LLMResponseReceived events
-    - ToolRouter ports (``acall_tool``): Emit ToolCalled/ToolCompleted events
+    - LLM ports (``SupportsGeneration``): Emit LLMPromptSent/LLMResponseReceived
+    - ToolRouter ports: Emit ToolCalled/ToolCompleted events
 
     Parameters
     ----------
@@ -359,9 +366,9 @@ def wrap_ports_with_observability(ports: dict[str, Any]) -> dict[str, Any]:
     """
     wrapped = {}
     for name, port in ports.items():
-        if hasattr(port, "aresponse"):
+        if isinstance(port, SupportsGeneration):
             wrapped[name] = wrap_llm_port(port)
-        elif hasattr(port, "acall_tool"):
+        elif isinstance(port, ToolRouter):
             wrapped[name] = wrap_tool_router_port(port)
         else:
             wrapped[name] = port

@@ -4,13 +4,13 @@ import asyncio
 import hashlib
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.ports.embedding import ImageInput
+from hexdag.core.ports.llm import ImageInput, SupportsEmbedding
 
 if TYPE_CHECKING:
     from hexdag.core.ports.healthcheck import HealthStatus
 
 
-class MockEmbedding:
+class MockEmbedding(SupportsEmbedding):
     """Mock implementation of the Embedding interface for testing.
 
     This mock generates deterministic embeddings based on the input text's hash,
