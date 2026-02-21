@@ -3,7 +3,7 @@
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
 from hexdag.core.domain.dag import NodeSpec
@@ -104,3 +104,60 @@ class TestBaseNodeFactory:
         assert node_spec.fn == test_fn
         assert "input_mapping" in node_spec.params
         assert node_spec.params["input_mapping"] == input_mapping
+
+
+class TestNullableSchema:
+    """Tests for nullable type support in create_pydantic_model."""
+
+    @pytest.fixture
+    def factory(self):
+        return MockNodeFactory()
+
+    def test_nullable_accepts_none(self, factory):
+        model = factory.create_pydantic_model("Test", {"name": "str?"})
+        assert model(name=None).name is None
+
+    def test_nullable_accepts_value(self, factory):
+        model = factory.create_pydantic_model("Test", {"name": "str?"})
+        assert model(name="hello").name == "hello"
+
+    def test_nullable_defaults_to_none(self, factory):
+        model = factory.create_pydantic_model("Test", {"name": "str?", "age": "int"})
+        instance = model(age=30)
+        assert instance.name is None
+        assert instance.age == 30
+
+    def test_required_rejects_none(self, factory):
+        model = factory.create_pydantic_model("Test", {"name": str})
+        with pytest.raises(ValidationError):
+            model(name=None)
+
+    def test_mixed_required_and_nullable(self, factory):
+        model = factory.create_pydantic_model(
+            "Test",
+            {
+                "rate": float,
+                "origin": "str?",
+                "mc_number": "str?",
+            },
+        )
+        instance = model(rate=2100.0, origin=None, mc_number=None)
+        assert instance.rate == 2100.0
+        assert instance.origin is None
+        assert instance.mc_number is None
+
+    def test_all_nullable_variants(self, factory):
+        model = factory.create_pydantic_model(
+            "Test",
+            {
+                "s": "str?",
+                "i": "int?",
+                "f": "float?",
+                "b": "bool?",
+                "l": "list?",
+                "d": "dict?",
+            },
+        )
+        instance = model()
+        for field in ("s", "i", "f", "b", "l", "d"):
+            assert getattr(instance, field) is None

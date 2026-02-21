@@ -168,6 +168,24 @@ class NodeExecutor:
             else:
                 validated_input = node_input
 
+            # Auto-skip if all upstream dependencies were skipped
+            if isinstance(validated_input, dict) and validated_input.get("_upstream_skipped"):
+                logger.info(
+                    "Node '{node}' skipped: all upstream dependencies were skipped",
+                    node=node_name,
+                )
+                skip_event = NodeSkipped(
+                    name=node_name,
+                    wave_index=wave_index,
+                    reason="all upstream dependencies were skipped",
+                )
+                await coordinator.notify_observer(observer_mgr, skip_event)
+                return {
+                    "_skipped": True,
+                    "_upstream_skipped": True,
+                    "reason": "all upstream dependencies were skipped",
+                }
+
             # Evaluate when clause - skip node if condition evaluates to False
             if node_spec.when:
                 try:

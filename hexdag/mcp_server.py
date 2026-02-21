@@ -235,6 +235,23 @@ def explain_yaml_structure() -> str:
 
 
 @mcp.tool()  # type: ignore[misc]
+def get_type_reference() -> str:
+    """Get reference for hexDAG YAML output_schema type system.
+
+    Returns documentation on:
+    - Supported types: str, int, float, bool, list, dict, Any
+    - Nullable types with ? suffix: str?, int?, float?, bool?, list?, dict?
+    - When to use nullable vs required types
+    - Examples for LLM output parsing
+
+    Returns
+    -------
+        Type system reference documentation
+    """
+    return api.documentation.get_type_reference()
+
+
+@mcp.tool()  # type: ignore[misc]
 def get_custom_adapter_guide() -> str:
     """Get a comprehensive guide for creating custom adapters.
 

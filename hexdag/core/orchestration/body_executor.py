@@ -38,6 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from hexdag.core.context import get_ports
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.resolver import resolve_function
@@ -179,6 +180,13 @@ class BodyExecutor:
         exec_context = dict(input_data)
         if iteration_context:
             exec_context.update(iteration_context)
+
+        # Fall back to ContextVar ports when caller passed empty dict
+        # (e.g., CompositeNode receives empty **ports from NodeExecutor)
+        if not ports:
+            context_ports = get_ports()
+            if context_ports is not None:
+                ports = dict(context_ports)
 
         if body_pipeline:
             return await self._execute_pipeline(body_pipeline, exec_context, context, ports)

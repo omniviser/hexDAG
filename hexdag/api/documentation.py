@@ -142,6 +142,61 @@ Map data between nodes using input_mapping.
 """
 
 
+def get_type_reference() -> str:
+    """Get reference for hexDAG YAML output_schema type system.
+
+    Returns documentation on supported types, nullable types,
+    and examples for LLM output parsing.
+
+    Returns
+    -------
+    str
+        Type system reference documentation
+    """
+    generated = _load_generated_doc("type_reference.md")
+    if generated:
+        return generated
+
+    return """# hexDAG Output Schema Type Reference
+
+## Supported Types
+
+Use these types in `output_schema` on `llm_node`, `agent_node`, etc.
+
+### Required Types (non-nullable)
+
+- `str`, `int`, `float`, `bool`, `list`, `dict`, `Any`
+
+### Nullable Types (accept null, default to null)
+
+Append `?` to any base type. Nullable fields accept `null` without
+validation errors and default to `null` when omitted.
+
+- `str?`, `int?`, `float?`, `bool?`, `list?`, `dict?`
+
+## Example
+
+```yaml
+- kind: llm_node
+  metadata:
+    name: extract_data
+  spec:
+    prompt_template: "Extract from: {{text}}"
+    parse_json: true
+    output_schema:
+      rate: float        # Required
+      order_id: str      # Required
+      mc_number: str?    # Nullable — null if not found
+      origin: str?       # Nullable
+```
+
+## When to Use
+
+- **Required** (`str`): LLM must always provide a value
+- **Nullable** (`str?`): Field may legitimately be absent or null
+"""
+
+
 def get_custom_adapter_guide() -> str:
     """Get a comprehensive guide for creating custom adapters.
 

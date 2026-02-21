@@ -115,6 +115,50 @@ Conditional execution:
     false_branch: [retry]
 ```
 
+## Conditional Execution & Skip Propagation
+
+hexDAG supports conditional node execution via `when` clauses and automatic skip propagation through dependency chains.
+
+### When Clauses
+
+Any node can include a `when` expression. The expression is evaluated against the node's validated input data. If it evaluates to `False`, the node is skipped.
+
+```yaml
+nodes:
+  - type: llm
+    id: send_notification
+    params:
+      template: "Draft notification for {{input}}"
+      when: "requires_notification == True"
+    depends_on: [classifier]
+```
+
+Skipped nodes produce a result of `{"_skipped": True, "reason": "..."}` and emit a `NodeSkipped` event.
+
+### Automatic Skip Propagation
+
+When **all** dependencies of a node are skipped, the downstream node is automatically skipped without needing its own `when` clause. This prevents cascading errors in branching pipelines with `!include` fragments.
+
+```
+  classifier (when: "False")
+       │
+       ▼
+  send_email       ← auto-skipped (_upstream_skipped)
+       │
+       ▼
+  log_result       ← auto-skipped (_upstream_skipped)
+```
+
+**Partial skip:** If a node has multiple dependencies and only some are skipped, the node still executes — it receives the non-skipped dependency results normally.
+
+### Skip Result Format
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `_skipped` | `bool` | Node was skipped (always `True` in skip results) |
+| `_upstream_skipped` | `bool` | Skip was propagated from upstream (not a direct `when` clause) |
+| `reason` | `str` | Human-readable explanation |
+
 ## Event System & Observability
 
 Monitor workflow execution through the observer pattern:
@@ -153,7 +197,7 @@ print(profiler.format_report())
 ### Available Events
 
 - `PipelineStarted` / `PipelineCompleted` - Pipeline lifecycle
-- `NodeStarted` / `NodeCompleted` / `NodeFailed` - Node execution
+- `NodeStarted` / `NodeCompleted` / `NodeFailed` / `NodeSkipped` - Node execution
 - `WaveStarted` / `WaveCompleted` - Wave-level parallelism
 - `LLMPromptSent` / `LLMResponseReceived` - LLM interactions (with token usage)
 - `ToolCalled` / `ToolCompleted` - Tool execution

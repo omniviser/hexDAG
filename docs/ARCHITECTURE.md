@@ -142,8 +142,12 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 │  │  ├──────────────────────────────────────────────────────┤  │     │
 │  │  │  1. Input Resolution                                 │  │     │
 │  │  │     └─ InputMapper resolves {{dep.field}} refs       │  │     │
+│  │  │  1b. Skip Propagation                                │  │     │
+│  │  │     └─ If ALL deps skipped → return skip marker      │  │     │
 │  │  │  2. Input Validation                                 │  │     │
 │  │  │     └─ Pydantic validation via in_model              │  │     │
+│  │  │  3. When Clause / Upstream Skip Check                │  │     │
+│  │  │     └─ Evaluate `when` or auto-skip if upstream      │  │     │
 │  │  │  4. Function Execution                               │  │     │
 │  │  │     └─ async fn(ExecutionContext) → result           │  │     │
 │  │  │  5. Output Validation                                │  │     │
@@ -151,7 +155,7 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 │  │  │  6. Result Storage                                   │  │     │
 │  │  │     └─ Store in ExecutionContext                     │  │     │
 │  │  │  7. Event Emission                                   │  │     │
-│  │  │     └─ NodeCompleted/NodeFailed events               │  │     │
+│  │  │     └─ NodeCompleted/NodeFailed/NodeSkipped events   │  │     │
 │  │  └──────────────────────────────────────────────────────┘  │     │
 │  └────────────────────────────────────────────────────────────┘     │
 │                              │                                       │
@@ -191,6 +195,7 @@ hexDAG is an enterprise-ready AI agent orchestration framework built on **hexago
 │  │  │  ├─ PipelineStarted / PipelineCompleted             │  │     │
 │  │  │  ├─ WaveStarted / WaveCompleted                      │  │     │
 │  │  │  ├─ NodeStarted / NodeCompleted / NodeFailed         │  │     │
+│  │  │  ├─ NodeSkipped (when clause / upstream skip)       │  │     │
 │  │  │  ├─ ValidationError                                  │  │     │
 │  │  │  └─ Custom Events                                    │  │     │
 │  │  │                                                       │  │     │
@@ -675,6 +680,11 @@ ValidationError(node_name, error_details)
 │     │  ├─ For each node in wave (parallel):                   │
 │     │  │  │                                                   │
 │     │  │  ├─ Resolve inputs from dependencies                 │
+│     │  │  ├─ Skip propagation (all deps skipped → skip)       │
+│     │  │  ├─ Evaluate `when` clause (if present)              │
+│     │  │  │  └─ If false → Emit NodeSkipped, store skip       │
+│     │  │  ├─ Auto-skip if upstream deps all skipped           │
+│     │  │  │  └─ Emit NodeSkipped, propagate skip marker       │
 │     │  │  ├─ Evaluate policies                                │
 │     │  │  ├─ Emit NodeStarted                                 │
 │     │  │  ├─ Validate inputs (Pydantic)                       │
@@ -698,6 +708,53 @@ ValidationError(node_name, error_details)
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+### When Clauses & Skip Propagation
+
+Nodes can be conditionally skipped using `when` clauses, and skip status propagates
+automatically through dependency chains.
+
+**When Clause:** A node with a `when` expression is evaluated before execution. If the
+expression evaluates to `False`, the node is skipped and its result is stored as
+`{"_skipped": True, "reason": "..."}`. A `NodeSkipped` event is emitted.
+
+```yaml
+- kind: llm_node
+  metadata:
+    name: send_email
+  spec:
+    template: "Draft email for {{input}}"
+    when: "escalation_required == True"
+  dependencies: [classifier]
+```
+
+**Skip Propagation:** When ALL dependencies of a node were skipped, the downstream node
+is automatically skipped as well (no explicit `when` clause needed). The result includes
+`{"_skipped": True, "_upstream_skipped": True}` so downstream nodes can distinguish
+between a direct skip (from a `when` clause) and a propagated skip.
+
+```
+  A (when: "False") ──→ B ──→ C
+  │                     │     │
+  skipped               auto- auto-
+  (when clause)         skip  skip
+                        (_upstream_skipped)
+```
+
+**Partial Skip:** If a node depends on multiple upstream nodes and only some are skipped,
+the node still executes normally — it receives the non-skipped results in its input dict.
+Only when ALL dependencies are skipped does the auto-skip trigger.
+
+```
+  A (skipped) ─┐
+               ├──→ C (runs — receives B's result)
+  B (runs)   ─┘
+```
+
+**Implementation Details:**
+- `ExecutionCoordinator.prepare_node_input()` checks for all-deps-skipped
+- `NodeExecutor.execute_node()` checks for `_upstream_skipped` flag before `when` evaluation
+- `_apply_input_mapping()` defensively handles non-string values from malformed YAML/`!include`
 
 ---
 

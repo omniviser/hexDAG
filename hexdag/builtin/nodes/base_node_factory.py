@@ -52,8 +52,13 @@ class BaseNodeFactory(ABC):
                 match field_type:
                     case str():
                         # String type names - convert to actual types
-                        actual_type = type_map.get(field_type, Any)
-                        field_definitions[field_name] = (actual_type, ...)
+                        if field_type.endswith("?"):
+                            base = field_type[:-1]
+                            actual_type = type_map.get(base, Any)
+                            field_definitions[field_name] = (actual_type | None, None)
+                        else:
+                            actual_type = type_map.get(field_type, Any)
+                            field_definitions[field_name] = (actual_type, ...)
                     case type():
                         # Already a type
                         field_definitions[field_name] = (field_type, ...)
