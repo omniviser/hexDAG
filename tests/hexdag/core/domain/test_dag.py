@@ -9,9 +9,9 @@ from hexdag.core.domain.dag import (
     DuplicateNodeError,
     MissingDependencyError,
     NodeSpec,
+    NodeValidationError,
     SchemaCompatibilityError,
     ValidationCacheState,
-    ValidationError,
 )
 
 
@@ -210,7 +210,7 @@ class TestNodeSpec:
         # Missing required field
         test_data = {"name": "test"}  # Missing 'value'
 
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(NodeValidationError) as exc_info:
             node.validate_input(test_data)
 
         assert "Input validation failed for node 'test_node'" in str(exc_info.value)
@@ -252,7 +252,7 @@ class TestNodeSpec:
         # Invalid count (must be > 0)
         test_data = {"result": "success", "count": 0}
 
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(NodeValidationError) as exc_info:
             node.validate_output(test_data)
 
         assert "Output validation failed for node 'test_node'" in str(exc_info.value)

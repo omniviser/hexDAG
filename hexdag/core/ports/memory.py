@@ -29,7 +29,7 @@ class Memory(Protocol):
         -------
             The stored value, or None if key doesn't exist
         """
-        pass
+        ...
 
     @abstractmethod
     async def aset(self, key: str, value: Any) -> None:
@@ -40,7 +40,7 @@ class Memory(Protocol):
             key: The key to store under
             value: The value to store
         """
-        pass
+        ...
 
     async def ahealth_check(self) -> "HealthStatus":
         """Check memory storage backend health (optional).

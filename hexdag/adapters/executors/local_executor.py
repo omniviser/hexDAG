@@ -71,7 +71,7 @@ class Local:
 class LocalExecutor:
     """Local in-process executor using asyncio.
 
-    This executor wraps the core NodeExecutor and WaveExecutor to provide
+    This executor wraps the core NodeExecutor to provide
     the same in-process execution behavior but through the ExecutorPort
     interface. It's useful for:
 

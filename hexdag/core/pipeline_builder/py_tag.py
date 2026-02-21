@@ -30,12 +30,13 @@ from typing import Any
 
 import yaml
 
+from hexdag.core.exceptions import HexDAGError
 from hexdag.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class PyTagError(Exception):
+class PyTagError(HexDAGError):
     """Error compiling !py tagged Python code."""
 
     pass

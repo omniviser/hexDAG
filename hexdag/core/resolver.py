@@ -15,8 +15,10 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from hexdag.core.exceptions import HexDAGError
 
-class ResolveError(Exception):
+
+class ResolveError(HexDAGError):
     """Raised when a module path cannot be resolved."""
 
     def __init__(self, kind: str, reason: str):

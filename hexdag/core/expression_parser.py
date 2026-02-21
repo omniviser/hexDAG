@@ -52,6 +52,7 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Any
 
+from hexdag.core.exceptions import HexDAGError
 from hexdag.core.logging import get_logger
 
 __all__ = ["compile_expression", "evaluate_expression", "ExpressionError", "ALLOWED_FUNCTIONS"]
@@ -59,7 +60,7 @@ __all__ = ["compile_expression", "evaluate_expression", "ExpressionError", "ALLO
 logger = get_logger(__name__)
 
 
-class ExpressionError(Exception):
+class ExpressionError(HexDAGError):
     """Raised when expression parsing or evaluation fails."""
 
     def __init__(self, expression: str, reason: str) -> None:

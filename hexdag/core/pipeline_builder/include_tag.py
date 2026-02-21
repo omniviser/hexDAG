@@ -56,6 +56,7 @@ from typing import Any
 
 import yaml
 
+from hexdag.core.exceptions import HexDAGError
 from hexdag.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -64,7 +65,7 @@ logger = get_logger(__name__)
 _current_base_path: Path | None = None
 
 
-class IncludeTagError(Exception):
+class IncludeTagError(HexDAGError):
     """Error including external YAML file."""
 
     pass

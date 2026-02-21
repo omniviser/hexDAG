@@ -6,7 +6,6 @@ nodes with full lifecycle management including validation, timeout, and events.
 
 import asyncio
 import contextvars
-import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -15,7 +14,8 @@ else:
     ObserverManagerPort = Any
 
 from hexdag.core.context import get_observer_manager, set_current_node_name
-from hexdag.core.domain.dag import NodeSpec, ValidationError
+from hexdag.core.domain.dag import NodeSpec, NodeValidationError
+from hexdag.core.exceptions import HexDAGError
 from hexdag.core.expression_parser import ExpressionError, compile_expression
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
@@ -27,12 +27,13 @@ from hexdag.core.orchestration.events import (
     NodeStarted,
 )
 from hexdag.core.orchestration.models import NodeExecutionContext
+from hexdag.core.utils.node_timer import Timer
 from hexdag.core.validation.retry import RetryConfig, execute_with_retry
 
 logger = get_logger(__name__)
 
 
-class NodeExecutionError(Exception):
+class NodeExecutionError(HexDAGError):
     """Exception raised when a node fails to execute."""
 
     def __init__(self, node_name: str, original_error: Exception) -> None:
@@ -147,7 +148,7 @@ class NodeExecutor:
         Any
             The validated output from the node execution.
         """
-        node_start_time = time.time()
+        node_timer = Timer()
 
         observer_mgr = get_observer_manager()
 
@@ -156,7 +157,7 @@ class NodeExecutor:
             if validate:
                 try:
                     validated_input = node_spec.validate_input(node_input)
-                except ValidationError as e:
+                except NodeValidationError as e:
                     if self.strict_validation:
                         raise
                     logger.debug(
@@ -273,7 +274,7 @@ class NodeExecutor:
             if validate:
                 try:
                     validated_output = node_spec.validate_output(raw_output)
-                except ValidationError as e:
+                except NodeValidationError as e:
                     if self.strict_validation:
                         raise
                     logger.debug(
@@ -290,7 +291,7 @@ class NodeExecutor:
                 name=node_name,
                 wave_index=wave_index,
                 result=validated_output,
-                duration_ms=(time.time() - node_start_time) * 1000,
+                duration_ms=node_timer.duration_ms,
             )
             await coordinator.notify_observer(observer_mgr, complete_event)
 
@@ -315,7 +316,13 @@ class NodeExecutor:
             set_current_node_name(None)  # Clear on error
             raise
 
-        except (ValidationError, ValueError, TypeError, KeyError, AttributeError) as validation_err:
+        except (
+            NodeValidationError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+        ) as validation_err:
             # Validation/type errors - emit failure event
             fail_event = NodeFailed(
                 name=node_name,
@@ -339,6 +346,19 @@ class NodeExecutor:
 
             set_current_node_name(None)  # Clear on runtime error
             raise NodeExecutionError(node_name, runtime_err) from runtime_err
+
+        except Exception as err:
+            # Catch-all for any remaining errors (e.g. ParseError, HexDAGError
+            # subclasses) so every node error carries node name context.
+            fail_event = NodeFailed(
+                name=node_name,
+                wave_index=wave_index,
+                error=err,
+            )
+            await coordinator.notify_observer(observer_mgr, fail_event)
+
+            set_current_node_name(None)
+            raise NodeExecutionError(node_name, err) from err
 
     async def _execute_function(
         self,

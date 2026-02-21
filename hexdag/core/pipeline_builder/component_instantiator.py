@@ -13,6 +13,7 @@ import re
 from collections import namedtuple
 from typing import Any
 
+from hexdag.core.exceptions import HexDAGError
 from hexdag.core.logging import get_logger
 from hexdag.core.resolver import resolve
 
@@ -25,7 +26,7 @@ _DEFERRED_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(?::([^}]*))?\}")
 ComponentSpec = namedtuple("ComponentSpec", ["module_path", "params"])
 
 
-class ComponentInstantiationError(Exception):
+class ComponentInstantiationError(HexDAGError):
     """Error instantiating component from specification."""
 
     pass

@@ -18,17 +18,19 @@ if TYPE_CHECKING:
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
+from hexdag.core.exceptions import HexDAGError
+
 T = TypeVar("T", bound=BaseModel)
 
 _EMPTY_SET: frozenset[str] = frozenset()
 
 
-class ValidationError(Exception):
-    """Domain-specific validation error for DAG validation.
+class NodeValidationError(HexDAGError):
+    """Raised when DAG node input/output validation fails.
 
-    Note: This is separate from hexdag.core.exceptions.ValidationError
-    which is used for general field validation. This exception is specifically
-    for DAG node input/output validation failures.
+    This covers Pydantic model validation failures during node execution,
+    e.g. when input data doesn't match the node's ``in_model`` or output
+    data doesn't match the node's ``out_model``.
     """
 
     __slots__ = ()
@@ -132,7 +134,7 @@ class NodeSpec:
 
         Raises
         ------
-        ValidationError
+        NodeValidationError
             If validation fails
         """
         if model is None:
@@ -154,12 +156,12 @@ class NodeSpec:
             error_msg = (
                 f"{validation_type.capitalize()} validation failed for node '{self.name}': {e}"
             )
-            raise ValidationError(error_msg) from e
+            raise NodeValidationError(error_msg) from e
         except Exception as e:
             error_msg = (
                 f"{validation_type.capitalize()} validation error for node '{self.name}': {e}"
             )
-            raise ValidationError(error_msg) from e
+            raise NodeValidationError(error_msg) from e
 
     def validate_input(self, data: Any) -> BaseModel | Any:
         """Validate and convert input data using Pydantic model if available.
@@ -280,7 +282,7 @@ class NodeSpec:
         return f"NodeSpec('{self.name}'{types_str}{deps_str}{params_str})"
 
 
-class DirectedGraphError(Exception):
+class DirectedGraphError(HexDAGError):
     """Base exception for DirectedGraph errors."""
 
     __slots__ = ()

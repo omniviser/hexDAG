@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from hexdag.core.context import get_ports
+from hexdag.core.exceptions import HexDAGError
 from hexdag.core.logging import get_logger
 from hexdag.core.orchestration.models import NodeExecutionContext
 from hexdag.core.resolver import resolve_function
@@ -46,7 +47,7 @@ from hexdag.core.resolver import resolve_function
 logger = get_logger(__name__)
 
 
-class BodyExecutorError(Exception):
+class BodyExecutorError(HexDAGError):
     """Error during body execution."""
 
     pass
