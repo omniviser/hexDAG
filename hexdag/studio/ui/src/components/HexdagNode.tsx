@@ -7,8 +7,6 @@ import {
   FileText,
   Scissors,
   Bot,
-  GitBranch,
-  Repeat,
   Box,
   AlertCircle,
   Play,
@@ -28,8 +26,6 @@ const iconMap: Record<string, typeof Code> = {
   prompt_node: FileText,
   parser_node: Scissors,
   agent_node: Bot,
-  conditional_node: GitBranch,
-  loop_node: Repeat,
 }
 
 // Dynamic icon selection for plugin nodes (used when not in iconMap)
@@ -166,13 +162,6 @@ function getSpecPreview(kind: string, spec: Record<string, unknown>): Array<{ ke
       break
     case 'agent_node':
       if (spec.max_steps) preview.push({ key: 'max_steps', value: String(spec.max_steps) })
-      break
-    case 'conditional_node':
-      if (spec.condition) preview.push({ key: 'if', value: truncate(String(spec.condition), 25) })
-      break
-    case 'loop_node':
-      if (spec.items_key) preview.push({ key: 'items', value: String(spec.items_key) })
-      if (spec.max_iterations) preview.push({ key: 'max', value: String(spec.max_iterations) })
       break
     default:
       // Show first 2 spec items

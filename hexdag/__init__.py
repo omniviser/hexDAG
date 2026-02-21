@@ -16,10 +16,8 @@ except Exception:
 
 # Core framework exports
 from hexdag.builtin.nodes import (
-    ConditionalNode,
     FunctionNode,
     LLMNode,
-    LoopNode,
     ReActAgentNode,
 )
 from hexdag.core.domain import DirectedGraph, NodeSpec
@@ -99,8 +97,6 @@ __all__ = [
     "FunctionNode",
     "LLMNode",
     "ReActAgentNode",
-    "LoopNode",
-    "ConditionalNode",
     # Templating System
     "PromptTemplate",
     "FewShotPromptTemplate",

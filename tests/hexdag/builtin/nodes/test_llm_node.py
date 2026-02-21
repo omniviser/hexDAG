@@ -51,34 +51,34 @@ class TestParseJson:
 
 
 class TestParseJsonInMarkdown:
-    """Test _parse_json_in_markdown delegates to SafeJSON.loads_from_text."""
+    """Test _parse_json handles markdown code blocks via SafeJSON.loads_from_text."""
 
     def setup_method(self) -> None:
         self.node = LLMNode()
 
     def test_json_code_block(self) -> None:
         text = 'Output:\n```json\n{"answer": 42}\n```\n'
-        result = self.node._parse_json_in_markdown(text)
+        result = self.node._parse_json(text)
         assert result == {"answer": 42}
 
     def test_generic_code_block(self) -> None:
         text = 'Output:\n```\n{"answer": 42}\n```\n'
-        result = self.node._parse_json_in_markdown(text)
+        result = self.node._parse_json(text)
         assert result == {"answer": 42}
 
     def test_falls_back_to_raw_json(self) -> None:
         text = '{"answer": 42}'
-        result = self.node._parse_json_in_markdown(text)
+        result = self.node._parse_json(text)
         assert result == {"answer": 42}
 
     def test_json_with_comments_in_block(self) -> None:
         text = '```json\n{"a": 1, // comment\n}\n```'
-        result = self.node._parse_json_in_markdown(text)
+        result = self.node._parse_json(text)
         assert result == {"a": 1}
 
     def test_invalid_raises(self) -> None:
         with pytest.raises(json.JSONDecodeError):
-            self.node._parse_json_in_markdown("no json here")
+            self.node._parse_json("no json here")
 
 
 class TestParseYaml:

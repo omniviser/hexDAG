@@ -83,17 +83,17 @@
             ],
             "type": "object"
         },
-        "ConditionalNodeSpec": {
+        "CompositeNodeSpec": {
             "allOf": [
                 {
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for conditional_node type",
+            "description": "Specification for composite_node type",
             "properties": {
                 "kind": {
-                    "const": "conditional_node",
-                    "description": "Node type: conditional_node"
+                    "const": "composite_node",
+                    "description": "Node type: composite_node"
                 },
                 "metadata": {
                     "properties": {
@@ -112,44 +112,248 @@
                     "type": "object"
                 },
                 "spec": {
-                    "description": "Multi-branch conditional router for workflow control flow",
+                    "additionalProperties": false,
                     "properties": {
-                        "branches": {
-                            "description": "List of condition branches evaluated in order",
-                            "items": {
-                                "properties": {
-                                    "action": {
-                                        "description": "Action name to return if condition matches",
-                                        "type": "string"
-                                    },
-                                    "condition": {
-                                        "description": "Expression like 'node.field == value' or callable",
-                                        "type": "string"
-                                    }
+                        "body": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
                                 },
-                                "required": [
-                                    "condition",
-                                    "action"
-                                ],
+                                {
+                                    "items": {
+                                        "type": "object"
+                                    },
+                                    "type": "array"
+                                },
+                                {
+                                    "description": "Module path string (e.g., 'myapp.process') or !py inline function",
+                                    "type": "string"
+                                }
+                            ],
+                            "default": null,
+                            "description": "Body to execute. Can be: - Module path string (e.g., \"myapp.process\") - Callable (compiled from !py tag) - List of node configs (inline nodes/sub-DAG) - None for yield-to-downstream pattern"
+                        },
+                        "body_pipeline": {
+                            "default": null,
+                            "description": "Path to external pipeline YAML file",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "branches": {
+                            "default": null,
+                            "description": "List of condition branches for switch mode",
+                            "items": {
                                 "type": "object"
                             },
-                            "type": "array"
+                            "type": [
+                                "array",
+                                "null"
+                            ]
                         },
-                        "else_action": {
-                            "description": "Default action if no branch conditions match",
+                        "collect": {
+                            "default": "list",
+                            "description": "Result collection mode (default: \"list\")",
+                            "enum": [
+                                "list",
+                                "last",
+                                "first",
+                                "dict",
+                                "reduce"
+                            ],
                             "type": "string"
                         },
-                        "tie_break": {
-                            "default": "first_true",
-                            "description": "Strategy for handling multiple matching branches",
-                            "enum": [
-                                "first_true"
+                        "concurrency": {
+                            "default": 1,
+                            "description": "Max concurrent iterations for for-each/times (default: 1)",
+                            "type": "integer"
+                        },
+                        "condition": {
+                            "default": null,
+                            "description": "Condition expression for while, if-else, or switch branches",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "count": {
+                            "default": null,
+                            "description": "Number of iterations for times mode",
+                            "type": [
+                                "integer",
+                                "null"
+                            ]
+                        },
+                        "default_node_timeout": {
+                            "default": null,
+                            "type": [
+                                "number",
+                                "null"
+                            ]
+                        },
+                        "else_action": {
+                            "default": null,
+                            "description": "Action label for else branch (switch routing mode)",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "else_body": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "items": {
+                                        "type": "object"
+                                    },
+                                    "type": "array"
+                                }
                             ],
+                            "default": null,
+                            "description": "Body for else branch (if-else, switch with inline execution)"
+                        },
+                        "error_handling": {
+                            "default": "fail_fast",
+                            "description": "Error handling strategy (default: \"fail_fast\")",
+                            "enum": [
+                                "fail_fast",
+                                "continue",
+                                "collect"
+                            ],
+                            "type": "string"
+                        },
+                        "index_var": {
+                            "default": "index",
+                            "description": "Variable name for current index (default: \"index\")",
+                            "type": "string"
+                        },
+                        "initial_state": {
+                            "default": null,
+                            "description": "Initial state dict for while mode",
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        },
+                        "item_var": {
+                            "default": "item",
+                            "description": "Variable name for current item (default: \"item\")",
+                            "type": "string"
+                        },
+                        "items": {
+                            "default": null,
+                            "description": "Expression resolving to iterable for for-each mode",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "key_field": {
+                            "default": null,
+                            "description": "Field to use as key for dict collection",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "max_concurrent_nodes": {
+                            "default": 10,
+                            "type": "integer"
+                        },
+                        "max_iterations": {
+                            "default": 100,
+                            "description": "Safety limit for while loops (default: 100)",
+                            "type": "integer"
+                        },
+                        "mode": {
+                            "description": "Control flow mode: while, for-each, times, if-else, switch",
+                            "enum": [
+                                "while",
+                                "for-each",
+                                "times",
+                                "if-else",
+                                "switch"
+                            ],
+                            "type": "string"
+                        },
+                        "reducer": {
+                            "default": null,
+                            "description": "Module path to reducer function for reduce collection",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "state_update": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "default": null,
+                            "description": "State update expressions for while mode",
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        },
+                        "strict_validation": {
+                            "default": false,
+                            "type": "boolean"
+                        }
+                    },
+                    "required": [
+                        "mode"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "DataNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for data_node type",
+            "properties": {
+                "kind": {
+                    "const": "data_node",
+                    "description": "Node type: data_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
                             "type": "string"
                         }
                     },
                     "required": [
-                        "branches"
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "output": {
+                            "description": "Output data to return. Values can be: - Static values (strings, numbers, bools, etc.) - Template strings using {{variable}} syntax",
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "output"
                     ],
                     "type": "object"
                 }
@@ -203,6 +407,106 @@
             },
             "required": [
                 "type"
+            ],
+            "type": "object"
+        },
+        "ExpressionNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for expression_node type",
+            "properties": {
+                "kind": {
+                    "const": "expression_node",
+                    "description": "Node type: expression_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "expressions": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "default": null,
+                            "description": "Mapping of {variable_name: expression_string}. Expressions are evaluated in definition order and can reference: - Input fields from input_mapping - Earlier computed variables - Whitelisted functions (len, max, min, Decimal, etc.) Optional when using merge_strategy.",
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        },
+                        "extract_field": {
+                            "default": null,
+                            "description": "Field to extract from each dependency result before merging. Uses dot notation (e.g., \"result.score\").",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "merge_strategy": {
+                            "default": null,
+                            "description": "Strategy for merging multiple dependency outputs: - \"dict\": Return {node_name: result} passthrough (default for multi-dep) - \"list\": Return [result1, result2, ...] in dependency order - \"first\": Return first non-None result - \"last\": Return last non-None result - \"reduce\": Apply reducer function to values",
+                            "enum": [
+                                "dict",
+                                "list",
+                                "first",
+                                "last",
+                                "reduce"
+                            ],
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "output_fields": {
+                            "default": null,
+                            "description": "Fields to include in output dict. If None, all computed expressions are returned.",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array",
+                                "null"
+                            ]
+                        },
+                        "reducer": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "description": "Module path string (e.g., 'myapp.process') or !py inline function",
+                                    "type": "string"
+                                }
+                            ],
+                            "default": null,
+                            "description": "Module path (e.g., \"statistics.mean\") or callable for 'reduce' strategy. The function receives a list of values and returns a single result."
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
             ],
             "type": "object"
         },
@@ -325,17 +629,32 @@
             ],
             "type": "object"
         },
-        "LoopNodeSpec": {
+        "Node": {
+            "description": "Base node structure",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "spec": {
+                    "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "Port_CallNodeSpec": {
             "allOf": [
                 {
                     "$ref": "#/$defs/Node"
                 }
             ],
-            "description": "Specification for loop_node type",
+            "description": "Specification for port_call_node type",
             "properties": {
                 "kind": {
-                    "const": "loop_node",
-                    "description": "Node type: loop_node"
+                    "const": "port_call_node",
+                    "description": "Node type: port_call_node"
                 },
                 "metadata": {
                     "properties": {
@@ -354,45 +673,35 @@
                     "type": "object"
                 },
                 "spec": {
-                    "description": "Loop control node for iterative processing",
+                    "additionalProperties": false,
                     "properties": {
-                        "body": {
-                            "description": "Module path to body function: (data, state) -> Any",
+                        "fallback": {
+                            "default": null,
+                            "description": "Value to return if the port is not available",
                             "type": "string"
                         },
-                        "collect_mode": {
-                            "default": "last",
-                            "description": "How to collect results: last value, all values, or reduced",
-                            "enum": [
-                                "last",
-                                "list",
-                                "reduce"
-                            ],
+                        "has_fallback": {
+                            "default": false,
+                            "description": "Set to True to enable fallback behavior (allows None as fallback)",
                             "type": "string"
                         },
-                        "initial_state": {
-                            "default": {},
-                            "description": "Initial state dict passed to first iteration",
-                            "type": "object"
-                        },
-                        "iteration_key": {
-                            "default": "loop_iteration",
-                            "description": "Key name for current iteration number in state",
+                        "method": {
+                            "description": "Method name to invoke on the port",
                             "type": "string"
                         },
-                        "max_iterations": {
-                            "default": 100,
-                            "description": "Maximum number of iterations before stopping",
-                            "type": "integer"
+                        "output_schema": {
+                            "default": null,
+                            "description": "Optional schema for validating/structuring the output",
+                            "type": "string"
                         },
-                        "while_condition": {
-                            "description": "Module path to condition function: (data, state) -> bool",
+                        "port": {
+                            "description": "Name of the port to call (e.g., \"database\", \"llm\", \"tool_router\")",
                             "type": "string"
                         }
                     },
                     "required": [
-                        "while_condition",
-                        "body"
+                        "port",
+                        "method"
                     ],
                     "type": "object"
                 }
@@ -404,19 +713,87 @@
             ],
             "type": "object"
         },
-        "Node": {
-            "description": "Base node structure",
+        "Reasoning_AgentNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for reasoning_agent_node type",
             "properties": {
                 "kind": {
-                    "type": "string"
+                    "const": "reasoning_agent_node",
+                    "description": "Node type: reasoning_agent_node"
                 },
                 "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
                     "type": "object"
                 },
                 "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "config": {
+                            "default": null,
+                            "description": "Agent configuration",
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        },
+                        "continuation_prompts": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "default": null,
+                            "description": "Phase-specific prompts",
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        },
+                        "main_prompt": {
+                            "description": "Initial reasoning prompt",
+                            "type": "string"
+                        },
+                        "output_schema": {
+                            "anyOf": [
+                                {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ],
+                            "default": null,
+                            "description": "Custom output schema for tool_end results"
+                        }
+                    },
+                    "required": [
+                        "main_prompt"
+                    ],
                     "type": "object"
                 }
             },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
             "type": "object"
         },
         "Tool_CallNodeSpec": {
@@ -574,22 +951,31 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/$defs/FunctionNodeSpec"
-                            },
-                            {
                                 "$ref": "#/$defs/LlmNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/AgentNodeSpec"
+                                "$ref": "#/$defs/Reasoning_AgentNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/LoopNodeSpec"
+                                "$ref": "#/$defs/CompositeNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/ConditionalNodeSpec"
+                                "$ref": "#/$defs/DataNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/ExpressionNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/FunctionNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/Port_CallNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/Tool_CallNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/AgentNodeSpec"
                             }
                         ]
                     },

@@ -2,7 +2,6 @@
 
 import ast
 import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
@@ -18,6 +17,7 @@ from hexdag.core.orchestration.prompt import PromptInput
 from hexdag.core.orchestration.prompt.template import PromptTemplate
 from hexdag.core.ports.tool_router import ToolRouter
 from hexdag.core.protocols import to_dict
+from hexdag.core.utils.node_timer import node_timer
 
 from .base_node_factory import BaseNodeFactory
 from .llm_node import LLMNode
@@ -267,7 +267,6 @@ class ReActAgentNode(BaseNodeFactory):
         async def agent_with_internal_loop(input_data: Any) -> Any:
             """Agent executor with internal loop control."""
             node_logger = logger.bind(node=name, node_type="agent_node")
-            start_time = time.perf_counter()
 
             # Log agent start
             node_logger.info(
@@ -279,67 +278,65 @@ class ReActAgentNode(BaseNodeFactory):
             # Start with initial input
             current_result = input_data
 
-            # Run the loop until success condition is met or max iterations reached
-            for step_num in range(config.max_steps):
-                # Log step start
-                node_logger.debug(
-                    "Agent step starting",
-                    step=step_num + 1,
-                    max_steps=config.max_steps,
-                )
-
-                # Execute single step
-                step_result = await single_step_executor(current_result)
-
-                # If not AgentState, it's the final output
-                if not isinstance(step_result, AgentState):
-                    duration_ms = (time.perf_counter() - start_time) * 1000
-                    node_logger.info(
-                        "Agent completed with direct output",
-                        total_steps=step_num + 1,
-                        duration_ms=f"{duration_ms:.2f}",
-                        output_type=type(step_result).__name__,
+            with node_timer() as t:
+                # Run the loop until success condition is met or max iterations reached
+                for step_num in range(config.max_steps):
+                    # Log step start
+                    node_logger.debug(
+                        "Agent step starting",
+                        step=step_num + 1,
+                        max_steps=config.max_steps,
                     )
-                    return step_result
 
-                # Log step completion with state info
-                node_logger.debug(
-                    "Agent step completed",
-                    step=step_num + 1,
-                    phase=step_result.current_phase,
-                    tools_used_count=len(step_result.tools_used),
-                )
+                    # Execute single step
+                    step_result = await single_step_executor(current_result)
 
-                # Check success condition
-                if success_condition(step_result):
-                    final_output = await self._check_for_final_output(
-                        step_result,
-                        output_model,
-                        get_port("event_manager"),
-                    )
-                    if final_output is not None:
-                        duration_ms = (time.perf_counter() - start_time) * 1000
+                    # If not AgentState, it's the final output
+                    if not isinstance(step_result, AgentState):
                         node_logger.info(
-                            "Agent completed",
+                            "Agent completed with direct output",
                             total_steps=step_num + 1,
-                            tools_used=step_result.tools_used,
-                            phases=step_result.phase_history,
-                            duration_ms=f"{duration_ms:.2f}",
+                            duration_ms=t.duration_str,
+                            output_type=type(step_result).__name__,
                         )
-                        return final_output
-                    return step_result
+                        return step_result
 
-                # Continue with next iteration (pass AgentState directly)
-                current_result = step_result
+                    # Log step completion with state info
+                    node_logger.debug(
+                        "Agent step completed",
+                        step=step_num + 1,
+                        phase=step_result.current_phase,
+                        tools_used_count=len(step_result.tools_used),
+                    )
 
-            # If we reach here, max steps reached
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            node_logger.warning(
-                "Agent reached max steps",
-                max_steps=config.max_steps,
-                duration_ms=f"{duration_ms:.2f}",
-            )
-            return current_result
+                    # Check success condition
+                    if success_condition(step_result):
+                        final_output = await self._check_for_final_output(
+                            step_result,
+                            output_model,
+                            get_port("event_manager"),
+                        )
+                        if final_output is not None:
+                            node_logger.info(
+                                "Agent completed",
+                                total_steps=step_num + 1,
+                                tools_used=step_result.tools_used,
+                                phases=step_result.phase_history,
+                                duration_ms=t.duration_str,
+                            )
+                            return final_output
+                        return step_result
+
+                    # Continue with next iteration (pass AgentState directly)
+                    current_result = step_result
+
+                # If we reach here, max steps reached
+                node_logger.warning(
+                    "Agent reached max steps",
+                    max_steps=config.max_steps,
+                    duration_ms=t.duration_str,
+                )
+                return current_result
 
         return agent_with_internal_loop
 

@@ -41,12 +41,15 @@ properties:
         description: List of pipeline nodes
         items:
           oneOf:
-          - $ref: '#/$defs/FunctionNodeSpec'
           - $ref: '#/$defs/LlmNodeSpec'
-          - $ref: '#/$defs/AgentNodeSpec'
-          - $ref: '#/$defs/LoopNodeSpec'
-          - $ref: '#/$defs/ConditionalNodeSpec'
+          - $ref: '#/$defs/Reasoning_AgentNodeSpec'
+          - $ref: '#/$defs/CompositeNodeSpec'
+          - $ref: '#/$defs/DataNodeSpec'
+          - $ref: '#/$defs/ExpressionNodeSpec'
+          - $ref: '#/$defs/FunctionNodeSpec'
+          - $ref: '#/$defs/Port_CallNodeSpec'
           - $ref: '#/$defs/Tool_CallNodeSpec'
+          - $ref: '#/$defs/AgentNodeSpec'
       input_schema:
         type: object
         description: JSON Schema for pipeline inputs
@@ -112,38 +115,6 @@ required:
 - metadata
 - spec
 $defs:
-  FunctionNodeSpec:
-    allOf:
-    - $ref: '#/$defs/Node'
-    type: object
-    description: Specification for function_node type
-    properties:
-      kind:
-        const: function_node
-        description: 'Node type: function_node'
-      metadata:
-        type: object
-        properties:
-          name:
-            type: string
-            description: Unique node identifier within the pipeline
-          annotations:
-            type: object
-            description: Optional metadata annotations
-        required:
-        - name
-      spec:
-        type: object
-        properties:
-          fn:
-            type: string
-            description: Module path string (e.g., 'myapp.process')
-        required:
-        - fn
-    required:
-    - kind
-    - metadata
-    - spec
   LlmNodeSpec:
     allOf:
     - $ref: '#/$defs/Node'
@@ -190,6 +161,471 @@ $defs:
             description: JSON parsing strategy
         required:
         - prompt_template
+    required:
+    - kind
+    - metadata
+    - spec
+  Reasoning_AgentNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for reasoning_agent_node type
+    properties:
+      kind:
+        const: reasoning_agent_node
+        description: 'Node type: reasoning_agent_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          main_prompt:
+            type: string
+            description: Initial reasoning prompt
+          continuation_prompts:
+            type:
+            - object
+            - 'null'
+            additionalProperties:
+              type: string
+            description: Phase-specific prompts
+            default: null
+          output_schema:
+            anyOf:
+            - type: object
+              additionalProperties:
+                type: string
+            - type: string
+            description: Custom output schema for tool_end results
+            default: null
+          config:
+            type:
+            - string
+            - 'null'
+            description: Agent configuration
+            default: null
+        additionalProperties: false
+        required:
+        - main_prompt
+    required:
+    - kind
+    - metadata
+    - spec
+  CompositeNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for composite_node type
+    properties:
+      kind:
+        const: composite_node
+        description: 'Node type: composite_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          mode:
+            type: string
+            enum:
+            - while
+            - for-each
+            - times
+            - if-else
+            - switch
+            description: 'Control flow mode: while, for-each, times, if-else, switch'
+          body:
+            anyOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+            - type: string
+              description: Module path string (e.g., 'myapp.process') or !py inline
+                function
+            description: 'Body to execute. Can be: - Module path string (e.g., "myapp.process")
+              - Callable (compiled from !py tag) - List of node configs (inline nodes/sub-DAG)
+              - None for yield-to-downstream pattern'
+            default: null
+          body_pipeline:
+            type:
+            - string
+            - 'null'
+            description: Path to external pipeline YAML file
+            default: null
+          condition:
+            type:
+            - string
+            - 'null'
+            description: Condition expression for while, if-else, or switch branches
+            default: null
+          items:
+            type:
+            - string
+            - 'null'
+            description: Expression resolving to iterable for for-each mode
+            default: null
+          item_var:
+            type: string
+            description: 'Variable name for current item (default: "item")'
+            default: item
+          index_var:
+            type: string
+            description: 'Variable name for current index (default: "index")'
+            default: index
+          count:
+            type:
+            - integer
+            - 'null'
+            description: Number of iterations for times mode
+            default: null
+          branches:
+            type:
+            - array
+            - 'null'
+            items:
+              type: object
+            description: List of condition branches for switch mode
+            default: null
+          else_body:
+            anyOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+            description: Body for else branch (if-else, switch with inline execution)
+            default: null
+          else_action:
+            type:
+            - string
+            - 'null'
+            description: Action label for else branch (switch routing mode)
+            default: null
+          initial_state:
+            type:
+            - object
+            - 'null'
+            description: Initial state dict for while mode
+            default: null
+          state_update:
+            type:
+            - object
+            - 'null'
+            additionalProperties:
+              type: string
+            description: State update expressions for while mode
+            default: null
+          max_iterations:
+            type: integer
+            description: 'Safety limit for while loops (default: 100)'
+            default: 100
+          concurrency:
+            type: integer
+            description: 'Max concurrent iterations for for-each/times (default: 1)'
+            default: 1
+          collect:
+            type: string
+            enum:
+            - list
+            - last
+            - first
+            - dict
+            - reduce
+            description: 'Result collection mode (default: "list")'
+            default: list
+          key_field:
+            type:
+            - string
+            - 'null'
+            description: Field to use as key for dict collection
+            default: null
+          reducer:
+            type:
+            - string
+            - 'null'
+            description: Module path to reducer function for reduce collection
+            default: null
+          error_handling:
+            type: string
+            enum:
+            - fail_fast
+            - continue
+            - collect
+            description: 'Error handling strategy (default: "fail_fast")'
+            default: fail_fast
+          max_concurrent_nodes:
+            type: integer
+            default: 10
+          strict_validation:
+            type: boolean
+            default: false
+          default_node_timeout:
+            type:
+            - number
+            - 'null'
+            default: null
+        additionalProperties: false
+        required:
+        - mode
+    required:
+    - kind
+    - metadata
+    - spec
+  DataNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for data_node type
+    properties:
+      kind:
+        const: data_node
+        description: 'Node type: data_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          output:
+            type: object
+            description: 'Output data to return. Values can be: - Static values (strings,
+              numbers, bools, etc.) - Template strings using {{variable}} syntax'
+        additionalProperties: false
+        required:
+        - output
+    required:
+    - kind
+    - metadata
+    - spec
+  ExpressionNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for expression_node type
+    properties:
+      kind:
+        const: expression_node
+        description: 'Node type: expression_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          expressions:
+            type:
+            - object
+            - 'null'
+            additionalProperties:
+              type: string
+            description: 'Mapping of {variable_name: expression_string}. Expressions
+              are evaluated in definition order and can reference: - Input fields
+              from input_mapping - Earlier computed variables - Whitelisted functions
+              (len, max, min, Decimal, etc.) Optional when using merge_strategy.'
+            default: null
+          output_fields:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+            description: Fields to include in output dict. If None, all computed expressions
+              are returned.
+            default: null
+          merge_strategy:
+            type:
+            - string
+            - 'null'
+            enum:
+            - dict
+            - list
+            - first
+            - last
+            - reduce
+            description: 'Strategy for merging multiple dependency outputs: - "dict":
+              Return {node_name: result} passthrough (default for multi-dep) - "list":
+              Return [result1, result2, ...] in dependency order - "first": Return
+              first non-None result - "last": Return last non-None result - "reduce":
+              Apply reducer function to values'
+            default: null
+          reducer:
+            anyOf:
+            - type: string
+            - type: string
+              description: Module path string (e.g., 'myapp.process') or !py inline
+                function
+            description: Module path (e.g., "statistics.mean") or callable for 'reduce'
+              strategy. The function receives a list of values and returns a single
+              result.
+            default: null
+          extract_field:
+            type:
+            - string
+            - 'null'
+            description: Field to extract from each dependency result before merging.
+              Uses dot notation (e.g., "result.score").
+            default: null
+        additionalProperties: false
+    required:
+    - kind
+    - metadata
+    - spec
+  FunctionNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for function_node type
+    properties:
+      kind:
+        const: function_node
+        description: 'Node type: function_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          fn:
+            type: string
+            description: Module path string (e.g., 'myapp.process')
+        required:
+        - fn
+    required:
+    - kind
+    - metadata
+    - spec
+  Port_CallNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for port_call_node type
+    properties:
+      kind:
+        const: port_call_node
+        description: 'Node type: port_call_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          port:
+            type: string
+            description: Name of the port to call (e.g., "database", "llm", "tool_router")
+          method:
+            type: string
+            description: Method name to invoke on the port
+          fallback:
+            type: string
+            description: Value to return if the port is not available
+            default: null
+          has_fallback:
+            type: string
+            description: Set to True to enable fallback behavior (allows None as fallback)
+            default: false
+          output_schema:
+            type: string
+            description: Optional schema for validating/structuring the output
+            default: null
+        additionalProperties: false
+        required:
+        - port
+        - method
+    required:
+    - kind
+    - metadata
+    - spec
+  Tool_CallNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for tool_call_node type
+    properties:
+      kind:
+        const: tool_call_node
+        description: 'Node type: tool_call_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          tool_name:
+            type: string
+            description: Full module path to the tool function (e.g., 'mymodule.my_tool')
+          arguments:
+            type:
+            - object
+            - 'null'
+            description: 'Arguments to pass to the tool (default: {})'
+            default: null
+          tool_call_id:
+            type:
+            - string
+            - 'null'
+            description: Optional ID for tracking (from LLM tool calls)
+            default: null
+        additionalProperties: false
+        required:
+        - tool_name
     required:
     - kind
     - metadata
@@ -245,162 +681,6 @@ $defs:
         additionalProperties: false
         required:
         - main_prompt
-    required:
-    - kind
-    - metadata
-    - spec
-  LoopNodeSpec:
-    allOf:
-    - $ref: '#/$defs/Node'
-    type: object
-    description: Specification for loop_node type
-    properties:
-      kind:
-        const: loop_node
-        description: 'Node type: loop_node'
-      metadata:
-        type: object
-        properties:
-          name:
-            type: string
-            description: Unique node identifier within the pipeline
-          annotations:
-            type: object
-            description: Optional metadata annotations
-        required:
-        - name
-      spec:
-        type: object
-        description: Loop control node for iterative processing
-        properties:
-          while_condition:
-            type: string
-            description: 'Module path to condition function: (data, state) -> bool'
-          body:
-            type: string
-            description: 'Module path to body function: (data, state) -> Any'
-          max_iterations:
-            type: integer
-            default: 100
-            description: Maximum number of iterations before stopping
-          collect_mode:
-            type: string
-            enum:
-            - last
-            - list
-            - reduce
-            default: last
-            description: 'How to collect results: last value, all values, or reduced'
-          initial_state:
-            type: object
-            default: {}
-            description: Initial state dict passed to first iteration
-          iteration_key:
-            type: string
-            default: loop_iteration
-            description: Key name for current iteration number in state
-        required:
-        - while_condition
-        - body
-    required:
-    - kind
-    - metadata
-    - spec
-  ConditionalNodeSpec:
-    allOf:
-    - $ref: '#/$defs/Node'
-    type: object
-    description: Specification for conditional_node type
-    properties:
-      kind:
-        const: conditional_node
-        description: 'Node type: conditional_node'
-      metadata:
-        type: object
-        properties:
-          name:
-            type: string
-            description: Unique node identifier within the pipeline
-          annotations:
-            type: object
-            description: Optional metadata annotations
-        required:
-        - name
-      spec:
-        type: object
-        description: Multi-branch conditional router for workflow control flow
-        properties:
-          branches:
-            type: array
-            description: List of condition branches evaluated in order
-            items:
-              type: object
-              properties:
-                condition:
-                  type: string
-                  description: Expression like 'node.field == value' or callable
-                action:
-                  type: string
-                  description: Action name to return if condition matches
-              required:
-              - condition
-              - action
-          else_action:
-            type: string
-            description: Default action if no branch conditions match
-          tie_break:
-            type: string
-            enum:
-            - first_true
-            default: first_true
-            description: Strategy for handling multiple matching branches
-        required:
-        - branches
-    required:
-    - kind
-    - metadata
-    - spec
-  Tool_CallNodeSpec:
-    allOf:
-    - $ref: '#/$defs/Node'
-    type: object
-    description: Specification for tool_call_node type
-    properties:
-      kind:
-        const: tool_call_node
-        description: 'Node type: tool_call_node'
-      metadata:
-        type: object
-        properties:
-          name:
-            type: string
-            description: Unique node identifier within the pipeline
-          annotations:
-            type: object
-            description: Optional metadata annotations
-        required:
-        - name
-      spec:
-        type: object
-        properties:
-          tool_name:
-            type: string
-            description: Full module path to the tool function (e.g., 'mymodule.my_tool')
-          arguments:
-            type:
-            - object
-            - 'null'
-            description: 'Arguments to pass to the tool (default: {})'
-            default: null
-          tool_call_id:
-            type:
-            - string
-            - 'null'
-            description: Optional ID for tracking (from LLM tool calls)
-            default: null
-        additionalProperties: false
-        required:
-        - tool_name
     required:
     - kind
     - metadata

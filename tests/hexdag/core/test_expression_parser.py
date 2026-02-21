@@ -270,8 +270,8 @@ class TestErrorHandling:
 class TestRealWorldExamples:
     """Test real-world usage examples."""
 
-    def test_conditional_node_expression(self) -> None:
-        """Test expression like in ConditionalNode."""
+    def test_conditional_expression(self) -> None:
+        """Test conditional branching expression."""
         # Simulating output from a previous node
         node_output = {
             "determine_action": {
@@ -292,7 +292,7 @@ class TestRealWorldExamples:
         assert pred(node_output, {}) is True
 
     def test_loop_condition_expression(self) -> None:
-        """Test expression like in LoopNode."""
+        """Test loop condition expression with state."""
         pred = compile_expression("state.iteration < 10 and not state.done")
         assert pred({}, {"iteration": 5, "done": False}) is True
         assert pred({}, {"iteration": 5, "done": True}) is False
@@ -366,8 +366,8 @@ class TestTernaryConditional:
         assert evaluate_expression(expr, {"name": "John", "uppercase": True}) == "JOHN"
         assert evaluate_expression(expr, {"name": "John", "uppercase": False}) == "john"
 
-    def test_ternary_in_conditional_node_context(self) -> None:
-        """Test ternary expressions as used in ConditionalNode."""
+    def test_ternary_in_conditional_context(self) -> None:
+        """Test ternary expressions for conditional branching."""
         # Common pattern: selecting discount based on customer tier
         expr = "0.2 if tier == 'gold' else (0.1 if tier == 'silver' else 0)"
         assert evaluate_expression(expr, {"tier": "gold"}) == 0.2
@@ -475,8 +475,8 @@ class TestAdditionalFunctions:
         assert result == "1,234.50"
 
 
-class TestConditionalNodeExpressions:
-    """Test expressions commonly used in ConditionalNode."""
+class TestConditionalExpressions:
+    """Test expressions commonly used in conditional branching."""
 
     def test_negotiation_rate_comparison(self) -> None:
         """Test rate comparison expression."""

@@ -289,148 +289,167 @@ def _get_value(data: dict[str, Any], state: dict[str, Any], path: list[str]) -> 
     return current
 
 
-def _evaluate_node(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
-    """Evaluate an AST node against data and state.
+# Allowed binary operators (hoisted from inline dict)
+_BINOP_MAP: dict[type[ast.operator], Callable[[Any, Any], Any]] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+}
 
-    Parameters
-    ----------
-    node : ast.AST
-        AST node to evaluate
-    data : dict
-        Data dict for variable resolution
-    state : dict
-        State dict for state variable resolution
 
-    Returns
-    -------
-    Any
-        Result of evaluation
-    """
-    if isinstance(node, ast.Constant):
-        return node.value
+# --- Individual AST node handlers ---
 
-    if isinstance(node, ast.Name):
-        # Simple variable access
-        if node.id == "True":
-            return True
-        if node.id == "False":
-            return False
-        if node.id == "None":
-            return None
-        if node.id == "state":
-            return state
-        return data.get(node.id)
 
-    if isinstance(node, ast.Attribute):
-        # Build path for attribute access
-        path = _collect_attribute_path(node)
-        return _get_value(data, state, path)
+def _eval_constant(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    return node.value  # type: ignore[attr-defined]
 
-    if isinstance(node, ast.Subscript):
-        # Handle subscript access: data["key"] or data[0]
-        value = _evaluate_node(node.value, data, state)
-        # Handle slice (Python 3.9+ changed ast.Index)
-        if isinstance(node.slice, ast.Index):  # Python 3.8
-            key = _evaluate_node(node.slice.value, data, state)  # type: ignore[attr-defined]
-        else:
-            key = _evaluate_node(node.slice, data, state)
-        if value is None:
-            return None
-        if isinstance(value, dict):
-            return value.get(key)
-        if isinstance(value, (list, tuple)) and isinstance(key, int):
-            return value[key] if 0 <= key < len(value) else None
+
+def _eval_name(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.Name = node  # type: ignore[assignment]
+    if n.id == "True":
+        return True
+    if n.id == "False":
+        return False
+    if n.id == "None":
         return None
+    if n.id == "state":
+        return state
+    return data.get(n.id)
 
-    if isinstance(node, ast.Compare):
-        # Handle chained comparisons: a < b < c
-        left = _evaluate_node(node.left, data, state)
-        result = True
-        for op, comparator in zip(node.ops, node.comparators, strict=False):
-            right = _evaluate_node(comparator, data, state)
-            op_func = _COMPARE_OPS.get(type(op))
-            if op_func is None:
-                raise ExpressionError("", f"Unsupported comparison: {type(op).__name__}")
-            try:
-                result = result and op_func(left, right)
-            except TypeError:
-                # Handle None comparisons gracefully
-                return False
-            left = right
-        return result
 
-    if isinstance(node, ast.BoolOp):
-        # Handle and/or with short-circuit evaluation
-        values = [_evaluate_node(v, data, state) for v in node.values]
-        op_func = _BOOL_OPS.get(type(node.op))
+def _eval_attribute(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    path = _collect_attribute_path(node)  # type: ignore[arg-type]
+    return _get_value(data, state, path)
+
+
+def _eval_subscript(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.Subscript = node  # type: ignore[assignment]
+    value = _evaluate_node(n.value, data, state)
+    if isinstance(n.slice, ast.Index):  # Python 3.8 compat
+        key = _evaluate_node(n.slice.value, data, state)  # type: ignore[attr-defined]
+    else:
+        key = _evaluate_node(n.slice, data, state)
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value.get(key)
+    if isinstance(value, (list, tuple)) and isinstance(key, int):
+        return value[key] if 0 <= key < len(value) else None
+    return None
+
+
+def _eval_compare(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.Compare = node  # type: ignore[assignment]
+    left = _evaluate_node(n.left, data, state)
+    result = True
+    for op, comparator in zip(n.ops, n.comparators, strict=False):
+        right = _evaluate_node(comparator, data, state)
+        op_func = _COMPARE_OPS.get(type(op))
         if op_func is None:
-            raise ExpressionError("", f"Unsupported boolean op: {type(node.op).__name__}")
-        return op_func(*values)
-
-    if isinstance(node, ast.UnaryOp):
-        operand = _evaluate_node(node.operand, data, state)
-        unary_op_func = _UNARY_OPS.get(type(node.op))
-        if unary_op_func is None:
-            raise ExpressionError("", f"Unsupported unary op: {type(node.op).__name__}")
-        return unary_op_func(operand)
-
-    if isinstance(node, ast.IfExp):
-        # Handle ternary conditional: a if condition else b
-        condition = _evaluate_node(node.test, data, state)
-        if condition:
-            return _evaluate_node(node.body, data, state)
-        return _evaluate_node(node.orelse, data, state)
-
-    if isinstance(node, ast.List):
-        return [_evaluate_node(elt, data, state) for elt in node.elts]
-
-    if isinstance(node, ast.Tuple):
-        return tuple(_evaluate_node(elt, data, state) for elt in node.elts)
-
-    if isinstance(node, ast.Dict):
-        keys = [_evaluate_node(k, data, state) if k else None for k in node.keys]
-        values = [_evaluate_node(v, data, state) for v in node.values]
-        return dict(zip(keys, values, strict=False))
-
-    if isinstance(node, ast.BinOp):
-        # Handle arithmetic operators
-        left = _evaluate_node(node.left, data, state)
-        right = _evaluate_node(node.right, data, state)
-        bin_ops = {
-            ast.Add: operator.add,
-            ast.Sub: operator.sub,
-            ast.Mult: operator.mul,
-            ast.Div: operator.truediv,
-            ast.Mod: operator.mod,
-        }
-        op_func = bin_ops.get(type(node.op))
-        if op_func is None:
-            raise ExpressionError("", f"Unsupported binary op: {type(node.op).__name__}")
-        return op_func(left, right)
-
-    if isinstance(node, ast.Call):
-        # Handle whitelisted function calls
-        func_name = _get_function_name(node.func)
-        if func_name is None or func_name not in ALLOWED_FUNCTIONS:
-            raise ExpressionError("", f"Unknown or disallowed function: {func_name}")
-
-        func = ALLOWED_FUNCTIONS[func_name]
-
-        # Evaluate arguments
-        args = [_evaluate_node(arg, data, state) for arg in node.args]
-
-        # Evaluate keyword arguments
-        kwargs = {}
-        for kw in node.keywords:
-            if kw.arg is not None:
-                kwargs[kw.arg] = _evaluate_node(kw.value, data, state)
-
+            raise ExpressionError("", f"Unsupported comparison: {type(op).__name__}")
         try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            raise ExpressionError("", f"Error calling {func_name}: {e}") from e
+            result = result and op_func(left, right)
+        except TypeError:
+            return False
+        left = right
+    return result
 
-    raise ExpressionError("", f"Unsupported AST node: {type(node).__name__}")
+
+def _eval_boolop(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.BoolOp = node  # type: ignore[assignment]
+    values = [_evaluate_node(v, data, state) for v in n.values]
+    op_func = _BOOL_OPS.get(type(n.op))
+    if op_func is None:
+        raise ExpressionError("", f"Unsupported boolean op: {type(n.op).__name__}")
+    return op_func(*values)
+
+
+def _eval_unaryop(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.UnaryOp = node  # type: ignore[assignment]
+    operand = _evaluate_node(n.operand, data, state)
+    op_func = _UNARY_OPS.get(type(n.op))
+    if op_func is None:
+        raise ExpressionError("", f"Unsupported unary op: {type(n.op).__name__}")
+    return op_func(operand)
+
+
+def _eval_ifexp(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.IfExp = node  # type: ignore[assignment]
+    if _evaluate_node(n.test, data, state):
+        return _evaluate_node(n.body, data, state)
+    return _evaluate_node(n.orelse, data, state)
+
+
+def _eval_list(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> list[Any]:
+    return [_evaluate_node(elt, data, state) for elt in node.elts]  # type: ignore[attr-defined]
+
+
+def _eval_tuple(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(_evaluate_node(elt, data, state) for elt in node.elts)  # type: ignore[attr-defined]
+
+
+def _eval_dict(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> dict[Any, Any]:
+    n: ast.Dict = node  # type: ignore[assignment]
+    keys = [_evaluate_node(k, data, state) if k else None for k in n.keys]
+    values = [_evaluate_node(v, data, state) for v in n.values]
+    return dict(zip(keys, values, strict=False))
+
+
+def _eval_binop(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.BinOp = node  # type: ignore[assignment]
+    left = _evaluate_node(n.left, data, state)
+    right = _evaluate_node(n.right, data, state)
+    op_func = _BINOP_MAP.get(type(n.op))
+    if op_func is None:
+        raise ExpressionError("", f"Unsupported binary op: {type(n.op).__name__}")
+    return op_func(left, right)
+
+
+def _eval_call(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    n: ast.Call = node  # type: ignore[assignment]
+    func_name = _get_function_name(n.func)
+    if func_name is None or func_name not in ALLOWED_FUNCTIONS:
+        raise ExpressionError("", f"Unknown or disallowed function: {func_name}")
+
+    func = ALLOWED_FUNCTIONS[func_name]
+    args = [_evaluate_node(arg, data, state) for arg in n.args]
+    kwargs = {}
+    for kw in n.keywords:
+        if kw.arg is not None:
+            kwargs[kw.arg] = _evaluate_node(kw.value, data, state)
+
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        raise ExpressionError("", f"Error calling {func_name}: {e}") from e
+
+
+# Dispatch table mapping AST node types to their handlers
+_NODE_HANDLERS: dict[type, Callable[[ast.AST, dict[str, Any], dict[str, Any]], Any]] = {
+    ast.Constant: _eval_constant,
+    ast.Name: _eval_name,
+    ast.Attribute: _eval_attribute,
+    ast.Subscript: _eval_subscript,
+    ast.Compare: _eval_compare,
+    ast.BoolOp: _eval_boolop,
+    ast.UnaryOp: _eval_unaryop,
+    ast.IfExp: _eval_ifexp,
+    ast.List: _eval_list,
+    ast.Tuple: _eval_tuple,
+    ast.Dict: _eval_dict,
+    ast.BinOp: _eval_binop,
+    ast.Call: _eval_call,
+}
+
+
+def _evaluate_node(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    """Evaluate an AST node against data and state."""
+    handler = _NODE_HANDLERS.get(type(node))
+    if handler is None:
+        raise ExpressionError("", f"Unsupported AST node: {type(node).__name__}")
+    return handler(node, data, state)
 
 
 def _collect_attribute_path(node: ast.Attribute) -> list[str]:

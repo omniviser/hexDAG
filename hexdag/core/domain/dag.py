@@ -645,24 +645,14 @@ class DirectedGraph:
             if missing_deps:
                 raise MissingDependencyError("; ".join(missing_deps))
 
-            if cycle_message := self._detect_cycles():
+            graph = {name: node_spec.deps for name, node_spec in self.nodes.items()}
+            if cycle_message := DirectedGraph.detect_cycle(graph):
                 raise CycleDetectedError(cycle_message)
 
             self._validation_cache = ValidationCacheState.VALID
 
         if check_type_compatibility and (incompatibilities := self._validate_type_compatibility()):
             raise SchemaCompatibilityError("; ".join(incompatibilities))
-
-    def _detect_cycles(self) -> str | None:
-        """Detect cycles using depth-first search with three states.
-
-        Returns
-        -------
-        str | None
-            Cycle detected message or None if no cycle is detected
-        """
-        graph = {name: node_spec.deps for name, node_spec in self.nodes.items()}
-        return DirectedGraph.detect_cycle(graph)
 
     def _validate_type_compatibility(self) -> list[str]:
         """Validate type compatibility between connected nodes.
@@ -1109,7 +1099,8 @@ class DirectedGraph:
 
         # Step 4: Single cycle check for entire merged graph
         # Only check if merge creates cycles (incremental check)
-        if self._detect_cycles():
+        graph = {name: node_spec.deps for name, node_spec in self.nodes.items()}
+        if DirectedGraph.detect_cycle(graph):
             # Rollback the merge
             for node_name in other.nodes:
                 del self.nodes[node_name]

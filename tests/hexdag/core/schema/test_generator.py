@@ -527,26 +527,6 @@ class TestYamlSchemaAttribute:
         # Should fallback to introspection
         assert "value" in schema["properties"]
 
-    def test_conditional_node_has_schema(self):
-        """Test that real ConditionalNode returns meaningful schema."""
-        from hexdag.builtin.nodes import ConditionalNode
-
-        schema = SchemaGenerator.from_callable(ConditionalNode)
-
-        # Should have branches property from _yaml_schema
-        assert "branches" in schema.get("properties", {})
-        assert "else_action" in schema.get("properties", {})
-
-    def test_loop_node_has_schema(self):
-        """Test that real LoopNode returns meaningful schema."""
-        from hexdag.builtin.nodes import LoopNode
-
-        schema = SchemaGenerator.from_callable(LoopNode)
-
-        # Should have while_condition and body from _yaml_schema
-        assert "while_condition" in schema.get("properties", {})
-        assert "body" in schema.get("properties", {})
-
     def test_yaml_schema_formats(self):
         """Test _yaml_schema works with different output formats."""
 

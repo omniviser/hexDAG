@@ -3,7 +3,6 @@
 import asyncio
 import importlib
 import inspect
-import time
 from collections.abc import Callable
 from typing import Any, get_type_hints
 
@@ -12,6 +11,7 @@ from pydantic import BaseModel
 from hexdag.core.domain.dag import NodeSpec
 from hexdag.core.logging import get_logger
 from hexdag.core.protocols import is_schema_type
+from hexdag.core.utils.node_timer import node_timer
 
 from .base_node_factory import BaseNodeFactory
 from .mapped_input import MappedInput
@@ -204,8 +204,6 @@ class FunctionNode(BaseNodeFactory):
             # Log execution start
             node_logger.info("Executing function", fn_name=fn_name)
 
-            start_time = time.perf_counter()
-
             # Prepare function call arguments
             if accepts_kwargs:
                 # Function accepts **kwargs, pass all ports
@@ -214,52 +212,49 @@ class FunctionNode(BaseNodeFactory):
                 # Function has specific parameters, only pass ports that match parameter names
                 call_kwargs = {k: v for k, v in ports.items() if k in param_names}
 
-            try:
-                # Execute function (handle both sync and async)
-                if unpack_input:
-                    # Unpack input_data fields as individual kwargs
-                    # This allows functions with signatures like fn(load_id, rate, *, db=None)
-                    if isinstance(input_data, dict):
-                        unpacked_kwargs = {**input_data, **call_kwargs}
-                    elif isinstance(input_data, BaseModel):
-                        unpacked_kwargs = {**input_data.model_dump(), **call_kwargs}
+            with node_timer() as t:
+                try:
+                    # Execute function (handle both sync and async)
+                    if unpack_input:
+                        # Unpack input_data fields as individual kwargs
+                        # This allows functions with signatures like fn(load_id, rate, *, db=None)
+                        if isinstance(input_data, dict):
+                            unpacked_kwargs = {**input_data, **call_kwargs}
+                        elif isinstance(input_data, BaseModel):
+                            unpacked_kwargs = {**input_data.model_dump(), **call_kwargs}
+                        else:
+                            # Fallback: try to convert to dict
+                            unpacked_kwargs = {**vars(input_data), **call_kwargs}
+
+                        if asyncio.iscoroutinefunction(fn):
+                            result = await fn(**unpacked_kwargs)
+                        else:
+                            result = fn(**unpacked_kwargs)
                     else:
-                        # Fallback: try to convert to dict
-                        unpacked_kwargs = {**vars(input_data), **call_kwargs}
+                        # Standard behavior: pass input_data as first positional argument
+                        if asyncio.iscoroutinefunction(fn):
+                            result = await fn(input_data, **call_kwargs)
+                        else:
+                            result = fn(input_data, **call_kwargs)
 
-                    if asyncio.iscoroutinefunction(fn):
-                        result = await fn(**unpacked_kwargs)
-                    else:
-                        result = fn(**unpacked_kwargs)
-                else:
-                    # Standard behavior: pass input_data as first positional argument
-                    if asyncio.iscoroutinefunction(fn):
-                        result = await fn(input_data, **call_kwargs)
-                    else:
-                        result = fn(input_data, **call_kwargs)
+                    node_logger.debug(
+                        "Function completed",
+                        fn_name=fn_name,
+                        duration_ms=t.duration_str,
+                        output_type=type(result).__name__,
+                    )
 
-                # Log successful completion
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                node_logger.debug(
-                    "Function completed",
-                    fn_name=fn_name,
-                    duration_ms=f"{duration_ms:.2f}",
-                    output_type=type(result).__name__,
-                )
+                    return result
 
-                return result
-
-            except Exception as e:
-                # Log failure
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                node_logger.error(
-                    "Function failed",
-                    fn_name=fn_name,
-                    duration_ms=f"{duration_ms:.2f}",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                )
-                raise
+                except Exception as e:
+                    node_logger.error(
+                        "Function failed",
+                        fn_name=fn_name,
+                        duration_ms=t.duration_str,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+                    raise
 
         # Preserve function metadata
         wrapped_fn.__name__ = getattr(fn, "__name__", f"wrapped_{name}")

@@ -35,7 +35,7 @@ class TestGetNodeTypes:
         data = response.json()
         kinds = [n["kind"] for n in data["nodes"]]
         # Deprecated nodes should not be included by default
-        deprecated = {"conditional_node", "loop_node", "data_node"}
+        deprecated = {"data_node"}
         for d in deprecated:
             assert d not in kinds
 

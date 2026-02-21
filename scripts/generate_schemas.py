@@ -17,19 +17,14 @@ be manually edited. Pre-commit hooks will reject manual modifications.
 
 from __future__ import annotations
 
+import importlib
 import json
+import pkgutil
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
-from hexdag.builtin.nodes import (
-    ConditionalNode,
-    FunctionNode,
-    LLMNode,
-    LoopNode,
-    ReActAgentNode,
-    ToolCallNode,
-)
 from hexdag.core.schema.generator import SchemaGenerator
 
 # Add project root to path for imports
@@ -37,16 +32,54 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 
-# Node factories to include in schema generation
-# Maps node name (as used in YAML) to the factory class
-NODE_FACTORIES: dict[str, type[Any]] = {
-    "function_node": FunctionNode,
-    "llm_node": LLMNode,
-    "agent_node": ReActAgentNode,
-    "loop_node": LoopNode,
-    "conditional_node": ConditionalNode,
-    "tool_call_node": ToolCallNode,
-}
+
+def _to_snake_case(name: str) -> str:
+    """Convert CamelCase to snake_case (e.g. LLMNode -> llm_node)."""
+    name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+    name = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", name)
+    return name.lower()
+
+
+def _discover_factory_classes() -> dict[str, type[Any]]:
+    """Auto-discover all BaseNodeFactory subclasses from hexdag.builtin.nodes.
+
+    Returns a mapping of snake_case alias to factory class, e.g.:
+        {"function_node": FunctionNode, "llm_node": LLMNode, ...}
+    """
+    from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
+
+    factories: dict[str, type[Any]] = {}
+    package = importlib.import_module("hexdag.builtin.nodes")
+
+    for module_info in pkgutil.iter_modules(package.__path__):
+        if module_info.name.startswith("_"):
+            continue
+        try:
+            module = importlib.import_module(f"hexdag.builtin.nodes.{module_info.name}")
+        except ImportError:
+            continue
+
+        for attr_name in dir(module):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(module, attr_name)
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, BaseNodeFactory)
+                and attr is not BaseNodeFactory
+            ):
+                snake_name = _to_snake_case(attr_name)
+                factories[snake_name] = attr
+
+    # Add agent_node alias for ReActAgentNode (matches YAML convention)
+    if "re_act_agent_node" in factories:
+        factories["agent_node"] = factories.pop("re_act_agent_node")
+
+    return factories
+
+
+# Auto-discovered node factories — no manual registration needed
+NODE_FACTORIES: dict[str, type[Any]] = _discover_factory_classes()
 
 
 def generate_pipeline_schema() -> dict[str, Any]:

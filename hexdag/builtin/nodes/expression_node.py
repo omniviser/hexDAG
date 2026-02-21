@@ -475,17 +475,11 @@ class ExpressionNode(BaseNodeFactory):
         expression_fn.__name__ = f"expression_{name}"
         expression_fn.__doc__ = f"Expression node: {name}"
 
-        # Extract framework-level parameters from kwargs
-        framework = self.extract_framework_params(kwargs)
-
-        return NodeSpec(
+        return self.create_node_with_mapping(
             name=name,
-            fn=expression_fn,
-            in_model=None,  # Accepts any dict input
-            out_model=None,  # Returns dict output
-            deps=frozenset(deps or []),
-            params=kwargs,
-            timeout=framework["timeout"],
-            max_retries=framework["max_retries"],
-            when=framework["when"],
+            wrapped_fn=expression_fn,
+            input_schema=None,
+            output_schema=None,
+            deps=deps,
+            **kwargs,
         )

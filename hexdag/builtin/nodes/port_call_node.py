@@ -35,11 +35,11 @@ YAML pipeline usage::
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import TYPE_CHECKING, Any
 
 from hexdag.core.context import get_port
 from hexdag.core.logging import get_logger
+from hexdag.core.utils.node_timer import node_timer
 
 from .base_node_factory import BaseNodeFactory
 
@@ -179,8 +179,6 @@ class PortCallNode(BaseNodeFactory):
                 method=method_name,
             )
 
-            start_time = time.perf_counter()
-
             # Get the port from context
             port_adapter = get_port(port_name)
 
@@ -220,16 +218,16 @@ class PortCallNode(BaseNodeFactory):
 
             try:
                 # Call method (handle both sync and async)
-                if asyncio.iscoroutinefunction(method_fn):
-                    result = await method_fn(**method_kwargs)
-                else:
-                    result = method_fn(**method_kwargs)
+                with node_timer() as t:
+                    if asyncio.iscoroutinefunction(method_fn):
+                        result = await method_fn(**method_kwargs)
+                    else:
+                        result = method_fn(**method_kwargs)
 
-                duration_ms = (time.perf_counter() - start_time) * 1000
                 node_logger.debug(
                     "Port method completed",
                     result_type=type(result).__name__,
-                    duration_ms=f"{duration_ms:.2f}",
+                    duration_ms=t.duration_str,
                 )
 
                 return {

@@ -73,28 +73,6 @@ Unified control flow node supporting while, for-each, times, if-else, switch.
   dependencies: []
 ```
 
-### ConditionalNode
-
-Multi-branch conditional router for workflow control flow
-
-**Kind**: `conditional_node`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `branches` | `array` | Yes | List of condition branches evaluated in order |
-| `else_action` | `string` | No | Default action if no branch conditions match |
-| `tie_break` | `string` | No | Strategy for handling multiple matching branches |
-
-**Example:**
-```yaml
-kind: conditional_node
-metadata:
-  name: my_conditional_node
-spec:
-  branches: []
-  tie_break: first_true
-```
-
 ### DataNode
 
 Static data node factory that returns constant output.
@@ -186,35 +164,6 @@ spec:
   prompt_template: value
   parse_json: false
   parse_strategy: json
-```
-
-### LoopNode
-
-Loop control node for iterative processing
-
-**Kind**: `loop_node`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `while_condition` | `string` | Yes | Module path to condition function: (data, state) -... |
-| `body` | `string` | Yes | Module path to body function: (data, state) -> Any |
-| `max_iterations` | `integer` | No | Maximum number of iterations before stopping |
-| `collect_mode` | `string` | No | How to collect results: last value, all values, or... |
-| `initial_state` | `object` | No | Initial state dict passed to first iteration |
-| `iteration_key` | `string` | No | Key name for current iteration number in state |
-
-**Example:**
-```yaml
-kind: loop_node
-metadata:
-  name: my_loop_node
-spec:
-  while_condition: value
-  body: value
-  max_iterations: 100
-  collect_mode: last
-  initial_state: {}
-  iteration_key: loop_iteration
 ```
 
 ### PortCallNode
