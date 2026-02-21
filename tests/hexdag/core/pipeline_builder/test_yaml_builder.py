@@ -59,6 +59,26 @@ class TestEnvironmentVariablePlugin:
         with pytest.raises(YamlPipelineBuilderError, match="MISSING_VAR.*not set"):
             plugin.process(config)
 
+    def test_missing_variable_error_includes_phase_label(self):
+        """Test that missing env var error identifies Phase 1."""
+        os.environ.pop("MISSING_VAR", None)
+
+        plugin = EnvironmentVariablePlugin()
+        config = {"value": "${MISSING_VAR}"}
+
+        with pytest.raises(YamlPipelineBuilderError, match=r"\[Phase 1"):
+            plugin.process(config)
+
+    def test_missing_variable_error_includes_hint(self):
+        """Test that missing env var error includes default syntax hint."""
+        os.environ.pop("MISSING_VAR", None)
+
+        plugin = EnvironmentVariablePlugin()
+        config = {"value": "${MISSING_VAR}"}
+
+        with pytest.raises(YamlPipelineBuilderError, match=r"default"):
+            plugin.process(config)
+
     def test_type_coercion_integer(self):
         """Test automatic integer type coercion."""
         os.environ["INT_VAR"] = "42"
@@ -288,6 +308,22 @@ class TestTemplatePlugin:
         config = {"value": "{{ invalid syntax }}"}
 
         with pytest.raises(YamlPipelineBuilderError, match="template syntax"):
+            plugin.process(config)
+
+    def test_syntax_error_includes_phase_label(self):
+        """Test that syntax error identifies Phase 2."""
+        plugin = TemplatePlugin()
+        config = {"value": "{% if %}"}
+
+        with pytest.raises(YamlPipelineBuilderError, match=r"\[Phase 2"):
+            plugin.process(config)
+
+    def test_syntax_error_includes_hint_about_node_spec(self):
+        """Test that syntax error hints about placing template in node spec."""
+        plugin = TemplatePlugin()
+        config = {"value": "{% if %}"}
+
+        with pytest.raises(YamlPipelineBuilderError, match=r"node.*spec"):
             plugin.process(config)
 
     def test_undefined_variable_raises(self):

@@ -175,6 +175,30 @@ class TestPromptTemplate:
         assert "Required variables: ['a', 'b', 'c']" in error_msg
         assert "Provided variables: ['a']" in error_msg
 
+    def test_missing_variable_error_includes_phase_label(self):
+        """Test that missing variable error identifies Phase 3."""
+        template = PromptTemplate("Hello {{name}}!")
+        with pytest.raises(MissingVariableError, match=r"\[Phase 3"):
+            template.render()
+
+    def test_missing_variable_error_includes_template_preview(self):
+        """Test that missing variable error shows template preview."""
+        template = PromptTemplate("Hello {{name}}!")
+        with pytest.raises(MissingVariableError, match=r"Hello \{\{name\}\}"):
+            template.render()
+
+    def test_missing_variable_error_includes_dependency_hint(self):
+        """Test that missing variable error hints about dependencies."""
+        template = PromptTemplate("{{data}}")
+        with pytest.raises(MissingVariableError, match=r"upstream|dependencies"):
+            template.render()
+
+    def test_nested_access_error_includes_phase_label(self):
+        """Test that nested access error identifies Phase 3."""
+        template = PromptTemplate("{{user.profile.name}}", ["user"])
+        with pytest.raises(MissingVariableError, match=r"\[Phase 3"):
+            template.render(user={"name": "Alice"})
+
     def test_extra_variables_allowed(self):
         """Test that providing extra variables doesn't cause errors."""
         template = PromptTemplate("Hello {{name}}!")

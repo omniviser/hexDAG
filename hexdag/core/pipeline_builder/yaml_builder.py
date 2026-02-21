@@ -90,11 +90,29 @@ class EntityPlugin(Protocol):
 class YamlPipelineBuilder:
     """YAML -> DirectedGraph builder with plugin support.
 
+    Template Rendering Phases
+    -------------------------
+    hexDAG uses a multi-phase rendering strategy:
+
+    **Phase 1** (build-time): ``${VAR}`` env var substitution via
+    ``EnvironmentVariablePlugin``. Secret patterns (``*_API_KEY``, etc.)
+    are deferred to Phase 3b.
+
+    **Phase 2** (build-time): ``{{ var }}`` Jinja2 rendering via
+    ``TemplatePlugin``. Node ``spec`` fields and pipeline ``outputs``
+    are **skipped** — preserved for Phase 3.
+
+    **Phase 3** (runtime): ``{{var}}`` rendering via ``PromptTemplate``
+    when nodes execute with actual dependency outputs.
+
+    **Phase 3b** (runtime): Deferred ``${VAR}`` resolution at adapter
+    instantiation via ``_resolve_deferred_env_vars``.
+
     Workflow:
     1. Parse YAML
     2. Select environment
     3. Validate structure
-    4. Run preprocessing plugins (env vars, templates)
+    4. Run preprocessing plugins (Phase 1 → Phase 2)
     5. Build graph using entity plugins
     6. Extract pipeline config
     """

@@ -266,6 +266,22 @@ class TestDeferredEnvVarResolution:
         assert "MISSING_VAR" in str(exc_info.value)
         assert "not set" in str(exc_info.value)
 
+    def test_missing_env_var_error_includes_phase_label(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that deferred env var error identifies Phase 3b."""
+        monkeypatch.delenv("MISSING_VAR", raising=False)
+        with pytest.raises(ComponentInstantiationError, match=r"\[Phase 3b"):
+            _resolve_string_value("${MISSING_VAR}")
+
+    def test_missing_env_var_error_includes_secret_hint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that deferred env var error explains secret deferral."""
+        monkeypatch.delenv("MISSING_VAR", raising=False)
+        with pytest.raises(ComponentInstantiationError, match=r"secret|deferred"):
+            _resolve_string_value("${MISSING_VAR}")
+
     def test_resolve_env_var_in_middle_of_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test resolving ${VAR} in the middle of a string."""
         monkeypatch.setenv("HOST", "localhost")
