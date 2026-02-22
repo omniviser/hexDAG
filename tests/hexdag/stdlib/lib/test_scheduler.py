@@ -11,8 +11,8 @@ from hexdag.kernel.domain.scheduled_task import (
     ScheduleType,
     TaskStatus,
 )
-from hexdag.kernel.lib_base import HexDAGLib
 from hexdag.stdlib.lib.scheduler import Scheduler
+from hexdag.stdlib.lib_base import HexDAGLib
 
 # ---------------------------------------------------------------------------
 # Domain — ScheduledTask

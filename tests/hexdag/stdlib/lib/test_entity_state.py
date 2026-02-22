@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
-from hexdag.kernel.lib_base import HexDAGLib
 from hexdag.stdlib.lib.entity_state import EntityState, InvalidTransitionError
+from hexdag.stdlib.lib_base import HexDAGLib
 
 # ---------------------------------------------------------------------------
 # Domain — StateMachineConfig

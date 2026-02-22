@@ -2,18 +2,13 @@
 
 This module contains prompt template classes used by application nodes for rendering templated
 prompts with variable substitution.
-
-Note: ChatPromptTemplate, FewShotPromptTemplate, and ChatFewShotTemplate have been moved to
-hexdag.stdlib.prompts.base but are re-exported here for backward compatibility.
 """
 
-# Core template (minimal)
-# Advanced templates (from builtin, re-exported for backward compatibility)
-from hexdag.kernel.orchestration.prompt.template import PromptTemplate
-from hexdag.stdlib.prompts.base import (
+from hexdag.kernel.orchestration.prompt.template import (
     ChatFewShotTemplate,
     ChatPromptTemplate,
     FewShotPromptTemplate,
+    PromptTemplate,
 )
 
 # Type aliases for template types (used across the framework)

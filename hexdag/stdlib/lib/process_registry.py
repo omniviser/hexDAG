@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
@@ -35,6 +35,7 @@ class ProcessRegistry(HexDAGLib):
     """
 
     def __init__(self) -> None:
+        """Initialise the in-memory run store."""
         self._runs: dict[str, PipelineRun] = {}
 
     # ------------------------------------------------------------------

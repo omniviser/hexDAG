@@ -32,7 +32,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.exceptions import HexDAGError
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
@@ -54,6 +54,7 @@ class EntityState(HexDAGLib):
     """
 
     def __init__(self) -> None:
+        """Initialise state machines, entity states, and history stores."""
         # entity_type → StateMachineConfig
         self._machines: dict[str, StateMachineConfig] = {}
         # (entity_type, entity_id) → current state string

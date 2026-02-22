@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from hexdag.kernel.pipeline_builder.tag_discovery import discover_tags, get_tag_schema
+from hexdag.kernel.ports.detection import detect_port_type as detect_port_type
 from hexdag.kernel.resolver import get_builtin_aliases, resolve
 from hexdag.kernel.schema import SchemaGenerator
 
@@ -264,89 +265,6 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
             unique_adapters.append(adapter)
 
     return sorted(unique_adapters, key=lambda x: (x["port_type"], x["name"]))
-
-
-def detect_port_type(adapter_class: type) -> str:
-    """Detect port type from adapter class using protocol inspection.
-
-    Adapters MUST inherit from their port protocol to be properly detected.
-    This is a convention enforced by hexDAG - no name-based guessing.
-
-    Port Protocol Convention
-    ------------------------
-    All adapters must inherit from their corresponding port protocol:
-
-    - LLM adapters: inherit from `LLM`, `SupportsGeneration`, `SupportsFunctionCalling`, etc.
-    - Memory adapters: inherit from `Memory`
-    - Database adapters: inherit from `Database` or `SQLAdapter`
-    - Secret adapters: inherit from `SecretStore`
-    - Storage adapters: inherit from `FileStorage` or `VectorStorePort`
-    - Tool adapters: inherit from `ToolRouter`
-
-    Example::
-
-        from hexdag.kernel.ports.llm import LLM
-
-        class MyCustomLLMAdapter(LLM):
-            async def aresponse(self, messages):
-                ...
-
-    Parameters
-    ----------
-    adapter_class : type
-        The adapter class to inspect
-
-    Returns
-    -------
-    str
-        Port type: "llm", "memory", "database", "secret", "storage", "tool_router", or "unknown"
-
-    Examples
-    --------
-    >>> from hexdag.stdlib.adapters.openai import OpenAIAdapter
-    >>> detect_port_type(OpenAIAdapter)
-    'llm'
-    """
-    # Check explicit decorator metadata first (future @adapter decorator)
-    explicit_port = getattr(adapter_class, "_hexdag_implements_port", None)
-    if explicit_port:
-        return str(explicit_port)
-
-    # Check protocol inheritance (required convention)
-    mro_names = [c.__name__ for c in adapter_class.__mro__]
-
-    # LLM adapters implement LLM, SupportsGeneration, SupportsFunctionCalling, etc.
-    llm_protocols = {"LLM", "SupportsGeneration", "SupportsFunctionCalling", "SupportsVision"}
-    if any(name in mro_names for name in llm_protocols):
-        return "llm"
-
-    # Memory adapters implement Memory protocol
-    if "Memory" in mro_names:
-        return "memory"
-
-    # Database adapters implement Database or SQLAdapter
-    if "Database" in mro_names or "DatabasePort" in mro_names or "SQLAdapter" in mro_names:
-        return "database"
-
-    # Secret adapters implement SecretStore
-    if "SecretStore" in mro_names or "SecretPort" in mro_names:
-        return "secret"
-
-    # Storage adapters implement FileStorage or VectorStorePort
-    storage_ports = ("FileStorage", "FileStoragePort", "VectorStorePort")
-    if any(name in mro_names for name in storage_ports):
-        return "storage"
-
-    # DataStore adapters implement DataStore
-    if "DataStore" in mro_names:
-        return "data_store"
-
-    # Tool router adapters implement ToolRouter
-    if "ToolRouter" in mro_names:
-        return "tool_router"
-
-    # No fallback - adapters must follow the convention
-    return "unknown"
 
 
 def _discover_entities(

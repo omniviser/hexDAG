@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from hexdag.kernel.domain.scheduled_task import ScheduleType, TaskStatus
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.scheduled_task import ScheduledTask
@@ -54,6 +54,7 @@ class Scheduler(HexDAGLib):
     """
 
     def __init__(self, spawner: PipelineSpawner | None = None) -> None:
+        """Initialise the scheduler with an optional pipeline spawner."""
         self._spawner = spawner
         self._tasks: dict[str, ScheduledTask] = {}
         self._handles: dict[str, asyncio.Task[None]] = {}

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.data_store import SupportsQuery

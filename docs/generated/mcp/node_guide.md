@@ -180,8 +180,8 @@ Multi-step reasoning agent.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `str` | Yes | Agent name |
-| `main_prompt` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.stdlib.prompts.base.ChatPromptTemplate | hexdag.stdlib.prompts.base.ChatFewShotTemplate | hexdag.stdlib.prompts.base.FewShotPromptTemplate` | Yes | Initial reasoning prompt |
-| `continuation_prompts` | `dict[str, str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.stdlib.prompts.base.ChatPromptTemplate | hexdag.stdlib.prompts.base.ChatFewShotTemplate | hexdag.stdlib.prompts.base.FewShotPromptTemplate] | None` | No | Phase-specific prompts |
+| `main_prompt` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate` | Yes | Initial reasoning prompt |
+| `continuation_prompts` | `dict[str, str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate] | None` | No | Phase-specific prompts |
 | `output_schema` | `dict[str, type] | type[pydantic.main.BaseModel] | None` | No | Custom output schema for tool_end results |
 | `config` | `hexdag.stdlib.nodes.agent_node.AgentConfig | None` | No | Agent configuration |
 | `deps` | `list[str] | None` | No | Dependencies |

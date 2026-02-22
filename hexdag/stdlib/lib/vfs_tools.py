@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.vfs import VFS
@@ -37,6 +37,7 @@ class VFSTools(HexDAGLib):
     """
 
     def __init__(self, vfs: VFS) -> None:
+        """Initialise with the given VFS port."""
         self._vfs = vfs
 
     async def aread_path(self, path: str) -> str:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
-from hexdag.kernel.lib_base import HexDAGLib
 from hexdag.kernel.orchestration.events.events import (
     NodeFailed,
     PipelineCancelled,
@@ -14,6 +13,7 @@ from hexdag.kernel.orchestration.events.events import (
 )
 from hexdag.stdlib.lib.process_registry import ProcessRegistry
 from hexdag.stdlib.lib.process_registry_observer import ProcessRegistryObserver
+from hexdag.stdlib.lib_base import HexDAGLib
 
 # ---------------------------------------------------------------------------
 # ProcessRegistry — direct API

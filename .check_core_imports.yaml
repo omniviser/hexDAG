@@ -11,10 +11,14 @@ check_directory: hexdag/kernel
 
 # Forbidden import patterns (regex)
 forbidden_patterns:
+  - '^from\s+hexdag\.api'
   - '^from\s+hexdag\.drivers'
   - '^from\s+hexdag\.stdlib'
+  - '^from\s+hexdag\.cli'
+  - '^import\s+hexdag\.api'
   - '^import\s+hexdag\.drivers'
   - '^import\s+hexdag\.stdlib'
+  - '^import\s+hexdag\.cli'
   # Legacy paths (catch any leftovers from pre-rename)
   - '^from\s+hexdag\.adapters'
   - '^from\s+hexdag\.builtin'
@@ -46,12 +50,6 @@ allowed_exceptions:
   hexdag/kernel/orchestration/components/execution_coordinator.py:
     - "from hexdag.stdlib.nodes.mapped_input import FieldExtractor"
 
-  # Prompt __init__ re-exports advanced prompts for backward compatibility
-  # These were moved to stdlib but are still part of kernel API surface.
-  # Rationale: Maintains public API while allowing modular organization.
-  hexdag/kernel/orchestration/prompt/__init__.py:
-    - "from hexdag.stdlib.prompts.base import ("
-
   # Models.py has doctest examples that import adapters for demonstration
   # These are documentation/test imports, not runtime dependencies.
   # Rationale: Doctests need concrete examples to be runnable.
@@ -59,6 +57,12 @@ allowed_exceptions:
     - "from hexdag.stdlib.adapters.mock import MockLLM"
     - "from hexdag.stdlib.adapters.openai import OpenAIAdapter"
     - "from hexdag.stdlib.adapters.anthropic import AnthropicAdapter"
+
+  # lib_base.py is a backward-compat re-export shim.
+  # The canonical location is hexdag.stdlib.lib_base.
+  # Rationale: Maintains import compatibility while lib contract lives in stdlib.
+  hexdag/kernel/lib_base.py:
+    - "from hexdag.stdlib.lib_base import HexDAGLib, get_lib_tool_schemas  # noqa: F401"
 
   # Resolver imports stdlib.nodes to trigger auto-discovery and alias registration
   # Also imports adapter/macro discovery for the unified alias system.
