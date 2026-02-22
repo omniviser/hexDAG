@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from hexdag.kernel.lib_base import HexDAGLib, get_lib_tool_schemas
+from hexdag.stdlib.lib_base import HexDAGLib, get_lib_tool_schemas
 
 # ---------------------------------------------------------------------------
 # Test doubles

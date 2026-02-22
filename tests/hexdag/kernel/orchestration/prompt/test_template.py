@@ -12,10 +12,8 @@ Tests cover:
 import pytest
 
 from hexdag.kernel.orchestration.prompt.template import (
-    MissingVariableError,
-)
-from hexdag.stdlib.prompts.base import (
     FewShotPromptTemplate,
+    MissingVariableError,
     PromptTemplate,
 )
 

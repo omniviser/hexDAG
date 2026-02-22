@@ -18,6 +18,7 @@ from hexdag.kernel.ports.database import (
     SupportsStreamingQuery,
     TableSchema,
 )
+from hexdag.kernel.ports.detection import detect_port_type
 from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -53,6 +54,7 @@ SecretPort = SecretStore
 
 __all__ = [
     "APICall",
+    "detect_port_type",
     "ColumnSchema",
     "ColumnType",
     "DataStore",

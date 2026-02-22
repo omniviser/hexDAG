@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from hexdag.kernel.lib_base import HexDAGLib
 from hexdag.kernel.ports.data_store import SupportsQuery
 from hexdag.stdlib.lib.database_tools import DatabaseTools
+from hexdag.stdlib.lib_base import HexDAGLib
 
 # ---------------------------------------------------------------------------
 # Test doubles

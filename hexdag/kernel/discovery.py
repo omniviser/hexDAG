@@ -231,7 +231,7 @@ def discover_adapters_in_package(
         Dotted path to the adapters package
     detect_port_type_fn : callable | None
         Function to detect port type from adapter class.
-        If None, uses hexdag.api.components.detect_port_type
+        If None, uses hexdag.kernel.ports.detection.detect_port_type
 
     Returns
     -------
@@ -244,9 +244,8 @@ def discover_adapters_in_package(
         - config_schema: JSON Schema for __init__
         - secrets: List of secret parameter names
     """
-    # Lazy import to avoid circular dependency
     if detect_port_type_fn is None:
-        from hexdag.api.components import detect_port_type
+        from hexdag.kernel.ports.detection import detect_port_type
 
         detect_port_type_fn = detect_port_type
 
@@ -660,9 +659,9 @@ def _discover_nodes_in_module(module: Any) -> list[dict[str, Any]]:
 def _detect_adapter_port_type(adapter_class: type) -> str:
     """Detect port type from adapter class using protocol inspection.
 
-    Delegates to the canonical implementation in ``api.components``.
+    Delegates to the canonical implementation in ``kernel.ports.detection``.
     """
-    from hexdag.api.components import detect_port_type
+    from hexdag.kernel.ports.detection import detect_port_type
 
     return detect_port_type(adapter_class)
 

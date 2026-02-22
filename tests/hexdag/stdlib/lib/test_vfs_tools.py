@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from hexdag.kernel.domain.vfs import DirEntry, EntryType, StatResult
-from hexdag.kernel.lib_base import HexDAGLib
 from hexdag.stdlib.lib.vfs_tools import VFSTools
+from hexdag.stdlib.lib_base import HexDAGLib
 
 
 class MockVFS:
