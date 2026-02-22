@@ -9,6 +9,7 @@ from hexdag.stdlib.lib.entity_state import EntityState
 from hexdag.stdlib.lib.process_registry import ProcessRegistry
 from hexdag.stdlib.lib.process_registry_observer import ProcessRegistryObserver
 from hexdag.stdlib.lib.scheduler import Scheduler
+from hexdag.stdlib.lib.vfs_tools import VFSTools
 
 __all__ = [
     "DatabaseTools",
@@ -16,4 +17,5 @@ __all__ = [
     "ProcessRegistry",
     "ProcessRegistryObserver",
     "Scheduler",
+    "VFSTools",
 ]

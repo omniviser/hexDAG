@@ -34,6 +34,7 @@ from hexdag.kernel.exceptions import (
     ResourceNotFoundError,
     TypeMismatchError,
     ValidationError,
+    VFSError,
 )
 from hexdag.kernel.protocols import (
     ComponentWithExecute,
@@ -71,6 +72,7 @@ __all__ = [
     "DependencyError",
     "TypeMismatchError",
     "OrchestratorError",
+    "VFSError",
     # Protocols
     "ComponentWithExecute",
     "ConfigurablePort",
