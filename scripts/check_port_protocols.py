@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 # Default path to scan for port protocols
-DEFAULT_PATH = "hexdag/core/ports"
+DEFAULT_PATH = "hexdag/kernel/ports"
 
 
 def _has_protocol_base(class_node: ast.ClassDef) -> bool:

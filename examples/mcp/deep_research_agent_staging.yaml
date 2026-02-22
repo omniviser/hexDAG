@@ -6,23 +6,21 @@ metadata:
 spec:
   ports:
     llm:
-      adapter: hexdag.builtin.adapters.openai.OpenAIAdapter
+      adapter: open_ai_adapter
       config:
         api_key: ${STAGING_OPENAI_API_KEY}
         model: gpt-4o-mini
         temperature: 0.7
     tool_router:
-      adapter: hexdag.builtin.adapters.mock.MockToolRouter
+      adapter: tool_router
       config:
-        available_tools:
-        - search
-        - calculate
+        tools: {}
   nodes:
   - kind: macro_invocation
     metadata:
       name: research_agent
     spec:
-      macro: hexdag.builtin.macros.ReasoningAgentMacro
+      macro: core:reasoning_agent
       config:
         main_prompt: 'You are a deep research agent. Research the following question
           thoroughly: {{research_question}}'

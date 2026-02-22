@@ -202,10 +202,10 @@ Multi-step reasoning agent.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `str` | Yes | Agent name |
-| `main_prompt` | `str | hexdag.core.orchestration.prompt.template.PromptTemplate | hexdag.builtin.prompts.base.ChatPromptTemplate | hexdag.builtin.prompts.base.ChatFewShotTemplate | hexdag.builtin.prompts.base.FewShotPromptTemplate` | Yes | Initial reasoning prompt |
-| `continuation_prompts` | `dict[str, str | hexdag.core.orchestration.prompt.template.PromptTemplate | hexdag.builtin.prompts.base.ChatPromptTemplate | hexdag.builtin.prompts.base.ChatFewShotTemplate | hexdag.builtin.prompts.base.FewShotPromptTemplate] | None` | No | Phase-specific prompts |
+| `main_prompt` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.stdlib.prompts.base.ChatPromptTemplate | hexdag.stdlib.prompts.base.ChatFewShotTemplate | hexdag.stdlib.prompts.base.FewShotPromptTemplate` | Yes | Initial reasoning prompt |
+| `continuation_prompts` | `dict[str, str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.stdlib.prompts.base.ChatPromptTemplate | hexdag.stdlib.prompts.base.ChatFewShotTemplate | hexdag.stdlib.prompts.base.FewShotPromptTemplate] | None` | No | Phase-specific prompts |
 | `output_schema` | `dict[str, type] | type[pydantic.main.BaseModel] | None` | No | Custom output schema for tool_end results |
-| `config` | `hexdag.builtin.nodes.agent_node.AgentConfig | None` | No | Agent configuration |
+| `config` | `hexdag.stdlib.nodes.agent_node.AgentConfig | None` | No | Agent configuration |
 | `deps` | `list[str] | None` | No | Dependencies |
 
 **Example:**
@@ -245,8 +245,8 @@ Execute a single tool call as a FunctionNode.
 ## Creating Custom Nodes
 
 ```python
-from hexdag.builtin.nodes import BaseNodeFactory
-from hexdag.core.domain.dag import NodeSpec
+from hexdag.stdlib.nodes import BaseNodeFactory
+from hexdag.kernel.domain.dag import NodeSpec
 
 class CustomProcessorNode(BaseNodeFactory):
     """Custom node for specialized processing."""

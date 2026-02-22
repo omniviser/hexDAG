@@ -4,7 +4,7 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from hexdag.core.ports.healthcheck import HealthStatus
+    from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
 @runtime_checkable

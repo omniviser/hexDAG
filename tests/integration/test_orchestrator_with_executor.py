@@ -4,14 +4,14 @@ import asyncio
 
 import pytest
 
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.ports.executor import (
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
     ExecutorPort,
 )
-from hexdag.core.ports_builder import PortsBuilder
+from hexdag.kernel.ports_builder import PortsBuilder
 
 
 # Test helper functions
@@ -157,7 +157,7 @@ class TestOrchestratorWithExecutor:
     async def test_executor_lifecycle_managed(self):
         """Test that executor setup/cleanup is called during execution."""
         # Now that we actually delegate to executor, use LocalExecutor
-        from hexdag.adapters.executors import LocalExecutor
+        from hexdag.drivers.executors import LocalExecutor
 
         executor = LocalExecutor()
 
@@ -223,7 +223,7 @@ class TestOrchestratorWithExecutor:
     async def test_executor_cleanup_called_even_on_error(self):
         """Test that executor cleanup is called even when execution fails."""
         # Use LocalExecutor which properly handles cleanup
-        from hexdag.adapters.executors import LocalExecutor
+        from hexdag.drivers.executors import LocalExecutor
 
         executor = LocalExecutor()
 
@@ -237,7 +237,7 @@ class TestOrchestratorWithExecutor:
         orchestrator = Orchestrator(executor=executor)
 
         # Execution should fail with NodeExecutionError (propagated from executor)
-        from hexdag.core.orchestration.components import NodeExecutionError
+        from hexdag.kernel.orchestration.components import NodeExecutionError
 
         with pytest.raises(NodeExecutionError):
             await orchestrator.run(graph, 0)

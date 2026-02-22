@@ -4,11 +4,11 @@
 [tool.hexdag]
 # Core modules to load - include the plugin's nodes
 modules = [
-    "hexdag.core.ports",               # Core port definitions
-    "hexdag.builtin.nodes",            # Core node factories
-    "hexdag.core.domain.agent_tools",
-    "hexdag.builtin.policies.execution_policies",
-    "hexdag.builtin.macros",
+    "hexdag.kernel.ports",               # Core port definitions
+    "hexdag.stdlib.nodes",            # Core node factories
+    "hexdag.kernel.domain.agent_tools",
+    "hexdag.stdlib.policies.execution_policies",
+    "hexdag.stdlib.macros",
     "hexdag_etl.nodes",                # ETL plugin nodes (pandas_transform, etc.)
 ]
 

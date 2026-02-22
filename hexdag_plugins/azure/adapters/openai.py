@@ -4,8 +4,8 @@ import os
 import time
 from typing import Any, Literal
 
-from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.ports.llm import (
+from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.ports.llm import (
     LLM,
     ImageInput,
     LLMResponse,

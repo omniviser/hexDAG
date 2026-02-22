@@ -1,6 +1,6 @@
 """Test hexDAG ETL plugin integration."""
 
-from hexdag.core.domain.dag import NodeSpec
+from hexdag.kernel.domain.dag import NodeSpec
 from hexdag_plugins.hexdag_etl.hexdag_etl import (
     APIExtractNode,
     FileReaderNode,

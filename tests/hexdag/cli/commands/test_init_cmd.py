@@ -36,7 +36,7 @@ class TestInit:
 
             content = config_file.read_text()
             assert "HexDAG Configuration" in content
-            assert "hexdag.core.ports" in content
+            assert "hexdag.kernel.ports" in content
 
     def test_init_creates_config_in_specified_dir(self, runner, tmp_path):
         """Test init creates hexdag.toml in specified directory."""
@@ -135,8 +135,8 @@ class TestGenerateConfig:
         """Test generating config without adapters."""
         config = _generate_config([])
         assert "HexDAG Configuration" in config
-        assert "hexdag.core.ports" in config
-        assert "hexdag.adapters.mock" in config
+        assert "hexdag.kernel.ports" in config
+        assert "hexdag.drivers.mock" in config
 
     def test_generate_config_with_openai(self):
         """Test generating config with OpenAI adapter."""

@@ -62,7 +62,7 @@ spec:
 
 ```python
 from hexdag_plugins.azure import AzureOpenAIAdapter
-from hexdag.core.ports.llm import Message
+from hexdag.kernel.ports.llm import Message
 
 # Create adapter (API key auto-resolved from AZURE_OPENAI_API_KEY)
 adapter = AzureOpenAIAdapter(

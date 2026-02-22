@@ -57,3 +57,9 @@ def aexists(remote_path: str) -> None:
 def aget_metadata(remote_path: str) -> None:
     """Whitelist for FileStoragePort.aget_metadata parameter."""
     _ = remote_path
+
+
+# hexdag/kernel/ports/data_store.py - SupportsTTL protocol
+def aset_with_ttl(key: str, value: object, ttl_seconds: int) -> None:
+    """Whitelist for SupportsTTL.aset_with_ttl parameters."""
+    _ = (key, value, ttl_seconds)

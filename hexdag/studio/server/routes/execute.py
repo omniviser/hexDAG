@@ -71,8 +71,8 @@ async def execute_pipeline(request: ExecuteRequest) -> ExecuteResponse:
         pass  # Workspace not set, continue without modification
 
     try:
-        from hexdag.core.orchestration.orchestrator import Orchestrator
-        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+        from hexdag.kernel.orchestration.orchestrator import Orchestrator
+        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         # Build pipeline
         builder = YamlPipelineBuilder()
@@ -81,8 +81,8 @@ async def execute_pipeline(request: ExecuteRequest) -> ExecuteResponse:
         # Create orchestrator with mocks if requested
         if request.use_mocks:
             # Use mock adapters for safe testing
-            from hexdag.builtin.adapters.memory import InMemoryMemory
-            from hexdag.builtin.adapters.mock import MockLLM
+            from hexdag.stdlib.adapters.memory import InMemoryMemory
+            from hexdag.stdlib.adapters.mock import MockLLM
 
             orchestrator = Orchestrator(
                 ports={
@@ -177,7 +177,7 @@ async def dry_run(request: ExecuteRequest) -> dict[str, Any]:
         pass
 
     try:
-        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(request.content)

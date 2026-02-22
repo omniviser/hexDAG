@@ -9,7 +9,7 @@ Reference in YAML as: tools: [examples.mcp.tavily_adapter.tavily_search]
 
 from typing import Any
 
-from hexdag.core.logging import get_logger
+from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
 

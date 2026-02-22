@@ -365,7 +365,7 @@ repos:
         name: Generate JSON Schemas from registry
         entry: uv run python scripts/generate_schemas.py
         language: system
-        files: ^(hexdag/(builtin/nodes|core/config/models|core/orchestration/policies/models).*\.py|scripts/generate_schemas\.py)$
+        files: ^(hexdag/(stdlib/nodes|kernel/config/models|kernel/orchestration/policies/models).*\.py|scripts/generate_schemas\.py)$
         stages: [pre-commit]
         pass_filenames: false
 
@@ -385,6 +385,6 @@ repos:
         name: Generate MCP documentation from code
         entry: uv run python scripts/generate_mcp_docs.py
         language: system
-        files: ^(hexdag/(builtin/(nodes|adapters|tools)|core/(docs|secrets|schema)).*\.py|scripts/generate_mcp_docs\.py)$
+        files: ^(hexdag/(stdlib/(nodes|adapters|tools)|kernel/(docs|secrets|schema)).*\.py|scripts/generate_mcp_docs\.py)$
         stages: [pre-commit, pre-push]
         pass_filenames: false

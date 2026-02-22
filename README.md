@@ -1,4 +1,4 @@
-# 🤖 hexDAG - AI Agent Orchestration Framework
+# hexDAG -- Operating System for AI Agents
 
 [![PyPI version](https://img.shields.io/pypi/v/hexdag.svg)](https://pypi.org/project/hexdag/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12.*-blue.svg)](https://www.python.org/downloads/)
@@ -6,32 +6,35 @@
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> **Enterprise-ready AI agent orchestration with low-code declarative workflows and powerful macro system**
+> Just as Linux provides processes, syscalls, drivers, and `/lib` so programs don't
+> reinvent the wheel, hexDAG provides **pipelines**, **ports**, **drivers**, and a
+> **standard library** so AI agents don't reinvent orchestration.
 
-hexDAG revolutionizes AI development by making agent orchestration and data science workflows accessible through declarative YAML configurations, reusable macro templates, and advanced conversation patterns, while maintaining the power and flexibility needed for enterprise deployments.
+hexDAG transforms complex AI workflows into deterministic, testable, and maintainable
+systems through declarative YAML pipelines and DAG-based execution. It is async-first,
+type-safe with Pydantic, and built on hexagonal architecture so you can swap any
+infrastructure dependency without touching business logic.
 
-## ✨ Why hexDAG?
+---
 
-Traditional AI frameworks force you to choose between simplicity and power. hexDAG delivers both through:
+## The OS Analogy
 
-- **🤖 Agent-First Design**: Build complex multi-agent systems with simple YAML
-- **📊 Data Processing Ready**: Mix AI agents with traditional data processing seamlessly
-- **🌊 Real-Time Streaming**: See agent thoughts and memory operations as they happen
-- **🔧 Low-Code Development**: Non-technical users can create sophisticated workflows
-- **🏢 Enterprise Grade**: Production-ready with comprehensive monitoring and control
-- **🎭 Macro System**: Reusable pipeline templates that expand into full workflows
-- **💬 Conversation Patterns**: Built-in support for multi-turn conversations with memory
+| Linux | hexDAG | Purpose |
+|-------|--------|---------|
+| Kernel | `kernel/` | Core execution engine, system call interfaces (Protocols), domain models |
+| System calls | `kernel/ports/` | Contracts for external capabilities (LLM, Memory, Database, etc.) |
+| Drivers | `drivers/` | Low-level infrastructure (executor, observer manager, pipeline spawner) |
+| `/lib` | `stdlib/` | Standard library -- built-in nodes, adapters, macros, system libs |
+| Processes | Pipeline runs | Tracked by `ProcessRegistry` (like `ps`) |
+| `fork`/`exec` | `PipelineSpawner` | Launch sub-pipelines from within a running pipeline |
+| Process scheduler | `Scheduler` | Delayed and recurring pipeline execution |
+| State machines | `EntityState` | Business entity lifecycle management |
+| `/usr/bin` | `api/` | User-facing tools (MCP + Studio REST) |
+| Shell | `cli/` | Command-line interface (`hexdag init`, `hexdag lint`, etc.) |
 
-## 🎯 The Six Pillars
+---
 
-1. **Async-First Architecture** - Non-blocking execution for maximum performance
-2. **Event-Driven Observability** - Real-time monitoring of agent actions
-3. **Pydantic Validation Everywhere** - Type safety and runtime validation
-4. **Hexagonal Architecture** - Clean separation of business logic and infrastructure
-5. **Composable Declarative Files** - Build complex workflows from simple components
-6. **DAG-Based Orchestration** - Intelligent dependency management and parallelization
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -43,32 +46,223 @@ pip install hexdag
 uv pip install hexdag
 
 # With optional dependencies
-pip install hexdag[openai]      # OpenAI LLM support
-pip install hexdag[anthropic]   # Anthropic Claude support
-pip install hexdag[all]         # All optional dependencies
+pip install hexdag[openai]      # OpenAI adapter
+pip install hexdag[anthropic]   # Anthropic adapter
+pip install hexdag[all]         # Everything
 ```
 
-#### Development Installation
+#### Development
 
 ```bash
-# Clone and install for development
 git clone https://github.com/omniviser/hexdag.git
 cd hexdag
 uv sync
 ```
 
-### MCP Server for LLM Editors
+### Your First Pipeline
 
-hexDAG includes a built-in MCP (Model Context Protocol) server that exposes pipeline building capabilities to Claude Code, Cursor, and other LLM-powered editors:
+Define a workflow in YAML:
+
+```yaml
+# research_agent.yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: research-workflow
+  description: AI-powered research assistant
+spec:
+  ports:
+    llm:
+      adapter: hexdag.stdlib.adapters.openai.OpenAIAdapter
+      config:
+        model: gpt-4
+
+  nodes:
+    - kind: agent_node
+      metadata:
+        name: researcher
+      spec:
+        initial_prompt_template: "Research the topic: {{topic}}"
+        max_steps: 5
+        available_tools: ["web_search", "summarize"]
+      dependencies: []
+
+    - kind: llm_node
+      metadata:
+        name: analyst
+      spec:
+        prompt_template: |
+          Analyze the research findings: {{researcher.results}}
+          Provide actionable insights.
+      dependencies: [researcher]
+
+    - kind: function_node
+      metadata:
+        name: formatter
+      spec:
+        fn: "myapp.reports.format_report"
+        input_mapping:
+          findings: "researcher.results"
+          insights: "analyst.output"
+      dependencies: [researcher, analyst]
+```
+
+Run it:
+
+```python
+from hexdag import PipelineRunner
+
+runner = PipelineRunner()
+result = await runner.run("research_agent.yaml", input_data={"topic": "AI trends 2025"})
+```
+
+With port overrides for testing:
+
+```python
+from hexdag import PipelineRunner, MockLLM
+
+runner = PipelineRunner(port_overrides={"llm": MockLLM(responses="Mock analysis result")})
+result = await runner.run("research_agent.yaml", input_data={"topic": "AI trends 2025"})
+```
+
+Or validate without executing:
+
+```python
+runner = PipelineRunner()
+issues = await runner.validate(pipeline_path="research_agent.yaml")
+# [] means valid
+```
+
+---
+
+## Architecture
+
+```
+hexdag/
+  kernel/   -- Core primitives. Protocols, domain models, orchestration.     (/kernel)
+  stdlib/   -- Standard library. Built-in nodes, adapters, macros, libs.     (/lib)
+  drivers/  -- Low-level infrastructure. Executor, observer, spawner.        (/drivers)
+  api/      -- Public API. MCP tools + Studio REST endpoints.                (/usr/bin)
+  cli/      -- CLI commands (hexdag init, hexdag lint, hexdag studio, etc.)
+```
+
+The **kernel** defines contracts and depends on nothing external. The **stdlib** ships
+implementations users interact with directly. **Drivers** provide low-level infrastructure
+the orchestrator needs internally. The **API** exposes everything to users via MCP and REST.
+
+### Decision Rules
+
+When adding something new:
+
+1. Defines a Protocol or domain model? --> `kernel/`
+2. Implements a Protocol for users to use or extend? --> `stdlib/`
+3. Low-level infrastructure the orchestrator needs internally? --> `drivers/`
+4. User-facing function (MCP tool or REST endpoint)? --> `api/`
+
+---
+
+## Uniform Entity Pattern
+
+All framework entities follow one pattern: **kernel defines contract, stdlib ships builtins, users write their own.**
+
+| Entity | Kernel Contract | Stdlib Builtins | User Custom |
+|--------|----------------|-----------------|-------------|
+| Ports | `kernel/ports/llm.py` | -- | `myapp.ports.X` |
+| Adapters | Protocol in `kernel/ports/` | `stdlib/adapters/openai/` | `myapp.adapters.X` |
+| Nodes | `NodeSpec` + `BaseNodeFactory` | `LLMNode`, `AgentNode`, `FunctionNode` | `myapp.nodes.X` |
+| Macros | (convention) | `ReasoningAgent`, `ConversationAgent` | `myapp.macros.X` |
+| Prompts | (convention) | `tool_prompts`, `error_correction` | `myapp.prompts.X` |
+| Libs | `HexDAGLib` base class | `ProcessRegistry`, `EntityState`, `Scheduler` | `myapp.lib.X` |
+
+Components are referenced by full Python module path in YAML:
+
+```yaml
+nodes:
+  - kind: hexdag.stdlib.nodes.LLMNode      # Full path
+  - kind: llm_node                          # Built-in alias
+  - kind: myapp.nodes.CustomNode            # User custom
+```
+
+---
+
+## System Libraries (Libs)
+
+Libs are system-level capabilities for multi-pipeline coordination. Every public async
+method on a `HexDAGLib` subclass auto-becomes an agent-callable tool.
+
+| Lib | Linux Analogy | Purpose |
+|-----|--------------|---------|
+| **ProcessRegistry** | `ps` | Track pipeline runs -- status, duration, results, parent/child relationships |
+| **EntityState** | State machines | Declarative state machines for business entities with validated transitions and audit trails |
+| **Scheduler** | `cron` / `at` | Delayed and recurring pipeline execution via asyncio timers |
+| **DatabaseTools** | `sqlite3` CLI | Agent-callable SQL query tools wrapping any `SupportsQuery` adapter |
+
+```python
+from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.kernel.ports.data_store import SupportsKeyValue
+
+class OrderManager(HexDAGLib):
+    def __init__(self, store: SupportsKeyValue) -> None:
+        self._store = store
+
+    async def acreate_order(self, customer_id: str, items: list[dict]) -> str:
+        """Create a new order. Auto-exposed as agent tool."""
+        ...
+
+    async def aget_order(self, order_id: str) -> dict:
+        """Get order by ID. Auto-exposed as agent tool."""
+        ...
+```
+
+---
+
+## Key Features
+
+### YAML-First Pipelines
+Declarative workflows versioned in git. Environment-specific configs for dev/staging/prod.
+Jinja2 templating, `!include` tags for modular composition, and automatic field mapping
+between nodes.
+
+### Pipeline Linting
+Static analysis for YAML pipelines: cycle detection, hardcoded secret scanning,
+missing timeout/retry warnings, naming conventions, and unused output detection.
 
 ```bash
-# Development: Install MCP dependencies
+hexdag lint my_pipeline.yaml
+```
+
+### Macro System
+Reusable pipeline templates that expand into full DAG subgraphs at build time.
+Built-in macros: `ReasoningAgent`, `ConversationAgent`, `LLMMacro`, `ToolMacro`.
+
+### Event-Driven Observability
+Comprehensive event system (`PipelineStarted`, `NodeCompleted`, `NodeFailed`, etc.)
+with pluggable observers for logging, cost profiling, and custom monitoring.
+
+### Hexagonal Architecture (Ports & Adapters)
+Swap OpenAI for Anthropic, PostgreSQL for SQLite, or any adapter -- with one config
+line. Business logic stays pure. Test everything with mock adapters.
+
+### Pydantic Validation Everywhere
+Type safety at every layer. Automatic schema compatibility checking between connected
+nodes. Runtime type coercion and validation.
+
+---
+
+## MCP Server
+
+hexDAG includes a built-in [Model Context Protocol](https://modelcontextprotocol.io)
+server that exposes pipeline building capabilities to Claude Code, Cursor, and other
+LLM-powered editors:
+
+```bash
+# Install MCP dependencies
 uv sync --extra mcp
 
-# Production: Install from PyPI with MCP support
-uv pip install "hexdag[mcp]"
+# Configure in Claude Desktop
+```
 
-# Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json)
+```json
 {
   "mcpServers": {
     "hexdag": {
@@ -79,245 +273,105 @@ uv pip install "hexdag[mcp]"
 }
 ```
 
-The MCP server provides LLMs with tools to:
+The MCP server provides tools to:
 - List available nodes, adapters, tools, and macros from your registry
 - Build and validate YAML pipelines interactively
 - Get component schemas and documentation
-- Auto-discover custom plugins from your `pyproject.toml`
+- Manage processes (spawn, schedule, track pipeline runs)
+- Auto-discover custom plugins from `HEXDAG_PLUGIN_PATHS`
 
-#### Custom Adapters and Plugins
+### Custom Plugin Discovery
 
 hexDAG supports three levels of component discovery:
-1. **Builtin** - Core adapters and nodes from `hexdag.builtin`
-2. **Plugins** - Community plugins from the `hexdag_plugins` namespace
-3. **User-authored** - Your custom adapters and nodes
-
-To make your custom components discoverable by MCP server, hexdag-studio, and the Python API, use the `HEXDAG_PLUGIN_PATHS` environment variable:
+1. **Builtin** -- Core adapters and nodes from `hexdag.stdlib`
+2. **Plugins** -- Community plugins from the `hexdag_plugins` namespace
+3. **User-authored** -- Your custom components via `HEXDAG_PLUGIN_PATHS`
 
 ```bash
-# Set custom plugin paths (colon-separated on Unix, semicolon on Windows)
 export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
-
-# Now MCP server, Studio, and API all discover your components
-uv run python -m hexdag --mcp
 ```
-
-**Claude Desktop with custom plugins:**
-```json
-{
-  "mcpServers": {
-    "hexdag": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "hexdag", "--mcp"],
-      "env": {
-        "HEXDAG_PLUGIN_PATHS": "/path/to/my_adapters:/path/to/my_nodes"
-      }
-    }
-  }
-}
-```
-
-**Programmatic configuration:**
-```python
-from hexdag.core.discovery import set_user_plugin_paths
-from pathlib import Path
-
-# Configure custom plugin paths
-set_user_plugin_paths([Path("./my_adapters"), Path("./my_nodes")])
-
-# Now list_adapters() and list_nodes() include your components
-from hexdag.api.components import list_adapters, list_nodes
-adapters = list_adapters()  # Includes your custom adapters
-nodes = list_nodes()        # Includes your custom nodes
-```
-
-See [examples/mcp/](examples/mcp/) for detailed configuration guides.
-
-### Your First Agent Workflow
-
-Create a simple AI agent workflow with YAML:
-
-```yaml
-# research_agent.yaml
-name: research_workflow
-description: AI-powered research assistant
-
-nodes:
-  - type: agent
-    id: researcher
-    params:
-      initial_prompt_template: "Research the topic: {{topic}}"
-      max_steps: 5
-      available_tools: ["web_search", "summarize"]
-    depends_on: []
-
-  - type: agent
-    id: analyst
-    params:
-      initial_prompt_template: |
-        Analyze the research findings: {{researcher.results}}
-        Provide actionable insights.
-      max_steps: 3
-    depends_on: [researcher]
-
-  - type: function
-    id: formatter
-    params:
-      fn: format_report
-      input_mapping:
-        title: "researcher.topic"
-        findings: "researcher.results"
-        insights: "analyst.insights"
-    depends_on: [researcher, analyst]
-```
-
-Run it with Python:
-
-```python
-from hexdag import Orchestrator, YamlPipelineBuilder
-
-# Load and execute the workflow
-builder = YamlPipelineBuilder()
-graph, metadata = builder.build_from_yaml_file("research_agent.yaml")
-
-orchestrator = Orchestrator()
-result = await orchestrator.run(graph, {"topic": "AI trends 2024"})
-```
-
-## 📚 Documentation & Learning
-
-### 📓 Interactive Notebooks (Recommended Start)
-Learn hexDAG through comprehensive, working Jupyter notebooks:
-
-**Core Concepts:**
-- **[01. Introduction](notebooks/01_introduction.ipynb)** - Your first pipeline (15 min)
-- **[02. YAML Pipelines](notebooks/02_yaml_pipelines.ipynb)** - Declarative workflows (25 min)
-- **[03. Practical Workflow](notebooks/03_practical_workflow.ipynb)** - Real-world patterns (30 min)
-
-**Advanced Features:**
-- **[06. Dynamic Reasoning Agent](notebooks/06_dynamic_reasoning_agent.ipynb)** - Advanced agent patterns
-- **[Advanced Few-shot & Retry](notebooks/advanced_fewshot_and_retry.ipynb)** - Error handling and examples
-- **[YAML Includes & Composition](notebooks/03_yaml_includes_and_composition.ipynb)** - Modular pipeline composition
-
-**All notebooks execute successfully:** `✅ All notebook(s) validated successfully!`
-
-### 📚 Complete Documentation
-- **[📖 Documentation Hub](docs/README.md)** - Complete navigation with learning paths
-- **[🤔 Philosophy & Design](docs/PHILOSOPHY.md)** - Six pillars and design principles
-- **[🔧 Implementation Guide](docs/IMPLEMENTATION_GUIDE.md)** - Production-ready workflows
-- **[⌨️ CLI Reference](docs/CLI_REFERENCE.md)** - Complete CLI documentation
-- **[🔌 Plugin System](docs/PLUGIN_SYSTEM.md)** - Custom component development
-- **[🗺️ Roadmap](docs/ROADMAP.md)** - Future vision and features
-
-### 📝 Additional Resources
-- **[Demo Directory](examples/demo/)** - Live demonstration scripts
-- **[Integration Tests](tests/integration/)** - Production test scenarios
-
-## 🎪 Interactive Notebooks
-
-Explore comprehensive Jupyter notebooks for hands-on learning:
-
-```bash
-# Start Jupyter to explore notebooks
-jupyter notebook notebooks/
-
-# Or run specific notebooks
-jupyter notebook notebooks/01_introduction.ipynb           # Getting started
-jupyter notebook notebooks/02_yaml_pipelines.ipynb         # YAML workflows
-jupyter notebook notebooks/03_practical_workflow.ipynb     # Real-world patterns
-jupyter notebook notebooks/06_dynamic_reasoning_agent.ipynb # Advanced agents
-```
-
-### Running the Demo
-
-```bash
-# Run the startup pitch demo
-uv run python examples/demo/run_demo_pitch.py
-
-# Or explore the YAML configuration
-cat examples/demo/demo_startup_pitch.yaml
-```
-
-## 🛠️ Development
-
-```bash
-# Setup development environment
-uv run pre-commit install
-
-# Run tests
-uv run pytest
-
-# Code quality checks
-uv run pre-commit run --all-files
-
-# Build documentation (via MkDocs)
-uv run hexdag docs build            # Build HTML documentation
-uv run hexdag docs build --clean    # Clean and rebuild
-uv run hexdag docs build --strict   # Build with warnings as errors
-uv run hexdag docs serve            # Live-reload dev server
-```
-
-## 🌟 Key Features
-
-### 🤖 Multi-Agent Orchestration
-- Sequential agent chains for complex reasoning
-- Parallel specialist agents for diverse perspectives
-- Hierarchical agent networks with supervisor patterns
-
-### 📊 Data Processing Integration
-- Mix AI agents with traditional data processing
-- Real-time streaming for Jupyter notebooks
-- Extensible adapter system for custom integrations
-
-### 🌊 Real-Time Streaming
-- Async event-driven streaming of agent actions
-- Memory operation visualization
-- Interactive debugging and control
-
-### 🔧 Low-Code Development
-- YAML-based workflow definitions
-- Template system for reusable patterns
-- Automatic field mapping between nodes
-- Interactive Studio UI for building and testing workflows (`hexdag studio`)
-
-### 🔄 Smart Data Mapping
-- **Automatic Input Mapping**: Define how data flows between nodes with simple mappings
-- **Nested Field Extraction**: Access deeply nested data with dot notation
-- **Type Inference**: Automatic type detection from Pydantic models
-- **Flexible Patterns**: Support for passthrough, rename, and prefixed mappings
-
-### 🎭 Powerful Macro System
-- **Reusable Templates**: Define pipeline patterns once, use everywhere
-- **Built-in Macros**: ConversationMacro, LLMMacro, ToolMacro, ReasoningAgentMacro
-- **YAML Integration**: Seamlessly use macros in declarative pipelines
-- **Dynamic Expansion**: Macros expand at runtime into full DAG subgraphs
-- **Configuration Inheritance**: Override macro defaults per invocation
-
-## 🔒 Production Security
-
-### Docker Build Command
-
-The `hexdag build` command generates containerized deployments from YAML pipelines.
-
-⚠️ **IMPORTANT**: This command is designed for **development and trusted pipelines only**.
-
-**Production Safety:**
-```bash
-# Disable build command in production environments
-export HEXDAG_DISABLE_BUILD=1
-```
-
-**For detailed documentation**, including security threat model, hardening checklist, and Docker Compose patterns, see the [CLI Reference](docs/CLI_REFERENCE.md#build---build-docker-containers).
-
-## 🤝 Community
-
-- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-
-## 📄 License
-
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Built with ❤️ for the AI community by the hexDAG team**
+## CLI
+
+| Command | Purpose |
+|---------|---------|
+| `hexdag init` | Initialize a new hexDAG project |
+| `hexdag pipeline validate` | Validate a YAML pipeline |
+| `hexdag pipeline execute` | Execute a pipeline |
+| `hexdag lint` | Lint YAML for best practices and security |
+| `hexdag create` | Create pipeline templates from schemas |
+| `hexdag build` | Build Docker containers for pipelines |
+| `hexdag studio` | Launch the visual pipeline editor |
+| `hexdag plugins` | Manage plugins and adapters |
+| `hexdag docs` | Generate and serve documentation |
+
+---
+
+## Documentation & Learning
+
+### Interactive Notebooks
+
+| Notebook | Topic | Time |
+|----------|-------|------|
+| [01. Introduction](notebooks/01_introduction.ipynb) | Your first pipeline | 15 min |
+| [02. YAML Pipelines](notebooks/02_yaml_pipelines.ipynb) | Declarative workflows | 25 min |
+| [03. Practical Workflow](notebooks/03_practical_workflow.ipynb) | Real-world patterns | 30 min |
+| [06. Dynamic Reasoning Agent](notebooks/06_dynamic_reasoning_agent.ipynb) | Advanced agent patterns | -- |
+| [YAML Includes & Composition](notebooks/03_yaml_includes_and_composition.ipynb) | Modular pipeline composition | -- |
+
+### Docs
+
+- [Architecture](docs/ARCHITECTURE.md) -- System architecture and the four layers
+- [Philosophy & Design](docs/PHILOSOPHY.md) -- Six pillars and design principles
+- [Hexagonal Architecture](docs/HEXAGONAL_ARCHITECTURE.md) -- Ports and adapters explained
+- [Implementation Guide](docs/IMPLEMENTATION_GUIDE.md) -- Production-ready workflows
+- [Plugin System](docs/PLUGIN_SYSTEM.md) -- Custom component development
+- [CLI Reference](docs/CLI_REFERENCE.md) -- Complete CLI documentation
+- [Roadmap](ARCHITECTURE_ROADMAP.md) -- Planned kernel extensions (EventBus, LockPort, CentralAgent)
+
+### Examples
+
+- [MCP Research Agent](examples/mcp/) -- Deep research agent with environment configs
+- [Demo: Startup Pitch](examples/demo/) -- Live demo with rich terminal UI
+
+---
+
+## Development
+
+```bash
+# Setup
+uv sync
+uv run pre-commit install
+
+# Test
+uv run pytest
+uv run pytest --cov=hexdag --cov-report=term-missing
+
+# Code quality
+uv run ruff check hexdag/ --fix
+uv run pyright ./hexdag
+uv run pre-commit run --all-files
+```
+
+---
+
+## The Six Pillars
+
+1. **Async-First Architecture** -- Non-blocking execution for maximum performance
+2. **Event-Driven Observability** -- Real-time monitoring via comprehensive event system
+3. **Pydantic Validation Everywhere** -- Type safety at every layer
+4. **Hexagonal Architecture** -- Clean separation of business logic and infrastructure
+5. **Composable Declarative Files** -- Complex workflows from simple YAML components
+6. **DAG-Based Orchestration** -- Intelligent dependency management and parallelization
+
+---
+
+## License
+
+Apache License 2.0 -- see [LICENSE](LICENSE) for details.
+
+---
+
+Built for the AI community by the hexDAG team.

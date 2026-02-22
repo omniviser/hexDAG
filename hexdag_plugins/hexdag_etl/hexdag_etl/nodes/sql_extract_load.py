@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from hexdag.core.domain.dag import NodeSpec
+from hexdag.kernel.domain.dag import NodeSpec
 
 from .base_node_factory import BaseNodeFactory
 

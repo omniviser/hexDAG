@@ -6,13 +6,13 @@ Provides secret resolution from Azure Key Vault for production deployments.
 import os
 from typing import TYPE_CHECKING, Any
 
-from hexdag.core.logging import get_logger
-from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.ports.secret import SecretPort
-from hexdag.core.types import Secret
+from hexdag.kernel.logging import get_logger
+from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.ports.secret import SecretPort
+from hexdag.kernel.types import Secret
 
 if TYPE_CHECKING:
-    from hexdag.core.ports.memory import Memory
+    from hexdag.kernel.ports.memory import Memory
 
 logger = get_logger(__name__)
 

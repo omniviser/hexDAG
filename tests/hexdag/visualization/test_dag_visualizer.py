@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from pydantic import BaseModel
 
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
 
 # Skip tests if visualization is not available
 pytest.importorskip("graphviz")

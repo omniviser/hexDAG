@@ -15,9 +15,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from hexdag.core.pipeline_builder.tag_discovery import discover_tags, get_tag_schema
-from hexdag.core.resolver import get_builtin_aliases, resolve
-from hexdag.core.schema import SchemaGenerator
+from hexdag.kernel.pipeline_builder.tag_discovery import discover_tags, get_tag_schema
+from hexdag.kernel.resolver import get_builtin_aliases, resolve
+from hexdag.kernel.schema import SchemaGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +28,21 @@ def is_builtin(module_path: str) -> bool:
     Parameters
     ----------
     module_path : str
-        Full import path (e.g., "hexdag.builtin.nodes.LLMNode")
+        Full import path (e.g., "hexdag.stdlib.nodes.LLMNode")
 
     Returns
     -------
     bool
         True if this is a built-in hexDAG component
     """
-    return module_path.startswith("hexdag.builtin.")
+    return module_path.startswith("hexdag.stdlib.")
 
 
 def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
     """List all available node types with schemas.
 
     Discovers nodes from:
-    1. Builtin nodes (hexdag.builtin.nodes.*)
+    1. Builtin nodes (hexdag.stdlib.nodes.*)
     2. User plugin paths (HEXDAG_PLUGIN_PATHS env var or set_user_plugin_paths())
 
     Parameters
@@ -67,7 +67,7 @@ def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
     >>> any(n["kind"] == "llm_node" for n in nodes)
     True
     """
-    from hexdag.core.discovery import discover_user_plugins
+    from hexdag.kernel.discovery import discover_user_plugins
 
     aliases = get_builtin_aliases()
     seen_classes: set[str] = set()
@@ -173,7 +173,7 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     """List all available adapters.
 
     Discovers adapters dynamically from four sources:
-    1. hexdag.builtin.adapters.* (builtin adapters)
+    1. hexdag.stdlib.adapters.* (builtin adapters)
     2. hexdag_plugins.* (installed plugin packages)
     3. User plugin paths (HEXDAG_PLUGIN_PATHS env var or set_user_plugin_paths())
     4. User-configured modules from hexdag.toml/pyproject.toml
@@ -198,7 +198,7 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     >>> all(a["port_type"] == "llm" for a in adapters)
     True
     """
-    from hexdag.core.discovery import (
+    from hexdag.kernel.discovery import (
         discover_adapters_in_package,
         discover_plugins,
         discover_user_modules,
@@ -208,7 +208,7 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     adapters: list[dict[str, Any]] = []
 
     # 1. Discover builtin adapters dynamically
-    adapters.extend(discover_adapters_in_package("hexdag.builtin.adapters", detect_port_type))
+    adapters.extend(discover_adapters_in_package("hexdag.stdlib.adapters", detect_port_type))
 
     # 2. Discover plugin adapters (hexdag_plugins namespace)
     for plugin_name in discover_plugins():
@@ -286,7 +286,7 @@ def detect_port_type(adapter_class: type) -> str:
 
     Example::
 
-        from hexdag.core.ports.llm import LLM
+        from hexdag.kernel.ports.llm import LLM
 
         class MyCustomLLMAdapter(LLM):
             async def aresponse(self, messages):
@@ -304,7 +304,7 @@ def detect_port_type(adapter_class: type) -> str:
 
     Examples
     --------
-    >>> from hexdag.builtin.adapters.openai import OpenAIAdapter
+    >>> from hexdag.stdlib.adapters.openai import OpenAIAdapter
     >>> detect_port_type(OpenAIAdapter)
     'llm'
     """
@@ -349,7 +349,7 @@ def list_tools() -> list[dict[str, Any]]:
     """List all available tools.
 
     Discovers tools dynamically from three levels:
-    1. hexdag.core.domain.agent_tools (builtin tools)
+    1. hexdag.kernel.domain.agent_tools (builtin tools)
     2. hexdag_plugins.*/tools (plugin tools)
     3. User-configured modules from hexdag.toml/pyproject.toml
 
@@ -367,7 +367,7 @@ def list_tools() -> list[dict[str, Any]]:
     >>> any(t["name"] == "tool_end" for t in tools)
     True
     """
-    from hexdag.core.discovery import (
+    from hexdag.kernel.discovery import (
         discover_plugins,
         discover_tools_in_module,
         discover_user_modules,
@@ -384,7 +384,7 @@ def list_tools() -> list[dict[str, Any]]:
                 tools.append(tool)
 
     # 1. Discover builtin tools
-    add_tools(discover_tools_in_module("hexdag.core.domain.agent_tools"))
+    add_tools(discover_tools_in_module("hexdag.kernel.domain.agent_tools"))
 
     # 2. Discover plugin tools
     for plugin_name in discover_plugins():
@@ -406,7 +406,7 @@ def list_macros() -> list[dict[str, Any]]:
     """List all available macros.
 
     Discovers macros dynamically from:
-    1. hexdag.builtin.macros (builtin macros)
+    1. hexdag.stdlib.macros (builtin macros)
     2. hexdag_plugins.*/macros (plugin macros)
 
     Macros are reusable pipeline templates that expand into subgraphs.
@@ -425,7 +425,7 @@ def list_macros() -> list[dict[str, Any]]:
     >>> any(m["name"] == "ReasoningAgentMacro" for m in macros)
     True
     """
-    from hexdag.core.discovery import discover_macros_in_module, discover_plugins
+    from hexdag.kernel.discovery import discover_macros_in_module, discover_plugins
 
     macros: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -438,7 +438,7 @@ def list_macros() -> list[dict[str, Any]]:
                 macros.append(macro)
 
     # Discover builtin macros
-    add_macros(discover_macros_in_module("hexdag.builtin.macros"))
+    add_macros(discover_macros_in_module("hexdag.stdlib.macros"))
 
     # Discover plugin macros
     for plugin_name in discover_plugins():
@@ -547,7 +547,7 @@ def _get_node_schema(name: str) -> dict[str, Any]:
 def _get_adapter_schema(name: str) -> dict[str, Any]:
     """Get schema for an adapter."""
     try:
-        from hexdag.builtin import adapters as builtin_adapters
+        from hexdag.stdlib import adapters as builtin_adapters
 
         cls = getattr(builtin_adapters, name, None)
         if cls is None:
@@ -564,7 +564,7 @@ def _get_adapter_schema(name: str) -> dict[str, Any]:
 def _get_tool_schema(name: str) -> dict[str, Any]:
     """Get schema for a tool."""
     try:
-        from hexdag.core.domain import agent_tools
+        from hexdag.kernel.domain import agent_tools
 
         fn = getattr(agent_tools, name, None)
         if fn is None:
@@ -581,7 +581,7 @@ def _get_tool_schema(name: str) -> dict[str, Any]:
 def _get_macro_schema(name: str) -> dict[str, Any]:
     """Get schema for a macro."""
     try:
-        from hexdag.builtin import macros as builtin_macros
+        from hexdag.stdlib import macros as builtin_macros
 
         cls = getattr(builtin_macros, name, None)
         if cls is None:

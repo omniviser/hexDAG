@@ -94,14 +94,14 @@ class TestDetectPortType:
 
     def test_detect_llm_adapter(self):
         """Test detection of LLM adapter."""
-        from hexdag.builtin.adapters.mock import MockLLM
+        from hexdag.stdlib.adapters.mock import MockLLM
 
         result = detect_port_type(MockLLM)
         assert result == "llm"
 
     def test_detect_memory_adapter(self):
         """Test detection of memory adapter."""
-        from hexdag.builtin.adapters.memory import InMemoryMemory
+        from hexdag.stdlib.adapters.memory import InMemoryMemory
 
         result = detect_port_type(InMemoryMemory)
         assert result == "memory"

@@ -56,7 +56,7 @@ from hexdag import api
 # Configure user plugin paths from environment variable
 # This allows MCP users to discover custom adapters/nodes
 if plugin_paths := os.environ.get("HEXDAG_PLUGIN_PATHS"):
-    from hexdag.core.discovery import set_user_plugin_paths
+    from hexdag.kernel.discovery import set_user_plugin_paths
 
     paths = [Path(p) for p in plugin_paths.split(os.pathsep) if p]
     set_user_plugin_paths(paths)

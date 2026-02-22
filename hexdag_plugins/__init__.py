@@ -32,7 +32,7 @@ Adapters MUST inherit from their port protocol to be auto-discovered:
 
 Example::
 
-    from hexdag.core.ports.llm import LLM
+    from hexdag.kernel.ports.llm import LLM
 
     class MyCustomLLMAdapter(LLM):
         async def aresponse(self, messages):
@@ -42,7 +42,7 @@ Node Requirements
 -----------------
 Custom nodes should inherit from ``BaseNodeFactory``::
 
-    from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
+    from hexdag.stdlib.nodes.base_node_factory import BaseNodeFactory
 
     class MyCustomNode(BaseNodeFactory):
         def __call__(self, name: str, **kwargs) -> NodeSpec:

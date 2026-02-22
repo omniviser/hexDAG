@@ -9,8 +9,8 @@ Tests demonstrate:
 
 import pytest
 
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
 
 
 async def data_loader(input_data: str) -> dict:
@@ -262,7 +262,7 @@ class TestYAMLPipelineWithInputMapping:
     @pytest.mark.asyncio
     async def test_input_mapping_preserved_through_yaml_builder(self):
         """Test that input_mapping from YAML is correctly stored in node params."""
-        from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1
@@ -294,8 +294,10 @@ spec:
     @pytest.mark.asyncio
     async def test_execution_coordinator_applies_input_mapping(self):
         """Test that ExecutionCoordinator correctly applies $input mappings at runtime."""
-        from hexdag.core.domain.dag import NodeSpec
-        from hexdag.core.orchestration.components.execution_coordinator import ExecutionCoordinator
+        from hexdag.kernel.domain.dag import NodeSpec
+        from hexdag.kernel.orchestration.components.execution_coordinator import (
+            ExecutionCoordinator,
+        )
 
         coordinator = ExecutionCoordinator()
 
@@ -328,7 +330,7 @@ spec:
     @pytest.mark.asyncio
     async def test_full_yaml_pipeline_with_input_mapping_end_to_end(self, orchestrator):
         """Test full pipeline execution with input_mapping using real functions."""
-        from hexdag.core.domain.dag import DirectedGraph, NodeSpec
+        from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
 
         # Create a simple pipeline manually that tests the input_mapping flow
         async def identity(x):

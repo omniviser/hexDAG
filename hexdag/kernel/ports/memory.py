@@ -1,0 +1,81 @@
+"""Port interface for Long Term Memory.
+
+.. deprecated::
+    Prefer :class:`~hexdag.kernel.ports.data_store.SupportsKeyValue` for new
+    code.  ``Memory`` is retained for backward compatibility and will be
+    removed in a future major release.
+"""
+
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from hexdag.kernel.ports.healthcheck import HealthStatus
+
+
+@runtime_checkable
+class Memory(Protocol):
+    """Protocol for long-term memory storage and retrieval.
+
+    .. deprecated::
+        Use :class:`~hexdag.kernel.ports.data_store.SupportsKeyValue` instead.
+        New adapters should implement ``SupportsKeyValue`` (which is a superset
+        of this protocol — it adds ``adelete``, ``aexists``, and ``alist_keys``).
+
+    Optional Methods
+    ----------------
+    Adapters may optionally implement:
+    - ahealth_check(): Verify storage backend connectivity and availability
+    """
+
+    @abstractmethod
+    async def aget(self, key: str) -> Any:
+        """Retrieve a value from long-term memory asynchronously.
+
+        Args
+        ----
+            key: The key to retrieve
+
+        Returns
+        -------
+            The stored value, or None if key doesn't exist
+        """
+        ...
+
+    @abstractmethod
+    async def aset(self, key: str, value: Any) -> None:
+        """Store a value in long-term memory asynchronously.
+
+        Args
+        ----
+            key: The key to store under
+            value: The value to store
+        """
+        ...
+
+    async def ahealth_check(self) -> "HealthStatus":
+        """Check memory storage backend health (optional).
+
+        Adapters should verify:
+        - Storage backend connectivity (database, file system, Redis, etc.)
+        - Read/write operations
+        - Storage capacity/availability
+
+        This method is optional. If not implemented, the adapter will be
+        considered healthy by default.
+
+        Returns
+        -------
+        HealthStatus
+            Current health status with details about storage backend
+
+        Examples
+        --------
+        Example usage::
+
+            # Redis memory adapter health check
+            status = await redis_memory.ahealth_check()
+            status.status  # "healthy", "degraded", or "unhealthy"
+            status.details  # {"connected_clients": 5, "used_memory_mb": 128}
+        """
+        ...

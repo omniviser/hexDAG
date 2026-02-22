@@ -91,21 +91,21 @@ def _generate_config(adapters: list[str]) -> str:
         "",
         "# Core modules to load",
         "modules = [",
-        '    "hexdag.core.ports",',
-        '    "hexdag.builtin.nodes",',
+        '    "hexdag.kernel.ports",',
+        '    "hexdag.stdlib.nodes",',
         "]",
         "",
         "# Plugins to load",
         "plugins = [",
-        '    "hexdag.builtin.adapters.local",  # Local in-process adapters',
+        '    "hexdag.drivers.observer_manager",  # Observer manager driver',
     ]
 
-    lines.append('    "hexdag.adapters.mock",   # Mock adapters for testing')
+    lines.append('    "hexdag.drivers.mock",   # Mock adapters for testing')
 
     if "openai" in adapters:
-        lines.append('    # "hexdag.adapters.openai",  # OpenAI adapter (requires api key)')
+        lines.append('    # "hexdag.drivers.openai",  # OpenAI adapter (requires api key)')
     if "anthropic" in adapters:
-        lines.append('    # "hexdag.adapters.anthropic",  # Anthropic adapter (requires api key)')
+        lines.append('    # "hexdag.drivers.anthropic",  # Anthropic adapter (requires api key)')
 
     lines.extend([
         "]",

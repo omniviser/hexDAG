@@ -14,15 +14,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hexdag.builtin.adapters.anthropic.anthropic_adapter import AnthropicAdapter
-from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
-from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
-from hexdag.builtin.adapters.secret.local_secret_adapter import LocalSecretAdapter
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig
-from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.pipeline_builder.component_instantiator import _resolve_deferred_env_vars
-from hexdag.core.types import Secret
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.hooks import HookConfig, PostDagHookConfig
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.pipeline_builder.component_instantiator import _resolve_deferred_env_vars
+from hexdag.kernel.types import Secret
+from hexdag.stdlib.adapters.anthropic.anthropic_adapter import AnthropicAdapter
+from hexdag.stdlib.adapters.memory.in_memory_memory import InMemoryMemory
+from hexdag.stdlib.adapters.openai.openai_adapter import OpenAIAdapter
+from hexdag.stdlib.adapters.secret.local_secret_adapter import LocalSecretAdapter
 
 # Note: Tests for deprecated ConfigurableAdapter pattern have been removed.
 # Secret management now uses the simplified decorator-based pattern.
@@ -188,7 +188,7 @@ async def test_orchestrator_with_local_secret_adapter():
 
         def capture_secrets(x=None, **kwargs):
             """Capture secrets from Memory during execution."""
-            from hexdag.core.context import get_port
+            from hexdag.kernel.context import get_port
 
             memory = get_port("memory")
             if memory:
@@ -317,7 +317,7 @@ async def test_end_to_end_secret_lifecycle():
 
         def use_secret(x=None, **kwargs):
             """Use secret during pipeline execution."""
-            from hexdag.core.context import get_port
+            from hexdag.kernel.context import get_port
 
             memory = get_port("memory")
             if memory:
@@ -366,7 +366,7 @@ async def test_secret_isolation_between_pipelines():
         captured_values = []
 
         def capture(x=None, **kwargs):
-            from hexdag.core.context import get_port
+            from hexdag.kernel.context import get_port
 
             memory = get_port("memory")
             if memory:
@@ -492,7 +492,7 @@ async def test_keyvault_orchestrator_hook_integration():
 
     def capture_secrets(x=None, **kwargs):
         """Capture secrets from Memory during execution."""
-        from hexdag.core.context import get_port
+        from hexdag.kernel.context import get_port
 
         memory = get_port("memory")
         if memory:

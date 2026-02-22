@@ -11,10 +11,11 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hexdag.builtin.adapters.mock import MockLLM, MockToolRouter
-from hexdag.core.logging import get_logger
-from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.logging import get_logger
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.stdlib.adapters.mock import MockLLM
 
 logger = get_logger(__name__)
 
@@ -93,9 +94,20 @@ async def run_research_agent(
             ],
             delay_seconds=0.05,
         )
-        mock_tool_router = MockToolRouter(available_tools=["search", "calculate"])
+        tool_router = ToolRouter(
+            tools={
+                "search": lambda query="", **kw: {
+                    "results": [f"Mock result for: {query}"],
+                    "status": "success",
+                },
+                "calculate": lambda expression="", **kw: {
+                    "result": str(expression),
+                    "status": "success",
+                },
+            }
+        )
 
-        orchestrator = Orchestrator(ports={"llm": mock_llm, "tool_router": mock_tool_router})
+        orchestrator = Orchestrator(ports={"llm": mock_llm, "tool_router": tool_router})
 
     elif environment == "staging":
         print("\n🧪 Staging Configuration:")
@@ -110,11 +122,18 @@ async def run_research_agent(
             )
 
         # Use mock tools for staging
-        mock_tool_router = MockToolRouter(
-            available_tools=["research:tavily_search", "research:tavily_qna_search"]
+        tool_router = ToolRouter(
+            tools={
+                "research:tavily_search": lambda query="", **kw: {
+                    "results": [f"Mock result for: {query}"]
+                },
+                "research:tavily_qna_search": lambda query="", **kw: {
+                    "answer": f"Mock answer for: {query}"
+                },
+            }
         )
 
-        orchestrator = Orchestrator(ports={"tool_router": mock_tool_router})
+        orchestrator = Orchestrator(ports={"tool_router": tool_router})
 
     elif environment == "prod":
         print("\n🚀 Production Configuration:")

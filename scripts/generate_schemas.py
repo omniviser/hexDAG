@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from hexdag.core.schema.generator import SchemaGenerator
+from hexdag.kernel.schema.generator import SchemaGenerator
 
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -41,21 +41,21 @@ def _to_snake_case(name: str) -> str:
 
 
 def _discover_factory_classes() -> dict[str, type[Any]]:
-    """Auto-discover all BaseNodeFactory subclasses from hexdag.builtin.nodes.
+    """Auto-discover all BaseNodeFactory subclasses from hexdag.stdlib.nodes.
 
     Returns a mapping of snake_case alias to factory class, e.g.:
         {"function_node": FunctionNode, "llm_node": LLMNode, ...}
     """
-    from hexdag.builtin.nodes.base_node_factory import BaseNodeFactory
+    from hexdag.stdlib.nodes.base_node_factory import BaseNodeFactory
 
     factories: dict[str, type[Any]] = {}
-    package = importlib.import_module("hexdag.builtin.nodes")
+    package = importlib.import_module("hexdag.stdlib.nodes")
 
     for module_info in pkgutil.iter_modules(package.__path__):
         if module_info.name.startswith("_"):
             continue
         try:
-            module = importlib.import_module(f"hexdag.builtin.nodes.{module_info.name}")
+            module = importlib.import_module(f"hexdag.stdlib.nodes.{module_info.name}")
         except ImportError:
             continue
 

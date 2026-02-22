@@ -55,8 +55,8 @@ def generate_research_agent_environments():
             },
         },
         "tool_router": {
-            "adapter": "plugin:mock_tool_router",  # Mock tools in staging
-            "config": {"available_tools": ["search", "calculate"]},
+            "adapter": "hexdag.kernel.ports.tool_router.ToolRouter",
+            "config": {"tools": {}},
         },
     }
 
@@ -129,7 +129,7 @@ def generate_research_agent_environments():
     print("\n🔧 Development Environment:")
     print("  File: deep_research_agent_dev.yaml")
     print("  LLM: plugin:mock_llm (no API key)")
-    print("  Tools: plugin:mock_tool_router (no API key)")
+    print("  Tools: ToolRouter (empty, no API key)")
     print("  Cost: $0.00 per run")
     print("  Speed: <1 second")
     print("  Use: Local testing, CI/CD, demos")
@@ -137,7 +137,7 @@ def generate_research_agent_environments():
     print("\n🧪 Staging Environment:")
     print("  File: deep_research_agent_staging.yaml")
     print("  LLM: core:openai (gpt-4o-mini)")
-    print("  Tools: plugin:mock_tool_router")
+    print("  Tools: ToolRouter (empty)")
     print("  Cost: ~$0.01-0.05 per run")
     print("  Speed: 10-20 seconds")
     print("  Use: Pre-production testing, validation")

@@ -7,7 +7,7 @@ from dataclasses import asdict
 from typing import Any, Literal
 
 import pandas as pd
-from hexdag.core.domain.dag import NodeSpec
+from hexdag.kernel.domain.dag import NodeSpec
 from pydantic import BaseModel
 
 from .base_node_factory import BaseNodeFactory

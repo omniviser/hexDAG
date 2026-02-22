@@ -30,7 +30,7 @@ class MemoryCacheAdapter:
 Use `secret()` in defaults to declare secrets that auto-resolve from environment:
 
 ```python
-from hexdag.core.secrets import secret
+from hexdag.kernel.secrets import secret
 
 class OpenAIAdapter:
     """OpenAI LLM adapter with automatic secret resolution."""
@@ -100,13 +100,6 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `LocalSecretAdapter` | Local secret adapter that reads from environment variables. |
 
-### tool_router
-
-| Adapter | Description |
-|---------|-------------|
-| `MockToolRouter` | Mock implementation of ToolRouter for testing. |
-| `ToolRouter` | Concrete tool router that wraps plain Python functions. |
-
 ## Using Adapters in YAML
 
 ```yaml
@@ -117,7 +110,7 @@ metadata:
 spec:
   ports:
     llm:
-      adapter: hexdag.builtin.adapters.openai.OpenAIAdapter
+      adapter: hexdag.stdlib.adapters.openai.OpenAIAdapter
       config:
         api_key: ${OPENAI_API_KEY}
         model: gpt-4

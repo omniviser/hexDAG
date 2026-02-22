@@ -10,7 +10,7 @@ spec:
   # Declarative workflow - no spaghetti code, just clear intent
   nodes:
     # Step 1: Extract structured data from unstructured text
-    - kind: hexdag.builtin.nodes.LLMNode
+    - kind: llm_node
       metadata:
         name: ticket_parser
         annotations:
@@ -25,7 +25,7 @@ spec:
         timeout: 10
         dependencies: []
     # Step 2: Standard analysis for all tiers
-    - kind: hexdag.builtin.nodes.LLMNode
+    - kind: llm_node
       metadata:
         name: ticket_analysis
         annotations:
@@ -60,6 +60,6 @@ spec:
 # - Jinja2 templating: {{ variable }}
 # - Multi-document YAML for different environments
 # - Macro invocations for reusable patterns
-# - Full module paths for node types: hexdag.builtin.nodes.LLMNode
+# - Full module paths for node types: llm_node
 #
 # See docs/YAML_PIPELINES_ARCHITECTURE.md for complete documentation.

@@ -99,7 +99,7 @@ def _kind_to_label(kind: str) -> str:
 
 def _is_builtin(module_path: str) -> bool:
     """Check if a module_path refers to a built-in component."""
-    return module_path.startswith("hexdag.builtin.")
+    return module_path.startswith("hexdag.stdlib.")
 
 
 def get_builtin_nodes(include_deprecated: bool = False) -> list[NodeTypeInfo]:
@@ -108,7 +108,7 @@ def get_builtin_nodes(include_deprecated: bool = False) -> list[NodeTypeInfo]:
     Uses hexdag.api.components.list_nodes() for discovery,
     then adds Studio-specific UI metadata (colors, icons, etc.).
 
-    Only returns nodes from hexdag.builtin.* to avoid duplicates with
+    Only returns nodes from hexdag.stdlib.* to avoid duplicates with
     plugin nodes which are served by /plugins endpoints.
     """
     # Use unified API to get nodes
@@ -182,7 +182,7 @@ async def get_node_type(kind: str) -> NodeTypeInfo | dict[str, str]:
 
 def _module_path_to_plugin(module_path: str) -> str:
     """Convert module_path to plugin name, or 'builtin' for built-in components."""
-    if module_path.startswith("hexdag.builtin."):
+    if module_path.startswith("hexdag.stdlib."):
         return "builtin"
     if module_path.startswith("hexdag_plugins."):
         parts = module_path.split(".")

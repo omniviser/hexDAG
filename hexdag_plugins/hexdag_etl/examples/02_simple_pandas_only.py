@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))  # hexdag ro
 sys.path.insert(0, str(Path(__file__).parent.parent))  # plugin root
 
 # Import plugin to register components
-from hexdag.builtin.adapters.memory.in_memory_memory import InMemoryMemory
-from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+from hexdag.stdlib.adapters.memory.in_memory_memory import InMemoryMemory
 
 import hexdag_etl  # noqa: F401
 

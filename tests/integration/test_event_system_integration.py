@@ -2,8 +2,8 @@
 
 import pytest
 
-from hexdag.builtin.adapters.local import LocalObserverManager
-from hexdag.core.orchestration.events import (
+from hexdag.drivers.observer_manager import LocalObserverManager
+from hexdag.kernel.orchestration.events import (
     Event,
     NodeCompleted,
     NodeStarted,

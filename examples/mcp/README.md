@@ -257,7 +257,7 @@ uv run python -m hexdag --mcp
 
 1. Verify your components can be imported:
    ```bash
-   python -c "from hexdag.core.resolver import resolve; print(resolve('hexdag.builtin.nodes.LLMNode'))"
+   python -c "from hexdag.kernel.resolver import resolve; print(resolve('hexdag.stdlib.nodes.LLMNode'))"
    ```
 
 2. Check that your plugin is on the Python path:

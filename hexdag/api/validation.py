@@ -10,8 +10,8 @@ from typing import Any
 
 import yaml
 
-from hexdag.core.pipeline_builder import YamlPipelineBuilder
-from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
+from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+from hexdag.kernel.pipeline_builder.yaml_validator import YamlValidator
 
 
 def validate(yaml_content: str, lenient: bool = False) -> dict[str, Any]:

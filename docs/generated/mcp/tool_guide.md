@@ -44,61 +44,25 @@ End agent execution with structured output.
 
 **Returns:** `dict[str, Any]`
 
-### database_execute
+### adatabase_query
 
-Execute a SQL command (INSERT, UPDATE, DELETE) on the database.
-
-**Parameters:**
-- `sql` (`str`): SQL command to execute
-- `params` (`dict[str, typing.Any] | None`, optional): Optional parameters for parameterized queries Default: `None`
-- `database_port` (`typing.Any | None`, optional): Injected database port (provided by framework) Default: `None`
-
-**Returns:** `None`
-
-*This is an async tool.*
-
-### database_query
-
-Execute a SQL query on the database.
-
-**Parameters:**
-- `sql` (`str`): SQL query to execute
-- `params` (`dict[str, typing.Any] | None`, optional): Optional parameters for parameterized queries Default: `None`
-- `database_port` (`hexdag.core.ports.database.DatabasePort | None`, optional): Injected database port (provided by framework) Default: `None`
+Execute a SQL query and return results.
 
 **Returns:** `list[dict[str, Any]]`
 
 *This is an async tool.*
 
-### database_query_sync
+### adescribe_table
 
-Execute a database query synchronously.
-
-**Parameters:**
-- `sql` (`str`): SQL query to execute
-- `params` (`dict[str, typing.Any] | None`, optional): Optional parameters Default: `None`
-- `database_port` (`hexdag.core.ports.database.DatabasePort | None`, optional): Injected database port Default: `None`
-
-**Returns:** `list[dict[str, Any]]`
-
-### describe_table
-
-Get schema information for a database table.
-
-**Parameters:**
-- `table` (`str`): Name of the table
-- `database_port` (`hexdag.core.ports.database.DatabasePort | None`, optional): Injected database port Default: `None`
+Get column information for a database table.
 
 **Returns:** `list[dict[str, Any]]`
 
 *This is an async tool.*
 
-### list_tables
+### alist_tables
 
 List all tables in the database.
-
-**Parameters:**
-- `database_port` (`hexdag.core.ports.database.DatabasePort | None`, optional): Injected database port Default: `None`
 
 **Returns:** `list[str]`
 
@@ -114,7 +78,7 @@ List all tables in the database.
     initial_prompt_template: "Research: {{topic}}"
     max_steps: 5
     tools:
-      - hexdag.core.domain.agent_tools.tool_end
+      - hexdag.kernel.domain.agent_tools.tool_end
       - mycompany.tools.search
   dependencies: []
 ```
@@ -134,16 +98,14 @@ INVOKE_TOOL: tool_name(param1="value", param2=123)
 |------|-------------|-------------|
 | `change_phase` | Change the agent's reasoning phase with ... | `dict[str, Any]` |
 | `tool_end` | End agent execution with structured outp... | `dict[str, Any]` |
-| `database_query_sync` | Execute a database query synchronously. | `list[dict[str, Any]]` |
 
 ### Asynchronous Tools
 
 | Tool | Description | Return Type |
 |------|-------------|-------------|
-| `database_execute` | Execute a SQL command (INSERT, UPDATE, D... | `None` |
-| `database_query` | Execute a SQL query on the database. | `list[dict[str, Any]]` |
-| `describe_table` | Get schema information for a database ta... | `list[dict[str, Any]]` |
-| `list_tables` | List all tables in the database. | `list[str]` |
+| `adatabase_query` | Execute a SQL query and return results. | `list[dict[str, Any]]` |
+| `adescribe_table` | Get column information for a database ta... | `list[dict[str, Any]]` |
+| `alist_tables` | List all tables in the database. | `list[str]` |
 
 ## Best Practices
 
