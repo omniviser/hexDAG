@@ -68,6 +68,7 @@ hexdag/kernel/
   ports/              Protocol definitions (interfaces)
   domain/             Domain models (data structures)
   orchestration/      Execution engine
+    port_wrappers.py    Transparent interceptors (observability, caching, retry)
   pipeline_builder/   YAML-to-DAG compilation
   validation/         Type validation, retry logic
   config/             TOML config loading
@@ -231,6 +232,63 @@ Users swap adapters (OpenAI <-> Anthropic), not drivers. Drivers are the plumbin
 
 ---
 
+## Port Wrappers
+
+Between raw ports and the nodes that call them, the orchestrator can inject
+**port wrappers** — transparent interceptors that add infrastructure concerns
+without changing the port contract.
+
+```
+Node calls port method
+  |
+  v
+Port Wrapper (transparent)         ← observability, caching, retry, rate-limit
+  |-- emit event (LLMPromptSent)
+  |-- check policy (future: rate-limit, auth)
+  |-- delegate to underlying adapter
+  |-- emit event (LLMResponseReceived)
+  |
+  v
+Adapter (actual implementation)
+```
+
+**Location:** `kernel/orchestration/port_wrappers.py`
+
+| Wrapper | Wraps | Adds |
+|---------|-------|------|
+| `ObservableLLMWrapper` | `SupportsGeneration` | Emits `LLMPromptSent`/`LLMResponseReceived`, tracks duration and token usage |
+| `ObservableToolRouterWrapper` | `ToolRouter` | Emits `ToolCalled`/`ToolCompleted`, tracks duration, logs errors |
+
+Wrappers are applied automatically by the orchestrator via `wrap_ports_with_observability()`
+at pipeline startup. Nodes don't know they're talking to a wrapper — the interface is
+identical to the raw port. This is the same pattern as Linux's VFS caching layer
+sitting between `read(2)` and the actual filesystem driver.
+
+### Port wrappers vs Libs
+
+Both can wrap ports, but they serve different purposes:
+
+```
+                    Transparent to caller?    Exposed as agent tools?    Owns state?
+                    ─────────────────────     ──────────────────────     ──────────
+Port Wrappers       Yes (same interface)      No                         No
+Libs                No (different API)        Yes (auto-tool)            Often yes
+```
+
+- **Port wrapper** = kernel-level interception. Like Linux's block I/O scheduler
+  sitting between `write(2)` and the disk driver. Adds caching, retry, metrics.
+  The caller doesn't know it's there.
+
+- **Lib** = userspace library. Like `libpq` providing `PQexec()` on top of the
+  raw PostgreSQL wire protocol. Adds business-domain convenience (e.g. `alist_tables()`,
+  `adescribe_table()`). Agents call libs explicitly by name.
+
+An ORM-like abstraction over the Database port is a **Lib** — it wraps a
+`SupportsQuery` port with higher-level operations and exposes them as agent
+tools. `DatabaseTools` in `stdlib/lib/` is exactly this pattern.
+
+---
+
 ## API Layer
 
 The API layer exposes hexDAG functionality to external consumers. Both the MCP server
@@ -238,14 +296,39 @@ and Studio REST API consume the same implementation functions.
 
 ```
 hexdag/api/
+  vfs.py             VFS factory and path wrappers (namespace interface)
+  processes.py       Parameterized process queries and actions (syscall interface)
   components.py      Component listing and schema generation
   validation.py      Pipeline YAML validation
   execution.py       Pipeline execution (build + run)
   pipeline.py        Pipeline CRUD operations
   documentation.py   MCP guide content generation
   export.py          Pipeline export (JSON, Python code)
-  processes.py       System library tools (ProcessRegistry, EntityState, Scheduler)
 ```
+
+### VFS vs Syscalls
+
+hexDAG exposes system state through two complementary interfaces — like
+Linux's `/proc` filesystem alongside `ps(1)` and `kill(2)`:
+
+```
+  VFS  (namespace — uniform addressing)     Syscalls  (api/ — typed operations)
+  ──────────────────────────────────────     ──────────────────────────────────────
+  vfs.aread("/proc/runs/<id>")              list_pipeline_runs(status=..., limit=50)
+  vfs.alist("/lib/nodes/")                  spawn_pipeline(name, input, ref_id=...)
+  vfs.astat("/proc/entities/order/123")     transition_entity(type, id, to_state)
+```
+
+**VFS** answers "what's at this path?" — one path, one entity. Agents use it
+to browse the system uniformly.
+
+**Syscalls** answer "find/do something with parameters" — filtering, sorting,
+branching logic. The `api/processes.py` functions take typed parameters and
+delegate to the appropriate lib method.
+
+Both delegate to the same underlying libs (`ProcessRegistry`, `EntityState`,
+`Scheduler`). They coexist — VFS doesn't replace syscalls, and syscalls
+don't make VFS redundant.
 
 ---
 
@@ -311,6 +394,7 @@ DirectedGraph + PipelineConfig
   v
 Orchestrator
   |-- Initialize ports (adapters)
+  |-- Wrap ports (observability, policy — port_wrappers.py)
   |-- Pre-DAG hooks
   |-- Wave execution (topological order)
   |   |-- For each wave: execute nodes in parallel (asyncio.gather)
@@ -450,12 +534,14 @@ kernel/ports/ (existing)              kernel/ports/ (planned)
   FileStorage
   SecretStore
   VectorSearch
+  VFS (Phase 1)
 
 stdlib/lib/ (existing)               stdlib/lib/ (planned)
   ProcessRegistry                       CentralAgent
   EntityState
   Scheduler
   DatabaseTools
+  VFSTools
 ```
 
 ---

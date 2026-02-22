@@ -660,58 +660,11 @@ def _discover_nodes_in_module(module: Any) -> list[dict[str, Any]]:
 def _detect_adapter_port_type(adapter_class: type) -> str:
     """Detect port type from adapter class using protocol inspection.
 
-    Falls back to name-based heuristics if no protocol inheritance found.
+    Delegates to the canonical implementation in ``api.components``.
     """
-    # Check explicit decorator metadata first
-    explicit_port = getattr(adapter_class, "_hexdag_implements_port", None)
-    if explicit_port:
-        return str(explicit_port)
+    from hexdag.api.components import detect_port_type
 
-    # Check protocol inheritance (MRO)
-    mro_names = [c.__name__ for c in adapter_class.__mro__]
-
-    # LLM protocols
-    if any(
-        name in mro_names
-        for name in ("LLM", "SupportsGeneration", "SupportsFunctionCalling", "SupportsVision")
-    ):
-        return "llm"
-
-    if "Memory" in mro_names:
-        return "memory"
-
-    if "Database" in mro_names or "DatabasePort" in mro_names or "SQLAdapter" in mro_names:
-        return "database"
-
-    if "SecretStore" in mro_names or "SecretPort" in mro_names:
-        return "secret"
-
-    storage_ports = ("FileStorage", "FileStoragePort", "VectorStorePort")
-    if any(name in mro_names for name in storage_ports):
-        return "storage"
-
-    if "DataStore" in mro_names:
-        return "data_store"
-
-    if "ToolRouter" in mro_names:
-        return "tool_router"
-
-    # Fall back to name-based heuristics
-    class_name = adapter_class.__name__.lower()
-    patterns = {
-        "llm": ["llm", "openai", "anthropic", "claude", "gpt"],
-        "memory": ["memory", "redis", "cosmos"],
-        "database": ["sql", "mysql", "postgres", "database", "db"],
-        "secret": ["secret", "vault", "keyvault"],
-        "storage": ["storage", "blob", "file", "s3"],
-        "vector_store": ["vector", "embedding", "chroma", "pgvector"],
-        "tool_router": ["tool", "router"],
-    }
-    for port_type, keywords in patterns.items():
-        if any(kw in class_name for kw in keywords):
-            return port_type
-
-    return "unknown"
+    return detect_port_type(adapter_class)
 
 
 def _to_snake_case(name: str) -> str:

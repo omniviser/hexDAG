@@ -73,28 +73,6 @@ Unified control flow node supporting while, for-each, times, if-else, switch.
   dependencies: []
 ```
 
-### DataNode
-
-Static data node factory that returns constant output.
-
-**Kind**: `data_node`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `str` | Yes | Node name (must be unique within the pipeline) |
-| `output` | `dict[str, Any]` | Yes | Output data to return. Values can be: - Static val... |
-| `deps` | `list[str] | None` | No | List of dependency node names for execution orderi... |
-
-**Example:**
-```yaml
-- kind: data_node
-  metadata:
-    name: my_data
-  spec:
-    # Add configuration here
-  dependencies: []
-```
-
 ### ExpressionNode
 
 Node factory for computing values using safe AST-based expressions.

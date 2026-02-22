@@ -8,13 +8,10 @@ the core of "everything is a file."
 
 .. code-block:: text
 
+    /lib/nodes|adapters|macros|tools|tags/ Component discovery
     /proc/runs/<run_id>/status|info       ProcessRegistry
     /proc/scheduled/<task_id>/status      Scheduler
     /proc/entities/<type>/<id>/state      EntityState
-    /dev/ports/<name>                     Bound adapter info
-    /lib/nodes|adapters|macros|tools|libs|prompts|tags/
-    /etc/pipelines/<name>                 Pipeline definitions
-    /sys/version|config                   System metadata
 
 **Mount system:** Providers register at path prefixes. Longest-prefix
 match resolves paths. Each subsystem implements :class:`VFSProvider`.

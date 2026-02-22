@@ -44,30 +44,6 @@ End agent execution with structured output.
 
 **Returns:** `dict[str, Any]`
 
-### adatabase_query
-
-Execute a SQL query and return results.
-
-**Returns:** `list[dict[str, Any]]`
-
-*This is an async tool.*
-
-### adescribe_table
-
-Get column information for a database table.
-
-**Returns:** `list[dict[str, Any]]`
-
-*This is an async tool.*
-
-### alist_tables
-
-List all tables in the database.
-
-**Returns:** `list[str]`
-
-*This is an async tool.*
-
 ## Using Tools with Agents
 
 ```yaml
@@ -98,14 +74,6 @@ INVOKE_TOOL: tool_name(param1="value", param2=123)
 |------|-------------|-------------|
 | `change_phase` | Change the agent's reasoning phase with ... | `dict[str, Any]` |
 | `tool_end` | End agent execution with structured outp... | `dict[str, Any]` |
-
-### Asynchronous Tools
-
-| Tool | Description | Return Type |
-|------|-------------|-------------|
-| `adatabase_query` | Execute a SQL query and return results. | `list[dict[str, Any]]` |
-| `adescribe_table` | Get column information for a database ta... | `list[dict[str, Any]]` |
-| `alist_tables` | List all tables in the database. | `list[str]` |
 
 ## Best Practices
 

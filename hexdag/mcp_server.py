@@ -69,136 +69,96 @@ mcp = FastMCP(
 
 
 # ============================================================================
-# Component Discovery Tools
+# VFS Tools — unified path-based introspection
 # ============================================================================
 
-
-@mcp.tool()  # type: ignore[misc]
-def list_nodes() -> str:
-    """List all available node types with auto-generated documentation.
-
-    Returns detailed information about each node type including:
-    - Node name and module path (unique identifier)
-    - Description (from docstring)
-    - Parameters summary (from _yaml_schema if available)
-    - Required vs optional parameters
-
-    Returns
-    -------
-        JSON string with available nodes grouped by source (builtin vs plugin)
-    """
-    nodes = api.components.list_nodes()
-    # Group by source (determined from module_path)
-    by_source: dict[str, list[dict[str, Any]]] = {"builtin": [], "plugins": []}
-    for node in nodes:
-        module_path = node.get("module_path", "")
-        if api.components.is_builtin(module_path):
-            by_source["builtin"].append(node)
-        else:
-            by_source["plugins"].append(node)
-    return json.dumps(by_source, indent=2)
+# Create a VFS instance for component and process introspection.
+# /lib/ is always available; /proc/* providers need lib instances
+# which are not wired here (they'll be added when the MCP server
+# supports process management).
+_vfs = api.vfs.create_vfs()
 
 
 @mcp.tool()  # type: ignore[misc]
-def list_adapters(port_type: str | None = None) -> str:
-    """List all available adapters in the hexDAG registry.
+async def vfs_read(path: str) -> str:
+    """Read content at a VFS path.
 
-    Args
-    ----
-        port_type: Optional filter by port type (e.g., "llm", "memory", "database", "secret")
+    Use this to inspect individual components, pipeline runs, scheduled
+    tasks, or entity states.
 
-    Returns
-    -------
-        JSON string with available adapters grouped by port type
-    """
-    adapters = api.components.list_adapters(port_type)
-    # Group by port type
-    by_port: dict[str, list[dict[str, Any]]] = {}
-    for adapter in adapters:
-        pt = adapter.get("port_type", "unknown")
-        if pt not in by_port:
-            by_port[pt] = []
-        by_port[pt].append(adapter)
-    return json.dumps(by_port, indent=2)
-
-
-@mcp.tool()  # type: ignore[misc]
-def list_tools() -> str:
-    """List all available tools in the hexDAG registry.
-
-    Returns
-    -------
-        JSON string with available tools grouped by source (builtin vs plugin)
-    """
-    tools = api.components.list_tools()
-    # Group by source (determined from module_path)
-    by_source: dict[str, list[dict[str, Any]]] = {"builtin": [], "plugins": []}
-    for tool in tools:
-        module_path = tool.get("module_path", "")
-        if api.components.is_builtin(module_path):
-            by_source["builtin"].append(tool)
-        else:
-            by_source["plugins"].append(tool)
-    return json.dumps(by_source, indent=2)
-
-
-@mcp.tool()  # type: ignore[misc]
-def list_macros() -> str:
-    """List all available macros in the hexDAG registry.
-
-    Macros are reusable pipeline templates that expand into subgraphs.
-
-    Returns
-    -------
-        JSON string with available macros and their descriptions
-    """
-    macros = api.components.list_macros()
-    return json.dumps(macros, indent=2)
-
-
-@mcp.tool()  # type: ignore[misc]
-def list_tags() -> str:
-    """List all available YAML custom tags.
-
-    Returns detailed information about each tag including:
-    - Tag name (e.g., "!py", "!include")
-    - Description
-    - Module path
-    - Syntax examples
-    - Security warnings (if applicable)
-
-    Returns
-    -------
-        JSON string with available tags and their documentation
-    """
-    tags = api.components.list_tags()
-    # Convert list to dict by name for backward compatibility
-    result: dict[str, dict[str, Any]] = {}
-    for tag in tags:
-        result[tag["name"]] = tag
-    return json.dumps(result, indent=2)
-
-
-@mcp.tool()  # type: ignore[misc]
-def get_component_schema(
-    component_type: str,
-    name: str,
-) -> str:
-    """Get detailed schema for a specific component.
+    Paths
+    -----
+    - ``/lib/nodes/llm_node`` — JSON detail for a specific node
+    - ``/lib/nodes/llm_node/schema`` — JSON schema for a node
+    - ``/lib/adapters/OpenAIAdapter`` — adapter detail
+    - ``/lib/tools/tool_end`` — tool detail
+    - ``/lib/macros/ReasoningAgentMacro`` — macro detail
+    - ``/lib/tags/!py`` — tag detail
+    - ``/proc/runs/<run_id>`` — pipeline run detail
+    - ``/proc/scheduled/<task_id>`` — scheduled task detail
+    - ``/proc/entities/<type>/<id>`` — entity state
 
     Parameters
     ----------
-    component_type : str
-        Type of component: "node", "adapter", "tool", "macro", "tag"
-    name : str
-        Component name or module_path (e.g., "llm_node", "OpenAIAdapter", "!py")
+    path : str
+        Absolute VFS path (e.g. ``/lib/nodes/llm_node``)
 
     Returns
     -------
-        JSON Schema for the component
+        JSON content at the path
     """
-    schema = api.components.get_component_schema(component_type, name)
-    return json.dumps(schema, indent=2)
+    return await api.vfs.read_path(_vfs, path)
+
+
+@mcp.tool()  # type: ignore[misc]
+async def vfs_list(path: str) -> str:
+    """List entries in a VFS directory.
+
+    Use this to discover available components, runs, or entities.
+
+    Paths
+    -----
+    - ``/lib/`` — list entity types (nodes, adapters, macros, tools, tags)
+    - ``/lib/nodes/`` — list all available nodes
+    - ``/lib/adapters/`` — list all adapters
+    - ``/lib/tools/`` — list all tools
+    - ``/lib/macros/`` — list all macros
+    - ``/lib/tags/`` — list all YAML tags
+    - ``/proc/runs/`` — list pipeline runs
+    - ``/proc/scheduled/`` — list scheduled tasks
+    - ``/proc/entities/`` — list entity types
+
+    Parameters
+    ----------
+    path : str
+        Absolute VFS directory path (e.g. ``/lib/nodes/``)
+
+    Returns
+    -------
+        JSON array of entries with name, entry_type, and path
+    """
+    entries = await api.vfs.list_path(_vfs, path)
+    return json.dumps(entries, indent=2)
+
+
+@mcp.tool()  # type: ignore[misc]
+async def vfs_stat(path: str) -> str:
+    """Get metadata about a VFS path.
+
+    Returns structured metadata including description, entity type,
+    module path, capabilities, and tags (e.g. is_builtin, port_type).
+
+    Parameters
+    ----------
+    path : str
+        Absolute VFS path (e.g. ``/lib/adapters/OpenAIAdapter``)
+
+    Returns
+    -------
+        JSON metadata dict
+    """
+    result = await api.vfs.stat_path(_vfs, path)
+    return json.dumps(result, indent=2)
 
 
 # ============================================================================

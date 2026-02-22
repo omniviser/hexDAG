@@ -1,13 +1,12 @@
-"""Component discovery API.
+"""Component discovery engine (internal).
 
-Provides unified functions for listing and inspecting hexDAG components:
-- Nodes
-- Adapters
-- Tools
-- Macros
-- Tags (YAML custom tags)
+This module is the authoritative source for component discovery.
+VFS ``LibProvider`` delegates to these functions. External consumers
+(MCP server, Studio) should use VFS paths instead of calling
+these functions directly.
 
-Uses core SchemaGenerator for schema extraction - thin wrapper over core functionality.
+Discovers:
+- Nodes, Adapters, Tools, Macros, Tags (YAML custom tags)
 """
 
 from __future__ import annotations
@@ -350,6 +349,50 @@ def detect_port_type(adapter_class: type) -> str:
     return "unknown"
 
 
+def _discover_entities(
+    discover_fn: Any,
+    builtin_modules: list[str],
+    plugin_submodule: str,
+    user_submodule: str | None = None,
+    sort_key: str = "name",
+) -> list[dict[str, Any]]:
+    """Generic multi-source entity discovery with deduplication.
+
+    Discovers from builtins, plugins, and optionally user modules.
+    Deduplicates by ``module_path`` and sorts by *sort_key*.
+    """
+    from hexdag.kernel.discovery import discover_plugins, discover_user_modules
+
+    entities: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _add(items: list[dict[str, Any]]) -> None:
+        for item in items:
+            mp = item.get("module_path", "")
+            if mp not in seen:
+                seen.add(mp)
+                entities.append(item)
+
+    # 1. Builtins
+    for mod in builtin_modules:
+        _add(discover_fn(mod))
+
+    # 2. Plugins
+    for plugin_name in discover_plugins():
+        _add(discover_fn(f"hexdag_plugins.{plugin_name}.{plugin_submodule}"))
+
+    # 3. User modules
+    if user_submodule is not None:
+        for user_module in discover_user_modules():
+            suffix = user_submodule
+            if not user_module.endswith(f".{suffix}"):
+                _add(discover_fn(f"{user_module}.{suffix}"))
+            else:
+                _add(discover_fn(user_module))
+
+    return sorted(entities, key=lambda x: x[sort_key])
+
+
 def list_tools() -> list[dict[str, Any]]:
     """List all available tools.
 
@@ -372,39 +415,14 @@ def list_tools() -> list[dict[str, Any]]:
     >>> any(t["name"] == "tool_end" for t in tools)
     True
     """
-    from hexdag.kernel.discovery import (
-        discover_plugins,
+    from hexdag.kernel.discovery import discover_tools_in_module
+
+    return _discover_entities(
         discover_tools_in_module,
-        discover_user_modules,
+        builtin_modules=["hexdag.kernel.domain.agent_tools"],
+        plugin_submodule="tools",
+        user_submodule="tools",
     )
-
-    tools: list[dict[str, Any]] = []
-    seen: set[str] = set()
-
-    def add_tools(tool_list: list[dict[str, Any]]) -> None:
-        for tool in tool_list:
-            module_path = tool.get("module_path", "")
-            if module_path not in seen:
-                seen.add(module_path)
-                tools.append(tool)
-
-    # 1. Discover builtin tools
-    add_tools(discover_tools_in_module("hexdag.kernel.domain.agent_tools"))
-
-    # 2. Discover plugin tools
-    for plugin_name in discover_plugins():
-        add_tools(discover_tools_in_module(f"hexdag_plugins.{plugin_name}.tools"))
-
-    # 3. Discover user-configured tools
-    for user_module in discover_user_modules():
-        # Try as tools submodule
-        add_tools(
-            discover_tools_in_module(
-                f"{user_module}.tools" if not user_module.endswith(".tools") else user_module
-            )
-        )
-
-    return sorted(tools, key=lambda x: x["name"])
 
 
 def list_macros() -> list[dict[str, Any]]:
@@ -430,26 +448,13 @@ def list_macros() -> list[dict[str, Any]]:
     >>> any(m["name"] == "ReasoningAgentMacro" for m in macros)
     True
     """
-    from hexdag.kernel.discovery import discover_macros_in_module, discover_plugins
+    from hexdag.kernel.discovery import discover_macros_in_module
 
-    macros: list[dict[str, Any]] = []
-    seen: set[str] = set()
-
-    def add_macros(macro_list: list[dict[str, Any]]) -> None:
-        for macro in macro_list:
-            module_path = macro.get("module_path", "")
-            if module_path not in seen:
-                seen.add(module_path)
-                macros.append(macro)
-
-    # Discover builtin macros
-    add_macros(discover_macros_in_module("hexdag.stdlib.macros"))
-
-    # Discover plugin macros
-    for plugin_name in discover_plugins():
-        add_macros(discover_macros_in_module(f"hexdag_plugins.{plugin_name}.macros"))
-
-    return sorted(macros, key=lambda x: x["name"])
+    return _discover_entities(
+        discover_macros_in_module,
+        builtin_modules=["hexdag.stdlib.macros"],
+        plugin_submodule="macros",
+    )
 
 
 def list_tags() -> list[dict[str, Any]]:
@@ -496,6 +501,10 @@ def list_tags() -> list[dict[str, Any]]:
 def get_component_schema(component_type: str, name: str) -> dict[str, Any]:
     """Get detailed schema for a specific component.
 
+    Uses :func:`resolve` to find components by alias or module path,
+    then extracts schema via ``_yaml_schema`` attribute or
+    :class:`SchemaGenerator`. Works for builtins and plugins alike.
+
     Parameters
     ----------
     component_type : str
@@ -514,90 +523,33 @@ def get_component_schema(component_type: str, name: str) -> dict[str, Any]:
     >>> "properties" in schema or "error" in schema
     True
     """
-    if component_type == "node":
-        return _get_node_schema(name)
-    if component_type == "adapter":
-        return _get_adapter_schema(name)
-    if component_type == "tool":
-        return _get_tool_schema(name)
-    if component_type == "macro":
-        return _get_macro_schema(name)
     if component_type == "tag":
         return _get_tag_schema(name)
-    return {"error": f"Unknown component type: {component_type}"}
+    if component_type not in ("node", "adapter", "tool", "macro"):
+        return {"error": f"Unknown component type: {component_type}"}
+    return _resolve_schema(name)
 
 
-def _get_node_schema(name: str) -> dict[str, Any]:
-    """Get schema for a node type."""
+def _resolve_schema(name: str) -> dict[str, Any]:
+    """Resolve a component and extract its schema."""
     try:
-        cls = resolve(name)
+        cls_or_fn = resolve(name)
     except Exception as e:
-        return {"error": f"Cannot resolve node '{name}': {e}"}
+        return {"error": f"Cannot resolve '{name}': {e}"}
 
     # Check for explicit _yaml_schema
-    yaml_schema = getattr(cls, "_yaml_schema", None)
+    yaml_schema = getattr(cls_or_fn, "_yaml_schema", None)
     if yaml_schema and isinstance(yaml_schema, dict):
         return dict(yaml_schema)
 
     # Fall back to SchemaGenerator
     try:
-        result = SchemaGenerator.from_callable(cls)
+        result = SchemaGenerator.from_callable(cls_or_fn)
         if isinstance(result, dict):
             return result
         return {"error": f"Schema generator returned non-dict for '{name}'"}
     except Exception as e:
         return {"error": f"Cannot generate schema for '{name}': {e}"}
-
-
-def _get_adapter_schema(name: str) -> dict[str, Any]:
-    """Get schema for an adapter."""
-    try:
-        from hexdag.stdlib import adapters as builtin_adapters
-
-        cls = getattr(builtin_adapters, name, None)
-        if cls is None:
-            return {"error": f"Adapter '{name}' not found"}
-
-        result = SchemaGenerator.from_callable(cls)
-        if isinstance(result, dict):
-            return result
-        return {"error": f"Schema generator returned non-dict for adapter '{name}'"}
-    except Exception as e:
-        return {"error": f"Cannot generate schema for adapter '{name}': {e}"}
-
-
-def _get_tool_schema(name: str) -> dict[str, Any]:
-    """Get schema for a tool."""
-    try:
-        from hexdag.kernel.domain import agent_tools
-
-        fn = getattr(agent_tools, name, None)
-        if fn is None:
-            return {"error": f"Tool '{name}' not found"}
-
-        result = SchemaGenerator.from_callable(fn)
-        if isinstance(result, dict):
-            return result
-        return {"error": f"Schema generator returned non-dict for tool '{name}'"}
-    except Exception as e:
-        return {"error": f"Cannot generate schema for tool '{name}': {e}"}
-
-
-def _get_macro_schema(name: str) -> dict[str, Any]:
-    """Get schema for a macro."""
-    try:
-        from hexdag.stdlib import macros as builtin_macros
-
-        cls = getattr(builtin_macros, name, None)
-        if cls is None:
-            return {"error": f"Macro '{name}' not found"}
-
-        result = SchemaGenerator.from_callable(cls)
-        if isinstance(result, dict):
-            return result
-        return {"error": f"Schema generator returned non-dict for macro '{name}'"}
-    except Exception as e:
-        return {"error": f"Cannot generate schema for macro '{name}': {e}"}
 
 
 def _get_tag_schema(name: str) -> dict[str, Any]:

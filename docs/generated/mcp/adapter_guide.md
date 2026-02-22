@@ -64,41 +64,54 @@ Secrets declared with `secret()` are resolved in this order:
 
 | Adapter | Description |
 |---------|-------------|
-| `SQLiteAdapter` | Async SQLite adapter for database port. |
-| `CsvAdapter` | Adapter class for reading CSV files from a specified directo... |
 | `MockDatabaseAdapter` | Mock implementation of Database for testing and demos. |
+| `MySQLAdapter` | MySQL database adapter with async connection pooling. |
+| `PgVectorAdapter` | PostgreSQL adapter with pgvector extension support. |
+| `PostgreSQLAdapter` | PostgreSQL database adapter with async connection pooling. |
+| `SQLAdapter` | Base SQL adapter with SQLAlchemy connection pooling. |
+| `SQLiteAdapter` | Async SQLite adapter for database port. |
+| `MySQLAdapter` | MySQL document-store adapter for hexDAG. |
+| `MySQLAdapter` | MySQL adapter for database port. |
 
 ### llm
 
 | Adapter | Description |
 |---------|-------------|
-| `OpenAIAdapter` | Unified OpenAI implementation of the LLM port. |
 | `AnthropicAdapter` | Anthropic implementation of the LLM port. |
+| `AzureOpenAIAdapter` | Azure OpenAI adapter for LLM port with embedding support. |
+| `LLM` | Port interface for Large Language Models (LLMs). |
+| `MockLLM` | Mock implementation of the LLM interface for testing. |
+| `OpenAIAdapter` | Unified OpenAI implementation of the LLM port. |
 
 ### memory
 
 | Adapter | Description |
 |---------|-------------|
+| `AzureCosmosAdapter` | Azure Cosmos DB adapter for agent memory and pipeline state. |
+| `FileMemoryAdapter` | Memory adapter backed by file system. |
 | `InMemoryMemory` | In-memory implementation of Memory for testing. |
 | `Memory` | Protocol for long-term memory storage and retrieval. |
-| `Memory` | Protocol for long-term memory storage and retrieval. |
 | `SQLiteMemoryAdapter` | Memory adapter backed by SQLite database. |
-| `FileMemoryAdapter` | Memory adapter backed by file system. |
-| `Memory` | Protocol for long-term memory storage and retrieval. |
-| `Memory` | Protocol for long-term memory storage and retrieval. |
-| `Memory` | Protocol for long-term memory storage and retrieval. |
-
-### observer_manager
-
-| Adapter | Description |
-|---------|-------------|
-| `LocalObserverManager` | Local standalone implementation of observer manager. |
 
 ### secret
 
 | Adapter | Description |
 |---------|-------------|
+| `AzureKeyVaultAdapter` | Azure Key Vault adapter for secret resolution. |
 | `LocalSecretAdapter` | Local secret adapter that reads from environment variables. |
+
+### storage
+
+| Adapter | Description |
+|---------|-------------|
+| `AzureBlobAdapter` | Azure Blob Storage adapter for file operations. |
+
+### unknown
+
+| Adapter | Description |
+|---------|-------------|
+| `ChromaDBAdapter` | ChromaDB vector store adapter. |
+| `PgVectorAdapter` | PostgreSQL pgvector adapter using SQLAlchemy. |
 
 ## Using Adapters in YAML
 

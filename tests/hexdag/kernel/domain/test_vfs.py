@@ -81,17 +81,17 @@ class TestStatResult:
 
     def test_model_dump_exclude_none(self) -> None:
         stat = StatResult(
-            path="/sys/version",
+            path="/lib/nodes/llm_node",
             entry_type=EntryType.FILE,
-            description="hexDAG version: 0.5.0",
+            description="Language model interaction node",
         )
         dumped = stat.model_dump(exclude_none=True)
         assert "entity_type" not in dumped
         assert "module_path" not in dumped
         assert "status" not in dumped
         assert "child_count" not in dumped
-        assert dumped["path"] == "/sys/version"
-        assert dumped["description"] == "hexDAG version: 0.5.0"
+        assert dumped["path"] == "/lib/nodes/llm_node"
+        assert dumped["description"] == "Language model interaction node"
 
     def test_model_dump_includes_empty_defaults(self) -> None:
         stat = StatResult(path="/lib", entry_type=EntryType.DIRECTORY)

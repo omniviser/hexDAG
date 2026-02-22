@@ -8,145 +8,140 @@ import pytest
 mcp = pytest.importorskip("mcp", reason="MCP package not installed")
 
 
-class TestListTagsMCP:
-    """Tests for the list_tags MCP tool."""
+class TestVFSToolsRead:
+    """Tests for the vfs_read MCP tool."""
 
-    def test_list_tags_returns_json(self) -> None:
-        """list_tags should return valid JSON."""
-        from hexdag.mcp_server import list_tags
+    @pytest.mark.asyncio
+    async def test_read_tags_returns_json(self) -> None:
+        """vfs_read /lib/tags should return valid JSON list."""
+        from hexdag.mcp_server import vfs_read
 
-        result = list_tags()
+        result = await vfs_read("/lib/tags")
         parsed = json.loads(result)
-        assert isinstance(parsed, dict)
+        assert isinstance(parsed, list)
 
-    def test_list_tags_contains_py(self) -> None:
-        """list_tags should include !py tag."""
-        from hexdag.mcp_server import list_tags
+    @pytest.mark.asyncio
+    async def test_read_tags_contains_py(self) -> None:
+        """Reading /lib/tags should include !py tag data."""
+        from hexdag.mcp_server import vfs_read
 
-        result = json.loads(list_tags())
-        assert "!py" in result
-        assert result["!py"]["name"] == "!py"
-        assert "security_warning" in result["!py"]
+        result = json.loads(await vfs_read("/lib/tags"))
+        names = [t["name"] for t in result]
+        assert "!py" in names
 
-    def test_list_tags_contains_include(self) -> None:
-        """list_tags should include !include tag."""
-        from hexdag.mcp_server import list_tags
+    @pytest.mark.asyncio
+    async def test_read_specific_tag(self) -> None:
+        """Reading /lib/tags/!py should return tag detail."""
+        from hexdag.mcp_server import vfs_read
 
-        result = json.loads(list_tags())
-        assert "!include" in result
-        assert result["!include"]["name"] == "!include"
+        result = json.loads(await vfs_read("/lib/tags/!py"))
+        assert result["name"] == "!py"
+        assert "description" in result
+        assert "security_warning" in result
 
-    def test_list_tags_has_required_fields(self) -> None:
-        """Each tag should have required fields."""
-        from hexdag.mcp_server import list_tags
+    @pytest.mark.asyncio
+    async def test_read_tag_schema(self) -> None:
+        """Reading /lib/tags/!py/schema should return tag schema."""
+        from hexdag.mcp_server import vfs_read
 
-        result = json.loads(list_tags())
-        for tag_name, tag_info in result.items():
-            assert "name" in tag_info, f"Tag {tag_name} missing 'name'"
-            assert "description" in tag_info, f"Tag {tag_name} missing 'description'"
-            assert "module" in tag_info, f"Tag {tag_name} missing 'module'"
-            assert "syntax" in tag_info, f"Tag {tag_name} missing 'syntax'"
-            assert "is_registered" in tag_info, f"Tag {tag_name} missing 'is_registered'"
-
-    def test_list_tags_py_has_security_warning(self) -> None:
-        """The !py tag should have a security warning in list_tags output."""
-        from hexdag.mcp_server import list_tags
-
-        result = json.loads(list_tags())
-        assert "security_warning" in result["!py"]
-        assert "arbitrary Python code" in result["!py"]["security_warning"]
-
-    def test_list_tags_include_has_no_security_warning(self) -> None:
-        """The !include tag should not have a security warning."""
-        from hexdag.mcp_server import list_tags
-
-        result = json.loads(list_tags())
-        assert "security_warning" not in result["!include"]
-
-
-class TestGetComponentSchemaTags:
-    """Tests for get_component_schema with tag type."""
-
-    def test_get_py_tag_schema(self) -> None:
-        """get_component_schema should work for !py tag."""
-        from hexdag.mcp_server import get_component_schema
-
-        result = json.loads(get_component_schema("tag", "!py"))
+        result = json.loads(await vfs_read("/lib/tags/!py/schema"))
         assert result["name"] == "!py"
         assert result["type"] == "yaml_tag"
         assert "schema" in result
         assert "yaml_example" in result
 
-    def test_get_include_tag_schema(self) -> None:
-        """get_component_schema should work for !include tag."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_read_include_tag_schema(self) -> None:
+        """Reading /lib/tags/!include/schema should return schema."""
+        from hexdag.mcp_server import vfs_read
 
-        result = json.loads(get_component_schema("tag", "!include"))
+        result = json.loads(await vfs_read("/lib/tags/!include/schema"))
         assert result["name"] == "!include"
         assert result["type"] == "yaml_tag"
 
-    def test_get_tag_schema_without_prefix(self) -> None:
-        """Tag lookup should work without ! prefix."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_read_nodes(self) -> None:
+        """Reading /lib/nodes should return node list."""
+        from hexdag.mcp_server import vfs_read
 
-        result = json.loads(get_component_schema("tag", "py"))
-        assert result["name"] == "!py"
+        result = json.loads(await vfs_read("/lib/nodes"))
+        assert isinstance(result, list)
+        kinds = [n["kind"] for n in result]
+        assert "llm_node" in kinds
 
-    def test_get_include_tag_without_prefix(self) -> None:
-        """Include tag lookup should work without ! prefix."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_read_adapters(self) -> None:
+        """Reading /lib/adapters should return adapter list."""
+        from hexdag.mcp_server import vfs_read
 
-        result = json.loads(get_component_schema("tag", "include"))
-        assert result["name"] == "!include"
+        result = json.loads(await vfs_read("/lib/adapters"))
+        assert isinstance(result, list)
+        assert len(result) > 0
 
-    def test_get_unknown_tag_returns_error(self) -> None:
-        """Unknown tag should return error object."""
-        from hexdag.mcp_server import get_component_schema
 
-        result = json.loads(get_component_schema("tag", "!nonexistent"))
-        assert "error" in result
+class TestVFSToolsList:
+    """Tests for the vfs_list MCP tool."""
 
-    def test_tag_schema_has_yaml_example(self) -> None:
-        """Tag schemas should include YAML examples."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_list_lib_root(self) -> None:
+        """Listing /lib/ should return entity type directories."""
+        from hexdag.mcp_server import vfs_list
 
-        for tag in ["!py", "!include"]:
-            result = json.loads(get_component_schema("tag", tag))
-            assert "yaml_example" in result
-            assert result["yaml_example"], f"Tag {tag} missing yaml_example"
+        result = json.loads(await vfs_list("/lib/"))
+        names = [e["name"] for e in result]
+        assert "nodes" in names
+        assert "adapters" in names
+        assert "tags" in names
 
-    def test_py_tag_schema_has_security_warning(self) -> None:
-        """The !py tag schema should include security warning."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_list_nodes(self) -> None:
+        """Listing /lib/nodes/ should return node entries."""
+        from hexdag.mcp_server import vfs_list
 
-        result = json.loads(get_component_schema("tag", "!py"))
-        assert "security_warning" in result
-        assert "arbitrary Python code" in result["security_warning"]
+        result = json.loads(await vfs_list("/lib/nodes/"))
+        names = [e["name"] for e in result]
+        assert "llm_node" in names
 
-    def test_tag_schema_has_documentation(self) -> None:
-        """Tag schemas should include full documentation."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_list_tags(self) -> None:
+        """Listing /lib/tags/ should return tag entries."""
+        from hexdag.mcp_server import vfs_list
 
-        result = json.loads(get_component_schema("tag", "!py"))
-        assert "documentation" in result
-        assert len(result["documentation"]) > 0
+        result = json.loads(await vfs_list("/lib/tags/"))
+        names = [e["name"] for e in result]
+        assert "!py" in names
+        assert "!include" in names
 
-    def test_tag_schema_has_syntax_patterns(self) -> None:
-        """Tag schemas should include syntax patterns."""
-        from hexdag.mcp_server import get_component_schema
 
-        result = json.loads(get_component_schema("tag", "!include"))
-        assert "syntax" in result
-        assert len(result["syntax"]) > 0
+class TestVFSToolsStat:
+    """Tests for the vfs_stat MCP tool."""
 
-    def test_tag_schema_has_output_info(self) -> None:
-        """Tag schemas should include output information."""
-        from hexdag.mcp_server import get_component_schema
+    @pytest.mark.asyncio
+    async def test_stat_lib(self) -> None:
+        """Stat /lib should return directory metadata."""
+        from hexdag.mcp_server import vfs_stat
 
-        py_result = json.loads(get_component_schema("tag", "!py"))
-        assert "output" in py_result
-        assert py_result["output"]["type"] == "callable"
+        result = json.loads(await vfs_stat("/lib"))
+        assert result["entry_type"] == "directory"
+        assert result["child_count"] > 0
 
-        include_result = json.loads(get_component_schema("tag", "!include"))
-        assert "output" in include_result
-        assert include_result["output"]["type"] == "any"
+    @pytest.mark.asyncio
+    async def test_stat_node(self) -> None:
+        """Stat /lib/nodes/llm_node should return node metadata."""
+        from hexdag.mcp_server import vfs_stat
+
+        result = json.loads(await vfs_stat("/lib/nodes/llm_node"))
+        assert result["entry_type"] == "file"
+        assert result["entity_type"] == "node"
+
+    @pytest.mark.asyncio
+    async def test_stat_adapter(self) -> None:
+        """Stat on an adapter should include port_type tag."""
+        from hexdag.mcp_server import vfs_read, vfs_stat
+
+        # Find an adapter name first
+        adapters = json.loads(await vfs_read("/lib/adapters"))
+        if adapters:
+            name = adapters[0]["name"]
+            result = json.loads(await vfs_stat(f"/lib/adapters/{name}"))
+            assert result["entity_type"] == "adapter"
