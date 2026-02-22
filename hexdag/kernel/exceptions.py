@@ -223,6 +223,34 @@ class OrchestratorError(HexDAGError):
     pass
 
 
+# ============================================================================
+# VFS Errors
+# ============================================================================
+
+
+class VFSError(HexDAGError):
+    """Raised when a VFS operation fails.
+
+    Examples
+    --------
+    Example usage::
+
+        raise VFSError("/proc/runs/abc123", "path not found")
+    """
+
+    def __init__(self, path: str, reason: str) -> None:
+        """Initialize VFS error.
+
+        Args
+        ----
+            path: The VFS path that caused the error
+            reason: Explanation of what went wrong
+        """
+        super().__init__(f"VFS error at '{path}': {reason}")
+        self.path = path
+        self.reason = reason
+
+
 __all__ = [
     "HexDAGError",
     "ConfigurationError",
@@ -231,4 +259,5 @@ __all__ = [
     "DependencyError",
     "TypeMismatchError",
     "OrchestratorError",
+    "VFSError",
 ]

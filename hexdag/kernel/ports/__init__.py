@@ -42,6 +42,7 @@ from hexdag.kernel.ports.pipeline_spawner import PipelineSpawner
 from hexdag.kernel.ports.secret import SecretStore
 from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.kernel.ports.vector_search import SupportsVectorSearch
+from hexdag.kernel.ports.vfs import VFS, VFSProvider
 
 # Backward-compat aliases (deprecated: use new names)
 DatabasePort = Database
@@ -89,5 +90,7 @@ __all__ = [
     "SupportsVision",
     "TableSchema",
     "ToolRouter",
+    "VFS",
+    "VFSProvider",
     "VisionMessage",
 ]

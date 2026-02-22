@@ -32,9 +32,19 @@ Available submodules
 - documentation: Guides and references
 - export: Project export
 - processes: Process management (pipeline runs, scheduling, entity state)
+- vfs: Virtual filesystem (uniform path-based introspection)
 """
 
-from hexdag.api import components, documentation, execution, export, pipeline, processes, validation
+from hexdag.api import (
+    components,
+    documentation,
+    execution,
+    export,
+    pipeline,
+    processes,
+    validation,
+    vfs,
+)
 
 __all__ = [
     "components",
@@ -44,4 +54,5 @@ __all__ = [
     "pipeline",
     "processes",
     "validation",
+    "vfs",
 ]

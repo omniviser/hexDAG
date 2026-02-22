@@ -4,9 +4,10 @@
 **Last Updated:** 2026-02
 
 hexDAG is an operating system for AI agents. This roadmap describes the planned
-kernel-level extensions that complete the OS analogy -- adding IPC (EventBus),
-locks (LockPort), permissions (GovernancePort), a filesystem for artifacts
-(ArtifactStore), and a CPU scheduler for multi-pipeline coordination (CentralAgent).
+kernel-level extensions that complete the OS analogy -- adding a virtual filesystem
+for uniform introspection (VFS), IPC (EventBus), locks (LockPort), permissions
+(GovernancePort), a filesystem for artifacts (ArtifactStore), and a CPU scheduler
+for multi-pipeline coordination (CentralAgent).
 
 Each follows the uniform entity pattern: kernel defines Protocol, stdlib ships default
 implementation, users write their own.
@@ -16,6 +17,86 @@ For the current architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ---
 
 ## Planned Ports
+
+### VFS (Virtual Filesystem)
+
+**Location:** `kernel/ports/vfs.py`
+
+Uniform path-based interface for all hexDAG entities. Replaces the scattered
+per-entity query functions in `api/components.py` and `api/processes.py` with
+a single interface. Every pipeline run, component, port, and configuration is
+addressable by path — the core of "everything is a file."
+
+**Phase 1 — Introspection (priority):**
+
+```python
+class VFS(Protocol):
+    async def aread(self, path: str) -> str: ...
+    async def alist(self, path: str) -> list[DirEntry]: ...
+    async def astat(self, path: str) -> StatResult: ...
+    async def awrite(self, path: str, data: str) -> None: ...
+```
+
+**Phase 2 — Execution:**
+
+```python
+    async def aexec(self, path: str, args: dict) -> Any: ...
+```
+
+Invoke entities by path. Spawn pipelines via `exec("/etc/pipelines/order-processing", {...})`,
+transition entity state via `exec("/proc/entities/order/123/transition", {"to": "shipped"})`,
+call tools via `exec("/lib/tools/search", {"query": "..."})`.
+
+**Phase 3 — Reactivity:**
+
+```python
+    async def awatch(self, path: str) -> AsyncIterator[Event]: ...
+```
+
+Subscribe to changes on a path (like inotify). Bridges to the existing event/observer
+system. Watch `/proc/runs/<id>/status` for state changes, `/lib/nodes/` for new plugins.
+
+**Phase 4 — Tool Integration:**
+
+VFS auto-registers executable paths as ToolRouter tools at pipeline startup. Agents
+still see individual typed tool schemas (e.g., `adatabase_query(sql, params)`), but
+each tool is backed by a VFS `exec` call. New tools appear automatically when a
+provider is mounted.
+
+**Namespace tree:**
+
+```
+/proc/runs/<run_id>/status|info       ProcessRegistry
+/proc/scheduled/<task_id>/status      Scheduler
+/proc/entities/<type>/<id>/state      EntityState
+/dev/ports/<name>                     Bound adapter info
+/lib/nodes|adapters|macros|tools|libs|prompts|tags/
+/etc/pipelines/<name>                 Pipeline definitions
+/sys/version|config                   System metadata
+```
+
+**Mount system:** Providers register at path prefixes. Longest-prefix match
+resolves paths. Each subsystem implements `VFSProvider`:
+
+```python
+class VFSProvider(Protocol):
+    async def read(self, relative_path: str) -> str: ...
+    async def write(self, relative_path: str, data: str) -> int: ...
+    async def stat(self, relative_path: str) -> StatResult: ...
+    async def readdir(self, relative_path: str) -> list[DirEntry]: ...
+```
+
+**Impact on existing code:**
+- `kernel/discovery.py` — unchanged (scanning engine, VFS providers call it)
+- `kernel/resolver.py` — unchanged (module path resolution)
+- `api/components.py` — refactored to thin VFS wrappers (backwards compatible)
+- `api/processes.py` — refactored to thin VFS wrappers (backwards compatible)
+- `ToolRouter` — unchanged in Phase 1; auto-populated from VFS in Phase 4
+
+**Stdlib default:** `LocalVFS` in `drivers/vfs/local.py` — in-process, mount-based dispatch.
+**User implementations:** Distributed VFS (etcd/consul), REST-backed VFS.
+
+---
 
 ### EventBus
 
@@ -124,6 +205,21 @@ class ArtifactStore(Protocol):
 
 ## Planned Libs
 
+### VFSTools
+
+**Location:** `stdlib/lib/vfs_tools.py`
+
+Agent-callable VFS operations. Extends `HexDAGLib` so methods auto-become agent
+tools. Gives any agent the ability to introspect the running system through
+a single lib rather than separate tools per subsystem.
+
+**Phase 1 methods:** `aread_path(path)`, `alist_directory(path)`, `astat_path(path)`
+**Phase 2 methods:** `aexec_path(path, args)`, `awatch_path(path)`
+
+**Dependencies:** VFS port.
+
+---
+
 ### CentralAgent
 
 **Location:** `stdlib/lib/central_agent.py`
@@ -175,11 +271,11 @@ context plus the arguments/return value of the call.
 
 ```
 kernel/ports/ (existing)              kernel/ports/ (planned)
-  LLM                                   EventBus
-  DataStore                              Lock
-  Database (deprecated)                  Governance
-  ToolRouter                             ArtifactStore
-  ObserverManager
+  LLM                                   VFS
+  DataStore                              EventBus
+  Database (deprecated)                  Lock
+  ToolRouter                             Governance
+  ObserverManager                        ArtifactStore
   Executor
   PipelineSpawner
   FileStorage
@@ -187,8 +283,8 @@ kernel/ports/ (existing)              kernel/ports/ (planned)
   Memory (deprecated)
 
 stdlib/lib/ (existing)               stdlib/lib/ (planned)
-  ProcessRegistry                       CentralAgent
-  EntityState
+  ProcessRegistry                       VFSTools
+  EntityState                           CentralAgent
   Scheduler
   DatabaseTools
 
@@ -201,10 +297,14 @@ kernel/ internals (planned)
 
 ## Implementation Priority
 
-1. **EventBus** -- Unlocks multi-pipeline coordination. Required by CentralAgent.
-2. **LockPort** -- Required for safe concurrent pipeline execution.
-3. **RunContext rename** -- Low risk, high clarity improvement. Can be done anytime.
-4. **NodeHook / PortHook** -- Enables middleware-style extensibility.
-5. **GovernancePort** -- Required for production multi-tenant deployments.
-6. **ArtifactStore** -- Required for pipeline result caching and audit trails.
-7. **CentralAgent** -- Depends on EventBus, LockPort, and existing libs.
+1. **VFS Phase 1** -- Uniform introspection. Primary query interface. Simplifies api/ layer.
+2. **EventBus** -- Cross-pipeline IPC. Required by CentralAgent.
+3. **LockPort** -- Required for safe concurrent pipeline execution.
+4. **RunContext rename** -- Low risk, high clarity improvement. Can be done anytime.
+5. **VFS Phase 2 (exec)** -- Entity invocation by path. Spawn pipelines, transition states, call tools.
+6. **NodeHook / PortHook** -- Enables middleware-style extensibility.
+7. **GovernancePort** -- Required for production multi-tenant deployments.
+8. **VFS Phase 3 (watch)** -- Reactive path subscriptions. Bridges to event/observer system.
+9. **ArtifactStore** -- Required for pipeline result caching and audit trails.
+10. **VFS Phase 4 (tool integration)** -- Auto-register VFS executables as ToolRouter tools.
+11. **CentralAgent** -- Depends on EventBus, LockPort, VFSTools, and existing libs.
