@@ -1,5 +1,9 @@
 name: Release Package
-description: Build and publish a single monorepo package with safe version bumping
+description: >
+  Bump version, build, commit, and tag a single monorepo package.
+  The publish step lives in the calling workflow (Docker container
+  actions break inside composite actions when the repo name has
+  uppercase characters).
 
 inputs:
   pyproject_path:
@@ -9,16 +13,13 @@ inputs:
     description: 'dev or stable'
     required: true
   publish_to:
-    description: 'testpypi or pypi'
+    description: 'testpypi or pypi (controls TestPyPI rename)'
     required: true
   tag_prefix:
     description: 'Git tag prefix (v, plugins-v, studio-v)'
     required: true
   working_directory:
     description: 'Working directory for python -m build'
-    required: true
-  dist_directory:
-    description: 'Path to dist/ for pypi-publish action'
     required: true
   test_name:
     description: 'Package name on TestPyPI'
@@ -112,17 +113,3 @@ runs:
         TAG="${{ inputs.tag_prefix }}${{ steps.version.outputs.version }}"
         git tag -f "$TAG"
         git push origin "$TAG" --force
-
-    # 10. Publish
-    - name: Publish to Test PyPI
-      if: inputs.publish_to == 'testpypi'
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
-        packages-dir: ${{ inputs.dist_directory }}
-
-    - name: Publish to PyPI
-      if: inputs.publish_to == 'pypi'
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        packages-dir: ${{ inputs.dist_directory }}

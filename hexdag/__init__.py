@@ -1,4 +1,4 @@
-"""Hex-DAG Agent Framework.
+"""hexDAG — Operating system for AI agents.
 
 A modular, deterministic, and extensible architecture for orchestrating LLM-powered agents alongside
 traditional code with YAML pipeline configuration.
