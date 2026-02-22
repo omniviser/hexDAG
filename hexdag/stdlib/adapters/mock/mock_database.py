@@ -3,11 +3,11 @@
 import asyncio
 from typing import Any
 
-from hexdag.kernel.ports.database import DatabasePort
+from hexdag.kernel.ports.database import Database
 
 
-class MockDatabaseAdapter(DatabasePort):
-    """Mock implementation of DatabasePort for testing and demos."""
+class MockDatabaseAdapter(Database):
+    """Mock implementation of Database for testing and demos."""
 
     # Type annotations for attributes
     enable_sample_data: bool
@@ -185,7 +185,7 @@ class MockDatabaseAdapter(DatabasePort):
             },
         }
 
-    # Required methods from DatabasePort
+    # Required methods from Database
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """Get schema information for all tables."""
         if self.delay_seconds > 0:
@@ -212,7 +212,7 @@ class MockDatabaseAdapter(DatabasePort):
             ]
         return []
 
-    # Optional methods from DatabasePort
+    # Optional methods from Database
     async def aget_relationships(self) -> list[dict[str, Any]]:
         """Get foreign key relationships between tables."""
         if self.delay_seconds > 0:

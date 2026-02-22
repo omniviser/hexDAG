@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from hexdag.kernel.orchestration.models import NodeExecutionContext
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 
 
 # Constants for pipeline status (replacing string literals)
@@ -45,7 +45,7 @@ class PreHookContext:
         All available ports for the pipeline
     context : NodeExecutionContext
         Execution context for this pipeline run
-    observer_manager : ObserverManagerPort | None
+    observer_manager : ObserverManager | None
         Optional observer for event emission
     pipeline_name : str
         Name of the pipeline being executed
@@ -65,7 +65,7 @@ class PreHookContext:
 
     ports: dict[str, Any]
     context: NodeExecutionContext
-    observer_manager: ObserverManagerPort | None
+    observer_manager: ObserverManager | None
     pipeline_name: str
 
 
@@ -82,7 +82,7 @@ class PostHookContext:
         All available ports
     context : NodeExecutionContext
         Execution context
-    observer_manager : ObserverManagerPort | None
+    observer_manager : ObserverManager | None
         Optional observer manager
     pipeline_name : str
         Pipeline name
@@ -111,7 +111,7 @@ class PostHookContext:
 
     ports: dict[str, Any]
     context: NodeExecutionContext
-    observer_manager: ObserverManagerPort | None
+    observer_manager: ObserverManager | None
     pipeline_name: str
     pipeline_status: PipelineStatus
     node_results: dict[str, Any]
@@ -142,7 +142,7 @@ class PreHookManagerProtocol(Protocol):
     ...         self,
     ...         ports: dict[str, Any],
     ...         context: NodeExecutionContext,
-    ...         observer_manager: ObserverManagerPort | None,
+    ...         observer_manager: ObserverManager | None,
     ...         pipeline_name: str,
     ...     ) -> dict[str, Any]:
     ...         # Custom implementation
@@ -153,7 +153,7 @@ class PreHookManagerProtocol(Protocol):
         self,
         ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
         pipeline_name: str,
     ) -> dict[str, Any]:
         """Execute all pre-DAG hooks.
@@ -164,7 +164,7 @@ class PreHookManagerProtocol(Protocol):
             All available ports for the pipeline
         context : NodeExecutionContext
             Execution context for this pipeline run
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Optional observer for event emission
         pipeline_name : str
             Name of the pipeline being executed
@@ -190,7 +190,7 @@ class PostHookManagerProtocol(Protocol):
     ...         self,
     ...         ports: dict[str, Any],
     ...         context: NodeExecutionContext,
-    ...         observer_manager: ObserverManagerPort | None,
+    ...         observer_manager: ObserverManager | None,
     ...         pipeline_name: str,
     ...         pipeline_status: str,
     ...         node_results: dict[str, Any],
@@ -204,7 +204,7 @@ class PostHookManagerProtocol(Protocol):
         self,
         ports: dict[str, Any],
         context: NodeExecutionContext,
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
         pipeline_name: str,
         pipeline_status: str,
         node_results: dict[str, Any],
@@ -218,7 +218,7 @@ class PostHookManagerProtocol(Protocol):
             All available ports
         context : NodeExecutionContext
             Execution context
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Optional observer manager
         pipeline_name : str
             Pipeline name

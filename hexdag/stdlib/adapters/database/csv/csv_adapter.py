@@ -1,6 +1,6 @@
 """CSV Database Adapter - Async CSV file reading with schema inference.
 
-This module provides a DatabasePort implementation for reading CSV files from a directory,
+This module provides a Database implementation for reading CSV files from a directory,
 with automatic type inference and async I/O for non-blocking operations.
 """
 
@@ -13,12 +13,12 @@ from typing import Any
 
 import aiofiles
 
-from hexdag.kernel.ports.database import ColumnSchema, ColumnType, DatabasePort, TableSchema
+from hexdag.kernel.ports.database import ColumnSchema, ColumnType, Database, TableSchema
 
 logging.basicConfig(level=logging.INFO)
 
 
-class CsvAdapter(DatabasePort):
+class CsvAdapter(Database):
     """
     Adapter class for reading CSV files from a specified directory as database tables.
 
@@ -120,7 +120,7 @@ class CsvAdapter(DatabasePort):
         """Execute a query on CSV files.
 
         Note: CSV adapter doesn't support SQL queries. This method is required
-        by DatabasePort but will raise NotImplementedError.
+        by Database but will raise NotImplementedError.
 
         Args:
             query: SQL query string (not supported)

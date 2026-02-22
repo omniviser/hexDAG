@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 else:
-    ObserverManagerPort = Any
+    ObserverManager = Any
 
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.events import HealthCheckCompleted
@@ -57,7 +57,7 @@ class HealthCheckManager:
     async def check_all_adapters(
         self,
         ports: dict[str, Any],
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
         pipeline_name: str,
     ) -> list[HealthStatus]:
         """Run health checks on all adapters that implement ahealth_check().
@@ -66,7 +66,7 @@ class HealthCheckManager:
         ----------
         ports : dict[str, Any]
             All available ports
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Optional observer for event emission
         pipeline_name : str
             Name of the pipeline
@@ -93,7 +93,7 @@ class HealthCheckManager:
         self,
         port_name: str,
         adapter: Any,
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
     ) -> HealthStatus:
         """Check health of a single adapter.
 
@@ -103,7 +103,7 @@ class HealthCheckManager:
             Name of the port
         adapter : Any
             Adapter instance
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Optional observer for event emission
 
         Returns

@@ -53,7 +53,7 @@ class TableSchema:
 
 
 @runtime_checkable
-class DatabasePort(Protocol):
+class Database(Protocol):
     """Port interface for accessing database schema and metadata.
 
     This port abstracts access to database systems, allowing the analytics engine to work with
@@ -193,9 +193,13 @@ class SupportsReadOnly(Protocol):
         ...
 
 
+# Backward-compat alias (deprecated: use Database)
+DatabasePort = Database
+
 __all__ = [
     "ColumnSchema",
     "ColumnType",
+    "Database",
     "DatabasePort",
     "SupportsRawSQL",
     "SupportsReadOnly",

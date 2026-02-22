@@ -17,9 +17,9 @@ Plugin Structure
 Available Adapters
 ------------------
 - ``AzureOpenAIAdapter``: Azure OpenAI for LLM operations (inherits ``LLM``)
-- ``AzureKeyVaultAdapter``: Azure Key Vault for secret management (inherits ``SecretPort``)
+- ``AzureKeyVaultAdapter``: Azure Key Vault for secret management (inherits ``SecretStore``)
 - ``AzureCosmosAdapter``: Azure Cosmos DB for memory/state (inherits ``Memory``)
-- ``AzureBlobAdapter``: Azure Blob Storage for files (inherits ``FileStoragePort``)
+- ``AzureBlobAdapter``: Azure Blob Storage for files (inherits ``FileStorage``)
 """
 
 from hexdag_plugins.azure.adapters import (
@@ -35,4 +35,3 @@ __all__ = [
     "AzureCosmosAdapter",
     "AzureBlobAdapter",
 ]
-__version__ = "0.2.0"

@@ -2,7 +2,7 @@
 
 This executor runs nodes in the same process using asyncio, providing
 the same behavior as the built-in orchestrator execution but through
-the ExecutorPort interface.
+the Executor interface.
 """
 
 import asyncio
@@ -72,7 +72,7 @@ class LocalExecutor:
     """Local in-process executor using asyncio.
 
     This executor wraps the core NodeExecutor to provide
-    the same in-process execution behavior but through the ExecutorPort
+    the same in-process execution behavior but through the Executor
     interface. It's useful for:
 
     1. Testing the executor abstraction

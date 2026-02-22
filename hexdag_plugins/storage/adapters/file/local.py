@@ -5,11 +5,11 @@ import shutil
 import time
 from pathlib import Path
 
-from hexdag.kernel.ports.file_storage import FileStoragePort
+from hexdag.kernel.ports.file_storage import FileStorage
 from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
-class LocalFileStorage(FileStoragePort):
+class LocalFileStorage(FileStorage):
     """Local filesystem storage adapter.
 
     Provides file storage on the local filesystem with a base directory.

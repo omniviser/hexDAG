@@ -9,9 +9,9 @@ import contextvars
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 else:
-    ObserverManagerPort = Any
+    ObserverManager = Any
 
 from hexdag.kernel.context import get_observer_manager, set_current_node_name
 from hexdag.kernel.domain.dag import NodeSpec, NodeValidationError

@@ -1,0 +1,34 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: order-processing
+  description: Process a customer order — validate payment and fulfill
+
+spec:
+  ports:
+    llm:
+      adapter: plugin:mock_llm
+      config:
+        responses:
+          - '{"approved": true, "reason": "Valid payment method"}'
+          - '{"status": "shipped", "tracking_id": "TRK-987654"}'
+
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: payment_validator
+      spec:
+        prompt_template: |
+          Validate payment for order {{order_id}} from customer {{customer_id}}.
+          Amount: ${{amount}}
+          Return JSON with "approved" (bool) and "reason".
+      dependencies: []
+
+    - kind: llm_node
+      metadata:
+        name: fulfillment_processor
+      spec:
+        prompt_template: |
+          Process fulfillment for order {{order_id}}.
+          Return JSON with "status" and "tracking_id".
+      dependencies: []

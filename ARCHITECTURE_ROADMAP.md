@@ -32,7 +32,7 @@ runs, enabling reactive multi-pipeline coordination.
 **Protocol sketch:**
 
 ```python
-class SupportsEventBus(Protocol):
+class EventBus(Protocol):
     async def apublish(self, topic: str, payload: dict) -> None: ...
     async def asubscribe(self, topic: str, handler: Callable) -> str: ...
     async def aunsubscribe(self, subscription_id: str) -> None: ...
@@ -58,7 +58,7 @@ conflicting on shared resources.
 **Protocol sketch:**
 
 ```python
-class SupportsLock(Protocol):
+class Lock(Protocol):
     async def aacquire(self, name: str, timeout: float | None = None) -> bool: ...
     async def arelease(self, name: str) -> None: ...
     async def ais_locked(self, name: str) -> bool: ...
@@ -84,7 +84,7 @@ and access data.
 **Protocol sketch:**
 
 ```python
-class SupportsGovernance(Protocol):
+class Governance(Protocol):
     async def aauthorize(self, action: str, principal: str, resource: str) -> bool: ...
     async def aaudit(self, action: str, principal: str, resource: str, result: str) -> None: ...
     async def alist_permissions(self, principal: str) -> list[str]: ...
@@ -99,7 +99,7 @@ class SupportsGovernance(Protocol):
 
 **Location:** `kernel/ports/artifact_store.py`
 
-Pipeline artifact storage with semantic metadata. Extends the existing FileStoragePort
+Pipeline artifact storage with semantic metadata. Extends the existing FileStorage
 concept with a semantic layer for pipeline inputs, outputs, and intermediate results.
 
 **Use cases:**
@@ -110,7 +110,7 @@ concept with a semantic layer for pipeline inputs, outputs, and intermediate res
 **Protocol sketch:**
 
 ```python
-class SupportsArtifactStore(Protocol):
+class ArtifactStore(Protocol):
     async def astore(self, run_id: str, name: str, data: bytes, metadata: dict) -> str: ...
     async def aretrieve(self, artifact_id: str) -> tuple[bytes, dict]: ...
     async def alist(self, run_id: str) -> list[dict]: ...
@@ -176,15 +176,15 @@ context plus the arguments/return value of the call.
 ```
 kernel/ports/ (existing)              kernel/ports/ (planned)
   LLM                                   EventBus
-  Memory / DataStore                     LockPort
-  Database                               GovernancePort
+  DataStore                              Lock
+  Database (deprecated)                  Governance
   ToolRouter                             ArtifactStore
   ObserverManager
   Executor
   PipelineSpawner
   FileStorage
-  Secret
-  VectorSearch
+  SecretStore
+  Memory (deprecated)
 
 stdlib/lib/ (existing)               stdlib/lib/ (planned)
   ProcessRegistry                       CentralAgent

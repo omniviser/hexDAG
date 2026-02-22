@@ -1,4 +1,4 @@
-"""Tests for Orchestrator integration with ExecutorPort."""
+"""Tests for Orchestrator integration with Executor."""
 
 import asyncio
 
@@ -9,7 +9,7 @@ from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
-    ExecutorPort,
+    Executor,
 )
 from hexdag.kernel.ports_builder import PortsBuilder
 
@@ -260,11 +260,11 @@ class TestOrchestratorWithExecutor:
 
     @pytest.mark.asyncio
     async def test_executor_protocol_validation(self):
-        """Test that executor implements ExecutorPort protocol."""
+        """Test that executor implements Executor protocol."""
         executor = MockExecutor()
 
         # Protocol check
-        assert isinstance(executor, ExecutorPort)
+        assert isinstance(executor, Executor)
 
         # Verify all required methods exist
         assert hasattr(executor, "aexecute_node")

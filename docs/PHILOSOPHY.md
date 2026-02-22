@@ -50,7 +50,7 @@ Understanding hexDAG's main entities and how they relate is essential for effect
 │  ├────────────────────────────────────────────────────┤     │
 │  │  Ports (Interfaces)      Adapters (Implementations)│     │
 │  │  • LLM                   → OpenAI, Anthropic, etc. │     │
-│  │  • DatabasePort          → PostgreSQL, SQLite, etc.│     │
+│  │  • Database          → PostgreSQL, SQLite, etc.│     │
 │  │  • ToolRouter            → Custom tools            │     │
 │  │  • Memory                → Vector stores, caches   │     │
 │  └────────────────────────────────────────────────────┘     │
@@ -143,7 +143,7 @@ Hexagonal architecture pattern for clean integration with external services:
 
 **Ports (Interfaces):**
 ```python
-from hexdag.core.ports import LLM, DatabasePort, ToolRouter
+from hexdag.kernel.ports import LLM, Database, ToolRouter
 
 # Define abstract interface
 class LLM(Protocol):

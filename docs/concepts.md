@@ -191,11 +191,12 @@ hexDAG follows hexagonal architecture. **Ports** define interfaces; **adapters**
 
 | Port | Interface | Purpose |
 |------|-----------|---------|
-| `LLM` | `hexdag.core.ports.LLM` | Language model interactions |
-| `DatabasePort` | `hexdag.core.ports.DatabasePort` | Data persistence |
-| `Memory` | `hexdag.core.ports.Memory` | Agent conversation memory |
-| `ToolRouter` | `hexdag.core.ports.ToolRouter` | Function calling / tool execution |
-| `SecretPort` | `hexdag.core.ports.SecretPort` | Secret management (KeyVault, etc.) |
+| `LLM` | `hexdag.kernel.ports.LLM` | Language model interactions |
+| `Database` | `hexdag.kernel.ports.Database` | Data persistence |
+| `Memory` | `hexdag.kernel.ports.Memory` | Agent conversation memory |
+| `ToolRouter` | `hexdag.kernel.ports.ToolRouter` | Function calling / tool execution |
+| `SecretStore` | `hexdag.kernel.ports.SecretStore` | Secret management (KeyVault, etc.) |
+| `DataStore` | `hexdag.kernel.ports.DataStore` | Unified key-value/TTL/query storage |
 
 Ports are declared in YAML under `spec.ports` and auto-instantiated by `PipelineRunner`:
 

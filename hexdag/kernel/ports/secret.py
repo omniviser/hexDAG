@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 @runtime_checkable
-class SecretPort(Protocol):
+class SecretStore(Protocol):
     """Port interface for secret/credential management systems.
 
     This port abstracts access to secret management services like:
@@ -211,3 +211,7 @@ class SecretPort(Protocol):
             status.details  # {"vault_url": "...", "authenticated": True}
         """
         ...
+
+
+# Backward-compat alias (deprecated: use SecretStore)
+SecretPort = SecretStore

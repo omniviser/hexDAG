@@ -83,7 +83,7 @@ The domain layer contains pure business logic for agent orchestration, DAG manag
 **Application Layer** (`hexdag.builtin`):
 This layer orchestrates agent workflows and manages execution flow. It handles event streaming, context management, and coordination between agents while maintaining separation from infrastructure.
 
-**Ports** (`hexdag.core.ports`):
+**Ports** (`hexdag.kernel.ports`):
 Ports define abstract interfaces for external services like LLMs, vector databases, and tool providers. They establish contracts that ensure loose coupling between the framework and external dependencies.
 
 **Essential Port Example:**
@@ -435,7 +435,7 @@ class LLM(Protocol):
         """Stream response from messages."""
         ...
 
-class DatabasePort(Protocol):
+class Database(Protocol):
     """Database interface."""
 
     async def get_schema(self, table_name: str) -> dict[str, Any]:

@@ -680,14 +680,18 @@ def _detect_adapter_port_type(adapter_class: type) -> str:
     if "Memory" in mro_names:
         return "memory"
 
-    if "DatabasePort" in mro_names or "SQLAdapter" in mro_names:
+    if "Database" in mro_names or "DatabasePort" in mro_names or "SQLAdapter" in mro_names:
         return "database"
 
-    if "SecretPort" in mro_names:
+    if "SecretStore" in mro_names or "SecretPort" in mro_names:
         return "secret"
 
-    if "FileStoragePort" in mro_names or "VectorStorePort" in mro_names:
+    storage_ports = ("FileStorage", "FileStoragePort", "VectorStorePort")
+    if any(name in mro_names for name in storage_ports):
         return "storage"
+
+    if "DataStore" in mro_names:
+        return "data_store"
 
     if "ToolRouter" in mro_names:
         return "tool_router"

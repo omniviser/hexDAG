@@ -129,8 +129,8 @@ hexdag/
 │   ├── prompts/             #   Prompt templates (tool prompts, etc.)
 │   └── lib/                 #   System libs (ProcessRegistry, EntityState, Scheduler)
 ├── drivers/                 # Low-level infrastructure (/drivers)
-│   ├── executors/           #   LocalExecutor (ExecutorPort)
-│   ├── observer_manager/    #   LocalObserverManager (ObserverManagerPort)
+│   ├── executors/           #   LocalExecutor (Executor)
+│   ├── observer_manager/    #   LocalObserverManager (ObserverManager)
 │   └── pipeline_spawner/    #   LocalPipelineSpawner (PipelineSpawner)
 ├── api/                     # Unified API layer (/usr/bin)
 │   ├── execution.py         #   Pipeline execution
@@ -171,6 +171,21 @@ Every public async method on a `HexDAGLib` subclass auto-becomes an agent tool.
 4. **Hexagonal Architecture** - Clean separation of business logic and infrastructure
 5. **Composable Declarative Files** - Complex workflows from simple YAML components
 6. **DAG-Based Orchestration** - Intelligent dependency management and parallelization
+
+### Port Naming Convention
+
+Ports follow a two-tier naming scheme inspired by Linux kernel structs:
+
+- **Standalone ports** use plain domain nouns (like Linux structs): `LLM`, `Executor`, `FileStorage`, `DataStore`, `SecretStore`, `Database`
+- **Capability sub-protocols** use the `Supports*` prefix (like struct fields): `SupportsGeneration`, `SupportsKeyValue`, `SupportsQuery`, `SupportsTTL`
+
+**Rule of thumb:** If it answers "what kind of port is this?" use a plain noun. If it answers "can this adapter do X?" use `Supports*`.
+
+**Location:**
+- Port protocols live in `kernel/ports/` (like `include/linux/`)
+- Drivers live in `drivers/` (like `drivers/`)
+
+**Export policy:** `Supports*` protocols are NOT exported from `hexdag/` top-level -- they are only importable from `hexdag.kernel.ports` (e.g., `from hexdag.kernel.ports.data_store import SupportsKeyValue`).
 
 ## Key Concepts
 
@@ -295,11 +310,6 @@ Both type checkers automatically run on:
 - Every commit (pre-commit stage)
 - Can be manually triggered with `uv run pre-commit run pyright --all-files`
 
-### CI/CD Pipeline
-Type checking is enforced in Azure DevOps pipelines:
-- Runs on all pull requests to main branch
-- Blocks merge if type errors are detected
-- Provides detailed error reporting
 
 ## Type Checking Best Practices
 

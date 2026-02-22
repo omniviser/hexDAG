@@ -1,6 +1,6 @@
 """Local Observer Manager Adapter - Standalone implementation of observer pattern.
 
-This adapter provides a complete, standalone implementation of the ObserverManagerPort
+This adapter provides a complete, standalone implementation of the ObserverManager
 interface with all safety features including weak references, event filtering,
 concurrency control, and fault isolation.
 """

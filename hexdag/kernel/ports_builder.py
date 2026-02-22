@@ -15,9 +15,10 @@ if TYPE_CHECKING:
     from hexdag.kernel.ports import (
         LLM,
         APICall,
-        DatabasePort,
+        Database,
+        DataStore,
         Memory,
-        ObserverManagerPort,
+        ObserverManager,
         ToolRouter,
     )
 
@@ -112,7 +113,21 @@ class PortsBuilder:
     # Storage & Persistence
     # ---------------------
 
-    def with_database(self, database: DatabasePort) -> Self:
+    def with_data_store(self, store: DataStore) -> Self:
+        """Add a unified data store adapter.
+
+        Args
+        ----
+            store: DataStore adapter instance (implements SupportsKeyValue,
+                SupportsQuery, etc.)
+
+        Returns
+        -------
+            Self for method chaining
+        """
+        return self._add_port("data_store", store)
+
+    def with_database(self, database: Database) -> Self:
         """Add a database adapter.
 
         Args
@@ -141,7 +156,7 @@ class PortsBuilder:
     # Event & Control Systems
     # -----------------------
 
-    def with_observer_manager(self, manager: ObserverManagerPort) -> Self:
+    def with_observer_manager(self, manager: ObserverManager) -> Self:
         """Add an observer manager for event monitoring.
 
         Args

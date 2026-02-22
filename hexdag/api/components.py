@@ -279,9 +279,9 @@ def detect_port_type(adapter_class: type) -> str:
 
     - LLM adapters: inherit from `LLM`, `SupportsGeneration`, `SupportsFunctionCalling`, etc.
     - Memory adapters: inherit from `Memory`
-    - Database adapters: inherit from `DatabasePort` or `SQLAdapter`
-    - Secret adapters: inherit from `SecretPort`
-    - Storage adapters: inherit from `FileStoragePort` or `VectorStorePort`
+    - Database adapters: inherit from `Database` or `SQLAdapter`
+    - Secret adapters: inherit from `SecretStore`
+    - Storage adapters: inherit from `FileStorage` or `VectorStorePort`
     - Tool adapters: inherit from `ToolRouter`
 
     Example::
@@ -325,17 +325,22 @@ def detect_port_type(adapter_class: type) -> str:
     if "Memory" in mro_names:
         return "memory"
 
-    # Database adapters implement DatabasePort or SQLAdapter
-    if "DatabasePort" in mro_names or "SQLAdapter" in mro_names:
+    # Database adapters implement Database or SQLAdapter
+    if "Database" in mro_names or "DatabasePort" in mro_names or "SQLAdapter" in mro_names:
         return "database"
 
-    # Secret adapters implement SecretPort
-    if "SecretPort" in mro_names:
+    # Secret adapters implement SecretStore
+    if "SecretStore" in mro_names or "SecretPort" in mro_names:
         return "secret"
 
-    # Storage adapters implement FileStoragePort or VectorStorePort
-    if "FileStoragePort" in mro_names or "VectorStorePort" in mro_names:
+    # Storage adapters implement FileStorage or VectorStorePort
+    storage_ports = ("FileStorage", "FileStoragePort", "VectorStorePort")
+    if any(name in mro_names for name in storage_ports):
         return "storage"
+
+    # DataStore adapters implement DataStore
+    if "DataStore" in mro_names:
+        return "data_store"
 
     # Tool router adapters implement ToolRouter
     if "ToolRouter" in mro_names:

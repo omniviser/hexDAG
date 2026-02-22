@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.healthcheck import HealthStatus
-from hexdag.kernel.ports.secret import SecretPort
+from hexdag.kernel.ports.secret import SecretStore
 from hexdag.kernel.types import Secret
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class AzureKeyVaultAdapter(SecretPort):
+class AzureKeyVaultAdapter(SecretStore):
     """Azure Key Vault adapter for secret resolution.
 
     Supports both API key authentication and Azure Managed Identity for
@@ -199,7 +199,7 @@ class AzureKeyVaultAdapter(SecretPort):
             raise RuntimeError(f"Failed to retrieve secret '{secret_name}': {e}") from e
 
     # ========================================================================
-    # SecretPort protocol
+    # SecretStore protocol
     # ========================================================================
 
     async def aget_secret(self, key: str) -> Secret:
@@ -318,7 +318,7 @@ class AzureKeyVaultAdapter(SecretPort):
             )
 
     # ========================================================================
-    # Additional Key Vault operations (not part of SecretPort)
+    # Additional Key Vault operations (not part of SecretStore)
     # ========================================================================
 
     async def aset(self, secret_name: str, value: str) -> None:

@@ -30,10 +30,10 @@ logger = get_logger(__name__)
 class EnvironmentVariablePlugin:
     """Resolve ${VAR} and ${VAR:default} in YAML with deferred secret resolution.
 
-    For KeyVault/SecretPort workflows, secret-like environment variables are
+    For KeyVault/SecretStore workflows, secret-like environment variables are
     preserved as ${VAR} for runtime resolution. This allows:
     - Building pipelines without secrets present
-    - Runtime secret injection via SecretPort -> Memory
+    - Runtime secret injection via SecretStore -> Memory
     - Separation of build and deployment contexts
 
     Secret patterns (deferred to runtime):

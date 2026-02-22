@@ -1,11 +1,11 @@
-"""Tests for ExecutorPort interface and execution models."""
+"""Tests for Executor interface and execution models."""
 
 import pytest
 
 from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
-    ExecutorPort,
+    Executor,
 )
 
 
@@ -141,7 +141,7 @@ class TestExecutionResult:
 
 
 class MockExecutor:
-    """Mock executor for testing ExecutorPort protocol."""
+    """Mock executor for testing Executor protocol."""
 
     def __init__(self):
         self.setup_called = False
@@ -175,16 +175,16 @@ class MockExecutor:
         self.close_called = True
 
 
-class TestExecutorPort:
-    """Tests for ExecutorPort protocol interface."""
+class TestExecutor:
+    """Tests for Executor protocol interface."""
 
     @pytest.mark.asyncio
     async def test_executor_implements_protocol(self):
-        """Test that mock executor implements ExecutorPort protocol."""
+        """Test that mock executor implements Executor protocol."""
         executor = MockExecutor()
 
         # Check that it implements the protocol
-        assert isinstance(executor, ExecutorPort)
+        assert isinstance(executor, Executor)
 
     @pytest.mark.asyncio
     async def test_execute_single_node(self):

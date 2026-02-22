@@ -25,7 +25,7 @@ class Observer(Protocol):
         ...
 
 
-class ObserverManagerPort(Protocol):
+class ObserverManager(Protocol):
     """Port interface for event observation systems.
 
     Key Safety Guarantees:
@@ -110,7 +110,7 @@ class ObserverManagerPort(Protocol):
         ...
 
     @abstractmethod
-    def __enter__(self) -> ObserverManagerPort:
+    def __enter__(self) -> ObserverManager:
         """Context manager entry."""
         ...
 
@@ -120,7 +120,7 @@ class ObserverManagerPort(Protocol):
         ...
 
     @abstractmethod
-    async def __aenter__(self) -> ObserverManagerPort:
+    async def __aenter__(self) -> ObserverManager:
         """Async context manager entry."""
         ...
 
@@ -128,3 +128,7 @@ class ObserverManagerPort(Protocol):
     async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
         """Async context manager exit with cleanup."""
         ...
+
+
+# Backward-compat alias (deprecated: use ObserverManager)
+ObserverManagerPort = ObserverManager

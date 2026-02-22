@@ -4,7 +4,7 @@ Provides adapters for various storage backends:
 
 File Storage
 ------------
-- ``LocalFileStorage``: Local filesystem storage (inherits ``FileStoragePort``)
+- ``LocalFileStorage``: Local filesystem storage (inherits ``FileStorage``)
 
 Vector Stores
 -------------

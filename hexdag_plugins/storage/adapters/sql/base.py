@@ -3,13 +3,13 @@
 import os
 from typing import Any
 
-from hexdag.kernel.ports.database import DatabasePort
+from hexdag.kernel.ports.database import Database
 from hexdag.kernel.ports.healthcheck import HealthStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 
-class SQLAdapter(DatabasePort):
+class SQLAdapter(Database):
     """Base SQL adapter with SQLAlchemy connection pooling.
 
     This base class provides common functionality for all SQL databases:

@@ -75,7 +75,7 @@ class ExecutionResult(BaseModel):
 
 
 @runtime_checkable
-class ExecutorPort(Protocol):
+class Executor(Protocol):
     """Port interface for DAG node execution strategies.
 
     This port abstracts the execution backend, allowing the orchestrator
@@ -235,3 +235,7 @@ class ExecutorPort(Protocol):
                 await self.http_client.close()
         """
         ...
+
+
+# Backward-compat alias (deprecated: use Executor)
+ExecutorPort = Executor

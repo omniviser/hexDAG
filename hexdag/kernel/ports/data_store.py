@@ -26,6 +26,29 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
+
+@runtime_checkable
+class DataStore(Protocol):
+    """Marker protocol for unified storage adapters.
+
+    ``DataStore`` groups the capability sub-protocols (``SupportsKeyValue``,
+    ``SupportsTTL``, ``SupportsQuery``, ``SupportsSchema``,
+    ``SupportsTransactions``) under a single identity — like ``LLM`` groups
+    its capabilities.
+
+    Adapters implement ``DataStore`` plus whichever capabilities they
+    support::
+
+        class SQLiteStore(DataStore, SupportsKeyValue, SupportsQuery):
+            ...
+
+    No methods are required on ``DataStore`` itself; capabilities are
+    checked at runtime with ``isinstance(store, SupportsXxx)``.
+    """
+
+    ...
+
+
 # ---------------------------------------------------------------------------
 # Key-value capabilities (supersedes Memory port)
 # ---------------------------------------------------------------------------
@@ -151,6 +174,7 @@ class SupportsTransactions(Protocol):
 
 
 __all__ = [
+    "DataStore",
     "SupportsKeyValue",
     "SupportsQuery",
     "SupportsSchema",
