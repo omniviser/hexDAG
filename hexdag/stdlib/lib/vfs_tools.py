@@ -43,7 +43,7 @@ class VFSTools(HexDAGLib):
         """Read a VFS path and return its content as JSON.
 
         Use this to inspect entities: ``/lib/nodes/llm_node``,
-        ``/proc/runs/<run_id>``, ``/sys/version``, etc.
+        ``/proc/runs/<run_id>``, etc.
 
         Args
         ----
@@ -59,7 +59,7 @@ class VFSTools(HexDAGLib):
         """List entries in a VFS directory.
 
         Use this to discover what's available: ``/lib/``,
-        ``/proc/runs/``, ``/etc/pipelines/``, etc.
+        ``/proc/runs/``, ``/lib/nodes/``, etc.
 
         Args
         ----

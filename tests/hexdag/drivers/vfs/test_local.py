@@ -79,7 +79,7 @@ class TestMount:
         vfs = LocalVFS()
         vfs.mount("/lib/", StubProvider("lib"))
         vfs.mount("/proc/runs/", StubProvider("runs"))
-        vfs.mount("/sys/", StubProvider("sys"))
+        vfs.mount("/proc/scheduled/", StubProvider("scheduled"))
         assert len(vfs.mounts()) == 3
 
 
@@ -146,13 +146,12 @@ class TestAlist:
         vfs = LocalVFS()
         vfs.mount("/lib/", StubProvider())
         vfs.mount("/proc/runs/", StubProvider())
-        vfs.mount("/sys/", StubProvider())
+        vfs.mount("/proc/scheduled/", StubProvider())
 
         entries = await vfs.alist("/")
         names = [e.name for e in entries]
         assert "lib" in names
         assert "proc" in names
-        assert "sys" in names
 
     @pytest.mark.asyncio()
     async def test_root_deduplicates_prefixes(self) -> None:
@@ -191,7 +190,7 @@ class TestAstat:
     async def test_root_stat(self) -> None:
         vfs = LocalVFS()
         vfs.mount("/lib/", StubProvider())
-        vfs.mount("/sys/", StubProvider())
+        vfs.mount("/proc/runs/", StubProvider())
 
         stat = await vfs.astat("/")
         assert stat.path == "/"
@@ -202,7 +201,7 @@ class TestAstat:
     async def test_delegates_to_provider(self) -> None:
         vfs = LocalVFS()
         provider = StubProvider()
-        vfs.mount("/sys/", provider)
+        vfs.mount("/proc/runs/", provider)
 
-        await vfs.astat("/sys/version")
-        assert provider.stat_calls == ["version"]
+        await vfs.astat("/proc/runs/abc123")
+        assert provider.stat_calls == ["abc123"]

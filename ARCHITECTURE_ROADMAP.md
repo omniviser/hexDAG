@@ -22,19 +22,76 @@ For the current architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 **Location:** `kernel/ports/vfs.py`
 
-Uniform path-based interface for all hexDAG entities. Replaces the scattered
-per-entity query functions in `api/components.py` and `api/processes.py` with
-a single interface. Every pipeline run, component, port, and configuration is
-addressable by path — the core of "everything is a file."
+Uniform path-based interface for all hexDAG entities. Every pipeline run,
+component, port, and configuration is addressable by path — the core of
+"everything is a file."
 
-**Phase 1 — Introspection (priority):**
+#### Two interfaces, one system
+
+hexDAG exposes system state through two complementary interfaces, exactly
+as Linux does:
+
+```
+                        ┌──────────────────────────────────────────────┐
+                        │          Agent / MCP / Studio                │
+                        └─────────┬────────────────────┬───────────────┘
+                                  │                    │
+                    ┌─────────────▼──────────┐  ┌──────▼───────────────┐
+                    │   VFS  (namespace)      │  │  Syscalls (api/)     │
+                    │                         │  │                      │
+                    │  aread   /proc/runs/42  │  │  list_pipeline_runs( │
+                    │  alist   /lib/nodes/    │  │    status="done",    │
+                    │  astat   /proc/ent/...  │  │    limit=50)         │
+                    │  aexec   /etc/pipe/... ²│  │  spawn_pipeline(...) │
+                    │  awatch  /proc/runs/.. ³│  │  schedule_pipeline() │
+                    │                         │  │  transition_entity() │
+                    │  Path-based.            │  │  Parameterized.      │
+                    │  One entity at a time.  │  │  Filtering, sorting, │
+                    │  Uniform addressing.    │  │  branching logic.    │
+                    └─────────┬───────────────┘  └──────┬───────────────┘
+                              │                         │
+                              ▼                         ▼
+                    ┌──────────────────────────────────────────────────┐
+                    │           System Libs  (stdlib/lib/)             │
+                    │  ProcessRegistry · EntityState · Scheduler       │
+                    └──────────────────────────────────────────────────┘
+```
+
+**VFS = namespace.** Like `/proc` in Linux. Given a path, return the entity
+at that path. No query parameters, no filtering — just hierarchical
+name-to-content resolution. Its power is **uniform addressing**: agents
+can browse the entire system through one interface (`aread`, `alist`,
+`astat`), and in Phase 2 invoke any entity through `aexec`.
+
+**Syscalls = typed operations.** Like `ps(1)`, `kill(2)`, `waitpid(2)`.
+The `api/processes.py` functions take typed parameters (`status`, `ref_id`,
+`limit`), do smart dispatch (e.g. `ref_id` → `alist_by_ref`, otherwise →
+`alist`), and return structured results. These are the query/action interface
+for consumers that need filtering, pagination, or multi-parameter operations
+that don't map to a single path.
+
+Both interfaces delegate to the same underlying libs. They coexist —
+the VFS doesn't replace the syscalls, and the syscalls don't make the
+VFS redundant. Each serves a different access pattern.
+
+| Linux                          | hexDAG VFS                                  | hexDAG Syscall                                      |
+|--------------------------------|---------------------------------------------|-----------------------------------------------------|
+| `cat /proc/1234/status`       | `vfs.aread("/proc/runs/<id>")`              | `get_pipeline_run(registry, run_id)`                |
+| `ls /proc/`                   | `vfs.alist("/proc/runs/")`                  | —                                                   |
+| `ps aux --sort=-pcpu \| head` | —                                           | `list_pipeline_runs(status=..., limit=50)`          |
+| `kill -9 1234`                | `vfs.aexec("/proc/runs/<id>/cancel", {})` ² | `cancel_scheduled(scheduler, task_id)`              |
+
+² = Phase 2 &emsp; ³ = Phase 3
+
+#### VFS Phases
+
+**Phase 1 — Introspection (implemented):**
 
 ```python
 class VFS(Protocol):
     async def aread(self, path: str) -> str: ...
     async def alist(self, path: str) -> list[DirEntry]: ...
     async def astat(self, path: str) -> StatResult: ...
-    async def awrite(self, path: str, data: str) -> None: ...
 ```
 
 **Phase 2 — Execution:**
@@ -63,7 +120,7 @@ still see individual typed tool schemas (e.g., `adatabase_query(sql, params)`), 
 each tool is backed by a VFS `exec` call. New tools appear automatically when a
 provider is mounted.
 
-**Namespace tree:**
+#### Namespace tree
 
 ```
 /proc/runs/<run_id>/status|info       ProcessRegistry
@@ -75,8 +132,10 @@ provider is mounted.
 /sys/version|config                   System metadata
 ```
 
-**Mount system:** Providers register at path prefixes. Longest-prefix match
-resolves paths. Each subsystem implements `VFSProvider`:
+#### Mount system
+
+Providers register at path prefixes. Longest-prefix match resolves paths.
+Each subsystem implements `VFSProvider`:
 
 ```python
 class VFSProvider(Protocol):
@@ -86,11 +145,12 @@ class VFSProvider(Protocol):
     async def readdir(self, relative_path: str) -> list[DirEntry]: ...
 ```
 
-**Impact on existing code:**
+#### Impact on existing code
+
 - `kernel/discovery.py` — unchanged (scanning engine, VFS providers call it)
 - `kernel/resolver.py` — unchanged (module path resolution)
-- `api/components.py` — refactored to thin VFS wrappers (backwards compatible)
-- `api/processes.py` — refactored to thin VFS wrappers (backwards compatible)
+- `api/components.py` — read-only functions become thin VFS wrappers (backwards compatible)
+- `api/processes.py` — mutation functions (`spawn_pipeline`, `transition_entity`) route through `vfs.aexec()` in Phase 2; parameterized query functions (`list_pipeline_runs`, `list_scheduled`) remain as syscall-style APIs (VFS provides uniform introspection, not query semantics)
 - `ToolRouter` — unchanged in Phase 1; auto-populated from VFS in Phase 4
 
 **Stdlib default:** `LocalVFS` in `drivers/vfs/local.py` — in-process, mount-based dispatch.
