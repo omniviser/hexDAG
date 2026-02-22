@@ -8,8 +8,10 @@ from pydantic import BaseModel
 
 from hexdag.kernel.context import get_port
 from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.exceptions import OrchestratorError
 from hexdag.kernel.orchestration.components import NodeExecutionError
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.ports.llm import SupportsGeneration
 
 
 # Test data models
@@ -1121,3 +1123,159 @@ class TestOrchestrator:
 
         error_msg = str(exc_info.value).lower()
         assert "timeout" in error_msg or "slow_node" in error_msg
+
+
+# --- Capability Validation Stubs ---
+
+
+class _BareLLMStub:
+    """Adapter that does NOT implement SupportsGeneration."""
+
+    ...
+
+
+class _GenerationLLMStub:
+    """Adapter that implements SupportsGeneration."""
+
+    async def aresponse(self, messages, **kwargs):
+        return "stub response"
+
+
+# --- Capability Validation Helpers ---
+
+
+def _make_fn_with_capabilities(caps: dict[str, list[type]]):
+    """Create a wrapper function with _hexdag_port_capabilities."""
+
+    async def wrapper(inputs, **ports):
+        return {"result": "ok"}
+
+    wrapper._hexdag_port_capabilities = caps  # type: ignore[attr-defined]
+    return wrapper
+
+
+def _build_single_node_graph(fn, name: str = "test_node"):
+    """Build a single-node DAG."""
+    graph = DirectedGraph()
+    graph.add(NodeSpec(name=name, fn=fn))
+    return graph
+
+
+class TestCapabilityValidation:
+    """Mount-time port capability validation (like Linux VFS f_op checks)."""
+
+    @pytest.mark.asyncio
+    async def test_valid_capabilities_pass(self):
+        """Adapter with SupportsGeneration passes validation."""
+        fn = _make_fn_with_capabilities({"llm": [SupportsGeneration]})
+        graph = _build_single_node_graph(fn)
+
+        orchestrator = Orchestrator()
+        result = await orchestrator.run(
+            graph,
+            initial_input={"inputs": {}},
+            additional_ports={"llm": _GenerationLLMStub()},
+            validate=False,
+        )
+        assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_missing_port_raises_at_mount(self):
+        """Missing required port raises OrchestratorError."""
+        fn = _make_fn_with_capabilities({"llm": [SupportsGeneration]})
+        graph = _build_single_node_graph(fn)
+
+        orchestrator = Orchestrator()
+        with pytest.raises(OrchestratorError, match="missing required port 'llm'"):
+            await orchestrator.run(
+                graph,
+                initial_input={"inputs": {}},
+                additional_ports={},
+                validate=False,
+            )
+
+    @pytest.mark.asyncio
+    async def test_missing_capability_raises_at_mount(self):
+        """Adapter without SupportsGeneration raises OrchestratorError."""
+        fn = _make_fn_with_capabilities({"llm": [SupportsGeneration]})
+        graph = _build_single_node_graph(fn)
+
+        orchestrator = Orchestrator()
+        with pytest.raises(
+            OrchestratorError,
+            match="does not implement SupportsGeneration",
+        ):
+            await orchestrator.run(
+                graph,
+                initial_input={"inputs": {}},
+                additional_ports={"llm": _BareLLMStub()},
+                validate=False,
+            )
+
+    @pytest.mark.asyncio
+    async def test_no_capabilities_declared_passes(self):
+        """Node without _hexdag_port_capabilities is backwards compatible."""
+
+        async def plain_fn(inputs, **ports):
+            return {"result": "ok"}
+
+        graph = _build_single_node_graph(plain_fn)
+
+        orchestrator = Orchestrator()
+        result = await orchestrator.run(
+            graph,
+            initial_input={"inputs": {}},
+            additional_ports={},
+            validate=False,
+        )
+        assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_multiple_errors_aggregated(self):
+        """Multiple failing nodes produce a single aggregated error."""
+        fn_a = _make_fn_with_capabilities({"llm": [SupportsGeneration]})
+        fn_b = _make_fn_with_capabilities({"llm": [SupportsGeneration]})
+
+        graph = DirectedGraph()
+        graph.add(NodeSpec(name="node_a", fn=fn_a))
+        graph.add(NodeSpec(name="node_b", fn=fn_b))
+
+        orchestrator = Orchestrator()
+        with pytest.raises(OrchestratorError) as exc_info:
+            await orchestrator.run(
+                graph,
+                initial_input={"inputs": {}},
+                additional_ports={"llm": _BareLLMStub()},
+                validate=False,
+            )
+
+        error_msg = str(exc_info.value)
+        assert "node_a" in error_msg
+        assert "node_b" in error_msg
+        assert "SupportsGeneration" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_no_nodes_execute_on_failure(self):
+        """Zero nodes execute when capability validation fails."""
+        executed = []
+
+        async def tracking_fn(inputs, **ports):
+            executed.append("ran")
+            return {"result": "ok"}
+
+        tracking_fn._hexdag_port_capabilities = {  # type: ignore[attr-defined]
+            "llm": [SupportsGeneration],
+        }
+
+        graph = _build_single_node_graph(tracking_fn)
+        orchestrator = Orchestrator()
+
+        with pytest.raises(OrchestratorError):
+            await orchestrator.run(
+                graph,
+                initial_input={"inputs": {}},
+                additional_ports={"llm": _BareLLMStub()},
+                validate=False,
+            )
+
+        assert not executed, "No nodes should execute when validation fails"

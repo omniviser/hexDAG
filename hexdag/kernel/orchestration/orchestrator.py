@@ -272,49 +272,54 @@ class Orchestrator:
                     f"Expected ObserverManager, got {type(obs).__name__}"
                 )
 
-    def _validate_required_ports(
+    def _validate_port_capabilities(
         self, graph: DirectedGraph, available_ports: dict[str, Any]
     ) -> None:
-        """Validate that all required ports for nodes in the DAG are available.
+        """Validate port existence and capabilities at mount time.
 
-        Args
-        ----
-            graph: The DirectedGraph to validate
-            available_ports: Dictionary of available ports
+        Like Linux VFS checks ``f_op`` at ``open()`` — not at ``read()`` time.
+        The capability dict keys define required ports; the values define
+        required ``Supports*`` protocols.
+
+        Parameters
+        ----------
+        graph : DirectedGraph
+            The DAG to validate.
+        available_ports : dict[str, Any]
+            Dictionary of available port adapters.
 
         Raises
         ------
-            OrchestratorError: If required ports are missing
+        OrchestratorError
+            If any required port is missing or lacks a required capability.
         """
-        missing_ports: dict[str, list[str]] = {}
+        errors: list[str] = []
 
-        for node_name, node_spec in graph.items():  # Using .items() instead of .nodes.items()
+        for node_name, node_spec in graph.items():
             fn = node_spec.fn
-            required_ports: list[str] = []
+            capabilities: dict[str, list[type]] = {}
 
-            # Try to get required_ports from the function/method
-            if hasattr(fn, "_hexdag_required_ports"):
-                required_ports = getattr(fn, "_hexdag_required_ports", [])
-            # Check if bound method - use getattr to avoid type checker issues
+            if hasattr(fn, "_hexdag_port_capabilities"):
+                capabilities = getattr(fn, "_hexdag_port_capabilities", {})
             elif (self_obj := getattr(fn, "__self__", None)) is not None:
-                # It's a bound method - check the class
-                node_class = self_obj.__class__
-                required_ports = getattr(node_class, "_hexdag_required_ports", [])
+                capabilities = getattr(self_obj.__class__, "_hexdag_port_capabilities", {})
 
-            # Check each required port
-            for port_name in required_ports:
-                if port_name not in available_ports:
-                    if node_name not in missing_ports:
-                        missing_ports[node_name] = []
-                    missing_ports[node_name].append(port_name)
+            for port_name, protocols in capabilities.items():
+                port = available_ports.get(port_name)
+                if port is None:
+                    errors.append(f"  Node '{node_name}': missing required port '{port_name}'")
+                    continue
 
-        # Raise error if any ports are missing
-        if missing_ports:
-            error_msg = "Missing required ports:\n"
-            for node_name, ports in missing_ports.items():
-                error_msg += f"  Node '{node_name}': {', '.join(ports)}\n"
-            error_msg += f"\nAvailable ports: {', '.join(available_ports.keys())}"
-            raise OrchestratorError(error_msg)
+                errors.extend(
+                    f"  Node '{node_name}': port '{port_name}' "
+                    f"({type(port).__name__}) does not implement "
+                    f"{protocol.__name__}"
+                    for protocol in protocols
+                    if not isinstance(port, protocol)
+                )
+
+        if errors:
+            raise OrchestratorError("Port capability validation failed:\n" + "\n".join(errors))
 
     def _check_wave_results_for_failures(self, wave_results: dict[str, ExecutionResult]) -> None:
         """Check wave results for failures and raise appropriate errors.
@@ -496,8 +501,8 @@ class Orchestrator:
                 # Other validation errors
                 raise OrchestratorError(f"Invalid DAG: {e}") from e
 
-        # Validate required ports for all nodes
-        self._validate_required_ports(graph, all_ports)
+        # Validate port existence and capabilities at mount time
+        self._validate_port_capabilities(graph, all_ports)
 
         node_results: dict[str, Any] = {}
         waves = graph.waves()

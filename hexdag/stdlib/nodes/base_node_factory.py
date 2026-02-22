@@ -11,20 +11,10 @@ from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
 from hexdag.kernel.protocols import is_schema_type
 from hexdag.kernel.utils.caching import KeyedCache, schema_cache_key
+from hexdag.kernel.utils.schema_conversion import VALID_TYPE_NAMES
 
 # Module-level cache for dynamically created Pydantic models.
 _MODEL_CACHE: KeyedCache[type[BaseModel]] = KeyedCache()
-
-# String type names mapping used during model creation
-_TYPE_MAP: dict[str, Any] = {
-    "str": str,
-    "int": int,
-    "float": float,
-    "bool": bool,
-    "list": list,
-    "dict": dict,
-    "Any": Any,
-}
 
 
 class BaseNodeFactory(ABC):
@@ -70,10 +60,10 @@ class BaseNodeFactory(ABC):
                                 field_definitions[field_name] = (sanitized, None)
                             elif field_type.endswith("?"):
                                 base = field_type[:-1]
-                                actual_type = _TYPE_MAP.get(base, Any)
+                                actual_type = VALID_TYPE_NAMES.get(base, Any)
                                 field_definitions[field_name] = (actual_type | None, None)
                             else:
-                                actual_type = _TYPE_MAP.get(field_type, Any)
+                                actual_type = VALID_TYPE_NAMES.get(field_type, Any)
                                 field_definitions[field_name] = (actual_type, ...)
                         case type():
                             field_definitions[field_name] = (field_type, ...)
@@ -154,15 +144,15 @@ class BaseNodeFactory(ABC):
 
         return schema
 
-    def _copy_required_ports_to_wrapper(self, wrapper_fn: Any) -> None:
-        """Copy required_ports metadata from factory class to wrapper function.
+    def _copy_port_capabilities_to_wrapper(self, wrapper_fn: Any) -> None:
+        """Copy port capability table from factory class to wrapper function.
 
-        This ensures port requirements are preserved when creating node functions.
+        The capability dict keys double as required port names.
+        Orchestrator validates at startup before any node executes.
         """
-        if hasattr(self.__class__, "_hexdag_required_ports"):
-            # _hexdag_required_ports is added dynamically by @node decorator
-            wrapper_fn._hexdag_required_ports = (  # noqa: B010
-                self.__class__._hexdag_required_ports  # pyright: ignore[reportAttributeAccessIssue]
+        if hasattr(self.__class__, "_hexdag_port_capabilities"):
+            wrapper_fn._hexdag_port_capabilities = (  # noqa: B010
+                self.__class__._hexdag_port_capabilities  # pyright: ignore[reportAttributeAccessIssue]
             )
 
     @staticmethod
@@ -224,8 +214,8 @@ class BaseNodeFactory(ABC):
         **kwargs: Any,
     ) -> NodeSpec:
         """Universal NodeSpec creation."""
-        # Copy required_ports metadata to wrapper
-        self._copy_required_ports_to_wrapper(wrapped_fn)
+        # Copy port capabilities metadata to wrapper
+        self._copy_port_capabilities_to_wrapper(wrapped_fn)
 
         # Extract framework-level parameters from kwargs
         framework = self.extract_framework_params(kwargs)
