@@ -348,8 +348,11 @@ class TestDAGVisualizer:
         finally:
             Path(output_path).unlink(missing_ok=True)
 
-    def test_show_method(self):
+    @patch("hexdag.visualization.dag_visualizer.subprocess.run")
+    def test_show_method(self, mock_subprocess):
         """Test show method."""
+        mock_subprocess.return_value.returncode = 0
+
         graph = DirectedGraph()
         node = NodeSpec("test_node", create_test_function())
         graph.add(node)
