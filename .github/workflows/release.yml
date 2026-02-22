@@ -102,9 +102,18 @@ jobs:
           publish_to: ${{ inputs.publish_to }}
           tag_prefix: v
           working_directory: .
-          dist_directory: dist/
           test_name: hexDAGtest
           package_name: hexdag
+
+      - name: Publish to Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Publish to PyPI
+        if: inputs.publish_to == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   # ── Release hexdag-plugins ──────────────────────────────────────────
   release-plugins:
@@ -146,9 +155,21 @@ jobs:
           publish_to: ${{ inputs.publish_to }}
           tag_prefix: plugins-v
           working_directory: hexdag_plugins
-          dist_directory: hexdag_plugins/dist/
           test_name: hexdag-plugins-test
           package_name: hexdag-plugins
+
+      - name: Publish to Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: hexdag_plugins/dist/
+
+      - name: Publish to PyPI
+        if: inputs.publish_to == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: hexdag_plugins/dist/
 
   # ── Release hexdag-studio ───────────────────────────────────────────
   release-studio:
@@ -194,8 +215,20 @@ jobs:
           publish_to: ${{ inputs.publish_to }}
           tag_prefix: studio-v
           working_directory: hexdag-studio
-          dist_directory: hexdag-studio/dist/
           test_name: hexdag-studio-test
           package_name: hexdag-studio
           needs_nodejs: 'true'
           nodejs_directory: hexdag-studio/ui
+
+      - name: Publish to Test PyPI
+        if: inputs.publish_to == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: hexdag-studio/dist/
+
+      - name: Publish to PyPI
+        if: inputs.publish_to == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: hexdag-studio/dist/
