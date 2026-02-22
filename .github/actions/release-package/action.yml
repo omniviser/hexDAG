@@ -1,0 +1,128 @@
+name: Release Package
+description: Build and publish a single monorepo package with safe version bumping
+
+inputs:
+  pyproject_path:
+    description: 'Path to pyproject.toml relative to repo root'
+    required: true
+  release_type:
+    description: 'dev or stable'
+    required: true
+  publish_to:
+    description: 'testpypi or pypi'
+    required: true
+  tag_prefix:
+    description: 'Git tag prefix (v, plugins-v, studio-v)'
+    required: true
+  working_directory:
+    description: 'Working directory for python -m build'
+    required: true
+  dist_directory:
+    description: 'Path to dist/ for pypi-publish action'
+    required: true
+  test_name:
+    description: 'Package name on TestPyPI'
+    required: true
+  package_name:
+    description: 'Display name for commit messages'
+    required: true
+  needs_nodejs:
+    description: 'Run Node.js build before Python build'
+    required: false
+    default: 'false'
+  nodejs_directory:
+    description: 'Directory with package.json for Node.js build'
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: 'Released version'
+    value: ${{ steps.version.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    # 1. Bump version (working directory only — no git commit yet)
+    - name: Bump version
+      id: version
+      shell: bash
+      run: |
+        NEW_VERSION=$(python scripts/bump_version.py \
+          --pyproject "${{ inputs.pyproject_path }}" \
+          --release-type "${{ inputs.release_type }}")
+        echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        echo "Bumped ${{ inputs.package_name }} to $NEW_VERSION"
+
+    # 2. Backup pyproject.toml (needed to undo TestPyPI rename later)
+    - name: Backup pyproject.toml
+      shell: bash
+      run: cp "${{ inputs.pyproject_path }}" "${{ inputs.pyproject_path }}.bak"
+
+    # 3. Build Node.js UI (studio only)
+    - name: Build Node.js UI
+      if: inputs.needs_nodejs == 'true'
+      shell: bash
+      working-directory: ${{ inputs.nodejs_directory }}
+      run: |
+        npm ci
+        npm run build
+
+    # 4. Rename package for TestPyPI
+    - name: Rename package for TestPyPI
+      if: inputs.publish_to == 'testpypi'
+      shell: bash
+      run: |
+        python scripts/rename_for_testpypi.py \
+          --pyproject "${{ inputs.pyproject_path }}" \
+          --test-name "${{ inputs.test_name }}"
+
+    # 5. Build Python package
+    - name: Build package
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        rm -rf dist/ build/
+        python -m build
+
+    # 6. Restore pyproject.toml (undo TestPyPI rename, keep version bump)
+    - name: Restore pyproject.toml
+      if: inputs.publish_to == 'testpypi'
+      shell: bash
+      run: mv "${{ inputs.pyproject_path }}.bak" "${{ inputs.pyproject_path }}"
+
+    # 7. Cleanup backup (pypi path — no rename happened)
+    - name: Cleanup backup
+      if: inputs.publish_to != 'testpypi'
+      shell: bash
+      run: rm -f "${{ inputs.pyproject_path }}.bak"
+
+    # 8. Commit version bump + push (ONLY after successful build)
+    - name: Commit and push version bump
+      shell: bash
+      run: |
+        git add "${{ inputs.pyproject_path }}"
+        git commit -m "release(${{ inputs.package_name }}) ${{ steps.version.outputs.version }}"
+        git push origin HEAD:${{ github.ref_name }}
+
+    # 9. Create and push git tag
+    - name: Create and push tag
+      shell: bash
+      run: |
+        TAG="${{ inputs.tag_prefix }}${{ steps.version.outputs.version }}"
+        git tag -f "$TAG"
+        git push origin "$TAG" --force
+
+    # 10. Publish
+    - name: Publish to Test PyPI
+      if: inputs.publish_to == 'testpypi'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        packages-dir: ${{ inputs.dist_directory }}
+
+    - name: Publish to PyPI
+      if: inputs.publish_to == 'pypi'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: ${{ inputs.dist_directory }}

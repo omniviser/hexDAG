@@ -1,4 +1,4 @@
-name: Release hexdag
+name: Release
 
 on:
   workflow_dispatch:
@@ -19,26 +19,14 @@ on:
         options:
           - testpypi
           - pypi
-  workflow_call:
-    inputs:
-      release_type:
-        required: true
-        type: string
-      publish_to:
-        required: true
-        type: string
-      skip_tests:
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
   id-token: write
 
 jobs:
+  # ── Test ────────────────────────────────────────────────────────────
   test:
-    if: ${{ !inputs.skip_tests }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,22 +42,45 @@ jobs:
       - name: Run lint
         run: uv run ruff check hexdag/ hexdag_plugins/
 
-  release:
+  # ── Detect changed packages ─────────────────────────────────────────
+  detect:
     needs: test
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      hexdag: ${{ steps.check.outputs.hexdag }}
+      plugins: ${{ steps.check.outputs.plugins }}
+      studio: ${{ steps.check.outputs.studio }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Detect changed packages
+        id: check
+        run: |
+          CHANGED=$(python scripts/detect_changes.py)
+          echo "Changed packages: $CHANGED"
+          echo "hexdag=$(echo $CHANGED | python -c 'import sys,json; print(str("hexdag" in json.load(sys.stdin)).lower())')" >> "$GITHUB_OUTPUT"
+          echo "plugins=$(echo $CHANGED | python -c 'import sys,json; print(str("hexdag-plugins" in json.load(sys.stdin)).lower())')" >> "$GITHUB_OUTPUT"
+          echo "studio=$(echo $CHANGED | python -c 'import sys,json; print(str("hexdag-studio" in json.load(sys.stdin)).lower())')" >> "$GITHUB_OUTPUT"
+
+  # ── Release hexdag ──────────────────────────────────────────────────
+  release-hexdag:
+    needs: detect
+    if: needs.detect.outputs.hexdag == 'true'
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.publish_to }}
       url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag/' || 'https://test.pypi.org/project/hexdag/' }}
-
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -83,41 +94,108 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Bump version
-        id: version
-        run: |
-          NEW_VERSION=$(python scripts/bump_version.py \
-            --pyproject pyproject.toml \
-            --release-type "${{ inputs.release_type }}")
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Bumped to $NEW_VERSION"
-
-      - name: Commit and tag
-        run: |
-          git add pyproject.toml
-          git commit -m "release(hexdag) ${{ steps.version.outputs.version }}"
-          git push origin HEAD:${{ github.ref_name }}
-          git tag -f "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}" --force
-
-      - name: Rename package for TestPyPI
-        if: inputs.publish_to == 'testpypi'
-        run: |
-          python scripts/rename_for_testpypi.py \
-            --pyproject pyproject.toml \
-            --test-name hexDAGtest
-
-      - name: Build package
-        run: |
-          rm -rf dist/ build/
-          python -m build
-
-      - name: Publish to Test PyPI
-        if: inputs.publish_to == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Release hexdag
+        uses: ./.github/actions/release-package
         with:
-          repository-url: https://test.pypi.org/legacy/
+          pyproject_path: pyproject.toml
+          release_type: ${{ inputs.release_type }}
+          publish_to: ${{ inputs.publish_to }}
+          tag_prefix: v
+          working_directory: .
+          dist_directory: dist/
+          test_name: hexDAGtest
+          package_name: hexdag
 
-      - name: Publish to PyPI
-        if: inputs.publish_to == 'pypi'
-        uses: pypa/gh-action-pypi-publish@release/v1
+  # ── Release hexdag-plugins ──────────────────────────────────────────
+  release-plugins:
+    needs: [detect, release-hexdag]
+    if: always() && needs.detect.outputs.plugins == 'true' && (needs.release-hexdag.result == 'success' || needs.release-hexdag.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.publish_to }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag-plugins/' || 'https://test.pypi.org/project/hexdag-plugins/' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest changes
+        run: git pull origin ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Release hexdag-plugins
+        uses: ./.github/actions/release-package
+        with:
+          pyproject_path: hexdag_plugins/pyproject.toml
+          release_type: ${{ inputs.release_type }}
+          publish_to: ${{ inputs.publish_to }}
+          tag_prefix: plugins-v
+          working_directory: hexdag_plugins
+          dist_directory: hexdag_plugins/dist/
+          test_name: hexdag-plugins-test
+          package_name: hexdag-plugins
+
+  # ── Release hexdag-studio ───────────────────────────────────────────
+  release-studio:
+    needs: [detect, release-plugins]
+    if: always() && needs.detect.outputs.studio == 'true' && (needs.release-plugins.result == 'success' || needs.release-plugins.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.publish_to }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag-studio/' || 'https://test.pypi.org/project/hexdag-studio/' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest changes
+        run: git pull origin ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Release hexdag-studio
+        uses: ./.github/actions/release-package
+        with:
+          pyproject_path: hexdag-studio/pyproject.toml
+          release_type: ${{ inputs.release_type }}
+          publish_to: ${{ inputs.publish_to }}
+          tag_prefix: studio-v
+          working_directory: hexdag-studio
+          dist_directory: hexdag-studio/dist/
+          test_name: hexdag-studio-test
+          package_name: hexdag-studio
+          needs_nodejs: 'true'
+          nodejs_directory: hexdag-studio/ui
