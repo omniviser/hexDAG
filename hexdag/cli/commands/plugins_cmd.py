@@ -131,8 +131,6 @@ def install_plugin(
     plugin_map = {
         "openai": "adapters-openai",
         "anthropic": "adapters-anthropic",
-        "viz": "viz",
-        "visualization": "viz",
         "cli": "cli",
         "all": "all",
     }
@@ -264,11 +262,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
             "capabilities": ["LLM"],
             "namespace": "plugin",
         },
-        "visualization": {
-            "module": "hexdag.visualization",
-            "capabilities": ["DAG Visualization"],
-            "namespace": "core",
-        },
     }
 
     for name, info in optional_adapters.items():
@@ -333,17 +326,6 @@ def _get_available_plugins() -> list[dict[str, Any]]:
                     "capabilities": capabilities,
                 })
 
-    # Special check for visualization graphviz support
-    try:
-        from hexdag.visualization import GRAPHVIZ_AVAILABLE
-
-        for plugin in plugins:
-            if plugin["name"] == "visualization":
-                plugin["installed"] = GRAPHVIZ_AVAILABLE
-                break
-    except ImportError:
-        pass
-
     return plugins
 
 
@@ -369,11 +351,6 @@ def _check_dependencies() -> list[dict]:
             "name": "PyYAML (CLI)",
             "required": False,
             "extra": "cli",
-        },
-        "graphviz": {
-            "name": "graphviz (visualization)",
-            "required": False,
-            "extra": "viz",
         },
     }
 

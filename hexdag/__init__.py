@@ -79,8 +79,6 @@ def __getattr__(name: str) -> Any:
 
     Raises
     ------
-    ImportError
-        If visualization module is not available
     AttributeError
         If the requested attribute does not exist
     """
@@ -106,20 +104,6 @@ def __getattr__(name: str) -> Any:
         from hexdag.stdlib.adapters.mock import MockDatabaseAdapter as _MockDatabaseAdapter
 
         return _MockDatabaseAdapter
-    # Visualization components (optional)
-    if name == "DAGVisualizer":
-        try:
-            from hexdag.visualization import DAGVisualizer as _DAGVisualizer
-
-            return _DAGVisualizer
-        except ImportError as e:
-            raise ImportError(
-                "Visualization module not available. Install with:\n"
-                "  pip install hexdag[viz]\n"
-                "  or\n"
-                "  uv pip install hexdag[viz]"
-            ) from e
-
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

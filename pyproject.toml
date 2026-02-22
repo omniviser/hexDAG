@@ -34,9 +34,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-viz = [
-    "graphviz>=0.20.0,<0.21", # For DAG visualization
-]
 openai = [
     "openai>=1.0.0", # OpenAI LLM adapter
 ]
@@ -73,7 +70,6 @@ notebooks = [
 ]
 studio = ["hexdag-studio>=0.1.0"] # Visual Studio UI for hexDAG pipelines
 all = [
-    "hexdag[viz]",
     "hexdag[openai]",
     "hexdag[anthropic]",
     "hexdag[database]",
@@ -244,7 +240,7 @@ module = ["tests.*", "hexdag_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["openai", "anthropic", "graphviz", "orjson"]
+module = ["openai", "anthropic", "orjson"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

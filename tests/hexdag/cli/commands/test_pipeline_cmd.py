@@ -1,8 +1,5 @@
 """Tests for hexdag.cli.commands.pipeline_cmd module."""
 
-import sys
-from unittest.mock import MagicMock, patch
-
 import pytest
 from typer.testing import CliRunner
 
@@ -184,120 +181,6 @@ nodes:
         result = runner.invoke(app, ["validate", str(pipeline_path)])
         assert result.exit_code == 1
         assert "dependency 'nonexistent_node' not found" in result.stdout
-
-
-class TestGraphCommand:
-    """Test the pipeline graph command."""
-
-    def test_graph_default_output(self, runner, valid_pipeline_yaml, tmp_path):
-        """Test generating graph with default output."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            mock_graphviz = MagicMock()
-            mock_dot = MagicMock()
-            mock_graphviz.Digraph.return_value = mock_dot
-
-            with patch.dict(sys.modules, {"graphviz": mock_graphviz}):
-                result = runner.invoke(app, ["graph", str(valid_pipeline_yaml)])
-                assert result.exit_code == 0
-                assert "Generating graph for:" in result.stdout
-                assert "✓ Graph generated:" in result.stdout
-                assert mock_dot.render.called
-
-    def test_graph_custom_output(self, runner, valid_pipeline_yaml, tmp_path):
-        """Test generating graph with custom output path."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            output_path = "custom-graph.svg"
-            mock_graphviz = MagicMock()
-            mock_dot = MagicMock()
-            mock_graphviz.Digraph.return_value = mock_dot
-
-            with patch.dict(sys.modules, {"graphviz": mock_graphviz}):
-                result = runner.invoke(
-                    app, ["graph", str(valid_pipeline_yaml), "--out", output_path]
-                )
-                assert result.exit_code == 0
-                assert f"✓ Graph generated: {output_path}" in result.stdout
-
-    def test_graph_different_formats(self, runner, valid_pipeline_yaml, tmp_path):
-        """Test generating graph in different formats."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            formats = ["svg", "png", "dot"]
-            for fmt in formats:
-                mock_graphviz = MagicMock()
-                mock_dot = MagicMock()
-                mock_graphviz.Digraph.return_value = mock_dot
-
-                with patch.dict(sys.modules, {"graphviz": mock_graphviz}):
-                    output_path = f"graph.{fmt}"
-                    result = runner.invoke(
-                        app, ["graph", str(valid_pipeline_yaml), "--out", output_path]
-                    )
-                    assert result.exit_code == 0
-
-    def test_graph_node_colors(self, runner, tmp_path):
-        """Test that different node types get different colors."""
-        pipeline_path = tmp_path / "colored.yaml"
-        pipeline_content = """name: test
-nodes:
-  - id: func
-    type: function
-  - id: llm
-    type: llm
-  - id: agent
-    type: agent
-  - id: cond
-    type: conditional
-"""
-        pipeline_path.write_text(pipeline_content)
-
-        mock_graphviz = MagicMock()
-        mock_dot = MagicMock()
-        mock_graphviz.Digraph.return_value = mock_dot
-
-        with patch.dict(sys.modules, {"graphviz": mock_graphviz}):
-            result = runner.invoke(app, ["graph", str(pipeline_path)])
-            assert result.exit_code == 0
-
-            # Check that nodes were added with different colors
-            node_calls = mock_dot.node.call_args_list
-            assert len(node_calls) == 4
-
-            # Extract colors from calls
-            colors = [call[1]["fillcolor"] for call in node_calls if "fillcolor" in call[1]]
-            assert len(set(colors)) > 1  # Multiple different colors used
-
-    def test_graph_nonexistent_file(self, runner, tmp_path):
-        """Test graph generation with nonexistent file."""
-        nonexistent = tmp_path / "nonexistent.yaml"
-        result = runner.invoke(app, ["graph", str(nonexistent)])
-        assert result.exit_code == 1
-        assert "Pipeline file not found" in result.stdout
-
-    def test_graph_missing_graphviz(self, runner, valid_pipeline_yaml):
-        """Test graph generation when graphviz is not installed."""
-        # Remove graphviz from sys.modules to simulate it not being installed
-        original_graphviz = sys.modules.get("graphviz")
-        if "graphviz" in sys.modules:
-            del sys.modules["graphviz"]
-
-        # Mock the import to raise ImportError
-        import builtins
-
-        original_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "graphviz":
-                raise ImportError("graphviz not found")
-            return original_import(name, *args, **kwargs)
-
-        with patch.object(builtins, "__import__", side_effect=mock_import):
-            result = runner.invoke(app, ["graph", str(valid_pipeline_yaml)])
-            assert result.exit_code == 1
-            assert "graphviz" in result.stdout.lower()
-
-        # Restore original
-        if original_graphviz:
-            sys.modules["graphviz"] = original_graphviz
 
 
 class TestPlanCommand:
