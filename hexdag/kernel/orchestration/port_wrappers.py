@@ -24,7 +24,6 @@ from hexdag.kernel.ports.llm import (
     LLM,
     LLMResponse,
     MessageList,
-    SupportsFunctionCalling,
     SupportsGeneration,
     SupportsUsageTracking,
 )
@@ -94,17 +93,9 @@ class ObservableLLMWrapper:
         #     elif policy_response.signal == PolicySignal.FAIL:
         #         raise RateLimitError("LLM rate limit exceeded")
 
-        # Call underlying LLM
+        # Call underlying LLM (capability validated at mount time by orchestrator)
         llm_timer = Timer()
-
-        # Check if the adapter supports generation
-        if isinstance(self._llm, SupportsGeneration):
-            response = await self._llm.aresponse(messages, **kwargs)
-        else:
-            raise NotImplementedError(
-                f"LLM adapter {type(self._llm).__name__} does not support text generation. "
-                "It must implement SupportsGeneration protocol."
-            )
+        response = await self._llm.aresponse(messages, **kwargs)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
 
         duration_ms = llm_timer.duration_ms
 
@@ -130,7 +121,7 @@ class ObservableLLMWrapper:
                 )
             )
 
-        return response
+        return response  # type: ignore[no-any-return]
 
     async def aresponse_with_tools(
         self,
@@ -168,15 +159,9 @@ class ObservableLLMWrapper:
                 )
             )
 
-        # Call underlying LLM (must support function calling)
-        if not isinstance(self._llm, SupportsFunctionCalling):
-            raise NotImplementedError(
-                f"LLM adapter {type(self._llm).__name__} does not support function calling. "
-                "It must implement SupportsFunctionCalling protocol."
-            )
-
+        # Call underlying LLM (capability validated at mount time by orchestrator)
         llm_timer = Timer()
-        response = await self._llm.aresponse_with_tools(messages, tools, tool_choice, **kwargs)
+        response = await self._llm.aresponse_with_tools(messages, tools, tool_choice, **kwargs)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
         duration_ms = llm_timer.duration_ms
 
         # Extract usage from LLMResponse or via SupportsUsageTracking protocol
@@ -207,7 +192,7 @@ class ObservableLLMWrapper:
                 )
             )
 
-        return response
+        return response  # type: ignore[no-any-return]
 
     def __getattr__(self, name: str) -> Any:
         """Forward all other attribute access to underlying LLM."""

@@ -4,7 +4,7 @@ import ast
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,6 +14,7 @@ from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.prompt import PromptInput
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
+from hexdag.kernel.ports.llm import SupportsGeneration  # noqa: TC001
 from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.kernel.protocols import to_dict
 from hexdag.kernel.utils.node_timer import node_timer
@@ -119,9 +120,18 @@ class ReActAgentNode(BaseNodeFactory):
     ```
     Agent(input) -> Loop -> SingleStep -> Loop -> SingleStep -> ... -> Output
     ```
+
+    Port Capabilities
+    -----------------
+    Requires ``llm`` port implementing ``SupportsGeneration`` (validated at mount time).
     """
 
     __aliases__ = ("agent_node",)
+
+    # Port capability table (validated at mount time by orchestrator)
+    _hexdag_port_capabilities: ClassVar[dict[str, list[type]]] = {
+        "llm": [SupportsGeneration],
+    }
 
     # Studio UI metadata
     _hexdag_icon = "Bot"

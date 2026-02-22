@@ -10,7 +10,7 @@ for all LLM interactions. It combines:
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ValidationError
 
@@ -18,7 +18,7 @@ from hexdag.kernel.context import get_port
 from hexdag.kernel.exceptions import ParseError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
-from hexdag.kernel.ports.llm import Message
+from hexdag.kernel.ports.llm import Message, SupportsGeneration  # noqa: TC001
 from hexdag.kernel.protocols import to_dict
 from hexdag.kernel.utils.caching import KeyedCache
 from hexdag.kernel.utils.node_timer import node_timer
@@ -61,6 +61,10 @@ class LLMNode(BaseNodeFactory):
     3. **Structured Output**: Optional JSON parsing with Pydantic validation
     4. **System Prompts**: Optional system message support
     5. **Message History**: Support for conversation context
+
+    Port Capabilities
+    -----------------
+    Requires ``llm`` port implementing ``SupportsGeneration`` (validated at mount time).
 
     Examples
     --------
@@ -109,6 +113,11 @@ class LLMNode(BaseNodeFactory):
               summary: str
               confidence: float
     """
+
+    # Port capability table (validated at mount time by orchestrator)
+    _hexdag_port_capabilities: ClassVar[dict[str, list[type]]] = {
+        "llm": [SupportsGeneration],
+    }
 
     # Studio UI metadata
     _hexdag_icon = "Brain"

@@ -7,7 +7,8 @@ to convert YAML-friendly type representations to actual Python types.
 from functools import singledispatch
 from typing import Any
 
-# Supported type name mappings
+# Canonical string-name → Python-type mapping (single source of truth).
+# Used by normalize_schema, pipeline builder, and node factories.
 VALID_TYPE_NAMES: dict[str, Any] = {
     "str": str,
     "int": int,
