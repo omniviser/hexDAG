@@ -111,6 +111,14 @@ class LocalVFS:
         """List entries in a directory at an absolute VFS path."""
         if path == "/":
             return self._list_root()
+
+        # Check for intermediate virtual directories (e.g. /proc/ when
+        # /proc/runs/ and /proc/scheduled/ are mounted but /proc/ itself is not).
+        normalized = path.rstrip("/") + "/"
+        children = self._list_virtual_dir(normalized)
+        if children:
+            return children
+
         provider, relative = self._resolve(path)
         return await provider.readdir(relative)
 
@@ -124,8 +132,53 @@ class LocalVFS:
                 child_count=len(self._mounts),
                 capabilities=["read"],
             )
+
+        # Handle intermediate virtual directories.
+        normalized = path.rstrip("/") + "/"
+        children = self._list_virtual_dir(normalized)
+        if children:
+            return StatResult(
+                path=path.rstrip("/"),
+                entry_type=EntryType.DIRECTORY,
+                description=f"Virtual directory {path.rstrip('/')}",
+                child_count=len(children),
+                capabilities=["read"],
+            )
+
         provider, relative = self._resolve(path)
         return await provider.stat(relative)
+
+    def _list_virtual_dir(self, prefix: str) -> list[DirEntry]:
+        """Synthesize entries for intermediate virtual directories.
+
+        When mounts exist at ``/proc/runs/``, ``/proc/scheduled/``, etc.
+        but nothing is mounted at ``/proc/`` itself, this method returns
+        the child segments (``runs``, ``scheduled``) so that the namespace
+        is fully navigable.
+
+        Returns an empty list when *prefix* is already a real mount
+        point or is not an intermediate directory of any mount.
+        """
+        # If there's a real mount at this exact prefix, defer to it.
+        if prefix in self._mounts:
+            return []
+
+        seen: set[str] = set()
+        entries: list[DirEntry] = []
+        for mount_prefix in sorted(self._mounts):
+            if mount_prefix.startswith(prefix) and mount_prefix != prefix:
+                rest = mount_prefix[len(prefix) :]
+                child = rest.split("/")[0]
+                if child and child not in seen:
+                    seen.add(child)
+                    entries.append(
+                        DirEntry(
+                            name=child,
+                            entry_type=EntryType.DIRECTORY,
+                            path=f"{prefix.rstrip('/')}/{child}",
+                        )
+                    )
+        return entries
 
     def _list_root(self) -> list[DirEntry]:
         """List mount-point prefixes as root directory entries."""

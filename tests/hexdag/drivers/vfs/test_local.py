@@ -185,6 +185,63 @@ class TestAlist:
             assert entry.entry_type == EntryType.DIRECTORY
 
 
+class TestIntermediateDirectories:
+    """Test virtual intermediate directory synthesis (e.g. /proc/)."""
+
+    @pytest.mark.asyncio()
+    async def test_alist_intermediate_directory(self) -> None:
+        vfs = LocalVFS()
+        vfs.mount("/proc/runs/", StubProvider("runs"))
+        vfs.mount("/proc/scheduled/", StubProvider("scheduled"))
+        vfs.mount("/proc/entities/", StubProvider("entities"))
+
+        entries = await vfs.alist("/proc/")
+        names = sorted(e.name for e in entries)
+        assert names == ["entities", "runs", "scheduled"]
+        for entry in entries:
+            assert entry.entry_type == EntryType.DIRECTORY
+
+    @pytest.mark.asyncio()
+    async def test_alist_intermediate_without_trailing_slash(self) -> None:
+        vfs = LocalVFS()
+        vfs.mount("/proc/runs/", StubProvider("runs"))
+        vfs.mount("/proc/scheduled/", StubProvider("scheduled"))
+
+        entries = await vfs.alist("/proc")
+        names = sorted(e.name for e in entries)
+        assert names == ["runs", "scheduled"]
+
+    @pytest.mark.asyncio()
+    async def test_astat_intermediate_directory(self) -> None:
+        vfs = LocalVFS()
+        vfs.mount("/proc/runs/", StubProvider("runs"))
+        vfs.mount("/proc/scheduled/", StubProvider("scheduled"))
+
+        stat = await vfs.astat("/proc")
+        assert stat.path == "/proc"
+        assert stat.entry_type == EntryType.DIRECTORY
+        assert stat.child_count == 2
+
+    @pytest.mark.asyncio()
+    async def test_intermediate_does_not_shadow_real_mount(self) -> None:
+        """If /proc/ itself is mounted, use the real provider."""
+        vfs = LocalVFS()
+        proc_provider = StubProvider("proc")
+        vfs.mount("/proc/", proc_provider)
+        vfs.mount("/proc/runs/", StubProvider("runs"))
+
+        await vfs.alist("/proc/")
+        # Should delegate to the real /proc/ provider, not synthesize
+        assert proc_provider.readdir_calls == [""]
+
+    @pytest.mark.asyncio()
+    async def test_nonexistent_intermediate_raises(self) -> None:
+        vfs = LocalVFS()
+        vfs.mount("/lib/", StubProvider())
+        with pytest.raises(VFSError, match="no provider mounted"):
+            await vfs.alist("/unknown/")
+
+
 class TestAstat:
     @pytest.mark.asyncio()
     async def test_root_stat(self) -> None:
