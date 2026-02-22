@@ -7,8 +7,8 @@ import os
 import time
 from typing import Any
 
-from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.ports.memory import Memory
+from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.ports.memory import Memory
 
 
 class AzureCosmosAdapter(Memory):

@@ -8,8 +8,8 @@ import os
 import time
 from typing import Any
 
-from hexdag.core.ports.healthcheck import HealthStatus
-from hexdag.core.utils.sql_validation import validate_sql_identifier
+from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.utils.sql_validation import validate_sql_identifier
 from sqlalchemy import Column, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine

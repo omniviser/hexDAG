@@ -171,8 +171,8 @@ Once Claude generates a pipeline for you:
 2. **Run it with hexDAG:**
    ```python
    # In Python or a notebook
-   from hexdag.core.pipeline_builder import YamlPipelineBuilder
-   from hexdag.core.orchestration import Orchestrator
+   from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+   from hexdag.kernel.orchestration import Orchestrator
 
    # Load pipeline
    builder = YamlPipelineBuilder()
@@ -261,7 +261,7 @@ Explain the hexDAG YAML pipeline structure
 2. **Check that hexDAG components can be resolved:**
    ```bash
    uv run python -c "
-   from hexdag.core.resolver import resolve, get_builtin_aliases
+   from hexdag.kernel.resolver import resolve, get_builtin_aliases
    aliases = get_builtin_aliases()
    print(f'Available aliases: {len(aliases)}')
    print('LLMNode:', resolve('llm_node'))

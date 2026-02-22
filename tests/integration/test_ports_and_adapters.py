@@ -9,8 +9,8 @@ Tests demonstrate:
 
 import pytest
 
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
 
 
 # Mock Adapters for testing
@@ -57,7 +57,7 @@ class MockLoggerAdapter:
 # Business Logic Functions
 async def process_user_data(input_data: dict, **kwargs) -> dict:
     """Process user data using ports."""
-    from hexdag.core.context import get_port
+    from hexdag.kernel.context import get_port
 
     db = get_port("database")
     email = get_port("email")
@@ -90,7 +90,7 @@ async def process_user_data(input_data: dict, **kwargs) -> dict:
 
 async def generate_report(input_data: dict, **kwargs) -> dict:
     """Generate report using database port."""
-    from hexdag.core.context import get_port
+    from hexdag.kernel.context import get_port
 
     db = get_port("database")
     logger = get_port("logger")

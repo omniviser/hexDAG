@@ -25,8 +25,8 @@ except ImportError as e:
         "  uv pip install hexdag[viz]"
     ) from e
 
-from hexdag.core.domain.dag import DirectedGraph
-from hexdag.core.logging import get_logger
+from hexdag.kernel.domain.dag import DirectedGraph
+from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
 

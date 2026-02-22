@@ -31,9 +31,10 @@ Available submodules
 - pipeline: YAML manipulation (init, add/remove/update nodes)
 - documentation: Guides and references
 - export: Project export
+- processes: Process management (pipeline runs, scheduling, entity state)
 """
 
-from hexdag.api import components, documentation, execution, export, pipeline, validation
+from hexdag.api import components, documentation, execution, export, pipeline, processes, validation
 
 __all__ = [
     "components",
@@ -41,5 +42,6 @@ __all__ = [
     "execution",
     "export",
     "pipeline",
+    "processes",
     "validation",
 ]

@@ -1,1083 +1,466 @@
-# 🏗️ hexDAG System Architecture
+# hexDAG System Architecture
 
-**A comprehensive guide to how hexDAG works as a complete system**
+hexDAG is an **operating system for AI agents**. Just as Linux provides processes,
+syscalls, drivers, and libraries so that programs don't reinvent the wheel, hexDAG
+provides pipelines, ports, drivers, and a standard library so that AI agents don't
+reinvent orchestration.
 
----
-
-## 📋 Table of Contents
-
-1. [Overview](#overview)
-2. [System Architecture Diagram](#system-architecture-diagram)
-3. [Core Components](#core-components)
-4. [Execution Flow](#execution-flow)
-5. [Data Flow](#data-flow)
-6. [Component Interactions](#component-interactions)
-7. [Lifecycle Management](#lifecycle-management)
-8. [Extension Points](#extension-points)
+The codebase is organized around a Linux-kernel-inspired directory structure. This
+document explains what belongs where, what each layer does, and how they interact.
 
 ---
 
-## Overview
+## The OS Analogy
 
-hexDAG is an enterprise-ready AI agent orchestration framework built on **hexagonal architecture** principles. The system transforms declarative YAML configurations into executable DAG workflows with comprehensive observability, type safety, and async-first execution.
-
-### Design Principles
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    hexDAG Design Pillars                     │
-├─────────────────────────────────────────────────────────────┤
-│  1. Async-First         → Non-blocking I/O everywhere       │
-│  2. Event-Driven        → Complete observability            │
-│  3. Type-Safe           → Pydantic validation everywhere    │
-│  4. Hexagonal           → Clean architecture boundaries     │
-│  5. Declarative         → YAML-first workflow definition    │
-│  6. DAG-Based           → Intelligent dependency mgmt       │
-└─────────────────────────────────────────────────────────────┘
-```
+| Linux | hexDAG | Purpose |
+|-------|--------|---------|
+| Kernel | `kernel/` | Core execution engine, system call interfaces (Protocols), domain models |
+| System calls | `kernel/ports/` | Contracts for external capabilities (LLM, Memory, Database, etc.) |
+| Drivers | `drivers/` | Low-level infrastructure (executor, observer manager, pipeline spawner) |
+| `/lib` | `stdlib/` | Standard library -- built-in nodes, adapters, macros, system libs |
+| Processes | Pipeline runs | Tracked by `ProcessRegistry` (like `ps`) |
+| `fork`/`exec` | `PipelineSpawner` | Launch sub-pipelines from within a running pipeline |
+| Process scheduler | `Scheduler` | Delayed and recurring pipeline execution |
+| State machines | `EntityState` | Business entity lifecycle management |
+| `/usr/bin` | `api/` | User-facing tools (MCP + Studio REST) |
+| Shell | `cli/` | Command-line interface (`hexdag init`, `hexdag run`, etc.) |
 
 ---
 
-## System Architecture Diagram
-
-### High-Level Architecture
+## The Four Layers
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        hexDAG System                                  │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  CONFIGURATION LAYER                                       │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  ┌──────────────┐    ┌──────────────┐    ┌─────────────┐  │     │
-│  │  │   YAML       │    │   Manifest   │    │   Python    │  │     │
-│  │  │   Files      │───▶│   Loader     │◀───│   Code      │  │     │
-│  │  └──────────────┘    └──────────────┘    └─────────────┘  │     │
-│  │         │                    │                    │         │     │
-│  └─────────┼────────────────────┼────────────────────┼─────────┘     │
-│            │                    │                    │               │
-│            ▼                    ▼                    ▼               │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  REGISTRY & DISCOVERY LAYER                                │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  ┌─────────────────────────────────────────────────────┐   │     │
-│  │  │          Component Registry (Singleton)             │   │     │
-│  │  ├─────────────────────────────────────────────────────┤   │     │
-│  │  │  • Bootstrap & Discovery                            │   │     │
-│  │  │  • Component Storage (Nodes, Adapters, Tools, etc) │   │     │
-│  │  │  • Schema Generation & Caching                      │   │     │
-│  │  │  • Lifecycle Management                             │   │     │
-│  │  └─────────────────────────────────────────────────────┘   │     │
-│  │                         │                                   │     │
-│  │         ┌───────────────┼───────────────┐                  │     │
-│  │         ▼               ▼               ▼                  │     │
-│  │    ┌────────┐     ┌─────────┐     ┌─────────┐             │     │
-│  │    │ Nodes  │     │Adapters │     │  Tools  │             │     │
-│  │    └────────┘     └─────────┘     └─────────┘             │     │
-│  └────────────────────────────────────────────────────────────┘     │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  PIPELINE BUILDER LAYER                                    │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  ┌──────────────────────────────────────────────────────┐  │     │
-│  │  │         YamlPipelineBuilder                          │  │     │
-│  │  ├──────────────────────────────────────────────────────┤  │     │
-│  │  │  1. YamlValidator    → Schema validation            │  │     │
-│  │  │  2. ComponentInstantiator → Create components       │  │     │
-│  │  │  3. NodeSpec Builder → Build node specifications    │  │     │
-│  │  │  4. DirectedGraph Builder → Assemble DAG            │  │     │
-│  │  └──────────────────────────────────────────────────────┘  │     │
-│  │                         │                                   │     │
-│  │                         ▼                                   │     │
-│  │              ┌─────────────────────┐                        │     │
-│  │              │  DirectedGraph      │                        │     │
-│  │              │  + PipelineConfig   │                        │     │
-│  │              └─────────────────────┘                        │     │
-│  └────────────────────────────────────────────────────────────┘     │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  ORCHESTRATION LAYER                                       │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  ┌──────────────────────────────────────────────────────┐  │     │
-│  │  │              Orchestrator (Core Engine)              │  │     │
-│  │  ├──────────────────────────────────────────────────────┤  │     │
-│  │  │  Execution Context Management                        │  │     │
-│  │  │  ├─ Ports Configuration                              │  │     │
-│  │  │  ├─ Event System (Observer notifications)            │  │     │
-│  │  │  └─ Resource Management                              │  │     │
-│  │  │                                                       │  │     │
-│  │  │  Wave Execution Pipeline                             │  │     │
-│  │  │  ├─ Pre-DAG Hooks                                    │  │     │
-│  │  │  ├─ Wave-by-Wave Execution                           │  │     │
-│  │  │  │   ├─ InputMapper → Resolve dependencies           │  │     │
-│  │  │  │   ├─ Parallel Execution (asyncio.gather)          │  │     │
-│  │  │  │   └─ Result Collection                            │  │     │
-│  │  │  └─ Post-DAG Hooks                                   │  │     │
-│  │  └──────────────────────────────────────────────────────┘  │     │
-│  │                         │                                   │     │
-│  │         ┌───────────────┼───────────────┐                  │     │
-│  │         ▼               ▼               ▼                  │     │
-│  │  ┌───────────┐   ┌───────────┐   ┌───────────┐            │     │
-│  │  │   Wave 1  │───│   Wave 2  │───│   Wave N  │            │     │
-│  │  │  (Nodes)  │   │  (Nodes)  │   │  (Nodes)  │            │     │
-│  │  └───────────┘   └───────────┘   └───────────┘            │     │
-│  └────────────────────────────────────────────────────────────┘     │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  EXECUTION LAYER (Node Processing)                         │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  For each node in each wave:                               │     │
-│  │                                                             │     │
-│  │  ┌──────────────────────────────────────────────────────┐  │     │
-│  │  │         Node Execution Pipeline                      │  │     │
-│  │  ├──────────────────────────────────────────────────────┤  │     │
-│  │  │  1. Input Resolution                                 │  │     │
-│  │  │     └─ InputMapper resolves {{dep.field}} refs       │  │     │
-│  │  │  1b. Skip Propagation                                │  │     │
-│  │  │     └─ If ALL deps skipped → return skip marker      │  │     │
-│  │  │  2. Input Validation                                 │  │     │
-│  │  │     └─ Pydantic validation via in_model              │  │     │
-│  │  │  3. When Clause / Upstream Skip Check                │  │     │
-│  │  │     └─ Evaluate `when` or auto-skip if upstream      │  │     │
-│  │  │  4. Function Execution                               │  │     │
-│  │  │     └─ async fn(ExecutionContext) → result           │  │     │
-│  │  │  5. Output Validation                                │  │     │
-│  │  │     └─ Pydantic validation via out_model             │  │     │
-│  │  │  6. Result Storage                                   │  │     │
-│  │  │     └─ Store in ExecutionContext                     │  │     │
-│  │  │  7. Event Emission                                   │  │     │
-│  │  │     └─ NodeCompleted/NodeFailed/NodeSkipped events   │  │     │
-│  │  └──────────────────────────────────────────────────────┘  │     │
-│  └────────────────────────────────────────────────────────────┘     │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  INTEGRATION LAYER (Ports & Adapters)                     │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  ┌──────────────────┐          ┌────────────────────────┐  │     │
-│  │  │   Ports          │          │   Adapters             │  │     │
-│  │  │  (Interfaces)    │◀─────────│  (Implementations)     │  │     │
-│  │  ├──────────────────┤          ├────────────────────────┤  │     │
-│  │  │  • LLM           │          │  • OpenAI              │  │     │
-│  │  │  • Memory        │          │  • Anthropic           │  │     │
-│  │  │  • Database      │          │  • PostgreSQL          │  │     │
-│  │  │  • ToolRouter    │          │  • VectorDB            │  │     │
-│  │  │  • FileStorage   │          │  • S3Storage           │  │     │
-│  │  │  • Secret        │          │  • Mock adapters       │  │     │
-│  │  └──────────────────┘          └────────────────────────┘  │     │
-│  │           │                              │                  │     │
-│  │           └──────────────┬───────────────┘                  │     │
-│  │                          ▼                                  │     │
-│  │              ┌──────────────────────┐                       │     │
-│  │              │  External Services   │                       │     │
-│  │              └──────────────────────┘                       │     │
-│  └────────────────────────────────────────────────────────────┘     │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────┐     │
-│  │  OBSERVABILITY LAYER (Event System)                        │     │
-│  ├────────────────────────────────────────────────────────────┤     │
-│  │                                                             │     │
-│  │  ┌──────────────────────────────────────────────────────┐  │     │
-│  │  │          Event System & Observers                    │  │     │
-│  │  ├──────────────────────────────────────────────────────┤  │     │
-│  │  │  Event Types:                                        │  │     │
-│  │  │  ├─ PipelineStarted / PipelineCompleted             │  │     │
-│  │  │  ├─ WaveStarted / WaveCompleted                      │  │     │
-│  │  │  ├─ NodeStarted / NodeCompleted / NodeFailed         │  │     │
-│  │  │  ├─ NodeSkipped (when clause / upstream skip)       │  │     │
-│  │  │  ├─ ValidationError                                  │  │     │
-│  │  │  └─ Custom Events                                    │  │     │
-│  │  │                                                       │  │     │
-│  │  │  Observers:                                           │  │     │
-│  │  │  ├─ MemoryObserver → Store execution history         │  │     │
-│  │  │  ├─ LoggingObserver → Structured logging             │  │     │
-│  │  │  ├─ MetricsObserver → Performance tracking           │  │     │
-│  │  │  └─ Custom Observers                                 │  │     │
-│  │  └──────────────────────────────────────────────────────┘  │     │
-│  └────────────────────────────────────────────────────────────┘     │
-│                                                                       │
-└──────────────────────────────────────────────────────────────────────┘
+hexdag/
+  kernel/   -- Core primitives. Protocols, domain models, orchestration.   (/kernel)
+  stdlib/   -- Standard library. Built-in nodes, adapters, macros, libs.   (/lib)
+  drivers/  -- Low-level infrastructure. Executor, observer, spawner.      (/drivers)
+  api/      -- Public API. MCP tools + Studio REST endpoints.              (/usr/bin)
+  cli/      -- CLI commands (hexdag init, hexdag run, etc.)
+  docs/     -- Documentation extraction utilities
 ```
+
+The kernel defines contracts. The stdlib ships implementations. Drivers provide
+infrastructure. The API exposes everything to users.
 
 ---
 
-## Core Components
+## Decision Rules
 
-### 1. Component Registry
+When adding something new, ask:
 
-**Purpose**: Central hub for component discovery, storage, and lifecycle management.
+1. **Defines a Protocol or domain model?** --> `kernel/`
+2. **Implements a Protocol for users to use or extend?** --> `stdlib/`
+3. **Low-level infrastructure the orchestrator needs internally?** --> `drivers/`
+4. **User-facing function (MCP tool or REST endpoint)?** --> `api/`
 
-**Responsibilities**:
-- **Bootstrap**: Load components from manifest configuration
-- **Discovery**: Find and register components from Python modules
-- **Storage**: Maintain flat storage of all registered components
-- **Schema Generation**: Generate JSON schemas for components
-- **Validation**: Ensure component uniqueness and correctness
+If it doesn't fit any of these, it probably belongs in `cli/` (commands) or `docs/`
+(documentation utilities).
 
-**Component Types**:
-- **Nodes**: Pipeline processing steps (LLMNode, FunctionNode, AgentNode)
-- **Adapters**: Port implementations (OpenAIAdapter, MockLLM)
-- **Tools**: Functions for agent use
-- **Macros**: Reusable pipeline templates
+---
 
-**Component Resolution**:
+## Kernel
 
-Components are resolved by full module path using `hexdag.core.resolver`:
-
-```python
-from hexdag.core.resolver import resolve
-
-# Resolve components by module path
-OpenAIAdapter = resolve("hexdag.builtin.adapters.openai.OpenAIAdapter")
-MyNode = resolve("myapp.nodes.MyNode")
-```
-
-**Creating Custom Components**:
-
-```python
-# Custom adapter - implement port interface
-from hexdag.core.ports.llm import LLM
-
-class OpenAIAdapter(LLM):
-    def __init__(self, api_key: str, model: str = "gpt-4"):
-        self.api_key = api_key
-        self.model = model
-
-# Custom node - extend BaseNodeFactory
-from hexdag.builtin.nodes import BaseNodeFactory
-
-class MyNode(BaseNodeFactory):
-    def __call__(self, name: str, timeout: float = 30.0, **kwargs):
-        return NodeSpec(...)
-```
-
-### 2. DirectedGraph
-
-**Purpose**: Immutable representation of workflow structure with dependency management.
-
-**Key Features**:
-- **Node Storage**: Maintains NodeSpec instances
-- **Dependency Tracking**: Explicit dependency relationships
-- **Cycle Detection**: DFS-based cycle detection algorithm
-- **Topological Sorting**: Computes execution waves
-- **Validation**: Ensures graph is valid DAG
-
-**Data Structure**:
-```python
-@dataclass(frozen=True, slots=True)
-class NodeSpec:
-    """Immutable node specification."""
-    name: str                         # Unique node identifier
-    fn: Callable[..., Any]            # Execution function
-    in_model: type[BaseModel] | None  # Input schema
-    out_model: type[BaseModel] | None # Output schema
-    deps: frozenset[str]              # Dependency node names
-    params: dict[str, Any]            # Configuration parameters
-    timeout: float | None             # Execution timeout
-```
-
-**Graph Operations**:
-```python
-graph = DirectedGraph()
-
-# Add nodes
-graph.add(NodeSpec(name="step1", fn=func1))
-graph.add(NodeSpec(name="step2", fn=func2, deps={"step1"}))
-
-# Validate (automatic on add)
-graph.validate()  # Checks cycles, dependencies
-
-# Compute execution waves
-waves = graph.topological_waves()
-# Result: [[step1], [step2]]  # Can execute step1, then step2
-```
-
-### 3. YamlPipelineBuilder
-
-**Purpose**: Transform YAML configurations into executable DirectedGraphs.
-
-**Processing Pipeline**:
+The kernel is the core of hexDAG. It defines all contracts (Protocols), domain models,
+and the execution engine. **The kernel depends on nothing outside the kernel.**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│          YamlPipelineBuilder Pipeline                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  YAML File                                                   │
-│     ↓                                                        │
-│  ┌─────────────────────────────────────────┐                │
-│  │  1. YAML Parsing                        │                │
-│  │     ├─ yaml.safe_load()                 │                │
-│  │     └─ Caching (lru_cache)              │                │
-│  └─────────────────────────────────────────┘                │
-│     ↓                                                        │
-│  ┌─────────────────────────────────────────┐                │
-│  │  2. Schema Validation (YamlValidator)   │                │
-│  │     ├─ Check required fields            │                │
-│  │     ├─ Validate node types exist        │                │
-│  │     ├─ Validate dependencies            │                │
-│  │     └─ Check for cycles                 │                │
-│  └─────────────────────────────────────────┘                │
-│     ↓                                                        │
-│  ┌─────────────────────────────────────────┐                │
-│  │  3. Component Instantiation             │                │
-│  │     ├─ Resolve component from registry  │                │
-│  │     ├─ Extract secrets                  │                │
-│  │     ├─ Merge params                     │                │
-│  │     └─ Create component instance        │                │
-│  └─────────────────────────────────────────┘                │
-│     ↓                                                        │
-│  ┌─────────────────────────────────────────┐                │
-│  │  4. NodeSpec Construction               │                │
-│  │     ├─ Call node factory                │                │
-│  │     ├─ Set dependencies                 │                │
-│  │     └─ Create immutable NodeSpec        │                │
-│  └─────────────────────────────────────────┘                │
-│     ↓                                                        │
-│  ┌─────────────────────────────────────────┐                │
-│  │  5. DirectedGraph Assembly              │                │
-│  │     ├─ Add all NodeSpecs                │                │
-│  │     ├─ Validate DAG structure           │                │
-│  │     └─ Compute topological order        │                │
-│  └─────────────────────────────────────────┘                │
-│     ↓                                                        │
-│  ┌─────────────────────────────────────────┐                │
-│  │  6. PipelineConfig Creation             │                │
-│  │     ├─ Extract ports configuration      │                │
-│  │     ├─ Extract policies                 │                │
-│  │     ├─ Extract observers                │                │
-│  │     └─ Package metadata                 │                │
-│  └─────────────────────────────────────────┘                │
-│     ↓                                                        │
-│  DirectedGraph + PipelineConfig                              │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+hexdag/kernel/
+  ports/              Protocol definitions (interfaces)
+  domain/             Domain models (data structures)
+  orchestration/      Execution engine
+  pipeline_builder/   YAML-to-DAG compilation
+  validation/         Type validation, retry logic
+  config/             TOML config loading
+  resolver.py         Module path resolution
+  lib_base.py         HexDAGLib base class for system libraries
+  logging.py          Structured logging
+  utils/              Internal utilities (timer, async helpers)
 ```
 
-**YAML Structure**:
+### kernel/ports/ -- Protocol Definitions
+
+Each port is a Python Protocol class that defines an interface. Adapters in `stdlib/`
+and drivers in `drivers/` implement these protocols.
+
+| Port | File | Purpose |
+|------|------|---------|
+| LLM | `llm.py` | Language model interactions (chat, streaming, usage tracking) |
+| Memory | `memory.py` | Key-value memory for agents (get, set, search) |
+| DataStore | `data_store.py` | Unified key-value/TTL/query/schema/transactions storage |
+| Database | `database.py` | SQL database access (queries, schema inspection, transactions) |
+| ToolRouter | `tool_router.py` | Function calling and tool dispatch |
+| ObserverManager | `observer_manager.py` | Event routing to observers |
+| Executor | `executor.py` | How nodes get executed (local, distributed) |
+| PipelineSpawner | `pipeline_spawner.py` | Fork/exec for sub-pipeline runs |
+| FileStorage | `file_storage.py` | File read/write abstraction |
+| Secret | `secret.py` | Secret/credential management |
+| VectorSearch | `vector_search.py` | Vector similarity search |
+| Healthcheck | `healthcheck.py` | Health status reporting |
+| ApiCall | `api_call.py` | External API call abstraction |
+
+### kernel/domain/ -- Domain Models
+
+| Model | File | Purpose |
+|-------|------|---------|
+| NodeSpec, DirectedGraph | `dag.py` | DAG structure, node specifications, topological sorting |
+| PipelineRun | `pipeline_run.py` | Pipeline execution state and results |
+| StateMachineConfig | `entity_state.py` | State machine definitions for business entities |
+| ScheduledTask | `scheduled_task.py` | Scheduled/recurring pipeline execution definitions |
+| AgentToolRouter | `agent_tools.py` | Built-in agent tool routing (tool_end, change_phase) |
+
+### kernel/orchestration/ -- Execution Engine
+
+The orchestrator walks a DirectedGraph in topological order, executing nodes wave by wave.
+
+```
+kernel/orchestration/
+  orchestrator.py       Main orchestrator (entry point for pipeline execution)
+  node_executor.py      Single-node execution with retry, validation, timeout
+  input_mapper.py       Resolves {{dep.field}} template expressions
+  execution_context.py  Thread-safe context carrying ports, results, metadata
+  hooks.py              Pre-DAG and post-DAG hook execution
+  events/               Event definitions and observer infrastructure
+    events.py           Event dataclasses (PipelineStarted, NodeCompleted, etc.)
+    observers/          Built-in observers (logging, memory, cost profiler)
+```
+
+### kernel/pipeline_builder/ -- YAML-to-DAG Compilation
+
+Transforms YAML pipeline definitions into executable DirectedGraphs.
+
+```
+kernel/pipeline_builder/
+  builder.py            Main YamlPipelineBuilder
+  preprocessing/        Runs before graph building
+    include.py          !include tag for YAML composition
+    env_vars.py         ${VAR} and ${VAR:default} resolution
+    template.py         Jinja2 templating (build-time vs runtime)
+  plugins/              Entity-level plugins
+    macros.py           Macro expansion (macro_invocation -> subgraph)
+    nodes.py            Node construction from registry
+```
+
+### kernel/lib_base.py -- HexDAGLib Base Class
+
+Base class for system libraries. Public async methods prefixed with `a` auto-become
+agent-callable tools. This enables libraries like ProcessRegistry and Scheduler to
+expose their functionality to LLM agents.
+
+### kernel/config/ -- Configuration
+
+Loads configuration from `hexdag.toml` or `pyproject.toml [tool.hexdag]`.
+Supports `${ENV_VAR}` substitution and LRU caching.
+
+---
+
+## Uniform Entity Pattern
+
+All entities follow the same pattern: the kernel defines the contract, the stdlib
+ships built-in implementations, and users write their own.
+
+| Entity | kernel/ contract | stdlib/ builtins | User custom |
+|--------|-----------------|-----------------|-------------|
+| Nodes | `NodeSpec` + `BaseNodeFactory` | LLMNode, AgentNode, FunctionNode, LoopNode, ConditionalNode | `myapp.nodes.X` |
+| Adapters | Protocol in `kernel/ports/` | OpenAI, Anthropic, SQLite, Mock, Memory variants | `myapp.adapters.X` |
+| Macros | (convention) | ReasoningAgent, ConversationAgent | `myapp.macros.X` |
+| Prompts | (convention) | tool_prompts, error_correction | `myapp.prompts.X` |
+| Libs | `HexDAGLib` base class | ProcessRegistry, EntityState, Scheduler, DatabaseTools | `myapp.lib.X` |
+
+All entities are referenced by their full Python module path in YAML:
+
 ```yaml
-apiVersion: hexdag/v1
-kind: Pipeline
-metadata:
-  name: my_workflow
-  description: Example workflow
-
-spec:
-  nodes:
-    - type: llm
-      id: analyzer
-      params:
-        prompt_template: "Analyze: {{input.text}}"
-        model: gpt-4
-      depends_on: []
-
-    - type: function
-      id: processor
-      params:
-        fn: my_module.process_data
-      depends_on: [analyzer]
-
-  ports:
-    llm:
-      adapter: openai
-      params:
-        api_key: "${OPENAI_API_KEY}"
-        model: gpt-4
-
-  policies:
-    - type: retry
-      params:
-        max_retries: 3
-        backoff: 1.0
+nodes:
+  - kind: hexdag.stdlib.nodes.LLMNode        # Full path
+  - kind: llm_node                            # Built-in alias
+  - kind: myapp.nodes.CustomNode              # User custom
 ```
 
-### 4. Orchestrator
+---
 
-**Purpose**: Core execution engine that walks DirectedGraphs in topological order.
+## Stdlib
 
-**Execution Architecture**:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│              Orchestrator Execution Flow                      │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  async def run(graph, input_data) → results:                 │
-│                                                               │
-│  1. INITIALIZATION                                            │
-│  ┌─────────────────────────────────────────────────────┐     │
-│  │  • Create ExecutionContext                          │     │
-│  │  • Initialize Ports (LLM, Memory, etc)              │     │
-│  │  • Setup Event System                               │     │
-│  │  • Call adapter.asetup() for all adapters           │     │
-│  └─────────────────────────────────────────────────────┘     │
-│                        ↓                                      │
-│  2. PRE-DAG HOOKS                                             │
-│  ┌─────────────────────────────────────────────────────┐     │
-│  │  • Execute pre-DAG hooks in sequence                │     │
-│  │  • Can modify input_data or abort pipeline          │     │
-│  │  • Emit PipelineStarted event                       │     │
-│  └─────────────────────────────────────────────────────┘     │
-│                        ↓                                      │
-│  3. WAVE EXECUTION (for each wave in topological order)      │
-│  ┌─────────────────────────────────────────────────────┐     │
-│  │  Wave N Execution:                                  │     │
-│  │                                                      │     │
-│  │  • Emit WaveStarted event                           │     │
-│  │  • For each node in wave (parallel):                │     │
-│  │    ┌──────────────────────────────────────────┐     │     │
-│  │    │  Node Execution Pipeline:                │     │     │
-│  │    │                                           │     │     │
-│  │    │  a. Input Resolution                      │     │     │
-│  │    │     └─ InputMapper.resolve_inputs()       │     │     │
-│  │    │        • Resolve {{dep.field}} refs       │     │     │
-│  │    │        • Merge with node params           │     │     │
-│  │    │                                           │     │     │
-│  │    │  b. Emit NodeStarted event                │     │     │
-│  │    │                                           │     │     │
-│  │    │  c. Input Validation                      │     │     │
-│  │    │     └─ node.validate_input(data)          │     │     │
-│  │    │        • Pydantic model validation        │     │     │
-│  │    │                                           │     │     │
-│  │    │  d. Function Execution                    │     │     │
-│  │    │     └─ await node.fn(context, **inputs)   │     │     │
-│  │    │        • Timeout handling                 │     │     │
-│  │    │        • Error capture                    │     │     │
-│  │    │                                           │     │     │
-│  │    │  e. Output Validation                     │     │     │
-│  │    │     └─ node.validate_output(result)       │     │     │
-│  │    │        • Pydantic model validation        │     │     │
-│  │    │                                           │     │     │
-│  │    │  f. Result Storage                        │     │     │
-│  │    │     └─ context.set_result(node, result)   │     │     │
-│  │    │                                           │     │     │
-│  │    │  h. Emit NodeCompleted event              │     │     │
-│  │    │                                           │     │     │
-│  │    └──────────────────────────────────────────┘     │     │
-│  │                                                      │     │
-│  │  • Wait for all nodes: asyncio.gather(*tasks)       │     │
-│  │  • Emit WaveCompleted event                         │     │
-│  └─────────────────────────────────────────────────────┘     │
-│                        ↓                                      │
-│  4. POST-DAG HOOKS                                            │
-│  ┌─────────────────────────────────────────────────────┐     │
-│  │  • Execute post-DAG hooks in sequence               │     │
-│  │  • Can modify results                               │     │
-│  │  • Emit PipelineCompleted event                     │     │
-│  └─────────────────────────────────────────────────────┘     │
-│                        ↓                                      │
-│  5. CLEANUP                                                   │
-│  ┌─────────────────────────────────────────────────────┐     │
-│  │  • Call adapter.aclose() for all adapters           │     │
-│  │  • Cleanup resources                                │     │
-│  │  • Return results                                   │     │
-│  └─────────────────────────────────────────────────────┘     │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**Key Orchestrator Components**:
-
-1. **InputMapper**: Resolves template expressions like `{{dep.field}}`
-2. **ExecutionContext**: Thread-safe context for ports, results, and metadata
-3. **WaveExecutor**: Manages parallel execution within a wave
-4. **ExecutionCoordinator**: Handles observer notifications and input mapping
-5. **EventManager**: Emits events for observability
-
-### 5. Ports & Adapters (Hexagonal Architecture)
-
-**Purpose**: Clean separation between business logic and external services.
-
-**Architecture**:
+The standard library ships all built-in implementations that users interact with directly.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│              Hexagonal Architecture Pattern                   │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌───────────────────────────────────────────────┐           │
-│  │            Business Logic Core                │           │
-│  │         (Orchestrator, Nodes, DAG)            │           │
-│  │                                               │           │
-│  │  Depends ONLY on Port interfaces, not        │           │
-│  │  concrete implementations                     │           │
-│  └───────────────────┬───────────────────────────┘           │
-│                      │                                        │
-│                      │ Uses interfaces only                   │
-│                      ▼                                        │
-│  ┌───────────────────────────────────────────────┐           │
-│  │              Port Layer                       │           │
-│  │         (Abstract Interfaces)                 │           │
-│  ├───────────────────────────────────────────────┤           │
-│  │                                               │           │
-│  │  class LLMPort(Protocol):                    │           │
-│  │      async def aresponse(                    │           │
-│  │          self,                                │           │
-│  │          messages: list[dict]                 │           │
-│  │      ) -> str: ...                            │           │
-│  │                                               │           │
-│  │  class MemoryPort(Protocol):                 │           │
-│  │      async def aget(                          │           │
-│  │          self, key: str                       │           │
-│  │      ) -> Any: ...                            │           │
-│  │                                               │           │
-│  │  class DatabasePort(Protocol):               │           │
-│  │      async def aexecute_query(                │           │
-│  │          self, sql: str                       │           │
-│  │      ) -> list[dict]: ...                     │           │
-│  │                                               │           │
-│  └───────────────────┬───────────────────────────┘           │
-│                      │                                        │
-│                      │ Implemented by                         │
-│                      ▼                                        │
-│  ┌───────────────────────────────────────────────┐           │
-│  │           Adapter Layer                       │           │
-│  │    (Concrete Implementations)                 │           │
-│  ├───────────────────────────────────────────────┤           │
-│  │                                               │           │
-│  │  class OpenAIAdapter(LLM):                   │           │
-│  │      async def aresponse(...) -> str:        │           │
-│  │          # OpenAI API call                    │           │
-│  │                                               │           │
-│  │  class AnthropicAdapter(LLM):                │           │
-│  │      async def aresponse(...) -> str:        │           │
-│  │          # Anthropic API call                 │           │
-│  │                                               │           │
-│  │  class RedisMemoryAdapter(Memory):           │           │
-│  │      async def aget(...) -> Any:             │           │
-│  │          # Redis GET operation                │           │
-│  │                                               │           │
-│  └───────────────────┬───────────────────────────┘           │
-│                      │                                        │
-│                      │ Calls                                  │
-│                      ▼                                        │
-│  ┌───────────────────────────────────────────────┐           │
-│  │          External Services                    │           │
-│  ├───────────────────────────────────────────────┤           │
-│  │  • OpenAI API                                 │           │
-│  │  • Anthropic API                              │           │
-│  │  • PostgreSQL Database                        │           │
-│  │  • Redis Cache                                │           │
-│  │  • S3 Storage                                 │           │
-│  │  • Vector Databases                           │           │
-│  └───────────────────────────────────────────────┘           │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
+hexdag/stdlib/
+  adapters/     Port implementations
+    openai/       OpenAI LLM adapter
+    anthropic/    Anthropic LLM adapter
+    memory/       Memory adapters (in-memory, SQLite, file, session, state)
+    database/     Database adapters (SQLite, CSV)
+    mock/         Mock adapters for testing (LLM, database, tool router, embedding)
+    secret/       Secret management (local file-based)
+    local/        Re-exports from drivers/ for backward compatibility
+    unified_tool_router.py  Combined tool routing
+  nodes/        Node factories
+    llm_node.py         LLM interaction nodes
+    agent_node.py       ReAct agent nodes with tool access
+    function_node.py    Execute arbitrary Python functions
+    loop_node.py        Iterative processing
+    conditional_node.py Conditional execution paths
+  macros/       Reusable pipeline templates
+    reasoning_agent.py    Multi-step reasoning macro
+    conversation_agent.py Conversational agent macro
+  prompts/      Prompt templates
+    tool_prompts.py       Tool calling format prompts
+    error_correction.py   Error correction prompts
+  lib/          System libraries (HexDAGLib subclasses)
+    process_registry.py   Track pipeline runs (like ps)
+    entity_state.py       Declarative state machines for business entities
+    scheduler.py          Delayed/recurring pipeline execution
+    database_tools.py     Agent-callable SQL query tools
 ```
 
-**Benefits**:
-- **Testability**: Easy to test with mock adapters
-- **Flexibility**: Swap implementations without changing business logic
-- **Maintainability**: Clear separation of concerns
-- **Vendor Independence**: Not locked to specific service providers
+---
 
-### 6. Event System
+## Drivers
 
-**Purpose**: Comprehensive observability through event-driven architecture.
+Drivers are low-level infrastructure that the orchestrator needs internally. Unlike
+adapters (which users swap regularly -- OpenAI today, Anthropic tomorrow), drivers are
+infrastructure that rarely changes.
 
-**Event Flow**:
+Each driver implements a kernel Protocol:
+
+| Driver | Directory | Implements | Purpose |
+|--------|-----------|-----------|---------|
+| LocalExecutor | `drivers/executors/` | `ExecutorPort` | Execute nodes via asyncio in the local process |
+| LocalObserverManager | `drivers/observer_manager/` | `ObserverManagerPort` | Route events to registered observers |
+| LocalPipelineSpawner | `drivers/pipeline_spawner/` | `PipelineSpawner` | Fork sub-pipeline runs in the local process |
+
+Users swap adapters (OpenAI <-> Anthropic), not drivers. Drivers are the plumbing.
+
+---
+
+## API Layer
+
+The API layer exposes hexDAG functionality to external consumers. Both the MCP server
+and Studio REST API consume the same implementation functions.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                  Event System Architecture                    │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  Orchestrator Execution                                       │
-│         │                                                     │
-│         │ emit_event()                                        │
-│         ▼                                                     │
-│  ┌─────────────────────────────────────────┐                 │
-│  │      ObserverManagerPort                │                 │
-│  │  (Event Bus / Pub-Sub System)           │                 │
-│  ├─────────────────────────────────────────┤                 │
-│  │  • Event Queue                          │                 │
-│  │  • Observer Registry                    │                 │
-│  │  • Async Event Distribution             │                 │
-│  └─────────┬───────────────────────────────┘                 │
-│            │                                                  │
-│            │ notify_observers()                               │
-│            │                                                  │
-│  ┌─────────┴──────────┬──────────┬──────────┬─────────┐      │
-│  ▼                    ▼          ▼          ▼         ▼      │
-│  ┌─────────┐   ┌──────────┐  ┌───────┐  ┌────────┐  ┌────┐  │
-│  │ Memory  │   │ Logging  │  │Metrics│  │ Custom │  │... │  │
-│  │Observer │   │Observer  │  │Observer  │Observer │  │    │  │
-│  └─────────┘   └──────────┘  └───────┘  └────────┘  └────┘  │
-│      │              │            │           │                │
-│      ▼              ▼            ▼           ▼                │
-│  Store in     Write to     Track perf    Custom              │
-│  Memory       Logs         metrics        logic              │
-│  Port         (JSON)       (Prometheus)                       │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
+hexdag/api/
+  components.py      Component listing and schema generation
+  validation.py      Pipeline YAML validation
+  execution.py       Pipeline execution (build + run)
+  pipeline.py        Pipeline CRUD operations
+  documentation.py   MCP guide content generation
+  export.py          Pipeline export (JSON, Python code)
+  processes.py       System library tools (ProcessRegistry, EntityState, Scheduler)
 ```
 
-**Event Types**:
+---
+
+## Config and Discovery
+
+How the framework bootstraps and discovers components:
+
+### 1. Default Config
+
+`get_default_config()` returns a hardcoded list of built-in modules:
 
 ```python
-# Pipeline-level events
-PipelineStarted(pipeline_id, graph, input_data)
-PipelineCompleted(pipeline_id, results, duration)
-PipelineFailed(pipeline_id, error)
-PipelineCancelled(pipeline_id)
-
-# Wave-level events
-WaveStarted(wave_index, node_names)
-WaveCompleted(wave_index, results, duration)
-
-# Node-level events
-NodeStarted(node_name, wave_index, inputs)
-NodeCompleted(node_name, output, duration)
-NodeFailed(node_name, error, traceback)
-
-# Validation events
-ValidationError(node_name, error_details)
+modules=[
+    "hexdag.kernel.ports",
+    "hexdag.stdlib.nodes",
+    "hexdag.stdlib.adapters.mock",
+    "hexdag.drivers.executors",
+    "hexdag.drivers.observer_manager",
+    "hexdag.drivers.pipeline_spawner",
+    "hexdag.kernel.domain.agent_tools",
+]
 ```
+
+### 2. User Config
+
+Users add their own modules via `hexdag.toml` or `pyproject.toml`:
+
+```toml
+[tool.hexdag]
+modules = ["myapp.nodes", "myapp.adapters"]
+```
+
+### 3. Plugin Auto-Discovery
+
+Any installed package under the `hexdag_plugins` namespace is auto-discovered:
+
+```python
+# In your package's pyproject.toml:
+[project.entry-points."hexdag_plugins"]
+my_plugin = "my_plugin_package"
+```
+
+### 4. Module Resolution
+
+`resolver.resolve("hexdag.stdlib.nodes.LLMNode")` maps a module path string to the
+actual Python class. Used by the pipeline builder to instantiate components from YAML.
 
 ---
 
 ## Execution Flow
 
-### Complete Request Flow
-
 ```
-┌──────────────────────────────────────────────────────────────┐
-│         Complete Request Flow (YAML to Results)               │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  1. User provides YAML file                                   │
-│     ↓                                                         │
-│  2. YamlPipelineBuilder parses and validates                  │
-│     ├─ Validate schema                                        │
-│     ├─ Resolve components from registry                       │
-│     └─ Build DirectedGraph                                    │
-│     ↓                                                         │
-│  3. Create Orchestrator with PipelineConfig                   │
-│     ├─ Initialize ports (LLM, Memory, etc)                    │
-│     ├─ Setup event system                                     │
-│     └─ Initialize policies                                    │
-│     ↓                                                         │
-│  4. Call orchestrator.run(graph, input_data)                  │
-│     │                                                         │
-│     ├─ Execute pre-DAG hooks                                  │
-│     │  └─ Can modify input or abort                           │
-│     │                                                         │
-│     ├─ For each wave (topological order):                     │
-│     │  │                                                      │
-│     │  ├─ Emit WaveStarted                                    │
-│     │  │                                                      │
-│     │  ├─ For each node in wave (parallel):                   │
-│     │  │  │                                                   │
-│     │  │  ├─ Resolve inputs from dependencies                 │
-│     │  │  ├─ Skip propagation (all deps skipped → skip)       │
-│     │  │  ├─ Evaluate `when` clause (if present)              │
-│     │  │  │  └─ If false → Emit NodeSkipped, store skip       │
-│     │  │  ├─ Auto-skip if upstream deps all skipped           │
-│     │  │  │  └─ Emit NodeSkipped, propagate skip marker       │
-│     │  │  ├─ Evaluate policies                                │
-│     │  │  ├─ Emit NodeStarted                                 │
-│     │  │  ├─ Validate inputs (Pydantic)                       │
-│     │  │  ├─ Execute node function                            │
-│     │  │  │  └─ May call ports (LLM, Memory, etc)             │
-│     │  │  ├─ Validate outputs (Pydantic)                      │
-│     │  │  ├─ Store results                                    │
-│     │  │  └─ Emit NodeCompleted                               │
-│     │  │                                                      │
-│     │  ├─ Wait for all nodes: asyncio.gather()                │
-│     │  └─ Emit WaveCompleted                                  │
-│     │                                                         │
-│     ├─ Execute post-DAG hooks                                 │
-│     │  └─ Can modify results                                  │
-│     │                                                         │
-│     └─ Cleanup resources                                      │
-│        └─ Call adapter.aclose()                               │
-│     ↓                                                         │
-│  5. Return execution results                                  │
-│     └─ Results dictionary with all node outputs               │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
+YAML file
+  |
+  v
+PipelineBuilder
+  |-- Preprocessing (include, env vars, Jinja2 templates)
+  |-- Entity plugins (macros, nodes)
+  |-- Component instantiation via resolver
+  v
+DirectedGraph + PipelineConfig
+  |
+  v
+Orchestrator
+  |-- Initialize ports (adapters)
+  |-- Pre-DAG hooks
+  |-- Wave execution (topological order)
+  |   |-- For each wave: execute nodes in parallel (asyncio.gather)
+  |   |-- InputMapper resolves {{dep.field}} references
+  |   |-- NodeExecutor handles retry, validation, timeout
+  |   |-- Events emitted at each stage
+  |-- Post-DAG hooks
+  |-- Cleanup (adapter.aclose())
+  v
+Results (dict of node_name -> output)
 ```
 
-### When Clauses & Skip Propagation
+### Key Execution Concepts
 
-Nodes can be conditionally skipped using `when` clauses, and skip status propagates
-automatically through dependency chains.
+**Waves**: Nodes are grouped into waves based on topological sort. All nodes in a wave
+can execute in parallel because their dependencies are in earlier waves.
 
-**When Clause:** A node with a `when` expression is evaluated before execution. If the
-expression evaluates to `False`, the node is skipped and its result is stored as
-`{"_skipped": True, "reason": "..."}`. A `NodeSkipped` event is emitted.
+**Skip Propagation**: A node with `when: "expr"` evaluating to false is skipped. When
+ALL dependencies of a node were skipped, the downstream node auto-skips too.
 
-```yaml
-- kind: llm_node
-  metadata:
-    name: send_email
-  spec:
-    template: "Draft email for {{input}}"
-    when: "escalation_required == True"
-  dependencies: [classifier]
-```
-
-**Skip Propagation:** When ALL dependencies of a node were skipped, the downstream node
-is automatically skipped as well (no explicit `when` clause needed). The result includes
-`{"_skipped": True, "_upstream_skipped": True}` so downstream nodes can distinguish
-between a direct skip (from a `when` clause) and a propagated skip.
-
-```
-  A (when: "False") ──→ B ──→ C
-  │                     │     │
-  skipped               auto- auto-
-  (when clause)         skip  skip
-                        (_upstream_skipped)
-```
-
-**Partial Skip:** If a node depends on multiple upstream nodes and only some are skipped,
-the node still executes normally — it receives the non-skipped results in its input dict.
-Only when ALL dependencies are skipped does the auto-skip trigger.
-
-```
-  A (skipped) ─┐
-               ├──→ C (runs — receives B's result)
-  B (runs)   ─┘
-```
-
-**Implementation Details:**
-- `ExecutionCoordinator.prepare_node_input()` checks for all-deps-skipped
-- `NodeExecutor.execute_node()` checks for `_upstream_skipped` flag before `when` evaluation
-- `_apply_input_mapping()` defensively handles non-string values from malformed YAML/`!include`
-
----
-
-## Data Flow
-
-### Dependency Resolution
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│            Dependency Resolution & Data Flow                  │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  Example YAML:                                                │
-│  nodes:                                                       │
-│    - type: llm                                                │
-│      id: analyzer                                             │
-│      params:                                                  │
-│        prompt_template: "Analyze: {{input.text}}"            │
-│                                                               │
-│    - type: function                                           │
-│      id: processor                                            │
-│      params:                                                  │
-│        data: "{{analyzer.result}}"                           │
-│      depends_on: [analyzer]                                   │
-│                                                               │
-│  ┌──────────────────────────────────────────────────┐        │
-│  │  Execution Flow:                                 │        │
-│  ├──────────────────────────────────────────────────┤        │
-│  │                                                   │        │
-│  │  Wave 0: [analyzer]                              │        │
-│  │  ┌────────────────────────────────────┐          │        │
-│  │  │  analyzer node                     │          │        │
-│  │  │  1. InputMapper resolves:          │          │        │
-│  │  │     {{input.text}} → from input    │          │        │
-│  │  │  2. Execute LLM call               │          │        │
-│  │  │  3. Store result: {"result": "..."} │         │        │
-│  │  └────────────────────────────────────┘          │        │
-│  │           ↓                                       │        │
-│  │  Wave 1: [processor]                             │        │
-│  │  ┌────────────────────────────────────┐          │        │
-│  │  │  processor node                    │          │        │
-│  │  │  1. InputMapper resolves:          │          │        │
-│  │  │     {{analyzer.result}}            │          │        │
-│  │  │     → Look up "analyzer" in results│          │        │
-│  │  │     → Extract "result" field       │          │        │
-│  │  │     → Pass to processor            │          │        │
-│  │  │  2. Execute function               │          │        │
-│  │  │  3. Store result                   │          │        │
-│  │  └────────────────────────────────────┘          │        │
-│  │                                                   │        │
-│  └──────────────────────────────────────────────────┘        │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Template Resolution
-
-**InputMapper** resolves template expressions in this order:
-
-1. **Dependency References**: `{{dep_name.field}}` → Look up previous node results
-2. **Input Data**: `{{input.field}}` → Look up original input data
-3. **Context Variables**: `{{ctx.pipeline_id}}` → Execution context metadata
-4. **Environment Variables**: `${ENV_VAR}` → System environment variables
-
----
-
-## Component Interactions
-
-### Registry → Builder → Orchestrator Flow
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│        Component Interaction Sequence                         │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  System Startup:                                              │
-│  1. Bootstrap Registry                                        │
-│     ├─ Load manifest.toml                                     │
-│     ├─ Import core modules                                    │
-│     ├─ Import plugin modules                                  │
-│     └─ Register all components                                │
-│                                                               │
-│  Pipeline Execution:                                          │
-│  2. YamlPipelineBuilder.build_from_yaml_file()                │
-│     ├─ Parse YAML                                             │
-│     ├─ For each node:                                         │
-│     │  ├─ resolve(node_type) → Get factory class              │
-│     │  ├─ factory(**params) → Create NodeSpec                 │
-│     │  └─ graph.add(node_spec)                                │
-│     ├─ graph.validate()                                       │
-│     └─ Return (graph, config)                                 │
-│                                                               │
-│  3. Create Orchestrator                                       │
-│     ├─ For each port in config.ports:                         │
-│     │  ├─ resolve(adapter_path) → Get adapter class           │
-│     │  ├─ adapter(**params) → Create instance                 │
-│     │  └─ Store in ports dict                                 │
-│     └─ Setup event system                                     │
-│                                                               │
-│  4. Orchestrator.run(graph, input_data)                       │
-│     ├─ Initialize ExecutionContext                            │
-│     │  ├─ ctx.ports = ports                                   │
-│     │  ├─ ctx.results = {}                                    │
-│     │  └─ ctx.event_manager = event_manager                   │
-│     ├─ For each wave:                                         │
-│     │  └─ For each node:                                      │
-│     │     ├─ node.fn(ctx, **inputs)                           │
-│     │     │  └─ Can access ctx.ports.llm.aresponse()          │
-│     │     └─ Store result in ctx.results                      │
-│     └─ Return ctx.results                                     │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Lifecycle Management
-
-### Adapter Lifecycle
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                  Adapter Lifecycle Hooks                      │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  class PostgresAdapter(Database):                             │
-│  # Implements Database port interface                                       │
-│      def __init__(self, connection_string: str):              │
-│          self.connection_string = connection_string           │
-│          self.pool = None  # Initialize later                 │
-│                                                               │
-│      async def asetup(self) -> None:                          │
-│          """Called once when orchestrator starts."""          │
-│          self.pool = await asyncpg.create_pool(               │
-│              self.connection_string                           │
-│          )                                                    │
-│          logger.info("Database pool created")                 │
-│                                                               │
-│      async def aclose(self) -> None:                          │
-│          """Called once when orchestrator finishes."""        │
-│          if self.pool:                                        │
-│              await self.pool.close()                          │
-│              logger.info("Database pool closed")              │
-│                                                               │
-│      async def aexecute_query(self, sql: str):                │
-│          """Business logic methods."""                        │
-│          async with self.pool.acquire() as conn:              │
-│              return await conn.fetch(sql)                     │
-│                                                               │
-│  ┌──────────────────────────────────────────────────┐        │
-│  │  Orchestrator manages lifecycle:                 │        │
-│  ├──────────────────────────────────────────────────┤        │
-│  │                                                   │        │
-│  │  async with orchestrator.run(graph, data):       │        │
-│  │      # 1. Call adapter.asetup()                  │        │
-│  │      # 2. Execute graph                          │        │
-│  │      # 3. Call adapter.aclose()                  │        │
-│  │                                                   │        │
-│  └──────────────────────────────────────────────────┘        │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Pipeline Lifecycle
-
-```
-Pipeline Startup:
-  1. Parse YAML → DirectedGraph
-  2. Initialize Ports (adapters)
-  3. Call adapter.asetup() for all adapters
-  4. Setup event system
-  5. Initialize policies
-
-Pipeline Execution:
-  6. Execute pre-DAG hooks
-  7. For each wave:
-     - Execute nodes in parallel
-     - Collect results
-  8. Execute post-DAG hooks
-
-Pipeline Shutdown:
-  9. Call adapter.aclose() for all adapters
-  10. Cleanup resources
-  11. Return results
-```
+**Events**: Every lifecycle stage emits events (PipelineStarted, WaveStarted,
+NodeStarted, NodeCompleted, NodeFailed, NodeSkipped, etc.) that observers receive.
 
 ---
 
 ## Extension Points
 
-hexDAG provides multiple extension points for customization:
-
-### 1. Custom Nodes
-
-Extend `BaseNodeFactory` and reference by full module path:
+### Custom Node
 
 ```python
-from hexdag.core.domain.dag import NodeSpec
-from hexdag.builtin.nodes import BaseNodeFactory
+from hexdag.stdlib.nodes import BaseNodeFactory
+from hexdag.kernel.domain.dag import NodeSpec
 
-class CustomProcessorNode(BaseNodeFactory):
-    def __call__(self, name: str, config: dict, **kwargs):
-        async def process(ctx: ExecutionContext, **inputs):
-            # Custom processing logic
-            result = await custom_processing(inputs, config)
-            return result
-
-        return NodeSpec(
-            name=name,
-            fn=process,
-            deps=kwargs.get("depends_on", frozenset()),
-            params=config
-        )
+class MyNode(BaseNodeFactory):
+    def __call__(self, name: str, **kwargs) -> NodeSpec:
+        async def process(ctx, **inputs):
+            return {"result": "processed"}
+        return NodeSpec(name=name, fn=process)
 ```
 
-Use in YAML: `kind: myapp.nodes.CustomProcessorNode`
+Use in YAML: `kind: myapp.nodes.MyNode`
 
-### 2. Custom Adapters
+### Custom Adapter
 
-Implement the port interface (e.g., `LLM`, `Memory`, `Database`):
+Implement a kernel Protocol:
 
 ```python
-class CustomCacheAdapter:
-    def __init__(self, api_key: str | None = None, ttl: int = 3600):
-        self.api_key = api_key or os.environ.get("CACHE_API_KEY")
-        self.ttl = ttl
+from hexdag.kernel.ports.llm import SupportsLLM
 
-    async def asetup(self):
-        # Initialize connection
-        pass
+class MyLLMAdapter:
+    def __init__(self, api_key: str, model: str = "gpt-4"):
+        self.api_key = api_key
+        self.model = model
 
-    async def aget(self, key: str):
-        # Custom get logic
-        pass
-
-    async def aclose(self):
-        # Cleanup
-        pass
+    async def aresponse(self, messages: list[dict], **kwargs) -> str:
+        # Your implementation
+        ...
 ```
 
-Use in YAML: `adapter: myapp.adapters.CustomCacheAdapter`
+Use in YAML: `adapter: myapp.adapters.MyLLMAdapter`
 
-### 3. Custom Tools
-
-Tools are plain functions with type hints and docstrings:
+### Custom Lib
 
 ```python
-def web_search(query: str, limit: int = 10) -> list[dict]:
-    """Search the web for information.
+from hexdag.kernel.lib_base import HexDAGLib
 
-    Args:
-        query: Search query
-        limit: Maximum results to return
+class MyLib(HexDAGLib):
+    """Public async a* methods auto-become agent tools."""
 
-    Returns:
-        List of search results
-    """
-    # Custom search logic
-    return search_results
+    async def ado_something(self, query: str) -> str:
+        """This becomes an agent-callable tool."""
+        return f"Result for {query}"
 ```
 
-Use in YAML: `tools: [myapp.tools.web_search]`
-
-### 4. Custom Observers
-
-Implement the observer interface:
+### Custom Observer
 
 ```python
-from hexdag.core.orchestration.events import NodeCompleted
+from hexdag.kernel.orchestration.events import NodeCompleted
 
-class PerformanceMonitor:
+class MyObserver:
     async def on_event(self, event):
         if isinstance(event, NodeCompleted):
-            # Track performance metrics
-            duration = event.duration
-            node_name = event.node_name
-            await metrics_client.record(node_name, duration)
+            print(f"Node {event.node_name} completed in {event.duration_ms}ms")
 ```
 
-### 5. Custom Hooks
+### Custom Tool
+
+Plain functions with type hints and docstrings:
 
 ```python
-# Pre-DAG hook to validate input
-async def validate_input_hook(context):
-    if not context.input_data.get("required_field"):
-        raise ValueError("Missing required field")
-    return context
-
-# Post-DAG hook to transform output
-async def transform_output_hook(context):
-    results = context.results
-    # Transform results
-    context.results = transformed_results
-    return context
-
-# Register hooks
-orchestrator = Orchestrator(
-    pre_dag_hooks=[validate_input_hook],
-    post_dag_hooks=[transform_output_hook]
-)
+def search_database(query: str, limit: int = 10) -> list[dict]:
+    """Search the database for matching records."""
+    return results
 ```
 
 ---
 
-## Summary
+## Kernel Extensions Roadmap
 
-hexDAG's architecture provides:
+The following kernel-level primitives are planned. Each follows the uniform entity
+pattern: kernel defines Protocol, stdlib ships default implementation, users write
+their own.
 
-1. **Clean Separation**: Hexagonal architecture isolates business logic
-2. **Type Safety**: Pydantic validation at every layer
-3. **Observability**: Comprehensive event system for monitoring
-4. **Flexibility**: Multiple extension points for customization
-5. **Performance**: Async-first design with parallel execution
-6. **Maintainability**: Clear component boundaries and responsibilities
-7. **Declarative**: YAML-first approach for low-code development
-8. **Testability**: Mock adapters and clear interfaces
+### Planned Ports (kernel/ports/)
 
-The system is designed for **enterprise-grade AI agent orchestration** with production-ready patterns for error handling, monitoring, and extensibility.
+| Port | Purpose |
+|------|---------|
+| **EventBus** | Cross-pipeline pub/sub signals. Pipelines emit/subscribe to named events across runs. Enables reactive multi-pipeline coordination. |
+| **LockPort** | Distributed locking/coordination. Prevents concurrent pipeline runs from conflicting on shared resources. |
+| **GovernancePort** | Authorization and audit. Controls who can spawn pipelines, transition entity states, access data. |
+| **ArtifactStore** | Pipeline artifact storage (extends FileStoragePort). Semantic layer for pipeline inputs/outputs/intermediate results. |
+
+### Planned Libs (stdlib/lib/)
+
+| Lib | Purpose |
+|-----|---------|
+| **CentralAgent** | Meta-orchestrator ("CPU"). LLM-powered task assignment across multiple pipelines. Uses PipelineSpawner + ProcessRegistry + LLM port. |
+
+### Planned Kernel Internals
+
+| Component | Purpose |
+|-----------|---------|
+| **RunContext** | Rename ExecutionContext for clarity. Carries run metadata, ports, results through the execution stack. |
+| **NodeHook / PortHook** | Per-node lifecycle hooks (extends existing hooks.py). Before/after execution, before/after port calls. |
+
+### Existing vs Planned
+
+```
+kernel/ports/ (existing)              kernel/ports/ (planned)
+  LLM                                   EventBus
+  Memory / DataStore                     LockPort
+  Database                               GovernancePort
+  ToolRouter                             ArtifactStore
+  ObserverManager
+  Executor
+  PipelineSpawner
+  FileStorage
+  Secret
+  VectorSearch
+
+stdlib/lib/ (existing)               stdlib/lib/ (planned)
+  ProcessRegistry                       CentralAgent
+  EntityState
+  Scheduler
+  DatabaseTools
+```
 
 ---
 
 **See Also**:
-- [Core Concepts](concepts.md) - Understanding hexDAG fundamentals
-- [Implementation Guide](IMPLEMENTATION_GUIDE.md) - Building production workflows
-- [Plugin System](PLUGIN_SYSTEM.md) - Extending hexDAG
-- [Philosophy](PHILOSOPHY.md) - Design principles and comparisons
+- [Hexagonal Architecture](HEXAGONAL_ARCHITECTURE.md) -- Why ports and adapters
+- [Plugin System](PLUGIN_SYSTEM.md) -- Extending hexDAG with plugins
+- [Architecture Roadmap](../ARCHITECTURE_ROADMAP.md) -- Detailed roadmap for planned extensions

@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hexdag.core.ports.llm import Message
+from hexdag.kernel.ports.llm import Message
 
 from hexdag_plugins.azure.adapters.openai import AzureOpenAIAdapter
 
@@ -53,7 +53,7 @@ async def test_aresponse_success(azure_adapter):
 @pytest.mark.asyncio
 async def test_aresponse_with_tools(azure_adapter):
     """Test response with tool calling."""
-    from hexdag.core.ports.llm import LLMResponse
+    from hexdag.kernel.ports.llm import LLMResponse
 
     # Mock tool call response
     mock_tool_call = MagicMock()

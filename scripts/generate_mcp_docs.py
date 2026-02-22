@@ -22,12 +22,12 @@ from typing import TYPE_CHECKING
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hexdag.core.docs.extractors import DocExtractor
-from hexdag.core.docs.generators import GuideGenerator
-from hexdag.core.logging import get_logger
+from hexdag.docs.extractors import DocExtractor
+from hexdag.docs.generators import GuideGenerator
+from hexdag.kernel.logging import get_logger
 
 if TYPE_CHECKING:
-    from hexdag.core.docs.models import AdapterDoc, NodeDoc, ToolDoc
+    from hexdag.docs.models import AdapterDoc, NodeDoc, ToolDoc
 
 logger = get_logger(__name__)
 
@@ -46,23 +46,22 @@ def collect_adapters() -> list[AdapterDoc]:
 
     # Adapter modules to scan
     adapter_modules = [
-        "hexdag.builtin.adapters.openai.openai_adapter",
-        "hexdag.builtin.adapters.anthropic.anthropic_adapter",
-        "hexdag.builtin.adapters.memory.in_memory_memory",
-        "hexdag.builtin.adapters.memory.sqlite_memory_adapter",
-        "hexdag.builtin.adapters.memory.file_memory_adapter",
-        "hexdag.builtin.adapters.memory.session_memory",
-        "hexdag.builtin.adapters.memory.state_memory",
-        "hexdag.builtin.adapters.database.sqlite.sqlite_adapter",
-        "hexdag.builtin.adapters.database.csv.csv_adapter",
-        "hexdag.builtin.adapters.mock.mock_llm",
-        "hexdag.builtin.adapters.mock.mock_database",
-        "hexdag.builtin.adapters.mock.mock_tool_router",
-        "hexdag.builtin.adapters.mock.mock_embedding",
-        "hexdag.builtin.adapters.secret.local_secret_adapter",
-        "hexdag.builtin.adapters.local.local_observer_manager",
-        "hexdag.builtin.adapters.local.local_policy_manager",
-        "hexdag.builtin.adapters.unified_tool_router",
+        "hexdag.stdlib.adapters.openai.openai_adapter",
+        "hexdag.stdlib.adapters.anthropic.anthropic_adapter",
+        "hexdag.stdlib.adapters.memory.in_memory_memory",
+        "hexdag.stdlib.adapters.memory.sqlite_memory_adapter",
+        "hexdag.stdlib.adapters.memory.file_memory_adapter",
+        "hexdag.stdlib.adapters.memory.session_memory",
+        "hexdag.stdlib.adapters.memory.state_memory",
+        "hexdag.stdlib.adapters.database.sqlite.sqlite_adapter",
+        "hexdag.stdlib.adapters.database.csv.csv_adapter",
+        "hexdag.stdlib.adapters.mock.mock_llm",
+        "hexdag.stdlib.adapters.mock.mock_database",
+        "hexdag.stdlib.adapters.mock.mock_embedding",
+        "hexdag.stdlib.adapters.secret.local_secret_adapter",
+        "hexdag.drivers.observer_manager.local",
+        "hexdag.stdlib.adapters.local.local_policy_manager",
+        "hexdag.stdlib.adapters.unified_tool_router",
     ]
 
     for module_path in adapter_modules:
@@ -110,7 +109,7 @@ def collect_nodes() -> list[NodeDoc]:
     nodes = []
 
     try:
-        from hexdag.builtin import nodes as builtin_nodes
+        from hexdag.stdlib import nodes as builtin_nodes
 
         for name in dir(builtin_nodes):
             if name.startswith("_"):
@@ -152,7 +151,7 @@ def collect_tools() -> list[ToolDoc]:
     tools = []
 
     try:
-        from hexdag.core.domain import agent_tools
+        from hexdag.kernel.domain import agent_tools
 
         for name in dir(agent_tools):
             if name.startswith("_"):
@@ -184,24 +183,18 @@ def collect_tools() -> list[ToolDoc]:
     except ImportError as e:
         logger.warning(f"Could not import builtin tools: {e}")
 
-    # Also try database tools
+    # Also try database tools (HexDAGLib-based)
     try:
-        from hexdag.builtin.tools import database_tools
+        from hexdag.stdlib.lib.database_tools import DatabaseTools
 
-        for name in dir(database_tools):
-            if name.startswith("_"):
-                continue
-
-            obj = getattr(database_tools, name, None)
-            if obj is None or not callable(obj) or isinstance(obj, type):
-                continue
-
+        db_tools = DatabaseTools.__new__(DatabaseTools)
+        for method_name, method in db_tools.get_tools().items():
             try:
-                tool_doc = DocExtractor.extract_tool_doc(obj)
+                tool_doc = DocExtractor.extract_tool_doc(method)
                 tools.append(tool_doc)
-                logger.debug(f"Extracted tool: {name}")
+                logger.debug(f"Extracted tool: {method_name}")
             except Exception as e:
-                logger.warning(f"Failed to extract tool {name}: {e}")
+                logger.warning(f"Failed to extract tool {method_name}: {e}")
 
     except ImportError:
         pass  # database_tools may not exist

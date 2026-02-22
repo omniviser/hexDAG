@@ -115,7 +115,7 @@ class {class_name}:
         pass
 
     # TODO: Implement the {port} port interface methods
-    # Check hexdag/core/ports/{port}.py for the interface definition
+    # Check hexdag/kernel/ports/{port}.py for the interface definition
 
     def __repr__(self) -> str:
         """String representation."""
@@ -263,7 +263,8 @@ SOFTWARE.
     table = Table(title="Next Steps", show_header=False, box=None)
     table.add_row("1.", f"Edit [cyan]{plugin_path / f'{name}.py'}[/cyan] to implement your adapter")
     table.add_row(
-        "2.", f"Update the port interface methods based on [cyan]hexdag/core/ports/{port}.py[/cyan]"
+        "2.",
+        f"Update port interface methods based on [cyan]hexdag/kernel/ports/{port}.py[/cyan]",
     )
     table.add_row("3.", f"Add dependencies to [cyan]{plugin_path / 'pyproject.toml'}[/cyan]")
     table.add_row("4.", f"Run [yellow]hexdag plugin lint {name}[/yellow] to check your code")

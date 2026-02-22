@@ -14,10 +14,11 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hexdag.builtin.adapters.mock import MockLLM, MockToolRouter
-from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.mcp_server import build_yaml_pipeline_interactive
+from hexdag.stdlib.adapters.mock import MockLLM
 
 
 def test_mcp_builds_with_mock_adapters():
@@ -54,8 +55,8 @@ def test_mcp_builds_with_mock_adapters():
             },
         },
         "tool_router": {
-            "adapter": "plugin:mock_tool_router",
-            "config": {"available_tools": ["search", "calculate"]},
+            "adapter": "hexdag.kernel.ports.tool_router.ToolRouter",
+            "config": {"tools": {}},
         },
     }
 
@@ -73,7 +74,7 @@ def test_mcp_builds_with_mock_adapters():
 
     # Verify it contains mock adapters
     assert "plugin:mock_llm" in yaml_output
-    assert "plugin:mock_tool_router" in yaml_output
+    assert "hexdag.kernel.ports.tool_router.ToolRouter" in yaml_output
 
     print("\n✅ Test 1 passed: MCP successfully built pipeline with mock adapters")
     return yaml_output
@@ -152,9 +153,9 @@ spec:
           - "I'll search for quantum computing. INVOKE_TOOL: search(query='quantum computing breakthroughs')"
           - "Based on the search results, here are the latest quantum computing breakthroughs: IBM announced a 1000-qubit processor, and Google achieved error correction milestones."
     tool_router:
-      adapter: plugin:mock_tool_router
+      adapter: hexdag.kernel.ports.tool_router.ToolRouter
       config:
-        available_tools: [search, calculate]
+        tools: {}
   nodes:
     - kind: macro_invocation
       metadata:
@@ -190,7 +191,18 @@ spec:
         ]
     )
 
-    mock_tool_router = MockToolRouter(available_tools=["search", "calculate"])
+    tool_router = ToolRouter(
+        tools={
+            "search": lambda query="", **kw: {
+                "results": [f"Mock result for: {query}"],
+                "status": "success",
+            },
+            "calculate": lambda expression="", **kw: {
+                "result": str(expression),
+                "status": "success",
+            },
+        }
+    )
 
     # Run the pipeline
     orchestrator = Orchestrator()
@@ -203,7 +215,7 @@ spec:
             graph,
             initial_input={"topic": "quantum computing"},
             llm=mock_llm,
-            tool_router=mock_tool_router,
+            tool_router=tool_router,
         )
 
         print("\n✅ Agent execution completed!")
@@ -227,12 +239,12 @@ spec:
         # Verify mock was called
         print("\n📈 Mock Statistics:")
         print(f"  LLM calls: {mock_llm.call_count}")
-        print(f"  Tool calls: {len(mock_tool_router.call_history)}")
+        print(f"  Tool calls: {len(tool_router.call_history)}")
 
-        if mock_tool_router.call_history:
+        if tool_router.call_history:
             print("\n🔧 Tool Calls Made:")
-            for i, call in enumerate(mock_tool_router.call_history, 1):
-                print(f"  {i}. {call['tool']}({call['params']})")
+            for i, call in enumerate(tool_router.call_history, 1):
+                print(f"  {i}. {call['tool_name']}({call['params']})")
 
         print("\n✅ Test 3 passed: Agent ran successfully with mock adapters!")
         return True
@@ -280,33 +292,30 @@ def test_mock_with_tavily_style_responses():
     print(json.dumps(mock_search_responses, indent=2))
     print("-" * 80)
 
-    # Create mock tool router that returns these results
-    class TavilyMockToolRouter(MockToolRouter):
-        async def acall_tool(self, tool_name: str, params: dict) -> dict:
-            if tool_name == "tavily_search":
-                query = params.get("query", "")
-                return {
-                    "query": query,
-                    "answer": f"Mock AI-generated answer for: {query}",
-                    "results": [
-                        {
-                            "title": f"Result 1 for {query}",
-                            "url": "https://example.com/1",
-                            "content": f"Detailed content about {query}...",
-                            "score": 0.95,
-                        },
-                        {
-                            "title": f"Result 2 for {query}",
-                            "url": "https://example.com/2",
-                            "content": f"More information on {query}...",
-                            "score": 0.90,
-                        },
-                    ],
-                    "response_time": 0.5,
-                }
-            return await super().acall_tool(tool_name, params)
+    # Create a ToolRouter with a mock Tavily search function
+    def mock_tavily_search(query: str = "", **kw) -> dict:
+        """Mock Tavily search returning realistic results."""
+        return {
+            "query": query,
+            "answer": f"Mock AI-generated answer for: {query}",
+            "results": [
+                {
+                    "title": f"Result 1 for {query}",
+                    "url": "https://example.com/1",
+                    "content": f"Detailed content about {query}...",
+                    "score": 0.95,
+                },
+                {
+                    "title": f"Result 2 for {query}",
+                    "url": "https://example.com/2",
+                    "content": f"More information on {query}...",
+                    "score": 0.90,
+                },
+            ],
+            "response_time": 0.5,
+        }
 
-    router = TavilyMockToolRouter(available_tools=["tavily_search"])
+    router = ToolRouter(tools={"tavily_search": mock_tavily_search})
 
     print("\n✅ Test 4 passed: Can create Tavily-style mock responses")
     return router

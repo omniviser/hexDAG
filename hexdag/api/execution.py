@@ -1,7 +1,7 @@
 """Pipeline execution API.
 
 Provides unified functions for executing hexDAG pipelines.
-Delegates to :class:`~hexdag.core.pipeline_runner.PipelineRunner` for the
+Delegates to :class:`~hexdag.kernel.pipeline_runner.PipelineRunner` for the
 heavy lifting (YAML parsing, port instantiation, secret loading, execution).
 """
 
@@ -78,7 +78,7 @@ async def execute(
     try:
         # Use PipelineRunner for non-streaming execution when no per-node ports
         if node_ports is None:
-            from hexdag.core.pipeline_runner import PipelineRunner
+            from hexdag.kernel.pipeline_runner import PipelineRunner
 
             # If explicit ports provided, use them as overrides;
             # otherwise let PipelineRunner create mocks / use YAML config
@@ -185,7 +185,7 @@ def dry_run(yaml_content: str, inputs: dict[str, Any] | None = None) -> dict[str
     2
     """
     try:
-        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -218,21 +218,13 @@ def dry_run(yaml_content: str, inputs: dict[str, Any] | None = None) -> dict[str
         }
 
 
-_ADAPTER_ALIASES: dict[str, str] = {
-    "MockLLM": "hexdag.builtin.adapters.mock.MockLLM",
-    "InMemoryMemory": "hexdag.builtin.adapters.memory.InMemoryMemory",
-    "MockDatabaseAdapter": "hexdag.builtin.adapters.mock.MockDatabaseAdapter",
-    "MockToolRouter": "hexdag.builtin.adapters.mock.MockToolRouter",
-    "ToolRouter": "hexdag.core.ports.tool_router.ToolRouter",
-    "UnifiedToolRouter": "hexdag.core.ports.tool_router.ToolRouter",
-}
-
-
 def create_ports_from_config(port_config: dict[str, Any]) -> dict[str, Any]:
     """Create adapter instances from port configuration.
 
-    Accepts both short adapter names (``MockLLM``) and full module paths.
-    Always ensures ``llm`` and ``memory`` defaults are present.
+    Accepts adapter aliases (``MockLLM``, ``mock_llm``, ``llm:mock``)
+    and full module paths. Alias resolution is handled by the resolver
+    via ``ComponentInstantiator``. Always ensures ``llm`` and ``memory``
+    defaults are present.
 
     Parameters
     ----------
@@ -253,30 +245,22 @@ def create_ports_from_config(port_config: dict[str, Any]) -> dict[str, Any]:
     >>> "llm" in ports
     True
     """
-    from hexdag.core.pipeline_builder.component_instantiator import ComponentInstantiator
-
-    # Resolve short adapter names to full module paths
-    resolved_config: dict[str, dict[str, Any]] = {}
-    for port_name, spec in port_config.items():
-        adapter_name = spec.get("adapter", "")
-        if adapter_name in _ADAPTER_ALIASES:
-            spec = {**spec, "adapter": _ADAPTER_ALIASES[adapter_name]}
-        resolved_config[port_name] = spec
+    from hexdag.kernel.pipeline_builder.component_instantiator import ComponentInstantiator
 
     instantiator = ComponentInstantiator()
     try:
-        ports = instantiator.instantiate_ports(resolved_config)
+        ports = instantiator.instantiate_ports(port_config)
     except Exception:
         # Fallback to defaults on failure (backward-compatible behavior)
         ports = _create_default_ports()
 
     # Ensure we always have llm and memory defaults
     if "llm" not in ports:
-        from hexdag.builtin.adapters.mock import MockLLM
+        from hexdag.stdlib.adapters.mock import MockLLM
 
         ports["llm"] = MockLLM()
     if "memory" not in ports:
-        from hexdag.builtin.adapters.memory import InMemoryMemory
+        from hexdag.stdlib.adapters.memory import InMemoryMemory
 
         ports["memory"] = InMemoryMemory()
 
@@ -285,9 +269,9 @@ def create_ports_from_config(port_config: dict[str, Any]) -> dict[str, Any]:
 
 def _create_default_ports() -> dict[str, Any]:
     """Create default mock ports for execution."""
-    from hexdag.builtin.adapters.memory import InMemoryMemory
-    from hexdag.builtin.adapters.mock import MockLLM
-    from hexdag.core.ports.tool_router import ToolRouter
+    from hexdag.kernel.ports.tool_router import ToolRouter
+    from hexdag.stdlib.adapters.memory import InMemoryMemory
+    from hexdag.stdlib.adapters.mock import MockLLM
 
     return {
         "llm": MockLLM(),
@@ -308,9 +292,9 @@ async def _execute_with_node_ports(
     node_results: list[dict[str, Any]] = []
 
     try:
-        from hexdag.core.orchestration.models import PortConfig, PortsConfiguration
-        from hexdag.core.orchestration.orchestrator import Orchestrator
-        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+        from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
+        from hexdag.kernel.orchestration.orchestrator import Orchestrator
+        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -424,8 +408,8 @@ async def execute_streaming(
     start_time = time.perf_counter()
 
     try:
-        from hexdag.builtin.adapters.local import LocalObserverManager
-        from hexdag.core.orchestration.events import (
+        from hexdag.drivers.observer_manager import LocalObserverManager
+        from hexdag.kernel.orchestration.events import (
             NodeCompleted,
             NodeFailed,
             NodeStarted,
@@ -433,9 +417,9 @@ async def execute_streaming(
             WaveCompleted,
             WaveStarted,
         )
-        from hexdag.core.orchestration.models import PortConfig, PortsConfiguration
-        from hexdag.core.orchestration.orchestrator import Orchestrator
-        from hexdag.core.pipeline_builder import YamlPipelineBuilder
+        from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
+        from hexdag.kernel.orchestration.orchestrator import Orchestrator
+        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)

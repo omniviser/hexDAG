@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that duration measurement uses Timer, not inline time.time()/perf_counter().
 
-Enforces the M3 audit convention: use Timer from hexdag/core/utils/node_timer.py
+Enforces the M3 audit convention: use Timer from hexdag/kernel/utils/node_timer.py
 for performance timing. Only wall-clock data timestamps may use time.time().
 
 Usage:
@@ -20,10 +20,14 @@ from pathlib import Path
 # Files where time.time()/time.perf_counter() is legitimately needed
 ALLOWLIST: dict[str, set[str]] = {
     # Timer implementation itself
-    "hexdag/core/utils/node_timer.py": {"time.perf_counter", "time.time"},
+    "hexdag/kernel/utils/node_timer.py": {"time.perf_counter", "time.time"},
     # Wall-clock timestamps for data storage (not duration measurement)
-    "hexdag/builtin/adapters/memory/state_memory.py": {"time.time"},
-    "hexdag/builtin/adapters/memory/session_memory.py": {"time.time"},
+    "hexdag/stdlib/adapters/memory/state_memory.py": {"time.time"},
+    "hexdag/stdlib/adapters/memory/session_memory.py": {"time.time"},
+    # Libs use wall-clock timestamps for audit trails (not duration measurement)
+    "hexdag/stdlib/lib/entity_state.py": {"time.time"},
+    "hexdag/stdlib/lib/process_registry_observer.py": {"time.time"},
+    "hexdag/stdlib/lib/scheduler.py": {"time.time"},
 }
 
 # Pre-existing violations from before the M3 audit.
@@ -32,9 +36,9 @@ GRANDFATHERED: set[str] = {
     # Core
     "hexdag/api/execution.py",
     "hexdag/studio/server/routes/execute.py",
-    "hexdag/builtin/adapters/openai/openai_adapter.py",
-    "hexdag/adapters/executors/local_executor.py",
-    "hexdag/builtin/nodes/tool_call_node.py",
+    "hexdag/stdlib/adapters/openai/openai_adapter.py",
+    "hexdag/drivers/executors/local_executor.py",
+    "hexdag/stdlib/nodes/tool_call_node.py",
     # Plugins — pre-existing timer/timestamp usage
     "hexdag_plugins/azure/adapters/blob.py",
     "hexdag_plugins/azure/adapters/cosmos.py",
@@ -119,7 +123,7 @@ def check_file(
 
         msg = (
             f"  {relative_path}:{line}:{col}: {call_name}() — "
-            f"Use Timer from hexdag.core.utils.node_timer instead"
+            f"Use Timer from hexdag.kernel.utils.node_timer instead"
         )
 
         if is_grandfathered:

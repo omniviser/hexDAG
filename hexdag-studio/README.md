@@ -114,8 +114,8 @@ All component discovery is handled by `hexdag.api.components`, which the Studio 
 
 ```
 module_path examples:
-├── hexdag.builtin.nodes.LLMNode          → Built-in (core)
-├── hexdag.builtin.adapters.mock.MockLLM  → Built-in (core)
+├── hexdag.stdlib.nodes.LLMNode          → Built-in (core)
+├── hexdag.stdlib.adapters.mock.MockLLM  → Built-in (core)
 ├── hexdag_plugins.mysql_adapter.MySQLAdapter → Plugin: mysql_adapter
 ├── hexdag_plugins.azure.AzureOpenAI      → Plugin: azure
 └── mycompany.adapters.CustomLLM          → User plugin: mycompany
@@ -127,7 +127,7 @@ The system determines where a component belongs based on its `module_path`:
 
 | Module Path Pattern | Classification |
 |---------------------|----------------|
-| `hexdag.builtin.*` | Built-in (core) - shown in "Core Nodes" |
+| `hexdag.stdlib.*` | Built-in (core) - shown in "Core Nodes" |
 | `hexdag_plugins.<name>.*` | Official plugin - grouped by `<name>` |
 | `<package>.*` | User plugin - grouped by top-level package |
 
@@ -135,7 +135,7 @@ The system determines where a component belongs based on its `module_path`:
 
 | Endpoint | Returns |
 |----------|---------|
-| `/api/registry/nodes` | Built-in nodes only (from `hexdag.builtin.*`) |
+| `/api/registry/nodes` | Built-in nodes only (from `hexdag.stdlib.*`) |
 | `/api/registry/adapters` | All adapters with `plugin` field |
 | `/api/plugins` | Plugin metadata grouped by module path |
 | `/api/plugins/nodes/all` | Plugin nodes only (excludes built-in) |
@@ -336,7 +336,7 @@ __all__ = [
 
 import os
 from typing import Any
-from hexdag.core.ports.database import Database
+from hexdag.kernel.ports.database import Database
 
 class MyDatabaseAdapter(Database):
     """Custom database adapter implementing Database port."""
@@ -384,7 +384,7 @@ Use in YAML: `adapter: my_plugin.adapters.MyDatabaseAdapter`
 ```python
 """Custom nodes for my plugin."""
 
-from hexdag.builtin.nodes import BaseNodeFactory
+from hexdag.stdlib.nodes import BaseNodeFactory
 
 class MyProcessorNode(BaseNodeFactory):
     """Custom data processor node."""
@@ -466,7 +466,7 @@ spec:
 # my_plugin/__init__.py
 import os
 from typing import Any
-from hexdag.core.ports.llm import LLM
+from hexdag.kernel.ports.llm import LLM
 
 class MyLLMAdapter(LLM):
     """Custom LLM adapter implementing the LLM port interface."""
@@ -547,7 +547,7 @@ def __init__(
 ### Creating Nodes
 
 ```python
-from hexdag.builtin.nodes import BaseNodeFactory
+from hexdag.stdlib.nodes import BaseNodeFactory
 
 class MyNode(BaseNodeFactory):
     """Custom processing node."""

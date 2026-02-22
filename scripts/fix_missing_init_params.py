@@ -121,44 +121,6 @@ def fix_mock_llm():
     print(f"✅ Fixed {file}")
 
 
-def fix_mock_tool_adapter():
-    """Fix MockToolAdapter."""
-    file = Path("hexdag/builtin/adapters/mock/mock_tool_adapter.py")
-    content = file.read_text()
-
-    content = re.sub(
-        r'(def __init__\(self, \*\*kwargs: Any\) -> None:.*?""")',
-        r"""\1
-        self.responses = kwargs.get("responses", {})
-        self.raise_on_unknown = kwargs.get("raise_on_unknown", False)
-        self.default_response = kwargs.get("default_response", "Mock tool response")""",
-        content,
-        flags=re.DOTALL,
-    )
-
-    file.write_text(content)
-    print(f"✅ Fixed {file}")
-
-
-def fix_mock_tool_router():
-    """Fix MockToolRouter."""
-    file = Path("hexdag/builtin/adapters/mock/mock_tool_router.py")
-    content = file.read_text()
-
-    content = re.sub(
-        r'(def __init__\(self, \*\*kwargs: Any\) -> None:.*?""")',
-        r"""\1
-        self.available_tools = kwargs.get("available_tools", [])
-        self.delay_seconds = kwargs.get("delay_seconds", 0.0)
-        self.raise_on_unknown_tool = kwargs.get("raise_on_unknown_tool", False)""",
-        content,
-        flags=re.DOTALL,
-    )
-
-    file.write_text(content)
-    print(f"✅ Fixed {file}")
-
-
 def fix_local_secret_adapter():
     """Fix LocalSecretAdapter."""
     file = Path("hexdag/builtin/adapters/secret/local_secret_adapter.py")
@@ -186,8 +148,6 @@ def main():
     fix_sqlite_memory()
     fix_mock_database()
     fix_mock_llm()
-    fix_mock_tool_adapter()
-    fix_mock_tool_router()
     fix_local_secret_adapter()
 
     print("\n✅ All files fixed!")

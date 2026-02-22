@@ -22,8 +22,8 @@ async def main() -> None:
 
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-    from hexdag.core.domain.dag import DirectedGraph
-    from hexdag.core.orchestration.orchestrator import Orchestrator
+    from hexdag.kernel.domain.dag import DirectedGraph
+    from hexdag.kernel.orchestration.orchestrator import Orchestrator
 
     # Import ETL nodes
     from hexdag_plugins.hexdag_etl.hexdag_etl.nodes.file_io import (

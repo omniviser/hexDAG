@@ -228,12 +228,12 @@ def _get_available_plugins() -> list[dict[str, Any]]:
     # Built-in adapters (always available)
     builtin_adapters = {
         "mock": {
-            "module": "hexdag.builtin.adapters.mock",
+            "module": "hexdag.stdlib.adapters.mock",
             "capabilities": ["LLM", "Database", "ToolRouter"],
             "namespace": "core",
         },
         "memory": {
-            "module": "hexdag.builtin.adapters.memory",
+            "module": "hexdag.stdlib.adapters.memory",
             "capabilities": ["Memory"],
             "namespace": "core",
         },
@@ -255,12 +255,12 @@ def _get_available_plugins() -> list[dict[str, Any]]:
     # Optional adapters (extras)
     optional_adapters = {
         "openai": {
-            "module": "hexdag.adapters.openai",
+            "module": "hexdag.drivers.openai",
             "capabilities": ["LLM", "Embeddings"],
             "namespace": "plugin",
         },
         "anthropic": {
-            "module": "hexdag.adapters.anthropic",
+            "module": "hexdag.drivers.anthropic",
             "capabilities": ["LLM"],
             "namespace": "plugin",
         },
@@ -398,12 +398,12 @@ def _check_dependencies() -> list[dict]:
     adapter_packages: dict[str, Any] = {
         "openai": {
             "display": "OpenAI",
-            "adapter_module": "hexdag.adapters.openai",
+            "adapter_module": "hexdag.drivers.openai",
             "extra": "adapters-openai",
         },
         "anthropic": {
             "display": "Anthropic",
-            "adapter_module": "hexdag.adapters.anthropic",
+            "adapter_module": "hexdag.drivers.anthropic",
             "extra": "adapters-anthropic",
         },
     }

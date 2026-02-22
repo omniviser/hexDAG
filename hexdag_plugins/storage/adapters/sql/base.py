@@ -3,8 +3,8 @@
 import os
 from typing import Any
 
-from hexdag.core.ports.database import DatabasePort
-from hexdag.core.ports.healthcheck import HealthStatus
+from hexdag.kernel.ports.database import DatabasePort
+from hexdag.kernel.ports.healthcheck import HealthStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 

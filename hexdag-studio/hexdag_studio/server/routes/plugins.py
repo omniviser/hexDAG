@@ -14,10 +14,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from hexdag import api
-from hexdag.core.discovery import (
+from hexdag.kernel.discovery import (
     get_user_plugin_paths as core_get_user_plugin_paths,
 )
-from hexdag.core.discovery import (
+from hexdag.kernel.discovery import (
     set_user_plugin_paths as core_set_user_plugin_paths,
 )
 
@@ -148,14 +148,14 @@ class PluginsResponse(BaseModel):
 def _module_path_to_plugin_name(module_path: str) -> str | None:
     """Extract plugin name from module_path.
 
-    Returns None for built-in components (hexdag.builtin.*).
+    Returns None for built-in components (hexdag.stdlib.*).
 
     Examples:
-        "hexdag.builtin.nodes.LLMNode" -> None (builtin)
+        "hexdag.stdlib.nodes.LLMNode" -> None (builtin)
         "hexdag_plugins.mysql_adapter.MySQLAdapter" -> "mysql_adapter"
         "acme.adapters.CustomAdapter" -> "acme"
     """
-    if module_path.startswith("hexdag.builtin."):
+    if module_path.startswith("hexdag.stdlib."):
         return None  # Built-in, not a plugin
 
     if module_path.startswith("hexdag_plugins."):
@@ -189,7 +189,7 @@ def discover_plugins() -> list[PluginInfo]:
 
     Groups components by their module_path to identify plugins.
     All discovery is delegated to hexdag.api.components which handles:
-    - Built-in components (hexdag.builtin.*) - excluded from plugins
+    - Built-in components (hexdag.stdlib.*) - excluded from plugins
     - Plugin components (hexdag_plugins.*)
     - User plugin paths (HEXDAG_PLUGIN_PATHS env var)
     - User-configured modules (hexdag.toml/pyproject.toml)

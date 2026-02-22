@@ -6,7 +6,7 @@ metadata:
 spec:
   ports:
     llm:
-      adapter: hexdag.builtin.adapters.mock.MockLLM
+      adapter: mock_llm
       config:
         responses:
         - 'I''ll search for information. INVOKE_TOOL: search(query=''...'')'
@@ -14,17 +14,15 @@ spec:
         - 'Based on research, here are my findings: [Mock comprehensive answer]'
         delay_seconds: 0.1
     tool_router:
-      adapter: hexdag.builtin.adapters.mock.MockToolRouter
+      adapter: tool_router
       config:
-        available_tools:
-        - search
-        - calculate
+        tools: {}
   nodes:
   - kind: macro_invocation
     metadata:
       name: research_agent
     spec:
-      macro: hexdag.builtin.macros.ReasoningAgentMacro
+      macro: core:reasoning_agent
       config:
         main_prompt: 'You are a deep research agent. Research the following question
           thoroughly: {{research_question}}'

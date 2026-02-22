@@ -200,7 +200,7 @@ async def validate_yaml(request: ValidationRequest) -> ValidationResponse:
     # Step 5: Try full hexdag validation if no critical errors
     if not any(e.severity == "error" for e in errors):
         try:
-            from hexdag.core.pipeline_builder import YamlPipelineBuilder
+            from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
             builder = YamlPipelineBuilder()
             builder.build_from_yaml_string(request.content)

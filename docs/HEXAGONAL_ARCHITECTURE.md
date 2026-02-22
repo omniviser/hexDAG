@@ -79,7 +79,7 @@ Adapters implement **how** to fulfill the port contracts. They are plain Python 
 class OpenAIAdapter:
     """OpenAI implementation of LLM port.
 
-    Referenced in YAML as: hexdag.builtin.adapters.openai.OpenAIAdapter
+    Referenced in YAML as: hexdag.stdlib.adapters.openai.OpenAIAdapter
     """
 
     def __init__(self, api_key: str, model: str = "gpt-4"):
@@ -94,7 +94,7 @@ class OpenAIAdapter:
 class MockLLMAdapter:
     """Test implementation for fast, deterministic testing.
 
-    Referenced in YAML as: hexdag.builtin.adapters.mock.MockLLM
+    Referenced in YAML as: hexdag.stdlib.adapters.mock.MockLLM
     """
 
     async def agenerate(self, messages, **kwargs):

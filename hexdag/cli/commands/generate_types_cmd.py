@@ -130,7 +130,7 @@ def _infer_type_from_mapping(source_path: str) -> Any:
         Inferred type (defaults to Any)
     """
     # Check for expression patterns that have known return types
-    from hexdag.core.expression_parser import ALLOWED_FUNCTIONS
+    from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS
 
     for func_name in ALLOWED_FUNCTIONS:
         if f"{func_name}(" in source_path:

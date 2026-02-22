@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hexdag.builtin.adapters.anthropic.anthropic_adapter import AnthropicAdapter
-from hexdag.builtin.adapters.openai.openai_adapter import OpenAIAdapter
-from hexdag.core.ports.llm import Message, MessageList
+from hexdag.kernel.ports.llm import Message, MessageList
+from hexdag.stdlib.adapters.anthropic.anthropic_adapter import AnthropicAdapter
+from hexdag.stdlib.adapters.openai.openai_adapter import OpenAIAdapter
 
 
 class TestLLMAdaptersIntegration:
@@ -33,7 +33,7 @@ class TestLLMAdaptersIntegration:
         """Test that Anthropic adapter handles authentication errors gracefully."""
         # Mock the Anthropic client to simulate authentication error
         with patch(
-            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             mock_client = AsyncMock()
             mock_client.messages.create = AsyncMock(
@@ -53,9 +53,7 @@ class TestLLMAdaptersIntegration:
     ):
         """Test that OpenAI adapter handles authentication errors gracefully."""
         # Mock the OpenAI client to simulate authentication error
-        with patch(
-            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
-        ) as mock_client_class:
+        with patch("hexdag.stdlib.adapters.openai.openai_adapter.AsyncOpenAI") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.chat.completions.create = AsyncMock(
                 side_effect=Exception("401: Incorrect API key provided: fake-api-key-for-testing")
@@ -74,7 +72,7 @@ class TestLLMAdaptersIntegration:
     ):
         """Test Anthropic adapter with simulated successful response."""
         with patch(
-            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_client_class:
             # Simulate successful response
             mock_response = MagicMock()
@@ -104,9 +102,7 @@ class TestLLMAdaptersIntegration:
     @pytest.mark.asyncio
     async def test_openai_adapter_successful_response_simulation(self, fake_api_key, test_messages):
         """Test OpenAI adapter with simulated successful response."""
-        with patch(
-            "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
-        ) as mock_client_class:
+        with patch("hexdag.stdlib.adapters.openai.openai_adapter.AsyncOpenAI") as mock_client_class:
             # Simulate successful response
             mock_choice = MagicMock()
             mock_choice.message.content = "Of course! I'm here to help. What can I assist you with?"
@@ -137,7 +133,7 @@ class TestLLMAdaptersIntegration:
 
         # Test Anthropic rate limit
         with patch(
-            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_anthropic:
             mock_client = AsyncMock()
             mock_client.messages.create = AsyncMock(
@@ -153,7 +149,7 @@ class TestLLMAdaptersIntegration:
             assert result is None
 
         # Test OpenAI rate limit
-        with patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
+        with patch("hexdag.stdlib.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_client.chat.completions.create = AsyncMock(
                 side_effect=Exception("429: Too many requests")
@@ -173,7 +169,7 @@ class TestLLMAdaptersIntegration:
 
         # Test Anthropic network error
         with patch(
-            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_anthropic:
             mock_client = AsyncMock()
             mock_client.messages.create = AsyncMock(side_effect=Exception("Connection timeout"))
@@ -187,7 +183,7 @@ class TestLLMAdaptersIntegration:
             assert result is None
 
         # Test OpenAI network error
-        with patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
+        with patch("hexdag.stdlib.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_client.chat.completions.create = AsyncMock(
                 side_effect=Exception("Network unreachable")
@@ -206,7 +202,7 @@ class TestLLMAdaptersIntegration:
         # Test Anthropic with env var
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "env-anthropic-key"}):
             with patch(
-                "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+                "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
             ) as mock_anthropic:
                 mock_client = AsyncMock()
                 mock_response = MagicMock()
@@ -230,7 +226,7 @@ class TestLLMAdaptersIntegration:
 
         # Test OpenAI with env var
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-openai-key"}):
-            with patch("hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
+            with patch("hexdag.stdlib.adapters.openai.openai_adapter.AsyncOpenAI") as mock_openai:
                 mock_client = AsyncMock()
                 mock_choice = MagicMock()
                 mock_choice.message.content = "Response from env key"
@@ -262,7 +258,7 @@ class TestLLMAdaptersIntegration:
         for provider, model, adapter_class in test_cases:
             if provider == "anthropic":
                 with patch(
-                    "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+                    "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
                 ) as mock_client_class:
                     mock_response = MagicMock()
                     mock_content = MagicMock()
@@ -284,7 +280,7 @@ class TestLLMAdaptersIntegration:
 
             elif provider == "openai":
                 with patch(
-                    "hexdag.builtin.adapters.openai.openai_adapter.AsyncOpenAI"
+                    "hexdag.stdlib.adapters.openai.openai_adapter.AsyncOpenAI"
                 ) as mock_client_class:
                     mock_choice = MagicMock()
                     mock_choice.message.content = f"Response from {model}"
@@ -310,7 +306,7 @@ class TestLLMAdaptersIntegration:
         import asyncio
 
         with patch(
-            "hexdag.builtin.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
+            "hexdag.stdlib.adapters.anthropic.anthropic_adapter.AsyncAnthropic"
         ) as mock_anthropic:
             mock_client = AsyncMock()
 

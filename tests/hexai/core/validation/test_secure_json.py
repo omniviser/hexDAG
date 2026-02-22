@@ -6,7 +6,7 @@ import json
 
 from pydantic import BaseModel
 
-from hexdag.core.validation.secure_json import SafeJSON
+from hexdag.kernel.validation.secure_json import SafeJSON
 
 
 def test_extract_json_from_markdown_fenced_block():

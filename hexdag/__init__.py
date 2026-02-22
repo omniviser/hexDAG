@@ -16,57 +16,56 @@ except Exception:
     __version__ = "0.0.0.dev0"  # Fallback for development installs
 
 # Node factories (still useful for programmatic DAG building)
-from hexdag.builtin.nodes import (
+# Templating system
+from hexdag.kernel.orchestration.prompt import FewShotPromptTemplate, PromptTemplate
+
+# Primary API — the recommended entry point for running YAML pipelines
+from hexdag.kernel.pipeline_runner import PipelineRunner
+
+# Port interfaces (needed for writing custom adapters)
+from hexdag.kernel.ports import LLM, APICall, DatabasePort, ToolRouter
+from hexdag.stdlib.nodes import (
     FunctionNode,
     LLMNode,
     ReActAgentNode,
 )
 
-# Templating system
-from hexdag.core.orchestration.prompt import FewShotPromptTemplate, PromptTemplate
-
-# Primary API — the recommended entry point for running YAML pipelines
-from hexdag.core.pipeline_runner import PipelineRunner
-
-# Port interfaces (needed for writing custom adapters)
-from hexdag.core.ports import LLM, APICall, DatabasePort, ToolRouter
-
 # Define placeholders for lazy-loaded adapters to satisfy __all__ checking
 # These will be replaced by __getattr__ when accessed
 if TYPE_CHECKING:
-    from hexdag.builtin.adapters.memory import InMemoryMemory
-    from hexdag.builtin.adapters.mock import MockDatabaseAdapter, MockLLM
-    from hexdag.core.domain import DirectedGraph, NodeSpec
-    from hexdag.core.orchestration.orchestrator import Orchestrator
-    from hexdag.core.pipeline_builder.yaml_builder import YamlPipelineBuilder
-    from hexdag.core.resolver import resolve, resolve_function
+    from hexdag.kernel.domain import DirectedGraph, NodeSpec
+    from hexdag.kernel.orchestration.orchestrator import Orchestrator
+    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+    from hexdag.kernel.resolver import resolve, resolve_function
+    from hexdag.stdlib.adapters.memory import InMemoryMemory
+    from hexdag.stdlib.adapters.mock import MockDatabaseAdapter, MockLLM
 
 
 # Deprecated top-level exports — use submodule imports or PipelineRunner instead.
 _DEPRECATED_IMPORTS: dict[str, tuple[str, str]] = {
     "Orchestrator": (
-        "hexdag.core.orchestration.orchestrator",
-        "Use PipelineRunner or import from 'hexdag.core.orchestration.orchestrator'.",
+        "hexdag.kernel.orchestration.orchestrator",
+        "Use PipelineRunner or import from 'hexdag.kernel.orchestration.orchestrator'.",
     ),
     "YamlPipelineBuilder": (
-        "hexdag.core.pipeline_builder.yaml_builder",
-        "Use PipelineRunner or import from 'hexdag.core.pipeline_builder.yaml_builder'.",
+        "hexdag.kernel.pipeline_builder.yaml_builder",
+        "Use PipelineRunner or import from 'hexdag.kernel.pipeline_builder.yaml_builder'.",
     ),
     "DirectedGraph": (
-        "hexdag.core.domain",
-        "Import from 'hexdag.core.domain' instead.",
+        "hexdag.kernel.domain",
+        "Import from 'hexdag.kernel.domain' instead.",
     ),
     "NodeSpec": (
-        "hexdag.core.domain",
-        "Import from 'hexdag.core.domain' instead.",
+        "hexdag.kernel.domain",
+        "Import from 'hexdag.kernel.domain' instead.",
     ),
     "resolve": (
-        "hexdag.core.resolver",
-        "Import from 'hexdag.core.resolver' instead.",
+        "hexdag.kernel.resolver",
+        "Import from 'hexdag.kernel.resolver' instead.",
     ),
     "resolve_function": (
-        "hexdag.core.resolver",
-        "Import from 'hexdag.core.resolver' instead.",
+        "hexdag.kernel.resolver",
+        "Import from 'hexdag.kernel.resolver' instead.",
     ),
 }
 
@@ -97,18 +96,13 @@ def __getattr__(name: str) -> Any:
 
     # Mock adapters
     if name == "MockLLM":
-        from hexdag.builtin.adapters.mock import MockLLM as _MockLLM
+        from hexdag.stdlib.adapters.mock import MockLLM as _MockLLM
 
         return _MockLLM
     if name == "MockDatabaseAdapter":
-        from hexdag.builtin.adapters.mock import MockDatabaseAdapter as _MockDatabaseAdapter
+        from hexdag.stdlib.adapters.mock import MockDatabaseAdapter as _MockDatabaseAdapter
 
         return _MockDatabaseAdapter
-    if name == "MockToolRouter":
-        from hexdag.builtin.adapters.mock import MockToolRouter as _MockToolRouter
-
-        return _MockToolRouter
-
     # Visualization components (optional)
     if name == "DAGVisualizer":
         try:

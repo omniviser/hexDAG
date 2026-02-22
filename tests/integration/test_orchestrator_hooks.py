@@ -10,10 +10,10 @@ Tests the complete lifecycle of pre-DAG and post-DAG hooks including:
 
 import pytest
 
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.hooks import HookConfig, PostDagHookConfig
-from hexdag.core.orchestration.orchestrator import Orchestrator
-from hexdag.core.ports.healthcheck import HealthStatus
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.hooks import HookConfig, PostDagHookConfig
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.ports.healthcheck import HealthStatus
 
 # ===================================================================
 # Mock Adapters for Testing
@@ -85,7 +85,7 @@ class MockSecretPort:
         self.health_check_count = 0
 
     async def aget_secret(self, key: str):
-        from hexdag.core.types import Secret
+        from hexdag.kernel.types import Secret
 
         return Secret(self.secrets[key])
 
@@ -255,7 +255,7 @@ async def test_orchestrator_secret_injection_with_custom_prefix():
 
     def capture_secrets(x=None, **kwargs) -> str:
         # Capture memory state during execution
-        from hexdag.core.context import get_port
+        from hexdag.kernel.context import get_port
 
         memory = get_port("memory")
         if memory:
@@ -565,7 +565,7 @@ async def test_orchestrator_secret_injection_isolated_per_run():
     captured_secrets = []
 
     def capture_secret(x=None, **kwargs) -> str:
-        from hexdag.core.context import get_port
+        from hexdag.kernel.context import get_port
 
         memory = get_port("memory")
         if memory:

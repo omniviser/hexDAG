@@ -75,7 +75,7 @@ def create_pipeline(
             "spec": {
                 "nodes": [
                     {
-                        "kind": "hexdag.builtin.nodes.FunctionNode",
+                        "kind": "function_node",
                         "metadata": {"name": "step1"},
                         "spec": {
                             "fn": "my_module.my_function",
@@ -99,13 +99,13 @@ def create_pipeline(
             "spec": {
                 "ports": {
                     "llm": {
-                        "adapter": "hexdag.builtin.adapters.mock.MockLLM",
+                        "adapter": "mock_llm",
                         "config": {},
                     }
                 },
                 "nodes": [
                     {
-                        "kind": "hexdag.builtin.nodes.FunctionNode",
+                        "kind": "function_node",
                         "metadata": {
                             "name": "input_processor",
                             "annotations": {"description": "Process input data"},
@@ -117,7 +117,7 @@ def create_pipeline(
                         },
                     },
                     {
-                        "kind": "hexdag.builtin.nodes.LLMNode",
+                        "kind": "llm_node",
                         "metadata": {
                             "name": "analyzer",
                             "annotations": {"description": "Analyze processed data"},
@@ -128,7 +128,7 @@ def create_pipeline(
                         },
                     },
                     {
-                        "kind": "hexdag.builtin.nodes.FunctionNode",
+                        "kind": "function_node",
                         "metadata": {
                             "name": "output_formatter",
                             "annotations": {"description": "Format final output"},
@@ -161,14 +161,14 @@ def create_pipeline(
                 },
                 "ports": {
                     "llm": {
-                        "adapter": "hexdag.builtin.adapters.mock.MockLLM",
+                        "adapter": "mock_llm",
                         "config": {},
                     }
                 },
                 "common_field_mappings": {"default_mapping": {"value": "input.data"}},
                 "nodes": [
                     {
-                        "kind": "hexdag.builtin.nodes.FunctionNode",
+                        "kind": "function_node",
                         "metadata": {
                             "name": "validator",
                             "annotations": {
@@ -187,7 +187,7 @@ def create_pipeline(
                         },
                     },
                     {
-                        "kind": "hexdag.builtin.nodes.LLMNode",
+                        "kind": "llm_node",
                         "metadata": {"name": "processor"},
                         "spec": {
                             "prompt_template": "Process: {{validator.result}}",

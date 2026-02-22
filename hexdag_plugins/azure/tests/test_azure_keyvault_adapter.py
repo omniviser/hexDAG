@@ -6,7 +6,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hexdag.core.types import Secret
+from hexdag.kernel.types import Secret
 
 from hexdag_plugins.azure.adapters.keyvault import AzureKeyVaultAdapter
 

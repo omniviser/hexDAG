@@ -17,6 +17,13 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
+# Test files that intentionally don't follow the 1:1 naming convention.
+# These test a feature/aspect of an existing module rather than the module itself.
+_ALLOWED_ORPHANS: frozenset[str] = frozenset({
+    # Tests SupportsKeyValue protocol on InMemoryMemory (source: in_memory_memory.py)
+    "tests/hexdag/stdlib/adapters/memory/test_in_memory_key_value.py",
+})
+
 
 class TestMismatch(NamedTuple):
     """Represents a test structure mismatch."""
@@ -67,33 +74,46 @@ def get_test_files() -> set[Path]:
 def source_to_test_path(source_file: Path) -> Path:
     """Convert a source file path to its expected test file path.
 
+    Handles underscore-prefixed source files: ``_discovery.py`` maps to
+    ``test_discovery.py`` (the leading underscore is stripped).
+
     Returns
     -------
         Expected test file path.
     """
-    # hexdag/core/domain/dag.py -> tests/hexdag/core/domain/test_dag.py
+    # hexdag/kernel/domain/dag.py -> tests/hexdag/kernel/domain/test_dag.py
+    # hexdag/stdlib/adapters/_discovery.py -> tests/hexdag/stdlib/adapters/test_discovery.py
 
     # Remove the hexdag prefix
     relative_path = source_file.relative_to(Path("hexdag"))
 
+    # Strip leading underscore from module name for test naming
+    module_name = relative_path.name
+    if module_name.startswith("_") and module_name != "__init__.py":
+        module_name = module_name[1:]
+
     # Change module.py to test_module.py
-    test_filename = f"test_{relative_path.name}"
+    test_filename = f"test_{module_name}"
     return Path("tests/hexdag") / relative_path.parent / test_filename
 
 
-def test_to_source_path(test_file: Path) -> Path:
-    """Convert a test file path to its expected source file path.
+def test_to_source_candidates(test_file: Path) -> list[Path]:
+    """Convert a test file path to candidate source file paths.
+
+    Returns both ``module.py`` and ``_module.py`` variants so that
+    underscore-prefixed private modules (e.g. ``_discovery.py``) are
+    correctly matched by ``test_discovery.py``.
 
     Returns
     -------
-        Expected source file path.
+        List of candidate source file paths.
 
     Raises
     ------
     ValueError
         If test file doesn't follow naming convention.
     """
-    # tests/hexdag/core/domain/test_dag.py -> hexdag/core/domain/dag.py
+    # tests/hexdag/kernel/domain/test_dag.py -> hexdag/kernel/domain/dag.py
 
     # Remove the tests/hexdag prefix
     relative_path = test_file.relative_to(Path("tests/hexdag"))
@@ -103,7 +123,27 @@ def test_to_source_path(test_file: Path) -> Path:
         raise ValueError(f"Test file {test_file} doesn't follow test_ naming convention")
 
     source_filename = relative_path.name[5:]  # Remove "test_"
-    return Path("hexdag") / relative_path.parent / source_filename
+    parent = Path("hexdag") / relative_path.parent
+
+    # Return both plain and underscore-prefixed variants
+    return [parent / source_filename, parent / f"_{source_filename}"]
+
+
+def _find_source_for_test(test_file: Path, source_files: set[Path]) -> Path | None:
+    """Find the matching source file for a test file.
+
+    Returns
+    -------
+        The matching source path, or None if no match found.
+    """
+    try:
+        candidates = test_to_source_candidates(test_file)
+    except ValueError:
+        return None
+    for candidate in candidates:
+        if candidate in source_files:
+            return candidate
+    return None
 
 
 def check_test_structure() -> list[TestMismatch]:
@@ -119,42 +159,38 @@ def check_test_structure() -> list[TestMismatch]:
     mismatches = []
 
     # Check each test file has a corresponding source file
+    test_files_with_no_source = []
     for test_file in test_files:
-        try:
-            expected_source = test_to_source_path(test_file)
+        # Skip explicitly allowed orphan test files
+        if str(test_file) in _ALLOWED_ORPHANS:
+            continue
 
-            if expected_source not in source_files:
-                mismatches.append(
-                    TestMismatch(
-                        test_file=str(test_file),
-                        expected_source=str(expected_source),
-                        issue="Test file exists but corresponding source file is missing",
-                    )
-                )
+        try:
+            candidates = test_to_source_candidates(test_file)
         except ValueError as e:
             mismatches.append(
                 TestMismatch(test_file=str(test_file), expected_source="N/A", issue=str(e))
             )
+            continue
 
-    # Check if any test files are in unexpected locations
-    # Only flag as wrong if the test file doesn't correspond to any existing source file
-    test_files_with_no_source = []
-    for test_file in test_files:
-        try:
-            expected_source = test_to_source_path(test_file)
-            if expected_source not in source_files:
-                # This test file doesn't have a corresponding source file
-                test_files_with_no_source.append(test_file)
-        except ValueError:
-            # Already handled above in the first loop
-            pass
+        if not any(c in source_files for c in candidates):
+            mismatches.append(
+                TestMismatch(
+                    test_file=str(test_file),
+                    expected_source=str(candidates[0]),
+                    issue="Test file exists but corresponding source file is missing",
+                )
+            )
+            test_files_with_no_source.append(test_file)
 
     # For orphaned test files, suggest they might be in wrong location
     for orphaned_test in test_files_with_no_source:
         test_module = orphaned_test.stem[5:]  # Remove "test_" prefix
 
-        # Find source files with the same module name
-        possible_sources = [sf for sf in source_files if sf.stem == test_module]
+        # Find source files with the same module name (plain or underscore-prefixed)
+        possible_sources = [
+            sf for sf in source_files if sf.stem == test_module or sf.stem == f"_{test_module}"
+        ]
 
         if possible_sources:
             # Suggest the most likely correct location

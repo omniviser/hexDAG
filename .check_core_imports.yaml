@@ -1,16 +1,21 @@
 # Configuration for scripts/check_core_imports.py
 #
-# This enforces the architectural principle that hexdag/core contains pure
+# This enforces the architectural principle that hexdag/kernel contains pure
 # abstractions (ports, domain models) and should NOT import from concrete
-# implementations in hexdag/adapters or hexdag/builtin.
+# implementations in hexdag/drivers or hexdag/stdlib.
 #
 # Allowed exceptions are documented below with rationale.
 
 # Directory to check (relative to repo root)
-check_directory: hexdag/core
+check_directory: hexdag/kernel
 
 # Forbidden import patterns (regex)
 forbidden_patterns:
+  - '^from\s+hexdag\.drivers'
+  - '^from\s+hexdag\.stdlib'
+  - '^import\s+hexdag\.drivers'
+  - '^import\s+hexdag\.stdlib'
+  # Legacy paths (catch any leftovers from pre-rename)
   - '^from\s+hexdag\.adapters'
   - '^from\s+hexdag\.builtin'
   - '^import\s+hexdag\.adapters'
@@ -20,52 +25,46 @@ forbidden_patterns:
 # Each exception requires a comment explaining WHY it's needed.
 allowed_exceptions:
   # Orchestrator needs default executor implementation
-  # This is the ONLY place where core imports from adapters.
+  # This is the ONLY place where kernel imports from drivers.
   # Rationale: User convenience - orchestrator works out-of-the-box without
   # requiring explicit executor injection in every use case.
-  hexdag/core/orchestration/orchestrator.py:
-    - "from hexdag.adapters.executors import LocalExecutor  # noqa: PLC0415"
+  hexdag/kernel/orchestration/orchestrator.py:
+    - "from hexdag.drivers.executors import LocalExecutor  # noqa: PLC0415"
 
   # PortsBuilder provides convenience factory methods for common adapters
   # These are lazy imports inside helper methods, not module-level dependencies.
   # Rationale: Developer experience - quick setup without manual instantiation.
-  hexdag/core/ports_builder.py:
-    - "from hexdag.builtin.adapters.local import LocalObserverManager"
-    - "from hexdag.builtin.adapters.local import LocalPolicyManager"
-    - "from hexdag.builtin.adapters.mock import MockLLM"
-    - "from hexdag.builtin.adapters.openai import OpenAIAdapter"
-    - "from hexdag.builtin.adapters.anthropic import AnthropicAdapter"
-
-  # YamlBuilder needs FieldMappingRegistry and ChatPromptTemplate for YAML pipeline compilation
-  # This is a compile-time dependency for the YAML DSL.
-  # Rationale: YAML builder is inherently tied to built-in node implementations.
-  hexdag/core/pipeline_builder/yaml_builder.py:
-    - "from hexdag.builtin.nodes.mapped_input import FieldMappingRegistry"
-    - "from hexdag.builtin.prompts.base import ChatPromptTemplate"
+  hexdag/kernel/ports_builder.py:
+    - "from hexdag.drivers.observer_manager import LocalObserverManager"
+    - "from hexdag.stdlib.adapters.mock import MockLLM"
+    - "from hexdag.stdlib.adapters.openai import OpenAIAdapter"
+    - "from hexdag.stdlib.adapters.anthropic import AnthropicAdapter"
 
   # ExecutionCoordinator needs FieldExtractor for input_mapping feature
   # This provides $input.field and node.field path extraction during execution.
   # Rationale: Input mapping is a core execution feature that reuses existing extraction logic.
-  hexdag/core/orchestration/components/execution_coordinator.py:
-    - "from hexdag.builtin.nodes.mapped_input import FieldExtractor"
+  hexdag/kernel/orchestration/components/execution_coordinator.py:
+    - "from hexdag.stdlib.nodes.mapped_input import FieldExtractor"
 
   # Prompt __init__ re-exports advanced prompts for backward compatibility
-  # These were moved to builtin but are still part of core API surface.
+  # These were moved to stdlib but are still part of kernel API surface.
   # Rationale: Maintains public API while allowing modular organization.
-  hexdag/core/orchestration/prompt/__init__.py:
-    - "from hexdag.builtin.prompts.base import ("
+  hexdag/kernel/orchestration/prompt/__init__.py:
+    - "from hexdag.stdlib.prompts.base import ("
 
   # Models.py has doctest examples that import adapters for demonstration
   # These are documentation/test imports, not runtime dependencies.
   # Rationale: Doctests need concrete examples to be runnable.
-  hexdag/core/orchestration/models.py:
-    - "from hexdag.builtin.adapters.mock import MockLLM"
-    - "from hexdag.builtin.adapters.openai import OpenAIAdapter"
-    - "from hexdag.builtin.adapters.anthropic import AnthropicAdapter"
+  hexdag/kernel/orchestration/models.py:
+    - "from hexdag.stdlib.adapters.mock import MockLLM"
+    - "from hexdag.stdlib.adapters.openai import OpenAIAdapter"
+    - "from hexdag.stdlib.adapters.anthropic import AnthropicAdapter"
 
-  # Resolver imports builtin.nodes to trigger auto-discovery and alias registration
-  # This is a lazy import inside _ensure_builtin_bootstrapped(), not a module-level dependency.
-  # Rationale: Enables auto-discovery of node factories without hardcoding builtin knowledge.
-  # The builtin module self-registers via register_builtin_aliases() - core provides the hook.
-  hexdag/core/resolver.py:
-    - "import hexdag.builtin.nodes  # noqa: F401"
+  # Resolver imports stdlib.nodes to trigger auto-discovery and alias registration
+  # Also imports adapter/macro discovery for the unified alias system.
+  # These are lazy imports inside _ensure_builtin_bootstrapped(), not module-level dependencies.
+  # Rationale: Enables auto-discovery of component factories without hardcoding builtin knowledge.
+  hexdag/kernel/resolver.py:
+    - "import hexdag.stdlib.nodes  # noqa: F401"
+    - "from hexdag.stdlib.adapters._discovery import discover_adapter_aliases"
+    - "from hexdag.stdlib.macros._discovery import discover_macro_aliases"

@@ -352,16 +352,16 @@ def _generate_main_py(project_name: str, pipeline: dict[str, Any]) -> str:
         "",
         "from dotenv import load_dotenv",
         "",
-        "from hexdag.core.pipeline_builder import YamlPipelineBuilder",
-        "from hexdag.core.orchestration.orchestrator import Orchestrator",
+        "from hexdag.kernel.pipeline_builder import YamlPipelineBuilder",
+        "from hexdag.kernel.orchestration.orchestrator import Orchestrator",
     ]
 
     # Add adapter imports
     adapter_imports = []
     if adapters.get("llm"):
-        adapter_imports.append("from hexdag.builtin.adapters.openai import OpenAIAdapter")
+        adapter_imports.append("from hexdag.stdlib.adapters.openai import OpenAIAdapter")
     if adapters.get("memory"):
-        adapter_imports.append("from hexdag.builtin.adapters.memory import InMemoryMemory")
+        adapter_imports.append("from hexdag.stdlib.adapters.memory import InMemoryMemory")
 
     if adapter_imports:
         imports.append("")

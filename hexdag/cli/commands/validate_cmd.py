@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from hexdag.core.pipeline_builder.yaml_validator import YamlValidator
+from hexdag.kernel.pipeline_builder.yaml_validator import YamlValidator
 
 app = typer.Typer()
 console = Console()
@@ -168,7 +168,7 @@ def _explain_validation(config: dict, result: Any) -> None:
                 node_type = node_type[:-5]
 
             # Check if node type is known
-            from hexdag.core.pipeline_builder.yaml_validator import KNOWN_NODE_TYPES
+            from hexdag.kernel.pipeline_builder.yaml_validator import KNOWN_NODE_TYPES
 
             qualified_type = f"{namespace}:{node_type}"
             if qualified_type in KNOWN_NODE_TYPES or node_type in KNOWN_NODE_TYPES:

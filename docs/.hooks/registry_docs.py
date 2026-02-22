@@ -5,7 +5,7 @@ documentation pages from the HexDAG component resolver during the build process.
 Documentation is generated from the builtin node factory signatures, making it
 adaptive and always up-to-date with the codebase.
 
-Note: This uses the resolver system (hexdag.core.resolver) which provides
+Note: This uses the resolver system (hexdag.kernel.resolver) which provides
 module path resolution for components. Components are documented based on
 their registered aliases and inspected signatures.
 """
@@ -43,7 +43,7 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
     """
 
     try:
-        from hexdag.core.resolver import get_builtin_aliases, resolve
+        from hexdag.kernel.resolver import get_builtin_aliases, resolve
 
         docs_dir = Path(config["docs_dir"])
 
@@ -89,6 +89,26 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
             virtual_file = _create_virtual_file(file_path, markdown, docs_dir, config["site_dir"])
             files.append(virtual_file)
             logger.info(f"Generated documentation for {len(other)} other components")
+
+        # Generate port protocol documentation
+        ports_markdown = _generate_ports_docs()
+        if ports_markdown:
+            file_path = "reference/ports.md"
+            virtual_file = _create_virtual_file(
+                file_path, ports_markdown, docs_dir, config["site_dir"]
+            )
+            files.append(virtual_file)
+            logger.info("Generated port protocol documentation")
+
+        # Generate tools documentation
+        tools_markdown = _generate_tools_docs()
+        if tools_markdown:
+            file_path = "reference/tools.md"
+            virtual_file = _create_virtual_file(
+                file_path, tools_markdown, docs_dir, config["site_dir"]
+            )
+            files.append(virtual_file)
+            logger.info("Generated tools documentation")
 
     except ImportError as e:
         logger.warning(f"Could not import HexDAG resolver: {e}")
@@ -240,7 +260,7 @@ def _generate_signature_docs(component) -> list[str]:
                     ann.replace("typing.", "")
                     .replace("<class '", "")
                     .replace("'>", "")
-                    .replace("hexdag.core.", "")
+                    .replace("hexdag.kernel.", "")
                 )
 
             # Check if required or optional
@@ -366,3 +386,132 @@ def _get_example_value(param_name: str, type_str: str) -> str | None:
         return "{}"
 
     return None
+
+
+def _generate_ports_docs() -> str:
+    """Generate documentation for port protocol interfaces."""
+    import importlib
+
+    port_modules = [
+        ("LLM", "hexdag.kernel.ports.llm"),
+        ("DatabasePort", "hexdag.kernel.ports.database"),
+        ("Memory", "hexdag.kernel.ports.memory"),
+        ("ToolRouter", "hexdag.kernel.ports.tool_router"),
+        ("APICall", "hexdag.kernel.ports.api_call"),
+        ("FileStorage", "hexdag.kernel.ports.file_storage"),
+        ("SecretPort", "hexdag.kernel.ports.secret"),
+        ("VectorSearch", "hexdag.kernel.ports.vector_search"),
+        ("Executor", "hexdag.kernel.ports.executor"),
+    ]
+
+    lines = [
+        "# Ports Reference",
+        "",
+        "Port protocols define the interfaces that adapters must implement.",
+        "hexDAG follows hexagonal architecture — ports live in the kernel,",
+        "adapters in stdlib or plugins.",
+        "",
+        "## Overview",
+        "",
+        "| Port | Module |",
+        "|------|--------|",
+    ]
+
+    loaded: list[tuple[str, object, str]] = []
+    for port_name, module_path in port_modules:
+        try:
+            mod = importlib.import_module(module_path)
+            cls = getattr(mod, port_name, None)
+            if cls is not None:
+                lines.append(f"| `{port_name}` | `{module_path}` |")
+                loaded.append((port_name, cls, module_path))
+        except Exception as e:
+            logger.debug(f"Could not load port {port_name}: {e}")
+
+    lines.extend(["", "---", ""])
+
+    for port_name, cls, module_path in loaded:
+        lines.append(f"### `{port_name}`")
+        lines.append("")
+        lines.append(f"**Module:** `{module_path}`")
+        lines.append("")
+
+        if hasattr(cls, "__doc__") and cls.__doc__:
+            doc = cls.__doc__.strip().split("\n")[0]
+            lines.append(doc)
+            lines.append("")
+
+        # List methods
+        methods = []
+        for name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+            if name.startswith("_"):
+                continue
+            try:
+                sig = inspect.signature(method)
+                methods.append(f"- `{name}{sig}`")
+            except (ValueError, TypeError):
+                methods.append(f"- `{name}(...)`")
+
+        if methods:
+            lines.append("**Methods:**")
+            lines.append("")
+            lines.extend(methods)
+            lines.append("")
+
+        lines.extend(["---", ""])
+
+    return "\n".join(lines)
+
+
+def _generate_tools_docs() -> str:
+    """Generate documentation for built-in agent tools."""
+    lines = [
+        "# Tools Reference",
+        "",
+        "Built-in tools available to agent nodes during execution.",
+        "",
+    ]
+
+    tool_modules = [
+        ("Agent Lifecycle Tools", "hexdag.kernel.domain.agent_tools"),
+        ("Database Tools", "hexdag.stdlib.lib.database_tools"),
+    ]
+
+    for section_title, module_path in tool_modules:
+        try:
+            import importlib
+
+            mod = importlib.import_module(module_path)
+            lines.append(f"## {section_title}")
+            lines.append("")
+            lines.append(f"**Module:** `{module_path}`")
+            lines.append("")
+
+            for name in sorted(dir(mod)):
+                if name.startswith("_"):
+                    continue
+                obj = getattr(mod, name, None)
+                if obj is None or not callable(obj) or isinstance(obj, type):
+                    continue
+
+                try:
+                    sig = inspect.signature(obj)
+                except (ValueError, TypeError):
+                    continue
+
+                lines.append(f"### `{name}`")
+                lines.append("")
+                lines.append(f"```python\n{name}{sig}\n```")
+                lines.append("")
+
+                if hasattr(obj, "__doc__") and obj.__doc__:
+                    doc = obj.__doc__.strip().split("\n")[0]
+                    lines.append(doc)
+                    lines.append("")
+
+                lines.extend(["---", ""])
+
+        except ImportError as e:
+            logger.debug(f"Could not load tools from {module_path}: {e}")
+
+    return "\n".join(lines)

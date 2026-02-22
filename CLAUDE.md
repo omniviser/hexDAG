@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-hexDAG is an enterprise-ready AI agent orchestration framework that transforms complex AI workflows into deterministic, testable, and maintainable systems through declarative YAML configurations and DAG-based orchestration.
+hexDAG is an **operating system for AI agents** -- an orchestration framework that provides pipelines (processes), ports (syscalls), drivers, and a standard library so that AI agents don't reinvent orchestration. It transforms complex AI workflows into deterministic, testable, and maintainable systems through declarative YAML configurations and DAG-based execution.
 
 ## Development Commands
 
@@ -45,9 +45,9 @@ uv run pytest
 uv run pytest --cov=hexdag --cov-report=html --cov-report=term-missing
 
 # Run specific test areas
-uv run pytest tests/hexdag/pipeline_builder/ -x --tb=short  # Pipeline builder tests
-uv run pytest tests/hexdag/core/                        # Core framework tests
-uv run pytest tests/hexdag/validation/                  # Validation tests
+uv run pytest tests/hexdag/kernel/pipeline_builder/ -x --tb=short  # Pipeline builder tests
+uv run pytest tests/hexdag/kernel/                                 # Kernel tests
+uv run pytest tests/hexdag/stdlib/lib/                             # System lib tests
 
 # Run doctests (tests embedded in docstrings)
 uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/
@@ -110,23 +110,59 @@ uv run scripts/check_examples.py
 
 ## Architecture Overview
 
-hexDAG follows hexagonal architecture with clear separation of concerns:
+hexDAG is structured like an operating system -- kernel (execution engine), stdlib (built-in components), drivers (infrastructure), and api (user-facing tools):
 
-### Core Framework Structure
+### Framework Structure
 ```
 hexdag/
-├── core/
-│   ├── domain/          # Core business logic (DAG, NodeSpec, DirectedGraph)
-│   ├── orchestration/   # Orchestrator and execution engine
-│   ├── pipeline_builder/# YAML pipeline building and compilation
-│   ├── ports/           # Interface definitions (LLM, Database, Memory)
-│   └── validation/      # Type validation and schema conversion
-├── builtin/
-│   ├── nodes/          # Node implementations (LLMNode, AgentNode, etc.)
-│   ├── adapters/       # Built-in adapter implementations
-│   └── macros/         # Reusable macro components
-└── cli/                # Command-line interface
+├── kernel/                  # Core execution engine (/kernel)
+│   ├── domain/              #   Domain models (DAG, NodeSpec, PipelineRun, etc.)
+│   ├── orchestration/       #   Orchestrator, events, observers
+│   ├── pipeline_builder/    #   YAML pipeline building and compilation
+│   ├── ports/               #   Port interfaces (LLM, DataStore, PipelineSpawner)
+│   ├── validation/          #   Type validation and schema conversion
+│   └── lib_base.py          #   HexDAGLib base class (lib contract)
+├── stdlib/                  # Standard library (/lib)
+│   ├── adapters/            #   Built-in adapters (OpenAI, SQLite, Mock, etc.)
+│   ├── nodes/               #   Node factories (LLMNode, AgentNode, etc.)
+│   ├── macros/              #   Macro components (ReasoningAgent, etc.)
+│   ├── prompts/             #   Prompt templates (tool prompts, etc.)
+│   └── lib/                 #   System libs (ProcessRegistry, EntityState, Scheduler)
+├── drivers/                 # Low-level infrastructure (/drivers)
+│   ├── executors/           #   LocalExecutor (ExecutorPort)
+│   ├── observer_manager/    #   LocalObserverManager (ObserverManagerPort)
+│   └── pipeline_spawner/    #   LocalPipelineSpawner (PipelineSpawner)
+├── api/                     # Unified API layer (/usr/bin)
+│   ├── execution.py         #   Pipeline execution
+│   ├── processes.py         #   Process management (9 MCP tools)
+│   └── ...                  #   Components, validation, documentation
+├── docs/                    # Documentation utilities
+└── cli/                     # Command-line interface
 ```
+
+### Uniform Entity Pattern
+
+All framework entities follow one pattern: **kernel defines contract, stdlib ships builtins, users write their own.**
+
+| Entity   | Contract (kernel/)          | Builtins (stdlib/)                 | User custom        |
+|----------|----------------------------|------------------------------------|-------------------|
+| Ports    | `kernel/ports/llm.py`      | -                                  | `myapp.ports.X`   |
+| Adapters | `kernel/ports/` (Protocol) | `stdlib/adapters/openai/`          | `myapp.adapters.X`|
+| Nodes    | `stdlib/nodes/base_node_factory.py` | `stdlib/nodes/llm_node.py` | `myapp.nodes.X`   |
+| Macros   | (convention)               | `stdlib/macros/reasoning_agent.py` | `myapp.macros.X`  |
+| Prompts  | (convention)               | `stdlib/prompts/tool_prompts.py`   | `myapp.prompts.X` |
+| **Libs** | **`kernel/lib_base.py`**   | **`stdlib/lib/process_registry.py`** | **`myapp.lib.X`** |
+
+### System Libraries (Libs)
+
+Libs are the new entity type for multi-pipeline coordination:
+
+- **ProcessRegistry** — tracks pipeline runs (like `ps` in Linux)
+- **EntityState** — declarative state machines for business entities
+- **Scheduler** — delayed/recurring pipeline execution (asyncio timers)
+- **DatabaseTools** — agent-callable SQL query tools
+
+Every public async method on a `HexDAGLib` subclass auto-becomes an agent tool.
 
 ### The Six Pillars
 1. **Async-First Architecture** - Non-blocking execution for maximum performance
@@ -305,7 +341,7 @@ Examples:
 hexDAG enforces async-first architecture through:
 
 1. **Static Analysis** - `scripts/check_async_io.py` scans for blocking I/O in async functions
-2. **Runtime Warnings** - `hexdag/core/utils/async_warnings.py` detects blocking operations at runtime
+2. **Runtime Warnings** - `hexdag/kernel/utils/async_warnings.py` detects blocking operations at runtime
 
 #### Running the Async I/O Checker
 
@@ -317,13 +353,13 @@ uv run python scripts/check_async_io.py
 uv run python scripts/check_async_io.py --verbose
 
 # Check specific paths
-uv run python scripts/check_async_io.py hexdag/adapters/
+uv run python scripts/check_async_io.py hexdag/drivers/
 ```
 
 #### Using Runtime Warnings
 
 ```python
-from hexdag.core.utils.async_warnings import warn_sync_io, warn_if_async
+from hexdag.kernel.utils.async_warnings import warn_sync_io, warn_if_async
 
 # In async functions
 async def my_function():
@@ -338,7 +374,8 @@ def sync_helper():
 See `docs/async_io_enforcement.md` for complete documentation.
 
 ### Error Handling
-- Use custom exception hierarchies (e.g., `OrchestratorError`, `ValidationError`)
+- All framework exceptions inherit from `HexDAGError`
+- Use custom exception hierarchies (e.g., `OrchestratorError`, `NodeValidationError`)
 - Maintain error context and node information
 - Event emission for error tracking
 
@@ -349,13 +386,13 @@ hexDAG uses a **module path resolver** for component discovery. Components (node
 ### How It Works
 
 ```python
-from hexdag.core.resolver import resolve
+from hexdag.kernel.resolver import resolve
 
 # Resolve a node class
-LLMNode = resolve("hexdag.builtin.nodes.LLMNode")
+LLMNode = resolve("hexdag.stdlib.nodes.LLMNode")
 
 # Resolve an adapter class
-MockLLM = resolve("hexdag.builtin.adapters.mock.MockLLM")
+MockLLM = resolve("hexdag.stdlib.adapters.mock.MockLLM")
 
 # Resolve a custom component
 MyNode = resolve("myapp.nodes.MyNode")
@@ -373,11 +410,11 @@ metadata:
 spec:
   ports:
     llm:
-      adapter: hexdag.builtin.adapters.openai.OpenAIAdapter
+      adapter: hexdag.stdlib.adapters.openai.OpenAIAdapter
       config:
         model: gpt-4
   nodes:
-    - kind: hexdag.builtin.nodes.LLMNode
+    - kind: hexdag.stdlib.nodes.LLMNode
       metadata:
         name: analyzer
       spec:
@@ -391,7 +428,7 @@ For convenience, built-in nodes have short aliases:
 ```yaml
 # These are equivalent:
 - kind: llm_node                           # Short alias
-- kind: hexdag.builtin.nodes.LLMNode       # Full path
+- kind: hexdag.stdlib.nodes.LLMNode       # Full path
 ```
 
 Available aliases: `llm_node`, `function_node`, `agent_node`, `loop_node`, `conditional_node`
@@ -401,7 +438,7 @@ Available aliases: `llm_node`, `function_node`, `agent_node`, `loop_node`, `cond
 **Adapters** implement port interfaces:
 
 ```python
-from hexdag.core.ports.llm import LLM
+from hexdag.kernel.ports.llm import LLM
 
 class MyLLMAdapter(LLM):
     def __init__(self, model: str = "gpt-4", api_key: str | None = None):
@@ -416,8 +453,8 @@ class MyLLMAdapter(LLM):
 **Nodes** extend BaseNodeFactory:
 
 ```python
-from hexdag.builtin.nodes import BaseNodeFactory
-from hexdag.core.domain import NodeSpec
+from hexdag.stdlib.nodes import BaseNodeFactory
+from hexdag.kernel.domain import NodeSpec
 
 class MyNode(BaseNodeFactory):
     def __call__(self, name: str, config: dict, **kwargs) -> NodeSpec:
@@ -425,6 +462,26 @@ class MyNode(BaseNodeFactory):
             return {"result": "processed"}
 
         return NodeSpec(id=name, fn=process)
+```
+
+**Libs** extend HexDAGLib (async methods auto-become agent tools):
+
+```python
+from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.kernel.ports.data_store import SupportsKeyValue
+
+class OrderManager(HexDAGLib):
+    def __init__(self, store: SupportsKeyValue) -> None:
+        self._store = store
+
+    async def acreate_order(self, customer_id: str, items: list[dict]) -> str:
+        """Create a new order. Auto-exposed as agent tool."""
+        # Your implementation
+        ...
+
+    async def aget_order(self, order_id: str) -> dict:
+        """Get order by ID. Auto-exposed as agent tool."""
+        ...
 ```
 
 **Tools** are plain functions with type hints:
@@ -479,7 +536,7 @@ class MockLLM(LLM):
 
 ## Working with YAML Pipelines
 
-YAML pipelines are built using `YamlPipelineBuilder` in `hexdag/core/pipeline_builder/`:
+YAML pipelines are built using `YamlPipelineBuilder` in `hexdag/kernel/pipeline_builder/`:
 
 ```yaml
 name: example_workflow
@@ -505,6 +562,7 @@ Key components:
 - **Dependencies**: Explicit via `depends_on` array
 - **Parameters**: Node-specific configuration
 - **Template System**: Jinja2-style templating for dynamic content
+- **Libs**: System libraries whose methods auto-become agent tools (ProcessRegistry, EntityState, Scheduler)
 
 ### Function Nodes with Module Path Strings
 
@@ -560,11 +618,11 @@ See [docs/reference/nodes.md](docs/reference/nodes.md#function_node) for complet
 
 The framework integrates with external services through ports:
 - **LLM Port**: Language model interactions (OpenAI, Anthropic, etc.)
-- **Memory Port**: Persistent memory for agents
-- **Database Port**: Data persistence and retrieval
+- **DataStore Port**: Unified data access (`SupportsKeyValue`, `SupportsQuery`, `SupportsTTL`, `SupportsSchema`, `SupportsTransactions`)
+- **PipelineSpawner Port**: Fork/exec for child pipelines
 - **Tool Router**: Function calling and tool execution
 
-Use mock adapters in `hexdag/adapters/mock/` for development and testing.
+Use mock adapters in `hexdag/stdlib/adapters/mock/` for development and testing.
 
 ## YAML-First Philosophy
 

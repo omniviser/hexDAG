@@ -12,9 +12,9 @@ import random
 
 import pytest
 
-from hexdag.core.context import get_port
-from hexdag.core.domain.dag import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.context import get_port
+from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
 
 
 # Simulated external services that can fail

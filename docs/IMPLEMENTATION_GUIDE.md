@@ -737,19 +737,16 @@ The framework provides comprehensive mock implementations for all ports, making 
 
 **Essential Mock Usage:**
 ```python
-from hexdag.adapters.mock import (
-    MockLLM,
-    MockDatabaseAdapter,
-    MockMemoryAdapter,
-    MockToolRouter
-)
+from hexdag.stdlib.adapters.mock import MockLLM, MockDatabaseAdapter
+from hexdag.kernel.ports.tool_router import ToolRouter
 
-# Use in tests one can actually define the responces from the MockLLM.
+# Use in tests -- configure mock responses from MockLLM.
 ports = {
     "llm": MockLLM(["response1", "response2"]),
     "database": MockDatabaseAdapter(),
-    "memory": MockMemoryAdapter(),
-    "tool_router": MockToolRouter()
+    "tool_router": ToolRouter(tools={
+        "search": lambda query="", **kw: {"results": []},
+    }),
 }
 ```
 

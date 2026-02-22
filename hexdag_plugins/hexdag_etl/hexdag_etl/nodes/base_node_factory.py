@@ -5,9 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, cast
 
-from hexdag.core.domain.dag import NodeSpec
-from hexdag.core.orchestration.prompt.template import PromptTemplate
-from hexdag.core.protocols import is_schema_type
+from hexdag.kernel.domain.dag import NodeSpec
+from hexdag.kernel.orchestration.prompt.template import PromptTemplate
+from hexdag.kernel.protocols import is_schema_type
 from pydantic import BaseModel, create_model
 
 
