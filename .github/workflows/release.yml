@@ -19,6 +19,18 @@ on:
         options:
           - testpypi
           - pypi
+  workflow_call:
+    inputs:
+      release_type:
+        required: true
+        type: string
+      publish_to:
+        required: true
+        type: string
+      skip_tests:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -26,6 +38,7 @@ permissions:
 
 jobs:
   test:
+    if: ${{ !inputs.skip_tests }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +56,7 @@ jobs:
 
   release:
     needs: test
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.publish_to }}
