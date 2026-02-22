@@ -1,4 +1,4 @@
-name: Release to PyPI
+name: Release hexdag
 
 on:
   workflow_dispatch:
@@ -9,27 +9,44 @@ on:
         default: 'dev'
         type: choice
         options:
-          - dev      # 0.5.0 -> 0.5.1.dev0 or 0.5.1.dev0 -> 0.5.1.dev1
-          - stable   # 0.5.1.dev2 -> 0.5.1
+          - dev      # 0.7.0 -> 0.8.0.dev1, or 0.8.0.dev1 -> 0.8.0.dev2
+          - stable   # 0.8.0.dev2 -> 0.8.0
       publish_to:
         description: 'Publish to'
         required: true
         default: 'testpypi'
         type: choice
         options:
-          - testpypi  # Test first
-          - pypi      # Production
+          - testpypi
+          - pypi
 
 permissions:
-  contents: write  # For pushing tags
-  id-token: write  # For trusted publishing
+  contents: write
+  id-token: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Run tests
+        run: |
+          uv sync
+          uv run pytest -x -q
+      - name: Run lint
+        run: uv run ruff check hexdag/ hexdag_plugins/
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.publish_to }}
-      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag/' || 'https://test.pypi.org/project/hexDAGtest/' }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag/' || 'https://test.pypi.org/project/hexdag/' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -42,10 +59,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Install build tools
         run: |
           python -m pip install --upgrade pip
-          pip install commitizen build
+          pip install build
 
       - name: Configure git
         run: |
@@ -55,26 +72,26 @@ jobs:
       - name: Bump version
         id: version
         run: |
-          echo "Current version: $(cz version --project)"
-          if [ "${{ inputs.release_type }}" == "dev" ]; then
-            cz bump --yes --devrelease 1 || echo "No commits to bump, using current version"
-          else
-            cz bump --yes || echo "No commits to bump, using current version"
-          fi
-          NEW_VERSION=$(cz version --project)
-          echo "New version: $NEW_VERSION"
+          NEW_VERSION=$(python scripts/bump_version.py \
+            --pyproject pyproject.toml \
+            --release-type "${{ inputs.release_type }}")
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped to $NEW_VERSION"
 
-      - name: Push version bump and tag
+      - name: Commit and tag
         run: |
-          git push origin HEAD:${{ github.ref_name }} || echo "Nothing to push"
-          git tag -f v${{ steps.version.outputs.version }}
-          git push origin v${{ steps.version.outputs.version }} --force || echo "Tag already exists"
+          git add pyproject.toml
+          git commit -m "release(hexdag) ${{ steps.version.outputs.version }}"
+          git push origin HEAD:${{ github.ref_name }}
+          git tag -f "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}" --force
 
-      - name: Set package name for Test PyPI
+      - name: Rename package for TestPyPI
         if: inputs.publish_to == 'testpypi'
         run: |
-          sed -i 's/^name = "hexdag"/name = "hexDAGtest"/' pyproject.toml
+          python scripts/rename_for_testpypi.py \
+            --pyproject pyproject.toml \
+            --test-name hexDAGtest
 
       - name: Build package
         run: |

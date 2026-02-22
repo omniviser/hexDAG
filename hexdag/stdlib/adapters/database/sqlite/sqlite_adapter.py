@@ -9,7 +9,7 @@ from typing import Any, Literal
 import aiosqlite
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.database import DatabasePort, SupportsReadOnly
+from hexdag.kernel.ports.database import Database, SupportsReadOnly
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
@@ -18,11 +18,11 @@ logger = get_logger(__name__)
 SQLiteJournalMode = Literal["WAL", "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "OFF"]
 
 
-class SQLiteAdapter(DatabasePort, SupportsReadOnly):
+class SQLiteAdapter(Database, SupportsReadOnly):
     """Async SQLite adapter for database port.
 
     Provides a lightweight, file-based database solution that implements
-    the DatabasePort interface for SQL execution and schema introspection.
+    the Database interface for SQL execution and schema introspection.
     All operations are fully async using aiosqlite.
     """
 

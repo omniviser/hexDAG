@@ -38,8 +38,6 @@ from .nodes.file_io import FileReaderNode, FileWriterNode
 from .nodes.pandas_transform import PandasTransformNode
 from .nodes.sql_extract_load import SQLExtractNode, SQLLoadNode
 
-__version__ = "0.1.0"
-
 __all__ = [
     "APIExtractNode",
     "FileReaderNode",

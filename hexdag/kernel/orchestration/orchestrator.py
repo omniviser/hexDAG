@@ -11,9 +11,9 @@ from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 else:
-    ObserverManagerPort = Any
+    ObserverManager = Any
 
 from hexdag.kernel.context import (
     ExecutionContext,
@@ -43,7 +43,7 @@ from hexdag.kernel.orchestration.events import WaveCompleted, WaveStarted
 from hexdag.kernel.orchestration.hook_context import PipelineStatus
 from hexdag.kernel.orchestration.models import PortsConfiguration
 from hexdag.kernel.orchestration.port_wrappers import wrap_ports_with_observability
-from hexdag.kernel.ports.executor import ExecutionResult, ExecutionTask, ExecutorPort
+from hexdag.kernel.ports.executor import ExecutionResult, ExecutionTask, Executor
 from hexdag.kernel.ports_builder import PortsBuilder
 from hexdag.kernel.utils.node_timer import Timer
 
@@ -80,7 +80,7 @@ DEFAULT_MAX_CONCURRENT_NODES = 10
 async def _managed_ports(
     base_ports: dict[str, Any],
     additional_ports: dict[str, Any] | None = None,
-    executor: ExecutorPort | None = None,
+    executor: Executor | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Manage port and executor lifecycle with automatic cleanup.
 
@@ -93,7 +93,7 @@ async def _managed_ports(
         Base ports to manage
     additional_ports : dict[str, Any] | None
         Additional ports to merge with base ports
-    executor : ExecutorPort | None
+    executor : Executor | None
         Optional executor to manage lifecycle for
     """
     all_ports = {**base_ports}
@@ -178,7 +178,7 @@ class Orchestrator:
         default_node_timeout: float | None = None,
         pre_hook_config: HookConfig | None = None,
         post_hook_config: PostDagHookConfig | None = None,
-        executor: ExecutorPort | None = None,
+        executor: Executor | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -194,7 +194,7 @@ class Orchestrator:
             post_hook_config: Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
             executor: Optional executor port for pluggable execution strategies.
                 If None (default), creates LocalExecutor with the provided configuration.
-                Set to a custom ExecutorPort implementation (e.g., CeleryExecutor,
+                Set to a custom Executor implementation (e.g., CeleryExecutor,
                 AzureFunctionsExecutor) for distributed or serverless execution.
 
         Notes
@@ -247,9 +247,7 @@ class Orchestrator:
         self._execution_coordinator = ExecutionCoordinator()
         self._lifecycle_manager = LifecycleManager(pre_hook_config, post_hook_config)
 
-    async def _notify_observer(
-        self, observer_manager: ObserverManagerPort | None, event: Any
-    ) -> None:
+    async def _notify_observer(self, observer_manager: ObserverManager | None, event: Any) -> None:
         """Notify observer if it exists (delegates to ExecutionCoordinator)."""
         await self._execution_coordinator.notify_observer(observer_manager, event)
 
@@ -271,7 +269,7 @@ class Orchestrator:
             if not hasattr(obs, "notify"):
                 logger.warning(
                     f"Port 'observer_manager' doesn't have 'notify' method. "
-                    f"Expected ObserverManagerPort, got {type(obs).__name__}"
+                    f"Expected ObserverManager, got {type(obs).__name__}"
                 )
 
     def _validate_required_ports(
@@ -356,7 +354,7 @@ class Orchestrator:
         builder: PortsBuilder,
         max_concurrent_nodes: int = DEFAULT_MAX_CONCURRENT_NODES,
         strict_validation: bool = False,
-        executor: ExecutorPort | None = None,
+        executor: Executor | None = None,
     ) -> "Orchestrator":
         """Create an Orchestrator using a PortsBuilder.
 
@@ -505,7 +503,7 @@ class Orchestrator:
         waves = graph.waves()
         pipeline_timer = Timer()
 
-        observer_manager: ObserverManagerPort | None = all_ports.get("observer_manager")
+        observer_manager: ObserverManager | None = all_ports.get("observer_manager")
 
         wrapped_ports = wrap_ports_with_observability(all_ports)
 

@@ -10,9 +10,9 @@ This module provides execution coordination functionality:
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 else:
-    ObserverManagerPort = Any
+    ObserverManager = Any
 
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.logging import get_logger
@@ -54,14 +54,12 @@ class ExecutionCoordinator:
     # Observer Notifications (from PolicyCoordinator)
     # ========================================================================
 
-    async def notify_observer(
-        self, observer_manager: ObserverManagerPort | None, event: Any
-    ) -> None:
+    async def notify_observer(self, observer_manager: ObserverManager | None, event: Any) -> None:
         """Notify observer manager of an event if it exists.
 
         Parameters
         ----------
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Observer manager to notify (None if no observer configured)
         event : Any
             Event to send (typically NodeStarted, NodeCompleted, etc.)

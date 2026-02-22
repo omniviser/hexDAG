@@ -51,7 +51,7 @@ if TYPE_CHECKING:
         PostDagHookConfig,
     )
     from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
-    from hexdag.kernel.ports.secret import SecretPort
+    from hexdag.kernel.ports.secret import SecretStore
 
 logger = get_logger(__name__)
 
@@ -74,7 +74,7 @@ class PipelineRunner:
     port_overrides : dict[str, Any] | None
         Runtime port overrides. Merges with YAML-declared ports;
         overrides win on name collision.
-    secrets_provider : SecretPort | None
+    secrets_provider : SecretStore | None
         Secret adapter for pre-instantiation secret loading.
         Overrides any ``secret`` port declared in YAML.
     secret_keys : list[str] | None
@@ -99,7 +99,7 @@ class PipelineRunner:
         self,
         *,
         port_overrides: dict[str, Any] | None = None,
-        secrets_provider: SecretPort | None = None,
+        secrets_provider: SecretStore | None = None,
         secret_keys: list[str] | None = None,
         max_concurrent_nodes: int = 10,
         strict_validation: bool = False,

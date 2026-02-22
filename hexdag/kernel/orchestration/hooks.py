@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from types import MappingProxyType
 
     from hexdag.kernel.orchestration.models import NodeExecutionContext
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.components.adapter_lifecycle_manager import (
@@ -67,7 +67,7 @@ class HookConfig:
     health_check_warn_only : bool
         If True, log warnings for unhealthy adapters but don't block
     enable_secret_injection : bool
-        Load secrets from SecretPort into Memory before execution
+        Load secrets from SecretStore into Memory before execution
     secret_keys : list[str] | None
         Specific secret keys to load. If None, loads all available secrets.
     secret_prefix : str
@@ -147,7 +147,7 @@ class PreDagHookManager:
 
     Pre-DAG hooks execute BEFORE the PipelineStarted event and include:
     1. Health checks on all adapters
-    2. Secret injection from KeyVault/SecretPort into Memory
+    2. Secret injection from KeyVault/SecretStore into Memory
     3. Custom user-defined setup hooks
 
     Examples
@@ -402,7 +402,7 @@ class PostDagHookManager:
         context: NodeExecutionContext,
         node_results: dict[str, Any],
         status: str,
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Save final checkpoint state."""
         from hexdag.kernel.context import get_port

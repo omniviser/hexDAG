@@ -93,7 +93,7 @@ and drivers in `drivers/` implement these protocols.
 | Executor | `executor.py` | How nodes get executed (local, distributed) |
 | PipelineSpawner | `pipeline_spawner.py` | Fork/exec for sub-pipeline runs |
 | FileStorage | `file_storage.py` | File read/write abstraction |
-| Secret | `secret.py` | Secret/credential management |
+| SecretStore | `secret.py` | Secret/credential management |
 | VectorSearch | `vector_search.py` | Vector similarity search |
 | Healthcheck | `healthcheck.py` | Health status reporting |
 | ApiCall | `api_call.py` | External API call abstraction |
@@ -223,8 +223,8 @@ Each driver implements a kernel Protocol:
 
 | Driver | Directory | Implements | Purpose |
 |--------|-----------|-----------|---------|
-| LocalExecutor | `drivers/executors/` | `ExecutorPort` | Execute nodes via asyncio in the local process |
-| LocalObserverManager | `drivers/observer_manager/` | `ObserverManagerPort` | Route events to registered observers |
+| LocalExecutor | `drivers/executors/` | `Executor` | Execute nodes via asyncio in the local process |
+| LocalObserverManager | `drivers/observer_manager/` | `ObserverManager` | Route events to registered observers |
 | LocalPipelineSpawner | `drivers/pipeline_spawner/` | `PipelineSpawner` | Fork sub-pipeline runs in the local process |
 
 Users swap adapters (OpenAI <-> Anthropic), not drivers. Drivers are the plumbing.
@@ -421,7 +421,7 @@ their own.
 | **EventBus** | Cross-pipeline pub/sub signals. Pipelines emit/subscribe to named events across runs. Enables reactive multi-pipeline coordination. |
 | **LockPort** | Distributed locking/coordination. Prevents concurrent pipeline runs from conflicting on shared resources. |
 | **GovernancePort** | Authorization and audit. Controls who can spawn pipelines, transition entity states, access data. |
-| **ArtifactStore** | Pipeline artifact storage (extends FileStoragePort). Semantic layer for pipeline inputs/outputs/intermediate results. |
+| **ArtifactStore** | Pipeline artifact storage (extends FileStorage). Semantic layer for pipeline inputs/outputs/intermediate results. |
 
 ### Planned Libs (stdlib/lib/)
 
@@ -441,14 +441,14 @@ their own.
 ```
 kernel/ports/ (existing)              kernel/ports/ (planned)
   LLM                                   EventBus
-  Memory / DataStore                     LockPort
+  DataStore / Memory                     LockPort
   Database                               GovernancePort
   ToolRouter                             ArtifactStore
   ObserverManager
   Executor
   PipelineSpawner
   FileStorage
-  Secret
+  SecretStore
   VectorSearch
 
 stdlib/lib/ (existing)               stdlib/lib/ (planned)

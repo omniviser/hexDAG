@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Any
 from hexdag.kernel.logging import get_logger
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 else:
-    ObserverManagerPort = Any
+    ObserverManager = Any
 
 logger = get_logger(__name__)
 
@@ -43,7 +43,7 @@ class AdapterLifecycleManager:
     async def cleanup_all_adapters(
         self,
         ports: dict[str, Any],
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Close adapter connections and release resources.
 
@@ -51,7 +51,7 @@ class AdapterLifecycleManager:
         ----------
         ports : dict[str, Any]
             All available ports
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Optional observer for event emission
 
         Returns

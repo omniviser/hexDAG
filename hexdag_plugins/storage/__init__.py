@@ -23,7 +23,7 @@ Plugin Structure
 
 Available Adapters
 ------------------
-- ``LocalFileStorage``: Local filesystem storage (inherits ``FileStoragePort``)
+- ``LocalFileStorage``: Local filesystem storage (inherits ``FileStorage``)
 - ``InMemoryVectorStore``: In-memory vector store (inherits ``VectorStorePort``)
 - ``PgVectorAdapter``: PostgreSQL pgvector (inherits ``VectorStorePort``)
 - ``ChromaDBAdapter``: ChromaDB vector store (inherits ``VectorStorePort``)
@@ -35,8 +35,6 @@ from hexdag_plugins.storage.adapters import (
     LocalFileStorage,
     PgVectorAdapter,
 )
-
-__version__ = "0.1.0"
 
 __all__ = [
     # File Storage

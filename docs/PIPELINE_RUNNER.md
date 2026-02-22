@@ -95,7 +95,7 @@ else:
 PipelineRunner(
     *,
     port_overrides: dict[str, Any] | None = None,
-    secrets_provider: SecretPort | None = None,
+    secrets_provider: SecretStore | None = None,
     secret_keys: list[str] | None = None,
     max_concurrent_nodes: int = 10,
     strict_validation: bool = False,
@@ -110,7 +110,7 @@ PipelineRunner(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `port_overrides` | `dict[str, Any] \| None` | `None` | Runtime port overrides. Merges with YAML-declared ports; overrides win on name collision. |
-| `secrets_provider` | `SecretPort \| None` | `None` | Secret adapter for pre-instantiation secret loading. Overrides any `secret` port in YAML. |
+| `secrets_provider` | `SecretStore \| None` | `None` | Secret adapter for pre-instantiation secret loading. Overrides any `secret` port in YAML. |
 | `secret_keys` | `list[str] \| None` | `None` | Specific secret keys to load. If `None`, loads all available secrets. |
 | `max_concurrent_nodes` | `int` | `10` | Maximum nodes to execute concurrently. |
 | `strict_validation` | `bool` | `False` | Raise on schema validation failure. |
@@ -220,7 +220,7 @@ PipelineRunner loads secrets into `os.environ` **before** port adapters are inst
 
 ### Constructor-Based Secrets
 
-Pass a `SecretPort` adapter directly:
+Pass a `SecretStore` adapter directly:
 
 ```python
 from hexdag_plugins.azure import AzureKeyVaultAdapter
@@ -515,7 +515,7 @@ PipelineRunner orchestrates five internal steps on every `run()` call:
 1. Build        YAML string/file  -->  (DirectedGraph, PipelineConfig)
                 via YamlPipelineBuilder
 
-2. Load secrets  SecretPort.load_to_environ()  -->  os.environ
+2. Load secrets  SecretStore.load_to_environ()  -->  os.environ
                  (skipped if already cached or no provider)
 
 3. Validate      Scan port configs for ${VAR} patterns

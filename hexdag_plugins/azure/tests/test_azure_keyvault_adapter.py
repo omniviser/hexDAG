@@ -95,7 +95,7 @@ async def test_service_principal_requires_all_credentials():
 
 
 # ===================================================================
-# aget_secret() — SecretPort protocol
+# aget_secret() — SecretStore protocol
 # ===================================================================
 
 
@@ -196,7 +196,7 @@ async def test_aget_secret_null_value(keyvault_adapter):
 
 
 # ===================================================================
-# aload_secrets_to_memory() — SecretPort protocol
+# aload_secrets_to_memory() — SecretStore protocol
 # ===================================================================
 
 
@@ -277,7 +277,7 @@ async def test_aload_secrets_to_memory_skips_missing(keyvault_adapter):
 
 
 # ===================================================================
-# alist_secret_names() — SecretPort protocol
+# alist_secret_names() — SecretStore protocol
 # ===================================================================
 
 

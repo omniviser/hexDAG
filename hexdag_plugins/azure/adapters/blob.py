@@ -7,11 +7,11 @@ import os
 import time
 from typing import Any
 
-from hexdag.kernel.ports.file_storage import FileStoragePort
+from hexdag.kernel.ports.file_storage import FileStorage
 from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
-class AzureBlobAdapter(FileStoragePort):
+class AzureBlobAdapter(FileStorage):
     """Azure Blob Storage adapter for file operations.
 
     Provides scalable file storage for documents, artifacts, and pipeline

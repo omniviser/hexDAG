@@ -41,8 +41,8 @@ class MockAdapterWithHealth:
         self.close_called = True
 
 
-class MockSecretPort:
-    """Mock secret port for testing."""
+class MockSecretStore:
+    """Mock secret store for testing."""
 
     def __init__(self, secrets: dict[str, str] | None = None):
         self.secrets = secrets or {}
@@ -200,9 +200,9 @@ class TestPreDagHookManager:
 
     @pytest.mark.asyncio
     async def test_secret_injection(self, mock_context):
-        """Test secret injection from SecretPort to Memory."""
+        """Test secret injection from SecretStore to Memory."""
         # Setup
-        secret_port = MockSecretPort(
+        secret_port = MockSecretStore(
             secrets={
                 "OPENAI_API_KEY": "sk-test-123",
                 "DATABASE_PASSWORD": "dbpass456",
@@ -455,7 +455,7 @@ class TestPostHookCleanupRobustness:
         """Test that secret cleanup runs even if custom hook raises unexpected exception."""
         # Setup
         mock_memory = MockMemory()
-        mock_secret = MockSecretPort({"API_KEY": "secret123"})
+        mock_secret = MockSecretStore({"API_KEY": "secret123"})
 
         # Pre-hook manager to inject secrets
         pre_config = HookConfig(enable_secret_injection=True)
@@ -565,7 +565,7 @@ class TestPostHookCleanupRobustness:
         """Test that all cleanup operations run even with multiple failures."""
         # Setup
         mock_memory = MockMemory()
-        mock_secret = MockSecretPort({"KEY": "value"})
+        mock_secret = MockSecretStore({"KEY": "value"})
         mock_adapter = MockAdapterWithHealth()
 
         pre_config = HookConfig(enable_secret_injection=True)

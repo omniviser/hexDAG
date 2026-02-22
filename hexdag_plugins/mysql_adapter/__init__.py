@@ -20,5 +20,4 @@ Note: For standard SQL operations (raw queries, table schemas), use
 
 from hexdag_plugins.mysql_adapter.adapters import MySQLAdapter
 
-__version__ = "1.0.0"
 __all__ = ["MySQLAdapter"]

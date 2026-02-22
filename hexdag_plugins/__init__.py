@@ -25,9 +25,9 @@ Adapters MUST inherit from their port protocol to be auto-discovered:
 
 - LLM adapters: inherit from ``LLM``, ``SupportsGeneration``, etc.
 - Memory adapters: inherit from ``Memory``
-- Database adapters: inherit from ``DatabasePort`` or ``SQLAdapter``
-- Secret adapters: inherit from ``SecretPort``
-- Storage adapters: inherit from ``FileStoragePort`` or ``VectorStorePort``
+- Database adapters: inherit from ``Database`` or ``SQLAdapter``
+- Secret adapters: inherit from ``SecretStore``
+- Storage adapters: inherit from ``FileStorage`` or ``VectorStorePort``
 - Tool adapters: inherit from ``ToolRouter``
 
 Example::
@@ -54,3 +54,10 @@ Available Plugins
 - ``storage``: File and vector storage adapters
 - ``hexdag_etl``: ETL pipeline nodes
 """
+
+try:
+    from importlib.metadata import version as _meta_version
+
+    __version__ = _meta_version("hexdag-plugins")
+except Exception:
+    __version__ = "0.0.0.dev0"  # Fallback for development installs

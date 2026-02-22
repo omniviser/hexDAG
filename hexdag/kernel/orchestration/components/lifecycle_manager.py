@@ -4,7 +4,7 @@ This module consolidates pre-DAG and post-DAG hook management into a single
 component that handles the complete pipeline lifecycle:
 
 - Health checks on adapters
-- Secret injection from KeyVault/SecretPort
+- Secret injection from KeyVault/SecretStore
 - Custom user hooks
 - Checkpoint saving
 - Secret cleanup (security)
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
     from hexdag.kernel.orchestration.models import NodeExecutionContext
     from hexdag.kernel.ports.memory import Memory
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
-    from hexdag.kernel.ports.secret import SecretPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
+    from hexdag.kernel.ports.secret import SecretStore
 
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.events import HealthCheckCompleted
@@ -71,7 +71,7 @@ class HookConfig:
     health_check_warn_only : bool
         If True, log warnings for unhealthy adapters but don't block
     enable_secret_injection : bool
-        Load secrets from SecretPort into Memory before execution
+        Load secrets from SecretStore into Memory before execution
     secret_keys : list[str] | None
         Specific secret keys to load. If None, loads all available secrets.
     secret_prefix : str
@@ -130,7 +130,7 @@ class LifecycleManager:
 
     Pre-execution (pre_execute):
     1. Health checks on all adapters
-    2. Secret injection from SecretPort into Memory
+    2. Secret injection from SecretStore into Memory
     3. Custom user-defined setup hooks
 
     Post-execution (post_execute):
@@ -365,7 +365,7 @@ class LifecycleManager:
     async def _check_all_adapters(
         self,
         ports: dict[str, Any],
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
         pipeline_name: str,
     ) -> list[HealthStatus]:
         """Run health checks on all adapters that implement ahealth_check()."""
@@ -385,7 +385,7 @@ class LifecycleManager:
         self,
         port_name: str,
         adapter: Any,
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
     ) -> HealthStatus:
         """Check health of a single adapter."""
         try:
@@ -435,11 +435,11 @@ class LifecycleManager:
 
     async def _load_secrets(
         self,
-        secret_port: SecretPort | None,
+        secret_port: SecretStore | None,
         memory: Memory | None,
         dag_id: str,
     ) -> dict[str, str]:
-        """Load secrets from SecretPort into Memory."""
+        """Load secrets from SecretStore into Memory."""
         if not secret_port:
             logger.debug("No secret port configured, skipping secret injection")
             return {}
@@ -508,7 +508,7 @@ class LifecycleManager:
     async def _cleanup_all_adapters(
         self,
         ports: dict[str, Any],
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Close adapter connections and release resources."""
         cleaned_adapters = []
@@ -548,7 +548,7 @@ class LifecycleManager:
         context: NodeExecutionContext,
         node_results: dict[str, Any],
         status: str,
-        observer_manager: ObserverManagerPort | None,
+        observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Save final checkpoint state."""
         from hexdag.kernel.context import get_port

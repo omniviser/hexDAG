@@ -77,8 +77,8 @@ class MockMemory:
         )
 
 
-class MockSecretPort:
-    """Mock secret port."""
+class MockSecretStore:
+    """Mock secret store."""
 
     def __init__(self, secrets: dict[str, str]):
         self.secrets = secrets
@@ -222,7 +222,7 @@ async def test_orchestrator_secret_injection():
 
     # Create ports
     memory = MockMemory()
-    secret_port = MockSecretPort(
+    secret_port = MockSecretStore(
         secrets={
             "API_KEY": "sk-test-123",
             "DATABASE_URL": "postgres://localhost/test",
@@ -266,7 +266,7 @@ async def test_orchestrator_secret_injection_with_custom_prefix():
     graph.add(NodeSpec(name="capture", fn=capture_secrets, deps=set()))
 
     memory = MockMemory()
-    secret_port = MockSecretPort(secrets={"API_KEY": "sk-custom-prefix"})
+    secret_port = MockSecretStore(secrets={"API_KEY": "sk-custom-prefix"})
 
     orchestrator = Orchestrator(
         ports={
@@ -303,7 +303,7 @@ async def test_orchestrator_post_dag_secret_cleanup():
     graph.add(NodeSpec(name="simple", fn=simple_node, deps=set()))
 
     memory = MockMemory()
-    secret_port = MockSecretPort(secrets={"API_KEY": "sk-test-123"})
+    secret_port = MockSecretStore(secrets={"API_KEY": "sk-test-123"})
 
     orchestrator = Orchestrator(
         ports={
@@ -337,7 +337,7 @@ async def test_orchestrator_post_dag_secret_cleanup_multiple_secrets():
     graph.add(NodeSpec(name="worker", fn=simple_node, deps=set()))
 
     memory = MockMemory()
-    secret_port = MockSecretPort(
+    secret_port = MockSecretStore(
         secrets={
             "API_KEY": "sk-key-123",
             "DATABASE_URL": "postgres://db",
@@ -468,7 +468,7 @@ async def test_orchestrator_secret_cleanup_on_failure():
     graph.add(NodeSpec(name="fail", fn=failing_node, deps=set()))
 
     memory = MockMemory()
-    secret_port = MockSecretPort(secrets={"API_KEY": "sk-test"})
+    secret_port = MockSecretStore(secrets={"API_KEY": "sk-test"})
 
     orchestrator = Orchestrator(
         ports={
@@ -577,7 +577,7 @@ async def test_orchestrator_secret_injection_isolated_per_run():
     graph.add(NodeSpec(name="capture", fn=capture_secret, deps=set()))
 
     memory = MockMemory()
-    secret_port = MockSecretPort(secrets={"API_KEY": "sk-test-123"})
+    secret_port = MockSecretStore(secrets={"API_KEY": "sk-test-123"})
 
     orchestrator = Orchestrator(
         ports={
@@ -623,7 +623,7 @@ async def test_orchestrator_full_lifecycle_with_all_hooks():
 
     adapter = MockAdapterWithLifecycle("full_lifecycle_adapter")
     memory = MockMemory()
-    secret_port = MockSecretPort(secrets={"API_KEY": "sk-full-test"})
+    secret_port = MockSecretStore(secrets={"API_KEY": "sk-full-test"})
 
     orchestrator = Orchestrator(
         ports={
@@ -702,7 +702,7 @@ async def test_orchestrator_hooks_with_complex_pipeline():
     adapter1 = MockAdapterWithLifecycle("adapter1")
     adapter2 = MockAdapterWithLifecycle("adapter2")
     memory = MockMemory()
-    secret_port = MockSecretPort(secrets={"KEY1": "value1", "KEY2": "value2"})
+    secret_port = MockSecretStore(secrets={"KEY1": "value1", "KEY2": "value2"})
 
     orchestrator = Orchestrator(
         ports={

@@ -6,7 +6,7 @@ from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
 @runtime_checkable
-class FileStoragePort(Protocol):
+class FileStorage(Protocol):
     """Port for file storage operations.
 
     Provides a unified interface for local and cloud file storage.
@@ -115,3 +115,7 @@ class FileStoragePort(Protocol):
             Health status of the storage system
         """
         ...
+
+
+# Backward-compat alias (deprecated: use FileStorage)
+FileStoragePort = FileStorage

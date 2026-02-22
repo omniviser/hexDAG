@@ -23,12 +23,15 @@ from hexdag.kernel.orchestration.prompt import FewShotPromptTemplate, PromptTemp
 from hexdag.kernel.pipeline_runner import PipelineRunner
 
 # Port interfaces (needed for writing custom adapters)
-from hexdag.kernel.ports import LLM, APICall, DatabasePort, ToolRouter
+from hexdag.kernel.ports import LLM, APICall, Database, ToolRouter
 from hexdag.stdlib.nodes import (
     FunctionNode,
     LLMNode,
     ReActAgentNode,
 )
+
+# Backward-compat alias (deprecated: use Database)
+DatabasePort = Database
 
 # Define placeholders for lazy-loaded adapters to satisfy __all__ checking
 # These will be replaced by __getattr__ when accessed
@@ -136,6 +139,7 @@ __all__ = [
     "LLM",
     "APICall",
     "ToolRouter",
+    "Database",
     "DatabasePort",
     # Testing and Development Adapters
     "InMemoryMemory",

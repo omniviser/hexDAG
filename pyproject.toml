@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.6.0"
+version = "0.7.0.dev1"
 
 description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
 authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
@@ -124,7 +124,6 @@ dev = [
     "interrogate>=1.7.0", # Docstring coverage
     # Additional tools
     "pre-commit==3.8.0",    # Git hooks
-    "commitizen==4.8.3",    # Conventional commits
     "watchdog==6.0.0",      # File system monitoring
     "safety>=3.0.0",        # Vulnerability scanning
     "yamllint>=1.35.0",     # YAML linting
@@ -387,20 +386,6 @@ convention = "numpy"
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexdag"]
-
-[tool.commitizen]
-name = "cz_customize"
-version = "0.6.0"
-version_files = ["pyproject.toml:^version"]
-bump_message = "release $current_version -> $new_version [skip ci]"
-changelog_file = "CHANGELOG.md"
-major_version_zero = true
-tag_format = "v$version"
-
-[tool.commitizen.customize]
-# Support both: regular commits "feat: ..." AND merged PRs "Merged PR 123: feat: ..."
-bump_pattern = '^(?:Merged PR \d+: )?(ci!?|docs!?|experiment!?|feat!?|fix!?|refactor!?|test!?)'
-bump_map = { ".*!" = "MAJOR", "ci" = "PATCH", "docs" = "PATCH", "experiment" = "PATCH", "feat" = "MINOR", "fix" = "PATCH", "refactor" = "PATCH", "test" = "PATCH" }
 
 [tool.vulture]
 min_confidence = 90

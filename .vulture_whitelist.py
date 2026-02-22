@@ -12,7 +12,7 @@ _ = CallableType
 
 
 # Protocol abstract method parameters (intentionally unused - define interface)
-# hexdag/core/ports/api_call.py - APICallPort protocol
+# hexdag/kernel/ports/api_call.py - ApiCall protocol
 def aget(url: str, headers: dict, params: dict, **kwargs: object) -> None:
     """Whitelist for APICallPort.aget parameters."""
     _ = (url, headers, params, kwargs)
@@ -33,29 +33,29 @@ def adelete(url: str, headers: dict, **kwargs: object) -> None:
     _ = (url, headers, kwargs)
 
 
-# hexdag/core/ports/file_storage.py - FileStoragePort protocol
+# hexdag/kernel/ports/file_storage.py - FileStorage protocol
 def aupload(local_path: str, remote_path: str) -> None:
-    """Whitelist for FileStoragePort.aupload parameters."""
+    """Whitelist for FileStorage.aupload parameters."""
     _ = (local_path, remote_path)
 
 
 def adownload(remote_path: str, local_path: str) -> None:
-    """Whitelist for FileStoragePort.adownload parameters."""
+    """Whitelist for FileStorage.adownload parameters."""
     _ = (remote_path, local_path)
 
 
 def adelete_file(remote_path: str) -> None:
-    """Whitelist for FileStoragePort.adelete parameter."""
+    """Whitelist for FileStorage.adelete parameter."""
     _ = remote_path
 
 
 def aexists(remote_path: str) -> None:
-    """Whitelist for FileStoragePort.aexists parameter."""
+    """Whitelist for FileStorage.aexists parameter."""
     _ = remote_path
 
 
 def aget_metadata(remote_path: str) -> None:
-    """Whitelist for FileStoragePort.aget_metadata parameter."""
+    """Whitelist for FileStorage.aget_metadata parameter."""
     _ = remote_path
 
 

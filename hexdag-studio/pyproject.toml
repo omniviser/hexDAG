@@ -4,13 +4,13 @@ version = "0.1.0"
 description = "Visual Studio UI for hexDAG pipelines"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
-authors = [{ name = "hexDAG Team", email = "team@hexdag.ai" }]
+license = { text = "Apache-2.0" }
+authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
 keywords = ["hexdag", "studio", "ui", "dag", "workflow", "visualization"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",

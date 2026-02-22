@@ -4,7 +4,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.secret import SecretPort
+from hexdag.kernel.ports.secret import SecretStore
 from hexdag.kernel.types import Secret
 
 if TYPE_CHECKING:
@@ -14,10 +14,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class LocalSecretAdapter(SecretPort):
+class LocalSecretAdapter(SecretStore):
     """Local secret adapter that reads from environment variables.
 
-    This adapter implements the SecretPort interface using local environment
+    This adapter implements the SecretStore interface using local environment
     variables as the secret source. It's useful for:
     - Development and testing
     - CI/CD pipelines

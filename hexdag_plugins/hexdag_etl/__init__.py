@@ -41,11 +41,9 @@ from .hexdag_etl import (
     PandasTransformNode,
     SQLExtractNode,
     SQLLoadNode,
-    __version__,
 )
 
 __all__ = [
-    "__version__",
     "APIExtractNode",
     "FileReaderNode",
     "FileWriterNode",

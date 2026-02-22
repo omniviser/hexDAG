@@ -1,31 +1,52 @@
-name: Release hexdag-studio to PyPI
+name: Release hexdag-studio
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 0.1.0, 0.1.1)'
+      release_type:
+        description: 'Release type'
         required: true
-        type: string
+        default: 'dev'
+        type: choice
+        options:
+          - dev      # 0.1.0 -> 0.2.0.dev1, or 0.2.0.dev1 -> 0.2.0.dev2
+          - stable   # 0.2.0.dev2 -> 0.2.0
       publish_to:
         description: 'Publish to'
         required: true
         default: 'testpypi'
         type: choice
         options:
-          - testpypi  # Test first
-          - pypi      # Production
+          - testpypi
+          - pypi
 
 permissions:
-  contents: write  # For pushing tags
-  id-token: write  # For trusted publishing
+  contents: write
+  id-token: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Run tests
+        run: |
+          uv sync
+          uv run pytest -x -q
+      - name: Run lint
+        run: uv run ruff check hexdag/ hexdag_plugins/
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.publish_to }}
-      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag-studio/' || 'https://test.pypi.org/project/hexdag-studio-test/' }}
+      url: ${{ inputs.publish_to == 'pypi' && 'https://pypi.org/project/hexdag-studio/' || 'https://test.pypi.org/project/hexdag-studio/' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +64,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Python dependencies
+      - name: Install build tools
         run: |
           python -m pip install --upgrade pip
           pip install build
@@ -53,36 +74,41 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Update version in pyproject.toml
-        working-directory: hexdag-studio
+      - name: Bump version
+        id: version
         run: |
-          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' pyproject.toml
-          echo "Updated version to ${{ inputs.version }}"
-          cat pyproject.toml | head -10
+          NEW_VERSION=$(python scripts/bump_version.py \
+            --pyproject hexdag-studio/pyproject.toml \
+            --release-type "${{ inputs.release_type }}")
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped to $NEW_VERSION"
 
-      - name: Build UI
+      - name: Commit and tag
+        run: |
+          git add hexdag-studio/pyproject.toml
+          git commit -m "release(hexdag-studio) ${{ steps.version.outputs.version }}"
+          git push origin HEAD:${{ github.ref_name }}
+          git tag -f "studio-v${{ steps.version.outputs.version }}"
+          git push origin "studio-v${{ steps.version.outputs.version }}" --force
+
+      - name: Build Studio UI
         working-directory: hexdag-studio/ui
         run: |
           npm ci
           npm run build
 
-      - name: Set package name for Test PyPI
+      - name: Rename package for TestPyPI
         if: inputs.publish_to == 'testpypi'
-        working-directory: hexdag-studio
         run: |
-          sed -i 's/^name = "hexdag-studio"/name = "hexdag-studio-test"/' pyproject.toml
+          python scripts/rename_for_testpypi.py \
+            --pyproject hexdag-studio/pyproject.toml \
+            --test-name hexdag-studio-test
 
       - name: Build package
         working-directory: hexdag-studio
         run: |
           rm -rf dist/ build/
           python -m build
-
-      - name: Create and push tag
-        if: inputs.publish_to == 'pypi'
-        run: |
-          git tag -f studio-v${{ inputs.version }}
-          git push origin studio-v${{ inputs.version }} --force || echo "Tag already exists"
 
       - name: Publish to Test PyPI
         if: inputs.publish_to == 'testpypi'

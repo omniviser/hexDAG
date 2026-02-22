@@ -394,12 +394,12 @@ def _generate_ports_docs() -> str:
 
     port_modules = [
         ("LLM", "hexdag.kernel.ports.llm"),
-        ("DatabasePort", "hexdag.kernel.ports.database"),
+        ("Database", "hexdag.kernel.ports.database"),
         ("Memory", "hexdag.kernel.ports.memory"),
         ("ToolRouter", "hexdag.kernel.ports.tool_router"),
         ("APICall", "hexdag.kernel.ports.api_call"),
         ("FileStorage", "hexdag.kernel.ports.file_storage"),
-        ("SecretPort", "hexdag.kernel.ports.secret"),
+        ("SecretStore", "hexdag.kernel.ports.secret"),
         ("VectorSearch", "hexdag.kernel.ports.vector_search"),
         ("Executor", "hexdag.kernel.ports.executor"),
     ]

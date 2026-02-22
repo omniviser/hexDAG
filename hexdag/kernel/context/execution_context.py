@@ -16,10 +16,10 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.observer_manager import ObserverManagerPort
+    from hexdag.kernel.ports.observer_manager import ObserverManager
 
 # Context variables for orchestrator components (async-safe)
-_observer_manager_context: ContextVar[ObserverManagerPort | None] = ContextVar(
+_observer_manager_context: ContextVar[ObserverManager | None] = ContextVar(
     "observer_manager", default=None
 )
 
@@ -48,7 +48,7 @@ _current_node_name_context: ContextVar[str | None] = ContextVar("current_node_na
 # ============================================================================
 
 
-def set_observer_manager(manager: ObserverManagerPort | None) -> None:
+def set_observer_manager(manager: ObserverManager | None) -> None:
     """Set observer manager for current async execution context.
 
     This should be called by the orchestrator at the start of DAG execution.
@@ -57,7 +57,7 @@ def set_observer_manager(manager: ObserverManagerPort | None) -> None:
 
     Parameters
     ----------
-    manager : ObserverManagerPort | None
+    manager : ObserverManager | None
         Observer manager instance, or None to clear context
 
     Examples
@@ -72,7 +72,7 @@ def set_observer_manager(manager: ObserverManagerPort | None) -> None:
     _observer_manager_context.set(manager)
 
 
-def get_observer_manager() -> ObserverManagerPort | None:
+def get_observer_manager() -> ObserverManager | None:
     """Get observer manager from current async execution context.
 
     This is called by components to access the observer manager for event
@@ -80,7 +80,7 @@ def get_observer_manager() -> ObserverManagerPort | None:
 
     Returns
     -------
-    ObserverManagerPort | None
+    ObserverManager | None
         Current observer manager, or None if not in orchestrator context
 
     Examples
@@ -285,7 +285,7 @@ class ExecutionContext:
 
     def __init__(
         self,
-        observer_manager: ObserverManagerPort | None = None,
+        observer_manager: ObserverManager | None = None,
         run_id: str | None = None,
         ports: dict[str, Any] | None = None,
     ):
@@ -293,7 +293,7 @@ class ExecutionContext:
 
         Parameters
         ----------
-        observer_manager : ObserverManagerPort | None
+        observer_manager : ObserverManager | None
             Observer manager for event emission
         run_id : str | None
             Unique run identifier

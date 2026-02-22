@@ -109,8 +109,8 @@ health = await storage.ahealth_check()
 ### Ports
 
 **In hexDAG Core:**
-- `DatabasePort` - SQL database operations
-- `FileStoragePort` - File storage operations
+- `Database` - SQL database operations
+- `FileStorage` - File storage operations
 
 **In hexdag-storage:**
 - `VectorStorePort` - Specialized for vector similarity search
@@ -119,7 +119,7 @@ health = await storage.ahealth_check()
 
 ```
 hexdag_plugins/storage/
-├── sql/              # DatabasePort implementations
+├── sql/              # Database implementations
 │   ├── postgresql.py
 │   ├── mysql.py
 │   └── sqlite.py
@@ -129,7 +129,7 @@ hexdag_plugins/storage/
 │   ├── chromadb.py   # ChromaDB
 │   └── in_memory.py  # In-memory (testing)
 │
-└── file/             # FileStoragePort implementations
+└── file/             # FileStorage implementations
     └── local.py      # Local filesystem
 ```
 

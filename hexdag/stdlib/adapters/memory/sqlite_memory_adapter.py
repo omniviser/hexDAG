@@ -1,4 +1,4 @@
-"""SQLite-backed Memory adapter that bridges DatabasePort to Memory Port.
+"""SQLite-backed Memory adapter that bridges Database to Memory Port.
 
 This adapter allows using SQLite databases as a Memory storage backend,
 providing persistent key-value storage with SQL database benefits.
@@ -7,7 +7,7 @@ providing persistent key-value storage with SQL database benefits.
 from typing import Any
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.database import DatabasePort
+from hexdag.kernel.ports.database import Database
 from hexdag.kernel.ports.memory import Memory
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
 
@@ -18,7 +18,7 @@ class SQLiteMemoryAdapter(Memory):
     """Memory adapter backed by SQLite database.
 
     Provides persistent key-value storage using SQLite, bridging the
-    DatabasePort and Memory Port. Automatically creates a key-value table
+    Database and Memory Port. Automatically creates a key-value table
     and provides async get/set operations.
 
     This adapter is ideal for:
@@ -28,7 +28,7 @@ class SQLiteMemoryAdapter(Memory):
 
     Parameters
     ----------
-    database : DatabasePort
+    database : Database
         SQLite database adapter (typically SQLiteAdapter)
     table_name : str, default="memory_store"
         Name of the key-value table
@@ -45,19 +45,19 @@ class SQLiteMemoryAdapter(Memory):
     """
 
     # Type annotations for attributes
-    database: DatabasePort
+    database: Database
     table_name: str
     auto_init: bool
     _initialized: bool
 
     def __init__(
-        self, database: DatabasePort, table_name: str = "memory_store", auto_init: bool = True
+        self, database: Database, table_name: str = "memory_store", auto_init: bool = True
     ) -> None:
         """Initialize SQLite memory adapter.
 
         Parameters
         ----------
-        database : DatabasePort
+        database : Database
             SQLite database adapter
         table_name : str
             Name of the key-value table

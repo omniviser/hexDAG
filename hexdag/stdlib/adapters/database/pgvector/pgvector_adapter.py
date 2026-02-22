@@ -5,13 +5,13 @@ from typing import Any
 import asyncpg
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.database import DatabasePort, SupportsReadOnly
+from hexdag.kernel.ports.database import Database, SupportsReadOnly
 from hexdag.kernel.ports.vector_search import SupportsVectorSearch
 
 logger = get_logger(__name__)
 
 
-class PgVectorAdapter(DatabasePort, SupportsVectorSearch, SupportsReadOnly):
+class PgVectorAdapter(Database, SupportsVectorSearch, SupportsReadOnly):
     """PostgreSQL adapter with pgvector extension support.
 
     This adapter provides integration with PostgreSQL databases that have the

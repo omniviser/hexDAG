@@ -291,7 +291,7 @@ class Secret:
     """Minimal secret wrapper to avoid accidental str() in logs.
 
     This class wraps sensitive string values to prevent them from being
-    accidentally logged or printed. It's used by the SecretPort interface
+    accidentally logged or printed. It's used by the SecretStore interface
     to return secret values in a safe manner.
 
     The Secret class uses name mangling (double underscore) to make it
@@ -309,7 +309,7 @@ class Secret:
 
     Usage in adapters::
 
-        # SecretPort implementation
+        # SecretStore implementation
         async def aget_secret(self, key: str) -> Secret:
             value = os.getenv(key)
             return Secret(value)

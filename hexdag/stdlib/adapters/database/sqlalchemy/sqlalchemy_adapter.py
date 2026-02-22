@@ -9,13 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from hexdag.kernel.ports.database import (
     ColumnSchema,
-    DatabasePort,
+    Database,
     SupportsRawSQL,
     TableSchema,
 )
 
 
-class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL):
+class SQLAlchemyAdapter(Database, SupportsRawSQL):
     """Adapter for SQLAlchemy-supported databases."""
 
     def __init__(self, dsn: str) -> None:
@@ -47,7 +47,7 @@ class SQLAlchemyAdapter(DatabasePort, SupportsRawSQL):
 
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """
-        Get schema information for all tables in DatabasePort format.
+        Get schema information for all tables in Database format.
 
         Returns:
             Dictionary mapping table names to schema information.

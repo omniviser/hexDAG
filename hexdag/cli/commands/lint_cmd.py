@@ -11,7 +11,8 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from hexdag.kernel.linting.pipeline_rules import run_pipeline_rules
+from hexdag.kernel.linting.pipeline_rules import ALL_PIPELINE_RULES
+from hexdag.kernel.linting.rules import run_rules
 
 if TYPE_CHECKING:
     from hexdag.kernel.linting.models import LintReport
@@ -53,6 +54,14 @@ def lint(
             help="Output format (text, json)",
         ),
     ] = "text",
+    disable: Annotated[
+        str,
+        typer.Option(
+            "--disable",
+            "-d",
+            help="Comma-separated rule IDs to skip (e.g., W200,W201)",
+        ),
+    ] = "",
 ) -> None:
     """Lint a YAML pipeline file for best practices and potential issues.
 
@@ -65,6 +74,7 @@ def lint(
     hexdag lint pipeline.yaml
     hexdag lint pipeline.yaml --severity warning
     hexdag lint pipeline.yaml --format json
+    hexdag lint pipeline.yaml --disable W200,W201
     """
     if severity not in _SEVERITY_RANK:
         console.print(
@@ -87,8 +97,24 @@ def lint(
         console.print("[red]File does not contain a valid YAML mapping.[/red]")
         raise typer.Exit(1)
 
-    # Run lint rules
-    report = run_pipeline_rules(config)
+    # Filter rules based on --disable flag
+    disabled_ids = (
+        {r.strip().upper() for r in disable.split(",") if r.strip()} if disable else set()
+    )
+
+    if disabled_ids:
+        known_ids = {r.rule_id for r in ALL_PIPELINE_RULES}
+        unknown = disabled_ids - known_ids
+        if unknown:
+            console.print(
+                f"[yellow]Unknown rule ID(s): {', '.join(sorted(unknown))}[/yellow]  "
+                f"Known: {', '.join(sorted(known_ids))}"
+            )
+        active_rules = [r for r in ALL_PIPELINE_RULES if r.rule_id not in disabled_ids]
+    else:
+        active_rules = list(ALL_PIPELINE_RULES)
+
+    report = run_rules(active_rules, config)
 
     # Filter by severity
     min_rank = _SEVERITY_RANK[severity]

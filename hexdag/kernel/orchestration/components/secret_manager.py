@@ -8,7 +8,7 @@ from hexdag.kernel.logging import get_logger
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.memory import Memory
-    from hexdag.kernel.ports.secret import SecretPort
+    from hexdag.kernel.ports.secret import SecretStore
 
 logger = get_logger(__name__)
 
@@ -17,7 +17,7 @@ class SecretManager:
     """Manages secret injection and cleanup lifecycle.
 
     Responsibilities:
-    - Load secrets from SecretPort into Memory
+    - Load secrets from SecretStore into Memory
     - Track loaded secret keys per pipeline
     - Clean up secrets after pipeline execution
 
@@ -59,15 +59,15 @@ class SecretManager:
 
     async def load_secrets(
         self,
-        secret_port: SecretPort | None,
+        secret_port: SecretStore | None,
         memory: Memory | None,
         dag_id: str,
     ) -> dict[str, str]:
-        """Load secrets from SecretPort into Memory.
+        """Load secrets from SecretStore into Memory.
 
         Parameters
         ----------
-        secret_port : SecretPort | None
+        secret_port : SecretStore | None
             Secret port instance (KeyVault, etc.)
         memory : Memory | None
             Memory port instance to store secrets in

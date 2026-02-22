@@ -66,7 +66,7 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `SQLiteAdapter` | Async SQLite adapter for database port. |
 | `CsvAdapter` | Adapter class for reading CSV files from a specified directo... |
-| `MockDatabaseAdapter` | Mock implementation of DatabasePort for testing and demos. |
+| `MockDatabaseAdapter` | Mock implementation of Database for testing and demos. |
 
 ### llm
 
