@@ -329,7 +329,7 @@ export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
 - [Implementation Guide](docs/IMPLEMENTATION_GUIDE.md) -- Production-ready workflows
 - [Plugin System](docs/PLUGIN_SYSTEM.md) -- Custom component development
 - [CLI Reference](docs/CLI_REFERENCE.md) -- Complete CLI documentation
-- [Roadmap](ARCHITECTURE_ROADMAP.md) -- Planned kernel extensions (EventBus, LockPort, CentralAgent)
+- [Roadmap](docs/ROADMAP.md) -- Development roadmap and planned kernel extensions
 
 ### Examples
 

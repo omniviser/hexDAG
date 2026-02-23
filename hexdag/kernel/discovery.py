@@ -35,7 +35,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from hexdag.kernel.config.loader import load_config
+from hexdag.compiler.config_loader import load_config
 from hexdag.kernel.ports.detection import detect_port_type
 from hexdag.kernel.schema import SchemaGenerator
 

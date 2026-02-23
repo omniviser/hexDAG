@@ -1,6 +1,6 @@
 # YAML as the System Compiler: Multi-Pipeline Orchestration for hexDAG
 
-**Status:** In Progress (Step 0a complete)
+**Status:** In Progress (Steps 0a, 0b, 0c complete)
 **Last Updated:** 2026-02
 
 ## Context
@@ -751,28 +751,19 @@ Each step has a **kernel side** (domain models, enforcement, runtime) and a **co
 
 Moved 15 source files, updated ~99 import references, created backward-compat wrapper with deprecation warning. All 2368 tests pass.
 
-**0b. Move `kernel/config/loader.py` -> `compiler/config_loader.py`**
+**0b. Move `kernel/config/loader.py` -> `compiler/config_loader.py` -- COMPLETED**
 
-| Action | What |
-|---|---|
-| Move `hexdag/kernel/config/loader.py` -> `hexdag/compiler/config_loader.py` | ConfigLoader, load_config, clear_config_cache, config_to_manifest_entries |
-| Keep `hexdag/kernel/config/models.py` in kernel | Pure domain models |
-| Update `hexdag/kernel/config/__init__.py` | Re-export from new location |
-| Update `hexdag/kernel/discovery.py` | Only consumer of config loader in kernel |
+Moved config loader to `compiler/config_loader.py`, replaced original with deprecation wrapper, updated `kernel/config/__init__.py` (lazy `__getattr__`) and `kernel/discovery.py` imports. All 2440 tests pass.
 
-**0c. Extend `HexDAGConfig` -- reuse `OrchestratorConfig`**
+**0c. Extend `HexDAGConfig` -- reuse `OrchestratorConfig` -- COMPLETED**
 
-| Action | What |
-|---|---|
-| Extend `HexDAGConfig` with `orchestrator: OrchestratorConfig` | `spec.kernel` -> `OrchestratorConfig` |
-| Add `limits: DefaultLimits` | Default resource limits |
-| Add `caps: DefaultCaps` | Default capability boundaries |
+Added `DefaultLimits` and `DefaultCaps` frozen dataclasses to `kernel/config/models.py`. Extended `HexDAGConfig` with `orchestrator: OrchestratorConfig`, `limits: DefaultLimits`, `caps: DefaultCaps`. Updated config parser to handle `orchestrator`/`kernel`, `limits`, and `caps` TOML sections. All 2440 tests pass.
 
 ### Step 1: `kind: Config`
 
 | File | Action | What |
 |---|---|---|
-| `kernel/config/models.py` | Edit | Add `DefaultLimits`, `DefaultCaps` dataclasses |
+| `kernel/config/models.py` | ~~Edit~~ | ~~Add `DefaultLimits`, `DefaultCaps` dataclasses~~ (done in Step 0c) |
 | `compiler/config_loader.py` | Edit | Add YAML parsing for `kind: Config` |
 | `compiler/plugins/config_definition.py` | New | `EntityPlugin` for `kind: Config` |
 

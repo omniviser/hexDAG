@@ -467,7 +467,6 @@ The framework defines ports for common AI workflow needs:
 - **Database Port**: Data storage and retrieval
 - **Memory Port**: Long-term memory storage
 - **Tool Router Port**: External tool integration
-- **Ontology Port**: Business knowledge access
 - **Embedding Selector Port**: Vector similarity search
 
 ### 2. Adapter Implementation
@@ -527,7 +526,6 @@ ports = {
     "llm": LLMFactoryAdapter(production_llm_model),
     "database": EnhancedDatabaseAdapter(production_db),
     "memory": ProductionMemoryAdapter(redis_connection),
-    "ontology": ProductionOntologyAdapter(ontology_service),
 }
 
 # Use in orchestrator
