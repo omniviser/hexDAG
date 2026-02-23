@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
+from hexdag.kernel.resolver import register_runtime
 
 if TYPE_CHECKING:
+    from hexdag.compiler.yaml_builder import YamlPipelineBuilder
     from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 logger = get_logger(__name__)
 
@@ -64,9 +66,11 @@ class MacroDefinitionPlugin:
         None
             Macro definitions don't add nodes to the graph
         """
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
-        from hexdag.kernel.resolver import register_runtime
-        from hexdag.kernel.yaml_macro import YamlMacro, YamlMacroConfig, YamlMacroParameterSpec
+        from hexdag.kernel.yaml_macro import (  # lazy: mutual cycle with yaml_builder
+            YamlMacro,
+            YamlMacroConfig,
+            YamlMacroParameterSpec,
+        )
 
         # Extract metadata
         metadata = node_config.get("metadata", {})

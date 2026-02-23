@@ -359,7 +359,9 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
 
     def _build_tool_schemas_for_native(self, allowed_tools: list[str]) -> list[dict[str, Any]]:
         """Build OpenAI-format tool schemas for native calling."""
-        from hexdag.kernel.ports.tool_router import tool_schema_from_callable
+        from hexdag.kernel.ports.tool_router import (
+            tool_schema_from_callable,  # lazy: avoid heavy tool_router import
+        )
 
         schemas = []
         for tool_name in allowed_tools:

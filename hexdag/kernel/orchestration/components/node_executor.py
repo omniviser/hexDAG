@@ -15,7 +15,10 @@ else:
 
 from hexdag.kernel.context import get_observer_manager, set_current_node_name
 from hexdag.kernel.domain.dag import NodeSpec, NodeValidationError
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import (
+    NodeExecutionError,  # noqa: F401
+    NodeTimeoutError,  # noqa: F401
+)
 from hexdag.kernel.expression_parser import ExpressionError, compile_expression
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.components.execution_coordinator import ExecutionCoordinator
@@ -31,23 +34,6 @@ from hexdag.kernel.utils.node_timer import Timer
 from hexdag.kernel.validation.retry import RetryConfig, execute_with_retry
 
 logger = get_logger(__name__)
-
-
-class NodeExecutionError(HexDAGError):
-    """Exception raised when a node fails to execute."""
-
-    def __init__(self, node_name: str, original_error: Exception) -> None:
-        self.node_name = node_name
-        self.original_error = original_error
-        super().__init__(f"Node '{node_name}' failed: {original_error}")
-
-
-class NodeTimeoutError(NodeExecutionError):
-    """Exception raised when a node exceeds its timeout."""
-
-    def __init__(self, node_name: str, timeout: float, original_error: TimeoutError) -> None:
-        self.timeout = timeout
-        super().__init__(node_name, original_error)
 
 
 class NodeExecutor:

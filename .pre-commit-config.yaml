@@ -8,7 +8,7 @@ repos:
     hooks:
       # Run the linter with auto-fix (main code)
       - id: ruff-check
-        args: [--config=pyproject.toml]
+        args: [--fix, --config=pyproject.toml]
         exclude: ^hexdag_plugins/
       # Run the formatter with auto-formatting (main code)
       - id: ruff-format
@@ -249,6 +249,14 @@ repos:
       - id: check-init-params
         name: Check adapter __init__ has explicit typed params
         entry: uv run python scripts/check_init_params.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-lazy-imports
+        name: Check for lazy imports in function bodies
+        entry: uv run python scripts/check_lazy_imports.py
         language: system
         types: [python]
         stages: [pre-commit]

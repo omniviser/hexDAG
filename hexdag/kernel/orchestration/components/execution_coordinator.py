@@ -15,7 +15,9 @@ else:
     ObserverManager = Any
 
 from hexdag.kernel.domain.dag import NodeSpec
+from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS, ExpressionError, evaluate_expression
 from hexdag.kernel.logging import get_logger
+from hexdag.stdlib.nodes.mapped_input import FieldExtractor
 
 __all__ = ["ExecutionCoordinator"]
 
@@ -183,8 +185,6 @@ class ExecutionCoordinator:
         bool
             True if the source appears to be an expression
         """
-        from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS
-
         # Check for function call patterns (function_name followed by parenthesis)
         for func_name in ALLOWED_FUNCTIONS:
             if f"{func_name}(" in source:
@@ -255,8 +255,6 @@ class ExecutionCoordinator:
                 "total": "price * quantity",
             }
         """
-        from hexdag.stdlib.nodes.mapped_input import FieldExtractor
-
         result: dict[str, Any] = {}
 
         for target_field, source_path in input_mapping.items():
@@ -342,8 +340,6 @@ class ExecutionCoordinator:
         Any
             The result of evaluating the expression
         """
-        from hexdag.kernel.expression_parser import ExpressionError, evaluate_expression
-
         # Build the data context for expression evaluation
         # Merge all available data sources into a single dict
         data_context: dict[str, Any] = {}

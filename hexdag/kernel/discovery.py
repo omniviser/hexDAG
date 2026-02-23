@@ -35,6 +35,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from hexdag.kernel.config.loader import load_config
+from hexdag.kernel.ports.detection import detect_port_type
+from hexdag.kernel.schema import SchemaGenerator
+
 # ============================================================================
 # User Plugin Path Configuration
 # ============================================================================
@@ -147,7 +151,7 @@ def discover_plugins() -> list[str]:
     """
     plugins = []
     try:
-        import hexdag_plugins
+        import hexdag_plugins  # lazy: optional namespace package
 
         for _finder, name, ispkg in pkgutil.iter_modules(hexdag_plugins.__path__):
             if ispkg:  # Only include packages, not loose modules
@@ -245,11 +249,7 @@ def discover_adapters_in_package(
         - secrets: List of secret parameter names
     """
     if detect_port_type_fn is None:
-        from hexdag.kernel.ports.detection import detect_port_type
-
         detect_port_type_fn = detect_port_type
-
-    from hexdag.kernel.schema import SchemaGenerator
 
     adapters = []
     # Use class identity (id) to deduplicate - same class may be imported in multiple modules
@@ -412,11 +412,6 @@ def discover_user_modules() -> list[str]:
     True
     """
     try:
-        from hexdag.kernel.config.loader import load_config
-    except ImportError:
-        return []
-
-    try:
         config = load_config()
     except FileNotFoundError:
         return []
@@ -553,7 +548,6 @@ def _discover_adapters_in_module(module: Any) -> list[dict[str, Any]]:
 
     Looks for adapters in __all__ or by class name convention.
     """
-    from hexdag.kernel.schema import SchemaGenerator
 
     adapters: list[dict[str, Any]] = []
 
@@ -661,7 +655,9 @@ def _detect_adapter_port_type(adapter_class: type) -> str:
 
     Delegates to the canonical implementation in ``kernel.ports.detection``.
     """
-    from hexdag.kernel.ports.detection import detect_port_type
+    from hexdag.kernel.ports.detection import (
+        detect_port_type,  # lazy: avoid loading all port protocols at import time
+    )
 
     return detect_port_type(adapter_class)
 
@@ -678,7 +674,6 @@ def _get_node_schema(cls: type) -> dict[str, Any]:
     For node factories, uses __call__ method (where config params are defined).
     Falls back to __init__ for other node types.
     """
-    from hexdag.kernel.schema import SchemaGenerator
 
     # Check if __call__ is overridden on this class
     for klass in cls.__mro__:

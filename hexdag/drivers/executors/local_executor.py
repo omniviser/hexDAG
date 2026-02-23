@@ -180,7 +180,7 @@ class LocalExecutor:
                     "Ensure orchestrator has set up context properly."
                 )
 
-            if task.node_name not in graph.nodes:
+            if task.node_name not in graph:
                 return ExecutionResult(
                     node_name=task.node_name,
                     status=PipelineStatus.FAILED,
@@ -189,7 +189,7 @@ class LocalExecutor:
                     duration_ms=_calculate_duration_ms(start_time),
                 )
 
-            node_spec: NodeSpec = graph.nodes[task.node_name]
+            node_spec: NodeSpec = graph[task.node_name]
 
             # Prepare input using ExecutionCoordinator
             node_input = self._execution_coordinator.prepare_node_input(

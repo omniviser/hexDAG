@@ -15,7 +15,7 @@ import re
 from collections import namedtuple
 from typing import Any
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import ComponentInstantiationError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import resolve
 
@@ -26,12 +26,6 @@ _DEFERRED_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(?::([^}]*))?\}")
 
 # Simple namedtuple for component specification
 ComponentSpec = namedtuple("ComponentSpec", ["module_path", "params"])
-
-
-class ComponentInstantiationError(HexDAGError):
-    """Error instantiating component from specification."""
-
-    pass
 
 
 def _resolve_deferred_env_vars(params: dict[str, Any]) -> dict[str, Any]:

@@ -1,458 +1,273 @@
-# 🗺️ Development Roadmap: hexAI Framework & YAML Pipelines
+# Development Roadmap: hexDAG Framework
 
-> **Strategic development plan separating the core hexAI framework from YAML pipelines applications**
+> **Strategic development plan for the hexDAG agent operating system**
 
-## 🎯 Vision & Architecture Separation
+## Vision & Architecture
 
 ### Core Philosophy
-- **hexAI**: Lightweight, focused DAG orchestration framework
-- **YAML Pipelines**: YAML-based agent workflow builder with multi-agent coordination patterns
-- **Clear Boundaries**: Framework provides hooks, YAML pipelines adds business workflow capabilities
+- **hexDAG**: Operating system for AI agents -- kernel (execution engine), stdlib (built-in components), drivers (infrastructure), compiler (YAML manifests)
+- **YAML Compiler**: YAML manifests are the source language, compiled into kernel domain models for execution
+- **Library-First**: All runtime primitives work as plain Python objects -- no server required
 
 ```mermaid
 graph TD
-    subgraph "hexAI Core Framework"
-        A[DAG Orchestration]
-        B[Node System]
-        C[Validation Framework]
-        D[Event Hooks]
+    subgraph "YAML Compiler (hexdag/compiler/)"
+        A[kind: Config]
+        B[kind: Pipeline]
+        C[kind: System]
+        D[kind: Adapter / Policy / Macro]
     end
 
-    subgraph "YAML Pipelines Layer"
-        E[YAML YAML Pipelines]
-        F[Multi-Agent Coordination]
-        G[Business Workflow Patterns]
-        H[Agent Catalog System]
+    subgraph "Kernel (hexdag/kernel/)"
+        E[Orchestrator + Domain Models]
+        F[Ports + Port Wrappers]
+        G[SystemRunner / PipelineRunner]
     end
 
-    subgraph "Agent Applications"
-        I[Text2SQL Agents]
-        J[Research Agents]
-        K[Analysis Workflows]
+    subgraph "Hosts (Layer 2)"
+        H[hexdag studio]
+        I[External FastAPI App]
+        J[CLI / MCP Server]
     end
 
     A --> E
     B --> E
-    C --> F
-    D --> H
+    C --> G
+    D --> E
+    E --> H
     E --> I
     E --> J
-    E --> K
 ```
 
 ---
 
-## 🏗️ Track 1: hexAI Core Framework Development
+## Completed Work
 
-### **Immediate: Core Framework Polish**
-**Objective**: Stabilize and optimize existing functionality
+### Core Framework
+- [x] **DAG Orchestration Engine** -- Topological sort, wave-based parallel execution
+- [x] **Node System** -- FunctionNode, LLMNode, AgentNode, LoopNode, ConditionalNode
+- [x] **Validation Framework** -- Multi-strategy validation (Pydantic, type checking, custom)
+- [x] **Event System** -- NodeStarted, NodeCompleted, NodeFailed, PipelineStarted, PipelineCompleted
+- [x] **Hexagonal Architecture** -- Ports (contracts) / Adapters (implementations) / Drivers (infrastructure)
+- [x] **Linux-aligned Restructure** -- `core/`->`kernel/`, `builtin/`->`stdlib/`, `adapters/`->`drivers/`
 
-#### **Architecture Improvements**
-- [ ] **Extract Retry Logic from LLMNode**
-  - Move 400+ lines of retry logic to validation framework
-  - Use validation strategies instead of node-specific logic
-  - Simplify to ~50 lines total
+### YAML Pipeline Compiler
+- [x] **YamlPipelineBuilder** -- Declarative YAML -> DirectedGraph compilation
+- [x] **Macros** -- Reusable node templates (`kind: Macro`) with subgraph expansion
+- [x] **Environment Management** -- Multi-document YAML with `metadata.namespace`
+- [x] **Preprocessing** -- Env var substitution, `!include` tags, Jinja2 templates
+- [x] **Custom YAML Tags** -- `!py` for Python expressions, `!include` for file inclusion
+- [x] **Compiler Refactor (Step 0a)** -- Moved `kernel/pipeline_builder/` -> `compiler/`
 
-- [ ] **Fix Agent Built-in Tools Architecture**
-  - Move `tool_end` and `change_phase` from adapter layer to core domain
-  - Implement CoreAgentTools to maintain hexagonal architecture
-  - Remove direct UnifiedToolRouter dependency from agent_node.py
+### Ports & Adapters
+- [x] **LLM Port** -- OpenAI, Anthropic, Mock adapters
+- [x] **DataStore Port** -- `SupportsKeyValue`, `SupportsQuery`, `SupportsTTL`, `SupportsSchema`, `SupportsTransactions`
+- [x] **PipelineSpawner Port** -- Fork/exec for child pipelines
+- [x] **ToolRouter** -- Function calling and tool execution
+- [x] **FileStorage, SecretStore, Memory** -- Data access ports
+- [x] **Executor, ObserverManager** -- Infrastructure ports
 
-- [ ] **Create Event Emission Decorators**
-  ```python
-  @emit_node_events
-  async def execute_node(...):
-      return await node_spec.fn(...)
-  ```
+### System Libraries (Libs)
+- [x] **ProcessRegistry** -- In-memory pipeline run tracker (like `ps`)
+- [x] **EntityState** -- Declarative state machines with `StateMachineConfig`
+- [x] **Scheduler** -- asyncio-based delayed/recurring pipeline execution
+- [x] **DatabaseTools** -- Agent-callable SQL query tools
 
-- [ ] **Simplify Node Factory Signatures**
-  - Reduce parameters from 10+ to 3-4 essential ones
-  - Use builder pattern or config objects
-  - Provide sensible defaults
+### API & Integration
+- [x] **MCP Server** -- 9 tools in `api/processes.py` for process management
+- [x] **Studio REST API** -- Pipeline execution, validation, export routes
+- [x] **CLI** -- `hexdag run`, `hexdag validate`, `hexdag studio`
 
-#### **Performance & DX Improvements**
-- [ ] **Extract JSON Parsing Strategies**
-  - Remove regex duplication
-  - Create pluggable parser interface
-  - Move to `hexdag.parsing` module
-  - Check the security of it
-  - Create YAML Parsing Strategy
-
-- [ ] **Static Pipeline Linter (`hexdag-lint`)**
-  - CLI tool for validating pipelines before execution
-  - Detect cycles, unused outputs, unknown parameters
-  - Emit rule IDs (E100, W200, I300) for different error types
-
-- [ ] **Repository CI/CD Pipeline Setup**
-  - Azure pipelines workflow for automated testing
-  - Multi-Python version testing (3.10, 3.11, 3.12+)
-  - Code coverage reporting with codecov integration
-  - Automated security scanning (bandit, safety)
-  - Pre-commit hooks for code quality (ruff, uv, flake8, mypy, pyright and other)
-  - Automated PyPI package publishing on release tags
-  - Documentation building and deployment
-  - Example validation in CI (run all examples as tests)
-
-- [ ] **AI Development Assistant Configuration**
-  - Create `.cursorrules` file with hexAI coding standards and patterns
-  - Add `CURSOR_GUIDE.md` with Cursor-specific development workflows
-  - Create `CLAUDE_PROMPTS.md` with standardized Claude prompts for hexAI development
-  - Add AI assistant context files for consistent code generation
-  - Document AI-assisted development best practices for the project
-
-
-### **Phase 1: Advanced Core Features**
-
-#### **Enhanced Node Types**
-- [ ] **Majority Vote Macro**
-  - Multi-input consensus mechanism
-  - Configurable voting strategies (unanimous, majority, weighted)
-  - Confidence scoring and result aggregation
-
-- [ ] **Enhanced Loop Node**
-  - Complex termination conditions
-  - State preservation across iterations
-  - Nested loop support
-
-- [ ] **Conditional Enhancement**
-  - Complex branching logic with multiple conditions
-  - Data-driven routing with schema validation
-  - Dynamic path selection based on runtime data
-
-#### **Port Registry System**
-- [ ] **Dynamic Port Discovery**
-  ```python
-  @register_port("vector_store")
-  class VectorStorePort:
-      """Custom port for vector operations"""
-  ```
-  - Remove hardcoded port names
-  - Enable runtime port registration
-  - Type-safe port contracts
-
-#### **Validation Framework Enhancement**
-- [ ] **Performance Mode**
-  - Validation result caching
-  - Compile-time validation optimization
-  - Zero-overhead passthrough mode
-
-- [ ] **Custom Validator Plugins**
-  - Simple registration API
-  - Chainable validators
-  - Domain-specific validation rules
-
-### **Phase 2: Framework Stability**
-
-#### **API Stabilization**
-- [ ] **Version 1.0 API Freeze**
-  - Backward compatibility commitment
-  - Deprecation policy
-  - Migration guides
-
-#### **Performance Optimization**
-- [ ] **Execution Engine Tuning**
-  - Wave calculation caching
-  - Minimal memory footprint
-  - Benchmark suite establishment
-
-- [ ] **Graph Optimizer Passes**
-  - Dead-node elimination and constant-folding before runtime
-  - Visitor pattern for optimization transformations
-  - Development vs production optimization profiles
-
-#### **Developer Experience**
-- [ ] **Type Stubs Generation**
-  - Full type coverage
-  - IDE autocomplete support
-  - Runtime type checking options
-
-- [ ] **Universal Input Mapping Across All Nodes**
-  - Standardize input mapping implementation across all node types
-  - Create shared mapping utilities and patterns
-  - Unify field transformation logic in BaseNodeFactory
-
-#### **Library Publication**
-- [ ] **PyPI Package Publication**
-  - Publish hexDAG as standalone library: `pip install hexdag`
-  - Semantic versioning and release automation
-  - Comprehensive package metadata and documentation
-  - Minimal dependencies (only Pydantic)
-
-- [ ] **Optional Dependencies Refactor**
-  - CLI tools as optional dependency group [cli]
-  - Visualization as optional dependency group [viz]
-  - Development tools as [dev] group
-  - Graceful import handling for missing dependencies
-
-### **Phase 3: Advanced Infrastructure**
-
-#### **Extensibility & Plugins**
-- [ ] **Plugin System Architecture**
-  - Custom node type plugins
-  - Port adapter plugins
-  - Validation strategy plugins
-  - Event observer plugins
+### Infrastructure
+- [x] **Pre-commit Hooks** -- ruff, pyupgrade, mypy, pyright, nbstripout
+- [x] **CI/CD** -- Azure pipelines
+- [x] **20+ Examples** -- Getting started to enterprise patterns
+- [x] **Jupyter Notebooks** -- Interactive documentation
 
 ---
 
-## 🏢 Track 2: YAML Pipelines Enhancement
+## Track 1: YAML Compiler & Multi-Process Orchestration
 
-### **Phase 1: Enterprise Features **
+### Phase 1: Compiler Foundation + `kind: Config`
 
-#### **Advanced Pipeline Management**
-- [ ] **Version Control Integration**
-  - Git-based pipeline versioning
-  - Rollback capabilities
-  - A/B testing support
+- [ ] **Move config loader to compiler** (Step 0b)
+  - `kernel/config/loader.py` -> `compiler/config_loader.py`
+  - Kernel keeps only domain models, compiler handles parsing
 
-#### **Advanced Features**
-- [ ] **Deterministic Replay & Checkpointing**
-  - Append-only checkpoint logs (`checkpoints/{session}.jsonl`)
-  - CLI replay command: `hexdag replay --session {id} --from {node}`
-  - Input/output hash verification for consistency
+- [ ] **Extend HexDAGConfig** (Step 0c)
+  - Add `orchestrator: OrchestratorConfig` (reuse existing)
+  - Add `limits: DefaultLimits`, `caps: DefaultCaps`
 
-- [ ] **Reusable Sub-Graphs ("Macros")**
-  - YAML macros for reducing node sequence duplication
-  - `use_macro:` directive for inline expansion
-  - Node-id prefixing for macro instance isolation
+- [ ] **`kind: Config` YAML manifest** (Step 1)
+  - Replace `hexdag.toml` with YAML `kind: Config`
+  - Parse `spec.kernel`, `spec.limits`, `spec.caps`
+  - Backward compat: TOML still works with deprecation warning
 
-### **Phase 2: Memory & Persistence**
+### Phase 2: Resource Limits & Caps
 
-#### **Memory Architecture**
-- [ ] **Memory Ports**
-  ```python
-  class MemoryPort:
-      async def store(self, key: str, value: Any, ttl: int = None)
-      async def retrieve(self, key: str) -> Any
-  ```
+- [ ] **Resource Limits** (Step 2)
+  - `ResourceLimits` frozen dataclass in `kernel/domain/`
+  - `ResourceAccounting` runtime enforcer in `kernel/orchestration/`
+  - Pre-call checks in `ObservableLLMWrapper` and `ObservableToolRouterWrapper`
+  - Events: `ResourceWarning`, `ResourceLimitExceeded`
 
-- [ ] **MemoryNode & ObserverNode**
-  - Explicit memory operations as pipeline nodes
-  - Automatic memory capture during execution
-  - Cross-pipeline memory sharing capabilities
+- [ ] **Caps (Capabilities)** (Step 3)
+  - `CapSet` frozen dataclass with `allows()`, `intersect()`
+  - Port wrapper enforcement
+  - Child process inheritance (child <= parent)
+  - Events: `CapDenied`
 
-- [ ] **Storage Backends**
-  - Redis for distributed memory
-  - PostgreSQL for structured data
-  - S3 for large objects
-  - Local cache for performance
+- [ ] **Pipeline Integration** (Step 4)
+  - Wire limits + caps into `PipelineRunner` and YAML `spec.limits`/`spec.caps`
+  - ContextVars: `_resource_accounting`, `_cap_set`
 
-#### **Event Persistence**
-- [ ] **Event Store Implementation**
-  - Audit trail capabilities
-  - Pipeline replay functionality
-  - Analytics integration
+- [ ] **`kind: Adapter`** (Step 5)
+  - Standalone adapter configs, referenceable by `{ ref: name }`
+  - DRY across System manifests
 
-### **Phase 3: Distributed Execution**
+- [ ] **`kind: Policy`** (Step 6)
+  - Reusable execution policies (retry, timeout, rate-limit)
+  - First-class declarative policy definitions
 
-#### **Distributed Infrastructure**
-- [ ] **Remote Orchestrator Service**
-  - REST API for pipeline execution
-  - Queue-based job management
-  - Horizontal scaling support
+### Phase 3: `kind: System` + SystemRunner
 
-- [ ] **Resource Management**
-  - CPU/Memory limits per pipeline
-  - Priority-based scheduling
-  - Cost tracking integration
+- [ ] **Pipes domain model** (Step 7)
+  - `Pipe` frozen dataclass: `from_process`, `to_process`, `mapping`
+  - Jinja2 template resolution for inter-process data flow
 
-#### **MCP Integration**
-- [ ] **MCP (Model Context Protocol) Server Framework**
-  - MCP protocol implementation for external tool integration
-  - Dynamic MCP server discovery and registration
-  - Native MCP support in ReActAgentNode
+- [ ] **`kind: System` + SystemBuilder** (Step 8)
+  - `SystemConfig` Pydantic model
+  - SystemBuilder: parse System YAML, resolve exec paths, validate pipe DAG
+  - SystemValidator: no cycles, valid process refs
 
----
+- [ ] **SystemRunner** (Step 9)
+  - Execute `SystemConfig` via `PipelineRunner` per process
+  - Topological execution order from pipe DAG
+  - Shared ports with per-process overrides
+  - `manual` mode (one-shot) first
 
-## 🧪 Track 2.5: Testing & Quality Infrastructure
+### Phase 4: Studio as Daemon Host
 
-### **Phase 1: Comprehensive Testing Framework**
+- [ ] **`schedule` mode** in SystemRunner
+  - Recurring execution via Scheduler (asyncio timers)
 
-#### **Unit Testing Enhancement**
-- [ ] **Test Coverage Goals**
-  - Achieve 90%+ code coverage for core modules
-  - 100% coverage for critical paths (validation, orchestration)
-  - Coverage reporting integration with CI/CD
+- [ ] **Studio System Manager**
+  - Load System manifests on startup
+  - Process supervision (like systemd)
+  - REST API: `/api/system/status`, `/api/system/start`, `/api/system/stop`
 
-- [ ] **Integration Testing Suite**
-  - End-to-end pipeline tests
-  - Multi-node workflow tests
-  - Error propagation tests
-  - Performance regression tests
+- [ ] **`continuous` mode**
+  - Restart processes on completion
+  - Restart policies and health monitoring
 
-- [ ] **Property-Based Testing**
-  - Hypothesis integration for validation framework
-  - Fuzzing for parser components
-  - Generative testing for DAG structures
-
-#### **Testing Tools & Infrastructure**
-- [ ] **Test Fixtures Library**
-  - Reusable mock components
-  - Test data generators
-  - Pipeline test harness
-  - Agent behavior simulators
-
-- [ ] **Debugging & Profiling Tools**
-  - Step-through DAG debugger
-  - Node execution profiler
-  - Memory usage analyzer
-  - Event trace visualizer
-
-### **Phase 2: Documentation & DevEx**
-
-#### **Documentation Generation**
-- [ ] **API Documentation System**
-  - Auto-generated API docs from docstrings
-  - Interactive examples in docs
-  - Architecture diagrams generation
-  - Deployment guides
-
-- [ ] **Developer Portal**
-  - Getting started tutorials
-  - Best practices guide
-  - Common patterns cookbook
-  - Troubleshooting guide
-
-### **Phase 3: Security & Reliability**
-
-#### **Security Framework**
-- [ ] **Agent Sandboxing**
-  - Secure execution environment for agents
-  - Resource limits enforcement
-  - Network access controls
-  - Secrets management
-
-- [ ] **Input Sanitization**
-  - LLM prompt injection prevention
-  - YAML bomb protection
-  - Path traversal prevention
-  - Command injection safeguards
-
-#### **Error Handling & Recovery**
-- [ ] **Structured Error System**
-  - Error categorization and codes
-  - Recovery strategies per error type
-  - Error context preservation
-  - User-friendly error messages
-
-- [ ] **Circuit Breaker Pattern**
-  - Service failure detection
-  - Automatic recovery mechanisms
-  - Fallback strategies
-  - Health monitoring
+- [ ] **`event` mode** (requires EventBus)
+  - Trigger system execution from EventBus events
 
 ---
 
-## 🚀 Track 3: Agent Applications
+## Track 2: Kernel Extensions
 
-### **Phase 1: Core Agent Workflows**
+### VFS (Virtual Filesystem)
+- [ ] **Phase 1: Introspection** -- `aread`, `alist`, `astat` path-based access
+- [ ] **Phase 2: Execution** -- `aexec` to invoke entities by path
+- [ ] **VFSTools lib** -- Agent-callable VFS operations
 
-#### **Text-to-SQL Pipeline**
-- [ ] **Multi-Strategy Execution**
-  - SQL agent with planning
-  - PetSQL integration
-  - Neurosymbolic approach
-  - Majority voting
+### EventBus
+- [ ] **Cross-pipeline pub/sub** -- Reactive multi-pipeline coordination
+- [ ] **In-memory default** + Redis/Kafka/NATS adapters
 
-#### **Research Pipeline**
-- [ ] **Multi-Agent Coordination**
-  - Web search integration
-  - Document analysis
-  - Fact verification
-  - Report generation
+### GovernancePort
+- [ ] **Authorization and audit** -- User-level permissions complementing Caps
+- [ ] **RBAC/ABAC** default implementations
 
-- [ ] **Deep Research Agent**
-  - Multi-source information gathering
-  - Fact verification and cross-referencing
-  - Citation management
-  - Knowledge synthesis
-
-#### **Chat Integration Pipeline macro**
-- [ ] **Conversational Interface**
-  - Context-aware dialogue management
-  - Multi-turn conversation support
-  - Natural language pipeline invocation
-
-### **Phase 2: Advanced Applications**
-
-#### **AutoRAG Pipeline**
-- [ ] **Document Intelligence**
-  - Automatic indexing
-  - Query optimization
-  - Knowledge graph construction
-
-#### **ETL Pipeline**
-- [ ] **Data Artifact Support**
-  - Artifact objects (URI, media_type, size) for large ETL outputs
-  - Bypass JSON serialization for files >512KB
-  - Parquet, CSV, and binary file format support
-
-### **Phase 3: Adapter Ecosystem**
-
-#### **LLM Adapters**
-- [ ] **Enhanced OpenAI Adapter**
-  - Streaming response support
-  - Function calling integration
-  - Rate limiting and quota management
-
-- [ ] **Anthropic Claude Adapter**
-  - Constitutional AI integration
-  - Tool use capabilities
-
-- [ ] **Open Source LLM Adapter**
-  - Ollama and NIM integration
-  - Model switching capabilities
+### Kernel Internals
+- [ ] **RunContext** -- Rename ExecutionContext, add typed accessors
+- [ ] **NodeHook / PortHook** -- Middleware-style lifecycle hooks
+- [ ] **`hexdag explain`** -- CLI command (like `kubectl explain`) for YAML field docs
 
 ---
 
+## Track 3: Framework Polish
 
-## 📚 Success Metrics
+### Performance & DX
+- [ ] **Graph Optimizer Passes** -- Dead-node elimination, constant-folding
+- [ ] **Static Pipeline Linter** -- `hexdag lint` with rule IDs (E100, W200)
+- [ ] **JSON Schema Export** -- Per-kind schemas for IDE YAML autocomplete
 
-### hexAI Core
-- Framework size < 10,000 LOC ✅ (Currently ~8,000 LOC)
-- Zero external dependencies (except Pydantic) ✅
+### API Stabilization
+- [ ] **Version 1.0 API Freeze** -- Backward compatibility commitment
+- [ ] **PyPI Publication** -- `pip install hexdag` with semantic versioning
+- [ ] **Optional Dependencies** -- `[cli]`, `[viz]`, `[dev]` groups
+
+### Node Enhancements
+- [ ] **Majority Vote Macro** -- Multi-input consensus mechanism
+- [ ] **Enhanced Loop Node** -- Complex termination, state preservation
+- [ ] **Conditional Enhancement** -- Data-driven routing with schema validation
+
+---
+
+## Track 4: Agent Applications
+
+### Core Workflows
+- [ ] **Text-to-SQL Pipeline** -- Multi-strategy with majority voting
+- [ ] **Research Pipeline** -- Multi-agent coordination with fact verification
+- [ ] **Chat Integration Macro** -- Conversational interface
+
+### Advanced Applications
+- [ ] **AutoRAG Pipeline** -- Automatic indexing and query optimization
+- [ ] **ETL Pipeline** -- Artifact objects for large data support
+
+### Adapter Ecosystem
+- [ ] **Enhanced OpenAI Adapter** -- Streaming, function calling, rate limiting
+- [ ] **Anthropic Claude Adapter** -- Tool use capabilities
+- [ ] **Open Source LLM Adapter** -- Ollama/NIM integration
+
+---
+
+## Success Metrics
+
+### hexDAG Core
+- Zero external dependencies (except Pydantic)
 - 100% type coverage
 - < 100ms overhead per node
-- Successful PyPI publication with >1000 downloads
+- Published on PyPI
 
-### YAML Pipelines
-- Support 1000+ concurrent pipelines
+### Multi-Process Orchestration
+- Support 100+ concurrent pipelines
 - < 1s pipeline startup time
-- 99.9% uptime
-- Horizontal scaling to 100+ nodes
+- Resource limit enforcement accuracy
 
 ### Developer Experience
-- 5 minute quick start ✅
-- Clear framework vs enterprise boundary ✅
-- Extensive examples ✅ (20 comprehensive examples)
-- Active community
+- 5 minute quick start
+- `hexdag explain` for instant YAML documentation
+- IDE autocomplete via JSON Schema
+- Extensive examples (20+ comprehensive examples)
 
 ---
 
-## 🎯 Library Development Milestones
+## Milestones
 
-### Milestone 1: Core Stabilization
-- [ ] Complete architecture fixes
-- [ ] Finalize public API
-- [ ] Performance optimizations
-- [ ] Enhanced validation framework
+### Milestone 1: YAML Compiler Foundation (In Progress)
+- [x] Compiler refactor (`pipeline_builder/` -> `compiler/`)
+- [ ] Config loader migration
+- [ ] `kind: Config` with typed defaults
 
-### Milestone 2: PyPI Release
-- [ ] Package structure optimization
-- [ ] Automated testing and CI/CD
-- [ ] Version tagging and release automation
-- [ ] Published on PyPI with semantic versioning
+### Milestone 2: Safety Rails
+- [ ] Resource Limits + Caps enforcement
+- [ ] `kind: Adapter` + `kind: Policy`
+- [ ] Pipeline-level limits/caps in YAML
 
-### Milestone 3: Enterprise Features
-- [ ] Agent factory distributed execution
-- [ ] Memory layer implementation
-- [ ] Advanced pipeline applications
-- [ ] MCP integration
+### Milestone 3: Multi-Process Orchestration
+- [ ] `kind: System` + SystemBuilder + SystemRunner
+- [ ] Pipes and topological execution
+- [ ] Manual mode end-to-end
 
-### Milestone 4: Community Adoption
-- [ ] Developer documentation site
-- [ ] Example repositories and tutorials
-- [ ] Community feedback integration
-- [ ] Stable 1.0 release
+### Milestone 4: Production Runtime
+- [ ] Studio as daemon host (schedule/continuous modes)
+- [ ] VFS Phase 1 + EventBus
+- [ ] GovernancePort
 
----
+### Milestone 5: Stable Release
+- [ ] API freeze and 1.0 release
+- [ ] PyPI publication
+- [ ] Community documentation site

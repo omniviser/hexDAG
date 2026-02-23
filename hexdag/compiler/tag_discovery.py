@@ -4,7 +4,7 @@ This module provides functions to discover available YAML custom tags
 and extract documentation from their constructors.
 
 Tags are discovered from:
-1. Builtin tags in hexdag.kernel.pipeline_builder (modules ending with _tag)
+1. Builtin tags in hexdag.compiler (modules ending with _tag)
 2. Plugin tags registered via entry points (hexdag.tags group)
 
 Plugin Tag Registration
@@ -18,7 +18,7 @@ The constructor function will receive (loader, node) arguments per PyYAML conven
 
 Usage
 -----
->>> from hexdag.kernel.pipeline_builder.tag_discovery import discover_tags
+>>> from hexdag.compiler.tag_discovery import discover_tags
 >>> tags = discover_tags()
 >>> tags["!py"]["name"]
 '!py'
@@ -36,7 +36,7 @@ import yaml
 
 
 def _discover_builtin_tags() -> dict[str, tuple[str, str, str]]:
-    """Discover builtin tags from hexdag.kernel.pipeline_builder package.
+    """Discover builtin tags from hexdag.compiler package.
 
     Scans for modules ending with '_tag' and looks for constructor functions
     following the naming pattern '<tagname>_constructor'.
@@ -49,7 +49,7 @@ def _discover_builtin_tags() -> dict[str, tuple[str, str, str]]:
     tags: dict[str, tuple[str, str, str]] = {}
 
     try:
-        package = importlib.import_module("hexdag.kernel.pipeline_builder")
+        package = importlib.import_module("hexdag.compiler")
         if not hasattr(package, "__path__"):
             return tags
 
@@ -58,7 +58,7 @@ def _discover_builtin_tags() -> dict[str, tuple[str, str, str]]:
             if not name.endswith("_tag"):
                 continue
 
-            module_path = f"hexdag.kernel.pipeline_builder.{name}"
+            module_path = f"hexdag.compiler.{name}"
 
             try:
                 module = importlib.import_module(module_path)
@@ -106,7 +106,7 @@ def _discover_plugin_tags() -> dict[str, tuple[str, str, str]]:
     tags: dict[str, tuple[str, str, str]] = {}
 
     try:
-        from importlib.metadata import entry_points
+        from importlib.metadata import entry_points  # lazy: optional plugin namespace
 
         eps = entry_points(group="hexdag.tags")
         for ep in eps:
@@ -143,7 +143,7 @@ def discover_tags() -> dict[str, dict[str, Any]]:
     """Discover all registered YAML custom tags with their metadata.
 
     Discovers tags from:
-    1. Builtin tags in hexdag.kernel.pipeline_builder (auto-discovered)
+    1. Builtin tags in hexdag.compiler (auto-discovered)
     2. Plugin tags via entry points (hexdag.tags group)
 
     Returns

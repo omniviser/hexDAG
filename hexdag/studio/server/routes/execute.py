@@ -71,8 +71,8 @@ async def execute_pipeline(request: ExecuteRequest) -> ExecuteResponse:
         pass  # Workspace not set, continue without modification
 
     try:
+        from hexdag.compiler import YamlPipelineBuilder
         from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         # Build pipeline
         builder = YamlPipelineBuilder()
@@ -177,7 +177,7 @@ async def dry_run(request: ExecuteRequest) -> dict[str, Any]:
         pass
 
     try:
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(request.content)

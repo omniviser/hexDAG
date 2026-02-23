@@ -21,8 +21,9 @@ from contextlib import suppress
 from functools import singledispatch
 from typing import Any
 
+from hexdag.compiler.preprocessing._type_guards import _is_dict_config
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.pipeline_builder.preprocessing._type_guards import _is_dict_config
 
 logger = get_logger(__name__)
 
@@ -129,7 +130,6 @@ def _resolve_env_vars_str(
     defer_secrets: bool = True,
 ) -> str | int | float | bool:
     """Resolve ${VAR} in strings with optional secret deferral."""
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
 
     def replacer(match: re.Match[str]) -> str:
         var_name, default = match.group(1), match.group(2)

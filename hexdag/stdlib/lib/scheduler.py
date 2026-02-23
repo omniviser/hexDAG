@@ -91,7 +91,9 @@ class Scheduler(HexDAGLib):
         -------
             Dict with task_id and schedule details.
         """
-        from hexdag.kernel.domain.scheduled_task import ScheduledTask
+        from hexdag.kernel.domain.scheduled_task import (
+            ScheduledTask,  # lazy: avoid import cycle with kernel
+        )
 
         task_id = str(uuid4())
         now = time.time()
@@ -131,7 +133,9 @@ class Scheduler(HexDAGLib):
         -------
             Dict with task_id and schedule details.
         """
-        from hexdag.kernel.domain.scheduled_task import ScheduledTask
+        from hexdag.kernel.domain.scheduled_task import (
+            ScheduledTask,  # lazy: avoid import cycle with kernel
+        )
 
         task_id = str(uuid4())
         now = time.time()

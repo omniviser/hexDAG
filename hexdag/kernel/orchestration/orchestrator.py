@@ -27,7 +27,6 @@ from hexdag.kernel.context import (
 from hexdag.kernel.domain.dag import DirectedGraph, DirectedGraphError
 from hexdag.kernel.exceptions import OrchestratorError
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.orchestration import NodeExecutionContext
 from hexdag.kernel.orchestration.components import ExecutionCoordinator
 from hexdag.kernel.orchestration.components.lifecycle_manager import (
     HookConfig,
@@ -41,7 +40,7 @@ from hexdag.kernel.orchestration.constants import (
 )
 from hexdag.kernel.orchestration.events import WaveCompleted, WaveStarted
 from hexdag.kernel.orchestration.hook_context import PipelineStatus
-from hexdag.kernel.orchestration.models import PortsConfiguration
+from hexdag.kernel.orchestration.models import NodeExecutionContext, PortsConfiguration
 from hexdag.kernel.orchestration.port_wrappers import wrap_ports_with_observability
 from hexdag.kernel.ports.executor import ExecutionResult, ExecutionTask, Executor
 from hexdag.kernel.ports_builder import PortsBuilder
@@ -211,7 +210,9 @@ class Orchestrator:
         # Default to LocalExecutor if no executor provided
         # ARCHITECTURAL EXCEPTION: Lazy import to avoid core -> adapters dependency at module level
         if executor is None:
-            from hexdag.drivers.executors import LocalExecutor  # noqa: PLC0415
+            from hexdag.drivers.executors import (
+                LocalExecutor,  # noqa: PLC0415  # lazy: deferred to avoid loading executor at class import
+            )
 
             if default_node_timeout is not None:
                 executor = LocalExecutor(
@@ -538,7 +539,7 @@ class Orchestrator:
             event = PipelineStarted(
                 name=pipeline_name,
                 total_waves=len(waves),
-                total_nodes=len(graph.nodes),
+                total_nodes=len(graph),
             )
             await self._notify_observer(observer_manager, event)
 
@@ -807,7 +808,7 @@ class Orchestrator:
                 return True  # Cancelled
 
             # Get current graph state (may have new nodes injected)
-            current_node_names = set(graph.nodes.keys())
+            current_node_names = set(graph.keys())
 
             # Find nodes ready to execute
             ready_nodes = self._get_ready_nodes(
@@ -860,13 +861,13 @@ class Orchestrator:
             set_node_results(node_results)
 
             # Check if new nodes were added to graph
-            new_nodes = current_node_names.symmetric_difference(set(graph.nodes.keys()))
+            new_nodes = current_node_names.symmetric_difference(set(graph.keys()))
             if new_nodes:
                 logger.info(f"Detected {len(new_nodes)} newly injected nodes: {new_nodes}")
 
         # Check if we exceeded max iterations
         if iteration >= max_iterations:
-            unexecuted = set(graph.nodes.keys()) - executed_nodes
+            unexecuted = set(graph.keys()) - executed_nodes
             raise OrchestratorError(
                 f"Dynamic execution exceeded max_iterations={max_iterations}. "
                 f"Possible infinite loop. "
@@ -912,7 +913,7 @@ class Orchestrator:
             if node_name in executed_nodes:
                 continue
 
-            node_spec = graph.nodes[node_name]
+            node_spec = graph[node_name]
 
             # Check if all dependencies are satisfied
             deps_satisfied = all(dep in node_results for dep in node_spec.deps)

@@ -262,7 +262,7 @@ class TestYAMLPipelineWithInputMapping:
     @pytest.mark.asyncio
     async def test_input_mapping_preserved_through_yaml_builder(self):
         """Test that input_mapping from YAML is correctly stored in node params."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1

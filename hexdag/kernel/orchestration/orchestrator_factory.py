@@ -6,10 +6,10 @@ runtime orchestrator, instantiating adapters and policies from their specs.
 
 from typing import TYPE_CHECKING, Any
 
+from hexdag.compiler.component_instantiator import ComponentInstantiator
+from hexdag.compiler.pipeline_config import PipelineConfig
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
-from hexdag.kernel.pipeline_builder.component_instantiator import ComponentInstantiator
-from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
 from hexdag.kernel.ports_builder import PortsBuilder
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ class OrchestratorFactory:
     Examples
     --------
     ```python
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+    from hexdag.compiler.yaml_builder import YamlPipelineBuilder
     from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
 
     # Parse YAML pipeline
@@ -218,7 +218,10 @@ class OrchestratorFactory:
         PortsConfiguration
             Hierarchical ports configuration with type-specific support
         """
-        from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
+        from hexdag.kernel.orchestration.models import (  # lazy: avoids module-level cycle
+            PortConfig,
+            PortsConfiguration,
+        )
 
         # Step 1: Instantiate global ports
         global_ports_dict = self._instantiate_ports(pipeline_config.ports)

@@ -31,6 +31,37 @@ def load_config() -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def _normalize_import(line: str) -> str:
+    """Strip inline comments and trailing whitespace for comparison."""
+    if "#" in line:
+        line = line[: line.index("#")]
+    return line.strip()
+
+
+def _is_allowed(stripped: str, allowed_imports: set[str]) -> bool:
+    """Check if an import line matches any allowed exception.
+
+    Handles two common mismatches:
+    - Trailing comments: ``import X  # noqa`` matches ``import X  # noqa  # lazy:``
+    - Multi-line imports: ``from X import (`` matches any allowed ``from X import Y``
+    """
+    norm = _normalize_import(stripped)
+
+    # Direct match (comment-stripped)
+    for allowed in allowed_imports:
+        if _normalize_import(allowed) == norm:
+            return True
+
+    # Multi-line import: "from X import (" -> match any allowed with same prefix
+    if norm.endswith("("):
+        prefix = norm[:-1].strip()  # "from X import"
+        for allowed in allowed_imports:
+            if _normalize_import(allowed).startswith(prefix):
+                return True
+
+    return False
+
+
 def check_file(
     file_path: Path,
     forbidden_patterns: list[str],
@@ -56,7 +87,7 @@ def check_file(
         for pattern in forbidden_patterns:
             if re.match(pattern, stripped):
                 # Check if this specific import is allowed
-                if stripped in allowed_imports:
+                if _is_allowed(stripped, allowed_imports):
                     continue
 
                 errors.append(

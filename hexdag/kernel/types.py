@@ -166,7 +166,7 @@ def is_literal_type(type_hint: Any) -> bool:
     False
     """
     try:
-        from typing import Literal
+        from typing import Literal  # lazy: stdlib typing import
 
         origin = get_origin(type_hint)
         return origin is Literal
@@ -190,7 +190,7 @@ def is_union_type(type_hint: Any) -> bool:
     origin = get_origin(type_hint)
 
     try:
-        from typing import Union
+        from typing import Union  # lazy: stdlib typing import
 
         if origin is Union:
             return True
@@ -198,7 +198,7 @@ def is_union_type(type_hint: Any) -> bool:
         pass
 
     try:
-        from types import UnionType
+        from types import UnionType  # lazy: stdlib typing import
 
         if isinstance(type_hint, UnionType):
             return True
@@ -253,7 +253,7 @@ def is_annotated_type(type_hint: Any) -> bool:
     False
     """
     try:
-        from typing import Annotated
+        from typing import Annotated  # lazy: stdlib typing import
 
         origin = get_origin(type_hint)
         return origin is Annotated

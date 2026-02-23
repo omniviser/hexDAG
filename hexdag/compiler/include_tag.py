@@ -56,19 +56,13 @@ from typing import Any
 
 import yaml
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import IncludeTagError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
 
 # Thread-local storage for base path during parsing
 _current_base_path: Path | None = None
-
-
-class IncludeTagError(HexDAGError):
-    """Error including external YAML file."""
-
-    pass
 
 
 def set_include_base_path(base_path: Path | None) -> None:
@@ -250,11 +244,11 @@ def register_include_tag() -> None:
     --------
     Import the module to auto-register::
 
-        import hexdag.kernel.pipeline_builder.include_tag  # Registers !include tag
+        import hexdag.compiler.include_tag  # Registers !include tag
 
     Or explicitly register::
 
-        from hexdag.kernel.pipeline_builder.include_tag import register_include_tag
+        from hexdag.compiler.include_tag import register_include_tag
         register_include_tag()
     """
     # Check if already registered to avoid duplicate registration

@@ -295,7 +295,7 @@ import json
 import sys
 from pathlib import Path
 
-from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+from hexdag.compiler import YamlPipelineBuilder
 
 async def main():
     try:

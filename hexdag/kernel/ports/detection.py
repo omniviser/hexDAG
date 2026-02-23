@@ -36,23 +36,43 @@ def _explicit_mro_match(cls: type, proto: type) -> bool:
 
 def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
     """Lazy-build the port registry to avoid circular imports."""
-    from hexdag.kernel.ports.api_call import APICall
-    from hexdag.kernel.ports.data_store import DataStore
-    from hexdag.kernel.ports.database import Database
-    from hexdag.kernel.ports.file_storage import FileStorage
-    from hexdag.kernel.ports.llm import (
+    from hexdag.kernel.ports.api_call import (
+        APICall,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.data_store import (
+        DataStore,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.database import (
+        Database,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.file_storage import (
+        FileStorage,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.llm import (  # lazy: deferred port loading
         LLM,
         SupportsEmbedding,
         SupportsFunctionCalling,
         SupportsGeneration,
         SupportsVision,
     )
-    from hexdag.kernel.ports.memory import Memory
-    from hexdag.kernel.ports.pipeline_spawner import PipelineSpawner
-    from hexdag.kernel.ports.secret import SecretStore
-    from hexdag.kernel.ports.tool_router import ToolRouter
-    from hexdag.kernel.ports.vector_search import SupportsVectorSearch
-    from hexdag.kernel.ports.vfs import VFS
+    from hexdag.kernel.ports.memory import (
+        Memory,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.pipeline_spawner import (
+        PipelineSpawner,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.secret import (
+        SecretStore,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.tool_router import (
+        ToolRouter,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.vector_search import (
+        SupportsVectorSearch,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.ports.vfs import (
+        VFS,  # lazy: loaded on first use to avoid import-time side effects
+    )
 
     # Order matters: specific before general.
     return (

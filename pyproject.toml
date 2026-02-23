@@ -376,7 +376,7 @@ convention = "numpy"
     "E501",
     "TC003",
 ] # Prompts: long template strings are ok, runtime Callable usage
-"hexdag/kernel/pipeline_builder/yaml_builder.py" = [
+"hexdag/compiler/yaml_builder.py" = [
     "E501",
 ] # YAML examples can be long
 

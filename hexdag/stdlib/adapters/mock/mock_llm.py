@@ -145,7 +145,10 @@ class MockLLM(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTra
                 ]
             )
         """
-        from hexdag.kernel.ports.llm import LLMResponse, ToolCall
+        from hexdag.kernel.ports.llm import (  # lazy: json import only when tool calls needed
+            LLMResponse,
+            ToolCall,
+        )
 
         # Get regular response
         response_text = await self.aresponse(messages)
@@ -192,7 +195,9 @@ class MockLLM(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTra
 
     async def ahealth_check(self) -> "HealthStatus":
         """Health check for Mock LLM (always healthy)."""
-        from hexdag.kernel.ports.healthcheck import HealthStatus
+        from hexdag.kernel.ports.healthcheck import (
+            HealthStatus,  # lazy: avoid heavy import for health check
+        )
 
         return HealthStatus(
             status="healthy",

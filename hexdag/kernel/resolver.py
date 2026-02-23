@@ -15,17 +15,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from hexdag.kernel.exceptions import HexDAGError
-
-
-class ResolveError(HexDAGError):
-    """Raised when a module path cannot be resolved."""
-
-    def __init__(self, kind: str, reason: str):
-        self.kind = kind
-        self.reason = reason
-        super().__init__(f"Cannot resolve '{kind}': {reason}")
-
+from hexdag.kernel.exceptions import ResolveError  # noqa: F401
 
 # Runtime storage for dynamically created components (e.g., YAML-defined macros)
 _runtime_components: dict[str, type[Any]] = {}
@@ -46,14 +36,16 @@ def register_builtin_aliases(aliases: dict[str, str]) -> None:
     This allows the builtin package to register its auto-discovered aliases
     without kernel needing to import from stdlib (maintaining hexagonal architecture).
 
+    Note: This does NOT set ``_builtin_bootstrapped`` — only
+    ``_ensure_builtin_bootstrapped`` sets the flag after loading all alias
+    sources (nodes, adapters, macros).
+
     Parameters
     ----------
     aliases : dict[str, str]
         Mapping of alias -> full module path
     """
-    global _builtin_bootstrapped
     _builtin_aliases.update(aliases)
-    _builtin_bootstrapped = True
 
 
 def _ensure_builtin_bootstrapped() -> None:
@@ -61,11 +53,15 @@ def _ensure_builtin_bootstrapped() -> None:
     global _builtin_bootstrapped
     if not _builtin_bootstrapped:
         # Node aliases (triggers hexdag.stdlib.nodes.__init__ -> register_builtin_aliases)
-        import hexdag.stdlib.nodes  # noqa: F401
+        import hexdag.stdlib.nodes  # noqa: F401  # lazy: bootstrap discovery
 
         # Adapter + macro aliases (static registries, no heavy imports)
-        from hexdag.stdlib.adapters._discovery import discover_adapter_aliases
-        from hexdag.stdlib.macros._discovery import discover_macro_aliases
+        from hexdag.stdlib.adapters._discovery import (
+            discover_adapter_aliases,  # lazy: bootstrap discovery
+        )
+        from hexdag.stdlib.macros._discovery import (
+            discover_macro_aliases,  # lazy: bootstrap discovery
+        )
 
         _builtin_aliases.update(discover_adapter_aliases())
         _builtin_aliases.update(discover_macro_aliases())

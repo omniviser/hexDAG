@@ -549,7 +549,7 @@ class TestYamlPipelineIntegration:
 
     def test_yaml_composite_while_builds(self) -> None:
         """Test composite_node with while mode builds from YAML."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1
@@ -575,7 +575,7 @@ spec:
 
     def test_yaml_composite_foreach_builds(self) -> None:
         """Test composite_node with for-each mode builds from YAML."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1
@@ -598,7 +598,7 @@ spec:
 
     def test_yaml_composite_switch_routing(self) -> None:
         """Test composite_node with switch mode for routing."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1
@@ -626,7 +626,7 @@ spec:
     @pytest.mark.asyncio
     async def test_yaml_composite_switch_executes(self) -> None:
         """Test composite_node switch mode executes correctly."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1

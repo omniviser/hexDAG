@@ -21,16 +21,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from hexdag.kernel.exceptions import HexDAGError
-
-
-class PromptTemplateError(HexDAGError):
-    """Base exception for prompt template errors."""
-
-
-class MissingVariableError(PromptTemplateError):
-    """Raised when required template variables are missing."""
-
+from hexdag.kernel.exceptions import (
+    MissingVariableError,  # noqa: F401
+    PromptTemplateError,  # noqa: F401
+)
 
 # ---------------------------------------------------------------------------
 # Cached Template Parsing

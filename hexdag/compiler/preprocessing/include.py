@@ -11,8 +11,9 @@ from typing import Any
 
 import yaml
 
+from hexdag.compiler.preprocessing._type_guards import _is_dict_config
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.pipeline_builder.preprocessing._type_guards import _is_dict_config
 
 logger = get_logger(__name__)
 
@@ -72,7 +73,6 @@ class IncludePreprocessPlugin:
         Returns:
             Processed object with includes resolved
         """
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
 
         if depth > self.max_depth:
             raise YamlPipelineBuilderError(
@@ -120,7 +120,6 @@ class IncludePreprocessPlugin:
         Returns:
             Loaded and processed content from included file
         """
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
 
         # Parse include specification (strip whitespace for better UX)
         include_spec = include_spec.strip()
@@ -178,7 +177,6 @@ class IncludePreprocessPlugin:
         Raises:
             YamlPipelineBuilderError: If path is invalid or potentially malicious
         """
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
 
         # Prevent absolute paths
         if Path(path_str).is_absolute():

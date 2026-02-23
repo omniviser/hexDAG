@@ -244,7 +244,9 @@ class InMemoryMemory(Memory):
             memory = InMemoryMemory()
             status = await memory.ahealth_check()
         """
-        from hexdag.kernel.ports.healthcheck import HealthStatus
+        from hexdag.kernel.ports.healthcheck import (
+            HealthStatus,  # lazy: avoid heavy import for health check
+        )
 
         try:
             # Test basic operations

@@ -375,7 +375,7 @@ class TestYamlAliasesIntegration:
 
     def test_yaml_pipeline_with_aliases(self) -> None:
         """Test that aliases in YAML spec are registered."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1
@@ -402,7 +402,7 @@ spec:
 
     def test_yaml_pipeline_multiple_aliases(self) -> None:
         """Test multiple aliases in YAML."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1
@@ -429,7 +429,7 @@ spec:
 
     def test_yaml_pipeline_without_aliases(self) -> None:
         """Test that pipeline without aliases section works."""
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         yaml_content = """
 apiVersion: hexdag/v1

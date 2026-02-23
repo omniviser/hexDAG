@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from hexdag.kernel.pipeline_builder.yaml_builder import (
+from hexdag.compiler.yaml_builder import (
     EnvironmentVariablePlugin,
     TemplatePlugin,
     YamlPipelineBuilder,
@@ -911,7 +911,7 @@ class TestIncludePreprocessPlugin:
 
     def test_absolute_path_rejected(self, tmp_path: Path) -> None:
         """Test that absolute paths are rejected for security."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
 
         plugin = IncludePreprocessPlugin(base_path=tmp_path)
         config = {"!include": "/etc/passwd"}
@@ -921,7 +921,7 @@ class TestIncludePreprocessPlugin:
 
     def test_max_depth_exceeded(self, tmp_path: Path) -> None:
         """Test that max nesting depth is enforced."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
 
         # Create a simple YAML file
         (tmp_path / "test.yaml").write_text("key: value")
@@ -934,7 +934,7 @@ class TestIncludePreprocessPlugin:
 
     def test_file_not_found_error(self, tmp_path: Path) -> None:
         """Test clear error message for missing include file."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
 
         plugin = IncludePreprocessPlugin(base_path=tmp_path)
         config = {"!include": "nonexistent.yaml"}
@@ -944,7 +944,7 @@ class TestIncludePreprocessPlugin:
 
     def test_anchor_not_found_error(self, tmp_path: Path) -> None:
         """Test error when anchor doesn't exist in include file."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
 
         # Create include file without the anchor
         (tmp_path / "base.yaml").write_text("existing_key: value")
@@ -957,7 +957,7 @@ class TestIncludePreprocessPlugin:
 
     def test_simple_include(self, tmp_path: Path) -> None:
         """Test simple file inclusion."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
 
         # Create include file
         (tmp_path / "shared.yaml").write_text("shared_key: shared_value")
@@ -971,7 +971,7 @@ class TestIncludePreprocessPlugin:
 
     def test_anchor_include(self, tmp_path: Path) -> None:
         """Test inclusion with anchor reference."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import IncludePreprocessPlugin
+        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
 
         # Create include file with multiple anchors
         (tmp_path / "configs.yaml").write_text("""

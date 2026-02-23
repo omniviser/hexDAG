@@ -17,34 +17,30 @@ from typing import Any, Protocol
 
 import yaml
 
-from hexdag.kernel.domain.dag import DirectedGraph
-from hexdag.kernel.exceptions import HexDAGError
-from hexdag.kernel.logging import get_logger
-from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
+from hexdag.compiler.pipeline_config import PipelineConfig
 
 # Re-export extracted classes for backward compatibility.
 # Existing code that imports from ``yaml_builder`` continues to work.
-from hexdag.kernel.pipeline_builder.plugins.macro_definition import (  # noqa: F401
+from hexdag.compiler.plugins.macro_definition import (  # noqa: F401
     MacroDefinitionPlugin,
 )
-from hexdag.kernel.pipeline_builder.plugins.macro_entity import MacroEntityPlugin  # noqa: F401
-from hexdag.kernel.pipeline_builder.plugins.node_entity import NodeEntityPlugin  # noqa: F401
-from hexdag.kernel.pipeline_builder.preprocessing.env_vars import (  # noqa: F401
+from hexdag.compiler.plugins.macro_entity import MacroEntityPlugin  # noqa: F401
+from hexdag.compiler.plugins.node_entity import NodeEntityPlugin  # noqa: F401
+from hexdag.compiler.preprocessing.env_vars import (  # noqa: F401
     EnvironmentVariablePlugin,
 )
-from hexdag.kernel.pipeline_builder.preprocessing.include import (  # noqa: F401
+from hexdag.compiler.preprocessing.include import (  # noqa: F401
     IncludePreprocessPlugin,
 )
-from hexdag.kernel.pipeline_builder.preprocessing.template import TemplatePlugin  # noqa: F401
-from hexdag.kernel.pipeline_builder.yaml_validator import YamlValidator
+from hexdag.compiler.preprocessing.template import TemplatePlugin  # noqa: F401
+from hexdag.compiler.yaml_validator import YamlValidator
+from hexdag.kernel.domain.dag import DirectedGraph
+from hexdag.kernel.exceptions import YamlPipelineBuilderError  # noqa: F401
+from hexdag.kernel.logging import get_logger
+from hexdag.kernel.resolver import register_alias
+from hexdag.kernel.validation.sanitized_types import register_type_from_config
 
 logger = get_logger(__name__)
-
-
-class YamlPipelineBuilderError(HexDAGError):
-    """YAML pipeline building errors."""
-
-    pass
 
 
 # ============================================================================
@@ -251,7 +247,7 @@ class YamlPipelineBuilder:
         logger.info(
             "Built pipeline '{name}' with {nodes} nodes, {ports} ports, {policies} policies",
             name=pipeline_config.metadata.get("name", "unknown"),
-            nodes=len(graph.nodes),
+            nodes=len(graph),
             ports=len(pipeline_config.ports),
             policies=len(pipeline_config.policies),
         )
@@ -314,7 +310,7 @@ class YamlPipelineBuilder:
         self._validate_manifest_format(config)
 
         result = self.validator.validate(config)
-        if not result.is_valid:
+        if not result:
             errors = "\n".join(f"  ERROR: {error}" for error in result.errors)
             raise YamlPipelineBuilderError(f"YAML validation failed:\n{errors}")
 
@@ -391,8 +387,6 @@ class YamlPipelineBuilder:
         config : dict[str, Any]
             The YAML configuration dict
         """
-        from hexdag.kernel.resolver import register_alias
-
         spec = config.get("spec", {})
         aliases = spec.get("aliases", {})
 
@@ -411,8 +405,6 @@ class YamlPipelineBuilder:
         config : dict[str, Any]
             The YAML configuration dict
         """
-        from hexdag.kernel.validation.sanitized_types import register_type_from_config
-
         spec = config.get("spec", {})
         custom_types = spec.get("custom_types", {})
 

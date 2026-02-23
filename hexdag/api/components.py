@@ -14,7 +14,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from hexdag.kernel.pipeline_builder.tag_discovery import discover_tags, get_tag_schema
+from hexdag.compiler.tag_discovery import discover_tags, get_tag_schema
+from hexdag.kernel.discovery import (
+    discover_adapters_in_package,
+    discover_macros_in_module,
+    discover_plugins,
+    discover_tools_in_module,
+    discover_user_modules,
+    discover_user_plugins,
+)
 from hexdag.kernel.ports.detection import detect_port_type as detect_port_type
 from hexdag.kernel.resolver import get_builtin_aliases, resolve
 from hexdag.kernel.schema import SchemaGenerator
@@ -67,7 +75,6 @@ def list_nodes(include_deprecated: bool = False) -> list[dict[str, Any]]:
     >>> any(n["kind"] == "llm_node" for n in nodes)
     True
     """
-    from hexdag.kernel.discovery import discover_user_plugins
 
     aliases = get_builtin_aliases()
     seen_classes: set[str] = set()
@@ -198,13 +205,6 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     >>> all(a["port_type"] == "llm" for a in adapters)
     True
     """
-    from hexdag.kernel.discovery import (
-        discover_adapters_in_package,
-        discover_plugins,
-        discover_user_modules,
-        discover_user_plugins,
-    )
-
     adapters: list[dict[str, Any]] = []
 
     # 1. Discover builtin adapters dynamically
@@ -279,8 +279,6 @@ def _discover_entities(
     Discovers from builtins, plugins, and optionally user modules.
     Deduplicates by ``module_path`` and sorts by *sort_key*.
     """
-    from hexdag.kernel.discovery import discover_plugins, discover_user_modules
-
     entities: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -333,8 +331,6 @@ def list_tools() -> list[dict[str, Any]]:
     >>> any(t["name"] == "tool_end" for t in tools)
     True
     """
-    from hexdag.kernel.discovery import discover_tools_in_module
-
     return _discover_entities(
         discover_tools_in_module,
         builtin_modules=["hexdag.kernel.domain.agent_tools"],
@@ -366,8 +362,6 @@ def list_macros() -> list[dict[str, Any]]:
     >>> any(m["name"] == "ReasoningAgentMacro" for m in macros)
     True
     """
-    from hexdag.kernel.discovery import discover_macros_in_module
-
     return _discover_entities(
         discover_macros_in_module,
         builtin_modules=["hexdag.stdlib.macros"],

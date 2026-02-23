@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from hexdag.kernel.pipeline_builder.yaml_validator import YamlValidator
+from hexdag.compiler.yaml_validator import YamlValidator
 
 app = typer.Typer()
 console = Console()
@@ -74,7 +74,7 @@ def validate(
 
     # Display results
     console.print()
-    if result.is_valid:
+    if result:
         console.print(f"[green]✓ Validation successful:[/green] {yaml_file}")
     else:
         console.print(f"[red]✗ Validation failed:[/red] {yaml_file}")
@@ -108,7 +108,7 @@ def validate(
     console.print()
 
     # Exit with error code if validation failed
-    if not result.is_valid:
+    if not result:
         raise typer.Exit(1)
 
 
@@ -168,7 +168,7 @@ def _explain_validation(config: dict, result: Any) -> None:
                 node_type = node_type[:-5]
 
             # Check if node type is known
-            from hexdag.kernel.pipeline_builder.yaml_validator import KNOWN_NODE_TYPES
+            from hexdag.compiler.yaml_validator import KNOWN_NODE_TYPES
 
             qualified_type = f"{namespace}:{node_type}"
             if qualified_type in KNOWN_NODE_TYPES or node_type in KNOWN_NODE_TYPES:
@@ -221,6 +221,6 @@ Total Nodes: {len(nodes)}
 Errors: {len(result.errors)}
 Warnings: {len(result.warnings)}
 Suggestions: {len(result.suggestions)}
-Valid: {"[green]Yes[/green]" if result.is_valid else "[red]No[/red]"}
+Valid: {"[green]Yes[/green]" if result else "[red]No[/red]"}
 """
     console.print(Panel(summary_text.strip(), border_style="blue"))

@@ -241,7 +241,7 @@ class SchemaGenerator:
 
         # Check for callable origin from collections.abc
         try:
-            from collections.abc import Callable as ABCCallable
+            from collections.abc import Callable as ABCCallable  # lazy: stdlib typing import
 
             if origin is ABCCallable:
                 return True

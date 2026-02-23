@@ -24,11 +24,11 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 from hexdag.drivers.observer_manager.local import LocalObserverManager
 from hexdag.kernel.domain.entity_state import StateMachineConfig
 from hexdag.kernel.lib_base import get_lib_tool_schemas
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
-from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 from hexdag.stdlib.adapters.mock import MockLLM
 from hexdag.stdlib.lib import (
     EntityState,

@@ -251,7 +251,7 @@ def generate_main_py(project_name: str, pipeline: dict[str, Any]) -> str:
         "",
         "from dotenv import load_dotenv",
         "",
-        "from hexdag.kernel.pipeline_builder import YamlPipelineBuilder",
+        "from hexdag.compiler import YamlPipelineBuilder",
         "from hexdag.kernel.orchestration.orchestrator import Orchestrator",
     ]
 

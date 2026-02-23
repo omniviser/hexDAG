@@ -10,8 +10,8 @@ from typing import Any
 
 import yaml
 
-from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
-from hexdag.kernel.pipeline_builder.yaml_validator import YamlValidator
+from hexdag.compiler import YamlPipelineBuilder
+from hexdag.compiler.yaml_validator import YamlValidator
 
 
 def validate(yaml_content: str, lenient: bool = False) -> dict[str, Any]:
@@ -70,8 +70,8 @@ def _validate_full(yaml_content: str) -> dict[str, Any]:
         return {
             "valid": True,
             "message": "Pipeline is valid",
-            "node_count": len(graph.nodes),
-            "nodes": [node.name for node in graph.nodes.values()],
+            "node_count": len(graph),
+            "nodes": [node.name for node in graph.values()],
             "ports": list(config.ports.keys()) if config.ports else [],
         }
     except Exception as e:
@@ -104,7 +104,7 @@ def _validate_lenient(yaml_content: str) -> dict[str, Any]:
         validator = YamlValidator()
         report = validator.validate(parsed)
 
-        if not report.is_valid:
+        if not report:
             return {
                 "valid": False,
                 "error": report.errors[0] if report.errors else "Validation failed",

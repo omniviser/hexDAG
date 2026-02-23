@@ -18,22 +18,29 @@ if TYPE_CHECKING:
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import (
+    CycleDetectedError,
+    DirectedGraphError,  # noqa: F401 - re-export for backward compat
+    DuplicateNodeError,
+    MissingDependencyError,
+    NodeValidationError,
+    SchemaCompatibilityError,
+)
+from hexdag.kernel.utils.serialization import is_json_serializable
 
 T = TypeVar("T", bound=BaseModel)
 
 _EMPTY_SET: frozenset[str] = frozenset()
 
-
-class NodeValidationError(HexDAGError):
-    """Raised when DAG node input/output validation fails.
-
-    This covers Pydantic model validation failures during node execution,
-    e.g. when input data doesn't match the node's ``in_model`` or output
-    data doesn't match the node's ``out_model``.
-    """
-
-    __slots__ = ()
+# Re-export for backward compatibility
+__all_errors__ = [
+    "NodeValidationError",
+    "DirectedGraphError",
+    "CycleDetectedError",
+    "MissingDependencyError",
+    "DuplicateNodeError",
+    "SchemaCompatibilityError",
+]
 
 
 class Color(Enum):
@@ -63,6 +70,7 @@ class NodeSpec:
     - Arbitrary metadata parameters
     - Optional conditional execution via `when` expression
     - Retry configuration with exponential backoff
+    - Factory metadata for distributed execution (factory_class, factory_params)
 
     Supports fluent chaining via .after() method.
 
@@ -104,6 +112,20 @@ class NodeSpec:
     retry_backoff: float | None = None  # Multiplier for exponential backoff (default: 2.0)
     retry_max_delay: float | None = None  # Maximum delay cap in seconds (default: 60.0)
     when: str | None = None  # Optional expression to evaluate before execution
+    # Factory metadata for distributed execution (set by YAML pipeline builder)
+    factory_class: str | None = None  # Module path, e.g. "hexdag.stdlib.nodes.LLMNode"
+    factory_params: dict[str, Any] | None = None  # Original factory **kwargs
+
+    @property
+    def distributable(self) -> bool:
+        """Whether this node can be reconstructed on a remote worker.
+
+        Requires factory metadata AND all param values must be serializable
+        (no callables, compiled code, or other non-primitive objects).
+        """
+        if self.factory_class is None or self.factory_params is None:
+            return False
+        return is_json_serializable(self.factory_params)
 
     def __post_init__(self) -> None:
         """Ensure deps and params are immutable, and intern strings for performance."""
@@ -112,6 +134,9 @@ class NodeSpec:
         # Intern dependency names as well
         object.__setattr__(self, "deps", frozenset(sys.intern(d) for d in self.deps))
         object.__setattr__(self, "params", MappingProxyType(self.params))
+        # Freeze factory_params if present
+        if self.factory_params is not None:
+            object.__setattr__(self, "factory_params", MappingProxyType(self.factory_params))
 
     def _validate_with_model(
         self, data: Any, model: type[T] | None, validation_type: str
@@ -249,9 +274,9 @@ class NodeSpec:
         >>> graph += c_with_dep
         >>> len(graph)
         3
-        >>> "a" in graph.nodes["b"].deps
+        >>> "a" in graph["b"].deps
         True
-        >>> "b" in graph.nodes["c"].deps
+        >>> "b" in graph["c"].deps
         True
 
         Notes
@@ -280,36 +305,6 @@ class NodeSpec:
         params_str = f", params={dict(self.params)}" if self.params else ""
 
         return f"NodeSpec('{self.name}'{types_str}{deps_str}{params_str})"
-
-
-class DirectedGraphError(HexDAGError):
-    """Base exception for DirectedGraph errors."""
-
-    __slots__ = ()
-
-
-class CycleDetectedError(DirectedGraphError):
-    """Raised when a cycle is detected in the DAG."""
-
-    __slots__ = ()
-
-
-class MissingDependencyError(DirectedGraphError):
-    """Raised when a node depends on a non-existent node."""
-
-    __slots__ = ()
-
-
-class DuplicateNodeError(DirectedGraphError):
-    """Raised when attempting to add a node with an existing name."""
-
-    __slots__ = ()
-
-
-class SchemaCompatibilityError(DirectedGraphError):
-    """Raised when connected nodes have incompatible schemas."""
-
-    __slots__ = ()
 
 
 class DirectedGraph:
@@ -905,6 +900,18 @@ class DirectedGraph:
         False
         """
         return node_name in self.nodes
+
+    def __getitem__(self, node_name: str) -> NodeSpec:
+        """Get a node by name using subscript syntax.
+
+        Examples
+        --------
+        >>> graph = DirectedGraph()
+        >>> _ = graph.add(NodeSpec("a", lambda: None))
+        >>> graph["a"].name
+        'a'
+        """
+        return self.nodes[node_name]
 
     def __iadd__(self, other: NodeSpec | list[NodeSpec]) -> "DirectedGraph":
         """Add node(s) to graph in-place using += operator.

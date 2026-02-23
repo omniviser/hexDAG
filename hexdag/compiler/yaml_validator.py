@@ -1,5 +1,6 @@
 """YAML Pipeline Validator - Validates pipeline configurations."""
 
+from collections.abc import Iterator
 from typing import Any
 
 from hexdag.kernel.domain.dag import DirectedGraph
@@ -20,7 +21,9 @@ def _get_known_node_types() -> frozenset[str]:
     """
     global _known_node_types
     if _known_node_types is None:
-        from hexdag.kernel.resolver import get_builtin_aliases
+        from hexdag.kernel.resolver import (
+            get_builtin_aliases,  # lazy: avoid circular import with node discovery
+        )
 
         _known_node_types = frozenset(get_builtin_aliases().keys())
     return _known_node_types
@@ -97,6 +100,20 @@ class ValidationReport:
             List of suggestion messages
         """
         return self._suggestions
+
+    def __bool__(self) -> bool:
+        """True if validation passed (no errors)."""
+        return not self._errors
+
+    def __len__(self) -> int:
+        """Total number of issues (errors + warnings + suggestions)."""
+        return len(self._errors) + len(self._warnings) + len(self._suggestions)
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over all issues: errors first, then warnings, then suggestions."""
+        yield from self._errors
+        yield from self._warnings
+        yield from self._suggestions
 
 
 class _SchemaValidator:
@@ -289,7 +306,7 @@ class YamlValidator:
         # Validate manifest structure
         self._validate_manifest_structure(config, result)
 
-        if not result.is_valid:
+        if not result:
             return result
 
         spec = config.get("spec", {})

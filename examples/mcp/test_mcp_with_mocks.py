@@ -14,8 +14,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
-from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.mcp_server import build_yaml_pipeline_interactive
 from hexdag.stdlib.adapters.mock import MockLLM
@@ -180,7 +180,7 @@ spec:
     graph, config = builder.build_from_yaml_string(pipeline_yaml)
 
     print("\n✅ Pipeline built successfully!")
-    print(f"  Nodes: {len(graph.nodes)}")
+    print(f"  Nodes: {len(graph)}")
     print(f"  Ports: {list(config.ports.keys())}")
 
     # Create mock adapters
