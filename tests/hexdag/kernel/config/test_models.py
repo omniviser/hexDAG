@@ -7,8 +7,15 @@ from __future__ import annotations
 
 import pytest
 
-from hexdag.kernel.config.models import HexDAGConfig, LoggingConfig, ManifestEntry
+from hexdag.kernel.config.models import (
+    DefaultCaps,
+    DefaultLimits,
+    HexDAGConfig,
+    LoggingConfig,
+    ManifestEntry,
+)
 from hexdag.kernel.exceptions import ValidationError
+from hexdag.kernel.orchestration.models import OrchestratorConfig
 
 
 class TestLoggingConfig:
@@ -192,3 +199,125 @@ class TestHexDAGConfig:
 
         config1.settings["key"] = "value"
         assert "key" not in config2.settings
+
+    def test_default_orchestrator(self) -> None:
+        """Test default orchestrator config."""
+        config = HexDAGConfig()
+        assert isinstance(config.orchestrator, OrchestratorConfig)
+        assert config.orchestrator.max_concurrent_nodes == 10
+        assert config.orchestrator.strict_validation is False
+        assert config.orchestrator.default_node_timeout is None
+
+    def test_custom_orchestrator(self) -> None:
+        """Test custom orchestrator config."""
+        orch = OrchestratorConfig(max_concurrent_nodes=5, default_node_timeout=60.0)
+        config = HexDAGConfig(orchestrator=orch)
+        assert config.orchestrator.max_concurrent_nodes == 5
+        assert config.orchestrator.default_node_timeout == 60.0
+
+    def test_default_limits(self) -> None:
+        """Test default limits config."""
+        config = HexDAGConfig()
+        assert isinstance(config.limits, DefaultLimits)
+        assert config.limits.max_total_tokens is None
+        assert config.limits.max_llm_calls is None
+        assert config.limits.max_tool_calls is None
+        assert config.limits.max_cost_usd is None
+        assert config.limits.warning_threshold == 0.8
+
+    def test_custom_limits(self) -> None:
+        """Test custom limits config."""
+        limits = DefaultLimits(max_llm_calls=100, max_cost_usd=10.0)
+        config = HexDAGConfig(limits=limits)
+        assert config.limits.max_llm_calls == 100
+        assert config.limits.max_cost_usd == 10.0
+
+    def test_default_caps(self) -> None:
+        """Test default caps config."""
+        config = HexDAGConfig()
+        assert isinstance(config.caps, DefaultCaps)
+        assert config.caps.default_set is None
+        assert config.caps.deny is None
+
+    def test_custom_caps(self) -> None:
+        """Test custom caps config."""
+        caps = DefaultCaps(default_set=["llm", "memory"], deny=["secret"])
+        config = HexDAGConfig(caps=caps)
+        assert config.caps.default_set == ["llm", "memory"]
+        assert config.caps.deny == ["secret"]
+
+
+class TestDefaultLimits:
+    """Tests for DefaultLimits dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values."""
+        limits = DefaultLimits()
+        assert limits.max_total_tokens is None
+        assert limits.max_llm_calls is None
+        assert limits.max_tool_calls is None
+        assert limits.max_cost_usd is None
+        assert limits.warning_threshold == 0.8
+
+    def test_custom_values(self) -> None:
+        """Test setting custom values."""
+        limits = DefaultLimits(
+            max_total_tokens=100000,
+            max_llm_calls=50,
+            max_tool_calls=200,
+            max_cost_usd=5.0,
+            warning_threshold=0.9,
+        )
+        assert limits.max_total_tokens == 100000
+        assert limits.max_llm_calls == 50
+        assert limits.max_tool_calls == 200
+        assert limits.max_cost_usd == 5.0
+        assert limits.warning_threshold == 0.9
+
+    def test_frozen_immutability(self) -> None:
+        """Test that DefaultLimits is frozen."""
+        limits = DefaultLimits()
+        with pytest.raises(AttributeError):
+            limits.max_llm_calls = 10  # type: ignore[misc]
+
+    def test_partial_limits(self) -> None:
+        """Test setting only some limits."""
+        limits = DefaultLimits(max_llm_calls=100)
+        assert limits.max_llm_calls == 100
+        assert limits.max_cost_usd is None
+        assert limits.max_tool_calls is None
+
+
+class TestDefaultCaps:
+    """Tests for DefaultCaps dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values (unrestricted)."""
+        caps = DefaultCaps()
+        assert caps.default_set is None
+        assert caps.deny is None
+
+    def test_custom_default_set(self) -> None:
+        """Test custom default set."""
+        caps = DefaultCaps(default_set=["llm", "memory", "datastore.read"])
+        assert caps.default_set == ["llm", "memory", "datastore.read"]
+
+    def test_custom_deny(self) -> None:
+        """Test custom deny list."""
+        caps = DefaultCaps(deny=["secret", "spawner"])
+        assert caps.deny == ["secret", "spawner"]
+
+    def test_frozen_immutability(self) -> None:
+        """Test that DefaultCaps is frozen."""
+        caps = DefaultCaps()
+        with pytest.raises(AttributeError):
+            caps.deny = ["secret"]  # type: ignore[misc]
+
+    def test_full_caps(self) -> None:
+        """Test full caps configuration."""
+        caps = DefaultCaps(
+            default_set=["llm", "memory"],
+            deny=["secret"],
+        )
+        assert caps.default_set == ["llm", "memory"]
+        assert caps.deny == ["secret"]

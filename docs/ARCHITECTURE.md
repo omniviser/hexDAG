@@ -549,4 +549,4 @@ stdlib/lib/ (existing)               stdlib/lib/ (planned)
 **See Also**:
 - [Hexagonal Architecture](HEXAGONAL_ARCHITECTURE.md) -- Why ports and adapters
 - [Plugin System](PLUGIN_SYSTEM.md) -- Extending hexDAG with plugins
-- [Architecture Roadmap](../ARCHITECTURE_ROADMAP.md) -- Detailed roadmap for planned extensions
+- [Roadmap](ROADMAP.md) -- Development roadmap and planned extensions

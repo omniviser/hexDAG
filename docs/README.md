@@ -173,7 +173,7 @@ Writing effective doctests:
 ### External Resources
 - **[GitHub Repository](https://dev.azure.com/omniviser/hexDAG/_git/hexDAG)** - Source code and issues
 - **[Changelog](../CHANGELOG.md)** - Version history and release notes
-- **[Architecture Roadmap](../ARCHITECTURE_ROADMAP.md)** - Technical evolution plans
+- **[Roadmap](ROADMAP.md)** - Development roadmap and technical evolution plans
 
 ### Internal Navigation
 - **[Main README](../README.md)** - Project overview and quick start

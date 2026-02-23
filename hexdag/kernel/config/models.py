@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from hexdag.kernel.exceptions import ValidationError
+from hexdag.kernel.orchestration.models import OrchestratorConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +103,47 @@ class ManifestEntry:
             raise ValidationError("namespace", "cannot contain ':'", self.namespace)
 
 
+@dataclass(frozen=True, slots=True)
+class DefaultLimits:
+    """Default resource limits for all processes.
+
+    Attributes
+    ----------
+    max_total_tokens : int | None
+        Maximum total tokens across all LLM calls
+    max_llm_calls : int | None
+        Maximum number of LLM calls
+    max_tool_calls : int | None
+        Maximum number of tool calls
+    max_cost_usd : float | None
+        Maximum cost in USD
+    warning_threshold : float
+        Fraction (0.0-1.0) at which to emit a warning event
+    """
+
+    max_total_tokens: int | None = None
+    max_llm_calls: int | None = None
+    max_tool_calls: int | None = None
+    max_cost_usd: float | None = None
+    warning_threshold: float = 0.8
+
+
+@dataclass(frozen=True, slots=True)
+class DefaultCaps:
+    """Default capability boundaries for all processes.
+
+    Attributes
+    ----------
+    default_set : list[str] | None
+        Default allowlist of capabilities. None means unrestricted.
+    deny : list[str] | None
+        Capabilities that are always denied unless explicitly granted.
+    """
+
+    default_set: list[str] | None = None
+    deny: list[str] | None = None
+
+
 @dataclass(slots=True)
 class HexDAGConfig:
     """Complete HexDAG configuration.
@@ -118,6 +160,12 @@ class HexDAGConfig:
         Logging configuration
     settings : dict[str, Any]
         Additional custom settings
+    orchestrator : OrchestratorConfig
+        Orchestrator execution defaults (concurrency, timeouts, validation)
+    limits : DefaultLimits
+        Default resource limits for all processes
+    caps : DefaultCaps
+        Default capability boundaries for all processes
 
     Examples
     --------
@@ -133,6 +181,17 @@ class HexDAGConfig:
     level = "DEBUG"
     format = "structured"
     use_color = true
+
+    [tool.hexdag.orchestrator]
+    max_concurrent_nodes = 5
+    default_node_timeout = 60.0
+
+    [tool.hexdag.limits]
+    max_llm_calls = 100
+    max_cost_usd = 10.0
+
+    [tool.hexdag.caps]
+    deny = ["secret"]
     ```
     """
 
@@ -148,3 +207,12 @@ class HexDAGConfig:
 
     # Additional settings
     settings: dict[str, Any] = field(default_factory=dict)
+
+    # Orchestrator execution defaults
+    orchestrator: OrchestratorConfig = field(default_factory=OrchestratorConfig)
+
+    # Default resource limits
+    limits: DefaultLimits = field(default_factory=DefaultLimits)
+
+    # Default capability boundaries
+    caps: DefaultCaps = field(default_factory=DefaultCaps)
