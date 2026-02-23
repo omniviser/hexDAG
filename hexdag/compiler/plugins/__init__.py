@@ -6,9 +6,9 @@ These plugins build specific entity types from YAML configuration:
 - NodeEntityPlugin: Build regular nodes (llm_node, function_node, etc.)
 """
 
-from hexdag.kernel.pipeline_builder.plugins.macro_definition import MacroDefinitionPlugin
-from hexdag.kernel.pipeline_builder.plugins.macro_entity import MacroEntityPlugin
-from hexdag.kernel.pipeline_builder.plugins.node_entity import NodeEntityPlugin
+from hexdag.compiler.plugins.macro_definition import MacroDefinitionPlugin
+from hexdag.compiler.plugins.macro_entity import MacroEntityPlugin
+from hexdag.compiler.plugins.node_entity import NodeEntityPlugin
 
 __all__ = [
     "MacroDefinitionPlugin",

@@ -3,7 +3,7 @@
 import pytest
 import yaml
 
-from hexdag.kernel.pipeline_builder.tag_discovery import (
+from hexdag.compiler.tag_discovery import (
     _get_tag_syntax,
     discover_tags,
     get_known_tag_names,
@@ -19,14 +19,14 @@ class TestDiscoverTags:
         tags = discover_tags()
         assert "!py" in tags
         assert tags["!py"]["name"] == "!py"
-        assert "hexdag.kernel.pipeline_builder.py_tag" in tags["!py"]["module"]
+        assert "hexdag.compiler.py_tag" in tags["!py"]["module"]
 
     def test_discovers_include_tag(self) -> None:
         """The !include tag should be discovered."""
         tags = discover_tags()
         assert "!include" in tags
         assert tags["!include"]["name"] == "!include"
-        assert "hexdag.kernel.pipeline_builder.include_tag" in tags["!include"]["module"]
+        assert "hexdag.compiler.include_tag" in tags["!include"]["module"]
 
     def test_tags_have_descriptions(self) -> None:
         """All tags should have descriptions."""

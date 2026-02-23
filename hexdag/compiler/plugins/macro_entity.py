@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from hexdag.compiler.plugins.node_entity import NodeEntityPlugin
 from hexdag.kernel.configurable import ConfigurableMacro
+from hexdag.kernel.domain.dag import DirectedGraph
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import ResolveError, resolve
+from hexdag.kernel.yaml_macro import YamlMacro
 
 if TYPE_CHECKING:
-    from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
+    from collections.abc import Callable
+
+    from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+    from hexdag.kernel.domain.dag import NodeSpec
 
 logger = get_logger(__name__)
 
@@ -26,8 +32,6 @@ class MacroEntityPlugin:
         self, node_config: dict[str, Any], builder: YamlPipelineBuilder, graph: DirectedGraph
     ) -> NodeSpec | None:
         """Expand macro into subgraph and merge into main graph."""
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
-
         instance_name = node_config["metadata"]["name"]
         spec = node_config.get("spec", {})
         macro_ref = spec.get("macro")
@@ -68,11 +72,20 @@ class MacroEntityPlugin:
         # inputs are the value mappings, so they should be merged
         macro_inputs = {**config_params, **inputs}
 
-        # Expand macro
+        # Expand macro — for YamlMacro, inject node_builder callback to
+        # avoid circular import (yaml_macro → compiler → yaml_macro)
         try:
-            subgraph = macro_instance.expand(
-                instance_name=instance_name, inputs=macro_inputs, dependencies=dependencies
-            )
+            if isinstance(macro_instance, YamlMacro):
+                subgraph = macro_instance.expand(
+                    instance_name=instance_name,
+                    inputs=macro_inputs,
+                    dependencies=dependencies,
+                    node_builder=self._make_node_builder(builder),
+                )
+            else:
+                subgraph = macro_instance.expand(
+                    instance_name=instance_name, inputs=macro_inputs, dependencies=dependencies
+                )
         except ValueError:
             # Re-raise validation errors directly (e.g., required parameter, enum validation)
             raise
@@ -88,11 +101,35 @@ class MacroEntityPlugin:
             "Expanded macro '{macro}' as '{instance}' ({nodes} nodes)",
             macro=macro_ref,
             instance=instance_name,
-            nodes=len(subgraph.nodes),
+            nodes=len(subgraph),
         )
 
         # Return None - subgraph already merged into graph
         return None
+
+    @staticmethod
+    def _make_node_builder(
+        builder: YamlPipelineBuilder,
+    ) -> Callable[[list[dict[str, Any]]], DirectedGraph]:
+        """Create a node-builder callback from the current YamlPipelineBuilder.
+
+        The callback builds a DirectedGraph from a list of rendered node configs
+        using the builder's entity plugins — this is injected into YamlMacro to
+        avoid the circular import between yaml_macro and the compiler.
+        """
+        node_plugin = NodeEntityPlugin(builder)
+
+        def _build(rendered_nodes: list[dict[str, Any]]) -> DirectedGraph:
+            graph = DirectedGraph()
+            for node_config in rendered_nodes:
+                if not node_plugin.can_handle(node_config):
+                    kind = node_config.get("kind", "unknown")
+                    raise ValueError(f"Invalid node kind in YAML macro: {kind}")
+                node_spec = node_plugin.build(node_config, builder, graph)
+                graph += node_spec
+            return graph
+
+        return _build
 
     @staticmethod
     def _merge_subgraph(
@@ -108,7 +145,7 @@ class MacroEntityPlugin:
         else:
             # Only process entry nodes that need external dependencies
             # Use in-place merge for better performance
-            for node in subgraph.nodes.values():
+            for node in subgraph:
                 if not subgraph.get_dependencies(node.name):
                     # Entry node - add external dependencies
                     graph += node.after(*external_deps)

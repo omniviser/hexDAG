@@ -103,7 +103,7 @@ class SafeJSON:
         estimation is not straightforward), so callers relying on depth limits
         should prefer JSON where possible.
         """
-        import yaml
+        import yaml  # lazy: optional yaml dependency
 
         if len(text.encode("utf-8")) > self.max_size_bytes:
             return SafeJSONResult(error="too_large", message="YAML exceeds size limit")

@@ -251,7 +251,7 @@ class ConversationMacro(ConfigurableMacro):
             try:
                 history_json = await memory_port.aget(memory_key)  # pyright: ignore[reportAttributeAccessIssue]
                 if history_json:
-                    import json
+                    import json  # lazy: optional aiofiles dependency
 
                     messages = json.loads(history_json)
                     logger.debug(
@@ -337,7 +337,7 @@ Please provide a thoughtful response to continue this conversation."""
         async def save_history(reasoning_response: Any) -> dict[str, Any]:
             """Save updated conversation history to memory."""
             # Get previous messages from context
-            from hexdag.kernel.context import get_node_results
+            from hexdag.kernel.context import get_node_results  # lazy: optional aiofiles dependency
 
             node_results = get_node_results()
             if not node_results:
@@ -369,7 +369,7 @@ Please provide a thoughtful response to continue this conversation."""
                     # Use default memory port from pipeline
                     memory_port = get_port("memory")
 
-                import json
+                import json  # lazy: optional json dependency
 
                 memory_key = f"conversation:{conversation_id}"
                 await memory_port.aset(memory_key, json.dumps(messages))  # pyright: ignore[reportAttributeAccessIssue]

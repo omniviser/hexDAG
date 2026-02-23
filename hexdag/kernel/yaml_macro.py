@@ -50,7 +50,7 @@ YAML macro usage::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import ChainableUndefined, Environment, TemplateSyntaxError, UndefinedError
 from pydantic import BaseModel, Field, field_validator
@@ -58,6 +58,9 @@ from pydantic import BaseModel, Field, field_validator
 from hexdag.kernel.configurable import ConfigurableMacro, MacroConfig
 from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.logging import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = get_logger(__name__)
 
@@ -261,6 +264,7 @@ class YamlMacro(ConfigurableMacro):
         instance_name: str,
         inputs: dict[str, Any],
         dependencies: list[str],
+        node_builder: Callable[[list[dict[str, Any]]], DirectedGraph] | None = None,
     ) -> DirectedGraph:
         """Expand YAML macro into a DirectedGraph.
 
@@ -272,6 +276,10 @@ class YamlMacro(ConfigurableMacro):
             Input values for macro parameters (merged with defaults)
         dependencies : list[str]
             External node names this macro depends on
+        node_builder : Callable | None
+            Optional callback to build a DirectedGraph from rendered node configs.
+            When provided, avoids importing the compiler (breaking circular dep).
+            Signature: ``(rendered_nodes: list[dict]) -> DirectedGraph``
 
         Returns
         -------
@@ -290,11 +298,11 @@ class YamlMacro(ConfigurableMacro):
         rendered_nodes = self._render_node_templates(config.nodes, context)
 
         # Step 4: Build DirectedGraph from rendered nodes
-        graph = self._build_graph_from_nodes(rendered_nodes)
+        graph = self._build_graph_from_nodes(rendered_nodes, node_builder)
 
         logger.info(
             f"✅ Expanded YAML macro '{config.macro_name}' as '{instance_name}' "
-            f"({len(graph.nodes)} nodes)"
+            f"({len(graph)} nodes)"
         )
 
         return graph
@@ -458,7 +466,11 @@ class YamlMacro(ConfigurableMacro):
         # Primitives (int, float, bool, None)
         return obj
 
-    def _build_graph_from_nodes(self, rendered_nodes: list[dict[str, Any]]) -> DirectedGraph:
+    def _build_graph_from_nodes(
+        self,
+        rendered_nodes: list[dict[str, Any]],
+        node_builder: Callable[[list[dict[str, Any]]], DirectedGraph] | None = None,
+    ) -> DirectedGraph:
         """Build DirectedGraph from rendered node configurations.
 
         This uses the same YamlPipelineBuilder logic to build nodes,
@@ -468,6 +480,9 @@ class YamlMacro(ConfigurableMacro):
         ----------
         rendered_nodes : list[dict[str, Any]]
             Rendered node configurations
+        node_builder : Callable | None
+            Optional callback to build a DirectedGraph from node configs.
+            When provided, avoids importing the compiler.
 
         Returns
         -------
@@ -479,32 +494,32 @@ class YamlMacro(ConfigurableMacro):
         ValueError
             If node building fails
         """
-        # Import here to avoid circular dependency
-        from hexdag.kernel.pipeline_builder.yaml_builder import (
-            NodeEntityPlugin,
-            YamlPipelineBuilder,
-        )
-
-        # Create temporary builder for node construction
-        builder = YamlPipelineBuilder()
-        graph = DirectedGraph()
-
-        # Use NodeEntityPlugin to build each node
-        node_plugin = NodeEntityPlugin(builder)
-
+        # Validate no nested macro_invocations
         for node_config in rendered_nodes:
-            # Validate it's a node (not another macro_invocation)
             if node_config.get("kind") == "macro_invocation":
                 raise ValueError(
                     "YAML macros cannot contain nested macro_invocations. "
                     "Use Python macros for composition."
                 )
 
+        if node_builder is not None:
+            return node_builder(rendered_nodes)
+
+        # Fallback: lazy import for standalone usage
+        from hexdag.compiler.yaml_builder import (  # lazy: mutual cycle with macro_definition
+            NodeEntityPlugin,
+            YamlPipelineBuilder,
+        )
+
+        builder = YamlPipelineBuilder()
+        graph = DirectedGraph()
+        node_plugin = NodeEntityPlugin(builder)
+
+        for node_config in rendered_nodes:
             if not node_plugin.can_handle(node_config):
                 kind = node_config.get("kind", "unknown")
                 raise ValueError(f"Invalid node kind in YAML macro: {kind}")
 
-            # Build node using existing infrastructure
             node_spec = node_plugin.build(node_config, builder, graph)
             graph += node_spec
 

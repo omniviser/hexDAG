@@ -687,7 +687,7 @@ class OpenAIAdapter(
             start = time.time()
 
             # Use a simple text generation request for health check
-            from hexdag.kernel.ports.llm import Message
+            from hexdag.kernel.ports.llm import Message  # lazy: avoid heavy import for health check
 
             test_messages = [Message(role="user", content="Hi")]
             await self.aresponse(test_messages)

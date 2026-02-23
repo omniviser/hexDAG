@@ -223,6 +223,165 @@ class OrchestratorError(HexDAGError):
     pass
 
 
+class NodeExecutionError(HexDAGError):
+    """Exception raised when a node fails to execute."""
+
+    def __init__(self, node_name: str, original_error: Exception) -> None:
+        self.node_name = node_name
+        self.original_error = original_error
+        super().__init__(f"Node '{node_name}' failed: {original_error}")
+
+
+class NodeTimeoutError(NodeExecutionError):
+    """Exception raised when a node exceeds its timeout."""
+
+    def __init__(self, node_name: str, timeout: float, original_error: TimeoutError) -> None:
+        self.timeout = timeout
+        super().__init__(node_name, original_error)
+
+
+class BodyExecutorError(HexDAGError):
+    """Error during body execution."""
+
+    pass
+
+
+class PromptTemplateError(HexDAGError):
+    """Base exception for prompt template errors."""
+
+
+class MissingVariableError(PromptTemplateError):
+    """Raised when required template variables are missing."""
+
+
+class PipelineRunnerError(HexDAGError):
+    """Error during pipeline runner execution."""
+
+
+class ExpressionError(HexDAGError):
+    """Raised when expression parsing or evaluation fails."""
+
+    def __init__(self, expression: str, reason: str) -> None:
+        self.expression = expression
+        self.reason = reason
+        super().__init__(f"Expression error in '{expression}': {reason}")
+
+
+class ResolveError(HexDAGError):
+    """Raised when a module path cannot be resolved."""
+
+    def __init__(self, kind: str, reason: str) -> None:
+        self.kind = kind
+        self.reason = reason
+        super().__init__(f"Cannot resolve '{kind}': {reason}")
+
+
+# ============================================================================
+# DAG Errors
+# ============================================================================
+
+
+class NodeValidationError(HexDAGError):
+    """Raised when DAG node input/output validation fails.
+
+    This covers Pydantic model validation failures during node execution,
+    e.g. when input data doesn't match the node's ``in_model`` or output
+    data doesn't match the node's ``out_model``.
+    """
+
+    __slots__ = ()
+
+
+class DirectedGraphError(HexDAGError):
+    """Base exception for DirectedGraph errors."""
+
+    __slots__ = ()
+
+
+class CycleDetectedError(DirectedGraphError):
+    """Raised when a cycle is detected in the DAG."""
+
+    __slots__ = ()
+
+
+class MissingDependencyError(DirectedGraphError):
+    """Raised when a node depends on a non-existent node."""
+
+    __slots__ = ()
+
+
+class DuplicateNodeError(DirectedGraphError):
+    """Raised when attempting to add a node with an existing name."""
+
+    __slots__ = ()
+
+
+class SchemaCompatibilityError(DirectedGraphError):
+    """Raised when connected nodes have incompatible schemas."""
+
+    __slots__ = ()
+
+
+# ============================================================================
+# Compiler Errors
+# ============================================================================
+
+
+class YamlPipelineBuilderError(HexDAGError):
+    """YAML pipeline building errors."""
+
+    pass
+
+
+class PyTagError(HexDAGError):
+    """Error compiling !py tagged Python code."""
+
+    pass
+
+
+class IncludeTagError(HexDAGError):
+    """Error including external YAML file."""
+
+    pass
+
+
+class ComponentInstantiationError(HexDAGError):
+    """Error instantiating component from specification."""
+
+    pass
+
+
+# ============================================================================
+# Driver Errors
+# ============================================================================
+
+
+class HttpClientError(HexDAGError):
+    """Raised when an HTTP request fails with a non-2xx status code.
+
+    Attributes
+    ----------
+    status_code : int
+        The HTTP status code.
+    body : Any
+        The response body.
+    """
+
+    def __init__(self, status_code: int, body: object, message: str = "") -> None:
+        self.status_code = status_code
+        self.body = body
+        super().__init__(message or f"HTTP {status_code}")
+
+
+# ============================================================================
+# Stdlib Errors
+# ============================================================================
+
+
+class InvalidTransitionError(HexDAGError):
+    """Raised when a state transition violates the machine config."""
+
+
 # ============================================================================
 # VFS Errors
 # ============================================================================
@@ -252,12 +411,43 @@ class VFSError(HexDAGError):
 
 
 __all__ = [
+    # Base
     "HexDAGError",
+    # Configuration & Validation
     "ConfigurationError",
     "ValidationError",
+    "ParseError",
+    # Resource & Dependency
     "ResourceNotFoundError",
     "DependencyError",
+    # Type
     "TypeMismatchError",
+    # Orchestration
     "OrchestratorError",
+    "NodeExecutionError",
+    "NodeTimeoutError",
+    "BodyExecutorError",
+    "PromptTemplateError",
+    "MissingVariableError",
+    "PipelineRunnerError",
+    "ExpressionError",
+    "ResolveError",
+    # DAG
+    "NodeValidationError",
+    "DirectedGraphError",
+    "CycleDetectedError",
+    "MissingDependencyError",
+    "DuplicateNodeError",
+    "SchemaCompatibilityError",
+    # Compiler
+    "YamlPipelineBuilderError",
+    "PyTagError",
+    "IncludeTagError",
+    "ComponentInstantiationError",
+    # Drivers
+    "HttpClientError",
+    # Stdlib
+    "InvalidTransitionError",
+    # VFS
     "VFSError",
 ]

@@ -273,7 +273,7 @@ class TestEnvVarValidation:
 
     def test_missing_env_var_detected(self) -> None:
         """${VAR} without default and not in os.environ → flagged."""
-        from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
+        from hexdag.compiler.pipeline_config import PipelineConfig
 
         config = PipelineConfig(
             ports={
@@ -292,7 +292,7 @@ class TestEnvVarValidation:
 
     def test_env_var_with_default_not_flagged(self) -> None:
         """${VAR:default} → not flagged."""
-        from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
+        from hexdag.compiler.pipeline_config import PipelineConfig
 
         config = PipelineConfig(
             ports={
@@ -309,7 +309,7 @@ class TestEnvVarValidation:
 
     def test_present_env_var_not_flagged(self) -> None:
         """${VAR} present in os.environ → not flagged."""
-        from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
+        from hexdag.compiler.pipeline_config import PipelineConfig
 
         os.environ["PRESENT_KEY"] = "some_value"
         try:
@@ -330,7 +330,7 @@ class TestEnvVarValidation:
 
     def test_portless_config_returns_empty(self) -> None:
         """No ports → no missing vars."""
-        from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
+        from hexdag.compiler.pipeline_config import PipelineConfig
 
         config = PipelineConfig(ports={}, metadata={}, nodes=[])
         assert _find_missing_env_vars(config) == []

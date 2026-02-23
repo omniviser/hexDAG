@@ -31,15 +31,13 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import InvalidTransitionError  # noqa: F401
 from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
-
-
-class InvalidTransitionError(HexDAGError):
-    """Raised when a state transition violates the machine config."""
 
 
 class EntityState(HexDAGLib):
@@ -71,6 +69,26 @@ class EntityState(HexDAGLib):
         self._machines[config.entity_type] = config
 
     # ------------------------------------------------------------------
+    # Collection interface
+    # ------------------------------------------------------------------
+
+    def __contains__(self, entity_type: str) -> bool:
+        """Check if an entity type has a registered state machine."""
+        return entity_type in self._machines
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over registered entity type names."""
+        return iter(self._machines)
+
+    def __len__(self) -> int:
+        """Number of registered entity types."""
+        return len(self._machines)
+
+    def entity_ids(self, entity_type: str) -> list[str]:
+        """Get all entity IDs for a given type."""
+        return sorted(eid for (etype, eid) in self._states if etype == entity_type)
+
+    # ------------------------------------------------------------------
     # Agent-callable tools
     # ------------------------------------------------------------------
 
@@ -92,7 +110,9 @@ class EntityState(HexDAGLib):
         -------
             Dict with entity_type, entity_id, and state.
         """
-        from hexdag.kernel.domain.entity_state import StateTransition
+        from hexdag.kernel.domain.entity_state import (
+            StateTransition,  # lazy: avoid import cycle with kernel
+        )
 
         config = self._machines.get(entity_type)
         state = initial_state or (config.initial_state if config else "created")
@@ -136,7 +156,9 @@ class EntityState(HexDAGLib):
         -------
             Dict with entity details and old/new state.
         """
-        from hexdag.kernel.domain.entity_state import StateTransition
+        from hexdag.kernel.domain.entity_state import (
+            StateTransition,  # lazy: avoid import cycle with kernel
+        )
 
         key = (entity_type, entity_id)
         current = self._states.get(key)

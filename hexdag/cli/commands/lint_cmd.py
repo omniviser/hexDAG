@@ -118,7 +118,7 @@ def lint(
 
     # Filter by severity
     min_rank = _SEVERITY_RANK[severity]
-    filtered = [v for v in report.violations if _SEVERITY_RANK[v.severity] <= min_rank]
+    filtered = [v for v in report if _SEVERITY_RANK[v.severity] <= min_rank]
 
     if output_format == "json":
         _print_json(filtered)

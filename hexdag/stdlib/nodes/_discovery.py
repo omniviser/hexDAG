@@ -25,6 +25,8 @@ import pkgutil
 import re
 from functools import lru_cache
 
+from hexdag.stdlib.nodes.base_node_factory import BaseNodeFactory
+
 
 def _to_snake_case(name: str) -> str:
     """Convert CamelCase to snake_case.
@@ -60,9 +62,6 @@ def discover_node_factories() -> dict[str, str]:
     >>> "core:llm" in aliases
     True
     """
-    # Import here to avoid circular imports
-    from hexdag.stdlib.nodes.base_node_factory import BaseNodeFactory
-
     aliases: dict[str, str] = {}
     package = importlib.import_module("hexdag.stdlib.nodes")
 

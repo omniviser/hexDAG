@@ -604,8 +604,8 @@ class TestPortCallNodeYAMLIntegration:
     @pytest.mark.asyncio
     async def test_port_call_node_from_yaml(self) -> None:
         """Test creating port_call_node from YAML configuration."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
         from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
         yaml_config = """
 apiVersion: hexdag/v1
@@ -643,8 +643,8 @@ spec:
     @pytest.mark.asyncio
     async def test_static_node_from_yaml(self) -> None:
         """Test creating static_node from YAML configuration."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
         from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
         yaml_config = """
 apiVersion: hexdag/v1
@@ -676,8 +676,8 @@ spec:
     @pytest.mark.asyncio
     async def test_port_call_with_fallback_from_yaml(self) -> None:
         """Test port_call_node with fallback from YAML configuration."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
         from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
         yaml_config = """
 apiVersion: hexdag/v1

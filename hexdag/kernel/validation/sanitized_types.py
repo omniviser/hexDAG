@@ -107,7 +107,7 @@ def register_type(
     # Use Union[base, None] so the BeforeValidator can return None (e.g. "N/A" → None)
     # and Pydantic accepts it without a string_type validation error.
     # The union is intentionally dynamic (base is a runtime type parameter).
-    from typing import Union
+    from typing import Union  # lazy: dynamic type registration
 
     nullable = Union[base, None]  # type: ignore[valid-type]  # noqa: UP007
     annotated = Annotated[nullable, BeforeValidator(cleaner)]

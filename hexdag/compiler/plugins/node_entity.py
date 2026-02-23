@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.resolver import ResolveError, resolve
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from hexdag.compiler.yaml_builder import YamlPipelineBuilder
     from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 
 class NodeEntityPlugin:
@@ -32,8 +34,6 @@ class NodeEntityPlugin:
         The 'kind' field must be a full module path to the node factory class.
         Example: hexdag.stdlib.nodes.LLMNode
         """
-        from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
-
         # Validate structure
         if "kind" not in node_config:
             raise YamlPipelineBuilderError("Node missing 'kind' field")
@@ -47,6 +47,8 @@ class NodeEntityPlugin:
         spec = node_config.get("spec", {}).copy()
         # Dependencies can be at node level or inside spec (for backwards compatibility)
         deps = node_config.get("dependencies", []) or spec.pop("dependencies", [])
+        # Snapshot factory params before factory consumes them
+        factory_params_snapshot = spec.copy()
 
         # Resolve factory class from full module path
         try:
@@ -73,6 +75,10 @@ class NodeEntityPlugin:
 
         # Create node - pass name as first positional arg
         node: NodeSpec = factory(node_id, **spec)
+
+        # Store factory metadata for distributed execution (remote workers
+        # can call resolve(kind)() and replay factory(name, **params))
+        node = replace(node, factory_class=kind, factory_params=factory_params_snapshot)
 
         # Add dependencies
         if deps:

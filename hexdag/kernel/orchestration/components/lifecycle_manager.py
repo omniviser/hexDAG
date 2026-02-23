@@ -29,8 +29,12 @@ if TYPE_CHECKING:
     from hexdag.kernel.ports.observer_manager import ObserverManager
     from hexdag.kernel.ports.secret import SecretStore
 
+from hexdag.kernel.context import get_observer_manager, get_port, get_ports
+from hexdag.kernel.exceptions import OrchestratorError
 from hexdag.kernel.logging import get_logger
+from hexdag.kernel.orchestration.components.checkpoint_manager import CheckpointManager
 from hexdag.kernel.orchestration.events import HealthCheckCompleted
+from hexdag.kernel.orchestration.models import CheckpointState
 from hexdag.kernel.ports.healthcheck import HealthStatus
 from hexdag.kernel.protocols import HealthCheckable
 
@@ -200,9 +204,6 @@ class LifecycleManager:
         dict[str, Any]
             Results from all pre-execution tasks
         """
-        from hexdag.kernel.context import get_observer_manager, get_port, get_ports
-        from hexdag.kernel.exceptions import OrchestratorError
-
         results: dict[str, Any] = {}
         ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
@@ -288,8 +289,6 @@ class LifecycleManager:
         dict[str, Any]
             Results from all post-execution tasks
         """
-        from hexdag.kernel.context import get_observer_manager, get_port, get_ports
-
         results: dict[str, Any] = {}
         ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
@@ -551,10 +550,6 @@ class LifecycleManager:
         observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Save final checkpoint state."""
-        from hexdag.kernel.context import get_port
-        from hexdag.kernel.orchestration.components import CheckpointManager
-        from hexdag.kernel.orchestration.models import CheckpointState
-
         memory = get_port("memory")
         if not memory:
             logger.debug("No memory port available for checkpoint save")
@@ -562,7 +557,7 @@ class LifecycleManager:
 
         checkpoint_mgr = CheckpointManager(storage=memory)
 
-        from datetime import UTC, datetime
+        from datetime import UTC, datetime  # lazy: deferred to avoid datetime import in hot path
 
         state = CheckpointState(
             run_id=context.dag_id,

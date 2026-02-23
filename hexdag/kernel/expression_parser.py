@@ -52,21 +52,12 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Any
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import ExpressionError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 
 __all__ = ["compile_expression", "evaluate_expression", "ExpressionError", "ALLOWED_FUNCTIONS"]
 
 logger = get_logger(__name__)
-
-
-class ExpressionError(HexDAGError):
-    """Raised when expression parsing or evaluation fails."""
-
-    def __init__(self, expression: str, reason: str) -> None:
-        self.expression = expression
-        self.reason = reason
-        super().__init__(f"Expression error in '{expression}': {reason}")
 
 
 # Allowed comparison operators

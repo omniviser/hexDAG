@@ -39,18 +39,12 @@ from pathlib import Path
 from typing import Any
 
 from hexdag.kernel.context import get_ports
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import BodyExecutorError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.models import NodeExecutionContext
 from hexdag.kernel.resolver import resolve_function
 
 logger = get_logger(__name__)
-
-
-class BodyExecutorError(HexDAGError):
-    """Error during body execution."""
-
-    pass
 
 
 class BodyExecutor:
@@ -377,10 +371,11 @@ class BodyExecutor:
         Any
             Result from the last non-skipped node in the sub-DAG
         """
-        # Import here to avoid circular dependency
-        from hexdag.kernel.domain.dag import DirectedGraph
-        from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder  # lazy: cycle via composite_node
+        from hexdag.kernel.domain.dag import DirectedGraph  # lazy: cycle via composite_node
+        from hexdag.kernel.orchestration.orchestrator import (
+            Orchestrator,  # lazy: cycle via __init__
+        )
 
         logger.debug(
             "Executing inline nodes",
@@ -401,7 +396,7 @@ class BodyExecutor:
                         sub_graph += result
                     break
 
-        if not sub_graph.nodes:
+        if not sub_graph:
             logger.warning("Inline body has no nodes", node_id=context.node_id)
             return None
 
@@ -421,7 +416,7 @@ class BodyExecutor:
         # Return the result from the last non-skipped node
         # Find nodes in topological order and get last result
         # Note: orchestrator.run() returns dict[str, Any]
-        for node_name in reversed(list(sub_graph.nodes.keys())):
+        for node_name in reversed(list(sub_graph.keys())):
             if node_name in run_result:
                 node_result = run_result[node_name]
                 if isinstance(node_result, dict) and node_result.get("_skipped"):
@@ -455,9 +450,10 @@ class BodyExecutor:
         Any
             Pipeline execution result
         """
-        # Import here to avoid circular dependency
-        from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder  # lazy: cycle via composite_node
+        from hexdag.kernel.orchestration.orchestrator import (
+            Orchestrator,  # lazy: cycle via __init__
+        )
 
         # Resolve pipeline path
         pipeline_path = self.base_path / body_pipeline

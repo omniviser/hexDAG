@@ -6,7 +6,7 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from hexdag.kernel.pipeline_builder.include_tag import (
+from hexdag.compiler.include_tag import (
     IncludeTagError,
     _resolve_include_path,
     _substitute_vars,

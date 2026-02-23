@@ -64,11 +64,11 @@ class ProcEntitiesProvider:
 
     def _entity_types(self) -> list[str]:
         """Get registered entity types from internal state."""
-        return sorted(self._entity_state._machines.keys())
+        return sorted(self._entity_state)
 
     def _entity_ids(self, entity_type: str) -> list[str]:
         """Get entity IDs for a given type from internal state."""
-        return sorted(eid for (etype, eid) in self._entity_state._states if etype == entity_type)
+        return self._entity_state.entity_ids(entity_type)
 
     async def readdir(self, relative_path: str) -> list[DirEntry]:
         """List entity types or entities.

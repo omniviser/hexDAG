@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from hexdag.compiler.pipeline_config import PipelineConfig
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
-from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
 
 
 class TestOrchestratorFactory:
@@ -127,7 +127,7 @@ class TestOrchestratorFactory:
 
     def test_instantiate_ports_error(self) -> None:
         """Test error handling when port instantiation fails."""
-        from hexdag.kernel.pipeline_builder.component_instantiator import (
+        from hexdag.compiler.component_instantiator import (
             ComponentInstantiationError,
         )
 

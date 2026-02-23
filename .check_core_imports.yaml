@@ -33,14 +33,14 @@ allowed_exceptions:
   # Rationale: User convenience - orchestrator works out-of-the-box without
   # requiring explicit executor injection in every use case.
   hexdag/kernel/orchestration/orchestrator.py:
-    - "from hexdag.drivers.executors import LocalExecutor  # noqa: PLC0415"
+    - "from hexdag.drivers.executors import ("
 
   # PortsBuilder provides convenience factory methods for common adapters
   # These are lazy imports inside helper methods, not module-level dependencies.
   # Rationale: Developer experience - quick setup without manual instantiation.
   hexdag/kernel/ports_builder.py:
-    - "from hexdag.drivers.observer_manager import LocalObserverManager"
-    - "from hexdag.stdlib.adapters.mock import MockLLM"
+    - "from hexdag.drivers.observer_manager import ("
+    - "from hexdag.stdlib.adapters.mock import MockLLM  # lazy: optional default providers"
     - "from hexdag.stdlib.adapters.openai import OpenAIAdapter"
     - "from hexdag.stdlib.adapters.anthropic import AnthropicAdapter"
 
@@ -69,6 +69,6 @@ allowed_exceptions:
   # These are lazy imports inside _ensure_builtin_bootstrapped(), not module-level dependencies.
   # Rationale: Enables auto-discovery of component factories without hardcoding builtin knowledge.
   hexdag/kernel/resolver.py:
-    - "import hexdag.stdlib.nodes  # noqa: F401"
-    - "from hexdag.stdlib.adapters._discovery import discover_adapter_aliases"
-    - "from hexdag.stdlib.macros._discovery import discover_macro_aliases"
+    - "import hexdag.stdlib.nodes  # noqa: F401  # lazy: bootstrap discovery"
+    - "from hexdag.stdlib.adapters._discovery import ("
+    - "from hexdag.stdlib.macros._discovery import ("

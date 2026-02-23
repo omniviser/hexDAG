@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from hexdag.kernel.pipeline_builder.component_instantiator import (
+from hexdag.compiler.component_instantiator import (
     ComponentInstantiationError,
     ComponentInstantiator,
     ComponentSpec,

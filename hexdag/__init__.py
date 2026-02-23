@@ -36,9 +36,9 @@ DatabasePort = Database
 # Define placeholders for lazy-loaded adapters to satisfy __all__ checking
 # These will be replaced by __getattr__ when accessed
 if TYPE_CHECKING:
+    from hexdag.compiler.yaml_builder import YamlPipelineBuilder
     from hexdag.kernel.domain import DirectedGraph, NodeSpec
     from hexdag.kernel.orchestration.orchestrator import Orchestrator
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
     from hexdag.kernel.resolver import resolve, resolve_function
     from hexdag.stdlib.adapters.memory import InMemoryMemory
     from hexdag.stdlib.adapters.mock import MockDatabaseAdapter, MockLLM
@@ -51,8 +51,8 @@ _DEPRECATED_IMPORTS: dict[str, tuple[str, str]] = {
         "Use PipelineRunner or import from 'hexdag.kernel.orchestration.orchestrator'.",
     ),
     "YamlPipelineBuilder": (
-        "hexdag.kernel.pipeline_builder.yaml_builder",
-        "Use PipelineRunner or import from 'hexdag.kernel.pipeline_builder.yaml_builder'.",
+        "hexdag.compiler.yaml_builder",
+        "Use PipelineRunner or import from 'hexdag.compiler.yaml_builder'.",
     ),
     "DirectedGraph": (
         "hexdag.kernel.domain",

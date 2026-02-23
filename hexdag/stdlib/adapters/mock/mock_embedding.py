@@ -210,7 +210,9 @@ class MockEmbedding(SupportsEmbedding):
 
     async def ahealth_check(self) -> "HealthStatus":
         """Health check for Mock Embedding (always healthy)."""
-        from hexdag.kernel.ports.healthcheck import HealthStatus
+        from hexdag.kernel.ports.healthcheck import (
+            HealthStatus,  # lazy: avoid heavy import for health check
+        )
 
         return HealthStatus(
             status="healthy",

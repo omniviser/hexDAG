@@ -14,10 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from hexdag.compiler.component_instantiator import _resolve_deferred_env_vars
 from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
 from hexdag.kernel.orchestration.hooks import HookConfig, PostDagHookConfig
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
-from hexdag.kernel.pipeline_builder.component_instantiator import _resolve_deferred_env_vars
 from hexdag.kernel.types import Secret
 from hexdag.stdlib.adapters.anthropic.anthropic_adapter import AnthropicAdapter
 from hexdag.stdlib.adapters.memory.in_memory_memory import InMemoryMemory

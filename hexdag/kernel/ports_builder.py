@@ -202,7 +202,9 @@ class PortsBuilder:
         # Only add defaults if not already configured
         if "observer_manager" not in self._ports:
             try:
-                from hexdag.drivers.observer_manager import LocalObserverManager
+                from hexdag.drivers.observer_manager import (
+                    LocalObserverManager,  # lazy: optional default providers
+                )
 
                 self._ports["observer_manager"] = LocalObserverManager()
             except ImportError:
@@ -210,7 +212,7 @@ class PortsBuilder:
 
         if "llm" not in self._ports:
             try:
-                from hexdag.stdlib.adapters.mock import MockLLM
+                from hexdag.stdlib.adapters.mock import MockLLM  # lazy: optional default providers
 
                 self._ports["llm"] = MockLLM()
             except ImportError:

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,3 +62,15 @@ class LintReport:
     def has_errors(self) -> bool:
         """True if any error-level violations exist."""
         return any(v.severity == "error" for v in self._violations)
+
+    def __bool__(self) -> bool:
+        """True if report is clean (no violations)."""
+        return not self._violations
+
+    def __len__(self) -> int:
+        """Total number of violations."""
+        return len(self._violations)
+
+    def __iter__(self) -> Iterator[LintViolation]:
+        """Iterate over all violations."""
+        return iter(self._violations)

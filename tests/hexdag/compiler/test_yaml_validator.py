@@ -1,6 +1,6 @@
 """Tests for YAML pipeline validator."""
 
-from hexdag.kernel.pipeline_builder.yaml_validator import ValidationReport, YamlValidator
+from hexdag.compiler.yaml_validator import ValidationReport, YamlValidator
 
 
 class TestValidationReport:
@@ -916,7 +916,7 @@ class TestPyTagValidation:
 
     def test_validate_py_source_valid(self):
         """Test validation of valid Python source."""
-        from hexdag.kernel.pipeline_builder.py_tag import validate_py_source
+        from hexdag.compiler.py_tag import validate_py_source
 
         source = """
 def process(item, index, state, **ports):
@@ -927,7 +927,7 @@ def process(item, index, state, **ports):
 
     def test_validate_py_source_async_valid(self):
         """Test validation of valid async Python source."""
-        from hexdag.kernel.pipeline_builder.py_tag import validate_py_source
+        from hexdag.compiler.py_tag import validate_py_source
 
         source = """
 async def process(item, index, state, **ports):
@@ -939,7 +939,7 @@ async def process(item, index, state, **ports):
 
     def test_validate_py_source_syntax_error(self):
         """Test validation catches syntax errors."""
-        from hexdag.kernel.pipeline_builder.py_tag import validate_py_source
+        from hexdag.compiler.py_tag import validate_py_source
 
         source = "def process( invalid"
         errors = validate_py_source(source)
@@ -948,7 +948,7 @@ async def process(item, index, state, **ports):
 
     def test_validate_py_source_no_function(self):
         """Test validation catches missing function."""
-        from hexdag.kernel.pipeline_builder.py_tag import validate_py_source
+        from hexdag.compiler.py_tag import validate_py_source
 
         source = "x = 1\ny = 2"
         errors = validate_py_source(source)
@@ -957,7 +957,7 @@ async def process(item, index, state, **ports):
 
     def test_validate_py_source_empty(self):
         """Test validation catches empty source."""
-        from hexdag.kernel.pipeline_builder.py_tag import validate_py_source
+        from hexdag.compiler.py_tag import validate_py_source
 
         errors = validate_py_source("")
         assert len(errors) == 1
@@ -965,7 +965,7 @@ async def process(item, index, state, **ports):
 
     def test_validate_py_source_whitespace_only(self):
         """Test validation catches whitespace-only source."""
-        from hexdag.kernel.pipeline_builder.py_tag import validate_py_source
+        from hexdag.compiler.py_tag import validate_py_source
 
         errors = validate_py_source("   \n\t  ")
         assert len(errors) == 1

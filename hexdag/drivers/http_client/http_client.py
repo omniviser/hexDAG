@@ -11,27 +11,10 @@ from typing import Any
 
 import httpx
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import HttpClientError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-class HttpClientError(HexDAGError):
-    """Raised when an HTTP request fails with a non-2xx status code.
-
-    Attributes
-    ----------
-    status_code : int
-        The HTTP status code.
-    body : Any
-        The response body.
-    """
-
-    def __init__(self, status_code: int, body: Any, message: str = "") -> None:
-        self.status_code = status_code
-        self.body = body
-        super().__init__(message or f"HTTP {status_code}")
 
 
 class HttpClientDriver:

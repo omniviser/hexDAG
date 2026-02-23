@@ -246,7 +246,9 @@ class ReActAgentNode(BaseNodeFactory):
 
         async def single_step_executor(input_data: Any) -> Any:
             """Execute single reasoning step."""
-            from hexdag.kernel.context import get_port
+            from hexdag.kernel.context import (
+                get_port,  # lazy: avoid heavy import at node definition time
+            )
 
             ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
 

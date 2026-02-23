@@ -6,12 +6,8 @@ with other prompts using the builder pattern.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
-
-if TYPE_CHECKING:
-    from hexdag.stdlib.nodes.tool_utils import ToolCallFormat
+from hexdag.stdlib.nodes.tool_utils import ToolCallFormat
 
 
 class FunctionToolPrompt(PromptTemplate):
@@ -160,10 +156,8 @@ def get_tool_prompt_for_format(format_style: ToolCallFormat) -> type[PromptTempl
         >>> prompt = PromptClass()
         >>> text = prompt.render(tools="search, calculator")
     """
-    from hexdag.stdlib.nodes.tool_utils import ToolCallFormat as _ToolCallFormat
-
-    if format_style == _ToolCallFormat.FUNCTION_CALL:
+    if format_style == ToolCallFormat.FUNCTION_CALL:
         return FunctionToolPrompt
-    if format_style == _ToolCallFormat.JSON:
+    if format_style == ToolCallFormat.JSON:
         return JsonToolPrompt
     return MixedToolPrompt

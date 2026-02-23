@@ -5,8 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from hexdag.compiler.yaml_validator import _get_known_node_types
+from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.linting.models import LintReport, LintViolation
 from hexdag.kernel.linting.rules import LintRule, run_rules
+from hexdag.kernel.resolver import get_registered_aliases
 
 # Node types that involve LLM calls (should have timeout/retry)
 _LLM_NODE_TYPES = frozenset({
@@ -63,8 +66,6 @@ class CycleDetectionRule:
 
     def check(self, config: dict[str, Any]) -> list[LintViolation]:
         """Check for cycles in the pipeline dependency graph."""
-        from hexdag.kernel.domain.dag import DirectedGraph
-
         nodes = _extract_nodes(config)
         dep_graph: dict[str, set[str]] = {}
         for node in nodes:
@@ -95,9 +96,6 @@ class UnresolvableKindRule:
 
     def check(self, config: dict[str, Any]) -> list[LintViolation]:
         """Check that all node kinds can be resolved."""
-        from hexdag.kernel.pipeline_builder.yaml_validator import _get_known_node_types
-        from hexdag.kernel.resolver import get_registered_aliases
-
         known = _get_known_node_types()
         registered = get_registered_aliases()
         violations: list[LintViolation] = []

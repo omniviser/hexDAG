@@ -11,9 +11,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
-from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.stdlib.adapters.mock import MockLLM
 
@@ -72,7 +72,7 @@ async def run_research_agent(
     builder = YamlPipelineBuilder()
     graph, config = builder.build_from_yaml_file(yaml_path)
 
-    print(f"   ✅ Pipeline loaded: {len(graph.nodes)} nodes")
+    print(f"   ✅ Pipeline loaded: {len(graph)} nodes")
 
     # Configure orchestrator based on environment
     if environment == "dev":

@@ -11,7 +11,9 @@ import asyncio
 import inspect
 from typing import TYPE_CHECKING, Any
 
+from hexdag.kernel.exceptions import ResourceNotFoundError
 from hexdag.kernel.logging import get_logger
+from hexdag.kernel.resolver import resolve_function
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -90,8 +92,6 @@ class ToolRouter:
 
         for name, fn_or_path in (tools or {}).items():
             if isinstance(fn_or_path, str):
-                from hexdag.kernel.resolver import resolve_function
-
                 fn_or_path = resolve_function(fn_or_path)
             if not callable(fn_or_path):
                 msg = f"Tool '{name}' is not callable: {fn_or_path!r}"
@@ -120,8 +120,6 @@ class ToolRouter:
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
         """Call a tool. Handles sync/async, filters params to match signature."""
         if tool_name not in self._tools:
-            from hexdag.kernel.exceptions import ResourceNotFoundError
-
             raise ResourceNotFoundError("tool", tool_name, list(self._tools.keys()))
 
         fn = self._tools[tool_name]

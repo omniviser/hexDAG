@@ -39,28 +39,24 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.exceptions import PipelineRunnerError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
-from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilder
 
 if TYPE_CHECKING:
+    from hexdag.compiler.pipeline_config import PipelineConfig
     from hexdag.kernel.domain.dag import DirectedGraph
     from hexdag.kernel.orchestration.components.lifecycle_manager import (
         HookConfig,
         PostDagHookConfig,
     )
-    from hexdag.kernel.pipeline_builder.pipeline_config import PipelineConfig
     from hexdag.kernel.ports.secret import SecretStore
 
 logger = get_logger(__name__)
 
 # Reuse the deferred env var pattern from component_instantiator
 _ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(?::([^}]*))?\}")
-
-
-class PipelineRunnerError(HexDAGError):
-    """Error during pipeline runner execution."""
 
 
 class PipelineRunner:
@@ -304,7 +300,7 @@ class PipelineRunner:
 
         # 4. Execute
         pipeline_name = pipeline_config.metadata.get("name", "unnamed")
-        logger.info(f"Running pipeline '{pipeline_name}' with {len(graph.nodes)} nodes")
+        logger.info(f"Running pipeline '{pipeline_name}' with {len(graph)} nodes")
 
         result = await orchestrator.run(graph, input_data or {})
 

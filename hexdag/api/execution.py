@@ -185,7 +185,7 @@ def dry_run(yaml_content: str, inputs: dict[str, Any] | None = None) -> dict[str
     2
     """
     try:
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
+        from hexdag.compiler import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -245,7 +245,7 @@ def create_ports_from_config(port_config: dict[str, Any]) -> dict[str, Any]:
     >>> "llm" in ports
     True
     """
-    from hexdag.kernel.pipeline_builder.component_instantiator import ComponentInstantiator
+    from hexdag.compiler.component_instantiator import ComponentInstantiator
 
     instantiator = ComponentInstantiator()
     try:
@@ -292,9 +292,9 @@ async def _execute_with_node_ports(
     node_results: list[dict[str, Any]] = []
 
     try:
+        from hexdag.compiler import YamlPipelineBuilder
         from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
         from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -408,6 +408,7 @@ async def execute_streaming(
     start_time = time.perf_counter()
 
     try:
+        from hexdag.compiler import YamlPipelineBuilder
         from hexdag.drivers.observer_manager import LocalObserverManager
         from hexdag.kernel.orchestration.events import (
             NodeCompleted,
@@ -419,7 +420,6 @@ async def execute_streaming(
         )
         from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
         from hexdag.kernel.orchestration.orchestrator import Orchestrator
-        from hexdag.kernel.pipeline_builder import YamlPipelineBuilder
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)

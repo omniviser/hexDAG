@@ -230,7 +230,9 @@ class LocalSecretAdapter(SecretStore):
         >>> status.status  # doctest: +SKIP
         'healthy'
         """
-        from hexdag.kernel.ports.healthcheck import HealthStatus
+        from hexdag.kernel.ports.healthcheck import (
+            HealthStatus,  # lazy: avoid heavy import for health check
+        )
 
         try:
             # Count available env vars

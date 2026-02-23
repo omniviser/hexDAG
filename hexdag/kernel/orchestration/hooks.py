@@ -12,6 +12,7 @@ Hooks provide extensibility points before and after DAG execution for:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -21,10 +22,17 @@ if TYPE_CHECKING:
     from hexdag.kernel.orchestration.models import NodeExecutionContext
     from hexdag.kernel.ports.observer_manager import ObserverManager
 
+from hexdag.kernel.context import (
+    get_observer_manager,
+    get_port,
+    get_ports,
+)
+from hexdag.kernel.exceptions import OrchestratorError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.components.adapter_lifecycle_manager import (
     AdapterLifecycleManager,
 )
+from hexdag.kernel.orchestration.components.checkpoint_manager import CheckpointManager
 from hexdag.kernel.orchestration.components.health_check_manager import HealthCheckManager
 from hexdag.kernel.orchestration.components.secret_manager import SecretManager
 from hexdag.kernel.orchestration.hook_context import (
@@ -34,6 +42,7 @@ from hexdag.kernel.orchestration.hook_context import (
     PreHookContext,
     PreHookManagerProtocol,
 )
+from hexdag.kernel.orchestration.models import CheckpointState
 
 logger = get_logger(__name__)
 
@@ -199,14 +208,6 @@ class PreDagHookManager:
         pipeline_name: str,
     ) -> dict[str, Any]:
         """Execute all pre-DAG hooks in order."""
-
-        from hexdag.kernel.context import (
-            get_observer_manager,
-            get_port,
-            get_ports,
-        )
-        from hexdag.kernel.orchestration.components import OrchestratorError
-
         results: dict[str, Any] = {}
         ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
@@ -317,12 +318,6 @@ class PostDagHookManager:
         error: BaseException | None = None,
     ) -> dict[str, Any]:
         """Execute all post-DAG hooks."""
-        from hexdag.kernel.context import (
-            get_observer_manager,
-            get_port,
-            get_ports,
-        )
-
         results: dict[str, Any] = {}
         ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
         observer_manager = get_observer_manager()
@@ -405,18 +400,12 @@ class PostDagHookManager:
         observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Save final checkpoint state."""
-        from hexdag.kernel.context import get_port
-        from hexdag.kernel.orchestration.components import CheckpointManager
-        from hexdag.kernel.orchestration.models import CheckpointState
-
         memory = get_port("memory")
         if not memory:
             logger.debug("No memory port available for checkpoint save")
             return {"skipped": "No memory port available"}
 
         checkpoint_mgr = CheckpointManager(storage=memory)
-
-        from datetime import UTC, datetime
 
         state = CheckpointState(
             run_id=context.dag_id,

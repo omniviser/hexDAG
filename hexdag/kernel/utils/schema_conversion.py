@@ -25,7 +25,9 @@ def is_valid_type_name(name: str) -> bool:
     if name in VALID_TYPE_NAMES:
         return True
 
-    from hexdag.kernel.validation.sanitized_types import get_type
+    from hexdag.kernel.validation.sanitized_types import (
+        get_type,  # lazy: avoid loading validation at import time
+    )
 
     base = name.rstrip("?")
     if get_type(base) is not None:

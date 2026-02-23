@@ -22,7 +22,8 @@ from typing import Any
 from jinja2 import TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
 
-from hexdag.kernel.pipeline_builder.preprocessing._type_guards import _is_dict_config
+from hexdag.compiler.preprocessing._type_guards import _is_dict_config
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 
 
 class TemplatePlugin:
@@ -89,8 +90,6 @@ def _render_templates(obj: Any, context: dict[str, Any], env: Any) -> Any:
 @_render_templates.register(str)
 def _render_templates_str(obj: str, context: dict[str, Any], env: Any) -> str | int | float | bool:
     """Render Jinja2 template in string."""
-    from hexdag.kernel.pipeline_builder.yaml_builder import YamlPipelineBuilderError
-
     if "{{" not in obj and "{%" not in obj:
         return obj
 

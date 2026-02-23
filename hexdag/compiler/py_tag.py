@@ -30,16 +30,10 @@ from typing import Any
 
 import yaml
 
-from hexdag.kernel.exceptions import HexDAGError
+from hexdag.kernel.exceptions import PyTagError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-class PyTagError(HexDAGError):
-    """Error compiling !py tagged Python code."""
-
-    pass
 
 
 def py_constructor(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> Callable[..., Any]:
@@ -207,11 +201,11 @@ def register_py_tag() -> None:
     --------
     Import the module to auto-register::
 
-        import hexdag.kernel.pipeline_builder.py_tag  # Registers !py tag
+        import hexdag.compiler.py_tag  # Registers !py tag
 
     Or explicitly register::
 
-        from hexdag.kernel.pipeline_builder.py_tag import register_py_tag
+        from hexdag.compiler.py_tag import register_py_tag
         register_py_tag()
     """
     # Check if already registered to avoid duplicate registration

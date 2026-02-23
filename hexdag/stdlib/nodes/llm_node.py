@@ -461,7 +461,7 @@ Example: {example_json}
         result = self._safe_json.loads_yaml_from_text(text)
         if result.ok:
             return result.data  # type: ignore[return-value]
-        import yaml
+        import yaml  # lazy: optional yaml dependency
 
         return yaml.safe_load(text)  # type: ignore[no-any-return]
 
