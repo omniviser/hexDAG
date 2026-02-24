@@ -87,6 +87,74 @@ properties:
             params:
               type: object
               description: Policy parameters
+      aliases:
+        type: object
+        description: User-defined short names for node kinds (maps alias to full module
+          path)
+        additionalProperties:
+          type: string
+      custom_types:
+        type: object
+        description: Custom sanitized types for output_schema validation
+        additionalProperties:
+          type: object
+          properties:
+            base:
+              type: string
+              description: Base type (str, int, float, bool, Decimal)
+              enum:
+              - str
+              - int
+              - float
+              - bool
+              - Decimal
+            pattern:
+              type: string
+              description: Regex pattern for validation
+            nulls:
+              type: array
+              items:
+                type: string
+              description: Values to treat as null
+            strip:
+              type: boolean
+              description: Strip whitespace
+            trim:
+              type: boolean
+              description: Trim whitespace
+            upper:
+              type: boolean
+              description: Convert to uppercase
+            lower:
+              type: boolean
+              description: Convert to lowercase
+            max_length:
+              type: integer
+              description: Maximum string length
+            default:
+              description: Default value if null
+            clamp:
+              type: array
+              items:
+                type: number
+              minItems: 2
+              maxItems: 2
+              description: '[min, max] bounds for numeric types'
+            true_values:
+              type: array
+              items:
+                type: string
+              description: Values to treat as true (bool type)
+            false_values:
+              type: array
+              items:
+                type: string
+              description: Values to treat as false (bool type)
+            description:
+              type: string
+              description: Human-readable description of the type
+          required:
+          - base
       events:
         type: object
         description: Event handlers for observability

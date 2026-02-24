@@ -7,15 +7,15 @@ from typing import Any
 from sqlalchemy import MetaData, Table, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from hexdag.kernel.ports.data_store import SupportsQuery
 from hexdag.kernel.ports.database import (
     ColumnSchema,
-    Database,
     SupportsRawSQL,
     TableSchema,
 )
 
 
-class SQLAlchemyAdapter(Database, SupportsRawSQL):
+class SQLAlchemyAdapter(SupportsQuery, SupportsRawSQL):
     """Adapter for SQLAlchemy-supported databases."""
 
     def __init__(self, dsn: str) -> None:

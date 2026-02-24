@@ -1,0 +1,40 @@
+# Configuration for scripts/check_deprecated_usage.py
+#
+# Controls which usages of deprecated APIs are intentionally allowed
+# (e.g., backward-compat re-exports in __init__.py files).
+
+# Mapping of deprecated item name → list of files allowed to use it.
+# Each entry is: "deprecated_name": ["file/path.py", ...]
+allowed_usages:
+  # DataNode re-exported from stdlib/nodes for backward compat
+  DataNode:
+    - hexdag/stdlib/nodes/__init__.py
+
+  # Memory class re-exported from kernel/ports + used in port detection
+  Memory:
+    - hexdag/kernel/ports/__init__.py
+    - hexdag/kernel/ports/detection.py
+
+  # hexdag.kernel.ports.memory module — re-export and detection files import from it
+  hexdag.kernel.ports.memory:
+    - hexdag/kernel/ports/__init__.py
+    - hexdag/kernel/ports/detection.py
+
+  # Database class re-exported from kernel/ports + used in port detection
+  Database:
+    - hexdag/kernel/ports/__init__.py
+    - hexdag/kernel/ports/detection.py
+
+  # hexdag.kernel.ports.database module — re-export, detection, and adapters that
+  # import non-deprecated types (ColumnSchema, TableSchema, SupportsReadOnly, etc.)
+  hexdag.kernel.ports.database:
+    - hexdag/kernel/ports/__init__.py
+    - hexdag/kernel/ports/detection.py
+    - hexdag/stdlib/adapters/database/csv/csv_adapter.py
+    - hexdag/stdlib/adapters/database/pgvector/pgvector_adapter.py
+    - hexdag/stdlib/adapters/database/sqlalchemy/sqlalchemy_adapter.py
+    - hexdag/stdlib/adapters/database/sqlite/sqlite_adapter.py
+
+  # DatabasePort alias in kernel/ports __init__
+  DatabasePort:
+    - hexdag/kernel/ports/__init__.py

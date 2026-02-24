@@ -7,14 +7,13 @@ providing persistent key-value storage with SQL database benefits.
 from typing import Any
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.database import Database
-from hexdag.kernel.ports.memory import Memory
+from hexdag.kernel.ports.data_store import SupportsKeyValue, SupportsQuery
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
 
 logger = get_logger(__name__)
 
 
-class SQLiteMemoryAdapter(Memory):
+class SQLiteMemoryAdapter(SupportsKeyValue):
     """Memory adapter backed by SQLite database.
 
     Provides persistent key-value storage using SQLite, bridging the
@@ -28,7 +27,7 @@ class SQLiteMemoryAdapter(Memory):
 
     Parameters
     ----------
-    database : Database
+    database : SupportsQuery
         SQLite database adapter (typically SQLiteAdapter)
     table_name : str, default="memory_store"
         Name of the key-value table
@@ -45,19 +44,19 @@ class SQLiteMemoryAdapter(Memory):
     """
 
     # Type annotations for attributes
-    database: Database
+    database: SupportsQuery
     table_name: str
     auto_init: bool
     _initialized: bool
 
     def __init__(
-        self, database: Database, table_name: str = "memory_store", auto_init: bool = True
+        self, database: SupportsQuery, table_name: str = "memory_store", auto_init: bool = True
     ) -> None:
         """Initialize SQLite memory adapter.
 
         Parameters
         ----------
-        database : Database
+        database : SupportsQuery
             SQLite database adapter
         table_name : str
             Name of the key-value table

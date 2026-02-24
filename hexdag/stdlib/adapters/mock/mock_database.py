@@ -3,10 +3,10 @@
 import asyncio
 from typing import Any
 
-from hexdag.kernel.ports.database import Database
+from hexdag.kernel.ports.data_store import SupportsQuery
 
 
-class MockDatabaseAdapter(Database):
+class MockDatabaseAdapter(SupportsQuery):
     """Mock implementation of Database for testing and demos."""
 
     # Type annotations for attributes

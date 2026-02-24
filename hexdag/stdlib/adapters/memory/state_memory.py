@@ -4,7 +4,7 @@ import time
 from typing import Any
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.memory import Memory
+from hexdag.kernel.ports.data_store import SupportsKeyValue
 from hexdag.stdlib.adapters.memory.schemas import BeliefState, EntityState
 
 logger = get_logger(__name__)
@@ -39,7 +39,7 @@ class StateMemoryPlugin:
 
     plugin_type = "state"
 
-    def __init__(self, storage: Memory):
+    def __init__(self, storage: SupportsKeyValue):
         """Initialize state memory plugin.
 
         Args

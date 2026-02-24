@@ -7,12 +7,12 @@ if TYPE_CHECKING:
     from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
-from hexdag.kernel.ports.memory import Memory
+from hexdag.kernel.ports.data_store import SupportsKeyValue
 
 __all__ = ["InMemoryMemory"]
 
 
-class InMemoryMemory(Memory):
+class InMemoryMemory(SupportsKeyValue):
     """In-memory implementation of Memory for testing.
 
     Features:

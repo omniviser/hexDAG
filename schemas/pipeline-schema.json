@@ -831,8 +831,99 @@
         },
         "spec": {
             "properties": {
+                "aliases": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "User-defined short names for node kinds (maps alias to full module path)",
+                    "type": "object"
+                },
                 "common_field_mappings": {
                     "description": "Reusable field mapping definitions",
+                    "type": "object"
+                },
+                "custom_types": {
+                    "additionalProperties": {
+                        "properties": {
+                            "base": {
+                                "description": "Base type (str, int, float, bool, Decimal)",
+                                "enum": [
+                                    "str",
+                                    "int",
+                                    "float",
+                                    "bool",
+                                    "Decimal"
+                                ],
+                                "type": "string"
+                            },
+                            "clamp": {
+                                "description": "[min, max] bounds for numeric types",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "maxItems": 2,
+                                "minItems": 2,
+                                "type": "array"
+                            },
+                            "default": {
+                                "description": "Default value if null"
+                            },
+                            "description": {
+                                "description": "Human-readable description of the type",
+                                "type": "string"
+                            },
+                            "false_values": {
+                                "description": "Values to treat as false (bool type)",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            },
+                            "lower": {
+                                "description": "Convert to lowercase",
+                                "type": "boolean"
+                            },
+                            "max_length": {
+                                "description": "Maximum string length",
+                                "type": "integer"
+                            },
+                            "nulls": {
+                                "description": "Values to treat as null",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            },
+                            "pattern": {
+                                "description": "Regex pattern for validation",
+                                "type": "string"
+                            },
+                            "strip": {
+                                "description": "Strip whitespace",
+                                "type": "boolean"
+                            },
+                            "trim": {
+                                "description": "Trim whitespace",
+                                "type": "boolean"
+                            },
+                            "true_values": {
+                                "description": "Values to treat as true (bool type)",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            },
+                            "upper": {
+                                "description": "Convert to uppercase",
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "base"
+                        ],
+                        "type": "object"
+                    },
+                    "description": "Custom sanitized types for output_schema validation",
                     "type": "object"
                 },
                 "events": {
