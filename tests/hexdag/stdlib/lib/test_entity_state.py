@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
+from hexdag.kernel.exceptions import ValidationError
 from hexdag.stdlib.lib.entity_state import EntityState, InvalidTransitionError
 from hexdag.stdlib.lib_base import HexDAGLib
 
@@ -33,7 +34,7 @@ class TestStateMachineConfig:
         assert config.initial_state == "new"
 
     def test_initial_state_not_in_states(self) -> None:
-        with pytest.raises(ValueError, match="Initial state"):
+        with pytest.raises(ValidationError, match="initial_state"):
             StateMachineConfig(
                 entity_type="x",
                 states={"a", "b"},
@@ -42,7 +43,7 @@ class TestStateMachineConfig:
             )
 
     def test_transition_source_not_in_states(self) -> None:
-        with pytest.raises(ValueError, match="Transition source"):
+        with pytest.raises(ValidationError, match="source"):
             StateMachineConfig(
                 entity_type="x",
                 states={"a", "b"},
@@ -51,7 +52,7 @@ class TestStateMachineConfig:
             )
 
     def test_transition_target_not_in_states(self) -> None:
-        with pytest.raises(ValueError, match="Transition targets"):
+        with pytest.raises(ValidationError, match="targets"):
             StateMachineConfig(
                 entity_type="x",
                 states={"a", "b"},

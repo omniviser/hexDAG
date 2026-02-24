@@ -271,7 +271,7 @@ class AlertingObserver:
                 try:
                     self.on_alert(alert)
                 except Exception as e:
-                    logger.error(f"Alert callback failed: {e}")
+                    logger.error("Alert callback failed: {}", e)
 
     def get_alerts(
         self,
@@ -443,18 +443,18 @@ class SimpleLoggingObserver:
         if isinstance(event, NodeStarted):
             logger.info(event.log_message())
             if self.verbose:
-                logger.debug(f"  Wave: {event.wave_index}, Dependencies: {event.dependencies}")
+                logger.debug("  Wave: {}, Dependencies: {}", event.wave_index, event.dependencies)
 
         elif isinstance(event, NodeCompleted):
             logger.info(event.log_message())
             if self.verbose and event.result is not None:
                 result_preview = str(event.result)[:100]
-                logger.debug(f"  Result: {result_preview}...")
+                logger.debug("  Result: {}...", result_preview)
 
         elif isinstance(event, NodeFailed):
             logger.error(event.log_message())
             if self.verbose:
-                logger.error(f"  Error: {event.error}")
+                logger.error("  Error: {}", event.error)
 
         elif isinstance(event, (PipelineStarted, PipelineCompleted)):
             logger.info(event.log_message())

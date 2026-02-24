@@ -29,6 +29,34 @@ def process_data(input_data: dict) -> dict:
 
 ## Available Node Types
 
+### ApiCallNode
+
+Declarative HTTP call node for REST API integration.
+
+**Kind**: `api_call_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `str` | Yes | Node name (must be unique in the pipeline). |
+| `method` | `HttpMethod` | No | HTTP method: GET, POST, PUT, DELETE, or PATCH. |
+| `url` | `str` | No | URL or path template. Supports ``{{variable}}`` sy... |
+| `headers` | `dict[str, str] | None` | No | Request headers. Values support ``{{variable}}`` s... |
+| `params` | `dict[str, Any] | None` | No | Query parameters for GET requests. |
+| `json_body` | `dict[str, Any] | None` | No | JSON body for POST/PUT/PATCH requests. |
+| `port` | `str` | No | Port name to use (default: ``"api_call"``). |
+| `output_schema` | `dict[str, Any] | type[BaseModel] | None` | No | Optional schema for output validation. |
+| `deps` | `list[str] | None` | No | Dependency node names. |
+
+**Example:**
+```yaml
+- kind: api_call_node
+  metadata:
+    name: my_api_call
+  spec:
+    # Add configuration here
+  dependencies: []
+```
+
 ### CompositeNode
 
 Unified control flow node supporting while, for-each, times, if-else, switch.

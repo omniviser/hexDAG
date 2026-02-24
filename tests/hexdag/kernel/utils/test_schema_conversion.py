@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from hexdag.kernel.exceptions import SchemaCompatibilityError
 from hexdag.kernel.utils.schema_conversion import (
     VALID_TYPE_NAMES,
     convert_yaml_schema,
@@ -144,7 +145,7 @@ class TestNormalizeSchemaDict:
     def test_invalid_type_name_raises_error(self) -> None:
         """Test that invalid type name raises ValueError."""
         schema = {"field": "invalid_type"}
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(SchemaCompatibilityError) as exc_info:
             normalize_schema(schema)
         assert "Invalid type 'invalid_type'" in str(exc_info.value)
         assert "field" in str(exc_info.value)
@@ -153,7 +154,7 @@ class TestNormalizeSchemaDict:
     def test_invalid_value_type_raises_error(self) -> None:
         """Test that invalid value type raises ValueError."""
         schema = {"field": 123}  # Not a string, type, or dict
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(SchemaCompatibilityError) as exc_info:
             normalize_schema(schema)
         assert "invalid value" in str(exc_info.value)
         assert "field" in str(exc_info.value)
@@ -180,7 +181,7 @@ class TestNullableTypes:
         assert result["mc_number"] == "str?"
 
     def test_invalid_nullable_raises_error(self) -> None:
-        with pytest.raises(ValueError, match="Invalid type 'invalid\\?'"):
+        with pytest.raises(SchemaCompatibilityError, match="Invalid type 'invalid\\?'"):
             normalize_schema({"field": "invalid?"})
 
 

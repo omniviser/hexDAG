@@ -7,6 +7,7 @@ import pytest
 import yaml
 from pydantic import Field
 
+from hexdag.kernel.exceptions import ValidationError
 from hexdag.kernel.schema.generator import SchemaGenerator
 
 
@@ -290,7 +291,7 @@ class TestOutputFormats:
         def factory(name: str):
             pass
 
-        with pytest.raises(ValueError, match="Invalid format"):
+        with pytest.raises(ValidationError, match="format"):
             SchemaGenerator.from_callable(factory, format="xml")
 
 

@@ -23,6 +23,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from hexdag.kernel.exceptions import ValidationError
+
 
 @dataclass(slots=True)
 class StateMachineConfig:
@@ -35,16 +37,25 @@ class StateMachineConfig:
 
     def __post_init__(self) -> None:
         if self.initial_state not in self.states:
-            msg = f"Initial state {self.initial_state!r} not in states: {self.states}"
-            raise ValueError(msg)
+            raise ValidationError(
+                "initial_state",
+                f"not in states: {self.states}",
+                self.initial_state,
+            )
         for from_state, to_states in self.transitions.items():
             if from_state not in self.states:
-                msg = f"Transition source {from_state!r} not in states: {self.states}"
-                raise ValueError(msg)
+                raise ValidationError(
+                    "transitions",
+                    f"source {from_state!r} not in states: {self.states}",
+                    from_state,
+                )
             invalid = to_states - self.states
             if invalid:
-                msg = f"Transition targets {invalid} not in states: {self.states}"
-                raise ValueError(msg)
+                raise ValidationError(
+                    "transitions",
+                    f"targets {invalid} not in states: {self.states}",
+                    invalid,
+                )
 
     def is_valid_transition(self, from_state: str, to_state: str) -> bool:
         """Check if a transition is allowed by this config."""

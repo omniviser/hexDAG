@@ -112,7 +112,7 @@ class HealthCheckManager:
             Health status of the adapter
         """
         try:
-            logger.debug(f"Running health check for {port_name}")
+            logger.debug("Running health check for {}", port_name)
             health_check = adapter.ahealth_check
             status: HealthStatus = await health_check()  # pyright: ignore[reportGeneralTypeIssues]
             status.port_name = port_name  # Ensure port name is set
@@ -133,7 +133,7 @@ class HealthCheckManager:
 
         except (RuntimeError, ConnectionError, TimeoutError, ValueError) as e:
             # Health check errors - mark adapter as unhealthy
-            logger.error(f"Health check failed for {port_name}: {e}", exc_info=True)
+            logger.error("Health check failed for {}: {}", port_name, e, exc_info=True)
             adapter_name = getattr(adapter, "_hexdag_name", port_name)
             return HealthStatus(
                 status="unhealthy",
@@ -156,9 +156,9 @@ class HealthCheckManager:
             latency_info = (
                 f" ({status.latency_ms:.{LATENCY_PRECISION}f}ms)" if status.latency_ms else ""
             )
-            logger.info(f"✅ {port_name} health check: {status.status}{latency_info}")
+            logger.info("✅ {} health check: {}{}", port_name, status.status, latency_info)
         else:
-            logger.warning(f"⚠️ {port_name} health check: {status.status} - {status.error}")
+            logger.warning("⚠️ {} health check: {} - {}", port_name, status.status, status.error)
 
     def get_unhealthy_adapters(self, health_results: list[HealthStatus]) -> list[HealthStatus]:
         """Filter health results to only unhealthy adapters.

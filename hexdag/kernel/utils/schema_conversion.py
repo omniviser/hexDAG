@@ -7,6 +7,8 @@ to convert YAML-friendly type representations to actual Python types.
 from functools import singledispatch
 from typing import Any
 
+from hexdag.kernel.exceptions import SchemaCompatibilityError
+
 # Canonical string-name → Python-type mapping (single source of truth).
 # Used by normalize_schema, pipeline builder, and node factories.
 VALID_TYPE_NAMES: dict[str, Any] = {
@@ -75,7 +77,7 @@ def _(schema: dict) -> dict[str, type]:
                 valid_names = ", ".join(sorted(VALID_TYPE_NAMES.keys()))
                 sanitized_names = ", ".join(sorted(get_available_types()))
                 hint = f" Sanitized types: {sanitized_names}" if sanitized_names else ""
-                raise ValueError(
+                raise SchemaCompatibilityError(
                     f"Invalid type '{value}' for field '{key}'. "
                     f"Supported types: {valid_names} (append ? for nullable).{hint}"
                 )
@@ -88,7 +90,7 @@ def _(schema: dict) -> dict[str, type]:
             # Already a type - pass through
             converted[key] = value
         else:
-            raise ValueError(
+            raise SchemaCompatibilityError(
                 f"Field '{key}' has invalid value: {value!r}. "
                 f"Expected type name string, type object, or nested schema dict."
             )

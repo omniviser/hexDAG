@@ -214,7 +214,7 @@ class PreDagHookManager:
 
         # 1. Health checks
         if self.config.enable_health_checks:
-            logger.info(f"Running health checks for pipeline '{pipeline_name}'")
+            logger.info("Running health checks for pipeline '{}'", pipeline_name)
             health_results = await self._health_check_manager.check_all_adapters(
                 ports=dict(ports), observer_manager=observer_manager, pipeline_name=pipeline_name
             )
@@ -226,16 +226,16 @@ class PreDagHookManager:
                 error_msg = f"Unhealthy adapters: {unhealthy_names}"
 
                 if self.config.health_check_fail_fast:
-                    logger.error(f"Health check failed - blocking pipeline: {error_msg}")
+                    logger.error("Health check failed - blocking pipeline: {}", error_msg)
                     raise OrchestratorError(f"Health check failed: {error_msg}")
                 if self.config.health_check_warn_only:
-                    logger.warning(f"Health check issues detected: {error_msg}")
+                    logger.warning("Health check issues detected: {}", error_msg)
                 else:
-                    logger.info(f"Health check issues: {error_msg}")
+                    logger.info("Health check issues: {}", error_msg)
 
         # 2. Secret injection
         if self.config.enable_secret_injection:
-            logger.info(f"Loading secrets for pipeline '{pipeline_name}'")
+            logger.info("Loading secrets for pipeline '{}'", pipeline_name)
             secret_port = get_port("secret")
             memory = get_port("memory")
             secret_results = await self._secret_manager.load_secrets(
@@ -246,13 +246,13 @@ class PreDagHookManager:
         # 3. Custom hooks
         for hook in self.config.custom_hooks:
             hook_name = hook.__name__
-            logger.info(f"Running custom pre-DAG hook: {hook_name}")
+            logger.info("Running custom pre-DAG hook: {}", hook_name)
             try:
                 hook_result = await hook(ports, context)
                 results[hook_name] = hook_result
             except (RuntimeError, ValueError, KeyError, TypeError) as e:
                 # Specific hook errors - these are expected failure modes
-                logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
+                logger.error("Custom hook '{}' failed: {}", hook_name, e, exc_info=True)
                 results[hook_name] = {"error": str(e)}
                 raise
 
@@ -329,10 +329,10 @@ class PostDagHookManager:
         )
 
         if not should_run:
-            logger.debug(f"Skipping post-DAG hooks for status: {pipeline_status}")
+            logger.debug("Skipping post-DAG hooks for status: {}", pipeline_status)
             return {"skipped": True, "reason": f"Not configured for {pipeline_status}"}
 
-        logger.info(f"Running post-DAG hooks for pipeline '{pipeline_name}' ({pipeline_status})")
+        logger.info("Running post-DAG hooks for pipeline '{}' ({})", pipeline_name, pipeline_status)
 
         try:
             # 1. Save checkpoint (if enabled)
@@ -346,19 +346,19 @@ class PostDagHookManager:
                     results["checkpoint"] = checkpoint_result
                 except Exception as e:
                     # Catch all checkpoint errors - don't let them block cleanup
-                    logger.error(f"Checkpoint save failed: {e}", exc_info=True)
+                    logger.error("Checkpoint save failed: {}", e, exc_info=True)
                     results["checkpoint"] = {"error": str(e)}
 
             # 2. Custom hooks (user-defined)
             for hook in self.config.custom_hooks:
                 hook_name = hook.__name__
                 try:
-                    logger.debug(f"Running custom post-DAG hook: {hook_name}")
+                    logger.debug("Running custom post-DAG hook: {}", hook_name)
                     hook_result = await hook(ports, context, node_results, pipeline_status, error)
                     results[hook_name] = hook_result
                 except Exception as e:
                     # Catch ALL exceptions from custom hooks - don't let them block cleanup
-                    logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
+                    logger.error("Custom hook '{}' failed: {}", hook_name, e, exc_info=True)
                     results[hook_name] = {"error": str(e)}
 
         finally:
@@ -374,7 +374,7 @@ class PostDagHookManager:
                     results["secret_cleanup"] = secret_cleanup
                 except Exception as e:
                     # Catch ALL exceptions - secret cleanup must be robust
-                    logger.error(f"Secret cleanup failed: {e}", exc_info=True)
+                    logger.error("Secret cleanup failed: {}", e, exc_info=True)
                     results["secret_cleanup"] = {"error": str(e)}
 
             # 4. Adapter cleanup (close connections - do this last)
@@ -386,7 +386,7 @@ class PostDagHookManager:
                     results["adapter_cleanup"] = adapter_cleanup
                 except Exception as e:
                     # Catch ALL exceptions - adapter cleanup must be robust
-                    logger.error(f"Adapter cleanup failed: {e}", exc_info=True)
+                    logger.error("Adapter cleanup failed: {}", e, exc_info=True)
                     results["adapter_cleanup"] = {"error": str(e)}
 
         return results
@@ -421,6 +421,6 @@ class PostDagHookManager:
         )
 
         await checkpoint_mgr.save(state)
-        logger.info(f"Saved checkpoint for run_id: {context.dag_id}")
+        logger.info("Saved checkpoint for run_id: {}", context.dag_id)
 
         return {"saved": True, "run_id": context.dag_id, "node_count": len(node_results)}

@@ -11,7 +11,7 @@ import asyncio
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from hexdag.kernel.exceptions import ResourceNotFoundError
+from hexdag.kernel.exceptions import ResourceNotFoundError, TypeMismatchError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import resolve_function
 
@@ -94,8 +94,7 @@ class ToolRouter:
             if isinstance(fn_or_path, str):
                 fn_or_path = resolve_function(fn_or_path)
             if not callable(fn_or_path):
-                msg = f"Tool '{name}' is not callable: {fn_or_path!r}"
-                raise TypeError(msg)
+                raise TypeMismatchError(name, "callable", type(fn_or_path).__name__, fn_or_path)
             self._tools[name] = fn_or_path
 
     # ── Mutation ──────────────────────────────────────────────────────

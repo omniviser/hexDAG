@@ -233,7 +233,7 @@ class OpenAIAdapter(
             return None
 
         except Exception as e:
-            logger.error(f"OpenAI API error: {e}", exc_info=True)
+            logger.error("OpenAI API error: {}", e, exc_info=True)
             return None
 
     async def aresponse_with_tools(
@@ -328,7 +328,7 @@ class OpenAIAdapter(
             )
 
         except Exception as e:
-            logger.error(f"OpenAI API error with tools: {e}", exc_info=True)
+            logger.error("OpenAI API error with tools: {}", e, exc_info=True)
             raise
 
     async def aresponse_with_vision(
@@ -422,7 +422,7 @@ class OpenAIAdapter(
             return None
 
         except Exception as e:
-            logger.error(f"OpenAI API error with vision: {e}", exc_info=True)
+            logger.error("OpenAI API error with vision: {}", e, exc_info=True)
             return None
 
     async def aresponse_with_vision_and_tools(
@@ -553,7 +553,7 @@ class OpenAIAdapter(
             )
 
         except Exception as e:
-            logger.error(f"OpenAI API error with vision+tools: {e}", exc_info=True)
+            logger.error("OpenAI API error with vision+tools: {}", e, exc_info=True)
             raise
 
     # ========== Embedding Methods (SupportsEmbedding Protocol) ==========
@@ -595,7 +595,7 @@ class OpenAIAdapter(
             return []
 
         except Exception as e:
-            logger.error(f"OpenAI embedding API error: {e}", exc_info=True)
+            logger.error("OpenAI embedding API error: {}", e, exc_info=True)
             raise
 
     async def aembed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -637,7 +637,7 @@ class OpenAIAdapter(
             return [[] for _ in texts]
 
         except Exception as e:
-            logger.error(f"OpenAI batch embedding API error: {e}", exc_info=True)
+            logger.error("OpenAI batch embedding API error: {}", e, exc_info=True)
             raise
 
     async def aembed_image(self, image: ImageInput) -> list[float]:
@@ -705,7 +705,7 @@ class OpenAIAdapter(
                 },
             )
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.error("Health check failed: {}", e)
             return HealthStatus(
                 status="unhealthy",
                 adapter_name=f"OpenAI[{self.model}]",

@@ -37,11 +37,12 @@ DatabasePort = Database
 # These will be replaced by __getattr__ when accessed
 if TYPE_CHECKING:
     from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+    from hexdag.drivers.http_client import HttpClientDriver
     from hexdag.kernel.domain import DirectedGraph, NodeSpec
     from hexdag.kernel.orchestration.orchestrator import Orchestrator
     from hexdag.kernel.resolver import resolve, resolve_function
     from hexdag.stdlib.adapters.memory import InMemoryMemory
-    from hexdag.stdlib.adapters.mock import MockDatabaseAdapter, MockLLM
+    from hexdag.stdlib.adapters.mock import MockDatabaseAdapter, MockHttpClient, MockLLM
 
 
 # Deprecated top-level exports — use submodule imports or PipelineRunner instead.
@@ -104,6 +105,14 @@ def __getattr__(name: str) -> Any:
         from hexdag.stdlib.adapters.mock import MockDatabaseAdapter as _MockDatabaseAdapter
 
         return _MockDatabaseAdapter
+    if name == "MockHttpClient":
+        from hexdag.stdlib.adapters.mock import MockHttpClient as _MockHttpClient
+
+        return _MockHttpClient
+    if name == "HttpClientDriver":
+        from hexdag.drivers.http_client import HttpClientDriver as _HttpClientDriver
+
+        return _HttpClientDriver
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -125,10 +134,13 @@ __all__ = [
     "ToolRouter",
     "Database",
     "DatabasePort",
+    # Drivers
+    "HttpClientDriver",
     # Testing and Development Adapters
     "InMemoryMemory",
     "MockLLM",
     "MockDatabaseAdapter",
+    "MockHttpClient",
     # Deprecated (still importable with warning)
     "Orchestrator",
     "DirectedGraph",

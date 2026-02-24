@@ -95,7 +95,7 @@ class FileMemoryAdapter(SupportsKeyValue):
 
         if self.create_dirs:
             self.base_path.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Initialized file storage at '{self.base_path}'")
+            logger.debug("Initialized file storage at '{}'", self.base_path)
 
     def _get_file_path(self, key: str) -> Path:
         """Get file path for a key.
@@ -188,7 +188,7 @@ class FileMemoryAdapter(SupportsKeyValue):
 
             return self._deserialize(data)
         except Exception as e:
-            logger.error(f"Failed to read key '{key}' from {file_path}: {e}")
+            logger.error("Failed to read key '{}' from {}: {}", key, file_path, e)
             return None
 
     async def aset(self, key: str, value: Any) -> None:
@@ -223,9 +223,9 @@ class FileMemoryAdapter(SupportsKeyValue):
                     )
                 file_path.write_text(serialized, encoding="utf-8")
 
-            logger.debug(f"Stored key '{key}' at {file_path}")
+            logger.debug("Stored key '{}' at {}", key, file_path)
         except Exception as e:
-            logger.error(f"Failed to write key '{key}' to {file_path}: {e}")
+            logger.error("Failed to write key '{}' to {}: {}", key, file_path, e)
             raise
 
     async def adelete(self, key: str) -> bool:
@@ -248,10 +248,10 @@ class FileMemoryAdapter(SupportsKeyValue):
 
         try:
             file_path.unlink()
-            logger.debug(f"Deleted key '{key}' from {file_path}")
+            logger.debug("Deleted key '{}' from {}", key, file_path)
             return True
         except Exception as e:
-            logger.error(f"Failed to delete key '{key}' at {file_path}: {e}")
+            logger.error("Failed to delete key '{}' at {}: {}", key, file_path, e)
             return False
 
     async def aexists(self, key: str) -> bool:
@@ -306,7 +306,7 @@ class FileMemoryAdapter(SupportsKeyValue):
         for file_path in self.base_path.glob(pattern):
             file_path.unlink()
 
-        logger.info(f"Cleared all files from {self.base_path}")
+        logger.info("Cleared all files from {}", self.base_path)
 
     def __repr__(self) -> str:
         """Return string representation."""

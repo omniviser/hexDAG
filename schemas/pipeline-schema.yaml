@@ -42,6 +42,7 @@ properties:
         items:
           oneOf:
           - $ref: '#/$defs/LlmNodeSpec'
+          - $ref: '#/$defs/Api_CallNodeSpec'
           - $ref: '#/$defs/CompositeNodeSpec'
           - $ref: '#/$defs/DataNodeSpec'
           - $ref: '#/$defs/ExpressionNodeSpec'
@@ -233,6 +234,62 @@ $defs:
             default: json
           template:
             type: string
+            default: null
+        additionalProperties: false
+    required:
+    - kind
+    - metadata
+    - spec
+  Api_CallNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for api_call_node type
+    properties:
+      kind:
+        const: api_call_node
+        description: 'Node type: api_call_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          method:
+            type: string
+            description: 'HTTP method: GET, POST, PUT, DELETE, or PATCH.'
+            default: GET
+          url:
+            type: string
+            description: URL or path template. Supports ``{{variable}}`` syntax.
+            default: ''
+          headers:
+            type: string
+            description: Request headers. Values support ``{{variable}}`` syntax.
+            default: null
+          params:
+            type: string
+            description: Query parameters for GET requests.
+            default: null
+          json_body:
+            type: string
+            description: JSON body for POST/PUT/PATCH requests.
+            default: null
+          port:
+            type: string
+            description: 'Port name to use (default: ``"api_call"``).'
+            default: api_call
+          output_schema:
+            type: string
+            description: Optional schema for output validation.
             default: null
         additionalProperties: false
     required:

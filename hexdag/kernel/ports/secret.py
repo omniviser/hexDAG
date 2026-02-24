@@ -151,7 +151,7 @@ class SecretStore(Protocol):
             env_var_name = f"{prefix}{key.replace('-', '_').upper()}"
 
             if not overwrite and env_var_name in os.environ:
-                logger.debug(f"Skipping '{env_var_name}' (already set)")
+                logger.debug("Skipping '{}' (already set)", env_var_name)
                 results[env_var_name] = "skipped"
                 continue
 
@@ -159,13 +159,13 @@ class SecretStore(Protocol):
                 secret = await self.aget_secret(key)
                 os.environ[env_var_name] = secret.get()
                 results[env_var_name] = "loaded"
-                logger.debug(f"Loaded '{key}' → env:{env_var_name}")
+                logger.debug("Loaded '{}' → env:{}", key, env_var_name)
             except (KeyError, ValueError, RuntimeError) as e:
-                logger.warning(f"Failed to load secret '{key}' to environ: {e}")
+                logger.warning("Failed to load secret '{}' to environ: {}", key, e)
                 results[env_var_name] = f"error: {e}"
 
         loaded = sum(1 for v in results.values() if v == "loaded")
-        logger.info(f"Loaded {loaded}/{len(keys)} secrets into os.environ")
+        logger.info("Loaded {}/{} secrets into os.environ", loaded, len(keys))
         return results
 
     async def alist_secret_names(self) -> list[str]:

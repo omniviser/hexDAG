@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from hexdag.kernel.exceptions import TypeMismatchError
 from hexdag.kernel.protocols import (
     ComponentWithExecute,
     ConfigurablePort,
@@ -227,19 +228,16 @@ class TestToDict:
         assert result == {"custom": "data"}
 
     def test_raises_type_error_for_string(self) -> None:
-        """Test that TypeError is raised for string."""
-        with pytest.raises(TypeError) as exc_info:
+        """Test that TypeMismatchError is raised for string."""
+        with pytest.raises(TypeMismatchError):
             to_dict("not convertible")
-        assert "Cannot convert str to dict" in str(exc_info.value)
 
     def test_raises_type_error_for_list(self) -> None:
-        """Test that TypeError is raised for list."""
-        with pytest.raises(TypeError) as exc_info:
+        """Test that TypeMismatchError is raised for list."""
+        with pytest.raises(TypeMismatchError):
             to_dict([1, 2, 3])
-        assert "Cannot convert list to dict" in str(exc_info.value)
 
     def test_raises_type_error_for_int(self) -> None:
-        """Test that TypeError is raised for int."""
-        with pytest.raises(TypeError) as exc_info:
+        """Test that TypeMismatchError is raised for int."""
+        with pytest.raises(TypeMismatchError):
             to_dict(42)
-        assert "Cannot convert int to dict" in str(exc_info.value)

@@ -118,7 +118,7 @@ class SQLiteAdapter(SupportsQuery, SupportsReadOnly):
             try:
                 yield cursor
             except aiosqlite.Error as e:
-                logger.error(f"Database error: {e}")
+                logger.error("Database error: {}", e)
                 await self.connection.rollback()
                 raise
 
@@ -270,11 +270,11 @@ class SQLiteAdapter(SupportsQuery, SupportsReadOnly):
                     await self.connection.commit()
 
                 # Log the operation
-                logger.info(f"Executed {query_type} query, affected rows: {affected_rows}")
+                logger.info("Executed {} query, affected rows: {}", query_type, affected_rows)
                 return []
         except aiosqlite.Error as e:
-            logger.error(f"Query execution failed: {e}")
-            logger.error(f"Query: {query[:100]}...")  # Log first 100 chars of query
+            logger.error("Query execution failed: {}", e)
+            logger.error("Query: {}...", query[:100])  # Log first 100 chars of query
             raise
 
     async def aget_relationships(self) -> list[dict[str, Any]]:

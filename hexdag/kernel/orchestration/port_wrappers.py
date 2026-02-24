@@ -274,7 +274,7 @@ class ObservableToolRouterWrapper:
             return result
 
         except Exception as e:
-            logger.error(f"Tool '{tool_name}' failed in {tool_timer.duration_str}ms: {e}")
+            logger.error("Tool '{}' failed in {}ms: {}", tool_name, tool_timer.duration_str, e)
 
             # Still emit completed event with error info
             if observer_mgr := get_observer_manager():

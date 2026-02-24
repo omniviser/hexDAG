@@ -137,9 +137,9 @@ def register_alias(alias: str, full_path: str) -> None:
     >>> #     - kind: my_processor  # Uses alias!
     """
     if not alias:
-        raise ValueError("Alias cannot be empty")
+        raise ResolveError("alias", "Alias cannot be empty")
     if not full_path:
-        raise ValueError("Full path cannot be empty")
+        raise ResolveError("full_path", "Full path cannot be empty")
     _user_aliases[alias] = full_path
 
 

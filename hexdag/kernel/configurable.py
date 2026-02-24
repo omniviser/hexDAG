@@ -15,6 +15,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field  # noqa: TC002
 
+from hexdag.kernel.exceptions import ValidationError
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
@@ -271,13 +272,14 @@ class ConfigurableMacro:
 
         Raises
         ------
-        ValueError
+        ValidationError
             If required inputs are missing
         """
         # Check required inputs
         if missing := [name for name in required if name not in inputs]:
-            raise ValueError(
-                f"Missing required inputs for {self.__class__.__name__}: {', '.join(missing)}"
+            raise ValidationError(
+                "inputs",
+                f"missing required inputs for {self.__class__.__name__}: {', '.join(missing)}",
             )
 
         # Apply defaults for optional inputs

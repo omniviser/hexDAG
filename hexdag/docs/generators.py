@@ -597,7 +597,7 @@ spec:
                 lines.extend(self._generate_ports_section(schema))
                 lines.extend(self._generate_events_section(schema))
         except Exception as e:
-            logger.warning(f"Could not load pipeline schema: {e}")
+            logger.warning("Could not load pipeline schema: {}", e)
             lines.extend([
                 "## Node Types",
                 "",
@@ -659,7 +659,7 @@ spec:
             )
             top_help = _strip_line_trailing_ws(result.stdout.strip() or result.stderr.strip())
         except Exception as e:
-            logger.warning(f"Could not run hexdag --help: {e}")
+            logger.warning("Could not run hexdag --help: {}", e)
             lines.append("*CLI help not available. Ensure hexdag is installed.*")
             return "\n".join(lines)
 
@@ -720,7 +720,7 @@ spec:
                     lines.append("```")
                     lines.append("")
             except Exception as e:
-                logger.warning(f"Could not get help for hexdag {cmd_name}: {e}")
+                logger.warning("Could not get help for hexdag {}: {}", cmd_name, e)
                 lines.append(f"*Help not available for `{cmd_name}`.*")
                 lines.append("")
 
@@ -801,7 +801,7 @@ spec:
             if schema:
                 lines.extend(self._generate_node_types_section(schema))
         except Exception as e:
-            logger.warning(f"Could not load pipeline schema for YAML reference: {e}")
+            logger.warning("Could not load pipeline schema for YAML reference: {}", e)
             lines.extend([
                 "### Node Types",
                 "",

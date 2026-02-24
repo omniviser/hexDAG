@@ -238,7 +238,7 @@ class ConversationMacro(ConfigurableMacro):
                     # Use default memory port from pipeline
                     memory_port = get_port("memory")
             except Exception as e:
-                logger.warning(f"Memory port not available ({e}), starting fresh conversation")
+                logger.warning("Memory port not available ({}), starting fresh conversation", e)
                 # Return empty history with system message
                 return {
                     "conversation_id": conversation_id,
@@ -255,14 +255,16 @@ class ConversationMacro(ConfigurableMacro):
 
                     messages = orjson.loads(history_json)
                     logger.debug(
-                        f"Loaded {len(messages)} messages from conversation {conversation_id}"
+                        "Loaded {} messages from conversation {}",
+                        len(messages),
+                        conversation_id,
                     )
                 else:
                     # New conversation
                     messages = [{"role": "system", "content": config.system_prompt}]
-                    logger.debug(f"Starting new conversation {conversation_id}")
+                    logger.debug("Starting new conversation {}", conversation_id)
             except Exception as e:
-                logger.warning(f"Failed to load history: {e}, starting fresh")
+                logger.warning("Failed to load history: {}, starting fresh", e)
                 messages = [{"role": "system", "content": config.system_prompt}]
 
             return {
@@ -290,7 +292,7 @@ class ConversationMacro(ConfigurableMacro):
             # Add new user message
             if user_message:
                 messages.append({"role": "user", "content": user_message})
-                logger.debug(f"Added user message (total messages: {len(messages)})")
+                logger.debug("Added user message (total messages: {})", len(messages))
 
             # Trim history if needed (keep system message + recent messages)
             if len(messages) > config.max_history:
@@ -298,7 +300,7 @@ class ConversationMacro(ConfigurableMacro):
                 system_msg = messages[0]
                 recent_messages = messages[-(config.max_history - 1) :]
                 messages = [system_msg] + recent_messages
-                logger.debug(f"Trimmed history to {len(messages)} messages")
+                logger.debug("Trimmed history to {} messages", len(messages))
 
             # Format messages into a prompt for reasoning agent
             # Include system prompt and conversation context
@@ -373,9 +375,9 @@ Please provide a thoughtful response to continue this conversation."""
 
                 memory_key = f"conversation:{conversation_id}"
                 await memory_port.aset(memory_key, orjson.dumps(messages).decode())  # pyright: ignore[reportAttributeAccessIssue]
-                logger.debug(f"Saved conversation with {len(messages)} messages")
+                logger.debug("Saved conversation with {} messages", len(messages))
             except Exception as e:
-                logger.warning(f"Failed to save conversation: {e}")
+                logger.warning("Failed to save conversation: {}", e)
 
             return {
                 "response": assistant_response,

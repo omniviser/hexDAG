@@ -289,7 +289,7 @@ Continue reasoning. Use tools if needed to gather more information."""
                         "result": result,
                     })
                 except Exception as e:
-                    logger.error(f"Tool execution error for {tc['name']}: {e}")
+                    logger.error("Tool execution error for {}: {}", tc["name"], e)
                     tool_results.append({
                         "tool_name": tc["name"],
                         "arguments": tc["arguments"],
@@ -375,7 +375,7 @@ Provide your final conclusion based on all reasoning and evidence gathered.""",
                 )
                 schemas.append(schema)
             except Exception as e:
-                logger.warning(f"Could not build schema for tool {tool_name}: {e}")
+                logger.warning("Could not build schema for tool {}: {}", tool_name, e)
 
         return schemas
 

@@ -23,6 +23,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+from hexdag.kernel.exceptions import ConfigurationError
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
@@ -72,12 +73,12 @@ class SecretDescriptor:
 
         Raises
         ------
-        ValueError
+        ConfigurationError
             If secret is required but not found
         """
         # Try environment first
         if value := os.getenv(self.env_var):
-            logger.debug(f"Resolved secret from env: {self.env_var}")
+            logger.debug("Resolved secret from env: {}", self.env_var)
             return value
 
         # Try memory
@@ -89,25 +90,27 @@ class SecretDescriptor:
                 elif hasattr(memory, "aget"):
                     # Async memory - can't resolve here
                     logger.warning(
-                        f"Memory port is async, cannot resolve {memory_key} in __init__. "
-                        "Consider using environment variable."
+                        "Memory port is async, cannot resolve {} in __init__. "
+                        "Consider using environment variable.",
+                        memory_key,
                     )
                 else:
                     value = None
 
                 if value:
-                    logger.debug(f"Resolved secret from memory: {memory_key}")
+                    logger.debug("Resolved secret from memory: {}", memory_key)
                     if hasattr(value, "get_secret_value"):
                         return value.get_secret_value()  # type: ignore[no-any-return]
                     return str(value)
             except Exception as e:
-                logger.debug(f"Failed to read from memory: {e}")
+                logger.debug("Failed to read from memory: {}", e)
 
         # Not found
         if self.required:
-            raise ValueError(
-                f"Required secret '{self.env_var}' not found. "
-                f"Set environment variable {self.env_var} or provide in memory."
+            raise ConfigurationError(
+                self.env_var,
+                f"Required secret not found. "
+                f"Set environment variable {self.env_var} or provide in memory.",
             )
 
         return None
@@ -192,7 +195,7 @@ def resolve_secrets_in_kwargs(
 
             # Skip if already provided in kwargs
             if param_name in kwargs and kwargs[param_name] is not None:
-                logger.debug(f"Secret '{param_name}' provided explicitly")
+                logger.debug("Secret '{}' provided explicitly", param_name)
                 continue
 
             # Resolve the secret
@@ -200,10 +203,10 @@ def resolve_secrets_in_kwargs(
                 resolved_value = secret_desc.resolve(memory=memory)
                 if resolved_value is not None:
                     kwargs[param_name] = resolved_value
-                    logger.debug(f"Resolved secret '{param_name}'")
+                    logger.debug("Resolved secret '{}'", param_name)
             except ValueError as e:
                 # Required secret not found
-                logger.error(f"Failed to resolve secret '{param_name}': {e}")
+                logger.error("Failed to resolve secret '{}': {}", param_name, e)
                 raise
 
     return kwargs

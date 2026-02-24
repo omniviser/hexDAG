@@ -139,7 +139,7 @@ class ToolCallNode(BaseNodeFactory):
                     ToolCalled(node_name=name, tool_name=tool_name, params=arguments)
                 )
 
-            logger.debug(f"🔧 Executing tool '{tool_name}' with args: {arguments}")
+            logger.debug("🔧 Executing tool '{}' with args: {}", tool_name, arguments)
 
             start_time = time.time()
             try:
@@ -168,7 +168,7 @@ class ToolCallNode(BaseNodeFactory):
                         )
                     )
 
-                logger.debug(f"✅ Tool '{tool_name}' completed in {duration_ms:.2f}ms")
+                logger.debug("✅ Tool '{}' completed in {:.2f}ms", tool_name, duration_ms)
 
                 return {
                     "result": result,
@@ -178,7 +178,7 @@ class ToolCallNode(BaseNodeFactory):
                 }
             except Exception as e:
                 duration_ms = (time.time() - start_time) * 1000
-                logger.warning(f"❌ Tool '{tool_name}' failed after {duration_ms:.2f}ms: {e}")
+                logger.warning("❌ Tool '{}' failed after {:.2f}ms: {}", tool_name, duration_ms, e)
                 return {
                     "result": None,
                     "tool_call_id": tool_call_id,

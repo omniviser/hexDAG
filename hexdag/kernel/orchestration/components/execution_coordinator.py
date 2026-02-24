@@ -308,7 +308,9 @@ class ExecutionCoordinator:
 
             if value is None:
                 logger.warning(
-                    f"input_mapping: '{source_path}' resolved to None for target '{target_field}'"
+                    "input_mapping: '{}' resolved to None for target '{}'",
+                    source_path,
+                    target_field,
                 )
 
             result[target_field] = value
@@ -367,8 +369,8 @@ class ExecutionCoordinator:
             # Use evaluate_expression to get the actual value, not a boolean
             return evaluate_expression(expression, data_context, {})
         except ExpressionError as e:
-            logger.error(f"Expression evaluation failed for '{expression}': {e}")
+            logger.error("Expression evaluation failed for '{}': {}", expression, e)
             return None
         except Exception as e:
-            logger.error(f"Unexpected error evaluating expression '{expression}': {e}")
+            logger.error("Unexpected error evaluating expression '{}': {}", expression, e)
             return None
