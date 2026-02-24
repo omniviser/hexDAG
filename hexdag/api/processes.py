@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.pipeline_spawner import PipelineSpawner
+    from hexdag.kernel import PipelineSpawner
     from hexdag.stdlib.lib.entity_state import EntityState
     from hexdag.stdlib.lib.process_registry import ProcessRegistry
     from hexdag.stdlib.lib.scheduler import Scheduler

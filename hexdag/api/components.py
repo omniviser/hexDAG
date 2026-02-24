@@ -15,17 +15,18 @@ import logging
 from typing import Any
 
 from hexdag.compiler.tag_discovery import discover_tags, get_tag_schema
-from hexdag.kernel.discovery import (
+from hexdag.kernel import (
+    SchemaGenerator,
+    detect_port_type,
     discover_adapters_in_package,
     discover_macros_in_module,
     discover_plugins,
     discover_tools_in_module,
     discover_user_modules,
     discover_user_plugins,
+    get_builtin_aliases,
+    resolve,
 )
-from hexdag.kernel.ports.detection import detect_port_type as detect_port_type
-from hexdag.kernel.resolver import get_builtin_aliases, resolve
-from hexdag.kernel.schema import SchemaGenerator
 
 logger = logging.getLogger(__name__)
 

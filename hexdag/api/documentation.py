@@ -227,7 +227,7 @@ implement the required port interface.
 ### LLM Adapter Example
 
 ```python
-from hexdag.kernel.ports.llm import LLM
+from hexdag.kernel import LLM
 
 class MyLLMAdapter(LLM):
     """Custom LLM adapter."""
@@ -308,7 +308,7 @@ and passes results to dependent nodes.
 ## Node Factory Pattern
 
 ```python
-from hexdag.kernel.domain import NodeSpec
+from hexdag.kernel import NodeSpec
 from hexdag.stdlib.nodes import BaseNodeFactory
 
 class MyProcessorNode(BaseNodeFactory):

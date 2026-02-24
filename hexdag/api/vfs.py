@@ -31,7 +31,7 @@ from hexdag.drivers.vfs.providers import (
 )
 
 if TYPE_CHECKING:
-    from hexdag.kernel.ports.vfs import VFS
+    from hexdag.kernel import VFS
     from hexdag.stdlib.lib.entity_state import EntityState
     from hexdag.stdlib.lib.process_registry import ProcessRegistry
     from hexdag.stdlib.lib.scheduler import Scheduler

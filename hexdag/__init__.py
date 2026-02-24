@@ -15,15 +15,18 @@ try:
 except Exception:
     __version__ = "0.0.0.dev0"  # Fallback for development installs
 
-# Node factories (still useful for programmatic DAG building)
 # Templating system
-from hexdag.kernel.orchestration.prompt import FewShotPromptTemplate, PromptTemplate
-
 # Primary API — the recommended entry point for running YAML pipelines
-from hexdag.kernel.pipeline_runner import PipelineRunner
-
 # Port interfaces (needed for writing custom adapters)
-from hexdag.kernel.ports import LLM, APICall, Database, ToolRouter
+from hexdag.kernel import (
+    LLM,
+    APICall,
+    Database,
+    FewShotPromptTemplate,
+    PipelineRunner,
+    PromptTemplate,
+    ToolRouter,
+)
 from hexdag.stdlib.nodes import (
     FunctionNode,
     LLMNode,
@@ -38,9 +41,7 @@ DatabasePort = Database
 if TYPE_CHECKING:
     from hexdag.compiler.yaml_builder import YamlPipelineBuilder
     from hexdag.drivers.http_client import HttpClientDriver
-    from hexdag.kernel.domain import DirectedGraph, NodeSpec
-    from hexdag.kernel.orchestration.orchestrator import Orchestrator
-    from hexdag.kernel.resolver import resolve, resolve_function
+    from hexdag.kernel import DirectedGraph, NodeSpec, Orchestrator, resolve, resolve_function
     from hexdag.stdlib.adapters.memory import InMemoryMemory
     from hexdag.stdlib.adapters.mock import MockDatabaseAdapter, MockHttpClient, MockLLM
 
@@ -48,28 +49,28 @@ if TYPE_CHECKING:
 # Deprecated top-level exports — use submodule imports or PipelineRunner instead.
 _DEPRECATED_IMPORTS: dict[str, tuple[str, str]] = {
     "Orchestrator": (
-        "hexdag.kernel.orchestration.orchestrator",
-        "Use PipelineRunner or import from 'hexdag.kernel.orchestration.orchestrator'.",
+        "hexdag.kernel",
+        "Use PipelineRunner or import from 'hexdag.kernel'.",
     ),
     "YamlPipelineBuilder": (
         "hexdag.compiler.yaml_builder",
         "Use PipelineRunner or import from 'hexdag.compiler.yaml_builder'.",
     ),
     "DirectedGraph": (
-        "hexdag.kernel.domain",
-        "Import from 'hexdag.kernel.domain' instead.",
+        "hexdag.kernel",
+        "Import from 'hexdag.kernel' instead.",
     ),
     "NodeSpec": (
-        "hexdag.kernel.domain",
-        "Import from 'hexdag.kernel.domain' instead.",
+        "hexdag.kernel",
+        "Import from 'hexdag.kernel' instead.",
     ),
     "resolve": (
-        "hexdag.kernel.resolver",
-        "Import from 'hexdag.kernel.resolver' instead.",
+        "hexdag.kernel",
+        "Import from 'hexdag.kernel' instead.",
     ),
     "resolve_function": (
-        "hexdag.kernel.resolver",
-        "Import from 'hexdag.kernel.resolver' instead.",
+        "hexdag.kernel",
+        "Import from 'hexdag.kernel' instead.",
     ),
 }
 

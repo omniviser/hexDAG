@@ -198,6 +198,14 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: check-kernel-boundary
+        name: Check kernel boundary (syscall table)
+        entry: uv run python scripts/check_kernel_boundary.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: check-async-io
         name: Check for sync I/O in async code
         entry: uv run python scripts/check_async_io.py

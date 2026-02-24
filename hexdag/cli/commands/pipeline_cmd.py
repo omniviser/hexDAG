@@ -365,7 +365,7 @@ def run_pipeline(
                 console.print(f"[red]Error: Invalid JSON in input file: {e}[/red]")
                 raise typer.Exit(1)
 
-        from hexdag.kernel.pipeline_runner import PipelineRunner
+        from hexdag.kernel import PipelineRunner
 
         runner = PipelineRunner(
             max_concurrent_nodes=max_concurrent,

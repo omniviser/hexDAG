@@ -11,11 +11,10 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from hexdag.kernel.linting.pipeline_rules import ALL_PIPELINE_RULES
-from hexdag.kernel.linting.rules import run_rules
+from hexdag.kernel import ALL_PIPELINE_RULES, run_rules
 
 if TYPE_CHECKING:
-    from hexdag.kernel.linting.models import LintReport
+    from hexdag.kernel import LintReport
 
 console = Console()
 
