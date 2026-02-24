@@ -262,6 +262,30 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: check-circular-imports
+        name: Check for circular import chains
+        entry: uv run python scripts/check_circular_imports.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-yaml-schema-sync
+        name: Check YAML schema matches builder capabilities
+        entry: uv run python scripts/check_yaml_schema_sync.py
+        language: system
+        files: ^(schemas/.*\.yaml|hexdag/compiler/)
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: check-deprecated-usage
+        name: Check for usage of deprecated APIs
+        entry: uv run python scripts/check_deprecated_usage.py
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: doctest
         name: Run doctest
         entry: uv run pytest --doctest-modules hexdag/ --ignore=hexdag/cli/ --doctest-continue-on-failure

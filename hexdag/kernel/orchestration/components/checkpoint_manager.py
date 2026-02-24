@@ -6,7 +6,7 @@ Supports any backend: SQL databases, files (JSON/YAML), Redis, S3, etc.
 
 from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
 from hexdag.kernel.orchestration.models import CheckpointState
-from hexdag.kernel.ports.memory import Memory
+from hexdag.kernel.ports.data_store import SupportsKeyValue
 
 
 class CheckpointManager:
@@ -25,7 +25,7 @@ class CheckpointManager:
 
     Parameters
     ----------
-    storage : Memory
+    storage : SupportsKeyValue
         Memory port implementation for storage backend
     key_prefix : str, default="checkpoint:"
         Prefix for checkpoint keys (useful for namespacing)
@@ -55,7 +55,7 @@ class CheckpointManager:
 
     def __init__(
         self,
-        storage: Memory,
+        storage: SupportsKeyValue,
         key_prefix: str = "checkpoint:",
         auto_checkpoint: bool = True,
     ):

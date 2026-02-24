@@ -1,0 +1,24 @@
+# Configuration for scripts/check_circular_imports.py
+#
+# This file controls which circular import chains and TYPE_CHECKING
+# workarounds are considered acceptable.
+
+# Real circular import cycles that are allowed (list of module lists).
+# Each entry is a cycle: [A, B, C] means A → B → C → A.
+allowed_cycles:
+  # Cycle 1: resolver ↔ stdlib.nodes — lazy bootstrap, safe by design
+  - [hexdag.kernel.resolver, hexdag.stdlib.nodes]
+  # Cycle 2: yaml_builder ↔ macro_entity ↔ yaml_macro — callback injection breaks cycle
+  - [hexdag.compiler.yaml_builder, hexdag.compiler.plugins.macro_entity, hexdag.kernel.yaml_macro]
+  # Cycle 3: yaml_builder ↔ macro_definition ↔ yaml_macro — lazy imports, safe by design
+  - [hexdag.compiler.yaml_builder, hexdag.compiler.plugins.macro_definition, hexdag.kernel.yaml_macro]
+
+# Modules allowed to use TYPE_CHECKING guards for internal imports.
+# These are hidden cycles that are intentionally masked.
+# Each entry is a module dotted path.
+allowed_hidden_cycles:
+  # All 4 are compiler plugins importing YamlPipelineBuilder under TYPE_CHECKING
+  - hexdag.compiler.plugins.config_definition
+  - hexdag.compiler.plugins.macro_definition
+  - hexdag.compiler.plugins.node_entity
+  - hexdag.compiler.plugins.macro_entity

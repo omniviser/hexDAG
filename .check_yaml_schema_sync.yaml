@@ -1,0 +1,14 @@
+# Configuration for scripts/check_yaml_schema_sync.py
+#
+# Controls which schema ↔ builder drift is intentionally allowed.
+
+# Properties in the YAML schema but not handled by builder code.
+# These are documented in the schema but intentionally not yet implemented.
+schema_only_allowed:
+  - events          # Declarative event handlers — aspirational, not yet wired
+  - input_schema    # Pipeline-level input validation — not yet implemented
+  - output_schema   # Pipeline-level output validation — not yet implemented
+
+# Properties handled by builder code but absent from the YAML schema.
+# These are builder features that don't need schema validation.
+code_only_allowed: []

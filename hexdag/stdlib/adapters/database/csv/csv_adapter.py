@@ -13,12 +13,13 @@ from typing import Any
 
 import aiofiles
 
-from hexdag.kernel.ports.database import ColumnSchema, ColumnType, Database, TableSchema
+from hexdag.kernel.ports.data_store import SupportsQuery
+from hexdag.kernel.ports.database import ColumnSchema, ColumnType, TableSchema
 
 logging.basicConfig(level=logging.INFO)
 
 
-class CsvAdapter(Database):
+class CsvAdapter(SupportsQuery):
     """
     Adapter class for reading CSV files from a specified directory as database tables.
 

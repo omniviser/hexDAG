@@ -66,7 +66,6 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `MockDatabaseAdapter` | Mock implementation of Database for testing and demos. |
 | `MySQLAdapter` | MySQL database adapter with async connection pooling. |
-| `PgVectorAdapter` | PostgreSQL adapter with pgvector extension support. |
 | `PostgreSQLAdapter` | PostgreSQL database adapter with async connection pooling. |
 | `SQLAdapter` | Base SQL adapter with SQLAlchemy connection pooling. |
 | `SQLiteAdapter` | Async SQLite adapter for database port. |
@@ -88,9 +87,9 @@ Secrets declared with `secret()` are resolved in this order:
 | Adapter | Description |
 |---------|-------------|
 | `AzureCosmosAdapter` | Azure Cosmos DB adapter for agent memory and pipeline state. |
-| `FileMemoryAdapter` | Memory adapter backed by file system. |
 | `InMemoryMemory` | In-memory implementation of Memory for testing. |
 | `Memory` | Protocol for long-term memory storage and retrieval. |
+| `FileMemoryAdapter` | Memory adapter backed by file system. |
 | `SQLiteMemoryAdapter` | Memory adapter backed by SQLite database. |
 
 ### secret
@@ -110,6 +109,7 @@ Secrets declared with `secret()` are resolved in this order:
 
 | Adapter | Description |
 |---------|-------------|
+| `PgVectorAdapter` | PostgreSQL adapter with pgvector extension support. |
 | `ChromaDBAdapter` | ChromaDB vector store adapter. |
 | `PgVectorAdapter` | PostgreSQL pgvector adapter using SQLAlchemy. |
 
