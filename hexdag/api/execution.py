@@ -78,7 +78,7 @@ async def execute(
     try:
         # Use PipelineRunner for non-streaming execution when no per-node ports
         if node_ports is None:
-            from hexdag.kernel.pipeline_runner import PipelineRunner
+            from hexdag.kernel import PipelineRunner
 
             # If explicit ports provided, use them as overrides;
             # otherwise let PipelineRunner create mocks / use YAML config
@@ -269,7 +269,7 @@ def create_ports_from_config(port_config: dict[str, Any]) -> dict[str, Any]:
 
 def _create_default_ports() -> dict[str, Any]:
     """Create default mock ports for execution."""
-    from hexdag.kernel.ports.tool_router import ToolRouter
+    from hexdag.kernel import ToolRouter
     from hexdag.stdlib.adapters.memory import InMemoryMemory
     from hexdag.stdlib.adapters.mock import MockLLM
 
@@ -293,8 +293,7 @@ async def _execute_with_node_ports(
 
     try:
         from hexdag.compiler import YamlPipelineBuilder
-        from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
-        from hexdag.kernel.orchestration.orchestrator import Orchestrator
+        from hexdag.kernel import Orchestrator, PortConfig, PortsConfiguration
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
@@ -410,16 +409,17 @@ async def execute_streaming(
     try:
         from hexdag.compiler import YamlPipelineBuilder
         from hexdag.drivers.observer_manager import LocalObserverManager
-        from hexdag.kernel.orchestration.events import (
+        from hexdag.kernel import (
             NodeCompleted,
             NodeFailed,
             NodeStarted,
+            Orchestrator,
             PipelineCompleted,
+            PortConfig,
+            PortsConfiguration,
             WaveCompleted,
             WaveStarted,
         )
-        from hexdag.kernel.orchestration.models import PortConfig, PortsConfiguration
-        from hexdag.kernel.orchestration.orchestrator import Orchestrator
 
         builder = YamlPipelineBuilder()
         graph, config = builder.build_from_yaml_string(yaml_content)
