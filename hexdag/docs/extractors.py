@@ -55,7 +55,7 @@ class DocExtractor:
         try:
             sig = inspect.signature(target)
         except (ValueError, TypeError) as e:
-            logger.warning(f"Could not get signature for {obj}: {e}")
+            logger.warning("Could not get signature for {}: {}", obj, e)
             return []
 
         # Extract docstring parameter descriptions

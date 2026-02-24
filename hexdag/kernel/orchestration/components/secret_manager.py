@@ -108,15 +108,17 @@ class SecretManager:
             self._loaded_secret_keys[dag_id] = memory_keys
 
             logger.info(
-                f"Loaded {len(mapping)} secrets into memory with prefix '{self.secret_prefix}'"
+                "Loaded {} secrets into memory with prefix '{}'",
+                len(mapping),
+                self.secret_prefix,
             )
-            logger.debug(f"Secret keys loaded: {list(mapping.keys())}")
+            logger.debug("Secret keys loaded: {}", list(mapping.keys()))
 
             return mapping
 
         except (ValueError, KeyError, RuntimeError) as e:
             # Secret loading errors
-            logger.error(f"Failed to inject secrets: {e}", exc_info=True)
+            logger.error("Failed to inject secrets: {}", e, exc_info=True)
             raise
 
     async def cleanup_secrets(
@@ -164,15 +166,15 @@ class SecretManager:
             try:
                 await memory.aset(secret_key, None)
                 removed_count += 1
-                logger.debug(f"Removed secret from memory: {secret_key}")
+                logger.debug("Removed secret from memory: {}", secret_key)
             except (RuntimeError, ValueError, KeyError) as e:
                 # Secret removal errors - log but continue cleanup
-                logger.warning(f"Failed to remove secret '{secret_key}': {e}")
+                logger.warning("Failed to remove secret '{}': {}", secret_key, e)
 
         # Clean up tracked keys
         self.clear_loaded_secret_keys(dag_id)
 
-        logger.info(f"Secret cleanup: Removed {removed_count} secret(s) from memory")
+        logger.info("Secret cleanup: Removed {} secret(s) from memory", removed_count)
         return {"cleaned": True, "keys_removed": removed_count}
 
     def get_loaded_secret_keys(self, dag_id: str) -> list[str]:

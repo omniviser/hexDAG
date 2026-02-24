@@ -124,8 +124,10 @@ class MacroDefinitionPlugin:
         register_runtime(macro_name, DynamicYamlMacro)
 
         logger.info(
-            f"Registered YAML macro '{macro_name}' "
-            f"({len(parameters)} parameters, {len(nodes)} nodes)"
+            "Registered YAML macro '{}' ({} parameters, {} nodes)",
+            macro_name,
+            len(parameters),
+            len(nodes),
         )
 
         # Return None - macro definitions don't add nodes to the graph

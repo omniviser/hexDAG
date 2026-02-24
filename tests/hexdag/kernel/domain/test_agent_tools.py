@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from hexdag.kernel.domain.agent_tools import CHANGE_PHASE, TOOL_END, change_phase, tool_end
-from hexdag.kernel.exceptions import ResourceNotFoundError
+from hexdag.kernel.exceptions import ResourceNotFoundError, TypeMismatchError
 from hexdag.kernel.ports.tool_router import ToolRouter
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -285,5 +285,5 @@ class TestToolRouterConcrete:
         assert result == 10
 
     def test_non_callable_raises(self) -> None:
-        with pytest.raises(TypeError, match="not callable"):
+        with pytest.raises(TypeMismatchError, match="callable"):
             ToolRouter(tools={"bad": 42})

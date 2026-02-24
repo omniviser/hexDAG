@@ -31,6 +31,15 @@ class HttpClientDriver:
         Request timeout in seconds (default: 30.0).
     headers : dict[str, str] | None
         Default headers included in every request.
+    bearer_token : str | None
+        Bearer token for Authorization header. Adds
+        ``Authorization: Bearer <token>`` to default headers.
+    basic_auth_username : str | None
+        Username for HTTP Basic Auth. Must be paired with
+        ``basic_auth_password``.
+    basic_auth_password : str | None
+        Password for HTTP Basic Auth. Must be paired with
+        ``basic_auth_username``.
     follow_redirects : bool
         Whether to follow HTTP redirects (default: True).
     raise_for_status : bool
@@ -45,24 +54,31 @@ class HttpClientDriver:
         result = await http.aget("/users", params={"limit": "10"})
         print(result["body"])
 
-    With default headers::
+    With bearer token::
 
         http = HttpClientDriver(
             base_url="https://api.example.com",
-            headers={"Authorization": "Bearer token123"},
+            bearer_token="sk-my-token",
         )
         result = await http.apost("/orders", json={"item": "widget"})
+
+    With basic auth::
+
+        http = HttpClientDriver(
+            base_url="https://api.example.com",
+            basic_auth_username="user",
+            basic_auth_password="pass",
+        )
 
     From YAML pipeline::
 
         ports:
           api_call:
-            adapter: hexdag.drivers.http.HttpClientDriver
+            adapter: hexdag.drivers.http_client.HttpClientDriver
             config:
               base_url: "https://api.example.com"
               timeout: 60.0
-              headers:
-                Authorization: "Bearer ${API_TOKEN}"
+              bearer_token: "${API_TOKEN}"
     """
 
     def __init__(
@@ -70,18 +86,30 @@ class HttpClientDriver:
         base_url: str = "",
         timeout: float = 30.0,
         headers: dict[str, str] | None = None,
+        bearer_token: str | None = None,
+        basic_auth_username: str | None = None,
+        basic_auth_password: str | None = None,
         follow_redirects: bool = True,
         raise_for_status: bool = True,
         **kwargs: Any,
     ) -> None:
         self._base_url = base_url
         self._timeout = timeout
-        self._default_headers = headers or {}
+        self._default_headers = dict(headers) if headers else {}
         self._follow_redirects = follow_redirects
         self._raise_for_status = raise_for_status
         self._client: httpx.AsyncClient | None = None
         # Hook for testing — inject a custom transport
         self._transport: httpx.AsyncBaseTransport | None = None
+
+        # Auth: bearer token adds Authorization header
+        if bearer_token:
+            self._default_headers["Authorization"] = f"Bearer {bearer_token}"
+
+        # Auth: basic auth via httpx.BasicAuth
+        self._auth: httpx.BasicAuth | None = None
+        if basic_auth_username and basic_auth_password:
+            self._auth = httpx.BasicAuth(basic_auth_username, basic_auth_password)
 
     def _get_client(self) -> httpx.AsyncClient:
         """Lazily create the httpx client on first use."""
@@ -92,6 +120,8 @@ class HttpClientDriver:
                 "headers": self._default_headers,
                 "follow_redirects": self._follow_redirects,
             }
+            if self._auth is not None:
+                kwargs["auth"] = self._auth
             if self._transport is not None:
                 kwargs["transport"] = self._transport
             self._client = httpx.AsyncClient(**kwargs)

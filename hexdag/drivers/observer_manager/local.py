@@ -66,10 +66,14 @@ class LoggingErrorHandler:
 
         if context.get("is_critical", False):
             self.logger.error(
-                f"Critical handler {handler_name} failed for {event_type}: {error}", exc_info=True
+                "Critical handler {} failed for {}: {}",
+                handler_name,
+                event_type,
+                error,
+                exc_info=True,
             )
         else:
-            self.logger.warning(f"Handler {handler_name} failed for {event_type}: {error}")
+            self.logger.warning("Handler {} failed for {}: {}", handler_name, event_type, error)
 
 
 class FunctionObserver:

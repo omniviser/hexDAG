@@ -105,7 +105,7 @@ def _resolve_string_value(value: str) -> str:
 
         if env_value is None:
             if default is not None:
-                logger.debug(f"Using default value for ${{{var_name}}}")
+                logger.debug("Using default value for ${{{}}}", var_name)
                 return default
             raise ComponentInstantiationError(
                 f"[Phase 3b: Deferred Secret Resolution] "
@@ -116,7 +116,7 @@ def _resolve_string_value(value: str) -> str:
                 f"or use ${{{var_name}:default}} syntax."
             )
 
-        logger.debug(f"Resolved ${{{var_name}}} from environment")
+        logger.debug("Resolved ${{{}}} from environment", var_name)
         return env_value
 
     return _DEFERRED_ENV_VAR_PATTERN.sub(replacer, value)
@@ -216,8 +216,9 @@ class ComponentInstantiator:
                     resolved_params = _resolve_deferred_env_vars(component_spec.params)
                     adapter_instance = adapter_class(**resolved_params)
                     logger.info(
-                        f"Instantiated adapter '{component_spec.module_path}' "
-                        f"for port '{port_name}'"
+                        "Instantiated adapter '{}' for port '{}'",
+                        component_spec.module_path,
+                        port_name,
                     )
                     return adapter_instance
                 except Exception as e:
@@ -230,14 +231,14 @@ class ComponentInstantiator:
                 # It's already an instance (runtime-registered non-class component)
                 if component_spec.params:  # type: ignore[unreachable]
                     logger.warning(
-                        f"Adapter '{component_spec.module_path}' "
-                        f"resolved to an instance. Parameters {component_spec.params} "
-                        f"will be ignored."
+                        "Adapter '{}' resolved to an instance. Parameters {} will be ignored.",
+                        component_spec.module_path,
+                        component_spec.params,
                     )
                 logger.info(
-                    f"Using resolved adapter instance "
-                    f"'{component_spec.module_path}' "
-                    f"for port '{port_name}'"
+                    "Using resolved adapter instance '{}' for port '{}'",
+                    component_spec.module_path,
+                    port_name,
                 )
                 return adapter_class
 
@@ -301,7 +302,9 @@ class ComponentInstantiator:
                 # Resolve any deferred environment variables at instantiation time
                 resolved_params = _resolve_deferred_env_vars(component_spec.params)
                 policy_instance = policy_class(**resolved_params)
-                logger.info(f"Instantiated policy '{component_spec.module_path}' ('{policy_name}')")
+                logger.info(
+                    "Instantiated policy '{}' ('{}')", component_spec.module_path, policy_name
+                )
                 return policy_instance
             except Exception as e:
                 raise ComponentInstantiationError(
@@ -346,7 +349,7 @@ class ComponentInstantiator:
             try:
                 ports[port_name] = self.instantiate_adapter(adapter_spec, port_name=port_name)
             except ComponentInstantiationError as e:
-                logger.error(f"Failed to instantiate adapter for port '{port_name}': {e}")
+                logger.error("Failed to instantiate adapter for port '{}': {}", port_name, e)
                 raise
 
         return ports
@@ -381,7 +384,7 @@ class ComponentInstantiator:
                 policy = self.instantiate_policy(policy_spec, policy_name=policy_name)
                 policies.append(policy)
             except ComponentInstantiationError as e:
-                logger.error(f"Failed to instantiate policy '{policy_name}': {e}")
+                logger.error("Failed to instantiate policy '{}': {}", policy_name, e)
                 raise
 
         return policies

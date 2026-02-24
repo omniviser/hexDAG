@@ -57,6 +57,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from hexdag.kernel.configurable import ConfigurableMacro, MacroConfig
 from hexdag.kernel.domain.dag import DirectedGraph
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
 
 if TYPE_CHECKING:
@@ -129,7 +130,7 @@ class YamlMacroParameterSpec(BaseModel):
         types = [t.strip() for t in v.split("|")]
         for t in types:
             if t not in valid_base_types:
-                raise ValueError(
+                raise YamlPipelineBuilderError(
                     f"Invalid type '{t}'. Must be one of: {', '.join(valid_base_types)}"
                 )
         return v
@@ -301,8 +302,10 @@ class YamlMacro(ConfigurableMacro):
         graph = self._build_graph_from_nodes(rendered_nodes, node_builder)
 
         logger.info(
-            f"✅ Expanded YAML macro '{config.macro_name}' as '{instance_name}' "
-            f"({len(graph)} nodes)"
+            "Expanded YAML macro '{}' as '{}' ({} nodes)",
+            config.macro_name,
+            instance_name,
+            len(graph),
         )
 
         return graph
@@ -322,7 +325,7 @@ class YamlMacro(ConfigurableMacro):
 
         Raises
         ------
-        ValueError
+        YamlPipelineBuilderError
             If required parameters are missing or enum validation fails
         """
         result = {}
@@ -337,7 +340,7 @@ class YamlMacro(ConfigurableMacro):
 
                 # Enum validation
                 if param.enum is not None and value not in param.enum:
-                    raise ValueError(
+                    raise YamlPipelineBuilderError(
                         f"Parameter '{param_name}' must be one of {param.enum}, got '{value}'"
                     )
 
@@ -345,7 +348,7 @@ class YamlMacro(ConfigurableMacro):
 
             elif param.required:
                 # Required but not provided
-                raise ValueError(
+                raise YamlPipelineBuilderError(
                     f"Required parameter '{param_name}' not provided for macro "
                     f"'{config.macro_name}'"
                 )
@@ -407,7 +410,7 @@ class YamlMacro(ConfigurableMacro):
 
         Raises
         ------
-        ValueError
+        YamlPipelineBuilderError
             If template rendering fails
         """
         rendered = []
@@ -418,7 +421,7 @@ class YamlMacro(ConfigurableMacro):
                 rendered.append(rendered_node)
             except (TemplateSyntaxError, UndefinedError) as e:
                 config: YamlMacroConfig = self.config  # type: ignore[assignment]
-                raise ValueError(
+                raise YamlPipelineBuilderError(
                     f"Failed to render node template {i} in macro '{config.macro_name}': {e}"
                 ) from e
 
@@ -491,13 +494,13 @@ class YamlMacro(ConfigurableMacro):
 
         Raises
         ------
-        ValueError
+        YamlPipelineBuilderError
             If node building fails
         """
         # Validate no nested macro_invocations
         for node_config in rendered_nodes:
             if node_config.get("kind") == "macro_invocation":
-                raise ValueError(
+                raise YamlPipelineBuilderError(
                     "YAML macros cannot contain nested macro_invocations. "
                     "Use Python macros for composition."
                 )
@@ -518,7 +521,7 @@ class YamlMacro(ConfigurableMacro):
         for node_config in rendered_nodes:
             if not node_plugin.can_handle(node_config):
                 kind = node_config.get("kind", "unknown")
-                raise ValueError(f"Invalid node kind in YAML macro: {kind}")
+                raise YamlPipelineBuilderError(f"Invalid node kind in YAML macro: {kind}")
 
             node_spec = node_plugin.build(node_config, builder, graph)
             graph += node_spec

@@ -183,5 +183,5 @@ class AnthropicAdapter(LLM, SupportsGeneration, SupportsFunctionCalling, Support
             return None
 
         except Exception as e:
-            logger.error(f"Anthropic API error: {e}", exc_info=True)
+            logger.error("Anthropic API error: {}", e, exc_info=True)
             return None

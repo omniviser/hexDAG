@@ -65,5 +65,5 @@ class ConfigDefinitionPlugin:
 
         builder._inline_config = config
 
-        logger.info(f"Processed inline kind: Config '{config_name}'")
+        logger.info("Processed inline kind: Config '{}'", config_name)
         return None

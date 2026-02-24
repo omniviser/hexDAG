@@ -137,7 +137,7 @@ def _resolve_env_vars_str(
         # Check if this looks like a secret
         if defer_secrets and secret_regex and secret_regex.match(var_name):
             # Secret detected - preserve ${VAR} syntax for runtime resolution
-            logger.debug(f"Deferring secret variable to runtime: {var_name}")
+            logger.debug("Deferring secret variable to runtime: {}", var_name)
             return match.group(0)  # Return original ${VAR} or ${VAR:default}
 
         # Non-secret - resolve immediately from environment

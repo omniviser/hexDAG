@@ -231,9 +231,9 @@ class ConfigLoader:
         if env_path := os.getenv("HEXDAG_CONFIG_PATH"):
             config_path = Path(env_path)
             if config_path.exists():
-                logger.debug(f"Using config from HEXDAG_CONFIG_PATH: {config_path}")
+                logger.debug("Using config from HEXDAG_CONFIG_PATH: {}", config_path)
                 return config_path
-            logger.warning(f"HEXDAG_CONFIG_PATH set but file not found: {config_path}")
+            logger.warning("HEXDAG_CONFIG_PATH set but file not found: {}", config_path)
 
         # Auto-discovery: pyproject.toml only
         if Path("pyproject.toml").exists():
@@ -275,7 +275,8 @@ class ConfigLoader:
                 value = os.environ.get(var_name)
                 if value is None:
                     logger.debug(
-                        f"Environment variable ${{{var_name}}} not found, keeping placeholder"
+                        "Environment variable ${{{var_name}}} not found, keeping placeholder",
+                        var_name=var_name,
                     )
                     return match.group(0)  # Keep original placeholder
 
@@ -397,64 +398,64 @@ class ConfigLoader:
         # Apply environment variable overrides
         if env_level := os.getenv("HEXDAG_LOG_LEVEL"):
             level = env_level.upper()
-            logger.debug(f"Overriding log level from env: {level}")
+            logger.debug("Overriding log level from env: {}", level)
 
         if env_format := os.getenv("HEXDAG_LOG_FORMAT"):
             format_type = env_format.lower()
-            logger.debug(f"Overriding log format from env: {format_type}")
+            logger.debug("Overriding log format from env: {}", format_type)
 
         if env_file := os.getenv("HEXDAG_LOG_FILE"):
             output_file = env_file
-            logger.debug(f"Overriding log file from env: {output_file}")
+            logger.debug("Overriding log file from env: {}", output_file)
 
         if env_color := os.getenv("HEXDAG_LOG_COLOR"):
             try:
                 use_color = _parse_bool_env(env_color)
-                logger.debug(f"Overriding log color from env: {use_color}")
+                logger.debug("Overriding log color from env: {}", use_color)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_COLOR value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_COLOR value: {}", e)
 
         if env_timestamp := os.getenv("HEXDAG_LOG_TIMESTAMP"):
             try:
                 include_timestamp = _parse_bool_env(env_timestamp)
-                logger.debug(f"Overriding log timestamp from env: {include_timestamp}")
+                logger.debug("Overriding log timestamp from env: {}", include_timestamp)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_TIMESTAMP value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_TIMESTAMP value: {}", e)
 
         if env_rich := os.getenv("HEXDAG_LOG_RICH"):
             try:
                 use_rich = _parse_bool_env(env_rich)
-                logger.debug(f"Overriding use_rich from env: {use_rich}")
+                logger.debug("Overriding use_rich from env: {}", use_rich)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_RICH value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_RICH value: {}", e)
 
         if env_dual_sink := os.getenv("HEXDAG_LOG_DUAL_SINK"):
             try:
                 dual_sink = _parse_bool_env(env_dual_sink)
-                logger.debug(f"Overriding dual_sink from env: {dual_sink}")
+                logger.debug("Overriding dual_sink from env: {}", dual_sink)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_DUAL_SINK value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_DUAL_SINK value: {}", e)
 
         if env_stdlib_bridge := os.getenv("HEXDAG_LOG_STDLIB_BRIDGE"):
             try:
                 enable_stdlib_bridge = _parse_bool_env(env_stdlib_bridge)
-                logger.debug(f"Overriding enable_stdlib_bridge from env: {enable_stdlib_bridge}")
+                logger.debug("Overriding enable_stdlib_bridge from env: {}", enable_stdlib_bridge)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_STDLIB_BRIDGE value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_STDLIB_BRIDGE value: {}", e)
 
         if env_backtrace := os.getenv("HEXDAG_LOG_BACKTRACE"):
             try:
                 backtrace = _parse_bool_env(env_backtrace)
-                logger.debug(f"Overriding backtrace from env: {backtrace}")
+                logger.debug("Overriding backtrace from env: {}", backtrace)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_BACKTRACE value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_BACKTRACE value: {}", e)
 
         if env_diagnose := os.getenv("HEXDAG_LOG_DIAGNOSE"):
             try:
                 diagnose = _parse_bool_env(env_diagnose)
-                logger.debug(f"Overriding diagnose from env: {diagnose}")
+                logger.debug("Overriding diagnose from env: {}", diagnose)
             except ValueError as e:
-                logger.warning(f"Invalid HEXDAG_LOG_DIAGNOSE value: {e}")
+                logger.warning("Invalid HEXDAG_LOG_DIAGNOSE value: {}", e)
 
         # Cast to proper Literal types for type safety
         # These will be validated by Pydantic at runtime

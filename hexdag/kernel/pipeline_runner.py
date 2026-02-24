@@ -300,11 +300,11 @@ class PipelineRunner:
 
         # 4. Execute
         pipeline_name = pipeline_config.metadata.get("name", "unnamed")
-        logger.info(f"Running pipeline '{pipeline_name}' with {len(graph)} nodes")
+        logger.info("Running pipeline '{}' with {} nodes", pipeline_name, len(graph))
 
         result = await orchestrator.run(graph, input_data or {})
 
-        logger.info(f"Pipeline '{pipeline_name}' completed with {len(result)} node results")
+        logger.info("Pipeline '{}' completed with {} node results", pipeline_name, len(result))
         return result
 
     async def _load_secrets(self, pipeline_config: PipelineConfig) -> None:
@@ -328,7 +328,7 @@ class PipelineRunner:
                 )
                 provider = adapter
             except Exception as e:
-                logger.warning(f"Failed to instantiate secret provider from YAML: {e}")
+                logger.warning("Failed to instantiate secret provider from YAML: {}", e)
                 return
 
         if provider is None:

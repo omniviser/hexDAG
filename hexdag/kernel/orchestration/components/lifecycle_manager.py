@@ -210,7 +210,7 @@ class LifecycleManager:
 
         # 1. Health checks
         if self.pre_config.enable_health_checks:
-            logger.info(f"Running health checks for pipeline '{pipeline_name}'")
+            logger.info("Running health checks for pipeline '{}'", pipeline_name)
             health_results = await self._check_all_adapters(
                 ports=dict(ports),
                 observer_manager=observer_manager,
@@ -224,16 +224,16 @@ class LifecycleManager:
                 error_msg = f"Unhealthy adapters: {unhealthy_names}"
 
                 if self.pre_config.health_check_fail_fast:
-                    logger.error(f"Health check failed - blocking pipeline: {error_msg}")
+                    logger.error("Health check failed - blocking pipeline: {}", error_msg)
                     raise OrchestratorError(f"Health check failed: {error_msg}")
                 if self.pre_config.health_check_warn_only:
-                    logger.warning(f"Health check issues detected: {error_msg}")
+                    logger.warning("Health check issues detected: {}", error_msg)
                 else:
-                    logger.info(f"Health check issues: {error_msg}")
+                    logger.info("Health check issues: {}", error_msg)
 
         # 2. Secret injection
         if self.pre_config.enable_secret_injection:
-            logger.info(f"Loading secrets for pipeline '{pipeline_name}'")
+            logger.info("Loading secrets for pipeline '{}'", pipeline_name)
             secret_port = get_port("secret")
             memory = get_port("memory")
             secret_results = await self._load_secrets(
@@ -246,12 +246,12 @@ class LifecycleManager:
         # 3. Custom hooks
         for hook in self.pre_config.custom_hooks:
             hook_name = hook.__name__
-            logger.info(f"Running custom pre-DAG hook: {hook_name}")
+            logger.info("Running custom pre-DAG hook: {}", hook_name)
             try:
                 hook_result = await hook(ports, context)
                 results[hook_name] = hook_result
             except (RuntimeError, ValueError, KeyError, TypeError) as e:
-                logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
+                logger.error("Custom hook '{}' failed: {}", hook_name, e, exc_info=True)
                 results[hook_name] = {"error": str(e)}
                 raise
 
@@ -300,10 +300,10 @@ class LifecycleManager:
         )
 
         if not should_run:
-            logger.debug(f"Skipping post-DAG hooks for status: {pipeline_status}")
+            logger.debug("Skipping post-DAG hooks for status: {}", pipeline_status)
             return {"skipped": True, "reason": f"Not configured for {pipeline_status}"}
 
-        logger.info(f"Running post-DAG hooks for pipeline '{pipeline_name}' ({pipeline_status})")
+        logger.info("Running post-DAG hooks for pipeline '{}' ({})", pipeline_name, pipeline_status)
 
         try:
             # 1. Save checkpoint (if enabled)
@@ -316,18 +316,18 @@ class LifecycleManager:
                     )
                     results["checkpoint"] = checkpoint_result
                 except Exception as e:
-                    logger.error(f"Checkpoint save failed: {e}", exc_info=True)
+                    logger.error("Checkpoint save failed: {}", e, exc_info=True)
                     results["checkpoint"] = {"error": str(e)}
 
             # 2. Custom hooks (user-defined)
             for hook in self.post_config.custom_hooks:
                 hook_name = hook.__name__
                 try:
-                    logger.debug(f"Running custom post-DAG hook: {hook_name}")
+                    logger.debug("Running custom post-DAG hook: {}", hook_name)
                     hook_result = await hook(ports, context, node_results, pipeline_status, error)
                     results[hook_name] = hook_result
                 except Exception as e:
-                    logger.error(f"Custom hook '{hook_name}' failed: {e}", exc_info=True)
+                    logger.error("Custom hook '{}' failed: {}", hook_name, e, exc_info=True)
                     results[hook_name] = {"error": str(e)}
 
         finally:
@@ -341,7 +341,7 @@ class LifecycleManager:
                     )
                     results["secret_cleanup"] = secret_cleanup
                 except Exception as e:
-                    logger.error(f"Secret cleanup failed: {e}", exc_info=True)
+                    logger.error("Secret cleanup failed: {}", e, exc_info=True)
                     results["secret_cleanup"] = {"error": str(e)}
 
             # 4. Adapter cleanup (close connections - do this last)
@@ -352,7 +352,7 @@ class LifecycleManager:
                     )
                     results["adapter_cleanup"] = adapter_cleanup
                 except Exception as e:
-                    logger.error(f"Adapter cleanup failed: {e}", exc_info=True)
+                    logger.error("Adapter cleanup failed: {}", e, exc_info=True)
                     results["adapter_cleanup"] = {"error": str(e)}
 
         return results
@@ -388,7 +388,7 @@ class LifecycleManager:
     ) -> HealthStatus:
         """Check health of a single adapter."""
         try:
-            logger.debug(f"Running health check for {port_name}")
+            logger.debug("Running health check for {}", port_name)
             health_check = adapter.ahealth_check
             status: HealthStatus = await health_check()
             status.port_name = port_name
@@ -405,7 +405,7 @@ class LifecycleManager:
             return status
 
         except (RuntimeError, ConnectionError, TimeoutError, ValueError) as e:
-            logger.error(f"Health check failed for {port_name}: {e}", exc_info=True)
+            logger.error("Health check failed for {}: {}", port_name, e, exc_info=True)
             adapter_name = getattr(adapter, "_hexdag_name", port_name)
             return HealthStatus(
                 status="unhealthy",
@@ -420,9 +420,9 @@ class LifecycleManager:
             latency_info = (
                 f" ({status.latency_ms:.{LATENCY_PRECISION}f}ms)" if status.latency_ms else ""
             )
-            logger.info(f"✅ {port_name} health check: {status.status}{latency_info}")
+            logger.info("✅ {} health check: {}{}", port_name, status.status, latency_info)
         else:
-            logger.warning(f"⚠️ {port_name} health check: {status.status} - {status.error}")
+            logger.warning("⚠️ {} health check: {} - {}", port_name, status.status, status.error)
 
     def _get_unhealthy_adapters(self, health_results: list[HealthStatus]) -> list[HealthStatus]:
         """Filter health results to only unhealthy adapters."""
@@ -458,15 +458,16 @@ class LifecycleManager:
             self._loaded_secret_keys[dag_id] = memory_keys
 
             logger.info(
-                f"Loaded {len(mapping)} secrets into memory with prefix "
-                f"'{self.pre_config.secret_prefix}'"
+                "Loaded {} secrets into memory with prefix '{}'",
+                len(mapping),
+                self.pre_config.secret_prefix,
             )
-            logger.debug(f"Secret keys loaded: {list(mapping.keys())}")
+            logger.debug("Secret keys loaded: {}", list(mapping.keys()))
 
             return mapping
 
         except (ValueError, KeyError, RuntimeError) as e:
-            logger.error(f"Failed to inject secrets: {e}", exc_info=True)
+            logger.error("Failed to inject secrets: {}", e, exc_info=True)
             raise
 
     async def _cleanup_secrets(
@@ -490,14 +491,14 @@ class LifecycleManager:
             try:
                 await memory.aset(secret_key, None)
                 removed_count += 1
-                logger.debug(f"Removed secret from memory: {secret_key}")
+                logger.debug("Removed secret from memory: {}", secret_key)
             except (RuntimeError, ValueError, KeyError) as e:
-                logger.warning(f"Failed to remove secret '{secret_key}': {e}")
+                logger.warning("Failed to remove secret '{}': {}", secret_key, e)
 
         if dag_id in self._loaded_secret_keys:
             del self._loaded_secret_keys[dag_id]
 
-        logger.info(f"Secret cleanup: Removed {removed_count} secret(s) from memory")
+        logger.info("Secret cleanup: Removed {} secret(s) from memory", removed_count)
         return {"cleaned": True, "keys_removed": removed_count}
 
     # ========================================================================
@@ -527,12 +528,12 @@ class LifecycleManager:
             if hasattr(adapter, method_name) and callable(getattr(adapter, method_name)):
                 cleanup_method = getattr(adapter, method_name)
                 try:
-                    logger.debug(f"Cleaning up adapter '{port_name}' via {method_name}()")
+                    logger.debug("Cleaning up adapter '{}' via {}()", port_name, method_name)
                     await cleanup_method()
-                    logger.info(f"✅ Cleaned up adapter: {port_name}")
+                    logger.info("✅ Cleaned up adapter: {}", port_name)
                     return True
                 except (RuntimeError, ValueError, TypeError, ConnectionError, OSError) as e:
-                    logger.warning(f"Cleanup failed for {port_name}: {e}")
+                    logger.warning("Cleanup failed for {}: {}", port_name, e)
                     return False
 
         return False
@@ -573,6 +574,6 @@ class LifecycleManager:
         )
 
         await checkpoint_mgr.save(state)
-        logger.info(f"Saved checkpoint for run_id: {context.dag_id}")
+        logger.info("Saved checkpoint for run_id: {}", context.dag_id)
 
         return {"saved": True, "run_id": context.dag_id, "node_count": len(node_results)}

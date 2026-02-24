@@ -98,7 +98,7 @@ class SQLiteMemoryAdapter(SupportsKeyValue):
         """  # nosec B608 - table_name is validated
         await self.database.aexecute_query(sql)
         self._initialized = True
-        logger.debug(f"Initialized table '{self.table_name}' for memory storage")
+        logger.debug("Initialized table '{}' for memory storage", self.table_name)
 
     async def aget(self, key: str) -> Any:
         """Retrieve a value from memory.
@@ -145,7 +145,7 @@ class SQLiteMemoryAdapter(SupportsKeyValue):
         VALUES (:key, :value, CURRENT_TIMESTAMP)
         """  # nosec B608
         await self.database.aexecute_query(sql, {"key": key, "value": str(value)})
-        logger.debug(f"Stored key '{key}' in table '{self.table_name}'")
+        logger.debug("Stored key '{}' in table '{}'", key, self.table_name)
 
     async def adelete(self, key: str) -> bool:
         """Delete a key from memory.
@@ -170,7 +170,7 @@ class SQLiteMemoryAdapter(SupportsKeyValue):
         # Table name is validated, user data in parameters
         sql = f"DELETE FROM {self.table_name} WHERE key = :key"  # nosec B608
         await self.database.aexecute_query(sql, {"key": key})
-        logger.debug(f"Deleted key '{key}' from table '{self.table_name}'")
+        logger.debug("Deleted key '{}' from table '{}'", key, self.table_name)
         return True
 
     async def aexists(self, key: str) -> bool:
@@ -229,7 +229,7 @@ class SQLiteMemoryAdapter(SupportsKeyValue):
         # Table name is validated
         sql = f"DELETE FROM {self.table_name}"  # nosec B608
         await self.database.aexecute_query(sql)
-        logger.info(f"Cleared all keys from table '{self.table_name}'")
+        logger.info("Cleared all keys from table '{}'", self.table_name)
 
     def __repr__(self) -> str:
         """Return string representation."""

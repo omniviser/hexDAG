@@ -228,7 +228,7 @@ class LocalExecutor:
             raise
         except (ValueError, TypeError, KeyError, AttributeError, RuntimeError) as e:
             # Catch expected execution errors (validation, type issues, missing data)
-            logger.error(f"LocalExecutor: Node '{task.node_name}' failed: {e}")
+            logger.error("LocalExecutor: Node '{}' failed: {}", task.node_name, e)
             return ExecutionResult(
                 node_name=task.node_name,
                 status=PipelineStatus.FAILED,
@@ -238,7 +238,7 @@ class LocalExecutor:
             )
         except Exception as e:
             # Catch unexpected errors but log with higher severity
-            logger.exception(f"LocalExecutor: Unexpected error in node '{task.node_name}': {e}")
+            logger.exception("LocalExecutor: Unexpected error in node '{}': {}", task.node_name, e)
             return ExecutionResult(
                 node_name=task.node_name,
                 status=PipelineStatus.FAILED,
@@ -292,7 +292,7 @@ class LocalExecutor:
                 results[result.node_name] = result
             elif isinstance(result, Exception):
                 # Can happen if task is cancelled during gather()
-                logger.error(f"Exception during wave execution: {result}")
+                logger.error("Exception during wave execution: {}", result)
                 raise result
 
         return results

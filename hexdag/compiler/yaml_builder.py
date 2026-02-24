@@ -287,7 +287,7 @@ class YamlPipelineBuilder:
         if environment:
             for doc in pipeline_docs:
                 if doc.get("metadata", {}).get("namespace") == environment:
-                    logger.info(f"Selected environment '{environment}' from multi-document YAML")
+                    logger.info("Selected environment '{}' from multi-document YAML", environment)
                     return doc
 
             available_envs = [
@@ -300,9 +300,10 @@ class YamlPipelineBuilder:
 
         if len(pipeline_docs) > 1:
             logger.warning(
-                f"Multi-document YAML detected ({len(pipeline_docs)} pipeline documents) "
+                "Multi-document YAML detected ({} pipeline documents) "
                 "but no environment specified. "
-                "Using first pipeline. Specify environment parameter to select specific config."
+                "Using first pipeline. Specify environment parameter to select specific config.",
+                len(pipeline_docs),
             )
 
         return pipeline_docs[0]
@@ -322,7 +323,7 @@ class YamlPipelineBuilder:
             raise YamlPipelineBuilderError(f"YAML validation failed:\n{errors}")
 
         for warning in result.warnings:
-            logger.warning(f"YAML validation warning: {warning}")
+            logger.warning("YAML validation warning: {}", warning)
 
         return config
 
@@ -424,7 +425,7 @@ class YamlPipelineBuilder:
 
         for alias, full_path in aliases.items():
             register_alias(alias, full_path)
-            logger.debug(f"Registered alias: {alias} -> {full_path}")
+            logger.debug("Registered alias: {} -> {}", alias, full_path)
 
     def _register_custom_types(self, config: dict[str, Any]) -> None:
         """Register custom sanitized types from ``spec.custom_types`` before validation.
@@ -442,7 +443,7 @@ class YamlPipelineBuilder:
 
         for type_name, type_config in custom_types.items():
             register_type_from_config(type_name, type_config)
-            logger.debug(f"Registered custom type: {type_name}")
+            logger.debug("Registered custom type: {}", type_name)
 
     def _build_graph(self, config: dict[str, Any]) -> DirectedGraph:
         """Build DirectedGraph using entity plugins."""

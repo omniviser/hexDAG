@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BeforeValidator
 
+from hexdag.kernel.exceptions import ValidationError
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -130,8 +132,10 @@ def register_type_from_config(name: str, config: dict[str, Any]) -> None:
     base = _BASE_TYPE_MAP.get(base_name)
     if base is None:
         valid = ", ".join(sorted(_BASE_TYPE_MAP))
-        raise ValueError(
-            f"Custom type '{name}': invalid base '{base_name}'. Must be one of: {valid}"
+        raise ValidationError(
+            "base",
+            f"invalid base '{base_name}' for custom type '{name}'. Must be one of: {valid}",
+            base_name,
         )
 
     cleaner = _build_cleaner_from_config(config)

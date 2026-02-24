@@ -9,6 +9,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 import yaml
 
+from hexdag.kernel.exceptions import ValidationError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.types import (
     get_annotated_metadata,
@@ -108,7 +109,7 @@ class SchemaGenerator:
 
         Raises
         ------
-        ValueError
+        ValidationError
             If format is not one of: dict, yaml, json
 
         Examples
@@ -129,18 +130,18 @@ class SchemaGenerator:
         True
         """
         if format not in ("dict", "yaml", "json"):
-            raise ValueError(f"Invalid format: {format}. Must be one of: dict, yaml, json")
+            raise ValidationError("format", "must be one of: dict, yaml, json", format)
 
         # Check for explicit _yaml_schema class attribute (for builder-pattern nodes)
         yaml_schema = getattr(factory, "_yaml_schema", None)
         if yaml_schema and isinstance(yaml_schema, dict):
-            logger.debug(f"Using explicit _yaml_schema for {factory}")
+            logger.debug("Using explicit _yaml_schema for {}", factory)
             return SchemaGenerator._format_output(yaml_schema, format)
 
         try:
             sig = inspect.signature(factory)
         except (ValueError, TypeError) as e:
-            logger.warning(f"Could not get signature for {factory}: {e}")
+            logger.warning("Could not get signature for {}: {}", factory, e)
             return SchemaGenerator._format_output({}, format)
 
         properties = {}

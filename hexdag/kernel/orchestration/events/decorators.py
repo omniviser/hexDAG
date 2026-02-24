@@ -11,6 +11,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
+from hexdag.kernel.exceptions import TypeMismatchError, ValidationError
+
 from .events import Event
 
 EVENT_METADATA_ATTR = "__hexdag_event_metadata__"
@@ -55,8 +57,10 @@ def normalize_event_types(event_types: EventTypesInput) -> set[EventType] | None
             normalized.add(_ensure_event_subclass(item))
         return normalized
 
-    raise TypeError(
-        f"event_types must be a type, iterable of types, or None; got {type(event_types).__name__}"
+    raise TypeMismatchError(
+        "event_types",
+        "type, iterable of types, or None",
+        type(event_types).__name__,
     )
 
 
@@ -64,13 +68,14 @@ def _ensure_event_subclass(event_type: Any) -> EventType:
     """Validate and return an event subclass."""
 
     if not isinstance(event_type, type):
-        raise TypeError(
-            "event_types must contain Event subclasses; "
-            f"got instance of {type(event_type).__name__}"
+        raise TypeMismatchError(
+            "event_types",
+            "Event subclass",
+            f"instance of {type(event_type).__name__}",
         )
 
     if not issubclass(event_type, Event):
-        raise TypeError(f"event_types must contain Event subclasses; got {event_type!r}")
+        raise TypeMismatchError("event_types", "Event subclass", repr(event_type))
 
     return event_type
 
@@ -112,7 +117,7 @@ def observer(
     normalized_events = normalize_event_types(event_types)
 
     if max_concurrency is not None and max_concurrency < 1:
-        raise ValueError("max_concurrency must be positive when provided")
+        raise ValidationError("max_concurrency", "must be positive", max_concurrency)
 
     def decorator(func: TFunc) -> TFunc:
         metadata = EventDecoratorMetadata(

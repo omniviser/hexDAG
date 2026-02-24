@@ -184,7 +184,7 @@ class PortCallNode(BaseNodeFactory):
 
             if port_adapter is None:
                 if _has_fallback:
-                    node_logger.warning(f"Port '{port_name}' not available, using fallback")
+                    node_logger.warning("Port '{}' not available, using fallback", port_name)
                     return {
                         "result": _fallback,
                         "port": port_name,

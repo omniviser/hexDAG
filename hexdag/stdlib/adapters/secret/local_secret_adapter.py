@@ -105,7 +105,7 @@ class LocalSecretAdapter(SecretStore):
         """
         # Check cache first (environment variables don't change at runtime)
         if key in self._cache:
-            logger.debug(f"Retrieved secret '{key}' from cache")
+            logger.debug("Retrieved secret '{}' from cache", key)
             return self._cache[key]
 
         env_var_name = f"{self.env_prefix}{key}"
@@ -122,7 +122,7 @@ class LocalSecretAdapter(SecretStore):
                 f"Secret '{key}' cannot be empty (set allow_empty=True to allow empty secrets)"
             )
 
-        logger.debug(f"Retrieved secret '{key}' from environment")
+        logger.debug("Retrieved secret '{}' from environment", key)
         secret = Secret(value)
 
         self._cache[key] = secret
@@ -171,7 +171,7 @@ class LocalSecretAdapter(SecretStore):
                 for key in os.environ
                 if key.startswith(self.env_prefix)
             ]
-            logger.debug(f"Auto-discovered {len(keys)} environment variables")
+            logger.debug("Auto-discovered {} environment variables", len(keys))
 
         # Load each secret
         loaded_count = 0
@@ -182,12 +182,14 @@ class LocalSecretAdapter(SecretStore):
                 await memory.aset(memory_key, secret.get())
                 mapping[key] = memory_key
                 loaded_count += 1
-                logger.debug(f"Loaded secret '{key}' → '{memory_key}'")
+                logger.debug("Loaded secret '{}' → '{}'", key, memory_key)
             except (KeyError, ValueError) as e:
-                logger.warning(f"Failed to load secret '{key}': {e}")
+                logger.warning("Failed to load secret '{}': {}", key, e)
                 continue
 
-        logger.info(f"Loaded {loaded_count}/{len(keys)} secrets into Memory with prefix '{prefix}'")
+        logger.info(
+            "Loaded {}/{} secrets into Memory with prefix '{}'", loaded_count, len(keys), prefix
+        )
         return mapping
 
     async def alist_secret_names(self) -> list[str]:
@@ -212,7 +214,7 @@ class LocalSecretAdapter(SecretStore):
             for key in os.environ
             if key.startswith(self.env_prefix)
         ]
-        logger.debug(f"Found {len(names)} environment variables")
+        logger.debug("Found {} environment variables", len(names))
         return names
 
     async def ahealth_check(self) -> "HealthStatus":

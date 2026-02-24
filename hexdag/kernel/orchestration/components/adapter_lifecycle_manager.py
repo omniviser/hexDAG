@@ -101,13 +101,13 @@ class AdapterLifecycleManager:
             if hasattr(adapter, method_name) and callable(getattr(adapter, method_name)):
                 cleanup_method = getattr(adapter, method_name)
                 try:
-                    logger.debug(f"Cleaning up adapter '{port_name}' via {method_name}()")
+                    logger.debug("Cleaning up adapter '{}' via {}()", port_name, method_name)
                     await cleanup_method()
-                    logger.info(f"✅ Cleaned up adapter: {port_name}")
+                    logger.info("✅ Cleaned up adapter: {}", port_name)
                     return True  # Only call first matching cleanup method
                 except (RuntimeError, ValueError, TypeError, ConnectionError, OSError) as e:
                     # Expected cleanup errors - log but don't crash
-                    logger.warning(f"Cleanup failed for {port_name}: {e}")
+                    logger.warning("Cleanup failed for {}: {}", port_name, e)
                     return False
 
         return False

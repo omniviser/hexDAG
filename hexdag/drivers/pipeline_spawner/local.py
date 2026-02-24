@@ -90,7 +90,7 @@ class LocalPipelineSpawner:
         task.add_done_callback(lambda t: self._on_task_done(run_id, t))
         self._runs[run_id].status = RunStatus.RUNNING
 
-        logger.debug(f"Spawned pipeline '{pipeline_name}' as run {run_id}")
+        logger.debug("Spawned pipeline '{}' as run {}", pipeline_name, run_id)
         return run_id
 
     async def aspawn_many(
@@ -147,7 +147,7 @@ class LocalPipelineSpawner:
         if run_id in self._tasks and not self._tasks[run_id].done():
             self._tasks[run_id].cancel()
             self._runs[run_id].status = RunStatus.CANCELLED
-            logger.debug(f"Cancelled run {run_id}")
+            logger.debug("Cancelled run {}", run_id)
 
     def get_run_status(self, run_id: str) -> RunStatus:
         """Get the status of a pipeline run (non-protocol utility)."""

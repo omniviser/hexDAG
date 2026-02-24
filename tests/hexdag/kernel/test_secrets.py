@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from hexdag.kernel.exceptions import ConfigurationError
 from hexdag.kernel.secrets import (
     SecretDescriptor,
     extract_secrets_from_signature,
@@ -102,7 +103,7 @@ class TestSecretDescriptor:
 
         desc = SecretDescriptor(env_var="MISSING_SECRET", required=True)
 
-        with pytest.raises(ValueError, match="Required secret.*not found"):
+        with pytest.raises(ConfigurationError, match="Required secret not found"):
             desc.resolve()
 
     def test_resolve_optional_not_found(self) -> None:
@@ -230,7 +231,7 @@ class TestResolveSecretsInKwargs:
             def __init__(self, api_key: str = secret(env="MISSING_CLASS_SECRET")):
                 pass
 
-        with pytest.raises(ValueError, match="Required secret"):
+        with pytest.raises(ConfigurationError, match="Required secret"):
             resolve_secrets_in_kwargs(RequiredSecret, {})
 
     def test_optional_secret_missing(self) -> None:

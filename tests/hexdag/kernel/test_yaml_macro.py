@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.yaml_macro import (
     PreserveUndefined,
     YamlMacro,
@@ -47,7 +48,7 @@ class TestYamlMacroParameterSpec:
 
     def test_invalid_type_raises_error(self) -> None:
         """Test that invalid type raises validation error."""
-        with pytest.raises(ValueError, match="Invalid type"):
+        with pytest.raises(YamlPipelineBuilderError, match="Invalid type"):
             YamlMacroParameterSpec(name="test", type="invalid_type")
 
     def test_union_type(self) -> None:
@@ -57,7 +58,7 @@ class TestYamlMacroParameterSpec:
 
     def test_invalid_union_type_raises_error(self) -> None:
         """Test invalid union type."""
-        with pytest.raises(ValueError, match="Invalid type"):
+        with pytest.raises(YamlPipelineBuilderError, match="Invalid type"):
             YamlMacroParameterSpec(name="test", type="str | invalid")
 
 
@@ -228,7 +229,9 @@ class TestYamlMacro:
                 }
             ],
         )
-        with pytest.raises(ValueError, match="Required parameter 'api_key' not provided"):
+        with pytest.raises(
+            YamlPipelineBuilderError, match="Required parameter 'api_key' not provided"
+        ):
             macro.expand(instance_name="test", inputs={}, dependencies=[])
 
     def test_macro_enum_validation(self) -> None:
@@ -269,7 +272,7 @@ class TestYamlMacro:
                 }
             ],
         )
-        with pytest.raises(ValueError, match="must be one of"):
+        with pytest.raises(YamlPipelineBuilderError, match="must be one of"):
             macro.expand(instance_name="test", inputs={"mode": "invalid"}, dependencies=[])
 
     def test_macro_preserves_runtime_variables(self) -> None:
@@ -303,7 +306,9 @@ class TestYamlMacro:
                 }
             ],
         )
-        with pytest.raises(ValueError, match="cannot contain nested macro_invocations"):
+        with pytest.raises(
+            YamlPipelineBuilderError, match="cannot contain nested macro_invocations"
+        ):
             macro.expand(instance_name="test", inputs={}, dependencies=[])
 
     def test_macro_repr(self) -> None:

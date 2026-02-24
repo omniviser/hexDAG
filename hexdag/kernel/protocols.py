@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+from hexdag.kernel.exceptions import TypeMismatchError
+
 # ============================================================================
 # Component Protocols
 # ============================================================================
@@ -254,10 +256,7 @@ def to_dict(obj: Any) -> dict[str, Any]:
         return obj.model_dump()
 
     # Case 3: Cannot convert
-    raise TypeError(
-        f"Cannot convert {type(obj).__name__} to dict. "
-        f"Expected dict or object with model_dump() method"
-    )
+    raise TypeMismatchError("obj", "dict or object with model_dump()", type(obj).__name__, obj)
 
 
 __all__ = [

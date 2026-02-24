@@ -511,7 +511,7 @@ async def _execute_while(
                         update_context = {**data, "state": state, "$body": result}
                         state[key] = update_fn(update_context, state)
                     except Exception as e:
-                        node_logger.warning(f"State update for '{key}' failed: {e}")
+                        node_logger.warning("State update for '{}' failed: {}", key, e)
         else:
             # Yield to downstream - just track iteration
             results.append({
@@ -805,7 +805,7 @@ async def _execute_switch(
                 condition_fn = branch["condition_fn"]
                 is_match = bool(condition_fn(data, {}))
             except Exception as e:
-                node_logger.warning(f"Branch {idx} condition failed: {e}")
+                node_logger.warning("Branch {} condition failed: {}", idx, e)
                 is_match = False
 
             evaluations.append(is_match)

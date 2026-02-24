@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from hexdag.kernel.exceptions import SchemaCompatibilityError, ValidationError
 from hexdag.kernel.validation.sanitized_types import (
     COMMON_NULLS,
     _build_cleaner_from_config,
@@ -173,7 +174,7 @@ class TestRegisterFromConfig:
         assert t is not None
 
     def test_invalid_base(self) -> None:
-        with pytest.raises(ValueError, match="invalid base"):
+        with pytest.raises(ValidationError, match="invalid base"):
             register_type_from_config("test_bad", {"base": "complex"})
 
     def test_clamp_config(self) -> None:
@@ -440,7 +441,7 @@ class TestSchemaConversion:
     def test_error_message_lists_sanitized_types(self) -> None:
         from hexdag.kernel.utils.schema_conversion import normalize_schema
 
-        with pytest.raises(ValueError, match="Sanitized types:.*currency"):
+        with pytest.raises(SchemaCompatibilityError, match="Sanitized types:.*currency"):
             normalize_schema({"field": "nonexistent_xyz_type"})
 
 

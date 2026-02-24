@@ -116,7 +116,7 @@ class PgVectorAdapter(SupportsQuery, SupportsVectorSearch, SupportsReadOnly):
                     else:
                         logger.warning("pgvector extension not found (read-only mode)")
             except Exception as e:
-                logger.warning(f"Could not verify pgvector extension: {e}")
+                logger.warning("Could not verify pgvector extension: {}", e)
 
     async def aclose(self) -> None:
         """Close database connection pool."""
@@ -388,7 +388,7 @@ class PgVectorAdapter(SupportsQuery, SupportsVectorSearch, SupportsReadOnly):
                         updated_count += 1
 
                 except Exception as e:
-                    logger.error(f"Failed to upsert vector {vec_data.get('id')}: {e}")
+                    logger.error("Failed to upsert vector {}: {}", vec_data.get("id"), e)
                     failed_count += 1
 
         return {

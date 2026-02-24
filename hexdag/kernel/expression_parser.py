@@ -518,7 +518,7 @@ def compile_expression(expression: str) -> Callable[[dict[str, Any], dict[str, A
             result = _evaluate_node(tree.body, data, state)
             return bool(result)
         except Exception as e:
-            logger.warning(f"Expression '{expression}' evaluation failed: {e}")
+            logger.warning("Expression '{}' evaluation failed: {}", expression, e)
             return False
 
     return predicate

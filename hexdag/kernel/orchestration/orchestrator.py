@@ -106,7 +106,7 @@ async def _managed_ports(
             await executor.asetup()
             executor_initialized = True
         except Exception as e:
-            logger.error(f"Executor setup failed: {e}")
+            logger.error("Executor setup failed: {}", e)
             raise
 
     # Setup ports
@@ -117,7 +117,7 @@ async def _managed_ports(
                 await port.asetup()
                 initialized.append(name)
             except Exception as e:
-                logger.error(f"Port setup failed: {name}: {e}")
+                logger.error("Port setup failed: {}: {}", name, e)
                 # Cleanup initialized ports
                 for cleanup_name in initialized:
                     cleanup_port = all_ports[cleanup_name]
@@ -144,7 +144,7 @@ async def _managed_ports(
                 try:
                     await port.aclose()
                 except Exception as e:
-                    logger.warning(f"Port cleanup failed: {name}: {e}")
+                    logger.warning("Port cleanup failed: {}: {}", name, e)
 
         # Cleanup executor last
         if (
@@ -155,7 +155,7 @@ async def _managed_ports(
             try:
                 await executor.aclose()
             except Exception as e:
-                logger.warning(f"Executor cleanup failed: {e}")
+                logger.warning("Executor cleanup failed: {}", e)
 
 
 class Orchestrator:
@@ -269,8 +269,9 @@ class Orchestrator:
             obs = ports["observer_manager"]
             if not hasattr(obs, "notify"):
                 logger.warning(
-                    f"Port 'observer_manager' doesn't have 'notify' method. "
-                    f"Expected ObserverManager, got {type(obs).__name__}"
+                    "Port 'observer_manager' doesn't have 'notify' method. "
+                    "Expected ObserverManager, got {}",
+                    type(obs).__name__,
                 )
 
     def _validate_port_capabilities(
@@ -617,7 +618,8 @@ class Orchestrator:
                     # Log all hook errors but don't fail the pipeline
                     # (hooks are for cleanup/observability, not critical path)
                     logger.error(
-                        f"Post-DAG lifecycle failed: {post_hook_error}",
+                        "Post-DAG lifecycle failed: {}",
+                        post_hook_error,
                         exc_info=True,
                     )
 
@@ -797,7 +799,7 @@ class Orchestrator:
         iteration = 0
         dynamic_timer = Timer()
 
-        logger.info(f"Starting dynamic execution (max_iterations={max_iterations})")
+        logger.info("Starting dynamic execution (max_iterations={})", max_iterations)
 
         while iteration < max_iterations:
             iteration += 1
@@ -821,13 +823,17 @@ class Orchestrator:
             if not ready_nodes:
                 # No more nodes to execute - we're done
                 logger.info(
-                    f"Dynamic execution completed after {iteration} iterations "
-                    f"({len(executed_nodes)} nodes executed)"
+                    "Dynamic execution completed after {} iterations ({} nodes executed)",
+                    iteration,
+                    len(executed_nodes),
                 )
                 break
 
             logger.debug(
-                f"Dynamic iteration {iteration}: executing {len(ready_nodes)} nodes: {ready_nodes}"
+                "Dynamic iteration {}: executing {} nodes: {}",
+                iteration,
+                len(ready_nodes),
+                ready_nodes,
             )
 
             # Execute wave of ready nodes
@@ -851,10 +857,11 @@ class Orchestrator:
                 result = node_results.get(node_name)
                 if result is not None:
                     executed_nodes.add(node_name)
-                    logger.debug(f"Node {node_name} completed successfully")
+                    logger.debug("Node {} completed successfully", node_name)
                 else:
                     logger.debug(
-                        f"Node {node_name} returned None, will re-execute after dependencies"
+                        "Node {} returned None, will re-execute after dependencies",
+                        node_name,
                     )
 
             # Update context for expander nodes
@@ -863,7 +870,7 @@ class Orchestrator:
             # Check if new nodes were added to graph
             new_nodes = current_node_names.symmetric_difference(set(graph.keys()))
             if new_nodes:
-                logger.info(f"Detected {len(new_nodes)} newly injected nodes: {new_nodes}")
+                logger.info("Detected {} newly injected nodes: {}", len(new_nodes), new_nodes)
 
         # Check if we exceeded max iterations
         if iteration >= max_iterations:

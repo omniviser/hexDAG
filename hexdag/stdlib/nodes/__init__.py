@@ -8,6 +8,7 @@ See hexdag.stdlib.nodes._discovery for the auto-discovery mechanism.
 """
 
 from .agent_node import ReActAgentNode
+from .api_call_node import ApiCallNode
 from .composite_node import CompositeNode
 from .data_node import DataNode
 from .expression_node import ExpressionNode
@@ -17,6 +18,7 @@ from .port_call_node import PortCallNode
 from .tool_call_node import ToolCallNode
 
 __all__ = [
+    "ApiCallNode",
     "CompositeNode",
     "DataNode",
     "ExpressionNode",

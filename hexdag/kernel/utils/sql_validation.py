@@ -2,6 +2,7 @@
 
 import re
 
+from hexdag.kernel.exceptions import ValidationError
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
@@ -46,7 +47,7 @@ def validate_sql_identifier(
 
     Raises
     ------
-    ValueError
+    ValidationError
         If raise_on_invalid=True and identifier is invalid
 
     Examples
@@ -79,7 +80,7 @@ def validate_sql_identifier(
         )
 
         if raise_on_invalid:
-            raise ValueError(msg)
+            raise ValidationError(identifier_type, "invalid SQL identifier", identifier)
 
         logger.warning(msg)
 

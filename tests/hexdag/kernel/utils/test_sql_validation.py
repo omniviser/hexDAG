@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from hexdag.kernel.exceptions import ValidationError
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
 
 
@@ -71,17 +72,17 @@ class TestValidateSqlIdentifier:
         assert validate_sql_identifier("name;drop") is False
 
     def test_raise_on_invalid_true(self) -> None:
-        """Test that raise_on_invalid=True raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
+        """Test that raise_on_invalid=True raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
             validate_sql_identifier("user-data", raise_on_invalid=True)
-        assert "Invalid identifier" in str(exc_info.value)
+        assert "identifier" in str(exc_info.value)
         assert "user-data" in str(exc_info.value)
 
     def test_raise_on_invalid_with_custom_type(self) -> None:
         """Test error message with custom identifier type."""
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             validate_sql_identifier("bad.table", "table", raise_on_invalid=True)
-        assert "Invalid table" in str(exc_info.value)
+        assert "table" in str(exc_info.value)
         assert "bad.table" in str(exc_info.value)
 
     def test_raise_on_invalid_false_returns_false(self) -> None:

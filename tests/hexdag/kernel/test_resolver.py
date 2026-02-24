@@ -331,16 +331,14 @@ class TestUserAliases:
         assert get_registered_aliases() == {}
 
     def test_register_alias_empty_alias_raises(self) -> None:
-        """Test that empty alias raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
+        """Test that empty alias raises ResolveError."""
+        with pytest.raises(ResolveError, match="(?i)empty"):
             register_alias("", "hexdag.stdlib.nodes.FunctionNode")
-        assert "empty" in str(exc_info.value).lower()
 
     def test_register_alias_empty_path_raises(self) -> None:
-        """Test that empty path raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
+        """Test that empty path raises ResolveError."""
+        with pytest.raises(ResolveError, match="(?i)empty"):
             register_alias("my_alias", "")
-        assert "empty" in str(exc_info.value).lower()
 
     def test_resolve_alias_invalid_path_raises(self) -> None:
         """Test that alias pointing to invalid path raises error."""

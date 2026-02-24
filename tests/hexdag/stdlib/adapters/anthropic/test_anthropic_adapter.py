@@ -263,4 +263,9 @@ class TestAnthropicAdapter:
                 result = await adapter.aresponse(messages)
 
             assert result is None
-            mock_log.assert_called_once_with("Anthropic API error: API Error", exc_info=True)
+            mock_log.assert_called_once()
+            call_args = mock_log.call_args
+            assert call_args[0][0] == "Anthropic API error: {}"
+            assert isinstance(call_args[0][1], Exception)
+            assert str(call_args[0][1]) == "API Error"
+            assert call_args[1] == {"exc_info": True}

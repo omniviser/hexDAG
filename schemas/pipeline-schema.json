@@ -83,6 +83,83 @@
             ],
             "type": "object"
         },
+        "Api_CallNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for api_call_node type",
+            "properties": {
+                "kind": {
+                    "const": "api_call_node",
+                    "description": "Node type: api_call_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "headers": {
+                            "default": null,
+                            "description": "Request headers. Values support ``{{variable}}`` syntax.",
+                            "type": "string"
+                        },
+                        "json_body": {
+                            "default": null,
+                            "description": "JSON body for POST/PUT/PATCH requests.",
+                            "type": "string"
+                        },
+                        "method": {
+                            "default": "GET",
+                            "description": "HTTP method: GET, POST, PUT, DELETE, or PATCH.",
+                            "type": "string"
+                        },
+                        "output_schema": {
+                            "default": null,
+                            "description": "Optional schema for output validation.",
+                            "type": "string"
+                        },
+                        "params": {
+                            "default": null,
+                            "description": "Query parameters for GET requests.",
+                            "type": "string"
+                        },
+                        "port": {
+                            "default": "api_call",
+                            "description": "Port name to use (default: ``\"api_call\"``).",
+                            "type": "string"
+                        },
+                        "url": {
+                            "default": "",
+                            "description": "URL or path template. Supports ``{{variable}}`` syntax.",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
         "CompositeNodeSpec": {
             "allOf": [
                 {
@@ -966,6 +1043,9 @@
                         "oneOf": [
                             {
                                 "$ref": "#/$defs/LlmNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/Api_CallNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/CompositeNodeSpec"

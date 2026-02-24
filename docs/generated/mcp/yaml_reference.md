@@ -48,6 +48,7 @@ spec:
 | Node Kind | Description |
 |-----------|-------------|
 | `agent_node` | Specification for agent_node type |
+| `api_call_node` | Specification for api_call_node type |
 | `composite_node` | Specification for composite_node type |
 | `data_node` | Specification for data_node type |
 | `expression_node` | Specification for expression_node type |
@@ -77,6 +78,32 @@ Specification for agent_node type
     name: my_agent
   spec:
     main_prompt: # required
+  dependencies: []
+```
+
+### api_call_node
+
+Specification for api_call_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `headers` | string | No | Request headers. Values support ``{{v... |
+| `json_body` | string | No | JSON body for POST/PUT/PATCH requests. |
+| `method` | string | No | HTTP method: GET, POST, PUT, DELETE, ... |
+| `output_schema` | string | No | Optional schema for output validation. |
+| `params` | string | No | Query parameters for GET requests. |
+| `port` | string | No | Port name to use (default: ``"api_cal... |
+| `url` | string | No | URL or path template. Supports ``{{va... |
+
+**Example:**
+
+```yaml
+- kind: api_call_node
+  metadata:
+    name: my_api_call
+  spec:
   dependencies: []
 ```
 
