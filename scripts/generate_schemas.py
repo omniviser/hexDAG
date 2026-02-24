@@ -67,6 +67,7 @@ def _discover_factory_classes() -> dict[str, type[Any]]:
                 isinstance(attr, type)
                 and issubclass(attr, BaseNodeFactory)
                 and attr is not BaseNodeFactory
+                and attr.__name__ == attr_name  # skip module-level aliases
             ):
                 snake_name = _to_snake_case(attr_name)
                 factories[snake_name] = attr

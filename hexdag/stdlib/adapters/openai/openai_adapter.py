@@ -21,6 +21,7 @@ from hexdag.kernel.ports.llm import (
     SupportsVision,
     TokenUsage,
     ToolCall,
+    ToolChoice,
     VisionMessage,
 )
 from hexdag.kernel.types import (
@@ -239,7 +240,7 @@ class OpenAIAdapter(
         self,
         messages: MessageList,
         tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
     ) -> LLMResponse:
         """Generate response with native OpenAI tool calling.
 
@@ -428,7 +429,7 @@ class OpenAIAdapter(
         self,
         messages: list[VisionMessage],
         tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
         max_tokens: int | None = None,
     ) -> LLMResponse:
         """Generate response with both vision and tool calling capabilities.

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.resolver import ResolveError, resolve
+from hexdag.kernel.schema.generator import SchemaGenerator
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -44,11 +45,13 @@ class NodeEntityPlugin:
 
         kind = node_config["kind"]
         node_id = node_config["metadata"]["name"]
+
+        # Read settings (literal config) and spec (dynamic wiring) sections
+        settings_values = node_config.get("settings", {}).copy()
         spec = node_config.get("spec", {}).copy()
+
         # Dependencies can be at node level or inside spec (for backwards compatibility)
         deps = node_config.get("dependencies", []) or spec.pop("dependencies", [])
-        # Snapshot factory params before factory consumes them
-        factory_params_snapshot = spec.copy()
 
         # Resolve factory class from full module path
         try:
@@ -73,15 +76,57 @@ class NodeEntityPlugin:
             # It's already a callable (function or instance)
             factory = cast("Callable[..., NodeSpec]", factory_obj)  # type: ignore[unreachable]
 
-        # Create node - pass name as first positional arg
-        node: NodeSpec = factory(node_id, **spec)
+        # Backward compat: if no explicit settings section, auto-partition flat spec
+        if not settings_values:
+            settings_values, spec = self._partition_spec(factory_obj, spec)
 
-        # Store factory metadata for distributed execution (remote workers
-        # can call resolve(kind)() and replay factory(name, **params))
-        node = replace(node, factory_class=kind, factory_params=factory_params_snapshot)
+        # Merge for factory call (factory signature unchanged)
+        factory_kwargs = {**settings_values, **spec}
+
+        # Snapshot factory params before factory consumes them
+        factory_params_snapshot = factory_kwargs.copy()
+
+        # Create node - pass name as first positional arg
+        node: NodeSpec = factory(node_id, **factory_kwargs)
+
+        # Store factory metadata and literals on NodeSpec
+        node = replace(
+            node,
+            factory_class=kind,
+            factory_params=factory_params_snapshot,
+            literals=settings_values,
+        )
 
         # Add dependencies
         if deps:
             node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
 
         return node
+
+    @staticmethod
+    def _partition_spec(
+        factory_obj: Any, spec: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Partition a flat spec dict into (literals, dynamic_params).
+
+        Uses ``SchemaGenerator.get_literal_param_names()`` to determine which
+        params are literal settings vs dynamic wiring.
+
+        Parameters
+        ----------
+        factory_obj : Any
+            Resolved factory class or instance
+        spec : dict[str, Any]
+            Flat spec dict to partition
+
+        Returns
+        -------
+        tuple[dict[str, Any], dict[str, Any]]
+            (settings_values, remaining_spec)
+        """
+        literal_names = SchemaGenerator.get_literal_param_names(factory_obj)
+
+        settings = {k: v for k, v in spec.items() if k in literal_names}
+        remaining = {k: v for k, v in spec.items() if k not in literal_names}
+
+        return settings, remaining

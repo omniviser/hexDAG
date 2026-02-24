@@ -1,15 +1,20 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
 from abc import abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
+
+type MessageRole = Literal["user", "assistant", "system", "tool", "human", "ai"]
+type ToolChoice = Literal["auto", "none", "required"]
+type ImageContentType = Literal["image", "image_url"]
+type ImageDetail = Literal["low", "high", "auto"]
 
 
 class Message(BaseModel):
     """A single message in a conversation."""
 
-    role: str
+    role: MessageRole
     content: str
 
 
@@ -169,7 +174,7 @@ class SupportsFunctionCalling(Protocol):
         self,
         messages: MessageList,
         tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
     ) -> LLMResponse:
         """Generate response with native tool calling support.
 
@@ -223,15 +228,15 @@ class SupportsFunctionCalling(Protocol):
 class ImageContent(BaseModel):
     """Image content in a vision-enabled message."""
 
-    type: str = "image"  # "image" or "image_url"
+    type: ImageContentType = "image"
     source: str | dict[str, Any]  # URL, base64, or provider-specific format
-    detail: str = "auto"  # "low", "high", or "auto" (for OpenAI)
+    detail: ImageDetail = "auto"
 
 
 class VisionMessage(BaseModel):
     """Message with optional image content for vision-enabled LLMs."""
 
-    role: str
+    role: MessageRole
     content: str | list[dict[str, Any]]  # Text or mixed text+image content
 
 
@@ -320,7 +325,7 @@ class SupportsVision(Protocol):
         self,
         messages: list[VisionMessage],
         tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
         max_tokens: int | None = None,
     ) -> LLMResponse:
         """Generate response with both vision and tool calling capabilities (optional).

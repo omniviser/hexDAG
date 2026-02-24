@@ -19,18 +19,18 @@ infrastructure dependency without touching business logic.
 
 ## The OS Analogy
 
-| Linux | hexDAG | Purpose |
-|-------|--------|---------|
-| Kernel | `kernel/` | Core execution engine, system call interfaces (Protocols), domain models |
-| System calls | `kernel/ports/` | Contracts for external capabilities (LLM, Memory, Database, etc.) |
-| Drivers | `drivers/` | Low-level infrastructure (executor, observer manager, pipeline spawner) |
-| `/lib` | `stdlib/` | Standard library -- built-in nodes, adapters, macros, system libs |
-| Processes | Pipeline runs | Tracked by `ProcessRegistry` (like `ps`) |
-| `fork`/`exec` | `PipelineSpawner` | Launch sub-pipelines from within a running pipeline |
-| Process scheduler | `Scheduler` | Delayed and recurring pipeline execution |
-| State machines | `EntityState` | Business entity lifecycle management |
-| `/usr/bin` | `api/` | User-facing tools (MCP + Studio REST) |
-| Shell | `cli/` | Command-line interface (`hexdag init`, `hexdag lint`, etc.) |
+| Linux             | hexDAG            | Purpose                                                                  |
+| ----------------- | ----------------- | ------------------------------------------------------------------------ |
+| Kernel            | `kernel/`         | Core execution engine, system call interfaces (Protocols), domain models |
+| System calls      | `kernel/ports/`   | Contracts for external capabilities (LLM, Memory, Database, etc.)        |
+| Drivers           | `drivers/`        | Low-level infrastructure (executor, observer manager, pipeline spawner)  |
+| `/lib`            | `stdlib/`         | Standard library -- built-in nodes, adapters, macros, system libs        |
+| Processes         | Pipeline runs     | Tracked by `ProcessRegistry` (like `ps`)                                 |
+| `fork`/`exec`     | `PipelineSpawner` | Launch sub-pipelines from within a running pipeline                      |
+| Process scheduler | `Scheduler`       | Delayed and recurring pipeline execution                                 |
+| State machines    | `EntityState`     | Business entity lifecycle management                                     |
+| `/usr/bin`        | `api/`            | User-facing tools (MCP + Studio REST)                                    |
+| Shell             | `cli/`            | Command-line interface (`hexdag init`, `hexdag lint`, etc.)              |
 
 ---
 
@@ -165,14 +165,14 @@ When adding something new:
 
 All framework entities follow one pattern: **kernel defines contract, stdlib ships builtins, users write their own.**
 
-| Entity | Kernel Contract | Stdlib Builtins | User Custom |
-|--------|----------------|-----------------|-------------|
-| Ports | `kernel/ports/llm.py` | -- | `myapp.ports.X` |
-| Adapters | Protocol in `kernel/ports/` | `stdlib/adapters/openai/` | `myapp.adapters.X` |
-| Nodes | `NodeSpec` + `BaseNodeFactory` | `LLMNode`, `AgentNode`, `FunctionNode` | `myapp.nodes.X` |
-| Macros | (convention) | `ReasoningAgent`, `ConversationAgent` | `myapp.macros.X` |
-| Prompts | (convention) | `tool_prompts`, `error_correction` | `myapp.prompts.X` |
-| Libs | `HexDAGLib` base class | `ProcessRegistry`, `EntityState`, `Scheduler` | `myapp.lib.X` |
+| Entity   | Kernel Contract                | Stdlib Builtins                               | User Custom        |
+| -------- | ------------------------------ | --------------------------------------------- | ------------------ |
+| Ports    | `kernel/ports/llm.py`          | --                                            | `myapp.ports.X`    |
+| Adapters | Protocol in `kernel/ports/`    | `stdlib/adapters/openai/`                     | `myapp.adapters.X` |
+| Nodes    | `NodeSpec` + `BaseNodeFactory` | `LLMNode`, `AgentNode`, `FunctionNode`        | `myapp.nodes.X`    |
+| Macros   | (convention)                   | `ReasoningAgent`, `ConversationAgent`         | `myapp.macros.X`   |
+| Prompts  | (convention)                   | `tool_prompts`, `error_correction`            | `myapp.prompts.X`  |
+| Libs     | `HexDAGLib` base class         | `ProcessRegistry`, `EntityState`, `Scheduler` | `myapp.lib.X`      |
 
 Components are referenced by full Python module path in YAML:
 
@@ -190,12 +190,12 @@ nodes:
 Libs are system-level capabilities for multi-pipeline coordination. Every public async
 method on a `HexDAGLib` subclass auto-becomes an agent-callable tool.
 
-| Lib | Linux Analogy | Purpose |
-|-----|--------------|---------|
-| **ProcessRegistry** | `ps` | Track pipeline runs -- status, duration, results, parent/child relationships |
-| **EntityState** | State machines | Declarative state machines for business entities with validated transitions and audit trails |
-| **Scheduler** | `cron` / `at` | Delayed and recurring pipeline execution via asyncio timers |
-| **DatabaseTools** | `sqlite3` CLI | Agent-callable SQL query tools wrapping any `SupportsQuery` adapter |
+| Lib                 | Linux Analogy  | Purpose                                                                                      |
+| ------------------- | -------------- | -------------------------------------------------------------------------------------------- |
+| **ProcessRegistry** | `ps`           | Track pipeline runs -- status, duration, results, parent/child relationships                 |
+| **EntityState**     | State machines | Declarative state machines for business entities with validated transitions and audit trails |
+| **Scheduler**       | `cron` / `at`  | Delayed and recurring pipeline execution via asyncio timers                                  |
+| **DatabaseTools**   | `sqlite3` CLI  | Agent-callable SQL query tools wrapping any `SupportsQuery` adapter                          |
 
 ```python
 from hexdag.kernel.lib_base import HexDAGLib
@@ -233,7 +233,7 @@ hexdag lint my_pipeline.yaml
 
 ### Macro System
 Reusable pipeline templates that expand into full DAG subgraphs at build time.
-Built-in macros: `ReasoningAgent`, `ConversationAgent`, `LLMMacro`, `ToolMacro`.
+Built-in macros: `ReasoningAgent`, `ConversationAgent`, `LLMMacro`.
 
 ### Event-Driven Observability
 Comprehensive event system (`PipelineStarted`, `NodeCompleted`, `NodeFailed`, etc.)
@@ -295,17 +295,17 @@ export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
 
 ## CLI
 
-| Command | Purpose |
-|---------|---------|
-| `hexdag init` | Initialize a new hexDAG project |
-| `hexdag pipeline validate` | Validate a YAML pipeline |
-| `hexdag pipeline execute` | Execute a pipeline |
-| `hexdag lint` | Lint YAML for best practices and security |
-| `hexdag create` | Create pipeline templates from schemas |
-| `hexdag build` | Build Docker containers for pipelines |
-| `hexdag studio` | Launch the visual pipeline editor |
-| `hexdag plugins` | Manage plugins and adapters |
-| `hexdag docs` | Generate and serve documentation |
+| Command                    | Purpose                                   |
+| -------------------------- | ----------------------------------------- |
+| `hexdag init`              | Initialize a new hexDAG project           |
+| `hexdag pipeline validate` | Validate a YAML pipeline                  |
+| `hexdag pipeline execute`  | Execute a pipeline                        |
+| `hexdag lint`              | Lint YAML for best practices and security |
+| `hexdag create`            | Create pipeline templates from schemas    |
+| `hexdag build`             | Build Docker containers for pipelines     |
+| `hexdag studio`            | Launch the visual pipeline editor         |
+| `hexdag plugins`           | Manage plugins and adapters               |
+| `hexdag docs`              | Generate and serve documentation          |
 
 ---
 
@@ -313,23 +313,20 @@ export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
 
 ### Interactive Notebooks
 
-| Notebook | Topic | Time |
-|----------|-------|------|
-| [01. Introduction](notebooks/01_introduction.ipynb) | Your first pipeline | 15 min |
-| [02. YAML Pipelines](notebooks/02_yaml_pipelines.ipynb) | Declarative workflows | 25 min |
-| [03. Practical Workflow](notebooks/03_practical_workflow.ipynb) | Real-world patterns | 30 min |
-| [06. Dynamic Reasoning Agent](notebooks/06_dynamic_reasoning_agent.ipynb) | Advanced agent patterns | -- |
-| [YAML Includes & Composition](notebooks/03_yaml_includes_and_composition.ipynb) | Modular pipeline composition | -- |
+| Notebook                                                                        | Topic                        | Time   |
+| ------------------------------------------------------------------------------- | ---------------------------- | ------ |
+| [01. Introduction](notebooks/01_introduction.ipynb)                             | Your first pipeline          | 15 min |
+| [02. YAML Pipelines](notebooks/02_yaml_pipelines.ipynb)                         | Declarative workflows        | 25 min |
+| [03. Practical Workflow](notebooks/03_practical_workflow.ipynb)                 | Real-world patterns          | 30 min |
+| [06. Dynamic Reasoning Agent](notebooks/06_dynamic_reasoning_agent.ipynb)       | Advanced agent patterns      | --     |
+| [YAML Includes & Composition](notebooks/03_yaml_includes_and_composition.ipynb) | Modular pipeline composition | --     |
 
 ### Docs
 
-- [Architecture](docs/ARCHITECTURE.md) -- System architecture and the four layers
-- [Philosophy & Design](docs/PHILOSOPHY.md) -- Six pillars and design principles
-- [Hexagonal Architecture](docs/HEXAGONAL_ARCHITECTURE.md) -- Ports and adapters explained
-- [Implementation Guide](docs/IMPLEMENTATION_GUIDE.md) -- Production-ready workflows
-- [Plugin System](docs/PLUGIN_SYSTEM.md) -- Custom component development
-- [CLI Reference](docs/CLI_REFERENCE.md) -- Complete CLI documentation
+- [Architecture](docs/ARCHITECTURE.md) -- System architecture and the OS analogy
 - [Roadmap](docs/ROADMAP.md) -- Development roadmap and planned kernel extensions
+- [Quick Start](docs/quickstart.md) -- Build your first workflow
+- [All Documentation](docs/README.md) -- Full documentation index
 
 ### Examples
 

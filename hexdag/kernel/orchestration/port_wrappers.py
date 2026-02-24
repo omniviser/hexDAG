@@ -26,6 +26,7 @@ from hexdag.kernel.ports.llm import (
     MessageList,
     SupportsGeneration,
     SupportsUsageTracking,
+    ToolChoice,
 )
 from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.kernel.utils.node_timer import Timer
@@ -127,7 +128,7 @@ class ObservableLLMWrapper:
         self,
         messages: MessageList,
         tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
         **kwargs: Any,
     ) -> LLMResponse:
         """Call LLM with tools and emit events.
@@ -138,7 +139,7 @@ class ObservableLLMWrapper:
             Messages to send to LLM
         tools : list[dict[str, Any]]
             Tool definitions
-        tool_choice : str | dict[str, Any]
+        tool_choice : ToolChoice | dict[str, Any]
             Tool choice strategy
         **kwargs : Any
             Additional LLM parameters

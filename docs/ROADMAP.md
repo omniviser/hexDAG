@@ -3,7 +3,6 @@
 > **Strategic development plan for the hexDAG agent operating system**
 
 For the current architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
-For the detailed YAML compiler design spec, see [YAML_COMPILER_PLAN.md](YAML_COMPILER_PLAN.md).
 
 ## Vision & Architecture
 

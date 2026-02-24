@@ -45,7 +45,7 @@ _SCHEMA_INSTRUCTION_CACHE: KeyedCache[str] = KeyedCache()
 
 def _convert_dicts_to_messages(message_dicts: list[dict[str, str]]) -> list[Message]:
     """Convert list of message dicts to Message objects."""
-    return [Message(**msg) for msg in message_dicts]
+    return [Message.model_validate(msg) for msg in message_dicts]
 
 
 class LLMNode(BaseNodeFactory):
@@ -123,42 +123,7 @@ class LLMNode(BaseNodeFactory):
     _hexdag_icon = "Brain"
     _hexdag_color = "#8b5cf6"  # violet-500
 
-    # Explicit schema for Studio UI (excludes internal alias 'template')
-    _yaml_schema = {
-        "type": "object",
-        "properties": {
-            "prompt_template": {
-                "type": "string",
-                "description": "Template for the user prompt (Jinja2-style {{variable}} syntax)",
-            },
-            "output_schema": {
-                "type": "object",
-                "description": (
-                    "Expected output schema for structured output validation. "
-                    "Field values can be basic types (str, int, float, bool) "
-                    "or sanitized types: currency, flexible_bool, score, "
-                    "upper_str, lower_str, nullable_str, trimmed_str. "
-                    "Custom types can be defined in spec.custom_types."
-                ),
-            },
-            "system_prompt": {
-                "type": "string",
-                "description": "System message to prepend to the conversation",
-            },
-            "parse_json": {
-                "type": "boolean",
-                "default": False,
-                "description": "Parse the LLM response as JSON",
-            },
-            "parse_strategy": {
-                "type": "string",
-                "enum": ["json", "json_in_markdown", "yaml"],
-                "default": "json",
-                "description": "JSON parsing strategy",
-            },
-        },
-        "required": ["prompt_template"],
-    }
+    # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize LLMNode."""

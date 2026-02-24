@@ -42,7 +42,6 @@ properties:
         items:
           oneOf:
           - $ref: '#/$defs/LlmNodeSpec'
-          - $ref: '#/$defs/Reasoning_AgentNodeSpec'
           - $ref: '#/$defs/CompositeNodeSpec'
           - $ref: '#/$defs/DataNodeSpec'
           - $ref: '#/$defs/ExpressionNodeSpec'
@@ -140,85 +139,34 @@ $defs:
         properties:
           prompt_template:
             type: string
-            description: Template for the user prompt (Jinja2-style {{variable}} syntax)
+            description: Template for the user prompt. Supports Jinja2-style {{variable}}
+              syntax. Can be a string or PromptTemplate/ChatPromptTemplate object.
+              Can also be provided as 'template' (alias for YAML compatibility).
+            default: null
           output_schema:
-            type: object
-            description: 'Expected output schema for structured output validation.
-              Field values can be basic types (str, int, float, bool) or sanitized
-              types: currency, flexible_bool, score, upper_str, lower_str, nullable_str,
-              trimmed_str. Custom types can be defined in spec.custom_types.'
+            type: string
+            description: Expected output schema for structured output. If provided
+              with parse_json=True, the LLM response will be parsed and validated
+              against this schema.
+            default: null
           system_prompt:
             type: string
-            description: System message to prepend to the conversation
+            description: System message to prepend to the conversation.
+            default: null
           parse_json:
-            type: boolean
+            type: string
+            description: If True, parse the LLM response as JSON and validate against
+              output_schema. Default is False (returns raw text).
             default: false
-            description: Parse the LLM response as JSON
           parse_strategy:
             type: string
-            enum:
-            - json
-            - json_in_markdown
-            - yaml
+            description: 'JSON parsing strategy: "json", "json_in_markdown", or "yaml".
+              Default is "json".'
             default: json
-            description: JSON parsing strategy
-        required:
-        - prompt_template
-    required:
-    - kind
-    - metadata
-    - spec
-  Reasoning_AgentNodeSpec:
-    allOf:
-    - $ref: '#/$defs/Node'
-    type: object
-    description: Specification for reasoning_agent_node type
-    properties:
-      kind:
-        const: reasoning_agent_node
-        description: 'Node type: reasoning_agent_node'
-      metadata:
-        type: object
-        properties:
-          name:
+          template:
             type: string
-            description: Unique node identifier within the pipeline
-          annotations:
-            type: object
-            description: Optional metadata annotations
-        required:
-        - name
-      spec:
-        type: object
-        properties:
-          main_prompt:
-            type: string
-            description: Initial reasoning prompt
-          continuation_prompts:
-            type:
-            - object
-            - 'null'
-            additionalProperties:
-              type: string
-            description: Phase-specific prompts
-            default: null
-          output_schema:
-            anyOf:
-            - type: object
-              additionalProperties:
-                type: string
-            - type: string
-            description: Custom output schema for tool_end results
-            default: null
-          config:
-            type:
-            - string
-            - 'null'
-            description: Agent configuration
             default: null
         additionalProperties: false
-        required:
-        - main_prompt
     required:
     - kind
     - metadata
@@ -530,11 +478,13 @@ $defs:
       spec:
         type: object
         properties:
-          fn:
-            type: string
-            description: Module path string (e.g., 'myapp.process')
-        required:
-        - fn
+          output_schema:
+            anyOf:
+            - type: object
+            - type: string
+            description: Output schema for validation (if None, inferred from function)
+            default: null
+        additionalProperties: false
     required:
     - kind
     - metadata

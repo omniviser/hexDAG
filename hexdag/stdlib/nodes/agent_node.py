@@ -734,7 +734,3 @@ carried_data={'key': 'value'})"""
                     continue  # Skip this tool result and try the next one
 
         return None
-
-
-# Backward compatibility alias
-ReasoningAgentNode = ReActAgentNode

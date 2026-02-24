@@ -150,7 +150,8 @@ def main() -> int:
     generator = GuideGenerator()
 
     def write_with_newline(path: Path, content: str) -> None:
-        """Write content ensuring trailing newline."""
+        """Write content ensuring no trailing whitespace and a final newline."""
+        content = "\n".join(line.rstrip() for line in content.splitlines())
         if not content.endswith("\n"):
             content += "\n"
         path.write_text(content)
@@ -213,6 +214,26 @@ def main() -> int:
         print(f"Generated {output_path.relative_to(Path.cwd())}")
     except Exception as e:
         print(f"Error generating pipeline schema guide: {e}", file=sys.stderr)
+        return 1
+
+    # Generate CLI reference
+    try:
+        cli_reference = generator.generate_cli_reference()
+        output_path = DOCS_DIR / "cli_reference.md"
+        write_with_newline(output_path, cli_reference)
+        print(f"Generated {output_path.relative_to(Path.cwd())}")
+    except Exception as e:
+        print(f"Error generating CLI reference: {e}", file=sys.stderr)
+        return 1
+
+    # Generate YAML reference
+    try:
+        yaml_reference = generator.generate_yaml_reference()
+        output_path = DOCS_DIR / "yaml_reference.md"
+        write_with_newline(output_path, yaml_reference)
+        print(f"Generated {output_path.relative_to(Path.cwd())}")
+    except Exception as e:
+        print(f"Error generating YAML reference: {e}", file=sys.stderr)
         return 1
 
     print()

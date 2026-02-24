@@ -547,6 +547,6 @@ stdlib/lib/ (existing)               stdlib/lib/ (planned)
 ---
 
 **See Also**:
-- [Hexagonal Architecture](HEXAGONAL_ARCHITECTURE.md) -- Why ports and adapters
-- [Plugin System](PLUGIN_SYSTEM.md) -- Extending hexDAG with plugins
 - [Roadmap](ROADMAP.md) -- Development roadmap and planned extensions
+- [Adapter Guide](generated/mcp/adapter_guide.md) -- Creating custom adapters
+- [Extension Guide](generated/mcp/extension_guide.md) -- Extending hexDAG

@@ -108,15 +108,22 @@ Simple factory for creating function-based nodes with optional Pydantic validati
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `fn` | `string` | Yes | Module path string (e.g., 'myapp.process') |
+| `name` | `str` | Yes | Node name |
+| `fn` | `collections.abc.Callable[..., typing.Any] | str` | Yes | Function to execute (callable or module path strin... |
+| `input_schema` | `dict[str, typing.Any] | type[pydantic.main.BaseModel] | None` | No | Input schema for validation (if None, inferred fro... |
+| `output_schema` | `dict[str, typing.Any] | type[pydantic.main.BaseModel] | None` | No | Output schema for validation (if None, inferred fr... |
+| `deps` | `list[str] | None` | No | List of dependency node names |
+| `input_mapping` | `dict[str, str] | None` | No | Optional field mapping dict {target_field: "source... |
+| `unpack_input` | `bool` | No | If True, unpack input_mapping fields as individual... |
 
 **Example:**
 ```yaml
-kind: function_node
-metadata:
-  name: my_function_node
-spec:
-  fn: value
+- kind: function_node
+  metadata:
+    name: my_function
+  spec:
+    # Add configuration here
+  dependencies: []
 ```
 
 ### LLMNode
@@ -127,21 +134,23 @@ Unified LLM node - prompt building, API calls, and optional parsing.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `prompt_template` | `string` | Yes | Template for the user prompt (Jinja2-style {{varia... |
-| `output_schema` | `object` | No | Expected output schema for structured output valid... |
-| `system_prompt` | `string` | No | System message to prepend to the conversation |
-| `parse_json` | `boolean` | No | Parse the LLM response as JSON |
-| `parse_strategy` | `string` | No | JSON parsing strategy |
+| `name` | `str` | Yes | Node name (must be unique in the graph) |
+| `prompt_template` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate | None` | No | Template for the user prompt. Supports Jinja2-styl... |
+| `output_schema` | `dict[str, typing.Any] | type[pydantic.main.BaseModel] | None` | No | Expected output schema for structured output. If p... |
+| `system_prompt` | `str | None` | No | System message to prepend to the conversation. |
+| `parse_json` | `bool` | No | If True, parse the LLM response as JSON and valida... |
+| `parse_strategy` | `Literal['json', 'json_in_markdown', 'yaml']` | No | JSON parsing strategy: "json", "json_in_markdown",... |
+| `deps` | `list[str] | None` | No | List of dependency node names. |
+| `template` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate | None` | No |  |
 
 **Example:**
 ```yaml
-kind: l_l_m_node
-metadata:
-  name: my_l_l_m_node
-spec:
-  prompt_template: value
-  parse_json: false
-  parse_strategy: json
+- kind: l_l_m_node
+  metadata:
+    name: my_l_l_m
+  spec:
+    # Add configuration here
+  dependencies: []
 ```
 
 ### PortCallNode

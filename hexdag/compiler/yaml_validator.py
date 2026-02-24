@@ -342,7 +342,7 @@ class YamlValidator:
             result.add_error("Configuration must contain 'metadata' field")
             return
 
-        # Macro definitions have different structure (no spec field)
+        # Macro and Config definitions have different structure
         kind = config.get("kind")
         if kind == "Macro":
             # Macro has: metadata, parameters, nodes (no spec)
@@ -350,6 +350,13 @@ class YamlValidator:
                 result.add_error("Macro definition must contain 'nodes' field")
                 return
             # Skip rest of validation for Macro kind
+            return
+
+        if kind == "Config":
+            # Config has: metadata, spec (no nodes)
+            if "spec" not in config:
+                result.add_error("Config definition must contain 'spec' field")
+            # Skip pipeline-specific validation for Config kind
             return
 
         # For Pipeline and other kinds, validate spec
@@ -426,11 +433,16 @@ class YamlValidator:
                 macro_instances.add(node_id)
                 continue
 
+            # Merge settings + spec for parameter validation
+            # settings: contains literal config, spec: contains dynamic wiring
+            _settings = node.get("settings", {})
+            _spec = node.get("spec", {})
+            merged_params = {**_settings, **_spec}
+
             # Handle module paths (e.g., hexdag.stdlib.nodes.LLMNode)
             if "." in kind and ":" not in kind:
                 # This is a full module path, skip node type validation
                 # (resolution will happen at build time)
-                params = node.get("spec", {})
                 continue
 
             # Handle user-registered aliases (e.g., "fn" -> "hexdag.stdlib.nodes.FunctionNode")
@@ -439,7 +451,6 @@ class YamlValidator:
             if kind in get_registered_aliases():
                 # This is a registered alias, skip node type validation
                 # (resolution will happen at build time via resolver)
-                params = node.get("spec", {})
                 continue
 
             if NAMESPACE_SEPARATOR in kind:
@@ -453,7 +464,7 @@ class YamlValidator:
 
             qualified_node_type = f"{namespace}:{node_type}"
 
-            params = node.get("spec", {})
+            params = merged_params
 
             # Validate node type
             # Support both qualified (namespace:type) and simple (type) formats
@@ -556,7 +567,8 @@ class YamlValidator:
             if not node_id:
                 continue
 
-            deps = node.get("spec", {}).get("dependencies", [])
+            # Dependencies can be at node level or inside spec
+            deps = node.get("dependencies", []) or node.get("spec", {}).get("dependencies", [])
 
             if not isinstance(deps, list):
                 deps = [deps]

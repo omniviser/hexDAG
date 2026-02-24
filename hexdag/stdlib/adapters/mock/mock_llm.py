@@ -10,6 +10,7 @@ from hexdag.kernel.ports.llm import (
     SupportsGeneration,
     SupportsUsageTracking,
     TokenUsage,
+    ToolChoice,
 )
 
 if TYPE_CHECKING:
@@ -122,7 +123,7 @@ class MockLLM(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTra
         self,
         messages: MessageList,
         tools: list[dict[str, Any]],
-        tool_choice: str | dict[str, Any] = "auto",
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
     ) -> Any:
         """Mock implementation of tool calling with configurable tool call simulation.
 

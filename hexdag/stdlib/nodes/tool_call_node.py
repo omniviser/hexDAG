@@ -1,7 +1,6 @@
 """ToolCallNode - Execute a single tool call as a FunctionNode.
 
 This node wraps a tool function and executes it as a node.
-Used by ToolMacro to create parallel tool execution nodes.
 """
 
 import contextlib
@@ -50,7 +49,6 @@ class ToolCallNode(BaseNodeFactory):
     2. Resolves the tool function using the module path resolver
     3. Executes it and returns the result with metadata
     4. Emits ToolCalled and ToolCompleted events
-    Used by ToolMacro to create parallel tool execution nodes.
 
     Examples
     --------
@@ -86,7 +84,6 @@ class ToolCallNode(BaseNodeFactory):
 
     In a macro (automatic parallel execution)::
 
-        # ToolMacro creates multiple ToolCallNodes
         tool1 = ToolCallNode()(name="tool_1", tool_name="search", ...)
         tool2 = ToolCallNode()(name="tool_2", tool_name="calc", ...)
         # Orchestrator executes them in parallel automatically
