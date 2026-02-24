@@ -13,24 +13,24 @@ from hexdag.kernel.exceptions import VFSError
 from hexdag.stdlib.lib.process_registry import ProcessRegistry
 
 
-def _make_registry(*runs: PipelineRun) -> ProcessRegistry:
+async def _make_registry(*runs: PipelineRun) -> ProcessRegistry:
     """Create a ProcessRegistry pre-populated with runs."""
     reg = ProcessRegistry()
     for run in runs:
-        reg.register(run)
+        await reg.register(run)
     return reg
 
 
 class TestReaddir:
     @pytest.mark.asyncio()
     async def test_empty_registry(self) -> None:
-        provider = ProcRunsProvider(_make_registry())
+        provider = ProcRunsProvider(await _make_registry())
         entries = await provider.readdir("")
         assert entries == []
 
     @pytest.mark.asyncio()
     async def test_lists_all_runs(self) -> None:
-        reg = _make_registry(
+        reg = await _make_registry(
             PipelineRun(run_id="r1", pipeline_name="p1"),
             PipelineRun(run_id="r2", pipeline_name="p2"),
         )
@@ -44,7 +44,7 @@ class TestReaddir:
 
     @pytest.mark.asyncio()
     async def test_specific_run_is_not_directory(self) -> None:
-        reg = _make_registry(PipelineRun(run_id="r1", pipeline_name="p1"))
+        reg = await _make_registry(PipelineRun(run_id="r1", pipeline_name="p1"))
         provider = ProcRunsProvider(reg)
         with pytest.raises(VFSError, match="not a directory"):
             await provider.readdir("r1")
@@ -53,7 +53,9 @@ class TestReaddir:
 class TestRead:
     @pytest.mark.asyncio()
     async def test_read_run(self) -> None:
-        reg = _make_registry(PipelineRun(run_id="r1", pipeline_name="p1", status=RunStatus.RUNNING))
+        reg = await _make_registry(
+            PipelineRun(run_id="r1", pipeline_name="p1", status=RunStatus.RUNNING)
+        )
         provider = ProcRunsProvider(reg)
         result = await provider.read("r1")
         data = json.loads(result)
@@ -62,7 +64,7 @@ class TestRead:
 
     @pytest.mark.asyncio()
     async def test_read_run_status(self) -> None:
-        reg = _make_registry(
+        reg = await _make_registry(
             PipelineRun(run_id="r1", pipeline_name="p1", status=RunStatus.COMPLETED)
         )
         provider = ProcRunsProvider(reg)
@@ -72,13 +74,13 @@ class TestRead:
 
     @pytest.mark.asyncio()
     async def test_read_unknown_run_raises(self) -> None:
-        provider = ProcRunsProvider(_make_registry())
+        provider = ProcRunsProvider(await _make_registry())
         with pytest.raises(VFSError, match="not found"):
             await provider.read("nonexistent")
 
     @pytest.mark.asyncio()
     async def test_read_directory_raises(self) -> None:
-        provider = ProcRunsProvider(_make_registry())
+        provider = ProcRunsProvider(await _make_registry())
         with pytest.raises(VFSError, match="cannot read directory"):
             await provider.read("")
 
@@ -86,7 +88,7 @@ class TestRead:
 class TestStat:
     @pytest.mark.asyncio()
     async def test_stat_root(self) -> None:
-        reg = _make_registry(
+        reg = await _make_registry(
             PipelineRun(run_id="r1", pipeline_name="p1"),
             PipelineRun(run_id="r2", pipeline_name="p2"),
         )
@@ -98,7 +100,7 @@ class TestStat:
 
     @pytest.mark.asyncio()
     async def test_stat_specific_run(self) -> None:
-        reg = _make_registry(
+        reg = await _make_registry(
             PipelineRun(
                 run_id="r1",
                 pipeline_name="order-processing",
@@ -118,6 +120,6 @@ class TestStat:
 
     @pytest.mark.asyncio()
     async def test_stat_unknown_run_raises(self) -> None:
-        provider = ProcRunsProvider(_make_registry())
+        provider = ProcRunsProvider(await _make_registry())
         with pytest.raises(VFSError, match="not found"):
             await provider.stat("nonexistent")

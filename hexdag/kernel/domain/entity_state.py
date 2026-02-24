@@ -19,6 +19,7 @@ Example::
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -73,3 +74,13 @@ class StateTransition:
     to_state: str
     timestamp: float = field(default_factory=time.time)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+def state_transition_to_storage(transition: StateTransition) -> dict[str, Any]:
+    """Serialise a StateTransition to a storage-ready dict."""
+    return dataclasses.asdict(transition)
+
+
+def state_transition_from_storage(data: dict[str, Any]) -> StateTransition:
+    """Reconstruct a StateTransition from a storage dict."""
+    return StateTransition(**data)

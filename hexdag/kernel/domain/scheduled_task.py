@@ -6,6 +6,7 @@ to track delayed and recurring pipeline executions.
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -48,3 +49,16 @@ class ScheduledTask:
     run_count: int = 0
     last_run_id: str | None = None
     error: str | None = None
+
+
+def scheduled_task_to_storage(task: ScheduledTask) -> dict[str, Any]:
+    """Serialise a ScheduledTask to a storage-ready dict."""
+    return dataclasses.asdict(task)
+
+
+def scheduled_task_from_storage(data: dict[str, Any]) -> ScheduledTask:
+    """Reconstruct a ScheduledTask from a storage dict."""
+    data = dict(data)
+    data["schedule_type"] = ScheduleType(data["schedule_type"])
+    data["status"] = TaskStatus(data["status"])
+    return ScheduledTask(**data)

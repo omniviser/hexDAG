@@ -173,8 +173,82 @@ class SupportsTransactions(Protocol):
         ...
 
 
+# ---------------------------------------------------------------------------
+# Collection storage capability (lib persistence)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class SupportsCollectionStorage(Protocol):
+    """Collection-scoped document storage for lib persistence.
+
+    Provides CRUD operations scoped by collection name, where each
+    record is a ``dict[str, Any]`` identified by a string key.
+
+    Libs (ProcessRegistry, EntityState, Scheduler) use this protocol
+    to optionally persist their state to a pluggable backend.  When no
+    backend is provided they fall back to in-memory dicts.
+
+    Example::
+
+        class SQLCollectionStorage:
+            async def asave(self, collection: str, key: str, data: dict[str, Any]) -> None:
+                ...
+    """
+
+    @abstractmethod
+    async def asave(self, collection: str, key: str, data: dict[str, Any]) -> None:
+        """Save a document to a collection (upsert semantics).
+
+        Args
+        ----
+            collection: The collection name (e.g. ``"pipeline_runs"``).
+            key: Unique identifier within the collection.
+            data: The document to store.
+        """
+        ...
+
+    @abstractmethod
+    async def aload(self, collection: str, key: str) -> dict[str, Any] | None:
+        """Load a document by key.  Returns ``None`` if not found.
+
+        Args
+        ----
+            collection: The collection name.
+            key: Unique identifier within the collection.
+        """
+        ...
+
+    @abstractmethod
+    async def aquery(
+        self, collection: str, filters: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Query documents in a collection, optionally filtered.
+
+        Filters use exact equality matching on document fields.
+
+        Args
+        ----
+            collection: The collection name.
+            filters: Optional dict of field-name → value equality filters.
+        """
+        ...
+
+    @abstractmethod
+    async def adelete(self, collection: str, key: str) -> bool:
+        """Delete a document.  Returns ``True`` if it existed.
+
+        Args
+        ----
+            collection: The collection name.
+            key: Unique identifier within the collection.
+        """
+        ...
+
+
 __all__ = [
     "DataStore",
+    "SupportsCollectionStorage",
     "SupportsKeyValue",
     "SupportsQuery",
     "SupportsSchema",

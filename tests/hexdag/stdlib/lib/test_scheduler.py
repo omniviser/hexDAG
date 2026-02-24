@@ -239,3 +239,125 @@ class TestTeardown:
         await asyncio.sleep(0.15)
         # After teardown, no more executions
         assert len(spawner.calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# Scheduler — with SupportsCollectionStorage
+# ---------------------------------------------------------------------------
+
+
+class TestSchedulerWithStorage:
+    @pytest.mark.asyncio()
+    async def test_schedule_once_persists(self) -> None:
+        from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
+
+        storage = InMemoryCollectionStorage()
+        sched = Scheduler(storage=storage)
+        result = await sched.aschedule_once("p1", {"x": 1}, delay_seconds=100)
+        task_id = result["task_id"]
+        doc = await storage.aload("scheduled_tasks", task_id)
+        assert doc is not None
+        assert doc["pipeline_name"] == "p1"
+        assert doc["schedule_type"] == "once"
+        assert doc["status"] == "pending"
+        await sched.ateardown()
+
+    @pytest.mark.asyncio()
+    async def test_schedule_recurring_persists(self) -> None:
+        from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
+
+        storage = InMemoryCollectionStorage()
+        sched = Scheduler(storage=storage)
+        result = await sched.aschedule_recurring("p1", interval_seconds=100)
+        task_id = result["task_id"]
+        doc = await storage.aload("scheduled_tasks", task_id)
+        assert doc is not None
+        assert doc["schedule_type"] == "recurring"
+        assert doc["interval_seconds"] == 100
+        await sched.ateardown()
+
+    @pytest.mark.asyncio()
+    async def test_cancel_updates_storage(self) -> None:
+        from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
+
+        storage = InMemoryCollectionStorage()
+        sched = Scheduler(storage=storage)
+        result = await sched.aschedule_once("p1", delay_seconds=100)
+        task_id = result["task_id"]
+        await sched.acancel(task_id)
+        doc = await storage.aload("scheduled_tasks", task_id)
+        assert doc is not None
+        assert doc["status"] == "cancelled"
+        await sched.ateardown()
+
+    @pytest.mark.asyncio()
+    async def test_completed_task_updates_storage(self) -> None:
+        from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
+
+        storage = InMemoryCollectionStorage()
+        spawner = _MockSpawner()
+        sched = Scheduler(spawner=spawner, storage=storage)
+        result = await sched.aschedule_once("p1", delay_seconds=0.05)
+        task_id = result["task_id"]
+        await asyncio.sleep(0.2)
+        doc = await storage.aload("scheduled_tasks", task_id)
+        assert doc is not None
+        assert doc["status"] == "completed"
+        await sched.ateardown()
+
+    @pytest.mark.asyncio()
+    async def test_alist_uses_storage(self) -> None:
+        from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
+
+        storage = InMemoryCollectionStorage()
+        sched = Scheduler(storage=storage)
+        await sched.aschedule_once("p1", delay_seconds=100, ref_id="r1")
+        await sched.aschedule_once("p2", delay_seconds=100, ref_id="r2")
+        result = await sched.alist_scheduled(ref_id="r1")
+        assert len(result) == 1
+        assert result[0]["ref_id"] == "r1"
+        await sched.ateardown()
+
+    @pytest.mark.asyncio()
+    async def test_rehydration_from_storage(self) -> None:
+        """Scheduler.asetup() loads persisted pending tasks."""
+        import time
+
+        from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
+
+        storage = InMemoryCollectionStorage()
+        await storage.asave(
+            "scheduled_tasks",
+            "t-rehydrate",
+            {
+                "task_id": "t-rehydrate",
+                "pipeline_name": "p1",
+                "schedule_type": "once",
+                "initial_input": {},
+                "delay_seconds": 0.0,
+                "interval_seconds": None,
+                "ref_id": None,
+                "ref_type": None,
+                "status": "pending",
+                "created_at": time.time(),
+                "next_run_at": time.time() + 100,
+                "last_run_at": None,
+                "run_count": 0,
+                "last_run_id": None,
+                "error": None,
+            },
+        )
+        sched = Scheduler(storage=storage)
+        await sched.asetup()
+        assert "t-rehydrate" in sched._tasks
+        await sched.ateardown()
+
+    @pytest.mark.asyncio()
+    async def test_backward_compat_no_storage(self) -> None:
+        """Scheduler without storage works exactly as before."""
+        sched = Scheduler()
+        result = await sched.aschedule_once("p1", delay_seconds=100)
+        assert result["pipeline_name"] == "p1"
+        tasks = await sched.alist_scheduled()
+        assert len(tasks) == 1
+        await sched.ateardown()

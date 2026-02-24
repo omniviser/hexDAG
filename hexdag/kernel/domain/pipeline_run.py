@@ -6,6 +6,7 @@ to track the state and metadata of pipeline executions.
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -39,3 +40,15 @@ class PipelineRun:
     node_results: dict[str, Any] | None = None
     error: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+def pipeline_run_to_storage(run: PipelineRun) -> dict[str, Any]:
+    """Serialise a PipelineRun to a storage-ready dict."""
+    return dataclasses.asdict(run)
+
+
+def pipeline_run_from_storage(data: dict[str, Any]) -> PipelineRun:
+    """Reconstruct a PipelineRun from a storage dict."""
+    data = dict(data)
+    data["status"] = RunStatus(data["status"])
+    return PipelineRun(**data)
