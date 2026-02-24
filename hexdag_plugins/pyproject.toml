@@ -1,6 +1,6 @@
 [project]
 name = "hexdag-plugins"
-version = "0.2.0.dev1"
+version = "0.2.0.dev2"
 description = "Official plugins for hexDAG framework - Azure, MySQL, ETL, and storage adapters"
 readme = "README.md"
 license = { text = "Apache-2.0" }
