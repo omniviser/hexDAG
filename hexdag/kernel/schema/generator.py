@@ -70,6 +70,22 @@ class SchemaGenerator:
         "unpack_input",
     }
 
+    # Dynamic params: runtime wiring that is never a literal setting.
+    DYNAMIC_PARAMS = {"input_mapping", "unpack_input"}
+
+    # Structural params: node identity/wiring, not user-configurable settings.
+    _STRUCTURAL_PARAMS = {"name", "deps", "dependencies", "self", "cls", "args", "kwargs"}
+
+    # NodeSpec-level params handled by BaseNodeFactory.extract_framework_params().
+    _NODESPEC_FRAMEWORK_PARAMS = {
+        "timeout",
+        "max_retries",
+        "retry_delay",
+        "retry_backoff",
+        "retry_max_delay",
+        "when",
+    }
+
     @staticmethod
     def from_callable(factory: Callable, format: str = "dict") -> dict | str:
         """Generate schema from factory __call__ signature.
@@ -653,6 +669,64 @@ class SchemaGenerator:
                         param_docs[current_param] = line_stripped
 
         return param_docs
+
+    @staticmethod
+    def get_literal_param_names(factory: Callable) -> frozenset[str]:
+        """Return the set of literal parameter names for a node factory.
+
+        Introspects the factory's ``__call__`` signature and returns all
+        parameter names that are **not** structural, dynamic, or framework
+        params.  This is the set of params that belong in ``settings:``.
+
+        Parameters
+        ----------
+        factory : Callable
+            Node factory class or instance (must be callable)
+
+        Returns
+        -------
+        frozenset[str]
+            Param names that are literal settings
+        """
+        skip = (
+            SchemaGenerator._STRUCTURAL_PARAMS
+            | SchemaGenerator.DYNAMIC_PARAMS
+            | SchemaGenerator._NODESPEC_FRAMEWORK_PARAMS
+        )
+
+        try:
+            sig = inspect.signature(factory)
+        except (ValueError, TypeError):
+            return frozenset()
+
+        return frozenset(
+            name
+            for name, param in sig.parameters.items()
+            if name not in skip
+            and param.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        )
+
+    @staticmethod
+    def describe_node_literals(node_spec: Any) -> dict[str, Any]:
+        """Generate an introspectable description of a node's literal config.
+
+        Parameters
+        ----------
+        node_spec : NodeSpec
+            Built node specification (uses duck typing to avoid circular import)
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary with ``name``, ``factory_class``, ``literals``,
+            and ``input_mapping``.
+        """
+        return {
+            "name": node_spec.name,
+            "factory_class": node_spec.factory_class,
+            "literals": dict(node_spec.literals) if node_spec.literals else {},
+            "input_mapping": node_spec.params.get("input_mapping") if node_spec.params else None,
+        }
 
     @staticmethod
     def _format_output(schema: dict, format: str) -> dict | str:

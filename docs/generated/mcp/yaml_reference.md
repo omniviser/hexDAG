@@ -1,24 +1,46 @@
-# hexDAG Pipeline Schema Reference
+# hexDAG YAML Manifest Reference
 
-This reference is auto-generated from the pipeline JSON schema.
+This reference is auto-generated from the pipeline JSON schema and compiler plugin definitions.
 
-## Overview
+## Manifest Kinds
 
-hexDAG pipelines are defined in YAML using a Kubernetes-like structure.
-The schema provides validation and IDE autocompletion support.
+hexDAG YAML files use a Kubernetes-like manifest format. Three kinds are supported:
 
-## Pipeline Structure
+| Kind | Purpose |
+|------|---------|
+| `Pipeline` | Define a workflow with nodes and ports |
+| `Macro` | Define a reusable node template |
+| `Config` | Define runtime configuration |
+
+Multiple kinds can appear in a single file using YAML multi-document syntax (`---` separator).
+
+## kind: Pipeline
+
+The primary manifest kind. Defines a DAG of nodes with ports and events.
+
+### Structure
 
 ```yaml
 apiVersion: hexdag/v1
 kind: Pipeline
 metadata:
   name: my-pipeline
-  description: Pipeline description
+  description: Optional description
 spec:
-  ports: {}     # Adapter configurations
-  nodes: []     # Processing nodes
-  events: {}    # Event handlers
+  ports:      # Adapter configurations
+    llm:
+      adapter: hexdag.stdlib.adapters.openai.OpenAIAdapter
+      config:
+        model: gpt-4
+        api_key: ${OPENAI_API_KEY}
+  nodes:      # Processing nodes
+    - kind: llm_node
+      metadata:
+        name: analyzer
+      spec:
+        prompt_template: "Analyze: {{input}}"
+      dependencies: []
+  events: {}  # Optional event handlers
 ```
 
 ## Node Types
@@ -239,86 +261,139 @@ Specification for tool_call_node type
   dependencies: []
 ```
 
-## Ports Configuration
+## kind: Macro
 
-Ports connect pipelines to external services:
+Define reusable node templates with parameters. Macros are expanded inline at build time.
 
-```yaml
-spec:
-  ports:
-    llm:
-      adapter: hexdag.stdlib.adapters.openai.OpenAIAdapter
-      config:
-        api_key: ${OPENAI_API_KEY}
-        model: gpt-4
-    memory:
-      adapter: hexdag.stdlib.adapters.memory.InMemoryMemory
-    database:
-      adapter: hexdag.stdlib.adapters.database.sqlite.SQLiteAdapter
-      config:
-        db_path: ./data.db
-```
-
-### Available Port Types
-
-| Port | Purpose |
-|------|---------|
-| `llm` | Language model interactions |
-| `memory` | Persistent agent memory |
-| `database` | Data persistence |
-| `secret` | Secret/credential management |
-| `tool_router` | Tool invocation routing |
-
-## Events Configuration
-
-Configure event handlers for observability:
+### Structure
 
 ```yaml
+apiVersion: hexdag/v1
+kind: Macro
+metadata:
+  name: retry_workflow
+  description: Retry logic with exponential backoff
+parameters:
+  - name: max_retries
+    type: int
+    default: 3
+  - name: fn
+    type: str
+    required: true
+nodes:
+  - kind: function_node
+    metadata:
+      name: "{{name}}_attempt"
+    spec:
+      fn: "{{fn}}"
+outputs:           # Optional output mapping
+  result: "{{name}}_attempt.result"
+```
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `metadata.name` | string | Yes | Unique macro name |
+| `metadata.description` | string | No | Human-readable description |
+| `parameters` | list | No | Parameter definitions |
+| `parameters[].name` | string | Yes | Parameter name |
+| `parameters[].type` | string | No | Type hint (str, int, float, bool) |
+| `parameters[].default` | any | No | Default value |
+| `parameters[].required` | bool | No | Whether parameter is required |
+| `nodes` | list | Yes | Node definitions (same as Pipeline nodes) |
+| `outputs` | object | No | Output field mappings |
+
+### Using Macros
+
+```yaml
+# Define macro in same file or separate file
+---
+kind: Macro
+metadata:
+  name: retry_workflow
+parameters:
+  - name: fn
+    required: true
+nodes:
+  - kind: function_node
+    metadata:
+      name: "{{name}}_run"
+    spec:
+      fn: "{{fn}}"
+---
+kind: Pipeline
+metadata:
+  name: my-pipeline
 spec:
-  events:
-    node_failed:
-      - type: alert
-        target: pagerduty
-        severity: high
-    pipeline_completed:
-      - type: metrics
-        target: datadog
+  nodes:
+    - kind: retry_workflow     # Use macro by name
+      metadata:
+        name: fetch_data
+      spec:
+        fn: myapp.fetch
 ```
 
-### Event Types
+## kind: Config
 
-| Event | When Triggered |
-|-------|----------------|
-| `pipeline_started` | Pipeline execution begins |
-| `pipeline_completed` | Pipeline execution finishes |
-| `node_started` | Node execution begins |
-| `node_completed` | Node execution finishes |
-| `node_failed` | Node execution fails |
+Define runtime configuration inline alongside pipelines, or in a standalone file.
 
-### Handler Types
+### Structure
 
-| Type | Purpose |
-|------|---------|
-| `alert` | Send alerts (PagerDuty, Slack) |
-| `metrics` | Emit metrics (Datadog, Prometheus) |
-| `log` | Write to logs |
-| `webhook` | Call external webhooks |
-| `callback` | Execute Python callbacks |
-
-## IDE Setup
-
-### VS Code
-
-Add to `.vscode/settings.json`:
-
-```json
-{
-  "yaml.schemas": {
-    "./schemas/pipeline-schema.json": ["*.yaml", "pipelines/*.yaml"]
-  }
-}
+```yaml
+apiVersion: hexdag/v1
+kind: Config
+metadata:
+  name: dev-config
+spec:
+  modules:
+    - myapp.adapters
+    - myapp.nodes
+  plugins:
+    - hexdag-openai
+  dev_mode: true
+  logging:
+    level: DEBUG
+    format: rich
+  orchestrator:
+    max_concurrent_nodes: 5
+    default_node_timeout: 60.0
+  limits:
+    max_llm_calls: 100
+    max_cost_usd: 10.0
+  caps:
+    deny: ["secret"]
 ```
 
-### Schema Location
+### Fields
 
-The schema file is at `schemas/pipeline-schema.json` and is auto-generated from node `_yaml_schema` attributes.
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `modules` | list[str] | `[]` | Module paths to load |
+| `plugins` | list[str] | `[]` | Plugin names to load |
+| `dev_mode` | bool | `false` | Enable development mode |
+| `logging.level` | str | `INFO` | Log level (DEBUG/INFO/WARNING/ERROR) |
+| `logging.format` | str | `structured` | console, json, structured, dual, rich |
+| `logging.output_file` | str | `null` | File path for log output |
+| `logging.use_color` | bool | `true` | Use ANSI color codes |
+| `logging.use_rich` | bool | `false` | Use Rich for enhanced console output |
+| `logging.dual_sink` | bool | `false` | Pretty console + structured JSON |
+| `orchestrator.max_concurrent_nodes` | int | — | Max parallel node execution |
+| `orchestrator.default_node_timeout` | float | — | Per-node timeout in seconds |
+| `limits.max_total_tokens` | int | `null` | Max tokens across all LLM calls |
+| `limits.max_llm_calls` | int | `null` | Max number of LLM calls |
+| `limits.max_tool_calls` | int | `null` | Max number of tool calls |
+| `limits.max_cost_usd` | float | `null` | Max cost in USD |
+| `limits.warning_threshold` | float | `0.8` | Fraction at which to warn |
+| `caps.default_set` | list[str] | `null` | Default capability allowlist |
+| `caps.deny` | list[str] | `null` | Always-denied capabilities |
+
+### Config Loading Priority
+
+Configuration is loaded in this order (later overrides earlier):
+
+1. Built-in defaults
+2. `pyproject.toml` `[tool.hexdag]` section
+3. `kind: Config` YAML file (explicit path or `HEXDAG_CONFIG` env var)
+4. Inline `kind: Config` document in multi-doc YAML
+5. Environment variables (`HEXDAG_LOG_LEVEL`, `HEXDAG_DEV_MODE`, etc.)

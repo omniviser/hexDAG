@@ -26,26 +26,26 @@ class TestInit:
     """Test the init command."""
 
     def test_init_creates_config_in_current_dir(self, runner, tmp_path):
-        """Test init creates hexdag.toml in current directory."""
+        """Test init creates hexdag.yaml in current directory."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(app, [])
             assert result.exit_code == 0
 
-            config_file = Path("hexdag.toml")
+            config_file = Path("hexdag.yaml")
             assert config_file.exists()
 
             content = config_file.read_text()
-            assert "HexDAG Configuration" in content
+            assert "kind: Config" in content
             assert "hexdag.kernel.ports" in content
 
     def test_init_creates_config_in_specified_dir(self, runner, tmp_path):
-        """Test init creates hexdag.toml in specified directory."""
+        """Test init creates hexdag.yaml in specified directory."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             test_dir = Path("my_project")
             result = runner.invoke(app, [str(test_dir)])
             assert result.exit_code == 0
 
-            config_file = test_dir / "hexdag.toml"
+            config_file = test_dir / "hexdag.yaml"
             assert config_file.exists()
 
     def test_init_with_adapters(self, runner, tmp_path):
@@ -54,7 +54,7 @@ class TestInit:
             result = runner.invoke(app, ["--with", "openai,anthropic"])
             assert result.exit_code == 0
 
-            config_file = Path("hexdag.toml")
+            config_file = Path("hexdag.yaml")
             content = config_file.read_text()
             assert "openai" in content.lower()
             assert "anthropic" in content.lower()
@@ -63,7 +63,7 @@ class TestInit:
         """Test init --force overwrites existing config."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # Create existing config
-            config_file = Path("hexdag.toml")
+            config_file = Path("hexdag.yaml")
             config_file.write_text("# Old config")
 
             result = runner.invoke(app, ["--force"])
@@ -71,14 +71,14 @@ class TestInit:
 
             # Should be overwritten
             content = config_file.read_text()
-            assert "HexDAG Configuration" in content
+            assert "kind: Config" in content
             assert "Old config" not in content
 
     def test_init_refuses_overwrite_without_force(self, runner, tmp_path):
         """Test init refuses to overwrite without --force."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # Create existing config
-            config_file = Path("hexdag.toml")
+            config_file = Path("hexdag.yaml")
             config_file.write_text("# Old config")
 
             # Simulate user declining overwrite
@@ -90,7 +90,7 @@ class TestInit:
         """Test init overwrites when user confirms."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # Create existing config
-            config_file = Path("hexdag.toml")
+            config_file = Path("hexdag.yaml")
             config_file.write_text("# Old config")
 
             # Simulate user confirming overwrite
@@ -98,7 +98,7 @@ class TestInit:
             assert result.exit_code == 0
 
             content = config_file.read_text()
-            assert "HexDAG Configuration" in content
+            assert "kind: Config" in content
 
     def test_init_creates_directory_if_not_exists(self, runner, tmp_path):
         """Test init creates directory if it doesn't exist."""
@@ -108,7 +108,7 @@ class TestInit:
             assert result.exit_code == 0
 
             assert nested_dir.exists()
-            assert (nested_dir / "hexdag.toml").exists()
+            assert (nested_dir / "hexdag.yaml").exists()
 
     def test_init_shows_next_steps(self, runner, tmp_path):
         """Test init shows helpful next steps."""
@@ -116,7 +116,7 @@ class TestInit:
             result = runner.invoke(app, [])
             assert result.exit_code == 0
             assert "Next steps:" in result.stdout
-            assert "hexdag.toml" in result.stdout
+            assert "hexdag.yaml" in result.stdout
 
     def test_init_with_context_invoked_subcommand(self, tmp_path):
         """Test init callback returns early when subcommand is invoked."""
@@ -134,7 +134,7 @@ class TestGenerateConfig:
     def test_generate_config_no_adapters(self):
         """Test generating config without adapters."""
         config = _generate_config([])
-        assert "HexDAG Configuration" in config
+        assert "kind: Config" in config
         assert "hexdag.kernel.ports" in config
         assert "hexdag.drivers.mock" in config
 
@@ -142,40 +142,30 @@ class TestGenerateConfig:
         """Test generating config with OpenAI adapter."""
         config = _generate_config(["openai"])
         assert "openai" in config.lower()
-        assert "OPENAI_API_KEY" in config
 
     def test_generate_config_with_anthropic(self):
         """Test generating config with Anthropic adapter."""
         config = _generate_config(["anthropic"])
         assert "anthropic" in config.lower()
-        assert "ANTHROPIC_API_KEY" in config
-
-    def test_generate_config_with_local(self):
-        """Test generating config with local adapter."""
-        config = _generate_config(["local"])
-        assert "local" in config.lower()
-        assert "memory_max_size" in config
 
     def test_generate_config_with_multiple_adapters(self):
         """Test generating config with multiple adapters."""
-        config = _generate_config(["openai", "anthropic", "local"])
+        config = _generate_config(["openai", "anthropic"])
         assert "openai" in config.lower()
         assert "anthropic" in config.lower()
-        assert "local" in config.lower()
 
     def test_generate_config_structure(self):
-        """Test generated config has correct structure."""
+        """Test generated config has correct YAML structure."""
         config = _generate_config([])
-        lines = config.split("\n")
 
+        # Should have kind: Config manifest structure
+        assert "kind: Config" in config
+        assert "metadata:" in config
+        assert "spec:" in config
         # Should have modules section
-        assert any("modules" in line for line in lines)
+        assert "modules:" in config
         # Should have plugins section
-        assert any("plugins" in line for line in lines)
-        # Should have dev_mode
-        assert any("dev_mode" in line for line in lines)
-        # Should have settings section
-        assert any("[settings]" in line for line in lines)
+        assert "plugins:" in config
 
 
 class TestPrintAdapterInfo:

@@ -31,17 +31,7 @@ class FunctionNode(BaseNodeFactory):
     _hexdag_icon = "Code"
     _hexdag_color = "#3b82f6"  # blue-500
 
-    # Explicit schema for Studio UI
-    _yaml_schema = {
-        "type": "object",
-        "properties": {
-            "fn": {
-                "type": "string",
-                "description": "Module path string (e.g., 'myapp.process')",
-            },
-        },
-        "required": ["fn"],
-    }
+    # Schema is auto-generated from __call__ signature by SchemaGenerator
 
     def __call__(
         self,

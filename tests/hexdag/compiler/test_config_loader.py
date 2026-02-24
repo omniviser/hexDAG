@@ -1,6 +1,7 @@
 """Tests for the config loader module (compiler location).
 
-This module tests TOML configuration loading for HexDAG.
+This module tests configuration loading for HexDAG, covering both
+kind: Config YAML manifests and pyproject.toml [tool.hexdag].
 """
 
 from __future__ import annotations
@@ -125,8 +126,8 @@ class TestConfigLoader:
     def test_find_config_file_explicit_path(self, tmp_path: Path) -> None:
         """Test finding config file with explicit path."""
         loader = ConfigLoader()
-        config_file = tmp_path / "test.toml"
-        config_file.write_text("[tool.hexdag]\nmodules = []")
+        config_file = tmp_path / "test.yaml"
+        config_file.write_text("kind: Config\nmetadata:\n  name: test\nspec: {}")
 
         result = loader._find_config_file(config_file)
         assert result == config_file
@@ -135,14 +136,14 @@ class TestConfigLoader:
         """Test that missing explicit path raises FileNotFoundError."""
         loader = ConfigLoader()
         with pytest.raises(FileNotFoundError) as exc_info:
-            loader._find_config_file(tmp_path / "nonexistent.toml")
+            loader._find_config_file(tmp_path / "nonexistent.yaml")
         assert "not found" in str(exc_info.value)
 
     def test_find_config_file_from_env(self, tmp_path: Path) -> None:
         """Test finding config file from HEXDAG_CONFIG_PATH."""
         loader = ConfigLoader()
-        config_file = tmp_path / "env_config.toml"
-        config_file.write_text("[tool.hexdag]\nmodules = []")
+        config_file = tmp_path / "env_config.yaml"
+        config_file.write_text("kind: Config\nmetadata:\n  name: test\nspec: {}")
 
         os.environ["HEXDAG_CONFIG_PATH"] = str(config_file)
         try:
@@ -320,26 +321,6 @@ class TestConfigLoader:
         finally:
             del os.environ["HEXDAG_LOG_COLOR"]
 
-    def test_load_from_toml(self, tmp_path: Path) -> None:
-        """Test loading config from TOML file."""
-        clear_config_cache()
-        config_file = tmp_path / "hexdag.toml"
-        config_file.write_text("""
-[tool.hexdag]
-modules = ["myapp.adapters"]
-plugins = ["hexdag-openai"]
-dev_mode = true
-
-[tool.hexdag.logging]
-level = "DEBUG"
-""")
-        loader = ConfigLoader()
-        config = loader.load_from_toml(config_file)
-        assert config.modules == ["myapp.adapters"]
-        assert config.plugins == ["hexdag-openai"]
-        assert config.dev_mode is True
-        assert config.logging.level == "DEBUG"
-
     def test_load_from_pyproject_toml(self, tmp_path: Path) -> None:
         """Test loading config from pyproject.toml."""
         clear_config_cache()
@@ -353,22 +334,191 @@ modules = ["myapp.nodes"]
 dev_mode = false
 """)
         loader = ConfigLoader()
-        config = loader.load_from_toml(config_file)
+        config = loader.load_config_file(config_file)
         assert config.modules == ["myapp.nodes"]
         assert config.dev_mode is False
 
-    def test_load_from_flat_toml(self, tmp_path: Path) -> None:
-        """Test loading config from flat hexdag.toml (no [tool.hexdag])."""
+
+class TestYamlConfigLoading:
+    """Tests for YAML kind: Config file loading."""
+
+    def test_load_yaml_config_full_manifest(self, tmp_path: Path) -> None:
+        """Test loading full kind: Config YAML manifest."""
         clear_config_cache()
-        config_file = tmp_path / "hexdag.toml"
-        config_file.write_text("""
-modules = ["flat.module"]
-dev_mode = true
+        config_file = tmp_path / "hexdag.yaml"
+        config_file.write_text("""\
+kind: Config
+metadata:
+  name: test-config
+spec:
+  modules:
+    - myapp.adapters
+  plugins:
+    - hexdag-openai
+  logging:
+    level: DEBUG
+  kernel:
+    max_concurrent_nodes: 5
+    default_node_timeout: 60.0
+  limits:
+    max_llm_calls: 100
+    max_cost_usd: 10.0
+  caps:
+    default_set:
+      - llm
+      - memory
+    deny:
+      - secret
 """)
-        loader = ConfigLoader()
-        config = loader.load_from_toml(config_file)
-        assert config.modules == ["flat.module"]
+        config = load_config(config_file)
+        assert config.modules == ["myapp.adapters"]
+        assert config.plugins == ["hexdag-openai"]
+        assert config.logging.level == "DEBUG"
+        assert config.orchestrator.max_concurrent_nodes == 5
+        assert config.orchestrator.default_node_timeout == 60.0
+        assert config.limits.max_llm_calls == 100
+        assert config.limits.max_cost_usd == 10.0
+        assert config.caps.default_set == ["llm", "memory"]
+        assert config.caps.deny == ["secret"]
+
+    def test_yaml_env_var_substitution(self, tmp_path: Path) -> None:
+        """Test env var substitution works in YAML config."""
+        clear_config_cache()
+        os.environ["TEST_MODULE"] = "myapp.custom"
+        try:
+            config_file = tmp_path / "config.yaml"
+            config_file.write_text("""\
+kind: Config
+metadata:
+  name: env-test
+spec:
+  modules:
+    - ${TEST_MODULE}
+""")
+            config = load_config(config_file)
+            assert config.modules == ["myapp.custom"]
+        finally:
+            del os.environ["TEST_MODULE"]
+
+    def test_yaml_config_missing_kind_raises(self, tmp_path: Path) -> None:
+        """Test YAML without kind: Config raises error."""
+        clear_config_cache()
+        config_file = tmp_path / "bad.yaml"
+        config_file.write_text("modules:\n  - foo\n")
+        with pytest.raises(ValueError, match="kind: Config"):
+            loader = ConfigLoader()
+            loader.load_config_file(config_file)
+
+    def test_yaml_config_wrong_kind_raises(self, tmp_path: Path) -> None:
+        """Test kind: Pipeline as standalone config raises error."""
+        clear_config_cache()
+        config_file = tmp_path / "wrong.yaml"
+        config_file.write_text("""\
+kind: Pipeline
+metadata:
+  name: not-a-config
+spec:
+  nodes: []
+""")
+        with pytest.raises(ValueError, match="kind: Config"):
+            loader = ConfigLoader()
+            loader.load_config_file(config_file)
+
+    def test_yaml_config_invalid_yaml_raises(self, tmp_path: Path) -> None:
+        """Test that non-dict YAML raises error."""
+        clear_config_cache()
+        config_file = tmp_path / "invalid.yaml"
+        config_file.write_text("- just\n- a\n- list\n")
+        with pytest.raises(ValueError, match="expected a mapping"):
+            loader = ConfigLoader()
+            loader.load_config_file(config_file)
+
+    def test_yaml_config_empty_spec(self, tmp_path: Path) -> None:
+        """Test kind: Config with empty spec returns default-like config."""
+        clear_config_cache()
+        config_file = tmp_path / "minimal.yaml"
+        config_file.write_text("""\
+kind: Config
+metadata:
+  name: minimal
+spec: {}
+""")
+        config = load_config(config_file)
+        assert config.modules == []
+        assert config.dev_mode is False
+
+    def test_explicit_path_loads_yaml(self, tmp_path: Path) -> None:
+        """Test explicit path argument pointing to .yaml file."""
+        clear_config_cache()
+        config_file = tmp_path / "custom-name.yaml"
+        config_file.write_text("""\
+kind: Config
+metadata:
+  name: custom
+spec:
+  dev_mode: true
+""")
+        config = load_config(config_file)
         assert config.dev_mode is True
+
+    def test_env_var_path_loads_yaml(self, tmp_path: Path) -> None:
+        """Test HEXDAG_CONFIG_PATH env var pointing to YAML file."""
+        clear_config_cache()
+        config_file = tmp_path / "env-config.yaml"
+        config_file.write_text("""\
+kind: Config
+metadata:
+  name: from-env
+spec:
+  modules:
+    - env.module
+""")
+        os.environ["HEXDAG_CONFIG_PATH"] = str(config_file)
+        try:
+            config = load_config()
+            assert config.modules == ["env.module"]
+        finally:
+            del os.environ["HEXDAG_CONFIG_PATH"]
+
+
+class TestConfigFileDiscovery:
+    """Tests for config file discovery order."""
+
+    def test_auto_discovery_does_not_find_hexdag_toml(self, tmp_path: Path) -> None:
+        """Test that auto-discovery does NOT find hexdag.toml."""
+        import pathlib
+
+        clear_config_cache()
+        # Create hexdag.toml - should NOT be discovered
+        (tmp_path / "hexdag.toml").write_text('modules = ["toml.mod"]')
+
+        original_dir = pathlib.Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            loader = ConfigLoader()
+            with pytest.raises(FileNotFoundError):
+                loader._find_config_file(None)
+        finally:
+            os.chdir(original_dir)
+
+    def test_auto_discovery_finds_pyproject(self, tmp_path: Path) -> None:
+        """Test that auto-discovery finds pyproject.toml."""
+        import pathlib
+
+        clear_config_cache()
+        (tmp_path / "pyproject.toml").write_text("""
+[tool.hexdag]
+modules = ["pyproject.mod"]
+""")
+
+        original_dir = pathlib.Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            loader = ConfigLoader()
+            result = loader._find_config_file(None)
+            assert result.name == "pyproject.toml"
+        finally:
+            os.chdir(original_dir)
 
 
 class TestLoadConfig:
@@ -377,9 +527,14 @@ class TestLoadConfig:
     def test_load_config_with_path(self, tmp_path: Path) -> None:
         """Test load_config with explicit path."""
         clear_config_cache()
-        config_file = tmp_path / "test.toml"
-        config_file.write_text("""
-modules = ["test.module"]
+        config_file = tmp_path / "test.yaml"
+        config_file.write_text("""\
+kind: Config
+metadata:
+  name: test
+spec:
+  modules:
+    - test.module
 """)
         config = load_config(config_file)
         assert config.modules == ["test.module"]
@@ -616,26 +771,29 @@ class TestParseConfigCapsSection:
         assert config.caps.default_set is None
         assert config.caps.deny is None
 
-    def test_load_toml_with_new_sections(self, tmp_path: Path) -> None:
-        """Test loading TOML file with orchestrator, limits, and caps sections."""
+    def test_load_yaml_with_all_sections(self, tmp_path: Path) -> None:
+        """Test loading YAML file with orchestrator, limits, and caps sections."""
         clear_config_cache()
-        config_file = tmp_path / "hexdag.toml"
-        config_file.write_text("""
-modules = ["myapp.nodes"]
-
-[orchestrator]
-max_concurrent_nodes = 5
-default_node_timeout = 60.0
-
-[limits]
-max_llm_calls = 100
-max_cost_usd = 10.0
-
-[caps]
-deny = ["secret"]
+        config_file = tmp_path / "full.yaml"
+        config_file.write_text("""\
+kind: Config
+metadata:
+  name: full-config
+spec:
+  modules:
+    - myapp.nodes
+  kernel:
+    max_concurrent_nodes: 5
+    default_node_timeout: 60.0
+  limits:
+    max_llm_calls: 100
+    max_cost_usd: 10.0
+  caps:
+    deny:
+      - secret
 """)
         loader = ConfigLoader()
-        config = loader.load_from_toml(config_file)
+        config = loader.load_config_file(config_file)
         assert config.modules == ["myapp.nodes"]
         assert config.orchestrator.max_concurrent_nodes == 5
         assert config.orchestrator.default_node_timeout == 60.0

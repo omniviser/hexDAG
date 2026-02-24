@@ -62,8 +62,8 @@ For fine-grained control, build DAGs in Python directly:
 
 ```python
 import asyncio
-from hexdag.core.domain import DirectedGraph, NodeSpec
-from hexdag.core.orchestration.orchestrator import Orchestrator
+from hexdag.kernel.domain import DirectedGraph, NodeSpec
+from hexdag.kernel.orchestration.orchestrator import Orchestrator
 
 # Define processing functions
 def load_data(inputs: dict) -> dict:
@@ -100,8 +100,8 @@ if __name__ == "__main__":
 Monitor execution through the observer pattern:
 
 ```python
-from hexdag.core.orchestration.events import NodeStarted, NodeCompleted
-from hexdag.core.ports.observer_manager import Observer
+from hexdag.kernel.orchestration.events import NodeStarted, NodeCompleted
+from hexdag.kernel.ports.observer_manager import Observer
 
 class LoggingObserver(Observer):
     async def handle(self, event) -> None:
@@ -111,11 +111,9 @@ class LoggingObserver(Observer):
             print(f"Completed: {event.name} ({event.duration_ms}ms)")
 ```
 
-See [Core Concepts — Event System](concepts.md#event-system--observability) for the full list of events and built-in observers.
-
 ## Next Steps
 
-- [PipelineRunner](PIPELINE_RUNNER.md) - One-liner pipeline execution, secrets, and validation
-- [Core Concepts](concepts.md) - Understand DAGs, nodes, and orchestration
-- [Node Types](node-types.md) - Explore LLM, Agent, Loop, and Conditional nodes
-- [YAML Pipelines Notebook](../notebooks/02_yaml_pipelines.ipynb) - Declarative workflows tutorial
+- [Architecture](ARCHITECTURE.md) - System architecture and the OS analogy
+- [Roadmap](ROADMAP.md) - What's planned and what's been built
+- [Node Guide](generated/mcp/node_guide.md) - Creating custom nodes
+- [Adapter Guide](generated/mcp/adapter_guide.md) - Creating custom adapters

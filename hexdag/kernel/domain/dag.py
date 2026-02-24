@@ -106,6 +106,7 @@ class NodeSpec:
     out_model: type[BaseModel] | None = None  # Pydantic model for output validation
     deps: frozenset[str] = field(default_factory=frozenset)
     params: dict[str, Any] = field(default_factory=dict)
+    literals: dict[str, Any] = field(default_factory=dict)  # Static config for autodoc
     timeout: float | None = None  # Optional timeout in seconds for this node
     max_retries: int | None = None  # Optional max retries for this node (1 = no retries)
     retry_delay: float | None = None  # Initial delay in seconds before first retry
@@ -125,7 +126,9 @@ class NodeSpec:
         """
         if self.factory_class is None or self.factory_params is None:
             return False
-        return is_json_serializable(self.factory_params)
+        return is_json_serializable(self.factory_params) and is_json_serializable(
+            dict(self.literals)
+        )
 
     def __post_init__(self) -> None:
         """Ensure deps and params are immutable, and intern strings for performance."""
@@ -134,6 +137,7 @@ class NodeSpec:
         # Intern dependency names as well
         object.__setattr__(self, "deps", frozenset(sys.intern(d) for d in self.deps))
         object.__setattr__(self, "params", MappingProxyType(self.params))
+        object.__setattr__(self, "literals", MappingProxyType(self.literals))
         # Freeze factory_params if present
         if self.factory_params is not None:
             object.__setattr__(self, "factory_params", MappingProxyType(self.factory_params))
@@ -303,8 +307,9 @@ class NodeSpec:
             types_str = f", {in_name} -> {out_name}"
 
         params_str = f", params={dict(self.params)}" if self.params else ""
+        literals_str = f", literals={dict(self.literals)}" if self.literals else ""
 
-        return f"NodeSpec('{self.name}'{types_str}{deps_str}{params_str})"
+        return f"NodeSpec('{self.name}'{types_str}{deps_str}{params_str}{literals_str})"
 
 
 class DirectedGraph:

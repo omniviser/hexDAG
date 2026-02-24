@@ -539,15 +539,21 @@
                     "type": "object"
                 },
                 "spec": {
+                    "additionalProperties": false,
                     "properties": {
-                        "fn": {
-                            "description": "Module path string (e.g., 'myapp.process')",
-                            "type": "string"
+                        "output_schema": {
+                            "anyOf": [
+                                {
+                                    "type": "object"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ],
+                            "default": null,
+                            "description": "Output schema for validation (if None, inferred from function)"
                         }
                     },
-                    "required": [
-                        "fn"
-                    ],
                     "type": "object"
                 }
             },
@@ -587,38 +593,38 @@
                     "type": "object"
                 },
                 "spec": {
+                    "additionalProperties": false,
                     "properties": {
                         "output_schema": {
-                            "description": "Expected output schema for structured output validation. Field values can be basic types (str, int, float, bool) or sanitized types: currency, flexible_bool, score, upper_str, lower_str, nullable_str, trimmed_str. Custom types can be defined in spec.custom_types.",
-                            "type": "object"
+                            "default": null,
+                            "description": "Expected output schema for structured output. If provided with parse_json=True, the LLM response will be parsed and validated against this schema.",
+                            "type": "string"
                         },
                         "parse_json": {
                             "default": false,
-                            "description": "Parse the LLM response as JSON",
-                            "type": "boolean"
+                            "description": "If True, parse the LLM response as JSON and validate against output_schema. Default is False (returns raw text).",
+                            "type": "string"
                         },
                         "parse_strategy": {
                             "default": "json",
-                            "description": "JSON parsing strategy",
-                            "enum": [
-                                "json",
-                                "json_in_markdown",
-                                "yaml"
-                            ],
+                            "description": "JSON parsing strategy: \"json\", \"json_in_markdown\", or \"yaml\". Default is \"json\".",
                             "type": "string"
                         },
                         "prompt_template": {
-                            "description": "Template for the user prompt (Jinja2-style {{variable}} syntax)",
+                            "default": null,
+                            "description": "Template for the user prompt. Supports Jinja2-style {{variable}} syntax. Can be a string or PromptTemplate/ChatPromptTemplate object. Can also be provided as 'template' (alias for YAML compatibility).",
                             "type": "string"
                         },
                         "system_prompt": {
-                            "description": "System message to prepend to the conversation",
+                            "default": null,
+                            "description": "System message to prepend to the conversation.",
+                            "type": "string"
+                        },
+                        "template": {
+                            "default": null,
                             "type": "string"
                         }
                     },
-                    "required": [
-                        "prompt_template"
-                    ],
                     "type": "object"
                 }
             },
@@ -702,89 +708,6 @@
                     "required": [
                         "port",
                         "method"
-                    ],
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
-        "Reasoning_AgentNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for reasoning_agent_node type",
-            "properties": {
-                "kind": {
-                    "const": "reasoning_agent_node",
-                    "description": "Node type: reasoning_agent_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "config": {
-                            "default": null,
-                            "description": "Agent configuration",
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        },
-                        "continuation_prompts": {
-                            "additionalProperties": {
-                                "type": "string"
-                            },
-                            "default": null,
-                            "description": "Phase-specific prompts",
-                            "type": [
-                                "object",
-                                "null"
-                            ]
-                        },
-                        "main_prompt": {
-                            "description": "Initial reasoning prompt",
-                            "type": "string"
-                        },
-                        "output_schema": {
-                            "anyOf": [
-                                {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object"
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ],
-                            "default": null,
-                            "description": "Custom output schema for tool_end results"
-                        }
-                    },
-                    "required": [
-                        "main_prompt"
                     ],
                     "type": "object"
                 }
@@ -952,9 +875,6 @@
                         "oneOf": [
                             {
                                 "$ref": "#/$defs/LlmNodeSpec"
-                            },
-                            {
-                                "$ref": "#/$defs/Reasoning_AgentNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/CompositeNodeSpec"

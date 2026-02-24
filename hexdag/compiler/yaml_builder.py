@@ -21,17 +21,12 @@ from hexdag.compiler.pipeline_config import PipelineConfig
 
 # Re-export extracted classes for backward compatibility.
 # Existing code that imports from ``yaml_builder`` continues to work.
-from hexdag.compiler.plugins.macro_definition import (  # noqa: F401
-    MacroDefinitionPlugin,
-)
+from hexdag.compiler.plugins.config_definition import ConfigDefinitionPlugin  # noqa: F401
+from hexdag.compiler.plugins.macro_definition import MacroDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.macro_entity import MacroEntityPlugin  # noqa: F401
 from hexdag.compiler.plugins.node_entity import NodeEntityPlugin  # noqa: F401
-from hexdag.compiler.preprocessing.env_vars import (  # noqa: F401
-    EnvironmentVariablePlugin,
-)
-from hexdag.compiler.preprocessing.include import (  # noqa: F401
-    IncludePreprocessPlugin,
-)
+from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin  # noqa: F401
+from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.template import TemplatePlugin  # noqa: F401
 from hexdag.compiler.yaml_validator import YamlValidator
 from hexdag.kernel.domain.dag import DirectedGraph
@@ -126,6 +121,9 @@ class YamlPipelineBuilder:
         self.preprocess_plugins: list[PreprocessPlugin] = []
         self.entity_plugins: list[EntityPlugin] = []
 
+        # Inline config from kind: Config documents in multi-doc YAML
+        self._inline_config: Any = None  # HexDAGConfig | None (avoid circular import)
+
         self._register_default_plugins()
 
     def _register_default_plugins(self) -> None:
@@ -136,7 +134,8 @@ class YamlPipelineBuilder:
         self.preprocess_plugins.append(TemplatePlugin())
 
         # Entity plugins (build specific entity types)
-        self.entity_plugins.append(MacroDefinitionPlugin())  # Process Macro definitions first
+        self.entity_plugins.append(ConfigDefinitionPlugin())  # Process Config definitions
+        self.entity_plugins.append(MacroDefinitionPlugin())  # Process Macro definitions
         self.entity_plugins.append(MacroEntityPlugin())  # Then macro invocations
         self.entity_plugins.append(NodeEntityPlugin(self))  # Finally regular nodes
 
@@ -195,11 +194,19 @@ class YamlPipelineBuilder:
         # Step 1: Parse YAML
         documents = self._parse_yaml(yaml_content, use_cache=use_cache)
 
-        # Step 2: Process ALL documents for macro definitions first
-        #         This allows macros to be defined in multi-document YAML
+        # Step 2: Process ALL documents for definitions first
+        #         This allows Config and Macros to be defined in multi-document YAML
         #         before the pipeline that uses them
         for doc in documents:
-            if isinstance(doc, dict) and doc.get("kind") == "Macro":
+            kind = doc.get("kind")
+            if kind == "Config":
+                # Process Config definition (skip template rendering)
+                processed_doc = doc
+                for plugin in self.preprocess_plugins:
+                    if not isinstance(plugin, TemplatePlugin):
+                        processed_doc = plugin.process(processed_doc)
+                self._process_config_definition(processed_doc)
+            elif kind == "Macro":
                 # Process includes for macro definitions (but skip template rendering)
                 # Templates in macros should be preserved for expansion-time rendering
                 processed_doc = doc
@@ -270,8 +277,8 @@ class YamlPipelineBuilder:
 
         Skips Macro definitions when selecting the Pipeline document.
         """
-        # Filter out Macro definitions - they're processed separately
-        pipeline_docs = [doc for doc in documents if doc.get("kind") != "Macro"]
+        # Filter out Config and Macro definitions - they're processed separately
+        pipeline_docs = [doc for doc in documents if doc.get("kind") not in ("Macro", "Config")]
 
         if not pipeline_docs:
             # No pipeline documents, return first macro (for macro-only files)
@@ -334,7 +341,7 @@ class YamlPipelineBuilder:
                 "  nodes: [...]"
             )
 
-        # Macro definitions have different structure (no spec field)
+        # Macro and Config definitions have different structure
         kind = config.get("kind")
         if kind == "Macro":
             # Macro has: metadata, parameters, nodes (no spec)
@@ -342,6 +349,10 @@ class YamlPipelineBuilder:
                 raise YamlPipelineBuilderError("Macro definition must have 'metadata' field")
             if "nodes" not in config:
                 raise YamlPipelineBuilderError("Macro definition must have 'nodes' field")
+        elif kind == "Config":
+            # Config has: metadata, spec (no nodes)
+            if "spec" not in config:
+                raise YamlPipelineBuilderError("Config manifest must have 'spec' field")
         else:
             # Pipeline and other kinds require spec
             if "spec" not in config:
@@ -375,6 +386,27 @@ class YamlPipelineBuilder:
             # Wrap in a fake node config format expected by entity plugin
             node_config = macro_config
             macro_plugin.build(node_config, self, temp_graph)
+
+    def _process_config_definition(self, config_doc: dict[str, Any]) -> None:
+        """Process a kind: Config document and store its settings.
+
+        Parameters
+        ----------
+        config_doc : dict[str, Any]
+            Validated Config document
+        """
+        temp_graph = DirectedGraph()
+
+        config_plugin = next(
+            (p for p in self.entity_plugins if isinstance(p, ConfigDefinitionPlugin)), None
+        )
+
+        if config_plugin is None:
+            raise YamlPipelineBuilderError(
+                "ConfigDefinitionPlugin not found. Cannot process Config definitions."
+            )
+
+        config_plugin.build(config_doc, self, temp_graph)
 
     def _register_aliases(self, config: dict[str, Any]) -> None:
         """Register user-defined aliases from spec.aliases before validation.

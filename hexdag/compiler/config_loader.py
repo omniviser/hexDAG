@@ -1,8 +1,14 @@
 """Configuration loader for HexDAG.
 
-Parses TOML configuration files into kernel domain models.
-This is part of the compiler (userspace) -- the kernel never touches
-config file formats directly.
+Parses configuration into kernel domain models. Supports two config sources:
+
+1. **kind: Config YAML** — canonical format, loaded via explicit path or
+   ``HEXDAG_CONFIG_PATH`` env var.
+2. **pyproject.toml [tool.hexdag]** — auto-discovery fallback (standard Python
+   convention).
+
+This is part of the compiler (userspace) — the kernel never touches config
+file formats directly.
 """
 
 from __future__ import annotations
@@ -14,6 +20,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import yaml
+
 from hexdag.kernel.config.models import (
     DefaultCaps,
     DefaultLimits,
@@ -23,11 +31,6 @@ from hexdag.kernel.config.models import (
 )
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.models import OrchestratorConfig
-
-TOML_IMPORT_MESSAGE = (
-    "TOML support requires 'tomli' for Python < 3.11. Install with: pip install tomli"
-)
-
 
 # Type alias for configuration data that can be recursively substituted
 ConfigData = str | dict[str, "ConfigData"] | list["ConfigData"] | int | float | bool | None
@@ -74,67 +77,134 @@ def _load_and_parse_cached(path_str: str) -> HexDAGConfig:
 
 
 class ConfigLoader:
-    """Loads and processes HexDAG configuration from TOML files."""
+    """Loads and processes HexDAG configuration files.
+
+    Supports two config sources:
+
+    1. ``kind: Config`` YAML manifests (explicit path or env var)
+    2. ``pyproject.toml [tool.hexdag]`` (auto-discovery)
+    """
 
     ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
-    def __init__(self) -> None:
-        """Initialize the config loader."""
-
-        if tomllib is None:
-            raise ImportError(TOML_IMPORT_MESSAGE)
-
-    def load_from_toml(self, path: str | Path | None = None) -> HexDAGConfig:
-        """Load configuration from TOML file.
+    def load_config_file(self, path: str | Path | None = None) -> HexDAGConfig:
+        """Load configuration from YAML or pyproject.toml.
 
         Parameters
         ----------
         path : str | Path | None
-            Path to TOML file. If None, searches for pyproject.toml or hexdag.toml
+            Path to config file. If None, searches using discovery order.
 
         Returns
         -------
         HexDAGConfig
             Parsed configuration with environment variables substituted
-
         """
-        # Find config file
         config_path = self._find_config_file(path)
-
-        # Use cached loader with file path
         return _load_and_parse_cached(str(config_path.absolute()))
 
+    def load_from_toml(self, path: str | Path | None = None) -> HexDAGConfig:
+        """Load configuration (backward-compatible entry point).
+
+        Parameters
+        ----------
+        path : str | Path | None
+            Path to config file. If None, searches using discovery order.
+
+        Returns
+        -------
+        HexDAGConfig
+            Parsed configuration with environment variables substituted
+        """
+        return self.load_config_file(path)
+
     def _load_and_parse(self, config_path: Path) -> HexDAGConfig:
-        """Load and parse configuration file."""
+        """Load and parse configuration file (YAML or TOML)."""
         logger.info("Loading configuration from {path}", path=config_path)
 
-        # Load TOML
+        if config_path.suffix in (".yaml", ".yml"):
+            return self._load_yaml_config(config_path)
+        return self._load_toml_config(config_path)
+
+    def _load_yaml_config(self, config_path: Path) -> HexDAGConfig:
+        """Load and parse a kind: Config YAML file.
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to YAML config file
+
+        Returns
+        -------
+        HexDAGConfig
+            Parsed configuration
+
+        Raises
+        ------
+        ValueError
+            If the YAML file is not a valid kind: Config manifest
+        """
+        with config_path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Invalid YAML config file: expected a mapping, got {type(data).__name__}"
+            )
+
+        kind = data.get("kind")
+        if kind != "Config":
+            raise ValueError(
+                f"YAML config file must use 'kind: Config' manifest format. "
+                f"Got 'kind: {kind}' in {config_path.name}."
+            )
+
+        spec = data.get("spec", {})
+        if not isinstance(spec, dict):
+            raise ValueError("'spec' field in kind: Config must be a mapping")
+
+        spec = self._substitute_env_vars(spec)
+        return self._parse_config(spec)
+
+    def _load_toml_config(self, config_path: Path) -> HexDAGConfig:
+        """Load and parse a TOML config file (pyproject.toml).
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to TOML config file
+
+        Returns
+        -------
+        HexDAGConfig
+            Parsed configuration
+        """
         with config_path.open("rb") as f:
             data = tomllib.load(f)
 
         if config_path.name == "pyproject.toml":
-            # Look for [tool.hexdag] section
             hexdag_data = data.get("tool", {}).get("hexdag", {})
             if not hexdag_data:
                 logger.warning("No [tool.hexdag] section found in pyproject.toml, using defaults")
                 return get_default_config()
         else:
-            # Direct hexdag.toml file - check if it has [tool.hexdag] or is flat
+            # Direct TOML file — check if it has [tool.hexdag] or is flat
             if "tool" in data and "hexdag" in data.get("tool", {}):
-                # TOML file uses [tool.hexdag] format (like pyproject.toml)
                 hexdag_data = data["tool"]["hexdag"]
             else:
-                # Flat format (top-level keys)
                 hexdag_data = data
 
-        # Process environment variable substitution
         hexdag_data = self._substitute_env_vars(hexdag_data)
-
-        # Parse configuration sections
         return self._parse_config(hexdag_data)
 
     def _find_config_file(self, path: str | Path | None) -> Path:
         """Find configuration file.
+
+        Discovery order:
+        1. Explicit path argument
+        2. ``HEXDAG_CONFIG_PATH`` env var
+        3. ``pyproject.toml`` in CWD
+        4. ``pyproject.toml`` in parent directories (with ``[tool.hexdag]``)
 
         Parameters
         ----------
@@ -157,7 +227,7 @@ class ConfigLoader:
                 raise FileNotFoundError(f"Configuration file not found: {config_path}")
             return config_path
 
-        # Check environment variable first
+        # Check environment variable
         if env_path := os.getenv("HEXDAG_CONFIG_PATH"):
             config_path = Path(env_path)
             if config_path.exists():
@@ -165,18 +235,11 @@ class ConfigLoader:
                 return config_path
             logger.warning(f"HEXDAG_CONFIG_PATH set but file not found: {config_path}")
 
-        # Search for config files in order of preference
-        search_paths = [
-            Path("hexdag.toml"),
-            Path("pyproject.toml"),
-            Path(".hexdag.toml"),
-        ]
+        # Auto-discovery: pyproject.toml only
+        if Path("pyproject.toml").exists():
+            return Path("pyproject.toml")
 
-        for search_path in search_paths:
-            if search_path.exists():
-                return search_path
-
-        # Also check parent directories for pyproject.toml
+        # Parent directory traversal for pyproject.toml
         current = Path.cwd()
         while current != current.parent:
             pyproject = current / "pyproject.toml"
@@ -188,7 +251,8 @@ class ConfigLoader:
             current = current.parent
 
         raise FileNotFoundError(
-            "No configuration file found. Searched for: hexdag.toml, pyproject.toml, .hexdag.toml"
+            "No configuration file found. Provide a kind: Config YAML path, "
+            "set HEXDAG_CONFIG_PATH, or add [tool.hexdag] to pyproject.toml"
         )
 
     def _substitute_env_vars(self, data: Any) -> Any:
@@ -210,7 +274,6 @@ class ConfigLoader:
                 var_name = match.group(1)
                 value = os.environ.get(var_name)
                 if value is None:
-                    # Only log at debug level to avoid cluttering CLI output
                     logger.debug(
                         f"Environment variable ${{{var_name}}} not found, keeping placeholder"
                     )
@@ -234,7 +297,7 @@ class ConfigLoader:
         Parameters
         ----------
         data : dict[str, Any]
-            Raw configuration data from TOML
+            Raw configuration data (format-agnostic)
 
         Returns
         -------
@@ -297,7 +360,7 @@ class ConfigLoader:
     def _parse_logging_config(self, logging_data: dict[str, Any]) -> LoggingConfig:
         """Parse logging configuration with environment variable overrides.
 
-        Environment variables take precedence over TOML configuration:
+        Environment variables take precedence over config file values:
         - HEXDAG_LOG_LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         - HEXDAG_LOG_FORMAT: Output format (console, json, structured, rich, dual)
         - HEXDAG_LOG_FILE: Optional file path for log output
@@ -312,14 +375,14 @@ class ConfigLoader:
         Parameters
         ----------
         logging_data : dict[str, Any]
-            Logging section from TOML config
+            Logging section from config
 
         Returns
         -------
         LoggingConfig
             Parsed logging configuration with env overrides applied
         """
-        # Start with TOML config values
+        # Start with config values
         level = logging_data.get("level", "INFO")
         format_type = logging_data.get("format", "structured")
         output_file = logging_data.get("output_file")
@@ -425,15 +488,15 @@ def _cached_load_config(path_str: str | None) -> HexDAGConfig:
     try:
         loader = ConfigLoader()
         if path_str and path_str.startswith("__auto__"):
-            return loader.load_from_toml(None)
-        return loader.load_from_toml(Path(path_str) if path_str else None)
+            return loader.load_config_file(None)
+        return loader.load_config_file(Path(path_str) if path_str else None)
     except FileNotFoundError:
         logger.info("No configuration file found, using defaults")
         return get_default_config()
 
 
 def load_config(path: str | Path | None = None) -> HexDAGConfig:
-    """Load configuration from TOML file or return defaults.
+    """Load configuration from file or return defaults.
 
     Parameters
     ----------
@@ -448,7 +511,7 @@ def load_config(path: str | Path | None = None) -> HexDAGConfig:
 
     try:
         loader = ConfigLoader()
-        return loader.load_from_toml(path)
+        return loader.load_config_file(path)
     except FileNotFoundError:
         logger.info("No configuration file found, using defaults")
         return get_default_config()
