@@ -251,9 +251,9 @@ class ConversationMacro(ConfigurableMacro):
             try:
                 history_json = await memory_port.aget(memory_key)  # pyright: ignore[reportAttributeAccessIssue]
                 if history_json:
-                    import json  # lazy: optional aiofiles dependency
+                    import orjson  # lazy: fast JSON
 
-                    messages = json.loads(history_json)
+                    messages = orjson.loads(history_json)
                     logger.debug(
                         f"Loaded {len(messages)} messages from conversation {conversation_id}"
                     )
@@ -369,10 +369,10 @@ Please provide a thoughtful response to continue this conversation."""
                     # Use default memory port from pipeline
                     memory_port = get_port("memory")
 
-                import json  # lazy: optional json dependency
+                import orjson  # lazy: fast JSON
 
                 memory_key = f"conversation:{conversation_id}"
-                await memory_port.aset(memory_key, json.dumps(messages))  # pyright: ignore[reportAttributeAccessIssue]
+                await memory_port.aset(memory_key, orjson.dumps(messages).decode())  # pyright: ignore[reportAttributeAccessIssue]
                 logger.debug(f"Saved conversation with {len(messages)} messages")
             except Exception as e:
                 logger.warning(f"Failed to save conversation: {e}")
