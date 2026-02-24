@@ -18,6 +18,16 @@ ErrorCode = Literal[
 
 logger = logging.getLogger(__name__)
 
+# Pre-compiled regex patterns for hot-path text processing
+_RE_COMMENT = re.compile(r"(?m)\s*(//|#).*?$")
+_RE_TRAILING_COMMA = re.compile(r",\s*([}\]])")
+_RE_SINGLE_QUOTES = re.compile(r"(?<!\\)'([^']*?)'(?!\\)")
+_RE_JSON_BLOCK = re.compile(r"```json\s*([\s\S]*?)```", re.IGNORECASE)
+_RE_CODE_BLOCK = re.compile(r"```[\w-]*\s*([\s\S]*?)```")
+_RE_RAW_JSON = re.compile(r"[\[{][\s\S]*[\]}]")
+_RE_YAML_BLOCK = re.compile(r"```ya?ml\s*([\s\S]*?)```", re.IGNORECASE)
+_RE_GENERIC_BLOCK = re.compile(r"```\s*([\s\S]*?)```")
+
 
 @dataclass
 class SafeJSONResult:
@@ -128,21 +138,21 @@ class SafeJSON:
 
     @staticmethod
     def _cleanup(text: str) -> str:
-        text = re.sub(r"(?m)\s*(//|#).*?$", "", text)
-        text = re.sub(r",\s*([}\]])", r"\1", text)
-        return re.sub(r"(?<!\\)'([^']*?)'(?!\\)", r'"\1"', text)
+        text = _RE_COMMENT.sub("", text)
+        text = _RE_TRAILING_COMMA.sub(r"\1", text)
+        return _RE_SINGLE_QUOTES.sub(r'"\1"', text)
 
     @staticmethod
     def _extract_json(text: str) -> str | None:
         if not text:
             return None
-        match = re.search(r"```json\s*([\s\S]*?)```", text, re.IGNORECASE)
+        match = _RE_JSON_BLOCK.search(text)
         if match:
             return match.group(1).strip()
-        match = re.search(r"```[\w-]*\s*([\s\S]*?)```", text)
+        match = _RE_CODE_BLOCK.search(text)
         if match and match.group(1).lstrip().startswith(("{", "[")):
             return match.group(1).strip()
-        match = re.search(r"[\[{][\s\S]*[\]}]", text)
+        match = _RE_RAW_JSON.search(text)
         return match.group(0).strip() if match else None
 
     @staticmethod
@@ -150,10 +160,10 @@ class SafeJSON:
         """Extract YAML content from markdown code blocks or return raw text."""
         if not text:
             return text
-        match = re.search(r"```ya?ml\s*([\s\S]*?)```", text, re.IGNORECASE)
+        match = _RE_YAML_BLOCK.search(text)
         if match:
             return match.group(1).strip()
-        match = re.search(r"```\s*([\s\S]*?)```", text)
+        match = _RE_GENERIC_BLOCK.search(text)
         if match:
             return match.group(1).strip()
         return text.strip()

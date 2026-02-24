@@ -40,14 +40,14 @@ def _calculate_duration_ms(start_time: float) -> float:
     Parameters
     ----------
     start_time : float
-        Start time from time.time()
+        Start time from time.perf_counter()
 
     Returns
     -------
     float
         Duration in milliseconds
     """
-    return (time.time() - start_time) * 1000
+    return (time.perf_counter() - start_time) * 1000
 
 
 class Local:
@@ -166,7 +166,7 @@ class LocalExecutor:
         if not self._initialized:
             raise RuntimeError("LocalExecutor not initialized - call asetup() first")
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             # Note: Uses ContextVar pattern consistent with rest of codebase

@@ -170,8 +170,12 @@ class LocalObserverManager:
 
         # Event type filtering and per-observer config
         self._event_filters: dict[str, set[EventType] | None] = {}
+        self._event_filter_tuples: dict[str, tuple[type, ...]] = {}  # cached tuple() conversion
         self._observer_timeouts: dict[str, float | None] = {}
         self._observer_semaphores: dict[str, asyncio.Semaphore] = {}
+
+        # Cached active observers — invalidated on register/unregister/clear
+        self._active_observers_cache: dict[str, Any] | None = None
 
         if use_weak_refs:
             self._weak_handlers: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
@@ -189,9 +193,11 @@ class LocalObserverManager:
     def _on_observer_deleted(self, observer_id: str) -> None:
         """Cleanup callback when observer is garbage collected."""
         self._event_filters.pop(observer_id, None)
+        self._event_filter_tuples.pop(observer_id, None)
         self._observer_timeouts.pop(observer_id, None)
         self._observer_semaphores.pop(observer_id, None)
         self._observer_refs.pop(observer_id, None)
+        self._active_observers_cache = None
 
     def _store_observer(self, observer_id: str, observer: Any, keep_alive: bool) -> None:
         """Store observer with appropriate reference type."""
@@ -283,6 +289,12 @@ class LocalObserverManager:
         self._store_observer(resolved_id, observer, keep_alive_flag)
 
         self._event_filters[resolved_id] = config.event_types
+        if config.event_types is not None:
+            self._event_filter_tuples[resolved_id] = tuple(config.event_types)
+        else:
+            self._event_filter_tuples.pop(resolved_id, None)
+
+        self._active_observers_cache = None  # invalidate cache
 
         if config.timeout is not None:
             self._observer_timeouts[resolved_id] = config.timeout
@@ -324,9 +336,13 @@ class LocalObserverManager:
 
         if handler_id in self._event_filters:
             del self._event_filters[handler_id]
+        self._event_filter_tuples.pop(handler_id, None)
 
         self._observer_timeouts.pop(handler_id, None)
         self._observer_semaphores.pop(handler_id, None)
+
+        if found:
+            self._active_observers_cache = None  # invalidate cache
 
         return found
 
@@ -368,8 +384,10 @@ class LocalObserverManager:
         """Remove all registered observers."""
         self._handlers.clear()
         self._event_filters.clear()
+        self._event_filter_tuples.clear()
         self._observer_timeouts.clear()
         self._observer_semaphores.clear()
+        self._active_observers_cache = None
 
         if self._use_weak_refs:
             self._weak_handlers.clear()
@@ -492,18 +510,28 @@ class LocalObserverManager:
 
     def _collect_active_observers(self) -> dict[str, Observer]:
         """Collect currently active observers, pruning dead weak references."""
+        if not self._use_weak_refs and self._active_observers_cache is not None:
+            return self._active_observers_cache
 
         observers: dict[str, Observer] = dict(self._handlers)
 
         if self._use_weak_refs:
+            pruned = False
             for observer_id in list(self._weak_handlers.keys()):
                 observer = self._weak_handlers.get(observer_id)
                 if observer is None:
                     self._weak_handlers.pop(observer_id, None)
                     self._event_filters.pop(observer_id, None)
+                    self._event_filter_tuples.pop(observer_id, None)
                     self._strong_refs.pop(observer_id, None)
+                    pruned = True
                     continue
                 observers.setdefault(observer_id, observer)
+            if pruned:
+                self._active_observers_cache = None
+
+        if not self._use_weak_refs:
+            self._active_observers_cache = observers
 
         return observers
 
@@ -608,13 +636,13 @@ class LocalObserverManager:
 
     def _should_notify(self, observer_id: str, event: Event) -> bool:
         """Check if observer should be notified of this event type."""
-        event_filter = self._event_filters.get(observer_id)
+        filter_tuple = self._event_filter_tuples.get(observer_id)
 
-        if event_filter is None:
+        if filter_tuple is None:
             return True
 
         # Check if event type matches any allowed type (supports subclassing)
-        return isinstance(event, tuple(event_filter))
+        return isinstance(event, filter_tuple)
 
     async def _safe_invoke(self, observer_id: str, observer: Observer, event: Event) -> None:
         """Safely invoke an observer with timeout."""

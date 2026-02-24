@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
+import orjson
 from pydantic import BaseModel, ValidationError
 
 from hexdag.kernel.context import get_port
@@ -371,7 +372,7 @@ class LLMNode(BaseNodeFactory):
             )
 
             example_data = {field: f"<{field}_value>" for field in schema.get("properties", {})}
-            example_json = json.dumps(example_data, indent=2)
+            example_json = orjson.dumps(example_data, option=orjson.OPT_INDENT_2).decode()
 
             return f"""
 

@@ -5,7 +5,7 @@ directed acyclic graphs of agents in the Hex-DAG framework.
 """
 
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
@@ -717,27 +717,28 @@ class DirectedGraph:
             return []
 
         in_degrees = {node: len(self.nodes[node].deps) for node in self.nodes}
+        ready: deque[str] = deque(node for node, deg in in_degrees.items() if deg == 0)
         waves = []
 
-        while in_degrees:
-            current_wave = []
-            for node, degree in in_degrees.items():
-                if degree == 0:
-                    current_wave.append(node)
-
-            if not current_wave:
-                remaining_nodes = list(in_degrees.keys())
-                raise CycleDetectedError(
-                    f"No nodes with zero in-degree found. Remaining nodes: {remaining_nodes}"
-                )
-
-            waves.append(sorted(current_wave))
+        while ready:
+            current_wave = sorted(ready)
+            ready.clear()
 
             for node in current_wave:
                 del in_degrees[node]
                 for dependent in self._forward_edges.get(node, _EMPTY_SET):
                     if dependent in in_degrees:
                         in_degrees[dependent] -= 1
+                        if in_degrees[dependent] == 0:
+                            ready.append(dependent)
+
+            waves.append(current_wave)
+
+        if in_degrees:
+            remaining_nodes = list(in_degrees.keys())
+            raise CycleDetectedError(
+                f"No nodes with zero in-degree found. Remaining nodes: {remaining_nodes}"
+            )
 
         self._waves_cache = waves
         return waves
@@ -807,30 +808,33 @@ class DirectedGraph:
         in_degrees: dict[str, int] = {}
 
         for node in remaining_nodes:
-            # Count only dependencies that haven't been completed
-            deps_remaining = self.nodes[node].deps - completed
-            in_degrees[node] = len(deps_remaining)
+            # Count remaining deps without creating temporary frozenset
+            count = sum(1 for d in self.nodes[node].deps if d not in completed)
+            in_degrees[node] = count
 
-        # Kahn's algorithm on remaining nodes only
+        # Queue-based Kahn's algorithm on remaining nodes only
+        ready: deque[str] = deque(node for node, deg in in_degrees.items() if deg == 0)
         waves: list[list[str]] = []
 
-        while in_degrees:
-            current_wave = [node for node, degree in in_degrees.items() if degree == 0]
-
-            if not current_wave:
-                remaining = list(in_degrees.keys())
-                raise CycleDetectedError(
-                    f"No nodes with zero in-degree found. Remaining nodes: {remaining}"
-                )
-
-            waves.append(sorted(current_wave))
+        while ready:
+            current_wave = sorted(ready)
+            ready.clear()
 
             for node in current_wave:
                 del in_degrees[node]
-                # Update in-degrees for nodes that depend on completed node
                 for dependent in self._forward_edges.get(node, _EMPTY_SET):
                     if dependent in in_degrees:
                         in_degrees[dependent] -= 1
+                        if in_degrees[dependent] == 0:
+                            ready.append(dependent)
+
+            waves.append(current_wave)
+
+        if in_degrees:
+            remaining = list(in_degrees.keys())
+            raise CycleDetectedError(
+                f"No nodes with zero in-degree found. Remaining nodes: {remaining}"
+            )
 
         return waves
 

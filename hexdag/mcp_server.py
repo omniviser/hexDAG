@@ -44,11 +44,11 @@ Example::
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
 
+import orjson
 from mcp.server.fastmcp import FastMCP
 
 from hexdag import api
@@ -138,7 +138,7 @@ async def vfs_list(path: str) -> str:
         JSON array of entries with name, entry_type, and path
     """
     entries = await api.vfs.list_path(_vfs, path)
-    return json.dumps(entries, indent=2)
+    return orjson.dumps(entries, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -158,7 +158,7 @@ async def vfs_stat(path: str) -> str:
         JSON metadata dict
     """
     result = await api.vfs.stat_path(_vfs, path)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 # ============================================================================
@@ -350,7 +350,7 @@ async def execute_pipeline(
         ports=ports,
         timeout=timeout,
     )
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -407,7 +407,7 @@ def dry_run_pipeline(yaml_content: str, inputs: dict[str, Any] | None = None) ->
         # Returns: {"execution_order": ["a", "b"], "waves": [["a"], ["b"]], ...}
     """
     result = api.execution.dry_run(yaml_content, inputs)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 # ============================================================================
@@ -428,7 +428,7 @@ def validate_yaml_pipeline(yaml_content: str) -> str:
         JSON string with validation results (success/errors)
     """
     result = api.validation.validate(yaml_content, lenient=False)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -458,7 +458,7 @@ def validate_yaml_pipeline_lenient(yaml_content: str) -> str:
         JSON string with validation results (success/errors/warnings)
     """
     result = api.validation.validate(yaml_content, lenient=True)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 # ============================================================================
@@ -485,7 +485,7 @@ def init_pipeline(name: str, description: str = "") -> str:
         JSON with {success: bool, yaml_content: str}
     """
     result = api.pipeline.init(name, description)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -510,13 +510,15 @@ def add_node_to_pipeline(yaml_content: str, node_config: dict[str, Any]) -> str:
     """
     # Validate required fields
     if "kind" not in node_config:
-        return json.dumps(
-            {"success": False, "error": "node_config must have 'kind' field"}, indent=2
-        )
+        return orjson.dumps(
+            {"success": False, "error": "node_config must have 'kind' field"},
+            option=orjson.OPT_INDENT_2,
+        ).decode()
     if "name" not in node_config:
-        return json.dumps(
-            {"success": False, "error": "node_config must have 'name' field"}, indent=2
-        )
+        return orjson.dumps(
+            {"success": False, "error": "node_config must have 'name' field"},
+            option=orjson.OPT_INDENT_2,
+        ).decode()
 
     result = api.pipeline.add_node(
         yaml_content,
@@ -525,7 +527,7 @@ def add_node_to_pipeline(yaml_content: str, node_config: dict[str, Any]) -> str:
         spec=node_config.get("spec", {}),
         dependencies=node_config.get("dependencies", []),
     )
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -546,7 +548,7 @@ def remove_node_from_pipeline(yaml_content: str, node_name: str) -> str:
         Warns if other nodes depend on the removed node.
     """
     result = api.pipeline.remove_node(yaml_content, node_name)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -577,7 +579,7 @@ def update_node_config(yaml_content: str, node_name: str, config_updates: dict[s
         dependencies=config_updates.get("dependencies"),
         kind=config_updates.get("kind"),
     )
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -602,7 +604,7 @@ def list_pipeline_nodes(yaml_content: str) -> str:
         }
     """
     result = api.pipeline.list_nodes(yaml_content)
-    return json.dumps(result, indent=2)
+    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
 # ============================================================================
@@ -632,7 +634,9 @@ def generate_pipeline_template(
     # Start with init
     result = api.pipeline.init(pipeline_name, description)
     if not result["success"]:
-        return json.dumps({"success": False, "error": result.get("error")}, indent=2)
+        return orjson.dumps(
+            {"success": False, "error": result.get("error")}, option=orjson.OPT_INDENT_2
+        ).decode()
 
     yaml_content = result["yaml_content"]
 
