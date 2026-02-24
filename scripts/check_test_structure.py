@@ -22,6 +22,8 @@ from typing import NamedTuple
 _ALLOWED_ORPHANS: frozenset[str] = frozenset({
     # Tests SupportsKeyValue protocol on InMemoryMemory (source: in_memory_memory.py)
     "tests/hexdag/stdlib/adapters/memory/test_in_memory_key_value.py",
+    # Round-trip serialization tests spanning pipeline_run, scheduled_task, entity_state
+    "tests/hexdag/kernel/domain/test_serialization.py",
 })
 
 

@@ -6,6 +6,7 @@ import pytest
 
 from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
 from hexdag.kernel.exceptions import ValidationError
+from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
 from hexdag.stdlib.lib.entity_state import EntityState, InvalidTransitionError
 from hexdag.stdlib.lib_base import HexDAGLib
 
@@ -256,3 +257,101 @@ class TestGetHistory:
         await lib.atransition("order", "o-1", "processing")
         history = await lib.aget_history("order", "o-1")
         assert history[0]["timestamp"] <= history[1]["timestamp"]
+
+
+# ---------------------------------------------------------------------------
+# EntityState — with SupportsCollectionStorage
+# ---------------------------------------------------------------------------
+
+
+class TestEntityStateWithStorage:
+    @pytest.mark.asyncio()
+    async def test_register_persists_state(self) -> None:
+        storage = InMemoryCollectionStorage()
+        lib = EntityState(storage=storage)
+        lib.register_machine(_order_config())
+        await lib.aregister_entity("order", "o-1")
+        doc = await storage.aload("entity_states", "order:o-1")
+        assert doc is not None
+        assert doc["state"] == "new"
+        assert doc["entity_type"] == "order"
+
+    @pytest.mark.asyncio()
+    async def test_register_persists_history(self) -> None:
+        storage = InMemoryCollectionStorage()
+        lib = EntityState(storage=storage)
+        lib.register_machine(_order_config())
+        await lib.aregister_entity("order", "o-1")
+        doc = await storage.aload("state_history", "order:o-1")
+        assert doc is not None
+        assert len(doc["transitions"]) == 1
+        assert doc["transitions"][0]["from_state"] is None
+        assert doc["transitions"][0]["to_state"] == "new"
+
+    @pytest.mark.asyncio()
+    async def test_transition_updates_storage(self) -> None:
+        storage = InMemoryCollectionStorage()
+        lib = EntityState(storage=storage)
+        lib.register_machine(_order_config())
+        await lib.aregister_entity("order", "o-1")
+        await lib.atransition("order", "o-1", "processing")
+        state_doc = await storage.aload("entity_states", "order:o-1")
+        assert state_doc is not None
+        assert state_doc["state"] == "processing"
+        history_doc = await storage.aload("state_history", "order:o-1")
+        assert history_doc is not None
+        assert len(history_doc["transitions"]) == 2
+        assert history_doc["transitions"][1]["from_state"] == "new"
+        assert history_doc["transitions"][1]["to_state"] == "processing"
+
+    @pytest.mark.asyncio()
+    async def test_aget_state_falls_back_to_storage(self) -> None:
+        storage = InMemoryCollectionStorage()
+        await storage.asave(
+            "entity_states",
+            "ticket:t-1",
+            {"entity_type": "ticket", "entity_id": "t-1", "state": "open"},
+        )
+        lib = EntityState(storage=storage)
+        result = await lib.aget_state("ticket", "t-1")
+        assert result is not None
+        assert result["state"] == "open"
+
+    @pytest.mark.asyncio()
+    async def test_aget_history_falls_back_to_storage(self) -> None:
+        storage = InMemoryCollectionStorage()
+        await storage.asave(
+            "state_history",
+            "ticket:t-1",
+            {
+                "entity_type": "ticket",
+                "entity_id": "t-1",
+                "transitions": [
+                    {
+                        "entity_type": "ticket",
+                        "entity_id": "t-1",
+                        "from_state": None,
+                        "to_state": "open",
+                        "timestamp": 1000.0,
+                        "metadata": {},
+                    }
+                ],
+            },
+        )
+        lib = EntityState(storage=storage)
+        history = await lib.aget_history("ticket", "t-1")
+        assert len(history) == 1
+        assert history[0]["to_state"] == "open"
+
+    @pytest.mark.asyncio()
+    async def test_backward_compat_no_storage(self) -> None:
+        """EntityState without storage works exactly as before."""
+        lib = EntityState()
+        lib.register_machine(_order_config())
+        await lib.aregister_entity("order", "o-1")
+        await lib.atransition("order", "o-1", "processing")
+        result = await lib.aget_state("order", "o-1")
+        assert result is not None
+        assert result["state"] == "processing"
+        history = await lib.aget_history("order", "o-1")
+        assert len(history) == 2

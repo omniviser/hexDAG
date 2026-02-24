@@ -17,6 +17,7 @@ Schemas for memory plugins:
 - ReasoningStep: Individual reasoning step schema
 """
 
+from .collection_memory import InMemoryCollectionStorage
 from .file_memory_adapter import FileMemoryAdapter
 from .in_memory_memory import InMemoryMemory
 from .schemas import (
@@ -32,6 +33,7 @@ from .state_memory import StateMemoryPlugin
 
 __all__ = [
     # Base memory adapters
+    "InMemoryCollectionStorage",
     "InMemoryMemory",
     "FileMemoryAdapter",
     "SQLiteMemoryAdapter",

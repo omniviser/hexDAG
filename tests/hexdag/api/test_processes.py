@@ -55,24 +55,24 @@ class TestListPipelineRuns:
     @pytest.mark.asyncio()
     async def test_list_all(self) -> None:
         reg = ProcessRegistry()
-        reg.register(PipelineRun(run_id="r1", pipeline_name="p1"))
-        reg.register(PipelineRun(run_id="r2", pipeline_name="p2"))
+        await reg.register(PipelineRun(run_id="r1", pipeline_name="p1"))
+        await reg.register(PipelineRun(run_id="r2", pipeline_name="p2"))
         result = await processes.list_pipeline_runs(reg)
         assert len(result) == 2
 
     @pytest.mark.asyncio()
     async def test_list_by_status(self) -> None:
         reg = ProcessRegistry()
-        reg.register(PipelineRun(run_id="r1", pipeline_name="p", status=RunStatus.RUNNING))
-        reg.register(PipelineRun(run_id="r2", pipeline_name="p", status=RunStatus.COMPLETED))
+        await reg.register(PipelineRun(run_id="r1", pipeline_name="p", status=RunStatus.RUNNING))
+        await reg.register(PipelineRun(run_id="r2", pipeline_name="p", status=RunStatus.COMPLETED))
         result = await processes.list_pipeline_runs(reg, status="running")
         assert len(result) == 1
 
     @pytest.mark.asyncio()
     async def test_list_by_ref_id(self) -> None:
         reg = ProcessRegistry()
-        reg.register(PipelineRun(run_id="r1", pipeline_name="p", ref_id="order-1"))
-        reg.register(PipelineRun(run_id="r2", pipeline_name="p", ref_id="order-2"))
+        await reg.register(PipelineRun(run_id="r1", pipeline_name="p", ref_id="order-1"))
+        await reg.register(PipelineRun(run_id="r2", pipeline_name="p", ref_id="order-2"))
         result = await processes.list_pipeline_runs(reg, ref_id="order-1")
         assert len(result) == 1
 
@@ -81,7 +81,7 @@ class TestGetPipelineRun:
     @pytest.mark.asyncio()
     async def test_get_existing(self) -> None:
         reg = ProcessRegistry()
-        reg.register(PipelineRun(run_id="r1", pipeline_name="p1"))
+        await reg.register(PipelineRun(run_id="r1", pipeline_name="p1"))
         result = await processes.get_pipeline_run(reg, "r1")
         assert result is not None
         assert result["run_id"] == "r1"

@@ -59,15 +59,15 @@ class ProcessRegistryObserver:
     async def handle(self, event: Event) -> None:
         """Handle a pipeline lifecycle event."""
         if isinstance(event, PipelineStarted):
-            self._on_started(event)
+            await self._on_started(event)
         elif isinstance(event, PipelineCompleted):
-            self._on_completed(event)
+            await self._on_completed(event)
         elif isinstance(event, NodeFailed):
-            self._on_node_failed(event)
+            await self._on_node_failed(event)
         elif isinstance(event, PipelineCancelled):
-            self._on_cancelled(event)
+            await self._on_cancelled(event)
 
-    def _on_started(self, event: PipelineStarted) -> None:
+    async def _on_started(self, event: PipelineStarted) -> None:
         run_id = str(uuid4())
         self._active_runs[event.name] = run_id
         run = PipelineRun(
@@ -76,13 +76,13 @@ class ProcessRegistryObserver:
             status=RunStatus.RUNNING,
             started_at=time.time(),
         )
-        self._registry.register(run)
+        await self._registry.register(run)
 
-    def _on_completed(self, event: PipelineCompleted) -> None:
+    async def _on_completed(self, event: PipelineCompleted) -> None:
         run_id = self._active_runs.pop(event.name, None)
         if run_id is None:
             return
-        self._registry.update_status(
+        await self._registry.update_status(
             run_id,
             RunStatus.COMPLETED,
             duration_ms=event.duration_ms,
@@ -90,14 +90,14 @@ class ProcessRegistryObserver:
             completed_at=time.time(),
         )
 
-    def _on_node_failed(self, event: NodeFailed) -> None:
+    async def _on_node_failed(self, event: NodeFailed) -> None:
         # NodeFailed has `name` (node name), not pipeline name.
         # We need to search active runs — for now, mark the first
         # active run as failed since events don't carry pipeline context.
         # In multi-pipeline scenarios, this is resolved by using
         # per-pipeline observer instances.
         for _pipeline_name, run_id in list(self._active_runs.items()):
-            self._registry.update_status(
+            await self._registry.update_status(
                 run_id,
                 RunStatus.FAILED,
                 error=f"Node '{event.name}' failed: {event.error}",
@@ -105,11 +105,11 @@ class ProcessRegistryObserver:
             )
             break
 
-    def _on_cancelled(self, event: PipelineCancelled) -> None:
+    async def _on_cancelled(self, event: PipelineCancelled) -> None:
         run_id = self._active_runs.pop(event.name, None)
         if run_id is None:
             return
-        self._registry.update_status(
+        await self._registry.update_status(
             run_id,
             RunStatus.CANCELLED,
             completed_at=time.time(),

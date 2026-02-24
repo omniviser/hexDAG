@@ -3,6 +3,7 @@
 from hexdag.kernel.ports.api_call import APICall
 from hexdag.kernel.ports.data_store import (
     DataStore,
+    SupportsCollectionStorage,
     SupportsKeyValue,
     SupportsQuery,
     SupportsSchema,
@@ -59,6 +60,7 @@ __all__ = [
     "ColumnType",
     "DataStore",
     "Database",
+    "SupportsCollectionStorage",
     "DatabasePort",
     "Executor",
     "ExecutionResult",

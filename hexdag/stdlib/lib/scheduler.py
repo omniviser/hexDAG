@@ -32,18 +32,26 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from hexdag.kernel.domain.scheduled_task import ScheduleType, TaskStatus
+from hexdag.kernel.domain.scheduled_task import (
+    ScheduleType,
+    TaskStatus,
+    scheduled_task_from_storage,
+    scheduled_task_to_storage,
+)
 from hexdag.stdlib.lib_base import HexDAGLib
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.scheduled_task import ScheduledTask
+    from hexdag.kernel.ports.data_store import SupportsCollectionStorage
     from hexdag.kernel.ports.pipeline_spawner import PipelineSpawner
 
 logger = logging.getLogger(__name__)
 
+_COLLECTION = "scheduled_tasks"
+
 
 class Scheduler(HexDAGLib):
-    """In-memory task scheduler with asyncio timers.
+    """Task scheduler with asyncio timers and optional persistent storage.
 
     Exposed tools
     -------------
@@ -53,11 +61,48 @@ class Scheduler(HexDAGLib):
     - ``alist_scheduled(ref_id?)`` — list scheduled tasks
     """
 
-    def __init__(self, spawner: PipelineSpawner | None = None) -> None:
-        """Initialise the scheduler with an optional pipeline spawner."""
+    def __init__(
+        self,
+        spawner: PipelineSpawner | None = None,
+        storage: SupportsCollectionStorage | None = None,
+    ) -> None:
+        """Initialise the scheduler.
+
+        Args
+        ----
+            spawner: Pipeline spawner for executing scheduled pipelines.
+            storage: Optional persistent backend.  When ``None`` (default),
+                all data lives only in memory.
+        """
         self._spawner = spawner
+        self._storage = storage
         self._tasks: dict[str, ScheduledTask] = {}
         self._handles: dict[str, asyncio.Task[None]] = {}
+
+    async def asetup(self) -> None:
+        """Rehydrate persisted tasks on startup.
+
+        Loads pending/running tasks from storage and restarts their
+        asyncio timers based on remaining delay.
+        """
+        if self._storage is None:
+            return
+
+        for status in ("pending", "running"):
+            docs = await self._storage.aquery(_COLLECTION, {"status": status})
+            for doc in docs:
+                task = scheduled_task_from_storage(doc)
+                self._tasks[task.task_id] = task
+                now = time.time()
+                remaining = max(0.0, (task.next_run_at or now) - now)
+                if task.schedule_type == ScheduleType.ONCE:
+                    self._handles[task.task_id] = asyncio.create_task(
+                        self._run_once(task.task_id, remaining)
+                    )
+                elif task.schedule_type == ScheduleType.RECURRING:
+                    self._handles[task.task_id] = asyncio.create_task(
+                        self._run_recurring(task.task_id, task.interval_seconds or 60.0)
+                    )
 
     async def ateardown(self) -> None:
         """Cancel all pending asyncio tasks on shutdown."""
@@ -109,6 +154,10 @@ class Scheduler(HexDAGLib):
         )
         self._tasks[task_id] = task
         self._handles[task_id] = asyncio.create_task(self._run_once(task_id, delay_seconds))
+
+        if self._storage is not None:
+            await self._storage.asave(_COLLECTION, task_id, scheduled_task_to_storage(task))
+
         return _task_to_dict(task)
 
     async def aschedule_recurring(
@@ -151,6 +200,10 @@ class Scheduler(HexDAGLib):
         )
         self._tasks[task_id] = task
         self._handles[task_id] = asyncio.create_task(self._run_recurring(task_id, interval_seconds))
+
+        if self._storage is not None:
+            await self._storage.asave(_COLLECTION, task_id, scheduled_task_to_storage(task))
+
         return _task_to_dict(task)
 
     async def acancel(self, task_id: str) -> dict[str, Any]:
@@ -173,6 +226,10 @@ class Scheduler(HexDAGLib):
             handle.cancel()
 
         task.status = TaskStatus.CANCELLED
+
+        if self._storage is not None:
+            await self._storage.asave(_COLLECTION, task_id, scheduled_task_to_storage(task))
+
         return {"task_id": task_id, "cancelled": True}
 
     async def alist_scheduled(self, ref_id: str | None = None) -> list[dict[str, Any]]:
@@ -186,6 +243,12 @@ class Scheduler(HexDAGLib):
         -------
             List of task detail dicts.
         """
+        if self._storage is not None:
+            filters = {"ref_id": ref_id} if ref_id else None
+            docs = await self._storage.aquery(_COLLECTION, filters)
+            docs.sort(key=lambda d: d.get("created_at", 0), reverse=True)
+            return [_storage_to_output(d) for d in docs]
+
         tasks = list(self._tasks.values())
         if ref_id:
             tasks = [t for t in tasks if t.ref_id == ref_id]
@@ -206,6 +269,9 @@ class Scheduler(HexDAGLib):
         task.status = TaskStatus.COMPLETED
         self._handles.pop(task_id, None)
 
+        if self._storage is not None:
+            await self._storage.asave(_COLLECTION, task_id, scheduled_task_to_storage(task))
+
     async def _run_recurring(self, task_id: str, interval: float) -> None:
         """Execute a recurring task on interval."""
         try:
@@ -216,6 +282,9 @@ class Scheduler(HexDAGLib):
                     return
                 await self._execute_task(task)
                 task.next_run_at = time.time() + interval
+
+                if self._storage is not None:
+                    await self._storage.asave(_COLLECTION, task_id, scheduled_task_to_storage(task))
         except asyncio.CancelledError:
             return
 
@@ -267,4 +336,23 @@ def _task_to_dict(task: ScheduledTask) -> dict[str, Any]:
         "last_run_at": task.last_run_at,
         "run_count": task.run_count,
         "last_run_id": task.last_run_id,
+    }
+
+
+def _storage_to_output(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert a storage document to tool output format."""
+    return {
+        "task_id": data.get("task_id"),
+        "pipeline_name": data.get("pipeline_name"),
+        "schedule_type": data.get("schedule_type"),
+        "status": data.get("status"),
+        "delay_seconds": data.get("delay_seconds"),
+        "interval_seconds": data.get("interval_seconds"),
+        "ref_id": data.get("ref_id"),
+        "ref_type": data.get("ref_type"),
+        "created_at": data.get("created_at"),
+        "next_run_at": data.get("next_run_at"),
+        "last_run_at": data.get("last_run_at"),
+        "run_count": data.get("run_count"),
+        "last_run_id": data.get("last_run_id"),
     }

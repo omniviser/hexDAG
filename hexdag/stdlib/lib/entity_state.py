@@ -38,10 +38,19 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
+    from hexdag.kernel.ports.data_store import SupportsCollectionStorage
+
+_STATES_COLLECTION = "entity_states"
+_HISTORY_COLLECTION = "state_history"
+
+
+def _entity_key(entity_type: str, entity_id: str) -> str:
+    """Build a storage key from entity type and ID."""
+    return f"{entity_type}:{entity_id}"
 
 
 class EntityState(HexDAGLib):
-    """In-memory entity state tracker with validated transitions.
+    """Entity state tracker with validated transitions and optional persistence.
 
     Exposed tools
     -------------
@@ -51,8 +60,15 @@ class EntityState(HexDAGLib):
     - ``aregister_entity(entity_type, entity_id)`` — create new entity
     """
 
-    def __init__(self) -> None:
-        """Initialise state machines, entity states, and history stores."""
+    def __init__(self, storage: SupportsCollectionStorage | None = None) -> None:
+        """Initialise state machines, entity states, and history stores.
+
+        Args
+        ----
+            storage: Optional persistent backend.  When ``None`` (default),
+                all data lives only in memory.
+        """
+        self._storage = storage
         # entity_type → StateMachineConfig
         self._machines: dict[str, StateMachineConfig] = {}
         # (entity_type, entity_id) → current state string
@@ -112,6 +128,7 @@ class EntityState(HexDAGLib):
         """
         from hexdag.kernel.domain.entity_state import (
             StateTransition,  # lazy: avoid import cycle with kernel
+            state_transition_to_storage,
         )
 
         config = self._machines.get(entity_type)
@@ -123,15 +140,32 @@ class EntityState(HexDAGLib):
 
         key = (entity_type, entity_id)
         self._states[key] = state
-        self._history.setdefault(key, []).append(
-            StateTransition(
-                entity_type=entity_type,
-                entity_id=entity_id,
-                from_state=None,
-                to_state=state,
-                timestamp=time.time(),
-            )
+        transition = StateTransition(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            from_state=None,
+            to_state=state,
+            timestamp=time.time(),
         )
+        self._history.setdefault(key, []).append(transition)
+
+        if self._storage is not None:
+            storage_key = _entity_key(entity_type, entity_id)
+            await self._storage.asave(
+                _STATES_COLLECTION,
+                storage_key,
+                {"entity_type": entity_type, "entity_id": entity_id, "state": state},
+            )
+            await self._storage.asave(
+                _HISTORY_COLLECTION,
+                storage_key,
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "transitions": [state_transition_to_storage(transition)],
+                },
+            )
+
         return {"entity_type": entity_type, "entity_id": entity_id, "state": state}
 
     async def atransition(
@@ -158,6 +192,7 @@ class EntityState(HexDAGLib):
         """
         from hexdag.kernel.domain.entity_state import (
             StateTransition,  # lazy: avoid import cycle with kernel
+            state_transition_to_storage,
         )
 
         key = (entity_type, entity_id)
@@ -181,16 +216,37 @@ class EntityState(HexDAGLib):
         metadata: dict[str, Any] = {}
         if reason:
             metadata["reason"] = reason
-        self._history.setdefault(key, []).append(
-            StateTransition(
-                entity_type=entity_type,
-                entity_id=entity_id,
-                from_state=current,
-                to_state=to_state,
-                timestamp=time.time(),
-                metadata=metadata,
-            )
+        transition = StateTransition(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            from_state=current,
+            to_state=to_state,
+            timestamp=time.time(),
+            metadata=metadata,
         )
+        self._history.setdefault(key, []).append(transition)
+
+        if self._storage is not None:
+            storage_key = _entity_key(entity_type, entity_id)
+            await self._storage.asave(
+                _STATES_COLLECTION,
+                storage_key,
+                {"entity_type": entity_type, "entity_id": entity_id, "state": to_state},
+            )
+            # Append to persisted history
+            history_doc = await self._storage.aload(_HISTORY_COLLECTION, storage_key)
+            transitions_list = history_doc.get("transitions", []) if history_doc else []
+            transitions_list.append(state_transition_to_storage(transition))
+            await self._storage.asave(
+                _HISTORY_COLLECTION,
+                storage_key,
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "transitions": transitions_list,
+                },
+            )
+
         return {
             "entity_type": entity_type,
             "entity_id": entity_id,
@@ -212,13 +268,23 @@ class EntityState(HexDAGLib):
         """
         key = (entity_type, entity_id)
         current = self._states.get(key)
-        if current is None:
-            return None
-        return {
-            "entity_type": entity_type,
-            "entity_id": entity_id,
-            "state": current,
-        }
+        if current is not None:
+            return {
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "state": current,
+            }
+        if self._storage is not None:
+            data = await self._storage.aload(
+                _STATES_COLLECTION, _entity_key(entity_type, entity_id)
+            )
+            if data is not None:
+                return {
+                    "entity_type": data.get("entity_type"),
+                    "entity_id": data.get("entity_id"),
+                    "state": data.get("state"),
+                }
+        return None
 
     async def aget_history(self, entity_type: str, entity_id: str) -> list[dict[str, Any]]:
         """Get the full state transition history of an entity.
@@ -233,13 +299,29 @@ class EntityState(HexDAGLib):
             List of transition records, oldest first.
         """
         key = (entity_type, entity_id)
-        transitions = self._history.get(key, [])
-        return [
-            {
-                "from_state": t.from_state,
-                "to_state": t.to_state,
-                "timestamp": t.timestamp,
-                "metadata": t.metadata,
-            }
-            for t in transitions
-        ]
+        transitions = self._history.get(key)
+        if transitions is not None:
+            return [
+                {
+                    "from_state": t.from_state,
+                    "to_state": t.to_state,
+                    "timestamp": t.timestamp,
+                    "metadata": t.metadata,
+                }
+                for t in transitions
+            ]
+        if self._storage is not None:
+            data = await self._storage.aload(
+                _HISTORY_COLLECTION, _entity_key(entity_type, entity_id)
+            )
+            if data is not None:
+                return [
+                    {
+                        "from_state": t.get("from_state"),
+                        "to_state": t.get("to_state"),
+                        "timestamp": t.get("timestamp"),
+                        "metadata": t.get("metadata", {}),
+                    }
+                    for t in data.get("transitions", [])
+                ]
+        return []
