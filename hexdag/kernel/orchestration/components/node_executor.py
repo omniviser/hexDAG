@@ -189,6 +189,8 @@ class NodeExecutor:
                         data_context.update(node_results)
                     if isinstance(validated_input, dict):
                         data_context.update(validated_input)
+                    elif hasattr(validated_input, "model_dump"):
+                        data_context.update(validated_input.model_dump())
                     condition_result = predicate(data_context, {})
 
                     if not condition_result:

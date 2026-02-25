@@ -1161,3 +1161,39 @@ class TestWhenClauseDataContext:
         assert result == {"processed": {"upstream": 42}}
         skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
         assert len(skip_events) == 0
+
+    @pytest.mark.asyncio()
+    async def test_when_with_pydantic_validated_input(
+        self, executor, coordinator, observer
+    ) -> None:
+        """when clause must work when validated_input is a Pydantic model (not a dict).
+
+        Regression test: when input_mapping produces a Pydantic model via
+        validate_input(), the when clause should still see the fields.
+        """
+
+        class MatchInput(BaseModel):
+            match_result: str
+
+        node_spec = NodeSpec(
+            "guarded",
+            noop_fn,
+            when="match_result == 'matched'",
+            in_model=MatchInput,
+        )
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="guarded",
+                node_spec=node_spec,
+                node_input={"match_result": "matched"},
+                context=NodeExecutionContext(dag_id="test", node_id="guarded"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=True,
+            )
+
+        # Should execute, not skip
+        assert "_skipped" not in result
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 0
