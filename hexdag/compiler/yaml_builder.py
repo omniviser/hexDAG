@@ -570,11 +570,19 @@ class YamlPipelineBuilder:
         if isinstance(expressions, dict):
             refs |= extract_refs_from_expressions(expressions, other_nodes)
 
-        # 3. prompt_template / template
+        # 3. prompt_template / template (string or dict format)
         for key in ("prompt_template", "template", "initial_prompt_template", "main_prompt"):
             template = spec.get(key)
             if isinstance(template, str):
                 refs |= extract_refs_from_template(template, other_nodes)
+            elif isinstance(template, dict):
+                # Dict-format prompt templates: extract refs from sub-fields
+                for subkey in ("template", "human_message", "system_message"):
+                    if isinstance(template.get(subkey), str):
+                        refs |= extract_refs_from_template(template[subkey], other_nodes)
+                for msg in template.get("messages", []):
+                    if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                        refs |= extract_refs_from_template(msg["content"], other_nodes)
 
         return refs
 

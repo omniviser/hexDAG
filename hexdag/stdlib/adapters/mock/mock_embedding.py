@@ -5,12 +5,18 @@ import hashlib
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.ports.llm import ImageInput, SupportsEmbedding
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
-class MockEmbedding(SupportsEmbedding):
+class MockEmbedding(
+    HexDAGAdapter,
+    SupportsEmbedding,
+    yaml_alias="mock_embedding",
+    port="embedding",
+):
     """Mock implementation of the Embedding interface for testing.
 
     This mock generates deterministic embeddings based on the input text's hash,

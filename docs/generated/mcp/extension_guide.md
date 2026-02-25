@@ -4,7 +4,7 @@
 
 | Component | Purpose | Available |
 |-----------|---------|-----------|
-| **Adapter** | Connect to external services | 23 |
+| **Adapter** | Connect to external services | 24 |
 | **Node** | Custom processing logic | 8 |
 | **Tool** | Agent-callable functions | 2 |
 

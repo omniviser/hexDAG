@@ -15,11 +15,12 @@ import aiofiles
 
 from hexdag.kernel.ports.data_store import SupportsQuery
 from hexdag.kernel.ports.database import ColumnSchema, ColumnType, TableSchema
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logging.basicConfig(level=logging.INFO)
 
 
-class CsvAdapter(SupportsQuery):
+class CsvAdapter(HexDAGAdapter, SupportsQuery, yaml_alias="csv_adapter", port="database"):
     """
     Adapter class for reading CSV files from a specified directory as database tables.
 

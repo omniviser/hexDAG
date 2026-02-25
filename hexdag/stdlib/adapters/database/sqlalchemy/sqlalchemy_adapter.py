@@ -13,9 +13,16 @@ from hexdag.kernel.ports.database import (
     SupportsRawSQL,
     TableSchema,
 )
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 
-class SQLAlchemyAdapter(SupportsQuery, SupportsRawSQL):
+class SQLAlchemyAdapter(
+    HexDAGAdapter,
+    SupportsQuery,
+    SupportsRawSQL,
+    yaml_alias="sqlalchemy_adapter",
+    port="database",
+):
     """Adapter for SQLAlchemy-supported databases."""
 
     def __init__(self, dsn: str) -> None:

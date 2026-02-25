@@ -136,7 +136,9 @@ def discover_modules(package_path: str) -> list[str]:
 def discover_plugins() -> list[str]:
     """Discover installed hexdag plugins.
 
-    Scans the hexdag_plugins namespace package for available plugins.
+    Discovers plugins from two sources:
+    1. ``importlib.metadata.entry_points`` (pip-installed packages with hexdag.* groups)
+    2. ``hexdag_plugins`` namespace package (legacy, for backward compatibility)
 
     Returns
     -------
@@ -149,16 +151,34 @@ def discover_plugins() -> list[str]:
     >>> isinstance(plugins, list)
     True
     """
-    plugins = []
+    seen: set[str] = set()
+
+    # 1. Entry-points based discovery (new standard)
+    try:
+        from importlib.metadata import (
+            entry_points as _ep,  # lazy: deferred to avoid import cost at module load
+        )
+
+        for group in ("hexdag.nodes", "hexdag.adapters", "hexdag.macros", "hexdag.prompts"):
+            for ep in _ep(group=group):
+                if ep.dist:
+                    seen.add(ep.dist.name)
+                else:
+                    seen.add(ep.name)
+    except ImportError:
+        pass
+
+    # 2. Legacy namespace package discovery (backward compat)
     try:
         import hexdag_plugins  # lazy: optional namespace package
 
         for _finder, name, ispkg in pkgutil.iter_modules(hexdag_plugins.__path__):
-            if ispkg:  # Only include packages, not loose modules
-                plugins.append(name)
+            if ispkg:
+                seen.add(name)
     except ImportError:
         pass
-    return plugins
+
+    return sorted(seen)
 
 
 def discover_classes_in_module(
@@ -690,11 +710,45 @@ def _get_node_schema(cls: type) -> dict[str, Any]:
     return init_schema if isinstance(init_schema, dict) else {"type": "object", "properties": {}}
 
 
+_plugin_components_loaded: bool = False
+
+
+def load_plugin_components() -> None:
+    """Load all pip-installed plugin components via entry_points.
+
+    Importing the entry point classes triggers ``__init_subclass__``
+    registration on ``BaseNodeFactory``, ``HexDAGAdapter``, and
+    ``ConfigurableMacro``.
+    """
+    global _plugin_components_loaded
+    if _plugin_components_loaded:
+        return
+    _plugin_components_loaded = True
+
+    try:
+        from importlib.metadata import (
+            entry_points as _ep,  # lazy: deferred to avoid import cost at module load
+        )
+
+        for group in ("hexdag.nodes", "hexdag.adapters", "hexdag.macros", "hexdag.prompts"):
+            for ep in _ep(group=group):
+                try:
+                    ep.load()  # imports the class → __init_subclass__ fires
+                except Exception:
+                    import logging
+
+                    logging.getLogger(__name__).warning("Failed to load plugin entry point: %s", ep)
+    except ImportError:
+        pass
+
+
 def clear_discovery_cache() -> None:
     """Clear all discovery caches.
 
     Useful for testing or when plugins are dynamically loaded/unloaded.
     """
+    global _plugin_components_loaded
+    _plugin_components_loaded = False
     discover_modules.cache_clear()
     discover_plugins.cache_clear()
     discover_user_modules.cache_clear()

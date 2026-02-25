@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -77,6 +77,52 @@ class PromptTemplate:
     - Loops or conditionals
     - Complex expressions
     """
+
+    _registry: ClassVar[dict[str, type[PromptTemplate]]] = {}
+    """Maps YAML ``type`` values to concrete template classes."""
+
+    def __init_subclass__(cls, *, yaml_type: str | None = None, **kwargs: Any) -> None:
+        """Register subclass for YAML ``from_yaml()`` dispatch."""
+        super().__init_subclass__(**kwargs)
+        if yaml_type:
+            PromptTemplate._registry[yaml_type] = cls
+
+    @classmethod
+    def from_yaml(cls, config: dict[str, Any]) -> PromptTemplate:
+        """Construct a prompt template from a YAML dict config.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            YAML mapping with at least a ``type`` key (default: ``"simple"``).
+
+        Returns
+        -------
+        PromptTemplate
+            An instance of the appropriate template subclass.
+
+        Raises
+        ------
+        ValueError
+            If the ``type`` is not registered.
+
+        Examples
+        --------
+        >>> tpl = PromptTemplate.from_yaml({"type": "simple", "template": "Hello {{name}}"})
+        >>> tpl.render(name="world")
+        'Hello world'
+        """
+        prompt_type = config.get("type", "simple")
+        factory = cls._registry.get(prompt_type)
+        if not factory:
+            valid = ", ".join(sorted(cls._registry))
+            raise ValueError(f"Unknown prompt type '{prompt_type}'. Valid: {valid}")
+        return factory._from_yaml_config(config)
+
+    @classmethod
+    def _from_yaml_config(cls, config: dict[str, Any]) -> PromptTemplate:
+        """Override in subclasses to construct from YAML config dict."""
+        return cls(config.get("template", ""))
 
     def __init__(self, template: str, input_vars: list[str] | None = None) -> None:
         r"""Initialize a PromptTemplate with a template string and optional input variables.
@@ -351,12 +397,15 @@ class PromptTemplate:
         return self + text
 
 
+# Register PromptTemplate itself as "simple" (not a subclass, so __init_subclass__ won't fire)
+PromptTemplate._registry["simple"] = PromptTemplate
+
 # ---------------------------------------------------------------------------
 # Advanced Template Types
 # ---------------------------------------------------------------------------
 
 
-class FewShotPromptTemplate(PromptTemplate):
+class FewShotPromptTemplate(PromptTemplate, yaml_type="few_shot"):
     r"""PromptTemplate with built-in support for few-shot examples.
 
     Simplified implementation that builds the template once during initialization.
@@ -426,6 +475,15 @@ class FewShotPromptTemplate(PromptTemplate):
 
         super().__init__(full_template, **kwargs)
 
+    @classmethod
+    def _from_yaml_config(cls, config: dict[str, Any]) -> FewShotPromptTemplate:
+        """Construct from YAML config dict."""
+        return cls(
+            template=config.get("template", ""),
+            examples=config.get("examples"),
+            example_separator=config.get("example_separator", "\n\n"),
+        )
+
     def _build_template(self) -> str:
         """Build the complete template with examples prepended.
 
@@ -489,7 +547,7 @@ class FewShotPromptTemplate(PromptTemplate):
         return self + text
 
 
-class ChatPromptTemplate(PromptTemplate):
+class ChatPromptTemplate(PromptTemplate, yaml_type="chat"):
     """Enhanced prompt template supporting multi-message conversations like LangChain.
 
     Supports:
@@ -556,6 +614,15 @@ class ChatPromptTemplate(PromptTemplate):
             combined_template = "\n".join(msg.get("content", "") for msg in self.message_templates)
 
         super().__init__(combined_template, **kwargs)
+
+    @classmethod
+    def _from_yaml_config(cls, config: dict[str, Any]) -> ChatPromptTemplate:
+        """Construct from YAML config dict."""
+        return cls(
+            system_message=config.get("system_message"),
+            human_message=config.get("human_message"),
+            messages=config.get("messages"),
+        )
 
     def to_messages(
         self,
@@ -666,7 +733,7 @@ class ChatPromptTemplate(PromptTemplate):
         return self + text
 
 
-class ChatFewShotTemplate(ChatPromptTemplate):
+class ChatFewShotTemplate(ChatPromptTemplate, yaml_type="chat_few_shot"):
     """Chat template with few-shot examples support.
 
     Combines the role-based messaging of ChatPromptTemplate with the example formatting of
@@ -745,6 +812,17 @@ class ChatFewShotTemplate(ChatPromptTemplate):
         )
 
         self._original_system_message = system_message
+
+    @classmethod
+    def _from_yaml_config(cls, config: dict[str, Any]) -> ChatFewShotTemplate:
+        """Construct from YAML config dict."""
+        return cls(
+            system_message=config.get("system_message"),
+            human_message=config.get("human_message"),
+            messages=config.get("messages"),
+            examples=config.get("examples"),
+            example_separator=config.get("example_separator", "\n\n"),
+        )
 
     def add_example(self, example: dict[str, Any]) -> None:
         """Add an example and rebuild system message."""

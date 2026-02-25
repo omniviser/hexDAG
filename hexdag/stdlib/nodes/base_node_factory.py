@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from pydantic import BaseModel, create_model
 
@@ -19,6 +19,29 @@ _MODEL_CACHE: KeyedCache[type[BaseModel]] = KeyedCache()
 
 class BaseNodeFactory(ABC):
     """Minimal base class for node factories with Pydantic models."""
+
+    _registry: ClassVar[dict[str, str]] = {}
+    """Auto-populated by ``__init_subclass__``: alias -> full module path."""
+
+    def __init_subclass__(cls, *, yaml_alias: str | None = None, **kwargs: Any) -> None:
+        """Register subclass in the alias registry when ``yaml_alias`` is provided."""
+        super().__init_subclass__(**kwargs)
+        if yaml_alias:
+            full_path = f"{cls.__module__}.{cls.__qualname__}"
+            BaseNodeFactory._registry[yaml_alias] = full_path
+            # Also register any __aliases__ declared on the class
+            for alias in getattr(cls, "__aliases__", ()):
+                BaseNodeFactory._registry[alias] = full_path
+
+            # Push aliases into the kernel registry immediately
+            from hexdag.kernel._alias_registry import (
+                register_builtin_aliases,  # lazy: avoid import at class-definition time
+            )
+
+            aliases: dict[str, str] = {yaml_alias: full_path}
+            for alias in getattr(cls, "__aliases__", ()):
+                aliases[alias] = full_path
+            register_builtin_aliases(aliases)
 
     # Note: Event emission has been removed as it's now handled by the orchestrator
     # The new event system uses ObserverManager at the orchestrator level

@@ -66,7 +66,7 @@ _METHOD_MAP: dict[str, str] = {
 }
 
 
-class ApiCallNode(BaseNodeFactory):
+class ApiCallNode(BaseNodeFactory, yaml_alias="api_call_node"):
     """Declarative HTTP call node for REST API integration.
 
     Makes HTTP requests via the ``api_call`` port with URL, header, and body

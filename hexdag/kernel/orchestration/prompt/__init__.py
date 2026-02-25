@@ -17,6 +17,9 @@ PromptInput = (
 )
 TemplateType = PromptTemplate | ChatPromptTemplate | ChatFewShotTemplate | FewShotPromptTemplate
 
+# Re-export from_yaml as a module-level function for convenience
+from_yaml = PromptTemplate.from_yaml
+
 __all__ = [
     "PromptTemplate",
     "FewShotPromptTemplate",
@@ -24,4 +27,5 @@ __all__ = [
     "ChatFewShotTemplate",
     "PromptInput",
     "TemplateType",
+    "from_yaml",
 ]

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.secret import SecretStore
 from hexdag.kernel.types import Secret
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.healthcheck import HealthStatus
@@ -14,7 +15,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class LocalSecretAdapter(SecretStore):
+class LocalSecretAdapter(
+    HexDAGAdapter,
+    SecretStore,
+    yaml_alias="local_secret_adapter",
+    port="secret",
+):
     """Local secret adapter that reads from environment variables.
 
     This adapter implements the SecretStore interface using local environment

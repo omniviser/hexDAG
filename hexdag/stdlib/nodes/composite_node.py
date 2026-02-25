@@ -78,7 +78,7 @@ CollectMode = Literal["list", "last", "first", "dict", "reduce"]
 ErrorHandling = Literal["fail_fast", "continue", "collect"]
 
 
-class CompositeNode(BaseNodeFactory):
+class CompositeNode(BaseNodeFactory, yaml_alias="composite_node"):
     """Unified control flow node supporting while, for-each, times, if-else, switch.
 
     All modes support two execution patterns:

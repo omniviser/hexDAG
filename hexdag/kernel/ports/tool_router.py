@@ -11,9 +11,9 @@ import asyncio
 import inspect
 from typing import TYPE_CHECKING, Any
 
+from hexdag.kernel._alias_registry import resolve_function
 from hexdag.kernel.exceptions import ResourceNotFoundError, TypeMismatchError
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.resolver import resolve_function
 
 if TYPE_CHECKING:
     from collections.abc import Callable

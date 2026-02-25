@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class PortCallNode(BaseNodeFactory):
+class PortCallNode(BaseNodeFactory, yaml_alias="port_call_node"):
     """Execute a method on a configured port/adapter.
 
     This node type eliminates the need for Python wrapper functions

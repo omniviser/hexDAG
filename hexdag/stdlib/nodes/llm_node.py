@@ -49,7 +49,7 @@ def _convert_dicts_to_messages(message_dicts: list[dict[str, str]]) -> list[Mess
     return [Message.model_validate(msg) for msg in message_dicts]
 
 
-class LLMNode(BaseNodeFactory):
+class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
     """Unified LLM node - prompt building, API calls, and optional parsing.
 
     This is the primary node for LLM interactions in hexdag. It provides a simple,
@@ -231,8 +231,10 @@ class LLMNode(BaseNodeFactory):
     # -------------------
 
     @staticmethod
-    def _prepare_template(template: PromptInput | str) -> TemplateType:
-        """Convert string input to PromptTemplate if needed."""
+    def _prepare_template(template: PromptInput | str | dict[str, Any]) -> TemplateType:
+        """Convert string or dict input to PromptTemplate if needed."""
+        if isinstance(template, dict):
+            return PromptTemplate.from_yaml(template)
         if isinstance(template, str):
             return PromptTemplate(template)
         return template
