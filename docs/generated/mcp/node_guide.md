@@ -181,33 +181,6 @@ Unified LLM node - prompt building, API calls, and optional parsing.
   dependencies: []
 ```
 
-### PortCallNode
-
-Execute a method on a configured port/adapter.
-
-**Kind**: `port_call_node`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `str` | Yes | Node name (must be unique within the pipeline) |
-| `port` | `str` | Yes | Name of the port to call (e.g., "database", "llm",... |
-| `method` | `str` | Yes | Method name to invoke on the port |
-| `input_mapping` | `dict[str, str] | None` | No | Mapping of method parameter names to data sources.... |
-| `fallback` | `Any` | No | Value to return if the port is not available |
-| `has_fallback` | `bool` | No | Set to True to enable fallback behavior (allows No... |
-| `output_schema` | `dict[str, Any] | type[BaseModel] | None` | No | Optional schema for validating/structuring the out... |
-| `deps` | `list[str] | None` | No | List of dependency node names for execution orderi... |
-
-**Example:**
-```yaml
-- kind: port_call_node
-  metadata:
-    name: my_port_call
-  spec:
-    # Add configuration here
-  dependencies: []
-```
-
 ### ReActAgentNode
 
 Multi-step reasoning agent.

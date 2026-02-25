@@ -911,6 +911,215 @@ class TestCompositeNodeValidation:
         assert any("kind" in err.lower() for err in result.errors)
 
 
+class TestMisplacedNodeFields:
+    """Tests for detecting fields misplaced at node level instead of inside spec."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.validator = YamlValidator()
+
+    def test_misplaced_when_at_node_level(self):
+        """Test that 'when' at node level is flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                        "when": "x == 1",  # Misplaced: should be inside spec
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any(
+            "'when' is not a valid node-level field" in err and "Move it inside 'spec'" in err
+            for err in result.errors
+        )
+
+    def test_when_inside_spec_valid(self):
+        """Test that 'when' inside spec is valid (no misplaced field error)."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test", "when": "x == 1"},
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+    def test_misplaced_timeout_at_node_level(self):
+        """Test that 'timeout' at node level is flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                        "timeout": 30,  # Misplaced: should be inside spec
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("'timeout' is not a valid node-level field" in err for err in result.errors)
+
+    def test_misplaced_input_mapping_at_node_level(self):
+        """Test that 'input_mapping' at node level is flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                    },
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node2"},
+                        "spec": {"fn": "test"},
+                        "input_mapping": {"x": "node1.y"},  # Misplaced
+                        "dependencies": ["node1"],
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any(
+            "'input_mapping' is not a valid node-level field" in err for err in result.errors
+        )
+
+    def test_misplaced_max_retries_at_node_level(self):
+        """Test that 'max_retries' at node level is flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                        "max_retries": 3,  # Misplaced
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("'max_retries' is not a valid node-level field" in err for err in result.errors)
+
+    def test_misplaced_fn_at_node_level(self):
+        """Test that 'fn' at node level is flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {},
+                        "fn": "json.loads",  # Misplaced
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("'fn' is not a valid node-level field" in err for err in result.errors)
+
+    def test_misplaced_prompt_template_at_node_level(self):
+        """Test that 'prompt_template' at node level is flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "llm_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {},
+                        "prompt_template": "Analyze: {{input}}",  # Misplaced
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any(
+            "'prompt_template' is not a valid node-level field" in err for err in result.errors
+        )
+
+    def test_multiple_misplaced_fields_reported(self):
+        """Test that multiple misplaced fields each produce a separate error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                        "when": "x == 1",
+                        "timeout": 30,
+                        "max_retries": 3,
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        misplaced_errors = [
+            err for err in result.errors if "is not a valid node-level field" in err
+        ]
+        assert len(misplaced_errors) == 3
+
+    def test_valid_node_level_keys_accepted(self):
+        """Test that valid node-level keys (dependencies, wait_for) are accepted."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                    },
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node2"},
+                        "spec": {"fn": "test"},
+                        "dependencies": ["node1"],
+                        "wait_for": ["node1"],
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+
+
 class TestPyTagValidation:
     """Tests for !py tag validation."""
 

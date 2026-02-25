@@ -182,6 +182,14 @@ properties:
         description: Custom sanitized types for output_schema validation
         title: Custom Types
         type: object
+      services:
+        additionalProperties:
+          additionalProperties: true
+          type: object
+        description: 'Service configurations. Format: {service_name: {class: str,
+          config: dict}}'
+        title: Services
+        type: object
       input_schema:
         additionalProperties: true
         type: object
@@ -205,7 +213,6 @@ properties:
           - $ref: '#/$defs/DataNodeSpec'
           - $ref: '#/$defs/ExpressionNodeSpec'
           - $ref: '#/$defs/FunctionNodeSpec'
-          - $ref: '#/$defs/Port_CallNodeSpec'
           - $ref: '#/$defs/Tool_CallNodeSpec'
           - $ref: '#/$defs/AgentNodeSpec'
       events:
@@ -666,55 +673,6 @@ $defs:
     - kind
     - metadata
     - spec
-  Port_CallNodeSpec:
-    allOf:
-    - $ref: '#/$defs/Node'
-    type: object
-    description: Specification for port_call_node type
-    properties:
-      kind:
-        const: port_call_node
-        description: 'Node type: port_call_node'
-      metadata:
-        type: object
-        properties:
-          name:
-            type: string
-            description: Unique node identifier within the pipeline
-          annotations:
-            type: object
-            description: Optional metadata annotations
-        required:
-        - name
-      spec:
-        type: object
-        properties:
-          port:
-            type: string
-            description: Name of the port to call (e.g., "database", "llm", "tool_router")
-          method:
-            type: string
-            description: Method name to invoke on the port
-          fallback:
-            type: string
-            description: Value to return if the port is not available
-            default: null
-          has_fallback:
-            type: string
-            description: Set to True to enable fallback behavior (allows None as fallback)
-            default: false
-          output_schema:
-            type: string
-            description: Optional schema for validating/structuring the output
-            default: null
-        additionalProperties: false
-        required:
-        - port
-        - method
-    required:
-    - kind
-    - metadata
-    - spec
   Tool_CallNodeSpec:
     allOf:
     - $ref: '#/$defs/Node'
@@ -828,13 +786,13 @@ $defs:
         properties:
           input_mapping:
             anyOf:
-            - additionalProperties:
-                type: string
+            - additionalProperties: true
               type: object
             - type: 'null'
             default: null
             description: Field mapping from upstream nodes or pipeline input. Keys
               are target field names, values use node_name.field or $input.field syntax.
+              Values can also be nested dicts whose leaf strings are resolved recursively.
             title: Input Mapping
       dependencies:
         anyOf:

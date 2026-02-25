@@ -1,11 +1,14 @@
-"""Tests for HexDAGLib base class."""
+"""Tests for HexDAGLib backwards-compatibility shim.
+
+HexDAGLib is now an alias for Service. These tests verify the alias
+works correctly and that Service-based libs function properly.
+"""
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
+from hexdag.kernel.service import Service, get_service_tool_schemas, tool
 from hexdag.stdlib.lib_base import HexDAGLib, get_lib_tool_schemas
 
 # ---------------------------------------------------------------------------
@@ -13,17 +16,19 @@ from hexdag.stdlib.lib_base import HexDAGLib, get_lib_tool_schemas
 # ---------------------------------------------------------------------------
 
 
-class EmptyLib(HexDAGLib):
+class EmptyLib(Service):
     """Lib with no tools."""
 
 
-class CalculatorLib(HexDAGLib):
+class CalculatorLib(Service):
     """Lib with two async tools and one sync method (excluded)."""
 
+    @tool
     async def aadd(self, a: int, b: int) -> int:
         """Add two numbers."""
         return a + b
 
+    @tool
     async def amultiply(self, x: float, y: float) -> float:
         """Multiply two numbers."""
         return x * y
@@ -36,7 +41,7 @@ class CalculatorLib(HexDAGLib):
         """Private — should NOT be exposed."""
 
 
-class LifecycleLib(HexDAGLib):
+class LifecycleLib(Service):
     """Lib that tracks lifecycle calls."""
 
     def __init__(self) -> None:
@@ -49,24 +54,38 @@ class LifecycleLib(HexDAGLib):
     async def ateardown(self) -> None:
         self.teardown_called = True
 
+    @tool
     async def ado_work(self) -> str:
         """Do some work."""
         return "done"
 
 
-class CustomToolsLib(HexDAGLib):
+class CustomToolsLib(Service):
     """Lib that overrides get_tools()."""
 
-    async def ahidden(self) -> str:
-        """This would normally be auto-exposed."""
-        return "hidden"
-
+    @tool
     async def avisible(self) -> str:
         """This is the only tool."""
         return "visible"
 
-    def get_tools(self) -> dict[str, Any]:
-        return {"avisible": self.avisible}
+    async def ahidden(self) -> str:
+        """Not decorated, so not exposed."""
+        return "hidden"
+
+
+# ---------------------------------------------------------------------------
+# Tests: backwards-compatibility alias
+# ---------------------------------------------------------------------------
+
+
+class TestBackwardsCompatibility:
+    """Verify that HexDAGLib is an alias for Service."""
+
+    def test_hexdaglib_is_service(self) -> None:
+        assert HexDAGLib is Service
+
+    def test_get_lib_tool_schemas_is_get_service_tool_schemas(self) -> None:
+        assert get_lib_tool_schemas is get_service_tool_schemas
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +127,7 @@ class TestToolDiscovery:
         tools = lib.get_tools()
         assert "ado_work" in tools
 
-    def test_custom_tools_override(self) -> None:
+    def test_undecorated_not_exposed(self) -> None:
         lib = CustomToolsLib()
         tools = lib.get_tools()
         assert "avisible" in tools
@@ -135,7 +154,7 @@ class TestLifecycle:
 
     @pytest.mark.asyncio()
     async def test_base_lifecycle_is_noop(self) -> None:
-        lib = HexDAGLib()
+        lib = Service()
         await lib.asetup()
         await lib.ateardown()
 
@@ -215,4 +234,4 @@ class TestRepr:
 
     def test_repr_empty_lib(self) -> None:
         lib = EmptyLib()
-        assert repr(lib) == "EmptyLib(tools=[])"
+        assert repr(lib) == "EmptyLib(tools=[], steps=[])"

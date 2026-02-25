@@ -1,19 +1,19 @@
 """Database tools lib — agent-callable database operations.
 
-Each public async ``a*`` method is auto-exposed as an agent tool.
+Each ``@tool``-decorated method is exposed as an agent-callable tool.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from hexdag.stdlib.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.data_store import SupportsQuery
 
 
-class DatabaseTools(HexDAGLib):
+class DatabaseTools(Service):
     """Database query tools for agent nodes.
 
     Provides SQL query execution, table listing, and schema introspection
@@ -29,6 +29,7 @@ class DatabaseTools(HexDAGLib):
     def __init__(self, store: SupportsQuery) -> None:
         self._store = store
 
+    @tool
     async def adatabase_query(
         self, sql: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
@@ -45,6 +46,7 @@ class DatabaseTools(HexDAGLib):
         """
         return await self._store.aexecute_query(sql, params)
 
+    @tool
     async def alist_tables(self) -> list[str]:
         """List all tables in the database.
 
@@ -60,6 +62,7 @@ class DatabaseTools(HexDAGLib):
         results = await self._store.aexecute_query(sql)
         return [row["table_name"] for row in results]
 
+    @tool
     async def adescribe_table(self, table: str) -> list[dict[str, Any]]:
         """Get column information for a database table.
 

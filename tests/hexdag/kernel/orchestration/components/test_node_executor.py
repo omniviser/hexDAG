@@ -1055,3 +1055,109 @@ class TestNodeExecutorUpstreamSkip:
 
         # Should have executed normally (noop_fn processes the input)
         assert result == {"processed": {"_skipped": True, "reason": "when clause"}}
+
+
+# ============================================================================
+# Tests: when clause data context
+# ============================================================================
+
+
+class TestWhenClauseDataContext:
+    """Test that when clause evaluates against both node_results and validated input."""
+
+    @pytest.fixture()
+    def executor(self) -> NodeExecutor:
+        return NodeExecutor(strict_validation=False)
+
+    @pytest.fixture()
+    def coordinator(self) -> ExecutionCoordinator:
+        return ExecutionCoordinator()
+
+    @pytest.fixture()
+    def observer(self) -> MockObserverManager:
+        return MockObserverManager()
+
+    @pytest.mark.asyncio()
+    async def test_when_skips_on_false(self, executor, coordinator, observer) -> None:
+        """when='x == 1' with x=2 → node is skipped."""
+        node_spec = NodeSpec("guarded", noop_fn, when="x == 1")
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="guarded",
+                node_spec=node_spec,
+                node_input={"x": 2},
+                context=NodeExecutionContext(dag_id="test", node_id="guarded"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+            )
+
+        assert result["_skipped"] is True
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 1
+
+    @pytest.mark.asyncio()
+    async def test_when_executes_on_true(self, executor, coordinator, observer) -> None:
+        """when='x == 1' with x=1 → node executes."""
+        node_spec = NodeSpec("guarded", noop_fn, when="x == 1")
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="guarded",
+                node_spec=node_spec,
+                node_input={"x": 1},
+                context=NodeExecutionContext(dag_id="test", node_id="guarded"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+            )
+
+        assert result == {"processed": {"x": 1}}
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 0
+
+    @pytest.mark.asyncio()
+    async def test_when_sees_node_results(self, executor, coordinator, observer) -> None:
+        """when='upstream.result == \"ok\"' with matching node_results → executes."""
+        node_spec = NodeSpec("guarded", noop_fn, when='upstream.result == "ok"')
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="guarded",
+                node_spec=node_spec,
+                node_input={},
+                context=NodeExecutionContext(dag_id="test", node_id="guarded"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+                node_results={"upstream": {"result": "ok"}},
+            )
+
+        assert result == {"processed": {}}
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 0
+
+    @pytest.mark.asyncio()
+    async def test_when_mapped_input_takes_precedence(
+        self, executor, coordinator, observer
+    ) -> None:
+        """Mapped input field name shadows node_results key → backward compat."""
+        node_spec = NodeSpec("guarded", noop_fn, when="upstream == 42")
+
+        async with ExecutionContext(observer_manager=observer):
+            result = await executor.execute_node(
+                node_name="guarded",
+                node_spec=node_spec,
+                node_input={"upstream": 42},  # mapped input shadows node_results
+                context=NodeExecutionContext(dag_id="test", node_id="guarded"),
+                coordinator=coordinator,
+                wave_index=0,
+                validate=False,
+                node_results={"upstream": {"result": "something_else"}},
+            )
+
+        # Mapped input value (42) should win; when clause should pass
+        assert result == {"processed": {"upstream": 42}}
+        skip_events = [e for e in observer.events if isinstance(e, NodeSkipped)]
+        assert len(skip_events) == 0

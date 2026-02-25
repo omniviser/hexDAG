@@ -1,13 +1,13 @@
 """VFSTools — agent-callable VFS operations.
 
-Extends :class:`~hexdag.kernel.lib_base.HexDAGLib` so that all public
-async ``a*`` methods auto-become agent tools. Gives any agent the
-ability to introspect the running system through path-based queries.
+Extends :class:`~hexdag.kernel.service.Service` with ``@tool``-decorated
+methods.  Gives any agent the ability to introspect the running system
+through path-based queries.
 
 YAML configuration::
 
     spec:
-      libs:
+      services:
         vfs:
           class: hexdag.stdlib.lib.vfs_tools.VFSTools
 """
@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from hexdag.stdlib.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.vfs import VFS
 
 
-class VFSTools(HexDAGLib):
+class VFSTools(Service):
     """Agent-callable VFS operations.
 
     Gives agents the ability to introspect the running hexDAG system
@@ -40,6 +40,7 @@ class VFSTools(HexDAGLib):
         """Initialise with the given VFS port."""
         self._vfs = vfs
 
+    @tool
     async def aread_path(self, path: str) -> str:
         """Read a VFS path and return its content as JSON.
 
@@ -56,6 +57,7 @@ class VFSTools(HexDAGLib):
         """
         return await self._vfs.aread(path)
 
+    @tool
     async def alist_directory(self, path: str) -> list[dict[str, Any]]:
         """List entries in a VFS directory.
 
@@ -73,6 +75,7 @@ class VFSTools(HexDAGLib):
         entries = await self._vfs.alist(path)
         return [e.model_dump() for e in entries]
 
+    @tool
     async def astat_path(self, path: str) -> dict[str, Any]:
         """Get metadata about a VFS path.
 

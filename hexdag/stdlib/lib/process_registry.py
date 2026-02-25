@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.domain.pipeline_run import pipeline_run_to_storage
-from hexdag.stdlib.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 _COLLECTION = "pipeline_runs"
 
 
-class ProcessRegistry(HexDAGLib):
+class ProcessRegistry(Service):
     """In-memory registry of pipeline runs with optional persistent storage.
 
     Exposed tools
@@ -90,9 +90,10 @@ class ProcessRegistry(HexDAGLib):
             await self._storage.asave(_COLLECTION, run_id, pipeline_run_to_storage(run))
 
     # ------------------------------------------------------------------
-    # Agent-callable tools (auto-exposed via HexDAGLib.get_tools)
+    # Agent-callable tools
     # ------------------------------------------------------------------
 
+    @tool
     async def aget(self, run_id: str) -> dict[str, Any] | None:
         """Get a pipeline run by ID.
 
@@ -113,6 +114,7 @@ class ProcessRegistry(HexDAGLib):
                 return _storage_to_output(data)
         return None
 
+    @tool
     async def alist(self, status: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         """List pipeline runs, optionally filtered by status.
 
@@ -137,6 +139,7 @@ class ProcessRegistry(HexDAGLib):
         runs.sort(key=lambda r: r.created_at, reverse=True)
         return [_run_to_dict(r) for r in runs[:limit]]
 
+    @tool
     async def alist_by_ref(self, ref_id: str, ref_type: str | None = None) -> list[dict[str, Any]]:
         """List pipeline runs linked to a business reference.
 

@@ -106,6 +106,7 @@ class NodeExecutor:
         coordinator: ExecutionCoordinator,
         wave_index: int = 0,
         validate: bool = True,
+        node_results: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
         """Execute a single node with full lifecycle management.
@@ -126,6 +127,10 @@ class NodeExecutor:
             Index of the execution wave.
         validate : bool, default=True
             Whether to validate input/output.
+        node_results : dict[str, Any] | None, default=None
+            Results from upstream nodes, keyed by node name.
+            Used to build the data context for ``when`` clause evaluation
+            so that ``node_name.field`` syntax works uniformly.
         **kwargs : Any
             Additional keyword arguments passed to the node function.
 
@@ -177,8 +182,13 @@ class NodeExecutor:
             if node_spec.when:
                 try:
                     predicate = compile_expression(node_spec.when)
-                    # Build data context from validated input
-                    data_context = validated_input if isinstance(validated_input, dict) else {}
+                    # Build data context: upstream node_results + mapped/validated input
+                    # Mapped input wins over node_results for backward compatibility
+                    data_context: dict[str, Any] = {}
+                    if node_results:
+                        data_context.update(node_results)
+                    if isinstance(validated_input, dict):
+                        data_context.update(validated_input)
                     condition_result = predicate(data_context, {})
 
                     if not condition_result:

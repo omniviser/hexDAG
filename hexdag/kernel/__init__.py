@@ -268,6 +268,7 @@ from hexdag.kernel.resolver import (
 # 10. Schema Introspection
 # ============================================================================
 from hexdag.kernel.schema import SchemaGenerator
+from hexdag.kernel.service import Service, get_service_tool_schemas, step, tool
 
 # ============================================================================
 # 14. Types
@@ -399,6 +400,10 @@ __all__ = [
     "ConfigurableMacro",
     "MacroConfig",
     "HexDAGLib",
+    "Service",
+    "tool",
+    "step",
+    "get_service_tool_schemas",
     # -- 9. Events --
     "Event",
     "NodeStarted",

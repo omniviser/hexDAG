@@ -213,6 +213,7 @@ class LocalExecutor:
                 coordinator=self._execution_coordinator,
                 wave_index=task.wave_index,
                 validate=task.should_validate,
+                node_results=node_results,
                 **task.params,
             )
 

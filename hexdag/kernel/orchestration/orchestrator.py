@@ -23,6 +23,7 @@ from hexdag.kernel.context import (
     set_node_results,
     set_ports,
     set_ports_config,
+    set_services,
 )
 from hexdag.kernel.domain.dag import DirectedGraph, DirectedGraphError
 from hexdag.kernel.exceptions import OrchestratorError
@@ -528,6 +529,11 @@ class Orchestrator:
             # Set PortsConfiguration for per-node port resolution
             if self.ports_config is not None:
                 set_ports_config(self.ports_config)
+
+            # Set services in context for agent tool injection
+            services = wrapped_ports.get("_hexdag_services")
+            if services:
+                set_services(services)
 
             # PRE-DAG LIFECYCLE: Execute before pipeline starts
             pre_hook_results = await self._lifecycle_manager.pre_execute(
