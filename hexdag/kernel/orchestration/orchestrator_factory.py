@@ -11,6 +11,7 @@ from hexdag.kernel.domain.pipeline_config import PipelineConfig
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.ports_builder import PortsBuilder
+from hexdag.kernel.resolver import resolve
 
 if TYPE_CHECKING:
     from hexdag.kernel.orchestration.components.lifecycle_manager import (
@@ -162,6 +163,18 @@ class OrchestratorFactory:
             post_hook_config=post_hook_config,
         )
 
+        # Step 3: Instantiate services if configured
+        services = self._instantiate_services(pipeline_config, global_ports)
+
+        if services:
+            # Store services in orchestrator's ports dict so they are accessible via context
+            if isinstance(orchestrator.ports, dict):
+                orchestrator.ports["_hexdag_services"] = services
+            logger.info(
+                "✅ {} services instantiated",
+                len(services),
+            )
+
         logger.info(
             "✅ Orchestrator created with {} ports",
             len(global_ports),
@@ -200,6 +213,55 @@ class OrchestratorFactory:
                 raise
 
         return ports
+
+    def _instantiate_services(
+        self,
+        pipeline_config: PipelineConfig,
+        ports: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Instantiate Service instances from pipeline configuration.
+
+        Parameters
+        ----------
+        pipeline_config : PipelineConfig
+            Pipeline configuration with services specs
+        ports : dict[str, Any]
+            Already-instantiated ports (for resolving port references in config)
+
+        Returns
+        -------
+        dict[str, Any]
+            Map of service_name -> Service instance
+        """
+        services: dict[str, Any] = {}
+
+        for service_name, service_spec in pipeline_config.services.items():
+            try:
+                logger.debug("Instantiating service: {} = {}", service_name, service_spec)
+
+                # Resolve port references in config values
+                config = dict(service_spec.get("config", {}))
+                for key, value in config.items():
+                    if isinstance(value, str) and value in ports:
+                        config[key] = ports[value]
+
+                # Resolve the service class via kernel resolver
+                class_path = service_spec.get("class", "")
+                service_cls = resolve(class_path)
+                service = service_cls(**config)
+
+                services[service_name] = service
+                logger.debug("✅ Service instantiated: {}", service_name)
+            except Exception as e:
+                logger.error(
+                    "Failed to instantiate service '{}' from spec '{}': {}",
+                    service_name,
+                    service_spec,
+                    e,
+                )
+                raise
+
+        return services
 
     def _build_ports_configuration(
         self, pipeline_config: PipelineConfig, additional_ports: dict[str, Any] | None

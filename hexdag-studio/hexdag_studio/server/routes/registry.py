@@ -42,7 +42,6 @@ NODE_COLORS: dict[str, str] = {
     "composite_node": "#6366f1",  # indigo
     "expression_node": "#06b6d4",  # cyan
     "tool_call_node": "#f97316",  # orange
-    "port_call_node": "#84cc16",  # lime
     # Deprecated but still supported
     "conditional_node": "#f59e0b",  # amber
     "loop_node": "#10b981",  # emerald
@@ -57,7 +56,6 @@ NODE_ICONS: dict[str, str] = {
     "composite_node": "Layers",
     "expression_node": "Calculator",
     "tool_call_node": "Wrench",
-    "port_call_node": "Plug",
     # Deprecated but still supported
     "conditional_node": "GitBranch",
     "loop_node": "Repeat",
@@ -72,7 +70,6 @@ DEFAULT_SPECS: dict[str, dict[str, Any]] = {
     "composite_node": {"mode": "for-each", "items": "", "body": []},
     "expression_node": {"expressions": {}},
     "tool_call_node": {"tool_name": "", "arguments": {}},
-    "port_call_node": {"port": "", "method": "", "input_mapping": {}},
     # Deprecated
     "conditional_node": {"branches": [], "else_action": None},
     "loop_node": {"while_condition": "", "body": "", "max_iterations": 100},
@@ -86,7 +83,7 @@ REQUIRED_PORTS: dict[str, list[str]] = {
 }
 
 # Deprecated nodes that shouldn't appear in the palette
-DEPRECATED_NODES = {"conditional_node", "loop_node", "data_node"}
+DEPRECATED_NODES = {"conditional_node", "loop_node", "data_node", "port_call_node"}
 
 
 def _kind_to_label(kind: str) -> str:

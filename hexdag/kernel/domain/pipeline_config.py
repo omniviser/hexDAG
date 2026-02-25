@@ -78,12 +78,14 @@ class BaseNodeConfig(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    input_mapping: dict[str, str] | None = Field(
+    input_mapping: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Field mapping from upstream nodes or pipeline input."
             " Keys are target field names, values use"
             " node_name.field or $input.field syntax."
+            " Values can also be nested dicts whose leaf strings"
+            " are resolved recursively."
         ),
     )
     dependencies: list[str] | None = Field(
@@ -235,6 +237,10 @@ class PipelineConfig(BaseModel):
     custom_types: dict[str, CustomTypeConfig] = Field(
         default_factory=dict,
         description="Custom sanitized types for output_schema validation",
+    )
+    services: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Service configurations. Format: {service_name: {class: str, config: dict}}",
     )
 
     # Schema declarations

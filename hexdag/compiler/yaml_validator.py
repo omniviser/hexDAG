@@ -386,6 +386,18 @@ class YamlValidator:
         if common_mappings is not None and not isinstance(common_mappings, dict):
             result.add_error("'spec.common_field_mappings' must be a dictionary")
 
+    # Structural keys valid at the node level (alongside kind/metadata/spec).
+    # ``dependencies`` and ``wait_for`` are read from node level by
+    # ``BaseNodeConfig.from_node_config()``.
+    _VALID_NODE_LEVEL_KEYS: frozenset[str] = frozenset(
+        {"kind", "metadata", "spec", "settings"}
+        | {
+            field_name
+            for field_name in BaseNodeConfig.model_fields
+            if field_name != "input_mapping"
+        }
+    )
+
     def _validate_nodes(
         self, nodes: list[dict[str, Any]], result: ValidationReport
     ) -> tuple[set[str], set[str]]:
@@ -415,6 +427,14 @@ class YamlValidator:
             if not node_id:
                 result.add_error(f"Node {i}: Missing 'metadata.name'")
                 continue
+
+            # Detect fields misplaced at node level that belong inside spec
+            for key in node:
+                if key not in self._VALID_NODE_LEVEL_KEYS:
+                    result.add_error(
+                        f"Node '{node_id}': '{key}' is not a valid node-level field. "
+                        f"Move it inside 'spec'."
+                    )
 
             kind = node.get("kind", "")
 

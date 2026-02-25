@@ -38,7 +38,7 @@ from hexdag.kernel.domain.scheduled_task import (
     scheduled_task_from_storage,
     scheduled_task_to_storage,
 )
-from hexdag.stdlib.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.scheduled_task import ScheduledTask
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 _COLLECTION = "scheduled_tasks"
 
 
-class Scheduler(HexDAGLib):
+class Scheduler(Service):
     """Task scheduler with asyncio timers and optional persistent storage.
 
     Exposed tools
@@ -114,6 +114,7 @@ class Scheduler(HexDAGLib):
     # Agent-callable tools
     # ------------------------------------------------------------------
 
+    @tool
     async def aschedule_once(
         self,
         pipeline_name: str,
@@ -160,6 +161,7 @@ class Scheduler(HexDAGLib):
 
         return _task_to_dict(task)
 
+    @tool
     async def aschedule_recurring(
         self,
         pipeline_name: str,
@@ -206,6 +208,7 @@ class Scheduler(HexDAGLib):
 
         return _task_to_dict(task)
 
+    @tool
     async def acancel(self, task_id: str) -> dict[str, Any]:
         """Cancel a scheduled task.
 
@@ -232,6 +235,7 @@ class Scheduler(HexDAGLib):
 
         return {"task_id": task_id, "cancelled": True}
 
+    @tool
     async def alist_scheduled(self, ref_id: str | None = None) -> list[dict[str, Any]]:
         """List scheduled tasks, optionally filtered by ref_id.
 

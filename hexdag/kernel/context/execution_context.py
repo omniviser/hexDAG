@@ -42,6 +42,9 @@ _node_results_context: ContextVar[dict[str, Any] | None] = ContextVar("node_resu
 # Current node name context - for event emission with proper node attribution
 _current_node_name_context: ContextVar[str | None] = ContextVar("current_node_name", default=None)
 
+# Services context - instantiated Service objects available to agent nodes
+_services_context: ContextVar[dict[str, Any] | None] = ContextVar("services", default=None)
+
 
 # ============================================================================
 # Observer Manager Context
@@ -247,6 +250,33 @@ def get_port(port_name: str) -> Any:
 
 
 # ============================================================================
+# Services Context
+# ============================================================================
+
+
+def set_services(services: dict[str, Any] | None) -> None:
+    """Set services dict for current async execution context.
+
+    Parameters
+    ----------
+    services : dict[str, Any] | None
+        Mapping of service_name -> Service instance
+    """
+    _services_context.set(services)
+
+
+def get_services() -> dict[str, Any] | None:
+    """Get services from current async execution context.
+
+    Returns
+    -------
+    dict[str, Any] | None
+        Services dictionary, or None if not in orchestrator context
+    """
+    return _services_context.get()
+
+
+# ============================================================================
 # Current Node Name Context
 # ============================================================================
 
@@ -372,6 +402,7 @@ def clear_execution_context() -> None:
     _current_graph_context.set(None)
     _node_results_context.set(None)
     _current_node_name_context.set(None)
+    _services_context.set(None)
 
 
 # ============================================================================

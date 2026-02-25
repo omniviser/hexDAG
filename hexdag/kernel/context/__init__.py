@@ -11,6 +11,7 @@ from hexdag.kernel.context.execution_context import (
     get_ports,
     get_ports_config,
     get_run_id,
+    get_services,
     get_user_ports,
     set_current_graph,
     set_current_node_name,
@@ -19,6 +20,7 @@ from hexdag.kernel.context.execution_context import (
     set_ports,
     set_ports_config,
     set_run_id,
+    set_services,
 )
 
 __all__ = [
@@ -32,6 +34,7 @@ __all__ = [
     "get_ports",
     "get_ports_config",
     "get_run_id",
+    "get_services",
     "get_user_ports",
     "set_current_graph",
     "set_current_node_name",
@@ -40,4 +43,5 @@ __all__ = [
     "set_ports",
     "set_ports_config",
     "set_run_id",
+    "set_services",
 ]

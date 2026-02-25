@@ -32,7 +32,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.exceptions import InvalidTransitionError  # noqa: F401
-from hexdag.stdlib.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -49,7 +49,7 @@ def _entity_key(entity_type: str, entity_id: str) -> str:
     return f"{entity_type}:{entity_id}"
 
 
-class EntityState(HexDAGLib):
+class EntityState(Service):
     """Entity state tracker with validated transitions and optional persistence.
 
     Exposed tools
@@ -108,6 +108,7 @@ class EntityState(HexDAGLib):
     # Agent-callable tools
     # ------------------------------------------------------------------
 
+    @tool
     async def aregister_entity(
         self,
         entity_type: str,
@@ -168,6 +169,7 @@ class EntityState(HexDAGLib):
 
         return {"entity_type": entity_type, "entity_id": entity_id, "state": state}
 
+    @tool
     async def atransition(
         self,
         entity_type: str,
@@ -254,6 +256,7 @@ class EntityState(HexDAGLib):
             "to_state": to_state,
         }
 
+    @tool
     async def aget_state(self, entity_type: str, entity_id: str) -> dict[str, Any] | None:
         """Get the current state of an entity.
 
@@ -286,6 +289,7 @@ class EntityState(HexDAGLib):
                 }
         return None
 
+    @tool
     async def aget_history(self, entity_type: str, entity_id: str) -> list[dict[str, Any]]:
         """Get the full state transition history of an entity.
 

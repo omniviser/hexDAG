@@ -742,9 +742,7 @@
                         "input_mapping": {
                             "anyOf": [
                                 {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
+                                    "additionalProperties": true,
                                     "type": "object"
                                 },
                                 {
@@ -752,7 +750,7 @@
                                 }
                             ],
                             "default": null,
-                            "description": "Field mapping from upstream nodes or pipeline input. Keys are target field names, values use node_name.field or $input.field syntax.",
+                            "description": "Field mapping from upstream nodes or pipeline input. Keys are target field names, values use node_name.field or $input.field syntax. Values can also be nested dicts whose leaf strings are resolved recursively.",
                             "title": "Input Mapping"
                         }
                     },
@@ -775,75 +773,6 @@
                     "title": "Wait For"
                 }
             },
-            "type": "object"
-        },
-        "Port_CallNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for port_call_node type",
-            "properties": {
-                "kind": {
-                    "const": "port_call_node",
-                    "description": "Node type: port_call_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "fallback": {
-                            "default": null,
-                            "description": "Value to return if the port is not available",
-                            "type": "string"
-                        },
-                        "has_fallback": {
-                            "default": false,
-                            "description": "Set to True to enable fallback behavior (allows None as fallback)",
-                            "type": "string"
-                        },
-                        "method": {
-                            "description": "Method name to invoke on the port",
-                            "type": "string"
-                        },
-                        "output_schema": {
-                            "default": null,
-                            "description": "Optional schema for validating/structuring the output",
-                            "type": "string"
-                        },
-                        "port": {
-                            "description": "Name of the port to call (e.g., \"database\", \"llm\", \"tool_router\")",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "port",
-                        "method"
-                    ],
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
             "type": "object"
         },
         "Tool_CallNodeSpec": {
@@ -1225,9 +1154,6 @@
                                 "$ref": "#/$defs/FunctionNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/Port_CallNodeSpec"
-                            },
-                            {
                                 "$ref": "#/$defs/Tool_CallNodeSpec"
                             },
                             {
@@ -1258,6 +1184,15 @@
                     },
                     "description": "Port adapters configuration (LLM, database, memory)",
                     "title": "Ports",
+                    "type": "object"
+                },
+                "services": {
+                    "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
+                    },
+                    "description": "Service configurations. Format: {service_name: {class: str, config: dict}}",
+                    "title": "Services",
                     "type": "object"
                 },
                 "type_ports": {

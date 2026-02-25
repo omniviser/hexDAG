@@ -470,45 +470,83 @@ class TestPrepareNodeInputSkipPropagation:
 # ============================================================================
 
 
-class TestInputMappingDefensive:
-    """Test that _apply_input_mapping handles non-string source_path values."""
+class TestNestedInputMapping:
+    """Test recursive resolution of nested input_mapping values."""
 
     @pytest.fixture()
     def coordinator(self) -> ExecutionCoordinator:
         return ExecutionCoordinator()
 
-    def test_dict_value_used_directly(self, coordinator) -> None:
-        """input_mapping with dict value should store it directly, not crash."""
+    def test_nested_dict_resolves_leaf_strings(self, coordinator) -> None:
+        """Nested dict values should have their leaf strings resolved."""
         input_mapping = {
-            "response": {"nested": "structure"},  # type: ignore[dict-item]
+            "ctx": {
+                "user_name": "$input.name",
+                "score": "analyzer.metadata.score",
+            },
         }
         result = coordinator._apply_input_mapping(
             base_input={},
             input_mapping=input_mapping,
-            initial_input={},
-            node_results={},
+            initial_input={"name": "Alice"},
+            node_results={"analyzer": {"metadata": {"score": 0.95}}},
         )
 
-        assert result["response"] == {"nested": "structure"}
+        assert result["ctx"] == {"user_name": "Alice", "score": 0.95}
 
-    def test_list_value_used_directly(self, coordinator) -> None:
-        """input_mapping with list value should store it directly, not crash."""
+    def test_deeply_nested_dict(self, coordinator) -> None:
+        """Multiple levels of nesting should resolve recursively."""
         input_mapping = {
-            "items": [1, 2, 3],  # type: ignore[dict-item]
+            "outer": {
+                "middle": {
+                    "value": "$input.deep_val",
+                },
+            },
         }
         result = coordinator._apply_input_mapping(
             base_input={},
             input_mapping=input_mapping,
-            initial_input={},
+            initial_input={"deep_val": 42},
             node_results={},
         )
 
-        assert result["items"] == [1, 2, 3]
+        assert result["outer"] == {"middle": {"value": 42}}
 
-    def test_int_value_used_directly(self, coordinator) -> None:
-        """input_mapping with int value should store it directly, not crash."""
+    def test_list_values_resolve_elements(self, coordinator) -> None:
+        """List values should resolve each element."""
         input_mapping = {
-            "count": 42,  # type: ignore[dict-item]
+            "items": ["$input.a", "$input.b"],
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={"a": 1, "b": 2},
+            node_results={},
+        )
+
+        assert result["items"] == [1, 2]
+
+    def test_list_with_nested_dicts(self, coordinator) -> None:
+        """Lists containing dicts should resolve recursively."""
+        input_mapping = {
+            "entries": [
+                {"name": "$input.name"},
+                {"id": "producer.id"},
+            ],
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={"name": "Alice"},
+            node_results={"producer": {"id": "P001"}},
+        )
+
+        assert result["entries"] == [{"name": "Alice"}, {"id": "P001"}]
+
+    def test_int_value_passed_through(self, coordinator) -> None:
+        """Non-string, non-dict, non-list values are returned as-is."""
+        input_mapping = {
+            "count": 42,
         }
         result = coordinator._apply_input_mapping(
             base_input={},
@@ -518,6 +556,25 @@ class TestInputMappingDefensive:
         )
 
         assert result["count"] == 42
+
+    def test_mixed_string_and_nested(self, coordinator) -> None:
+        """Mix of flat strings and nested dicts should both resolve."""
+        input_mapping = {
+            "user_name": "$input.name",
+            "ctx": {
+                "load_id": "$input.load_id",
+                "result": "processor.output",
+            },
+        }
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping=input_mapping,
+            initial_input={"name": "Alice", "load_id": "L001"},
+            node_results={"processor": {"output": "done"}},
+        )
+
+        assert result["user_name"] == "Alice"
+        assert result["ctx"] == {"load_id": "L001", "result": "done"}
 
     def test_string_values_unchanged(self, coordinator) -> None:
         """Normal string values should work as before (regression check)."""
@@ -532,19 +589,3 @@ class TestInputMappingDefensive:
         )
 
         assert result["user_name"] == "Alice"
-
-    def test_mixed_string_and_dict_values(self, coordinator) -> None:
-        """Mix of string and non-string values should handle each correctly."""
-        input_mapping = {
-            "user_name": "$input.name",
-            "config": {"key": "value"},  # type: ignore[dict-item]
-        }
-        result = coordinator._apply_input_mapping(
-            base_input={},
-            input_mapping=input_mapping,
-            initial_input={"name": "Alice"},
-            node_results={},
-        )
-
-        assert result["user_name"] == "Alice"
-        assert result["config"] == {"key": "value"}

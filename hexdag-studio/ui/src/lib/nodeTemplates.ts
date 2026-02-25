@@ -77,14 +77,6 @@ export const nodeTemplates: NodeTemplate[] = [
     color: '#f97316', // orange-500
     defaultSpec: { tool_name: '', arguments: {} },
   },
-  {
-    kind: 'port_call_node',
-    label: 'Port Call',
-    description: 'Call a method on a configured port/adapter',
-    icon: 'Plug',
-    color: '#84cc16', // lime-500
-    defaultSpec: { port: '', method: '', input_mapping: {} },
-  },
 ]
 
 // Map of kind to template for quick lookup
@@ -182,8 +174,6 @@ const kindAliases: Record<string, string> = {
   'core:expression_node': 'expression_node',
   'core:tool_call': 'tool_call_node',
   'core:tool_call_node': 'tool_call_node',
-  'core:port_call': 'port_call_node',
-  'core:port_call_node': 'port_call_node',
 }
 
 // Default colors for unknown node kinds
@@ -194,7 +184,6 @@ const defaultColors: Record<string, string> = {
   composite: '#6366f1',
   expression: '#06b6d4',
   tool: '#f97316',
-  port: '#84cc16',
   // Legacy - map to new colors
   conditional: '#6366f1',
   loop: '#6366f1',
@@ -315,7 +304,6 @@ const coreIconMap: Record<string, LucideIcon> = {
   expression_node: Calculator,
   data_node: Calculator, // legacy alias
   tool_call_node: Wrench,
-  port_call_node: Plug,
 }
 
 /**

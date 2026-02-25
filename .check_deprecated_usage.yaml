@@ -38,3 +38,7 @@ allowed_usages:
   # DatabasePort alias in kernel/ports __init__
   DatabasePort:
     - hexdag/kernel/ports/__init__.py
+
+  # HexDAGLib re-exported from kernel __init__ for backward compat
+  hexdag.kernel.lib_base:
+    - hexdag/kernel/__init__.py

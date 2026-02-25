@@ -224,10 +224,78 @@ class ExecutionCoordinator:
         ]
         return any(op in source for op in expression_indicators)
 
+    def _resolve_mapping_value(
+        self,
+        source: Any,
+        base_input: Any,
+        initial_input: Any,
+        node_results: dict[str, Any],
+    ) -> Any:
+        """Resolve a single input_mapping value.
+
+        If *source* is a ``dict``, its values are resolved recursively so that
+        nested structures like::
+
+            input_mapping:
+              ctx:
+                ctx1: "node1.output"
+                ctx2: "$input.field"
+
+        produce ``{"ctx": {"ctx1": <resolved>, "ctx2": <resolved>}}``.
+
+        If *source* is a ``list``, each element is resolved recursively.
+
+        If *source* is a ``str``, it is resolved using the standard
+        ``$input`` / ``node.field`` / expression syntax.
+
+        Any other type is returned as-is.
+        """
+        if isinstance(source, dict):
+            return {
+                k: self._resolve_mapping_value(v, base_input, initial_input, node_results)
+                for k, v in source.items()
+            }
+
+        if isinstance(source, list):
+            return [
+                self._resolve_mapping_value(item, base_input, initial_input, node_results)
+                for item in source
+            ]
+
+        if not isinstance(source, str):
+            return source
+
+        # --- String resolution (existing logic) ---
+        if self._is_expression(source):
+            return self._evaluate_expression(source, base_input, initial_input, node_results)
+
+        if source.startswith("$input."):
+            actual_path = source[7:]  # Remove "$input." prefix
+            if actual_path:
+                if isinstance(initial_input, dict):
+                    return FieldExtractor.extract(initial_input, actual_path)
+                return FieldExtractor.extract({"_root": initial_input}, "_root")
+            return initial_input
+
+        if source == "$input":
+            return initial_input
+
+        if "." in source:
+            parts = source.split(".", 1)
+            node_name, field_path = parts[0], parts[1]
+            if node_name in node_results:
+                return FieldExtractor.extract(node_results[node_name], field_path)
+            return FieldExtractor.extract(
+                base_input if isinstance(base_input, dict) else {}, source
+            )
+
+        # Simple field name - extract from base_input
+        return FieldExtractor.extract(base_input if isinstance(base_input, dict) else {}, source)
+
     def _apply_input_mapping(
         self,
         base_input: Any,
-        input_mapping: dict[str, str],
+        input_mapping: dict[str, Any],
         initial_input: Any,
         node_results: dict[str, Any],
     ) -> dict[str, Any]:
@@ -237,13 +305,16 @@ class ExecutionCoordinator:
         - ``$input.field`` - Extract from the initial pipeline input
         - ``node_name.field`` - Extract from a specific node's output
         - Expression syntax - Use allowed functions and operators
+        - Nested dicts - Values are resolved recursively
 
         Parameters
         ----------
         base_input : Any
             The prepared input from dependencies (may be single value or dict)
-        input_mapping : dict[str, str]
-            Mapping of {target_field: "source_path"} or {target_field: "expression"}
+        input_mapping : dict[str, Any]
+            Mapping of {target_field: source}. Source can be a string
+            (``"source_path"`` or ``"expression"``), a nested dict whose
+            leaf strings are resolved, or a list of resolvable values.
         initial_input : Any
             The original pipeline input (for $input references)
         node_results : dict[str, Any]
@@ -260,6 +331,15 @@ class ExecutionCoordinator:
         >>> mapping = {"load_id": "$input.load_id", "result": "analyzer.output"}
         >>> # This would extract load_id from initial input and result from analyzer node
 
+        Nested mapping example::
+
+            mapping = {
+                "ctx": {
+                    "user_name": "$input.name",
+                    "score": "analyzer.metadata.score",
+                },
+            }
+
         Expression examples::
 
             mapping = {
@@ -270,59 +350,14 @@ class ExecutionCoordinator:
         """
         result: dict[str, Any] = {}
 
-        for target_field, source_path in input_mapping.items():
-            # Guard against non-string values (e.g., from malformed YAML or !include)
-            if not isinstance(source_path, str):
-                logger.warning(  # type: ignore[unreachable]
-                    f"input_mapping: value for '{target_field}' is "
-                    f"{type(source_path).__name__}, expected str. Using value directly."
-                )
-                result[target_field] = source_path
-                continue
-
-            # Check if this is an expression that needs evaluation
-            if self._is_expression(source_path):
-                value = self._evaluate_expression(
-                    source_path, base_input, initial_input, node_results
-                )
-            elif source_path.startswith("$input."):
-                # Extract from initial pipeline input
-                actual_path = source_path[7:]  # Remove "$input." prefix
-                if actual_path:
-                    # Has a field path like "$input.my_field"
-                    if isinstance(initial_input, dict):
-                        value = FieldExtractor.extract(initial_input, actual_path)
-                    else:
-                        # Non-dict input - wrap and extract
-                        value = FieldExtractor.extract({"_root": initial_input}, "_root")
-                else:
-                    # Just "$input." with no field - return entire initial input
-                    value = initial_input
-            elif source_path == "$input":
-                # Reference the entire initial input
-                value = initial_input
-            elif "." in source_path:
-                # Check if it's a node_name.field pattern
-                parts = source_path.split(".", 1)
-                node_name, field_path = parts[0], parts[1]
-                if node_name in node_results:
-                    # Extract from specific node's result
-                    value = FieldExtractor.extract(node_results[node_name], field_path)
-                else:
-                    # Fall back to extracting from base_input
-                    value = FieldExtractor.extract(
-                        base_input if isinstance(base_input, dict) else {}, source_path
-                    )
-            else:
-                # Simple field name - extract from base_input
-                value = FieldExtractor.extract(
-                    base_input if isinstance(base_input, dict) else {}, source_path
-                )
+        for target_field, source in input_mapping.items():
+            value = self._resolve_mapping_value(source, base_input, initial_input, node_results)
 
             if value is None:
+                source_repr = source if isinstance(source, str) else repr(source)
                 logger.warning(
                     "input_mapping: '{}' resolved to None for target '{}'",
-                    source_path,
+                    source_repr,
                     target_field,
                 )
 

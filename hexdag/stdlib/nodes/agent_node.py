@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
-from hexdag.kernel.context import get_port, get_ports
+from hexdag.kernel.context import get_port, get_ports, get_services
 from hexdag.kernel.domain.agent_tools import CHANGE_PHASE, TOOL_END, change_phase, tool_end
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.logging import get_logger
@@ -556,6 +556,15 @@ carried_data={'key': 'value'})"""
             tool_router.add_tools_from(agent_tools_router)
         if base_router and isinstance(base_router, ToolRouter):
             tool_router.add_tools_from(base_router)
+
+        # Inject service @tool methods from execution context
+        services = get_services()
+        if services:
+            for svc in services.values():
+                if hasattr(svc, "get_tools"):
+                    svc_tools = svc.get_tools()
+                    if svc_tools:
+                        tool_router.add_tools_from(ToolRouter(tools=svc_tools))
 
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"

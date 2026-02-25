@@ -257,10 +257,6 @@ function getSpecPreview(kind: string, spec: Record<string, unknown>): Array<{ ke
     case 'tool_call_node':
       if (spec.tool_name) preview.push({ key: 'tool', value: formatValuePreview(spec.tool_name, 25) })
       break
-    case 'port_call_node':
-      if (spec.port) preview.push({ key: 'port', value: formatValuePreview(spec.port) })
-      if (spec.method) preview.push({ key: 'method', value: formatValuePreview(spec.method) })
-      break
     default:
       // Show first 2 spec items - use formatValuePreview to handle objects properly
       const entries = Object.entries(spec).slice(0, 2)

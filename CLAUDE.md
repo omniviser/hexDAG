@@ -121,7 +121,8 @@ hexdag/
 │   ├── pipeline_builder/    #   YAML pipeline building and compilation
 │   ├── ports/               #   Port interfaces (LLM, DataStore, PipelineSpawner)
 │   ├── validation/          #   Type validation and schema conversion
-│   └── lib_base.py          #   HexDAGLib base class (lib contract)
+│   ├── service.py           #   Service base class + @tool/@step decorators
+│   └── lib_base.py          #   HexDAGLib base class (DEPRECATED → Service)
 ├── stdlib/                  # Standard library (/lib)
 │   ├── adapters/            #   Built-in adapters (OpenAI, SQLite, Mock, etc.)
 │   ├── nodes/               #   Node factories (LLMNode, AgentNode, etc.)
@@ -151,18 +152,51 @@ All framework entities follow one pattern: **kernel defines contract, stdlib shi
 | Nodes    | `stdlib/nodes/base_node_factory.py` | `stdlib/nodes/llm_node.py` | `myapp.nodes.X`   |
 | Macros   | (convention)               | `stdlib/macros/reasoning_agent.py` | `myapp.macros.X`  |
 | Prompts  | (convention)               | `stdlib/prompts/tool_prompts.py`   | `myapp.prompts.X` |
-| **Libs** | **`kernel/lib_base.py`**   | **`stdlib/lib/process_registry.py`** | **`myapp.lib.X`** |
+| Libs *(deprecated)* | `kernel/lib_base.py` | `stdlib/lib/process_registry.py` | `myapp.lib.X` |
+| **Services** | **`kernel/service.py`** | *(stdlib builtins coming soon)* | **`myapp.services.X`** |
 
-### System Libraries (Libs)
+### Services
 
-Libs are the new entity type for multi-pipeline coordination:
+Services are the unified abstraction for port-backed operations.  They replace both `PortCallNode` (deprecated) and `HexDAGLib` (deprecated).
+
+A service wraps one or more ports/adapters behind a stable API. Methods use explicit decorators to declare how they can be invoked:
+
+- `@tool` — available as an agent-callable tool during ReAct reasoning
+- `@step` — available as a deterministic DAG node
+- Both decorators can be stacked on the same method
+
+```python
+from hexdag.kernel.service import Service, tool, step
+
+class OrderService(Service):
+    def __init__(self, store: SupportsKeyValue) -> None:
+        self._store = store
+
+    @tool
+    async def get_order(self, order_id: str) -> dict:
+        """Get order by ID."""
+        return await self._store.aget(f"order:{order_id}")
+
+    @step
+    async def save_order(self, order_id: str, data: dict) -> dict:
+        """Persist an order."""
+        await self._store.aset(f"order:{order_id}", data)
+        return {"saved": True, "order_id": order_id}
+
+    @tool
+    @step
+    async def validate_order(self, order_id: str) -> dict:
+        """Validate — usable as both agent tool and DAG step."""
+        ...
+```
+
+Built-in services (migrating from libs):
 
 - **ProcessRegistry** — tracks pipeline runs (like `ps` in Linux)
 - **EntityState** — declarative state machines for business entities
 - **Scheduler** — delayed/recurring pipeline execution (asyncio timers)
 - **DatabaseTools** — agent-callable SQL query tools
-
-Every public async method on a `HexDAGLib` subclass auto-becomes an agent tool.
+- **VFSTools** — virtual filesystem introspection
 
 ### The Six Pillars
 1. **Async-First Architecture** - Non-blocking execution for maximum performance
@@ -474,23 +508,30 @@ class MyNode(BaseNodeFactory):
         return NodeSpec(id=name, fn=process)
 ```
 
-**Libs** extend HexDAGLib (async methods auto-become agent tools):
+**Services** extend Service (use `@tool` / `@step` decorators):
 
 ```python
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool, step
 from hexdag.kernel.ports.data_store import SupportsKeyValue
 
-class OrderManager(HexDAGLib):
+class OrderService(Service):
     def __init__(self, store: SupportsKeyValue) -> None:
         self._store = store
 
-    async def acreate_order(self, customer_id: str, items: list[dict]) -> str:
-        """Create a new order. Auto-exposed as agent tool."""
-        # Your implementation
+    @tool
+    async def get_order(self, order_id: str) -> dict:
+        """Get order by ID. Agent-callable tool."""
         ...
 
-    async def aget_order(self, order_id: str) -> dict:
-        """Get order by ID. Auto-exposed as agent tool."""
+    @step
+    async def save_order(self, order_id: str, data: dict) -> dict:
+        """Persist an order. Deterministic DAG step."""
+        ...
+
+    @tool
+    @step
+    async def validate_order(self, order_id: str) -> dict:
+        """Both agent tool and DAG step."""
         ...
 ```
 

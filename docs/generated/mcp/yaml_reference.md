@@ -54,7 +54,6 @@ spec:
 | `expression_node` | Specification for expression_node type |
 | `function_node` | Specification for function_node type |
 | `llm_node` | Specification for llm_node type |
-| `port_call_node` | Specification for port_call_node type |
 | `tool_call_node` | Specification for tool_call_node type |
 
 ### agent_node
@@ -236,32 +235,6 @@ Specification for llm_node type
   metadata:
     name: my_llm
   spec:
-  dependencies: []
-```
-
-### port_call_node
-
-Specification for port_call_node type
-
-**Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `fallback` | string | No | Value to return if the port is not av... |
-| `has_fallback` | string | No | Set to True to enable fallback behavi... |
-| `method` | string | Yes | Method name to invoke on the port |
-| `output_schema` | string | No | Optional schema for validating/struct... |
-| `port` | string | Yes | Name of the port to call (e.g., "data... |
-
-**Example:**
-
-```yaml
-- kind: port_call_node
-  metadata:
-    name: my_port_call
-  spec:
-    port: # required
-    method: # required
   dependencies: []
 ```
 
