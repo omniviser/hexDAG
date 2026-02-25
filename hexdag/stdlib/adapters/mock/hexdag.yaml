@@ -1,0 +1,39 @@
+# HexDAG Configuration — Mock Adapters
+# This configuration loads the mock adapters as our first plugin
+kind: Config
+metadata:
+  name: mock-adapters
+spec:
+  # Core modules to load — these are the essential framework components
+  modules:
+    - hexdag.kernel.ports            # Core port definitions (must load before adapters)
+    - hexdag.stdlib.nodes            # Core node factories
+    - hexdag.stdlib.adapters.mock    # Mock implementations of all ports
+    - hexdag.stdlib.adapters.memory  # Memory adapter implementations
+
+  # Development mode — allows post-bootstrap registration for testing
+  dev_mode: true
+
+  settings:
+    # Logging configuration
+    log_level: INFO
+    enable_metrics: true
+
+    # Mock adapter default configurations
+    mock_llm:
+      # Default responses for the mock LLM
+      responses:
+        - "I understand your request."
+        - "Let me help you with that."
+        - "Here's what I found."
+      delay_seconds: 0.0
+
+    mock_database:
+      # Enable sample e-commerce data by default
+      enable_sample_data: true
+      delay_seconds: 0.0
+
+    mock_memory:
+      # In-memory storage settings
+      delay_seconds: 0.0
+      max_size: 1000  # Maximum number of items to store
