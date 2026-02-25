@@ -520,6 +520,125 @@ modules = ["pyproject.mod"]
         finally:
             os.chdir(original_dir)
 
+    def test_auto_discovery_finds_hexdag_yaml(self, tmp_path: Path) -> None:
+        """Test that auto-discovery finds hexdag.yaml in CWD."""
+        import pathlib
+
+        clear_config_cache()
+        (tmp_path / "hexdag.yaml").write_text("""\
+kind: Config
+metadata:
+  name: test
+spec:
+  modules:
+    - yaml.mod
+""")
+
+        original_dir = pathlib.Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            loader = ConfigLoader()
+            result = loader._find_config_file(None)
+            assert result.name == "hexdag.yaml"
+        finally:
+            os.chdir(original_dir)
+
+    def test_auto_discovery_finds_hexdag_yml(self, tmp_path: Path) -> None:
+        """Test that auto-discovery finds hexdag.yml in CWD."""
+        import pathlib
+
+        clear_config_cache()
+        (tmp_path / "hexdag.yml").write_text("""\
+kind: Config
+metadata:
+  name: test
+spec:
+  modules:
+    - yml.mod
+""")
+
+        original_dir = pathlib.Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            loader = ConfigLoader()
+            result = loader._find_config_file(None)
+            assert result.name == "hexdag.yml"
+        finally:
+            os.chdir(original_dir)
+
+    def test_yaml_takes_priority_over_pyproject(self, tmp_path: Path) -> None:
+        """Test that hexdag.yaml takes priority over pyproject.toml."""
+        import pathlib
+
+        clear_config_cache()
+        (tmp_path / "hexdag.yaml").write_text("""\
+kind: Config
+metadata:
+  name: yaml-config
+spec:
+  modules:
+    - yaml.mod
+""")
+        (tmp_path / "pyproject.toml").write_text("""
+[tool.hexdag]
+modules = ["pyproject.mod"]
+""")
+
+        original_dir = pathlib.Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            loader = ConfigLoader()
+            result = loader._find_config_file(None)
+            assert result.name == "hexdag.yaml"
+        finally:
+            os.chdir(original_dir)
+
+    def test_parent_directory_traversal_finds_hexdag_yaml(self, tmp_path: Path) -> None:
+        """Test that parent directory traversal finds hexdag.yaml."""
+        import pathlib
+
+        clear_config_cache()
+        # Create hexdag.yaml in parent
+        (tmp_path / "hexdag.yaml").write_text("""\
+kind: Config
+metadata:
+  name: parent-config
+spec:
+  modules:
+    - parent.mod
+""")
+        # Create a child directory
+        child_dir = tmp_path / "subdir"
+        child_dir.mkdir()
+
+        original_dir = pathlib.Path.cwd()
+        os.chdir(child_dir)
+        try:
+            loader = ConfigLoader()
+            result = loader._find_config_file(None)
+            assert result.name == "hexdag.yaml"
+            assert result.parent == tmp_path
+        finally:
+            os.chdir(original_dir)
+
+    def test_toml_loading_emits_deprecation_warning(self, tmp_path: Path) -> None:
+        """Test that loading from TOML emits a deprecation warning."""
+        import warnings
+
+        clear_config_cache()
+        config_file = tmp_path / "pyproject.toml"
+        config_file.write_text("""
+[tool.hexdag]
+modules = ["test.mod"]
+""")
+        loader = ConfigLoader()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            loader.load_config_file(config_file)
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) >= 1
+            assert "TOML is deprecated" in str(deprecation_warnings[0].message)
+
 
 class TestLoadConfig:
     """Tests for load_config function."""

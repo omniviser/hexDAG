@@ -10,7 +10,7 @@ The discovery system supports three levels:
 3. User-authored components from:
    - Paths configured via set_user_plugin_paths()
    - Environment variable HEXDAG_PLUGIN_PATHS
-   - Modules configured in hexdag.toml/pyproject.toml
+   - Modules configured in hexdag.yaml/pyproject.toml
 
 Examples
 --------
@@ -393,7 +393,7 @@ def discover_macros_in_module(module_path: str) -> list[dict[str, Any]]:
 
 @lru_cache(maxsize=1)
 def discover_user_modules() -> list[str]:
-    """Discover user-configured modules from hexdag.toml or pyproject.toml.
+    """Discover user-configured modules from hexdag.yaml or pyproject.toml.
 
     Reads the `modules` configuration from the project's hexdag configuration
     and returns modules that are not builtin or plugins (user-authored).
@@ -405,7 +405,7 @@ def discover_user_modules() -> list[str]:
 
     Examples
     --------
-    >>> # With hexdag.toml containing:
+    >>> # With hexdag.yaml containing:
     >>> # modules = ["myapp.adapters", "myapp.nodes"]
     >>> user_modules = discover_user_modules()
     >>> isinstance(user_modules, list)

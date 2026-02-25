@@ -184,7 +184,7 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
     1. hexdag.stdlib.adapters.* (builtin adapters)
     2. hexdag_plugins.* (installed plugin packages)
     3. User plugin paths (HEXDAG_PLUGIN_PATHS env var or set_user_plugin_paths())
-    4. User-configured modules from hexdag.toml/pyproject.toml
+    4. User-configured modules from hexdag.yaml/pyproject.toml
 
     Parameters
     ----------
@@ -235,7 +235,7 @@ def list_adapters(port_type: str | None = None) -> list[dict[str, Any]]:
             adapter_copy = {k: v for k, v in adapter.items() if k != "namespace"}
             adapters.append(adapter_copy)
 
-    # 4. Discover user-configured modules from hexdag.toml
+    # 4. Discover user-configured modules from hexdag.yaml
     for user_module in discover_user_modules():
         # Try as adapters subpackage
         adapters.extend(
@@ -316,7 +316,7 @@ def list_tools() -> list[dict[str, Any]]:
     Discovers tools dynamically from three levels:
     1. hexdag.kernel.domain.agent_tools (builtin tools)
     2. hexdag_plugins.*/tools (plugin tools)
-    3. User-configured modules from hexdag.toml/pyproject.toml
+    3. User-configured modules from hexdag.yaml/pyproject.toml
 
     Returns
     -------

@@ -32,7 +32,7 @@ def build_docs(
     config: Path | None = typer.Option(
         None,
         "--config",
-        help="Path to TOML configuration file (pyproject.toml or hexdag.toml)",
+        help="Path to configuration file (hexdag.yaml or pyproject.toml)",
     ),
 ) -> None:
     """Build documentation site with MkDocs.
@@ -41,7 +41,7 @@ def build_docs(
     registry. The registry hooks automatically generate reference documentation
     during the build process.
 
-    You can specify a custom TOML configuration to document your project's
+    You can specify a custom configuration file to document your project's
     specific components, plugins, and adapters.
 
     Examples:
@@ -123,7 +123,7 @@ def serve_docs(
     config: Path | None = typer.Option(
         None,
         "--config",
-        help="Path to TOML configuration file (pyproject.toml or hexdag.toml)",
+        help="Path to configuration file (hexdag.yaml or pyproject.toml)",
     ),
 ) -> None:
     """Serve documentation with live reload.
@@ -131,7 +131,7 @@ def serve_docs(
     Starts MkDocs development server with live reload. The server watches for
     changes in markdown files and automatically regenerates registry documentation.
 
-    You can specify a custom TOML configuration to document your project's
+    You can specify a custom configuration file to document your project's
     specific components, plugins, and adapters.
 
     Examples:

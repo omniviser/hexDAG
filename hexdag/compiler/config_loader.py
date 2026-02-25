@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import tomllib  # Python 3.11+
+import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -179,6 +180,12 @@ class ConfigLoader:
         HexDAGConfig
             Parsed configuration
         """
+        warnings.warn(
+            "Loading configuration from TOML is deprecated. "
+            "Migrate to 'kind: Config' YAML format. See docs/ROADMAP.md.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
         with config_path.open("rb") as f:
             data = tomllib.load(f)
 
@@ -203,8 +210,10 @@ class ConfigLoader:
         Discovery order:
         1. Explicit path argument
         2. ``HEXDAG_CONFIG_PATH`` env var
-        3. ``pyproject.toml`` in CWD
-        4. ``pyproject.toml`` in parent directories (with ``[tool.hexdag]``)
+        3. ``hexdag.yaml`` / ``hexdag.yml`` in CWD
+        4. ``pyproject.toml`` in CWD
+        5. ``hexdag.yaml`` / ``hexdag.yml`` in parent directories
+        6. ``pyproject.toml`` in parent directories (with ``[tool.hexdag]``)
 
         Parameters
         ----------
@@ -235,13 +244,27 @@ class ConfigLoader:
                 return config_path
             logger.warning("HEXDAG_CONFIG_PATH set but file not found: {}", config_path)
 
-        # Auto-discovery: pyproject.toml only
+        # Auto-discovery: hexdag.yaml / hexdag.yml in CWD (preferred)
+        for yaml_name in ("hexdag.yaml", "hexdag.yml"):
+            if Path(yaml_name).exists():
+                logger.debug("Auto-discovered config: {}", yaml_name)
+                return Path(yaml_name)
+
+        # Auto-discovery: pyproject.toml in CWD
         if Path("pyproject.toml").exists():
             return Path("pyproject.toml")
 
-        # Parent directory traversal for pyproject.toml
+        # Parent directory traversal
         current = Path.cwd()
         while current != current.parent:
+            # Check for hexdag.yaml / hexdag.yml first
+            for yaml_name in ("hexdag.yaml", "hexdag.yml"):
+                yaml_path = current / yaml_name
+                if yaml_path.exists():
+                    logger.debug("Auto-discovered config in parent: {}", yaml_path)
+                    return yaml_path
+
+            # Then check pyproject.toml
             pyproject = current / "pyproject.toml"
             if pyproject.exists():
                 with pyproject.open("rb") as f:
