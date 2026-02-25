@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from hexdag.kernel.domain.pipeline_config import PipelineConfig
 from hexdag.kernel.schema.generator import SchemaGenerator
 
 # Add project root to path for imports
@@ -83,6 +84,94 @@ def _discover_factory_classes() -> dict[str, type[Any]]:
 NODE_FACTORIES: dict[str, type[Any]] = _discover_factory_classes()
 
 
+def _build_spec_schema() -> dict[str, Any]:
+    """Build the ``spec`` section of the pipeline schema from PipelineConfig.
+
+    Generates properties from ``PipelineConfig.model_json_schema()`` so the
+    Pydantic model is the single source of truth.  ``nodes`` is overridden
+    with a dynamic ``oneOf`` placeholder, and ``events`` is appended as a
+    hardcoded section (kept separate from the model for now).
+
+    Inline ``$defs`` produced by Pydantic (e.g. for ``CustomTypeConfig``) are
+    hoisted and returned via a second dict key so the caller can merge them
+    into the top-level ``$defs``.
+    """
+
+    pipeline_schema = PipelineConfig.model_json_schema()
+    props: dict[str, Any] = {}
+
+    # Fields that are NOT part of spec (they sit at pipeline level)
+    _NON_SPEC_FIELDS = {"metadata"}
+
+    for field_name, field_schema in pipeline_schema.get("properties", {}).items():
+        if field_name in _NON_SPEC_FIELDS:
+            continue
+
+        # Resolve $ref pointers that Pydantic generates for nested models
+        if "$ref" in field_schema:
+            ref_key = field_schema["$ref"].rsplit("/", 1)[-1]
+            defs = pipeline_schema.get("$defs", {})
+            if ref_key in defs:
+                field_schema = defs[ref_key]
+
+        # Resolve anyOf used for Optional fields (e.g. anyOf: [{...}, {type: null}])
+        if "anyOf" in field_schema:
+            non_null = [s for s in field_schema["anyOf"] if s != {"type": "null"}]
+            if len(non_null) == 1:
+                merged = {**non_null[0]}
+                # Preserve description from the outer field_schema
+                if "description" in field_schema:
+                    merged["description"] = field_schema["description"]
+                field_schema = merged
+
+        # Resolve $ref inside additionalProperties (e.g. custom_types)
+        additional = field_schema.get("additionalProperties")
+        if isinstance(additional, dict) and "$ref" in additional:
+            ref_key = additional["$ref"].rsplit("/", 1)[-1]
+            defs = pipeline_schema.get("$defs", {})
+            if ref_key in defs:
+                field_schema = {**field_schema, "additionalProperties": defs[ref_key]}
+
+        props[field_name] = field_schema
+
+    # Override nodes with the dynamic oneOf placeholder
+    props["nodes"] = {
+        "type": "array",
+        "description": "List of pipeline nodes",
+        "items": {"oneOf": []},
+    }
+
+    # Hardcoded events section (kept out of PipelineConfig for now)
+    props["events"] = {
+        "type": "object",
+        "description": "Event handlers for observability",
+        "properties": {
+            "on_node_started": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/EventHandler"},
+            },
+            "on_node_completed": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/EventHandler"},
+            },
+            "on_node_failed": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/EventHandler"},
+            },
+            "on_workflow_complete": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/EventHandler"},
+            },
+        },
+    }
+
+    return {
+        "type": "object",
+        "properties": props,
+        "required": ["nodes"],
+    }
+
+
 def generate_pipeline_schema() -> dict[str, Any]:
     """Generate JSON Schema for hexDAG pipeline YAML files.
 
@@ -138,148 +227,7 @@ def generate_pipeline_schema() -> dict[str, Any]:
                 },
                 "required": ["name"],
             },
-            "spec": {
-                "type": "object",
-                "properties": {
-                    "nodes": {
-                        "type": "array",
-                        "description": "List of pipeline nodes",
-                        "items": {
-                            "oneOf": [],  # Will be populated with node definitions
-                        },
-                    },
-                    "input_schema": {
-                        "type": "object",
-                        "description": "JSON Schema for pipeline inputs",
-                    },
-                    "output_schema": {
-                        "type": "object",
-                        "description": "JSON Schema for pipeline outputs",
-                    },
-                    "common_field_mappings": {
-                        "type": "object",
-                        "description": "Reusable field mapping definitions",
-                    },
-                    "ports": {
-                        "type": "object",
-                        "description": "Port adapters configuration (LLM, database, memory)",
-                        "additionalProperties": {
-                            "type": "object",
-                            "properties": {
-                                "adapter": {"type": "string", "description": "Adapter type"},
-                                "params": {"type": "object", "description": "Adapter parameters"},
-                            },
-                        },
-                    },
-                    "type_ports": {
-                        "type": "object",
-                        "description": "Port type mappings",
-                        "additionalProperties": {"type": "string"},
-                    },
-                    "policies": {
-                        "type": "object",
-                        "description": "Execution policies (retry, timeout, error handling)",
-                        "additionalProperties": {
-                            "type": "object",
-                            "properties": {
-                                "type": {"type": "string", "description": "Policy type"},
-                                "params": {"type": "object", "description": "Policy parameters"},
-                            },
-                        },
-                    },
-                    "aliases": {
-                        "type": "object",
-                        "description": (
-                            "User-defined short names for node kinds"
-                            " (maps alias to full module path)"
-                        ),
-                        "additionalProperties": {"type": "string"},
-                    },
-                    "custom_types": {
-                        "type": "object",
-                        "description": "Custom sanitized types for output_schema validation",
-                        "additionalProperties": {
-                            "type": "object",
-                            "properties": {
-                                "base": {
-                                    "type": "string",
-                                    "description": "Base type (str, int, float, bool, Decimal)",
-                                    "enum": ["str", "int", "float", "bool", "Decimal"],
-                                },
-                                "pattern": {
-                                    "type": "string",
-                                    "description": "Regex pattern for validation",
-                                },
-                                "nulls": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Values to treat as null",
-                                },
-                                "strip": {"type": "boolean", "description": "Strip whitespace"},
-                                "trim": {"type": "boolean", "description": "Trim whitespace"},
-                                "upper": {
-                                    "type": "boolean",
-                                    "description": "Convert to uppercase",
-                                },
-                                "lower": {
-                                    "type": "boolean",
-                                    "description": "Convert to lowercase",
-                                },
-                                "max_length": {
-                                    "type": "integer",
-                                    "description": "Maximum string length",
-                                },
-                                "default": {"description": "Default value if null"},
-                                "clamp": {
-                                    "type": "array",
-                                    "items": {"type": "number"},
-                                    "minItems": 2,
-                                    "maxItems": 2,
-                                    "description": "[min, max] bounds for numeric types",
-                                },
-                                "true_values": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Values to treat as true (bool type)",
-                                },
-                                "false_values": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Values to treat as false (bool type)",
-                                },
-                                "description": {
-                                    "type": "string",
-                                    "description": "Human-readable description of the type",
-                                },
-                            },
-                            "required": ["base"],
-                        },
-                    },
-                    "events": {
-                        "type": "object",
-                        "description": "Event handlers for observability",
-                        "properties": {
-                            "on_node_started": {
-                                "type": "array",
-                                "items": {"$ref": "#/$defs/EventHandler"},
-                            },
-                            "on_node_completed": {
-                                "type": "array",
-                                "items": {"$ref": "#/$defs/EventHandler"},
-                            },
-                            "on_node_failed": {
-                                "type": "array",
-                                "items": {"$ref": "#/$defs/EventHandler"},
-                            },
-                            "on_workflow_complete": {
-                                "type": "array",
-                                "items": {"$ref": "#/$defs/EventHandler"},
-                            },
-                        },
-                    },
-                },
-                "required": ["nodes"],
-            },
+            "spec": _build_spec_schema(),
         },
         "required": ["kind", "metadata", "spec"],
         "$defs": {},
@@ -347,15 +295,33 @@ def generate_pipeline_schema() -> dict[str, Any]:
         # Add reference to oneOf
         node_definitions.append({"$ref": f"#/$defs/{def_key}"})
 
-    # Add base Node definition
+    # Add base Node definition — properties generated from BaseNodeConfig model
+    from hexdag.kernel.domain.pipeline_config import BaseNodeConfig
+
+    base_node_schema = BaseNodeConfig.model_json_schema()
+    base_node_props: dict[str, Any] = {
+        "kind": {"type": "string"},
+        "metadata": {"type": "object"},
+        "spec": {"type": "object"},
+    }
+
+    # Partition BaseNodeConfig fields: spec-level vs node-level
+    _SPEC_LEVEL_FIELDS = {"input_mapping"}
+
+    spec_props: dict[str, Any] = {}
+    for field_name, field_schema in base_node_schema.get("properties", {}).items():
+        if field_name in _SPEC_LEVEL_FIELDS:
+            spec_props[field_name] = field_schema
+        else:
+            base_node_props[field_name] = field_schema
+
+    if spec_props:
+        base_node_props["spec"] = {"type": "object", "properties": spec_props}
+
     schema["$defs"]["Node"] = {
         "type": "object",
         "description": "Base node structure",
-        "properties": {
-            "kind": {"type": "string"},
-            "metadata": {"type": "object"},
-            "spec": {"type": "object"},
-        },
+        "properties": base_node_props,
     }
 
     # Add EventHandler definition for events section

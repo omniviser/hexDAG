@@ -176,6 +176,34 @@ def get_ports_config() -> Any | None:
     return _ports_config_context.get()
 
 
+def get_user_ports() -> dict[str, Any]:
+    """Get user-facing ports from current execution context.
+
+    Returns all port adapters except internal executor keys (prefixed
+    with ``_hexdag_``).  This is the canonical way for node wrapped
+    functions that accept ``**ports`` to resolve adapters from the
+    ContextVar when the executor chain does not pass them explicitly.
+
+    Returns
+    -------
+    dict[str, Any]
+        Filtered ports dictionary (empty dict if no context is active).
+
+    Examples
+    --------
+    Inside a node's wrapped function::
+
+        async def wrapped_fn(input_data, **ports):
+            if not ports:
+                ports = get_user_ports()
+            ...
+    """
+    context_ports = _ports_context.get()
+    if context_ports is None:
+        return {}
+    return {k: v for k, v in context_ports.items() if not k.startswith("_hexdag_")}
+
+
 def get_port(port_name: str) -> Any:
     """Get a specific port from current async execution context.
 

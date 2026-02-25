@@ -170,6 +170,19 @@ class ExecutionCoordinator:
         if input_mapping:
             return self._apply_input_mapping(base_input, input_mapping, initial_input, node_results)
 
+        # Auto-wire: when a single-dep node has in_model and no explicit input_mapping,
+        # extract only the fields whose names match the in_model from the upstream dict.
+        if (
+            not input_mapping
+            and node_spec.in_model
+            and len(node_spec.deps) == 1
+            and isinstance(base_input, dict)
+        ):
+            expected_fields = set(node_spec.in_model.model_fields.keys())
+            matching = expected_fields & base_input.keys()
+            if matching:
+                base_input = {k: base_input[k] for k in matching}
+
         return base_input
 
     def _is_expression(self, source: str) -> bool:

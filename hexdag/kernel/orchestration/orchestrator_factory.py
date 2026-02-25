@@ -7,7 +7,7 @@ runtime orchestrator, instantiating adapters and policies from their specs.
 from typing import TYPE_CHECKING, Any
 
 from hexdag.compiler.component_instantiator import ComponentInstantiator
-from hexdag.compiler.pipeline_config import PipelineConfig
+from hexdag.kernel.domain.pipeline_config import PipelineConfig
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.ports_builder import PortsBuilder

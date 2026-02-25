@@ -2,12 +2,16 @@
 
 # DAG primitives - only export what's used in main application code
 from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
+from hexdag.kernel.domain.pipeline_config import BaseNodeConfig, PipelineConfig
 from hexdag.kernel.domain.vfs import DirEntry, EntryType, StatResult
 
 __all__ = [
     # DAG primitives (used in main application)
     "DirectedGraph",
     "NodeSpec",
+    # Pipeline configuration models
+    "BaseNodeConfig",
+    "PipelineConfig",
     # VFS domain models
     "DirEntry",
     "EntryType",

@@ -715,6 +715,22 @@
         "Node": {
             "description": "Base node structure",
             "properties": {
+                "dependencies": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Explicit execution dependencies (deprecated \u2014 prefer input_mapping or wait_for; deps are auto-inferred from data references)",
+                    "title": "Dependencies"
+                },
                 "kind": {
                     "type": "string"
                 },
@@ -722,7 +738,41 @@
                     "type": "object"
                 },
                 "spec": {
+                    "properties": {
+                        "input_mapping": {
+                            "anyOf": [
+                                {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "default": null,
+                            "description": "Field mapping from upstream nodes or pipeline input. Keys are target field names, values use node_name.field or $input.field syntax.",
+                            "title": "Input Mapping"
+                        }
+                    },
                     "type": "object"
+                },
+                "wait_for": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Ordering-only dependencies \u2014 run after these nodes complete but do not consume their data",
+                    "title": "Wait For"
                 }
             },
             "type": "object"
@@ -913,14 +963,18 @@
                         "type": "string"
                     },
                     "description": "User-defined short names for node kinds (maps alias to full module path)",
+                    "title": "Aliases",
                     "type": "object"
                 },
                 "common_field_mappings": {
+                    "additionalProperties": true,
                     "description": "Reusable field mapping definitions",
                     "type": "object"
                 },
                 "custom_types": {
                     "additionalProperties": {
+                        "additionalProperties": false,
+                        "description": "Custom sanitized type definition for output_schema validation.",
                         "properties": {
                             "base": {
                                 "description": "Base type (str, int, float, bool, Decimal)",
@@ -931,76 +985,186 @@
                                     "bool",
                                     "Decimal"
                                 ],
+                                "title": "Base",
                                 "type": "string"
                             },
                             "clamp": {
+                                "anyOf": [
+                                    {
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "maxItems": 2,
+                                        "minItems": 2,
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "[min, max] bounds for numeric types",
-                                "items": {
-                                    "type": "number"
-                                },
-                                "maxItems": 2,
-                                "minItems": 2,
-                                "type": "array"
+                                "title": "Clamp"
                             },
                             "default": {
-                                "description": "Default value if null"
+                                "anyOf": [
+                                    {},
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
+                                "description": "Default value if null",
+                                "title": "Default"
                             },
                             "description": {
+                                "anyOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Human-readable description of the type",
-                                "type": "string"
+                                "title": "Description"
                             },
                             "false_values": {
+                                "anyOf": [
+                                    {
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Values to treat as false (bool type)",
-                                "items": {
-                                    "type": "string"
-                                },
-                                "type": "array"
+                                "title": "False Values"
                             },
                             "lower": {
+                                "anyOf": [
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Convert to lowercase",
-                                "type": "boolean"
+                                "title": "Lower"
                             },
                             "max_length": {
+                                "anyOf": [
+                                    {
+                                        "type": "integer"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Maximum string length",
-                                "type": "integer"
+                                "title": "Max Length"
                             },
                             "nulls": {
+                                "anyOf": [
+                                    {
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Values to treat as null",
-                                "items": {
-                                    "type": "string"
-                                },
-                                "type": "array"
+                                "title": "Nulls"
                             },
                             "pattern": {
+                                "anyOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Regex pattern for validation",
-                                "type": "string"
+                                "title": "Pattern"
                             },
                             "strip": {
+                                "anyOf": [
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Strip whitespace",
-                                "type": "boolean"
+                                "title": "Strip"
                             },
                             "trim": {
+                                "anyOf": [
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Trim whitespace",
-                                "type": "boolean"
+                                "title": "Trim"
                             },
                             "true_values": {
+                                "anyOf": [
+                                    {
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Values to treat as true (bool type)",
-                                "items": {
-                                    "type": "string"
-                                },
-                                "type": "array"
+                                "title": "True Values"
                             },
                             "upper": {
+                                "anyOf": [
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ],
+                                "default": null,
                                 "description": "Convert to uppercase",
-                                "type": "boolean"
+                                "title": "Upper"
                             }
                         },
                         "required": [
                             "base"
                         ],
+                        "title": "CustomTypeConfig",
                         "type": "object"
                     },
                     "description": "Custom sanitized types for output_schema validation",
+                    "title": "Custom Types",
                     "type": "object"
                 },
                 "events": {
@@ -1034,6 +1198,7 @@
                     "type": "object"
                 },
                 "input_schema": {
+                    "additionalProperties": true,
                     "description": "JSON Schema for pipeline inputs",
                     "type": "object"
                 },
@@ -1073,48 +1238,38 @@
                     "type": "array"
                 },
                 "output_schema": {
+                    "additionalProperties": true,
                     "description": "JSON Schema for pipeline outputs",
                     "type": "object"
                 },
                 "policies": {
                     "additionalProperties": {
-                        "properties": {
-                            "params": {
-                                "description": "Policy parameters",
-                                "type": "object"
-                            },
-                            "type": {
-                                "description": "Policy type",
-                                "type": "string"
-                            }
-                        },
+                        "additionalProperties": true,
                         "type": "object"
                     },
                     "description": "Execution policies (retry, timeout, error handling)",
+                    "title": "Policies",
                     "type": "object"
                 },
                 "ports": {
                     "additionalProperties": {
-                        "properties": {
-                            "adapter": {
-                                "description": "Adapter type",
-                                "type": "string"
-                            },
-                            "params": {
-                                "description": "Adapter parameters",
-                                "type": "object"
-                            }
-                        },
+                        "additionalProperties": true,
                         "type": "object"
                     },
                     "description": "Port adapters configuration (LLM, database, memory)",
+                    "title": "Ports",
                     "type": "object"
                 },
                 "type_ports": {
                     "additionalProperties": {
-                        "type": "string"
+                        "additionalProperties": {
+                            "additionalProperties": true,
+                            "type": "object"
+                        },
+                        "type": "object"
                     },
-                    "description": "Port type mappings",
+                    "description": "Per-type port defaults",
+                    "title": "Type Ports",
                     "type": "object"
                 }
             },

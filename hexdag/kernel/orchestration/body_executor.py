@@ -38,7 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from hexdag.kernel.context import get_ports
+from hexdag.kernel.context import get_user_ports
 from hexdag.kernel.exceptions import BodyExecutorError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.models import NodeExecutionContext
@@ -179,9 +179,7 @@ class BodyExecutor:
         # Fall back to ContextVar ports when caller passed empty dict
         # (e.g., CompositeNode receives empty **ports from NodeExecutor)
         if not ports:
-            context_ports = get_ports()
-            if context_ports is not None:
-                ports = dict(context_ports)
+            ports = get_user_ports()
 
         if body_pipeline:
             return await self._execute_pipeline(body_pipeline, exec_context, context, ports)

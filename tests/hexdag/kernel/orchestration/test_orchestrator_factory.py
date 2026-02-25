@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from hexdag.compiler.pipeline_config import PipelineConfig
+from hexdag.kernel.domain.pipeline_config import PipelineConfig
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
 
 

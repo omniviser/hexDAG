@@ -42,7 +42,7 @@ _SCHEMA_PATH = Path("schemas/pipeline-schema.yaml")
 _BUILDER_PATHS: list[str] = [
     "hexdag/compiler/yaml_builder.py",
     "hexdag/compiler/yaml_validator.py",
-    "hexdag/compiler/pipeline_config.py",
+    "hexdag/kernel/domain/pipeline_config.py",
     "hexdag/compiler/plugins/node_entity.py",
     "hexdag/compiler/plugins/macro_entity.py",
     "hexdag/compiler/plugins/macro_definition.py",
@@ -85,6 +85,37 @@ def _extract_spec_properties(schema_path: Path) -> dict[str, str]:
     content = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
     spec_props = content.get("properties", {}).get("spec", {}).get("properties", {})
     return {name: prop.get("description", "(no description)") for name, prop in spec_props.items()}
+
+
+def _extract_node_level_properties(schema_path: Path) -> set[str]:
+    """Extract all node-level property names from ``$defs`` in the schema.
+
+    Collects properties from the base ``Node`` definition (including
+    top-level and ``spec.properties``) as well as each concrete node type's
+    ``spec.properties``.  This allows the sync checker to recognise
+    node-level ``spec.get(...)`` accesses in builder code without
+    false-flagging them as missing pipeline-level properties.
+
+    Returns
+    -------
+    set[str]
+        Set of all node-level property names.
+    """
+    content = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
+    defs = content.get("$defs", {})
+    props: set[str] = set()
+
+    for def_schema in defs.values():
+        # Top-level node properties (kind, metadata, spec, dependencies, wait_for)
+        for name in def_schema.get("properties", {}):
+            props.add(name)
+
+        # spec.properties within each node type
+        spec_schema = def_schema.get("properties", {}).get("spec", {})
+        for name in spec_schema.get("properties", {}):
+            props.add(name)
+
+    return props
 
 
 # ============================================================================
@@ -144,9 +175,16 @@ def _extract_code_properties(builder_sources: dict[str, str]) -> set[str]:
 
     # Pydantic model fields in PipelineConfig
     pydantic_field_pattern = re.compile(r"^\s+(\w+)\s*:\s*(?:dict|list|str|int|Any)", re.MULTILINE)
+    # Pattern to extract the PipelineConfig class body only
+    pipeline_config_class_pattern = re.compile(
+        r"^class PipelineConfig\b.*?(?=\nclass |\Z)", re.MULTILINE | re.DOTALL
+    )
 
     # Only scan pipeline-level files (not node plugins)
-    pipeline_level_files = {"hexdag/compiler/yaml_builder.py", "hexdag/compiler/pipeline_config.py"}
+    pipeline_level_files = {
+        "hexdag/compiler/yaml_builder.py",
+        "hexdag/kernel/domain/pipeline_config.py",
+    }
 
     properties: set[str] = set()
 
@@ -157,10 +195,13 @@ def _extract_code_properties(builder_sources: dict[str, str]) -> set[str]:
             properties.add(match.group(1))
         for match in spec_bracket_pattern.finditer(source):
             properties.add(match.group(1))
-        # Only look for Pydantic fields in pipeline_config.py
+        # Only look for Pydantic fields within the PipelineConfig class
         if "pipeline_config" in _file_path:
-            for match in pydantic_field_pattern.finditer(source):
-                properties.add(match.group(1))
+            class_match = pipeline_config_class_pattern.search(source)
+            if class_match:
+                class_body = class_match.group(0)
+                for match in pydantic_field_pattern.finditer(class_body):
+                    properties.add(match.group(1))
 
     return properties
 
@@ -216,6 +257,9 @@ def main() -> int:
             files = ", ".join(found_in)
             print(f"   ✓ {prop} → found in: {files}")
 
+    # Load node-level properties from $defs (base Node + concrete node types)
+    node_level_props = _extract_node_level_properties(_SCHEMA_PATH)
+
     # Check code → schema (properties handled by code but not in schema)
     code_props = _extract_code_properties(builder_sources)
     code_only: list[str] = []
@@ -232,6 +276,11 @@ def main() -> int:
                 "default_factory",
                 "description",
             }:
+                continue
+            # Exclude node-level properties defined in $defs
+            if prop in node_level_props:
+                if args.verbose:
+                    print(f"   ✓ {prop} → node-level property (in $defs)")
                 continue
             code_only.append(prop)
         elif args.verbose and prop in schema_props:

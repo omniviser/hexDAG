@@ -405,7 +405,7 @@ repos:
         name: Generate JSON Schemas from registry
         entry: uv run python scripts/generate_schemas.py
         language: system
-        files: ^(hexdag/(stdlib/nodes|kernel/config/models|kernel/orchestration/policies/models).*\.py|scripts/generate_schemas\.py)$
+        files: ^(hexdag/(stdlib/nodes|kernel/domain/pipeline_config|kernel/config/models|kernel/orchestration/policies/models).*\.py|scripts/generate_schemas\.py)$
         stages: [pre-commit]
         pass_filenames: false
 

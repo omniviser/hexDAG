@@ -45,8 +45,8 @@ from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
 
 if TYPE_CHECKING:
-    from hexdag.compiler.pipeline_config import PipelineConfig
     from hexdag.kernel.domain.dag import DirectedGraph
+    from hexdag.kernel.domain.pipeline_config import PipelineConfig
     from hexdag.kernel.orchestration.components.lifecycle_manager import (
         HookConfig,
         PostDagHookConfig,

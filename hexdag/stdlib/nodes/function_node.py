@@ -8,6 +8,7 @@ from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
+from hexdag.kernel.context import get_user_ports
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.protocols import is_schema_type
@@ -177,6 +178,10 @@ class FunctionNode(BaseNodeFactory):
         async def wrapped_fn(input_data: Any, **ports: Any) -> Any:
             """Execute function with explicit port handling."""
             node_logger = logger.bind(node=name, node_type="function_node")
+
+            # Resolve ports from ContextVar if none were passed as kwargs.
+            if not ports:
+                ports = get_user_ports()
 
             # Log input details at debug level
             if isinstance(input_data, dict):

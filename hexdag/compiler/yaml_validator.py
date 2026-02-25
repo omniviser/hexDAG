@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from hexdag.kernel.domain.dag import DirectedGraph
+from hexdag.kernel.domain.pipeline_config import BaseNodeConfig
 
 # Separator for namespace:name format
 NAMESPACE_SEPARATOR = ":"
@@ -567,15 +568,13 @@ class YamlValidator:
             if not node_id:
                 continue
 
-            # Dependencies can be at node level or inside spec
-            deps = node.get("dependencies", []) or node.get("spec", {}).get("dependencies", [])
-
-            if not isinstance(deps, list):
-                deps = [deps]
+            # Parse base fields via the model — single source of truth
+            base = BaseNodeConfig.from_node_config(node)
+            all_deps = list(base.dependencies or []) + list(base.wait_for or [])
 
             # Check all dependencies exist using cached node_ids
             valid_deps = set()
-            for dep in deps:
+            for dep in all_deps:
                 if dep in node_ids:
                     valid_deps.add(dep)
                     continue
