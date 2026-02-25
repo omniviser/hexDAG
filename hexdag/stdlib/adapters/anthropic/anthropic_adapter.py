@@ -21,6 +21,7 @@ from hexdag.kernel.types import (
     TimeoutSeconds,
     TopP,
 )
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logger = get_logger(__name__)
 
@@ -36,7 +37,15 @@ AnthropicModel = Literal[
 ]
 
 
-class AnthropicAdapter(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTracking):
+class AnthropicAdapter(
+    HexDAGAdapter,
+    LLM,
+    SupportsGeneration,
+    SupportsFunctionCalling,
+    SupportsUsageTracking,
+    yaml_alias="anthropic_adapter",
+    port="llm",
+):
     """Anthropic implementation of the LLM port.
 
     This adapter provides integration with Anthropic's Claude models through

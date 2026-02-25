@@ -106,7 +106,7 @@ class Agent:
     tools: dict[str, str] | None = None
 
 
-class ReActAgentNode(BaseNodeFactory):
+class ReActAgentNode(BaseNodeFactory, yaml_alias="re_act_agent_node"):
     """Multi-step reasoning agent.
 
     This agent:

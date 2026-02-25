@@ -76,7 +76,7 @@ class ReasoningAgentConfig(MacroConfig):
         return str(v)
 
 
-class ReasoningAgentMacro(ConfigurableMacro):
+class ReasoningAgentMacro(ConfigurableMacro, yaml_alias="reasoning_agent_macro"):
     """Multi-step reasoning agent with adaptive tool calling.
 
     Automatically detects and adapts to LLM adapter capabilities:

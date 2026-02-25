@@ -91,7 +91,7 @@ def _value_to_expression(value: Any) -> str:
     return repr(value)
 
 
-class DataNode(BaseNodeFactory):
+class DataNode(BaseNodeFactory, yaml_alias="data_node"):
     """Static data node factory that returns constant output.
 
     __aliases__ declares backward-compatible names for YAML resolution.

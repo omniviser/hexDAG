@@ -211,7 +211,7 @@ def _apply_merge_strategy(
             raise ValueError(f"Unknown merge strategy: {strategy}")
 
 
-class ExpressionNode(BaseNodeFactory):
+class ExpressionNode(BaseNodeFactory, yaml_alias="expression_node"):
     """Node factory for computing values using safe AST-based expressions.
 
     ExpressionNode eliminates dict packing/unpacking boilerplate by:

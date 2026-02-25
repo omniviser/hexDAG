@@ -9,11 +9,17 @@ from typing import Any
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.data_store import SupportsKeyValue, SupportsQuery
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logger = get_logger(__name__)
 
 
-class SQLiteMemoryAdapter(SupportsKeyValue):
+class SQLiteMemoryAdapter(
+    HexDAGAdapter,
+    SupportsKeyValue,
+    yaml_alias="sqlite_memory_adapter",
+    port="memory",
+):
     """Memory adapter backed by SQLite database.
 
     Provides persistent key-value storage using SQLite, bridging the

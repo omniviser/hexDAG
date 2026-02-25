@@ -41,7 +41,7 @@ class ToolCallOutput(BaseModel):
     error: str | None = None
 
 
-class ToolCallNode(BaseNodeFactory):
+class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
     """Execute a single tool call as a FunctionNode.
 
     This node is a simple wrapper that:

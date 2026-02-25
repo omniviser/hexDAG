@@ -12,6 +12,7 @@ from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.data_store import SupportsQuery
 from hexdag.kernel.ports.database import SupportsReadOnly
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logger = get_logger(__name__)
 
@@ -19,7 +20,13 @@ logger = get_logger(__name__)
 SQLiteJournalMode = Literal["WAL", "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "OFF"]
 
 
-class SQLiteAdapter(SupportsQuery, SupportsReadOnly):
+class SQLiteAdapter(
+    HexDAGAdapter,
+    SupportsQuery,
+    SupportsReadOnly,
+    yaml_alias="sqlite_adapter",
+    port="database",
+):
     """Async SQLite adapter for database port.
 
     Provides a lightweight, file-based database solution that implements

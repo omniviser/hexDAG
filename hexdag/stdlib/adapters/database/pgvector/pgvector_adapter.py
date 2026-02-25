@@ -8,11 +8,19 @@ from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.data_store import SupportsQuery
 from hexdag.kernel.ports.database import SupportsReadOnly
 from hexdag.kernel.ports.vector_search import SupportsVectorSearch
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logger = get_logger(__name__)
 
 
-class PgVectorAdapter(SupportsQuery, SupportsVectorSearch, SupportsReadOnly):
+class PgVectorAdapter(
+    HexDAGAdapter,
+    SupportsQuery,
+    SupportsVectorSearch,
+    SupportsReadOnly,
+    yaml_alias="pgvector_adapter",
+    port="database",
+):
     """PostgreSQL adapter with pgvector extension support.
 
     This adapter provides integration with PostgreSQL databases that have the

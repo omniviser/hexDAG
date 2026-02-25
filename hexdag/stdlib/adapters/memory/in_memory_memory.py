@@ -8,11 +8,12 @@ if TYPE_CHECKING:
 
 
 from hexdag.kernel.ports.data_store import SupportsKeyValue
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 __all__ = ["InMemoryMemory"]
 
 
-class InMemoryMemory(SupportsKeyValue):
+class InMemoryMemory(HexDAGAdapter, SupportsKeyValue, yaml_alias="in_memory_memory", port="memory"):
     """In-memory implementation of Memory for testing.
 
     Features:

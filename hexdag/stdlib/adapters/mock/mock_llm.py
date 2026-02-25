@@ -12,12 +12,21 @@ from hexdag.kernel.ports.llm import (
     TokenUsage,
     ToolChoice,
 )
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
-class MockLLM(LLM, SupportsGeneration, SupportsFunctionCalling, SupportsUsageTracking):
+class MockLLM(
+    HexDAGAdapter,
+    LLM,
+    SupportsGeneration,
+    SupportsFunctionCalling,
+    SupportsUsageTracking,
+    yaml_alias="mock_llm",
+    port="llm",
+):
     """Mock implementation of the LLM interface for testing.
 
     The LLM port interface is stateless, but this mock provides testing utilities like response

@@ -20,7 +20,7 @@ from .mapped_input import MappedInput
 logger = get_logger(__name__)
 
 
-class FunctionNode(BaseNodeFactory):
+class FunctionNode(BaseNodeFactory, yaml_alias="function_node"):
     """Simple factory for creating function-based nodes with optional Pydantic validation.
 
     Function nodes are highly dynamic - the function itself defines configuration via its

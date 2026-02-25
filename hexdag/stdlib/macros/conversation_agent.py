@@ -72,7 +72,7 @@ class ConversationConfig(MacroConfig):
     )
 
 
-class ConversationMacro(ConfigurableMacro):
+class ConversationMacro(ConfigurableMacro, yaml_alias="conversation_macro"):
     """Multi-turn conversation with dynamic message history expansion.
 
     Architecture (dynamic graph):

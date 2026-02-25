@@ -29,9 +29,9 @@ __all__ = [
     "ToolCallNode",
 ]
 
-# Bootstrap: Register auto-discovered node aliases with core resolver
-# This maintains hexagonal architecture - builtin calls into core, not vice versa
+# Bootstrap: Register __init_subclass__-discovered node aliases with core resolver.
+# Importing the node classes above triggers __init_subclass__ which populates _registry.
 from hexdag.kernel.resolver import register_builtin_aliases
-from hexdag.stdlib.nodes._discovery import discover_node_factories
+from hexdag.stdlib.nodes.base_node_factory import BaseNodeFactory
 
-register_builtin_aliases(discover_node_factories())
+register_builtin_aliases(BaseNodeFactory._registry)

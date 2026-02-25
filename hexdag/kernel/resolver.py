@@ -15,7 +15,15 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from hexdag.kernel._alias_registry import (
+    _builtin_aliases,
+    register_builtin_aliases,
+    resolve_function,
+)
 from hexdag.kernel.exceptions import ResolveError  # noqa: F401
+
+# Re-export for backward compatibility
+__all__ = ["register_builtin_aliases", "resolve_function"]
 
 # Runtime storage for dynamically created components (e.g., YAML-defined macros)
 _runtime_components: dict[str, type[Any]] = {}
@@ -23,29 +31,8 @@ _runtime_components: dict[str, type[Any]] = {}
 # User-registered aliases (separate from built-in short names)
 _user_aliases: dict[str, str] = {}
 
-# Builtin aliases registered by hexdag.stdlib during bootstrap
-_builtin_aliases: dict[str, str] = {}
-
 # Flag to track if builtin has been bootstrapped
 _builtin_bootstrapped: bool = False
-
-
-def register_builtin_aliases(aliases: dict[str, str]) -> None:
-    """Register builtin component aliases (called by hexdag.stdlib during bootstrap).
-
-    This allows the builtin package to register its auto-discovered aliases
-    without kernel needing to import from stdlib (maintaining hexagonal architecture).
-
-    Note: This does NOT set ``_builtin_bootstrapped`` — only
-    ``_ensure_builtin_bootstrapped`` sets the flag after loading all alias
-    sources (nodes, adapters, macros).
-
-    Parameters
-    ----------
-    aliases : dict[str, str]
-        Mapping of alias -> full module path
-    """
-    _builtin_aliases.update(aliases)
 
 
 def _ensure_builtin_bootstrapped() -> None:
@@ -65,6 +52,24 @@ def _ensure_builtin_bootstrapped() -> None:
 
         _builtin_aliases.update(discover_adapter_aliases())
         _builtin_aliases.update(discover_macro_aliases())
+
+        # Macro __init_subclass__ registry (macros imported above via discover_macro_aliases)
+        from hexdag.kernel.configurable import (
+            ConfigurableMacro,  # lazy: bootstrap discovery
+        )
+
+        _builtin_aliases.update(ConfigurableMacro._registry)
+
+        # Load pip-installed plugin components via entry_points.
+        # Use try/except to handle circular import during initial module loading.
+        try:
+            from hexdag.kernel.discovery import (
+                load_plugin_components,  # lazy: bootstrap discovery
+            )
+
+            load_plugin_components()
+        except ImportError:
+            pass  # Will be loaded on next resolve() call
 
         _builtin_bootstrapped = True
 
@@ -226,6 +231,15 @@ def resolve(kind: str) -> type[Any]:
     if kind in _builtin_aliases:
         kind = _builtin_aliases[kind]
 
+    # Check __init_subclass__ registries for classes imported after bootstrap
+    if "." not in kind:
+        from hexdag.kernel.configurable import (
+            ConfigurableMacro,  # lazy: avoid circular import with configurable→resolver
+        )
+
+        if kind in ConfigurableMacro._registry:
+            kind = ConfigurableMacro._registry[kind]
+
     if "." not in kind:
         raise ResolveError(
             kind,
@@ -259,51 +273,3 @@ def resolve(kind: str) -> type[Any]:
         raise ResolveError(kind, f"'{class_name}' is not a class (got {type(cls).__name__})")
 
     return cls
-
-
-def resolve_function(path: str) -> Any:
-    """Resolve a path to a function or callable.
-
-    Parameters
-    ----------
-    path : str
-        Full module path to the function (e.g., "json.loads")
-
-    Returns
-    -------
-    Callable
-        The resolved function
-
-    Raises
-    ------
-    ResolveError
-        If the module or function cannot be found
-    """
-    if "." not in path:
-        raise ResolveError(
-            path,
-            "Must be a full module path (e.g., 'json.loads')",
-        )
-
-    module_path, func_name = path.rsplit(".", 1)
-
-    try:
-        module = importlib.import_module(module_path)
-    except ModuleNotFoundError as e:
-        raise ResolveError(path, f"Module '{module_path}' not found: {e}") from e
-    except ImportError as e:
-        raise ResolveError(path, f"Failed to import '{module_path}': {e}") from e
-
-    try:
-        func = getattr(module, func_name)
-    except AttributeError as e:
-        available = [name for name in dir(module) if not name.startswith("_")]
-        raise ResolveError(
-            path,
-            f"'{func_name}' not found in '{module_path}'. Available: {', '.join(available[:10])}",
-        ) from e
-
-    if not callable(func):
-        raise ResolveError(path, f"'{func_name}' is not callable (got {type(func).__name__})")
-
-    return func

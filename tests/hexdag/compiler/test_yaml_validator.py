@@ -580,7 +580,7 @@ class TestManifestValidation:
             "spec": {
                 "nodes": [
                     {
-                        "kind": "core:function_node",
+                        "kind": "function_node",
                         "metadata": {"name": "node1"},
                         "spec": {"fn": "test"},
                     }

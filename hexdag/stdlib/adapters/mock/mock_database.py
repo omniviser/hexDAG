@@ -4,9 +4,15 @@ import asyncio
 from typing import Any
 
 from hexdag.kernel.ports.data_store import SupportsQuery
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 
-class MockDatabaseAdapter(SupportsQuery):
+class MockDatabaseAdapter(
+    HexDAGAdapter,
+    SupportsQuery,
+    yaml_alias="mock_database_adapter",
+    port="database",
+):
     """Mock implementation of Database for testing and demos."""
 
     # Type annotations for attributes

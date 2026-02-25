@@ -50,7 +50,7 @@ class LLMMacroConfig(MacroConfig):
         return normalize_schema(v)
 
 
-class LLMMacro(ConfigurableMacro):
+class LLMMacro(ConfigurableMacro, yaml_alias="llm_macro"):
     """LLM macro that wraps the unified LLMNode.
 
     This macro provides a YAML-friendly interface for structured LLM interactions.

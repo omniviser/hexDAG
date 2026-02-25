@@ -388,14 +388,14 @@ class TestStaticNodeAlias:
 
         assert StaticNode is DataNode
 
-    def test_core_static_node_resolves_to_data_node(self) -> None:
-        """Test that core:static_node alias resolves correctly."""
+    def test_static_node_alias_resolves_to_data_node(self) -> None:
+        """Test that static_node alias resolves correctly."""
         from hexdag.kernel.resolver import resolve
 
-        StaticNode = resolve("core:static_node")
-        DataNode = resolve("core:data_node")
+        StaticNode = resolve("static_node")
+        DataNodeCls = resolve("data_node")
 
-        assert StaticNode is DataNode
+        assert StaticNode is DataNodeCls
 
     def test_static_node_creates_working_node(self) -> None:
         """Test that static_node creates a functional node."""

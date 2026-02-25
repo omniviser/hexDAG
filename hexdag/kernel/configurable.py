@@ -11,7 +11,7 @@ This module provides:
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field  # noqa: TC002
 
@@ -190,7 +190,19 @@ class ConfigurableMacro:
     ...         return DirectedGraph([...])
     """
 
+    _registry: ClassVar[dict[str, str]] = {}
+    """Auto-populated by ``__init_subclass__``: alias -> full module path."""
+
     Config: type[MacroConfig]
+
+    def __init_subclass__(cls, *, yaml_alias: str | None = None, **kwargs: Any) -> None:
+        """Register subclass in the alias registry when ``yaml_alias`` is provided."""
+        super().__init_subclass__(**kwargs)
+        if yaml_alias:
+            full_path = f"{cls.__module__}.{cls.__qualname__}"
+            ConfigurableMacro._registry[yaml_alias] = full_path
+            # Also register CamelCase class name
+            ConfigurableMacro._registry[cls.__name__] = full_path
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize macro with configuration.

@@ -33,6 +33,7 @@ from hexdag.kernel.types import (
     TokenCount,
     TopP,
 )
+from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logger = get_logger(__name__)
 
@@ -54,12 +55,15 @@ OpenAIEmbeddingModel = Literal[
 
 
 class OpenAIAdapter(
+    HexDAGAdapter,
     LLM,
     SupportsGeneration,
     SupportsFunctionCalling,
     SupportsVision,
     SupportsEmbedding,
     SupportsUsageTracking,
+    yaml_alias="open_ai_adapter",
+    port="llm",
 ):
     """Unified OpenAI implementation of the LLM port.
 
