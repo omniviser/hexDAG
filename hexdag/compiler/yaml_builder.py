@@ -10,14 +10,13 @@ Plugins are extracted into focused modules:
 
 from __future__ import annotations
 
+import warnings
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
-
-from hexdag.compiler.pipeline_config import PipelineConfig
 
 # Re-export extracted classes for backward compatibility.
 # Existing code that imports from ``yaml_builder`` continues to work.
@@ -28,8 +27,14 @@ from hexdag.compiler.plugins.node_entity import NodeEntityPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin  # noqa: F401
 from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.template import TemplatePlugin  # noqa: F401
+from hexdag.compiler.reference_resolver import (
+    extract_refs_from_expressions,
+    extract_refs_from_mapping,
+    extract_refs_from_template,
+)
 from hexdag.compiler.yaml_validator import YamlValidator
 from hexdag.kernel.domain.dag import DirectedGraph
+from hexdag.kernel.domain.pipeline_config import BaseNodeConfig, PipelineConfig
 from hexdag.kernel.exceptions import YamlPipelineBuilderError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import register_alias
@@ -226,9 +231,7 @@ class YamlPipelineBuilder:
         if config.get("kind") == "Macro":
             # Return empty graph for macro-only documents
             logger.info("Document contains only macro definitions, no pipeline to build")
-            return DirectedGraph(), PipelineConfig(
-                ports={}, type_ports={}, policies={}, metadata={}, nodes=[]
-            )
+            return DirectedGraph(), PipelineConfig()
 
         # Step 4: Preprocess FIRST (includes must resolve before validation)
         for plugin in self.preprocess_plugins:
@@ -446,12 +449,76 @@ class YamlPipelineBuilder:
             logger.debug("Registered custom type: {}", type_name)
 
     def _build_graph(self, config: dict[str, Any]) -> DirectedGraph:
-        """Build DirectedGraph using entity plugins."""
+        """Build DirectedGraph using entity plugins.
+
+        Uses a two-pass approach:
+
+        **Pass 1** — Collect all node names so the reference resolver can
+        distinguish ``node_name.field`` from arbitrary identifiers.
+
+        **Pass 2** — For each node, infer dependencies from ``input_mapping``,
+        ``expressions``, and ``prompt_template``/``template`` fields.  Also
+        supports the ``wait_for`` keyword for ordering-only relationships.
+
+        Implicit sequential dependencies are preserved: if a node has no
+        ``dependencies``, no ``wait_for``, no ``input_mapping``, and no
+        inline references, it chains to the previous node (unless it is the
+        first node, in which case it is a root).
+
+        Explicit ``dependencies: []`` still marks a node as root.
+        """
         graph = DirectedGraph()
         spec = config.get("spec", {})
         nodes_list = spec.get("nodes", [])
 
+        # --- Pass 1: collect all node names ---
+        known_nodes = frozenset(
+            nc.get("metadata", {}).get("name")
+            for nc in nodes_list
+            if nc.get("metadata", {}).get("name")
+        )
+
+        # --- Pass 2: infer deps & build ---
+        previous_node_id: str | None = None
+
         for node_config in nodes_list:
+            node_id = node_config.get("metadata", {}).get("name")
+            node_spec = node_config.get("spec", {})
+
+            # Parse base fields via the model — single source of truth
+            base = BaseNodeConfig.from_node_config(node_config)
+            has_deps_key = "dependencies" in node_config or "dependencies" in node_spec
+
+            # Infer deps from input_mapping / expressions / templates
+            inferred_deps = self._infer_deps(node_config, known_nodes)
+
+            # Merge wait_for into deps (ordering only, no data flow)
+            wait_for = list(base.wait_for) if base.wait_for else []
+
+            if has_deps_key:
+                # Explicit dependencies provided — use them, but warn if redundant
+                explicit_deps = set(base.dependencies or [])
+                if inferred_deps and explicit_deps and explicit_deps <= inferred_deps:
+                    warnings.warn(
+                        f"Node '{node_id}': explicit 'dependencies' {sorted(explicit_deps)} "
+                        f"can be inferred from input_mapping/expressions/templates. "
+                        f"Consider removing the redundant 'dependencies' key.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                # Merge wait_for into explicit deps
+                if wait_for:
+                    merged = list(explicit_deps | set(wait_for))
+                    node_config = {**node_config, "dependencies": merged}
+            elif inferred_deps or wait_for:
+                # No explicit deps — use inferred + wait_for
+                merged_deps = inferred_deps | set(wait_for)
+                node_config = {**node_config, "dependencies": sorted(merged_deps)}
+            elif previous_node_id is not None:
+                # Implicit sequential dependency (no refs, no wait_for, not first)
+                node_config = {**node_config, "dependencies": [previous_node_id]}
+            # else: first node, no deps → root
+
             # Find plugin that can handle this entity
             for plugin in self.entity_plugins:
                 if plugin.can_handle(node_config):
@@ -464,21 +531,64 @@ class YamlPipelineBuilder:
                 kind = node_config.get("kind", "unknown")
                 raise YamlPipelineBuilderError(f"No plugin can handle kind: {kind}")
 
+            # Track for next iteration
+            if node_id:
+                previous_node_id = node_id
+
         return graph
 
     @staticmethod
-    def _extract_pipeline_config(config: dict[str, Any]) -> PipelineConfig:
-        """Extract PipelineConfig from YAML."""
-        spec = config.get("spec", {})
-        metadata = config.get("metadata", {})
+    def _infer_deps(node_config: dict[str, Any], known_nodes: frozenset[str]) -> set[str]:
+        """Infer dependencies from input_mapping, expressions, and templates.
 
-        return PipelineConfig(
-            ports=spec.get("ports", {}),
-            type_ports=spec.get("type_ports", {}),
-            policies=spec.get("policies", {}),
-            metadata=metadata,
-            nodes=spec.get("nodes", []),
-        )
+        Parameters
+        ----------
+        node_config : dict[str, Any]
+            Node configuration dictionary.
+        known_nodes : frozenset[str]
+            All node names in the pipeline.
+
+        Returns
+        -------
+        set[str]
+            Inferred dependency node names.
+        """
+        refs: set[str] = set()
+        spec = node_config.get("spec", {})
+        node_id = node_config.get("metadata", {}).get("name")
+
+        # Exclude self-references
+        other_nodes = known_nodes - {node_id} if node_id else known_nodes
+
+        # 1. input_mapping
+        input_mapping = spec.get("input_mapping")
+        if isinstance(input_mapping, dict):
+            refs |= extract_refs_from_mapping(input_mapping, other_nodes)
+
+        # 2. expressions
+        expressions = spec.get("expressions")
+        if isinstance(expressions, dict):
+            refs |= extract_refs_from_expressions(expressions, other_nodes)
+
+        # 3. prompt_template / template
+        for key in ("prompt_template", "template", "initial_prompt_template", "main_prompt"):
+            template = spec.get(key)
+            if isinstance(template, str):
+                refs |= extract_refs_from_template(template, other_nodes)
+
+        return refs
+
+    @staticmethod
+    def _extract_pipeline_config(config: dict[str, Any]) -> PipelineConfig:
+        """Extract PipelineConfig from YAML.
+
+        Feeds the raw ``spec`` dict straight into ``model_validate`` so
+        field names are defined once — on the Pydantic model.
+        ``metadata`` lives at the pipeline level, not inside ``spec``,
+        so it is injected separately.
+        """
+        spec = config.get("spec", {})
+        return PipelineConfig.model_validate({**spec, "metadata": config.get("metadata", {})})
 
 
 # ============================================================================

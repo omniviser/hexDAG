@@ -60,6 +60,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
+from hexdag.kernel.context import get_user_ports
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.expression_parser import compile_expression, evaluate_expression
 from hexdag.kernel.logging import get_logger
@@ -252,6 +253,10 @@ class CompositeNode(BaseNodeFactory):
 
         async def composite_fn(input_data: Any, **ports: Any) -> dict[str, Any]:
             """Execute control flow logic based on mode."""
+            # Resolve ports from ContextVar if none were passed as kwargs.
+            if not ports:
+                ports = get_user_ports()
+
             node_logger = logger.bind(node=name, node_type="composite_node", mode=_mode)
 
             # Normalize input

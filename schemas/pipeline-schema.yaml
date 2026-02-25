@@ -36,6 +36,164 @@ properties:
   spec:
     type: object
     properties:
+      ports:
+        additionalProperties:
+          additionalProperties: true
+          type: object
+        description: Port adapters configuration (LLM, database, memory)
+        title: Ports
+        type: object
+      type_ports:
+        additionalProperties:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+        description: Per-type port defaults
+        title: Type Ports
+        type: object
+      policies:
+        additionalProperties:
+          additionalProperties: true
+          type: object
+        description: Execution policies (retry, timeout, error handling)
+        title: Policies
+        type: object
+      aliases:
+        additionalProperties:
+          type: string
+        description: User-defined short names for node kinds (maps alias to full module
+          path)
+        title: Aliases
+        type: object
+      custom_types:
+        additionalProperties:
+          additionalProperties: false
+          description: Custom sanitized type definition for output_schema validation.
+          properties:
+            base:
+              description: Base type (str, int, float, bool, Decimal)
+              enum:
+              - str
+              - int
+              - float
+              - bool
+              - Decimal
+              title: Base
+              type: string
+            pattern:
+              anyOf:
+              - type: string
+              - type: 'null'
+              default: null
+              description: Regex pattern for validation
+              title: Pattern
+            nulls:
+              anyOf:
+              - items:
+                  type: string
+                type: array
+              - type: 'null'
+              default: null
+              description: Values to treat as null
+              title: Nulls
+            strip:
+              anyOf:
+              - type: boolean
+              - type: 'null'
+              default: null
+              description: Strip whitespace
+              title: Strip
+            trim:
+              anyOf:
+              - type: boolean
+              - type: 'null'
+              default: null
+              description: Trim whitespace
+              title: Trim
+            upper:
+              anyOf:
+              - type: boolean
+              - type: 'null'
+              default: null
+              description: Convert to uppercase
+              title: Upper
+            lower:
+              anyOf:
+              - type: boolean
+              - type: 'null'
+              default: null
+              description: Convert to lowercase
+              title: Lower
+            max_length:
+              anyOf:
+              - type: integer
+              - type: 'null'
+              default: null
+              description: Maximum string length
+              title: Max Length
+            default:
+              anyOf:
+              - {}
+              - type: 'null'
+              default: null
+              description: Default value if null
+              title: Default
+            clamp:
+              anyOf:
+              - items:
+                  type: number
+                maxItems: 2
+                minItems: 2
+                type: array
+              - type: 'null'
+              default: null
+              description: '[min, max] bounds for numeric types'
+              title: Clamp
+            true_values:
+              anyOf:
+              - items:
+                  type: string
+                type: array
+              - type: 'null'
+              default: null
+              description: Values to treat as true (bool type)
+              title: True Values
+            false_values:
+              anyOf:
+              - items:
+                  type: string
+                type: array
+              - type: 'null'
+              default: null
+              description: Values to treat as false (bool type)
+              title: False Values
+            description:
+              anyOf:
+              - type: string
+              - type: 'null'
+              default: null
+              description: Human-readable description of the type
+              title: Description
+          required:
+          - base
+          title: CustomTypeConfig
+          type: object
+        description: Custom sanitized types for output_schema validation
+        title: Custom Types
+        type: object
+      input_schema:
+        additionalProperties: true
+        type: object
+        description: JSON Schema for pipeline inputs
+      output_schema:
+        additionalProperties: true
+        type: object
+        description: JSON Schema for pipeline outputs
+      common_field_mappings:
+        additionalProperties: true
+        type: object
+        description: Reusable field mapping definitions
       nodes:
         type: array
         description: List of pipeline nodes
@@ -50,112 +208,6 @@ properties:
           - $ref: '#/$defs/Port_CallNodeSpec'
           - $ref: '#/$defs/Tool_CallNodeSpec'
           - $ref: '#/$defs/AgentNodeSpec'
-      input_schema:
-        type: object
-        description: JSON Schema for pipeline inputs
-      output_schema:
-        type: object
-        description: JSON Schema for pipeline outputs
-      common_field_mappings:
-        type: object
-        description: Reusable field mapping definitions
-      ports:
-        type: object
-        description: Port adapters configuration (LLM, database, memory)
-        additionalProperties:
-          type: object
-          properties:
-            adapter:
-              type: string
-              description: Adapter type
-            params:
-              type: object
-              description: Adapter parameters
-      type_ports:
-        type: object
-        description: Port type mappings
-        additionalProperties:
-          type: string
-      policies:
-        type: object
-        description: Execution policies (retry, timeout, error handling)
-        additionalProperties:
-          type: object
-          properties:
-            type:
-              type: string
-              description: Policy type
-            params:
-              type: object
-              description: Policy parameters
-      aliases:
-        type: object
-        description: User-defined short names for node kinds (maps alias to full module
-          path)
-        additionalProperties:
-          type: string
-      custom_types:
-        type: object
-        description: Custom sanitized types for output_schema validation
-        additionalProperties:
-          type: object
-          properties:
-            base:
-              type: string
-              description: Base type (str, int, float, bool, Decimal)
-              enum:
-              - str
-              - int
-              - float
-              - bool
-              - Decimal
-            pattern:
-              type: string
-              description: Regex pattern for validation
-            nulls:
-              type: array
-              items:
-                type: string
-              description: Values to treat as null
-            strip:
-              type: boolean
-              description: Strip whitespace
-            trim:
-              type: boolean
-              description: Trim whitespace
-            upper:
-              type: boolean
-              description: Convert to uppercase
-            lower:
-              type: boolean
-              description: Convert to lowercase
-            max_length:
-              type: integer
-              description: Maximum string length
-            default:
-              description: Default value if null
-            clamp:
-              type: array
-              items:
-                type: number
-              minItems: 2
-              maxItems: 2
-              description: '[min, max] bounds for numeric types'
-            true_values:
-              type: array
-              items:
-                type: string
-              description: Values to treat as true (bool type)
-            false_values:
-              type: array
-              items:
-                type: string
-              description: Values to treat as false (bool type)
-            description:
-              type: string
-              description: Human-readable description of the type
-          required:
-          - base
       events:
         type: object
         description: Event handlers for observability
@@ -773,6 +825,37 @@ $defs:
         type: object
       spec:
         type: object
+        properties:
+          input_mapping:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
+            default: null
+            description: Field mapping from upstream nodes or pipeline input. Keys
+              are target field names, values use node_name.field or $input.field syntax.
+            title: Input Mapping
+      dependencies:
+        anyOf:
+        - items:
+            type: string
+          type: array
+        - type: 'null'
+        default: null
+        description: "Explicit execution dependencies (deprecated \u2014 prefer input_mapping\
+          \ or wait_for; deps are auto-inferred from data references)"
+        title: Dependencies
+      wait_for:
+        anyOf:
+        - items:
+            type: string
+          type: array
+        - type: 'null'
+        default: null
+        description: "Ordering-only dependencies \u2014 run after these nodes complete\
+          \ but do not consume their data"
+        title: Wait For
   EventHandler:
     type: object
     description: Event handler configuration

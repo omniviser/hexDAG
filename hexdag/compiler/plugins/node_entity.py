@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+from hexdag.kernel.domain.pipeline_config import BaseNodeConfig
 from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.resolver import ResolveError, resolve
 from hexdag.kernel.schema.generator import SchemaGenerator
@@ -50,8 +51,12 @@ class NodeEntityPlugin:
         settings_values = node_config.get("settings", {}).copy()
         spec = node_config.get("spec", {}).copy()
 
-        # Dependencies can be at node level or inside spec (for backwards compatibility)
-        deps = node_config.get("dependencies", []) or spec.pop("dependencies", [])
+        # Extract base fields via the model — single source of truth
+        base = BaseNodeConfig.from_node_config(node_config)
+        spec.pop("dependencies", None)  # Remove from spec if present (backwards compat)
+        deps = list(base.dependencies or [])
+        if base.wait_for:
+            deps = sorted(set(deps) | set(base.wait_for))
 
         # Resolve factory class from full module path
         try:

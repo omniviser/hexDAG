@@ -4,9 +4,14 @@ Tests cover:
 - EnvironmentVariablePlugin: ${VAR} resolution with defaults and type coercion
 - TemplatePlugin: Jinja2 templating with context and type coercion
 - Integration: Both plugins working together in YamlPipelineBuilder
+- Implicit sequential dependencies
+- Dependency inference from input_mapping, wait_for, expressions, templates
+- Deprecation warnings for redundant dependencies
 """
 
 import os
+import textwrap
+import warnings
 from pathlib import Path
 
 import pytest
@@ -1021,3 +1026,390 @@ spec:
             graph, config = builder.build_from_yaml_string(yaml_content)
 
         assert "test" in graph.nodes
+
+
+# ============================================================================
+# Implicit Sequential Dependencies Tests
+# ============================================================================
+
+_IMPLICIT_DEPS_TEMPLATE = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test-implicit-deps
+spec:
+  nodes:
+{nodes}
+"""
+
+
+def _build_from_nodes(nodes_yaml: str):
+    """Helper: build a pipeline from a nodes YAML fragment."""
+    yaml_str = _IMPLICIT_DEPS_TEMPLATE.format(nodes=textwrap.indent(nodes_yaml, "    "))
+    builder = YamlPipelineBuilder()
+    graph, _ = builder.build_from_yaml_string(yaml_str)
+    return graph
+
+
+class TestImplicitSequentialDependencies:
+    """Tests for implicit sequential dep injection in _build_graph."""
+
+    def test_omitted_deps_create_sequential_chain(self):
+        """Nodes without a dependencies key depend on the previous node."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: step1 }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: step2 }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: step3 }
+  spec:
+    fn: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["step1"].deps == frozenset()
+        assert graph.nodes["step2"].deps == frozenset({"step1"})
+        assert graph.nodes["step3"].deps == frozenset({"step2"})
+
+    def test_first_node_without_deps_is_root(self):
+        """The first node with no dependencies key is a root."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: root_node }
+  spec:
+    fn: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+        assert graph.nodes["root_node"].deps == frozenset()
+
+    def test_explicit_empty_deps_is_root(self):
+        """Explicit ``dependencies: []`` means root, even when not first."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["a"].deps == frozenset()
+        assert graph.nodes["b"].deps == frozenset()
+
+    def test_explicit_deps_unchanged(self):
+        """Explicit ``dependencies: [a, b]`` works exactly as before."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: c }
+  spec:
+    fn: "json.dumps"
+  dependencies: [a, b]
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["a"].deps == frozenset()
+        assert graph.nodes["b"].deps == frozenset()
+        assert graph.nodes["c"].deps == frozenset({"a", "b"})
+
+    def test_mixed_implicit_and_explicit(self):
+        """Mixed implicit/explicit deps in same pipeline."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: fetch_a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: fetch_b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: merge }
+  spec:
+    fn: "json.dumps"
+  dependencies: [fetch_a, fetch_b]
+
+- kind: function_node
+  metadata: { name: format }
+  spec:
+    fn: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["fetch_a"].deps == frozenset()
+        assert graph.nodes["fetch_b"].deps == frozenset()
+        assert graph.nodes["merge"].deps == frozenset({"fetch_a", "fetch_b"})
+        assert graph.nodes["format"].deps == frozenset({"merge"})
+
+    def test_implicit_deps_after_explicit_root(self):
+        """Implicit dep tracks the previous node even after an explicit root."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: c }
+  spec:
+    fn: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["c"].deps == frozenset({"b"})
+
+
+# ============================================================================
+# Dependency Inference from input_mapping Tests
+# ============================================================================
+
+
+class TestDepsInferredFromInputMapping:
+    """Dependencies are auto-inferred from input_mapping node.field references."""
+
+    def test_single_node_ref_in_mapping(self):
+        """A node.field ref in input_mapping infers a dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: analyzer }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: merger }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      analysis: analyzer.result
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["analyzer"].deps == frozenset()
+        assert graph.nodes["merger"].deps == frozenset({"analyzer"})
+
+    def test_multiple_refs_in_mapping(self):
+        """Multiple node refs in input_mapping all become dependencies."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: fetch_a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: fetch_b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: merge }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      a_data: fetch_a.result
+      b_data: fetch_b.result
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["merge"].deps == frozenset({"fetch_a", "fetch_b"})
+
+    def test_dollar_input_not_a_dep(self):
+        """$input.field references do NOT create a node dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: step1 }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: step2 }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      request_id: "$input.id"
+      analysis: step1.result
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["step2"].deps == frozenset({"step1"})
+
+    def test_mapping_only_dollar_input_is_root(self):
+        """A node with only $input refs and no other refs is a root."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: root_mapper }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      data: "$input.payload"
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["root_mapper"].deps == frozenset()
+
+
+# ============================================================================
+# wait_for Tests
+# ============================================================================
+
+
+class TestWaitFor:
+    """Tests for the wait_for ordering-only keyword."""
+
+    def test_wait_for_creates_dep(self):
+        """wait_for entries become execution dependencies."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: processor }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: cleanup }
+  spec:
+    fn: "json.dumps"
+  wait_for: [processor]
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["cleanup"].deps == frozenset({"processor"})
+
+    def test_wait_for_string_form(self):
+        """wait_for can be a single string (not a list)."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: producer }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: consumer }
+  spec:
+    fn: "json.dumps"
+  wait_for: producer
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["consumer"].deps == frozenset({"producer"})
+
+    def test_wait_for_combined_with_input_mapping(self):
+        """wait_for and input_mapping refs are merged."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: loader }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: validator }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: processor }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      data: loader.result
+  wait_for: [validator]
+"""
+        graph = _build_from_nodes(nodes)
+
+        assert graph.nodes["processor"].deps == frozenset({"loader", "validator"})
+
+
+# ============================================================================
+# Deprecation Warning Tests
+# ============================================================================
+
+
+class TestDeprecationWarning:
+    """Redundant explicit dependencies emit a DeprecationWarning."""
+
+    def test_redundant_deps_emit_warning(self):
+        """When deps can be fully inferred, a deprecation warning is emitted."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: analyzer }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: merger }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      analysis: analyzer.result
+  dependencies: [analyzer]
+"""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            graph = _build_from_nodes(nodes)
+
+        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(deprecation_warnings) == 1
+        assert "merger" in str(deprecation_warnings[0].message)
+        assert "dependencies" in str(deprecation_warnings[0].message)
+
+        assert graph.nodes["merger"].deps == frozenset({"analyzer"})
+
+    def test_no_warning_when_deps_not_redundant(self):
+        """No warning when explicit deps add nodes beyond what's inferred."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: c }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      data: a.result
+  dependencies: [a, b]
+"""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _build_from_nodes(nodes)
+
+        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(deprecation_warnings) == 0
