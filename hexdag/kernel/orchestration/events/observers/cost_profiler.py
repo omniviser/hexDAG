@@ -10,14 +10,13 @@ from typing import Any
 
 from hexdag.kernel.orchestration.events.events import (
     Event,
-    LLMResponseReceived,
     NodeCompleted,
     NodeStarted,
     PipelineCompleted,
     PipelineStarted,
     WaveCompleted,
-    WaveStarted,
 )
+from hexdag.kernel.ports.llm import LLMEvent
 
 
 @dataclass(slots=True)
@@ -67,15 +66,9 @@ class CostProfilerObserver:
 
     Example
     -------
-        >>> from hexdag.kernel.orchestration.events import (
-        ...     CostProfilerObserver,
-        ...     COST_PROFILING_EVENTS,
-        ... )
+        >>> from hexdag.kernel.orchestration.events import CostProfilerObserver
         >>> profiler = CostProfilerObserver(model="gpt-4o-mini")
-        >>> observer_manager.register(  # doctest: +SKIP
-        ...     profiler.handle,
-        ...     event_types=COST_PROFILING_EVENTS
-        ... )
+        >>> # Register with observer manager using appropriate event types
         >>> # ... run pipeline ...
         >>> print(profiler.format_report())  # doctest: +SKIP
     """
@@ -115,7 +108,6 @@ class CostProfilerObserver:
         self.pipeline_name: str | None = None
         self.pipeline_duration_ms: float = 0.0
         self.waves: list[list[str]] = []
-        self._current_wave_nodes: list[str] = []
 
     async def handle(self, event: Event) -> None:
         """Handle events to track cost metrics.
@@ -123,8 +115,7 @@ class CostProfilerObserver:
         Parameters
         ----------
         event : Event
-            The event to process. Should be registered with
-            event_types=COST_PROFILING_EVENTS for performance.
+            The event to process.
         """
         if isinstance(event, PipelineStarted):
             self.pipeline_name = event.name
@@ -141,15 +132,11 @@ class CostProfilerObserver:
                 self.node_metrics[event.name] = NodeCostMetrics()
             self.node_metrics[event.name].node_duration_ms += event.duration_ms
 
-        elif isinstance(event, WaveStarted):
-            self._current_wave_nodes = list(event.nodes)
-
         elif isinstance(event, WaveCompleted):
-            if self._current_wave_nodes:
-                self.waves.append(list(self._current_wave_nodes))
-                self._current_wave_nodes = []
+            if event.nodes:
+                self.waves.append(list(event.nodes))
 
-        elif isinstance(event, LLMResponseReceived):
+        elif isinstance(event, LLMEvent):
             node_name = event.node_name
             if node_name not in self.node_metrics:
                 self.node_metrics[node_name] = NodeCostMetrics()
@@ -163,9 +150,10 @@ class CostProfilerObserver:
                 metrics.output_tokens += event.usage.get("output_tokens", 0)
                 metrics.total_tokens += event.usage.get("total_tokens", 0)
 
-                # Compute cost if model pricing is available
-                if self.model and self.model in self.pricing:
-                    input_price, output_price = self.pricing[self.model]
+                # Compute cost: per-event model (from adapter) → fallback to init-time model
+                model = event.model or self.model
+                if model and model in self.pricing:
+                    input_price, output_price = self.pricing[model]
                     metrics.estimated_cost += (
                         event.usage.get("input_tokens", 0) * input_price / 1_000_000
                         + event.usage.get("output_tokens", 0) * output_price / 1_000_000
@@ -336,4 +324,3 @@ class CostProfilerObserver:
         self.pipeline_name = None
         self.pipeline_duration_ms = 0.0
         self.waves.clear()
-        self._current_wave_nodes.clear()

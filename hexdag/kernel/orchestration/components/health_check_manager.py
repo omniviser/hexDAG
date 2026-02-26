@@ -10,8 +10,7 @@ else:
     ObserverManager = Any
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.orchestration.events import HealthCheckCompleted
-from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.ports.healthcheck import HealthCheckEvent, HealthStatus
 from hexdag.kernel.protocols import HealthCheckable
 
 logger = get_logger(__name__)
@@ -26,7 +25,7 @@ class HealthCheckManager:
 
     Responsibilities:
     - Check adapter health via ahealth_check() method
-    - Emit HealthCheckCompleted events
+    - Emit HealthCheckEvent events
     - Determine if unhealthy adapters should block execution
 
     Examples
@@ -119,7 +118,7 @@ class HealthCheckManager:
 
             # Emit event
             if observer_manager:
-                event = HealthCheckCompleted(
+                event = HealthCheckEvent(
                     adapter_name=status.adapter_name,
                     port_name=port_name,
                     status=status,

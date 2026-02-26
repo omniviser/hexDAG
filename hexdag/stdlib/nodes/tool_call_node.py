@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from hexdag.kernel.context import get_port
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.orchestration.events import ToolCalled, ToolCompleted
+from hexdag.kernel.ports.tool_router import ToolRouterEvent
 from hexdag.kernel.resolver import resolve_function
 
 from .base_node_factory import BaseNodeFactory
@@ -48,7 +48,7 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
     1. Takes a tool name and arguments
     2. Resolves the tool function using the module path resolver
     3. Executes it and returns the result with metadata
-    4. Emits ToolCalled and ToolCompleted events
+    4. Emits ToolRouterEvent events
 
     Examples
     --------
@@ -133,12 +133,6 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
             with contextlib.suppress(Exception):
                 observer_manager = get_port("observer_manager")
 
-            # Emit ToolCalled event
-            if observer_manager:
-                await observer_manager.notify(
-                    ToolCalled(node_name=name, tool_name=tool_name, params=arguments)
-                )
-
             logger.debug("🔧 Executing tool '{}' with args: {}", tool_name, arguments)
 
             start_time = time.time()
@@ -157,12 +151,13 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
 
                 duration_ms = (time.time() - start_time) * 1000
 
-                # Emit ToolCompleted event
+                # Emit ToolRouterEvent
                 if observer_manager:
                     await observer_manager.notify(
-                        ToolCompleted(
+                        ToolRouterEvent(
                             node_name=name,
                             tool_name=tool_name,
+                            params=arguments,
                             result=result,
                             duration_ms=duration_ms,
                         )

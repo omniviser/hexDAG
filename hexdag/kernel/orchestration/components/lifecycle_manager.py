@@ -33,9 +33,8 @@ from hexdag.kernel.context import get_observer_manager, get_port, get_ports
 from hexdag.kernel.exceptions import OrchestratorError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.components.checkpoint_manager import CheckpointManager
-from hexdag.kernel.orchestration.events import HealthCheckCompleted
 from hexdag.kernel.orchestration.models import CheckpointState
-from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.ports.healthcheck import HealthCheckEvent, HealthStatus
 from hexdag.kernel.protocols import HealthCheckable
 
 logger = get_logger(__name__)
@@ -394,7 +393,7 @@ class LifecycleManager:
             status.port_name = port_name
 
             if observer_manager:
-                event = HealthCheckCompleted(
+                event = HealthCheckEvent(
                     adapter_name=status.adapter_name,
                     port_name=port_name,
                     status=status,

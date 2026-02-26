@@ -11,18 +11,15 @@ from hexdag.kernel.orchestration.events.decorators import (
     observer,
 )
 from hexdag.kernel.orchestration.events.events import (
-    LLMPromptSent,
-    LLMResponseReceived,
     NodeCompleted,
     NodeFailed,
     NodeStarted,
     PipelineCompleted,
     PipelineStarted,
-    ToolCalled,
-    ToolCompleted,
     WaveCompleted,
-    WaveStarted,
 )
+from hexdag.kernel.ports.llm import LLMGeneration
+from hexdag.kernel.ports.tool_router import ToolRouterEvent
 
 
 class TestNodeEvents:
@@ -71,21 +68,23 @@ class TestNodeEvents:
 class TestWaveEvents:
     """Test wave-level event data classes."""
 
-    def test_wave_started_creation(self):
-        """Test WaveStarted event creation."""
-        nodes = ["node1", "node2", "node3"]
-        event = WaveStarted(wave_index=1, nodes=nodes)
-
-        assert event.wave_index == 1
-        assert event.nodes == nodes
-        assert isinstance(event.timestamp, datetime)
-
     def test_wave_completed_creation(self):
         """Test WaveCompleted event creation."""
         event = WaveCompleted(wave_index=2, duration_ms=3000.0)
 
         assert event.wave_index == 2
         assert event.duration_ms == 3000.0
+        assert event.nodes == []
+        assert isinstance(event.timestamp, datetime)
+
+    def test_wave_completed_with_nodes(self):
+        """Test WaveCompleted event creation with nodes list."""
+        nodes = ["node1", "node2", "node3"]
+        event = WaveCompleted(wave_index=1, duration_ms=1500.0, nodes=nodes)
+
+        assert event.wave_index == 1
+        assert event.duration_ms == 1500.0
+        assert event.nodes == nodes
         assert isinstance(event.timestamp, datetime)
 
 
@@ -111,6 +110,8 @@ class TestPipelineEvents:
         assert event.name == "test_pipeline"
         assert event.duration_ms == 5000.0
         assert event.node_results == node_results
+        assert event.status == "completed"
+        assert event.reason is None
         assert isinstance(event.timestamp, datetime)
 
     def test_pipeline_completed_defaults(self):
@@ -120,58 +121,61 @@ class TestPipelineEvents:
         assert event.name == "test"
         assert event.duration_ms == 1000.0
         assert event.node_results == {}
+        assert event.status == "completed"
         assert isinstance(event.timestamp, datetime)
 
+    def test_pipeline_completed_cancelled(self):
+        """Test PipelineCompleted with cancelled status."""
+        event = PipelineCompleted(
+            name="test",
+            duration_ms=500.0,
+            node_results={"a": 1},
+            status="cancelled",
+            reason="timeout",
+        )
 
-class TestLLMEvents:
-    """Test LLM-related event data classes."""
+        assert event.status == "cancelled"
+        assert event.reason == "timeout"
+        assert event.node_results == {"a": 1}
 
-    def test_llm_prompt_sent_creation(self):
-        """Test LLMPromptSent event creation."""
+
+class TestPortEvents:
+    """Test port-level event data classes."""
+
+    def test_llm_generation_creation(self):
+        """Test LLMGeneration event creation."""
         messages = [
             {"role": "system", "content": "You are a helpful assistant"},
             {"role": "user", "content": "Hello"},
         ]
-        event = LLMPromptSent(node_name="llm_node", messages=messages)
-
-        assert event.node_name == "llm_node"
-        assert event.messages == messages
-        assert isinstance(event.timestamp, datetime)
-
-    def test_llm_response_received_creation(self):
-        """Test LLMResponseReceived event creation."""
-        event = LLMResponseReceived(
-            node_name="llm_node", response="This is the LLM response", duration_ms=2500.0
+        event = LLMGeneration(
+            node_name="llm_node",
+            duration_ms=2500.0,
+            messages=messages,
+            response="This is the LLM response",
         )
 
         assert event.node_name == "llm_node"
+        assert event.messages == messages
         assert event.response == "This is the LLM response"
         assert event.duration_ms == 2500.0
         assert isinstance(event.timestamp, datetime)
 
-
-class TestToolEvents:
-    """Test tool-related event data classes."""
-
-    def test_tool_called_creation(self):
-        """Test ToolCalled event creation."""
+    def test_tool_router_event_creation(self):
+        """Test ToolRouterEvent event creation."""
         params = {"param1": "value1", "param2": 42}
-        event = ToolCalled(node_name="tool_node", tool_name="calculator", params=params)
-
-        assert event.node_name == "tool_node"
-        assert event.tool_name == "calculator"
-        assert event.params == params
-        assert isinstance(event.timestamp, datetime)
-
-    def test_tool_completed_creation(self):
-        """Test ToolCompleted event creation."""
         result = {"calculation": 84}
-        event = ToolCompleted(
-            node_name="tool_node", tool_name="calculator", result=result, duration_ms=100.5
+        event = ToolRouterEvent(
+            node_name="tool_node",
+            tool_name="calculator",
+            params=params,
+            result=result,
+            duration_ms=100.5,
         )
 
         assert event.node_name == "tool_node"
         assert event.tool_name == "calculator"
+        assert event.params == params
         assert event.result == result
         assert event.duration_ms == 100.5
         assert isinstance(event.timestamp, datetime)

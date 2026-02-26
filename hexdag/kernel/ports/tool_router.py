@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel._alias_registry import resolve_function
 from hexdag.kernel.exceptions import ResourceNotFoundError, TypeMismatchError
 from hexdag.kernel.logging import get_logger
+from hexdag.kernel.orchestration.events.events import Event
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -184,3 +186,19 @@ class ToolRouter:
             "tool_count": len(self._tools),
             "tools": list(self._tools.keys()),
         }
+
+
+# ---------------------------------------------------------------------------
+# Port event
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class ToolRouterEvent(Event):
+    """Event emitted when ToolRouter.acall_tool() completes."""
+
+    node_name: str
+    tool_name: str
+    params: dict[str, Any] | None = None
+    result: Any = None
+    duration_ms: float = 0.0

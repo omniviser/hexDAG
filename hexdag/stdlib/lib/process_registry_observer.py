@@ -26,7 +26,6 @@ from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
 from hexdag.kernel.orchestration.events.events import (
     Event,
     NodeFailed,
-    PipelineCancelled,
     PipelineCompleted,
     PipelineStarted,
 )
@@ -38,7 +37,6 @@ if TYPE_CHECKING:
 PROCESS_REGISTRY_EVENTS = (
     PipelineStarted,
     PipelineCompleted,
-    PipelineCancelled,
     NodeFailed,
 )
 
@@ -61,11 +59,12 @@ class ProcessRegistryObserver:
         if isinstance(event, PipelineStarted):
             await self._on_started(event)
         elif isinstance(event, PipelineCompleted):
-            await self._on_completed(event)
+            if event.status == "cancelled":
+                await self._on_cancelled(event)
+            else:
+                await self._on_completed(event)
         elif isinstance(event, NodeFailed):
             await self._on_node_failed(event)
-        elif isinstance(event, PipelineCancelled):
-            await self._on_cancelled(event)
 
     async def _on_started(self, event: PipelineStarted) -> None:
         run_id = str(uuid4())
@@ -105,7 +104,7 @@ class ProcessRegistryObserver:
             )
             break
 
-    async def _on_cancelled(self, event: PipelineCancelled) -> None:
+    async def _on_cancelled(self, event: PipelineCompleted) -> None:
         run_id = self._active_runs.pop(event.name, None)
         if run_id is None:
             return

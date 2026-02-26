@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-__all__ = ["HealthStatus"]
+from hexdag.kernel.orchestration.events.events import Event
+
+__all__ = ["HealthCheckEvent", "HealthStatus"]
 
 
 @dataclass(slots=True)
@@ -85,3 +87,31 @@ class HealthStatus:
             True if status is "healthy" or "degraded", False if "unhealthy"
         """
         return self.status in ("healthy", "degraded")
+
+
+# ---------------------------------------------------------------------------
+# Port event
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class HealthCheckEvent(Event):
+    """Event emitted when a port adapter's health check completes."""
+
+    adapter_name: str
+    port_name: str
+    status: Any  # HealthStatus
+
+    def log_message(self) -> str:
+        """Format log message for health check event."""
+        status_emoji = {
+            "healthy": "✅",
+            "degraded": "⚠️",
+            "unhealthy": "❌",
+        }.get(getattr(self.status, "status", "unknown"), "ℹ️")
+
+        latency = ""
+        if hasattr(self.status, "latency_ms") and self.status.latency_ms:
+            latency = f" ({self.status.latency_ms:.1f}ms)"
+
+        return f"{status_emoji} Health check [{self.port_name}]: {self.status.status}{latency}"
