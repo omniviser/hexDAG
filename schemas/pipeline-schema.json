@@ -775,6 +775,58 @@
             },
             "type": "object"
         },
+        "Service_CallNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for service_call_node type",
+            "properties": {
+                "kind": {
+                    "const": "service_call_node",
+                    "description": "Node type: service_call_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "method": {
+                            "type": "string"
+                        },
+                        "service": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "service",
+                        "method"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
         "Tool_CallNodeSpec": {
             "allOf": [
                 {
@@ -1152,6 +1204,9 @@
                             },
                             {
                                 "$ref": "#/$defs/FunctionNodeSpec"
+                            },
+                            {
+                                "$ref": "#/$defs/Service_CallNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/Tool_CallNodeSpec"

@@ -213,6 +213,7 @@ properties:
           - $ref: '#/$defs/DataNodeSpec'
           - $ref: '#/$defs/ExpressionNodeSpec'
           - $ref: '#/$defs/FunctionNodeSpec'
+          - $ref: '#/$defs/Service_CallNodeSpec'
           - $ref: '#/$defs/Tool_CallNodeSpec'
           - $ref: '#/$defs/AgentNodeSpec'
       events:
@@ -669,6 +670,41 @@ $defs:
             description: Output schema for validation (if None, inferred from function)
             default: null
         additionalProperties: false
+    required:
+    - kind
+    - metadata
+    - spec
+  Service_CallNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for service_call_node type
+    properties:
+      kind:
+        const: service_call_node
+        description: 'Node type: service_call_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          service:
+            type: string
+          method:
+            type: string
+        additionalProperties: false
+        required:
+        - service
+        - method
     required:
     - kind
     - metadata

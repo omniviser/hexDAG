@@ -16,6 +16,10 @@ The node is automatically available in YAML as:
 - my_node
 - core:my_node
 - core:my
+
+Nodes with ``_hexdag_system_kind = True`` additionally get ``system:`` aliases:
+- system:my_node
+- system:my
 """
 
 from __future__ import annotations
@@ -102,6 +106,16 @@ def discover_node_factories() -> dict[str, str]:
                     aliases[f"core:{alias}"] = full_path
                     if alias.endswith("_node"):
                         aliases[f"core:{alias[:-5]}"] = full_path
+
+                # System kind: additional system: namespace aliases
+                if getattr(attr, "_hexdag_system_kind", False):
+                    aliases[f"system:{snake_name}"] = full_path
+                    if snake_name.endswith("_node"):
+                        aliases[f"system:{snake_name[:-5]}"] = full_path
+                    for alias in getattr(attr, "__aliases__", ()):
+                        aliases[f"system:{alias}"] = full_path
+                        if alias.endswith("_node"):
+                            aliases[f"system:{alias[:-5]}"] = full_path
 
     return aliases
 

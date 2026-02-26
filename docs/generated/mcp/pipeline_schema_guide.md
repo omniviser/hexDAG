@@ -32,6 +32,7 @@ spec:
 | `expression_node` | Specification for expression_node type |
 | `function_node` | Specification for function_node type |
 | `llm_node` | Specification for llm_node type |
+| `service_call_node` | Specification for service_call_node type |
 | `tool_call_node` | Specification for tool_call_node type |
 
 ### agent_node
@@ -213,6 +214,29 @@ Specification for llm_node type
   metadata:
     name: my_llm
   spec:
+  dependencies: []
+```
+
+### service_call_node
+
+Specification for service_call_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `method` | string | Yes |  |
+| `service` | string | Yes |  |
+
+**Example:**
+
+```yaml
+- kind: service_call_node
+  metadata:
+    name: my_service_call
+  spec:
+    service: # required
+    method: # required
   dependencies: []
 ```
 
