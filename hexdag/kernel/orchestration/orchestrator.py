@@ -39,7 +39,7 @@ from hexdag.kernel.orchestration.constants import (
     EXECUTOR_CONTEXT_INITIAL_INPUT,
     EXECUTOR_CONTEXT_NODE_RESULTS,
 )
-from hexdag.kernel.orchestration.events import WaveCompleted, WaveStarted
+from hexdag.kernel.orchestration.events import WaveCompleted
 from hexdag.kernel.orchestration.hook_context import PipelineStatus
 from hexdag.kernel.orchestration.models import NodeExecutionContext, PortsConfiguration
 from hexdag.kernel.orchestration.port_wrappers import wrap_ports_with_observability
@@ -47,7 +47,7 @@ from hexdag.kernel.ports.executor import ExecutionResult, ExecutionTask, Executo
 from hexdag.kernel.ports_builder import PortsBuilder
 from hexdag.kernel.utils.node_timer import Timer
 
-from .events import PipelineCancelled, PipelineCompleted, PipelineStarted
+from .events import PipelineCompleted, PipelineStarted
 
 logger = get_logger(__name__)
 
@@ -595,13 +595,14 @@ class Orchestrator:
                 duration_ms = pipeline_timer.duration_ms
 
                 if cancelled:
-                    pipeline_cancelled = PipelineCancelled(
+                    pipeline_completed = PipelineCompleted(
                         name=pipeline_name,
                         duration_ms=duration_ms,
+                        node_results=node_results,
+                        status="cancelled",
                         reason="timeout",
-                        partial_results=node_results,
                     )
-                    await self._notify_observer(observer_manager, pipeline_cancelled)
+                    await self._notify_observer(observer_manager, pipeline_completed)
                 elif pipeline_status == PipelineStatus.SUCCESS:
                     pipeline_completed = PipelineCompleted(
                         name=pipeline_name,
@@ -695,10 +696,6 @@ class Orchestrator:
                     wave = waves[wave_idx]
                     wave_timer = Timer()
 
-                    # Fire wave started event
-                    wave_event = WaveStarted(wave_index=wave_idx + 1, nodes=wave)
-                    await self._notify_observer(get_observer_manager(), wave_event)
-
                     tasks = []
                     for node_name in wave:
                         task = ExecutionTask(
@@ -731,6 +728,7 @@ class Orchestrator:
                     wave_completed = WaveCompleted(
                         wave_index=wave_idx + 1,
                         duration_ms=wave_timer.duration_ms,
+                        nodes=list(wave),
                     )
                     await self._notify_observer(get_observer_manager(), wave_completed)
 

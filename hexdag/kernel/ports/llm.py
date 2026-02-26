@@ -1,9 +1,14 @@
 """Port interface definitions for Large Language Models (LLMs)."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
+
+from hexdag.kernel.orchestration.events.events import Event
 
 type MessageRole = Literal["user", "assistant", "system", "tool", "human", "ai"]
 type ToolChoice = Literal["auto", "none", "required"]
@@ -540,3 +545,50 @@ class SupportsEmbedding(Protocol):
             # Returns: [[0.1, 0.2, ...], [0.3, 0.4, ...], [0.5, 0.6, ...]]
         """
         ...
+
+
+# ---------------------------------------------------------------------------
+# Port events — subtypes mirror Supports* capability protocols
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class LLMEvent(Event):
+    """Base event for all LLM port operations."""
+
+    node_name: str
+    duration_ms: float = 0.0
+    usage: dict[str, int] | None = None
+    model: str | None = None
+
+
+@dataclass(slots=True)
+class LLMGeneration(LLMEvent):
+    """Emitted when SupportsGeneration.aresponse() is called."""
+
+    messages: list[dict[str, str]] | None = None
+    response: str = ""
+
+
+@dataclass(slots=True)
+class LLMFunctionCalling(LLMEvent):
+    """Emitted when SupportsFunctionCalling.aresponse_with_tools() is called."""
+
+    messages: list[dict[str, str]] | None = None
+    response: str = ""
+    tool_calls: list[dict[str, Any]] | None = None
+
+
+@dataclass(slots=True)
+class LLMVision(LLMEvent):
+    """Emitted when SupportsVision.aresponse_with_vision() is called."""
+
+    response: str = ""
+
+
+@dataclass(slots=True)
+class LLMEmbedding(LLMEvent):
+    """Emitted when SupportsEmbedding.aembed() is called."""
+
+    text_count: int = 0
+    dimensions: int = 0

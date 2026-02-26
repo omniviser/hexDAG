@@ -7,7 +7,6 @@ import pytest
 from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
 from hexdag.kernel.orchestration.events.events import (
     NodeFailed,
-    PipelineCancelled,
     PipelineCompleted,
     PipelineStarted,
 )
@@ -196,7 +195,11 @@ class TestProcessRegistryObserver:
         await obs.handle(PipelineStarted(name="p", total_waves=1, total_nodes=1))
         run_id = obs.get_active_run_id("p")
         assert run_id is not None
-        await obs.handle(PipelineCancelled(name="p", duration_ms=100.0, reason="user request"))
+        await obs.handle(
+            PipelineCompleted(
+                name="p", duration_ms=100.0, status="cancelled", reason="user request"
+            )
+        )
         result = await reg.aget(run_id)
         assert result is not None
         assert result["status"] == "cancelled"

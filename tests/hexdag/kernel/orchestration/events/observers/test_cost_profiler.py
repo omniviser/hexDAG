@@ -4,15 +4,14 @@ import pytest
 
 from hexdag.kernel.orchestration.events import (
     CostProfilerObserver,
-    LLMResponseReceived,
     NodeCompleted,
     NodeStarted,
     PipelineCompleted,
     PipelineStarted,
     WaveCompleted,
-    WaveStarted,
 )
 from hexdag.kernel.orchestration.events.observers.cost_profiler import NodeCostMetrics
+from hexdag.kernel.ports.llm import LLMGeneration
 
 # ==============================================================================
 # FIXTURES
@@ -37,13 +36,13 @@ def profiler_no_model():
 
 
 class TestTokenAggregation:
-    """Test token usage aggregation from LLMResponseReceived events."""
+    """Test token usage aggregation from LLMEvent events."""
 
     @pytest.mark.asyncio
     async def test_single_llm_call(self, profiler):
         """Verify tokens from a single LLM call are tracked."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="summarizer",
                 response="Hello world",
                 duration_ms=150.0,
@@ -63,7 +62,7 @@ class TestTokenAggregation:
         """Verify tokens accumulate across multiple LLM calls for the same node."""
         for i in range(3):
             await profiler.handle(
-                LLMResponseReceived(
+                LLMGeneration(
                     node_name="agent",
                     response=f"step {i}",
                     duration_ms=100.0,
@@ -82,7 +81,7 @@ class TestTokenAggregation:
     async def test_multiple_nodes(self, profiler):
         """Verify separate tracking for different nodes."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node_a",
                 response="a",
                 duration_ms=100.0,
@@ -90,7 +89,7 @@ class TestTokenAggregation:
             )
         )
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node_b",
                 response="b",
                 duration_ms=200.0,
@@ -105,7 +104,7 @@ class TestTokenAggregation:
     async def test_report_total_tokens(self, profiler):
         """Verify report aggregates total tokens across all nodes."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="a",
                 response="",
                 duration_ms=50.0,
@@ -113,7 +112,7 @@ class TestTokenAggregation:
             )
         )
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="b",
                 response="",
                 duration_ms=50.0,
@@ -140,7 +139,7 @@ class TestCostCalculation:
     async def test_gpt4o_mini_cost(self, profiler):
         """Verify cost for gpt-4o-mini: $0.15/$0.60 per 1M tokens."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -163,7 +162,7 @@ class TestCostCalculation:
         profiler = CostProfilerObserver(model="my-model", pricing=custom_pricing)
 
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="",
                 duration_ms=50.0,
@@ -179,7 +178,7 @@ class TestCostCalculation:
     async def test_no_model_no_cost(self, profiler_no_model):
         """Verify no cost is estimated when model is None."""
         await profiler_no_model.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -197,7 +196,7 @@ class TestCostCalculation:
         profiler = CostProfilerObserver(model="unknown-model-xyz")
 
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -220,7 +219,7 @@ class TestNoUsageFallback:
     async def test_none_usage(self, profiler):
         """Events with usage=None should be handled gracefully."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="hello",
                 duration_ms=100.0,
@@ -237,7 +236,7 @@ class TestNoUsageFallback:
     async def test_partial_usage(self, profiler):
         """Events with partial usage dict should use defaults."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="",
                 duration_ms=50.0,
@@ -285,7 +284,7 @@ class TestBottleneckDetection:
     async def test_highest_token_node(self, profiler):
         """Verify highest_token_node is the node with the most tokens."""
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="light",
                 response="",
                 duration_ms=50.0,
@@ -293,7 +292,7 @@ class TestBottleneckDetection:
             )
         )
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="heavy",
                 response="",
                 duration_ms=200.0,
@@ -334,11 +333,8 @@ class TestPipelineLifecycle:
     @pytest.mark.asyncio
     async def test_wave_tracking(self, profiler):
         """Verify waves are tracked for parallelization analysis."""
-        await profiler.handle(WaveStarted(wave_index=0, nodes=["a", "b"]))
-        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0))
-
-        await profiler.handle(WaveStarted(wave_index=1, nodes=["c"]))
-        await profiler.handle(WaveCompleted(wave_index=1, duration_ms=200.0))
+        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0, nodes=["a", "b"]))
+        await profiler.handle(WaveCompleted(wave_index=1, duration_ms=200.0, nodes=["c"]))
 
         assert profiler.waves == [["a", "b"], ["c"]]
 
@@ -354,11 +350,8 @@ class TestParallelizationSuggestions:
     @pytest.mark.asyncio
     async def test_consecutive_single_node_waves(self, profiler):
         """Two consecutive single-node waves trigger a suggestion."""
-        await profiler.handle(WaveStarted(wave_index=0, nodes=["a"]))
-        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0))
-
-        await profiler.handle(WaveStarted(wave_index=1, nodes=["b"]))
-        await profiler.handle(WaveCompleted(wave_index=1, duration_ms=100.0))
+        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0, nodes=["a"]))
+        await profiler.handle(WaveCompleted(wave_index=1, duration_ms=100.0, nodes=["b"]))
 
         report = profiler.get_report()
         suggestions = report["parallelization_suggestions"]
@@ -369,11 +362,8 @@ class TestParallelizationSuggestions:
     @pytest.mark.asyncio
     async def test_no_suggestion_for_multi_node_waves(self, profiler):
         """Multi-node waves should not trigger suggestions."""
-        await profiler.handle(WaveStarted(wave_index=0, nodes=["a", "b"]))
-        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0))
-
-        await profiler.handle(WaveStarted(wave_index=1, nodes=["c"]))
-        await profiler.handle(WaveCompleted(wave_index=1, duration_ms=100.0))
+        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0, nodes=["a", "b"]))
+        await profiler.handle(WaveCompleted(wave_index=1, duration_ms=100.0, nodes=["c"]))
 
         report = profiler.get_report()
         assert len(report["parallelization_suggestions"]) == 0
@@ -393,7 +383,7 @@ class TestFormatReport:
         await profiler.handle(PipelineStarted(name="test-pipeline", total_waves=1, total_nodes=2))
         await profiler.handle(NodeStarted(name="node_a", wave_index=0, dependencies=[]))
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node_a",
                 response="",
                 duration_ms=100.0,
@@ -437,15 +427,14 @@ class TestReset:
         """Verify reset clears all accumulated state."""
         await profiler.handle(PipelineStarted(name="pipeline", total_waves=1, total_nodes=1))
         await profiler.handle(
-            LLMResponseReceived(
+            LLMGeneration(
                 node_name="node",
                 response="",
                 duration_ms=100.0,
                 usage={"input_tokens": 500, "output_tokens": 200, "total_tokens": 700},
             )
         )
-        await profiler.handle(WaveStarted(wave_index=0, nodes=["node"]))
-        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0))
+        await profiler.handle(WaveCompleted(wave_index=0, duration_ms=100.0, nodes=["node"]))
         await profiler.handle(PipelineCompleted(name="pipeline", duration_ms=200.0))
 
         # Verify state exists

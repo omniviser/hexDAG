@@ -418,7 +418,6 @@ async def execute_streaming(
             PortConfig,
             PortsConfiguration,
             WaveCompleted,
-            WaveStarted,
         )
 
         builder = YamlPipelineBuilder()
@@ -444,15 +443,7 @@ async def execute_streaming(
 
         async def queue_observer(event: Any) -> None:
             """Observer that pushes events to the async queue."""
-            if isinstance(event, WaveStarted):
-                await event_queue.put({
-                    "event": "wave_start",
-                    "data": {
-                        "wave_index": event.wave_index,
-                        "nodes": event.nodes,
-                    },
-                })
-            elif isinstance(event, NodeStarted):
+            if isinstance(event, NodeStarted):
                 await event_queue.put({
                     "event": "node_start",
                     "data": {
@@ -485,6 +476,7 @@ async def execute_streaming(
                     "data": {
                         "wave_index": event.wave_index,
                         "duration_ms": event.duration_ms,
+                        "nodes": event.nodes,
                     },
                 })
             elif isinstance(event, PipelineCompleted):
@@ -495,7 +487,6 @@ async def execute_streaming(
             queue_observer,
             observer_id="streaming_observer",
             event_types=[
-                WaveStarted,
                 NodeStarted,
                 NodeCompleted,
                 NodeFailed,

@@ -1,7 +1,7 @@
 """Port wrappers that provide observability and control.
 
 These wrappers intercept port method calls to:
-1. **Observability** - Emit events (LLMPromptSent, LLMResponseReceived, etc.)
+1. **Observability** - Emit events (LLMGeneration, LLMFunctionCalling, ToolRouterEvent, etc.)
 2. **Control** - Enable policy-based control (rate limiting, caching, retry, fallback)
 3. **Metrics** - Track duration and performance
 4. **Extensibility** - Provide hooks for custom behavior
@@ -14,24 +14,37 @@ from typing import Any
 
 from hexdag.kernel.context import get_current_node_name, get_observer_manager
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.orchestration.events import (
-    LLMPromptSent,
-    LLMResponseReceived,
-    ToolCalled,
-    ToolCompleted,
-)
 from hexdag.kernel.ports.llm import (
     LLM,
+    LLMFunctionCalling,
+    LLMGeneration,
     LLMResponse,
     MessageList,
     SupportsGeneration,
     SupportsUsageTracking,
     ToolChoice,
 )
-from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.kernel.ports.tool_router import ToolRouter, ToolRouterEvent
 from hexdag.kernel.utils.node_timer import Timer
 
 logger = get_logger(__name__)
+
+
+def _extract_usage_dict(llm: Any, response_usage: Any | None = None) -> dict[str, int] | None:
+    """Extract usage dict from LLMResponse.usage or SupportsUsageTracking."""
+    if response_usage:
+        return {
+            "input_tokens": response_usage.input_tokens,
+            "output_tokens": response_usage.output_tokens,
+            "total_tokens": response_usage.total_tokens,
+        }
+    if isinstance(llm, SupportsUsageTracking) and (last_usage := llm.get_last_usage()):
+        return {
+            "input_tokens": last_usage.input_tokens,
+            "output_tokens": last_usage.output_tokens,
+            "total_tokens": last_usage.total_tokens,
+        }
+    return None
 
 
 class ObservableLLMWrapper:
@@ -57,12 +70,6 @@ class ObservableLLMWrapper:
     async def aresponse(self, messages: MessageList, **kwargs: Any) -> str | None:
         """Call LLM with observability and policy control.
 
-        This method:
-        1. Emits LLMPromptSent event (for observability)
-        2. Calls underlying LLM
-        3. Emits LLMResponseReceived event with duration
-        4. (Future: Policy evaluation for rate limiting, caching, retry)
-
         Parameters
         ----------
         messages : MessageList
@@ -77,48 +84,25 @@ class ObservableLLMWrapper:
         """
         node_name = get_current_node_name() or "unknown"
 
-        # Emit prompt sent event (OBSERVABILITY)
-        if observer_mgr := get_observer_manager():
-            await observer_mgr.notify(
-                LLMPromptSent(
-                    node_name=node_name,
-                    messages=[{"role": m.role, "content": m.content} for m in messages],
-                )
-            )
-
         # TODO(hexdag-team): Add policy evaluation here (CONTROL) #noqa: TD003
-        # if policy_mgr := get_policy_manager():
-        #     policy_response = await policy_mgr.evaluate(LLMCallPolicy(...))
-        #     if policy_response.signal == PolicySignal.SKIP:
-        #         return policy_response.data  # Cached response
-        #     elif policy_response.signal == PolicySignal.FAIL:
-        #         raise RateLimitError("LLM rate limit exceeded")
 
         # Call underlying LLM (capability validated at mount time by orchestrator)
         llm_timer = Timer()
         response = await self._llm.aresponse(messages, **kwargs)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
-
         duration_ms = llm_timer.duration_ms
 
-        # Extract usage via SupportsUsageTracking protocol
-        usage_dict = None
-        if isinstance(self._llm, SupportsUsageTracking) and (
-            last_usage := self._llm.get_last_usage()
-        ):
-            usage_dict = {
-                "input_tokens": last_usage.input_tokens,
-                "output_tokens": last_usage.output_tokens,
-                "total_tokens": last_usage.total_tokens,
-            }
+        usage_dict = _extract_usage_dict(self._llm)
 
-        # Emit response received event (OBSERVABILITY)
+        # Emit single LLMGeneration event (OBSERVABILITY)
         if observer_mgr := get_observer_manager():
             await observer_mgr.notify(
-                LLMResponseReceived(
+                LLMGeneration(
                     node_name=node_name,
-                    response=response or "",
                     duration_ms=duration_ms,
                     usage=usage_dict,
+                    model=getattr(self._llm, "model", None),
+                    messages=[{"role": m.role, "content": m.content} for m in messages],
+                    response=response or "",
                 )
             )
 
@@ -151,45 +135,30 @@ class ObservableLLMWrapper:
         """
         node_name = get_current_node_name() or "unknown"
 
-        # Emit prompt sent event
-        if observer_mgr := get_observer_manager():
-            await observer_mgr.notify(
-                LLMPromptSent(
-                    node_name=node_name,
-                    messages=[{"role": m.role, "content": m.content} for m in messages],
-                )
-            )
-
         # Call underlying LLM (capability validated at mount time by orchestrator)
         llm_timer = Timer()
         response = await self._llm.aresponse_with_tools(messages, tools, tool_choice, **kwargs)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
         duration_ms = llm_timer.duration_ms
 
-        # Extract usage from LLMResponse or via SupportsUsageTracking protocol
-        usage_dict = None
-        if response.usage:
-            usage_dict = {
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
-        elif isinstance(self._llm, SupportsUsageTracking) and (
-            last_usage := self._llm.get_last_usage()
-        ):
-            usage_dict = {
-                "input_tokens": last_usage.input_tokens,
-                "output_tokens": last_usage.output_tokens,
-                "total_tokens": last_usage.total_tokens,
-            }
+        usage_dict = _extract_usage_dict(self._llm, response.usage)
 
-        # Emit response received event
+        # Emit single LLMFunctionCalling event (OBSERVABILITY)
         if observer_mgr := get_observer_manager():
+            tool_calls_data = None
+            if response.tool_calls:
+                tool_calls_data = [
+                    {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                    for tc in response.tool_calls
+                ]
             await observer_mgr.notify(
-                LLMResponseReceived(
+                LLMFunctionCalling(
                     node_name=node_name,
-                    response=response.content or "",
                     duration_ms=duration_ms,
                     usage=usage_dict,
+                    model=getattr(self._llm, "model", None),
+                    messages=[{"role": m.role, "content": m.content} for m in messages],
+                    response=response.content or "",
+                    tool_calls=tool_calls_data,
                 )
             )
 
@@ -204,7 +173,7 @@ class ObservableToolRouterWrapper:
     """Wraps a ToolRouter port for observability and policy-based control.
 
     This wrapper provides:
-    - Automatic event emission for all tool calls (ToolCalled, ToolCompleted)
+    - Automatic event emission for all tool calls (ToolRouterEvent)
     - Policy evaluation before/after calls (future: auth, rate limiting)
     - Duration tracking and performance metrics
     - Error handling and logging
@@ -223,12 +192,6 @@ class ObservableToolRouterWrapper:
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
         """Call tool with observability and policy control.
 
-        This method:
-        1. Emits ToolCalled event (for observability)
-        2. Calls underlying tool
-        3. Emits ToolCompleted event with duration and result
-        4. (Future: Policy evaluation for auth, rate limiting)
-
         Parameters
         ----------
         tool_name : str
@@ -243,29 +206,20 @@ class ObservableToolRouterWrapper:
         """
         node_name = get_current_node_name() or "unknown"
 
-        # Emit tool called event (OBSERVABILITY)
-        if observer_mgr := get_observer_manager():
-            await observer_mgr.notify(
-                ToolCalled(node_name=node_name, tool_name=tool_name, params=params)
-            )
-
         # TODO(hexdag-team): Add policy evaluation here (CONTROL) #noqa: TD003
-        # if policy_mgr := get_policy_manager():
-        #     policy_response = await policy_mgr.evaluate(ToolCallPolicy(...))
-        #     if policy_response.signal == PolicySignal.FAIL:
-        #         raise AuthorizationError(f"Tool '{tool_name}' not authorized")
 
         # Call underlying tool
         tool_timer = Timer()
         try:
             result = await self._tool_router.acall_tool(tool_name, params)
 
-            # Emit tool completed event (OBSERVABILITY)
+            # Emit single ToolRouterEvent (OBSERVABILITY)
             if observer_mgr := get_observer_manager():
                 await observer_mgr.notify(
-                    ToolCompleted(
+                    ToolRouterEvent(
                         node_name=node_name,
                         tool_name=tool_name,
+                        params=params,
                         result=result,
                         duration_ms=tool_timer.duration_ms,
                     )
@@ -276,12 +230,13 @@ class ObservableToolRouterWrapper:
         except Exception as e:
             logger.error("Tool '{}' failed in {}ms: {}", tool_name, tool_timer.duration_str, e)
 
-            # Still emit completed event with error info
+            # Still emit event with error info
             if observer_mgr := get_observer_manager():
                 await observer_mgr.notify(
-                    ToolCompleted(
+                    ToolRouterEvent(
                         node_name=node_name,
                         tool_name=tool_name,
+                        params=params,
                         result={"error": str(e)},
                         duration_ms=tool_timer.duration_ms,
                     )
@@ -337,8 +292,8 @@ def wrap_ports_with_observability(ports: dict[str, Any]) -> dict[str, Any]:
     regardless of their dictionary key.
 
     Currently wraps:
-    - LLM ports (``SupportsGeneration``): Emit LLMPromptSent/LLMResponseReceived
-    - ToolRouter ports: Emit ToolCalled/ToolCompleted events
+    - LLM ports (``SupportsGeneration``): Emit LLMGeneration/LLMFunctionCalling
+    - ToolRouter ports: Emit ToolRouterEvent
 
     Parameters
     ----------
