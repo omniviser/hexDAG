@@ -206,6 +206,29 @@ Multi-step reasoning agent.
   dependencies: []
 ```
 
+### ServiceCallNode
+
+Call a ``@step`` method on a Service as a deterministic DAG node.
+
+**Kind**: `service_call_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `str` | Yes |  |
+| `service` | `str` | Yes |  |
+| `method` | `str` | Yes |  |
+| `deps` | `list[str] | None` | No |  |
+
+**Example:**
+```yaml
+- kind: service_call_node
+  metadata:
+    name: my_service_call
+  spec:
+    # Add configuration here
+  dependencies: []
+```
+
 ### ToolCallNode
 
 Execute a single tool call as a FunctionNode.

@@ -16,6 +16,10 @@ from .events import (
     NodeStarted,
     PipelineCompleted,
     PipelineStarted,
+    ProcessCompleted,
+    ProcessStarted,
+    SystemCompleted,
+    SystemStarted,
     WaveCompleted,
 )
 
@@ -35,11 +39,13 @@ from .observers import (
 NODE_LIFECYCLE_EVENTS = (NodeStarted, NodeCompleted, NodeFailed, NodeCancelled, NodeSkipped)
 WAVE_EVENTS = (WaveCompleted,)
 PIPELINE_EVENTS = (PipelineStarted, PipelineCompleted)
+SYSTEM_EVENTS = (SystemStarted, ProcessStarted, ProcessCompleted, SystemCompleted)
 HEALTH_EVENTS = ()  # HealthCheckEvent now lives in kernel.ports.healthcheck
 
 # Commonly used combinations
 ALL_NODE_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS
 ALL_EXECUTION_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS + PIPELINE_EVENTS
+ALL_SYSTEM_EVENTS = SYSTEM_EVENTS + ALL_EXECUTION_EVENTS
 
 __all__ = [
     # Events
@@ -52,6 +58,10 @@ __all__ = [
     "WaveCompleted",
     "PipelineStarted",
     "PipelineCompleted",
+    "SystemStarted",
+    "ProcessStarted",
+    "ProcessCompleted",
+    "SystemCompleted",
     # Core Observers
     "PerformanceMetricsObserver",
     "AlertingObserver",
@@ -66,7 +76,9 @@ __all__ = [
     "NODE_LIFECYCLE_EVENTS",
     "WAVE_EVENTS",
     "PIPELINE_EVENTS",
+    "SYSTEM_EVENTS",
     "HEALTH_EVENTS",
     "ALL_NODE_EVENTS",
     "ALL_EXECUTION_EVENTS",
+    "ALL_SYSTEM_EVENTS",
 ]

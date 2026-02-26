@@ -225,3 +225,123 @@ class PipelineCompleted(Event):
                 f"({completed_nodes} nodes completed): {self.reason or 'unknown'}"
             )
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
+
+
+# System events (kind: System multi-process orchestration)
+@dataclass(slots=True)
+class SystemStarted(Event):
+    """A system has started execution.
+
+    Attributes
+    ----------
+    name : str
+        System name from metadata
+    total_processes : int
+        Number of processes in the system
+    execution_order : list[str]
+        Topological execution order of process names
+    """
+
+    name: str
+    total_processes: int
+    execution_order: list[str] = field(default_factory=list)
+
+    def log_message(self) -> str:
+        """Format log message for system start event."""
+        return f"System '{self.name}' started ({self.total_processes} processes)"
+
+
+@dataclass(slots=True)
+class ProcessStarted(Event):
+    """A process within a system has started.
+
+    Attributes
+    ----------
+    system_name : str
+        Parent system name
+    process_name : str
+        Name of the process starting
+    index : int
+        Position in execution order (0-based)
+    """
+
+    system_name: str
+    process_name: str
+    index: int
+
+    def log_message(self) -> str:
+        """Format log message for process start event."""
+        return f"Process '{self.process_name}' started (step {self.index + 1})"
+
+
+@dataclass(slots=True)
+class ProcessCompleted(Event):
+    """A process within a system has completed.
+
+    Attributes
+    ----------
+    system_name : str
+        Parent system name
+    process_name : str
+        Name of the completed process
+    index : int
+        Position in execution order (0-based)
+    duration_ms : float
+        Process duration in milliseconds
+    status : str
+        "completed" or "failed"
+    error : str | None
+        Error message if failed
+    """
+
+    system_name: str
+    process_name: str
+    index: int
+    duration_ms: float
+    status: str = "completed"
+    error: str | None = None
+
+    def log_message(self) -> str:
+        """Format log message for process completion event."""
+        if self.status == "failed":
+            return (
+                f"Process '{self.process_name}' failed after "
+                f"{self.duration_ms / 1000:.2f}s: {self.error}"
+            )
+        return f"Process '{self.process_name}' completed in {self.duration_ms / 1000:.2f}s"
+
+
+@dataclass(slots=True)
+class SystemCompleted(Event):
+    """A system has completed execution.
+
+    Attributes
+    ----------
+    name : str
+        System name
+    duration_ms : float
+        Total system duration in milliseconds
+    process_results : dict[str, Any]
+        Results keyed by process name
+    status : str
+        "completed" or "failed"
+    reason : str | None
+        Failure reason if applicable
+    """
+
+    name: str
+    duration_ms: float
+    process_results: dict[str, Any] = field(default_factory=dict)
+    status: str = "completed"
+    reason: str | None = None
+
+    def log_message(self) -> str:
+        """Format log message for system completion event."""
+        if self.status == "failed":
+            return (
+                f"System '{self.name}' failed after {self.duration_ms / 1000:.2f}s: {self.reason}"
+            )
+        return (
+            f"System '{self.name}' completed in {self.duration_ms / 1000:.2f}s "
+            f"({len(self.process_results)} processes)"
+        )

@@ -14,6 +14,7 @@ from .data_node import DataNode
 from .expression_node import ExpressionNode
 from .function_node import FunctionNode
 from .llm_node import LLMNode
+from .service_call_node import ServiceCallNode
 from .tool_call_node import ToolCallNode
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "FunctionNode",
     "LLMNode",
     "ReActAgentNode",
+    "ServiceCallNode",
     "ToolCallNode",
 ]
 
