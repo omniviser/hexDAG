@@ -1,6 +1,6 @@
 [project]
 name = "hexdag-studio"
-version = "0.2.0.dev1"
+version = "0.2.0.dev2"
 description = "Visual Studio UI for hexDAG pipelines"
 readme = "README.md"
 requires-python = ">=3.12"
