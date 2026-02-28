@@ -313,12 +313,12 @@ def run_pipeline(
         ),
     ] = None,
     max_concurrent: Annotated[
-        int,
+        int | None,
         typer.Option(
             "--max-concurrent",
-            help="Maximum concurrent nodes",
+            help="Maximum concurrent nodes (default: from config or 10)",
         ),
-    ] = 10,
+    ] = None,
     timeout: Annotated[
         float | None,
         typer.Option(
@@ -365,9 +365,13 @@ def run_pipeline(
                 console.print(f"[red]Error: Invalid JSON in input file: {e}[/red]")
                 raise typer.Exit(1)
 
+        from hexdag.compiler.config_loader import load_config
         from hexdag.kernel import PipelineRunner
 
+        config = load_config()
+
         runner = PipelineRunner(
+            config=config,
             max_concurrent_nodes=max_concurrent,
             default_node_timeout=timeout,
             environment=environment,

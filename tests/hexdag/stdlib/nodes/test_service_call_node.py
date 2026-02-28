@@ -8,7 +8,7 @@ import pytest
 
 from hexdag.kernel.context import clear_execution_context, set_services
 from hexdag.kernel.service import Service, step, tool
-from hexdag.stdlib.nodes.service_call_node import ServiceCallNode, ServiceCallOutput
+from hexdag.stdlib.nodes.service_call_node import ServiceCallNode
 
 # ---------------------------------------------------------------------------
 # Test fixtures / helpers
@@ -56,10 +56,10 @@ class TestServiceCallNodeCreation:
         node = factory(name="save", service="orders", method="save_order", deps=["prev"])
         assert "prev" in node.deps
 
-    def test_output_model_is_service_call_output(self) -> None:
+    def test_no_output_model(self) -> None:
         factory = ServiceCallNode()
         node = factory(name="save", service="orders", method="save_order")
-        assert node.out_model is ServiceCallOutput
+        assert node.out_model is None
 
     def test_framework_params_extracted(self) -> None:
         factory = ServiceCallNode()
@@ -97,63 +97,51 @@ class TestServiceCallNodeExecution:
         factory = ServiceCallNode()
         node = factory(name="save", service="orders", method="save_order")
         result = await node.fn({"order_id": "123", "data": {"item": "widget"}})
-        assert result["error"] is None
-        assert result["result"]["saved"] is True
-        assert result["result"]["order_id"] == "123"
-        assert result["service"] == "orders"
-        assert result["method"] == "save_order"
+        assert result["saved"] is True
+        assert result["order_id"] == "123"
 
     @pytest.mark.asyncio
     async def test_calls_sync_step(self) -> None:
         factory = ServiceCallNode()
         node = factory(name="double", service="orders", method="sync_step")
         result = await node.fn({"value": 5})
-        assert result["error"] is None
-        assert result["result"]["doubled"] == 10
+        assert result["doubled"] == 10
 
     @pytest.mark.asyncio
     async def test_error_on_missing_service(self) -> None:
         factory = ServiceCallNode()
         node = factory(name="save", service="nonexistent", method="save_order")
-        result = await node.fn({})
-        assert result["error"] is not None
-        assert "nonexistent" in result["error"]
-        assert "orders" in result["error"]  # lists available services
+        with pytest.raises(KeyError, match="nonexistent"):
+            await node.fn({})
 
     @pytest.mark.asyncio
     async def test_error_on_tool_only_method(self) -> None:
         factory = ServiceCallNode()
         node = factory(name="get", service="orders", method="get_order")
-        result = await node.fn({"order_id": "123"})
-        assert result["error"] is not None
-        assert "get_order" in result["error"]
-        assert "not a @step" in result["error"]
+        with pytest.raises(AttributeError, match="get_order"):
+            await node.fn({"order_id": "123"})
 
     @pytest.mark.asyncio
     async def test_error_on_nonexistent_method(self) -> None:
         factory = ServiceCallNode()
         node = factory(name="nope", service="orders", method="does_not_exist")
-        result = await node.fn({})
-        assert result["error"] is not None
-        assert "does_not_exist" in result["error"]
+        with pytest.raises(AttributeError, match="does_not_exist"):
+            await node.fn({})
 
     @pytest.mark.asyncio
     async def test_error_on_no_services(self) -> None:
         clear_execution_context()  # remove services
         factory = ServiceCallNode()
         node = factory(name="save", service="orders", method="save_order")
-        result = await node.fn({})
-        assert result["error"] is not None
-        assert "No services" in result["error"]
+        with pytest.raises(RuntimeError, match="No services"):
+            await node.fn({})
 
     @pytest.mark.asyncio
-    async def test_step_exception_returned_as_error(self) -> None:
+    async def test_step_exception_propagates(self) -> None:
         factory = ServiceCallNode()
         node = factory(name="fail", service="orders", method="failing_step")
-        result = await node.fn({})
-        assert result["error"] is not None
-        assert "Intentional failure" in result["error"]
-        assert result["result"] is None
+        with pytest.raises(RuntimeError, match="Intentional failure"):
+            await node.fn({})
 
 
 # ---------------------------------------------------------------------------

@@ -91,9 +91,7 @@ class TestApiCallNodeExecution:
             spec = factory(name="get_users", method="GET", url="/users")
             result = await spec.fn({})
 
-            assert result["status_code"] == 200
-            assert result["body"] == {"users": [{"id": 1}]}
-            assert result["error"] is None
+            assert result == {"users": [{"id": 1}]}
             assert len(mock.requests) == 1
             assert mock.requests[0].method == "GET"
             assert mock.requests[0].url == "/users"
@@ -115,7 +113,7 @@ class TestApiCallNodeExecution:
             )
             result = await spec.fn({})
 
-            assert result["body"] == {"id": 42}
+            assert result == {"id": 42}
             assert mock.requests[0].method == "POST"
             assert mock.requests[0].json == {"name": "widget", "price": 9.99}
         finally:
@@ -136,7 +134,7 @@ class TestApiCallNodeExecution:
             )
             result = await spec.fn({})
 
-            assert result["body"] == {"updated": True}
+            assert result == {"updated": True}
             assert mock.requests[0].method == "PUT"
         finally:
             set_ports(None)
@@ -151,7 +149,7 @@ class TestApiCallNodeExecution:
             spec = factory(name="delete_item", method="DELETE", url="/items/1")
             result = await spec.fn({})
 
-            assert result["body"] == {"deleted": True}
+            assert result == {"deleted": True}
             assert mock.requests[0].method == "DELETE"
         finally:
             set_ports(None)
@@ -171,7 +169,7 @@ class TestApiCallNodeExecution:
             )
             result = await spec.fn({})
 
-            assert result["body"] == {"patched": True}
+            assert result == {"patched": True}
             assert mock.requests[0].method == "PATCH"
         finally:
             set_ports(None)
@@ -190,7 +188,7 @@ class TestApiCallNodeExecution:
             )
             result = await spec.fn({"user_id": "42"})
 
-            assert result["body"] == {"name": "Alice"}
+            assert result == {"name": "Alice"}
             assert mock.requests[0].url == "/users/42/profile"
         finally:
             set_ports(None)
@@ -208,9 +206,8 @@ class TestApiCallNodeExecution:
                 url="/data",
                 headers={"Authorization": "Bearer {{token}}"},
             )
-            result = await spec.fn({"token": "my-secret-token"})
+            await spec.fn({"token": "my-secret-token"})
 
-            assert result["error"] is None
             assert mock.requests[0].headers == {"Authorization": "Bearer my-secret-token"}
         finally:
             set_ports(None)
@@ -228,9 +225,8 @@ class TestApiCallNodeExecution:
                 url="/search",
                 params={"q": "test", "limit": "10"},
             )
-            result = await spec.fn({})
+            await spec.fn({})
 
-            assert result["error"] is None
             assert mock.requests[0].params == {"q": "test", "limit": "10"}
         finally:
             set_ports(None)
@@ -266,7 +262,7 @@ class TestApiCallNodeExecution:
             )
             result = await spec.fn({})
 
-            assert result["body"] == {"ok": True}
+            assert result == {"ok": True}
         finally:
             set_ports(None)
 
@@ -283,9 +279,8 @@ class TestApiCallNodeExecution:
                 url="/data",
                 headers={"X-Custom": "static-value"},
             )
-            result = await spec.fn({})
+            await spec.fn({})
 
-            assert result["error"] is None
             assert mock.requests[0].headers == {"X-Custom": "static-value"}
         finally:
             set_ports(None)

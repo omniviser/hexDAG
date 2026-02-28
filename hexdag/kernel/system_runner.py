@@ -39,6 +39,7 @@ from hexdag.kernel.utils.node_timer import Timer
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from hexdag.kernel.config.models import HexDAGConfig
     from hexdag.kernel.domain.system_config import SystemConfig
     from hexdag.kernel.ports.observer_manager import ObserverManager
 
@@ -57,6 +58,9 @@ class SystemRunner:
 
     Parameters
     ----------
+    config:
+        Organisation-wide defaults from ``kind: Config``.  Passed through
+        to every :class:`PipelineRunner` instance.
     port_overrides:
         Port overrides passed to every :class:`PipelineRunner` instance.
     observer_manager:
@@ -68,10 +72,12 @@ class SystemRunner:
     def __init__(
         self,
         *,
+        config: HexDAGConfig | None = None,
         port_overrides: dict[str, Any] | None = None,
         observer_manager: ObserverManager | None = None,
         base_path: Path | None = None,
     ) -> None:
+        self._config = config
         self._port_overrides = port_overrides
         self._observer_manager = observer_manager
         self._base_path = base_path
@@ -144,6 +150,7 @@ class SystemRunner:
 
                 # Create a PipelineRunner for this process
                 runner = PipelineRunner(
+                    config=self._config,
                     port_overrides=self._port_overrides,
                     base_path=self._base_path,
                 )

@@ -3,6 +3,9 @@
 Provides ergonomic REST API access via the ``api_call`` port, with
 URL/header/body templating using Jinja2-style ``{{variable}}`` syntax.
 
+Returns the response body directly — HTTP transport metadata (status code,
+headers) is logged but not included in the output.
+
 Examples
 --------
 YAML pipeline usage::
@@ -180,7 +183,7 @@ class ApiCallNode(BaseNodeFactory, yaml_alias="api_call_node"):
             tmpl = PromptTemplate(tmpl_str)
             all_vars.update(tmpl.input_vars)
 
-        input_schema: dict[str, Any] = dict.fromkeys(sorted(all_vars), str) or None  # type: ignore[assignment]
+        input_schema: dict[str, Any] | None = dict.fromkeys(sorted(all_vars), str) or None
 
         # Create the HTTP call wrapper function
         http_wrapper = self._create_http_wrapper(
@@ -223,7 +226,7 @@ class ApiCallNode(BaseNodeFactory, yaml_alias="api_call_node"):
         # Copy port capabilities metadata
         self._copy_port_capabilities_to_wrapper_for_http(port_name)
 
-        async def http_call_fn(input_data: dict[str, Any]) -> dict[str, Any]:
+        async def http_call_fn(input_data: dict[str, Any]) -> Any:
             """Execute HTTP request."""
             node_logger = logger.bind(
                 node=name,
@@ -283,12 +286,7 @@ class ApiCallNode(BaseNodeFactory, yaml_alias="api_call_node"):
                     duration_ms=t.duration_str,
                 )
 
-                return {
-                    "status_code": result.get("status_code"),
-                    "headers": result.get("headers", {}),
-                    "body": result.get("body"),
-                    "error": None,
-                }
+                return result.get("body")
 
             except Exception as e:
                 node_logger.error(

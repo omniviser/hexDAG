@@ -1413,3 +1413,63 @@ class TestDeprecationWarning:
 
         deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
         assert len(deprecation_warnings) == 0
+
+
+class TestBuilderInlineConfig:
+    """Tests for accessing inline_config from builder after build."""
+
+    def test_inline_config_none_by_default(self) -> None:
+        builder = YamlPipelineBuilder()
+        assert builder.inline_config is None
+
+    def test_inline_config_from_multi_doc_yaml(self) -> None:
+        yaml_content = """\
+---
+kind: Config
+metadata:
+  name: test-config
+spec:
+  kernel:
+    max_concurrent_nodes: 3
+  limits:
+    max_llm_calls: 50
+  caps:
+    deny: [secret]
+---
+kind: Pipeline
+metadata:
+  name: test-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: step1
+      spec:
+        fn: "json.loads"
+"""
+        builder = YamlPipelineBuilder()
+        builder.build_from_yaml_string(yaml_content)
+
+        config = builder.inline_config
+        assert config is not None
+        assert config.orchestrator.max_concurrent_nodes == 3
+        assert config.limits.max_llm_calls == 50
+        assert config.caps.deny == ["secret"]
+
+    def test_inline_config_none_without_config_doc(self) -> None:
+        yaml_content = """\
+kind: Pipeline
+metadata:
+  name: test-pipeline
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: step1
+      spec:
+        fn: "json.loads"
+"""
+        builder = YamlPipelineBuilder()
+        builder.build_from_yaml_string(yaml_content)
+
+        assert builder.inline_config is None

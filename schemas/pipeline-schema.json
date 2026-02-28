@@ -947,6 +947,10 @@
                     "title": "Aliases",
                     "type": "object"
                 },
+                "caps": {
+                    "$ref": "#/$defs/DefaultCaps",
+                    "description": "Capability boundaries for this pipeline"
+                },
                 "common_field_mappings": {
                     "additionalProperties": true,
                     "description": "Reusable field mapping definitions",
@@ -1183,6 +1187,10 @@
                     "description": "JSON Schema for pipeline inputs",
                     "type": "object"
                 },
+                "limits": {
+                    "$ref": "#/$defs/DefaultLimits",
+                    "description": "Resource limits for this pipeline (max_llm_calls, max_cost_usd, etc.)"
+                },
                 "nodes": {
                     "description": "List of pipeline nodes",
                     "items": {
@@ -1217,6 +1225,10 @@
                         ]
                     },
                     "type": "array"
+                },
+                "orchestrator": {
+                    "$ref": "#/$defs/OrchestratorConfig",
+                    "description": "Orchestrator execution settings (max_concurrent_nodes, timeout, etc.)"
                 },
                 "output_schema": {
                     "additionalProperties": true,

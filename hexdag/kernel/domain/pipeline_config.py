@@ -20,9 +20,15 @@ Formats:
 - policies: policy_name -> {namespace: str, name: str, params: dict}
 """
 
-from typing import Any, Literal, Self
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from hexdag.kernel.config.models import DefaultCaps, DefaultLimits
+    from hexdag.kernel.orchestration.models import OrchestratorConfig
 
 
 class CustomTypeConfig(BaseModel):
@@ -254,8 +260,54 @@ class PipelineConfig(BaseModel):
         default=None, description="Reusable field mapping definitions"
     )
 
+    # Execution configuration (optional per-pipeline overrides)
+    orchestrator: OrchestratorConfig | None = Field(
+        default=None,
+        description="Orchestrator execution settings (max_concurrent_nodes, timeout, etc.)",
+    )
+    limits: DefaultLimits | None = Field(
+        default=None,
+        description="Resource limits for this pipeline (max_llm_calls, max_cost_usd, etc.)",
+    )
+    caps: DefaultCaps | None = Field(
+        default=None,
+        description="Capability boundaries for this pipeline",
+    )
+
     # Metadata
     metadata: dict[str, Any] = Field(default_factory=dict, description="Pipeline metadata")
 
     # Node configurations (handled by existing builder)
     nodes: list[dict[str, Any]] = Field(default_factory=list, description="Node specifications")
+
+
+_pipeline_config_rebuilt = False
+
+
+def _rebuild_pipeline_config() -> None:
+    """Rebuild PipelineConfig to resolve forward references.
+
+    Idempotent — safe to call multiple times (no-op after first).
+    This resolves the ``OrchestratorConfig``, ``DefaultLimits``, and
+    ``DefaultCaps`` forward references that cannot be imported eagerly due
+    to circular imports between ``kernel.domain`` and ``kernel.config``.
+
+    Called automatically from ``kernel/__init__.py`` on first import,
+    and also as a safety net from any code that directly imports
+    ``PipelineConfig`` without going through ``hexdag.kernel``.
+    """
+    global _pipeline_config_rebuilt  # noqa: PLW0603
+    if _pipeline_config_rebuilt:
+        return
+    _pipeline_config_rebuilt = True
+
+    from hexdag.kernel.config.models import DefaultCaps, DefaultLimits  # lazy: circular import
+    from hexdag.kernel.orchestration.models import OrchestratorConfig  # lazy: circular import
+
+    PipelineConfig.model_rebuild(
+        _types_namespace={
+            "OrchestratorConfig": OrchestratorConfig,
+            "DefaultLimits": DefaultLimits,
+            "DefaultCaps": DefaultCaps,
+        },
+    )

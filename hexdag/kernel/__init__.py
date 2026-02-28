@@ -438,3 +438,15 @@ __all__ = [
     "JsonData",
     "ListData",
 ]
+
+# ---------------------------------------------------------------------------
+# Deferred model rebuild — resolve PipelineConfig forward references.
+# Must run AFTER every import above has executed so that OrchestratorConfig,
+# DefaultLimits, and DefaultCaps are fully defined in their modules.
+# ---------------------------------------------------------------------------
+from hexdag.kernel.domain.pipeline_config import (  # noqa: E402
+    _rebuild_pipeline_config as _rebuild,
+)
+
+_rebuild()
+del _rebuild
