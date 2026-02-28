@@ -7,7 +7,7 @@ runtime orchestrator, instantiating adapters and policies from their specs.
 from typing import TYPE_CHECKING, Any
 
 from hexdag.compiler.component_instantiator import ComponentInstantiator
-from hexdag.kernel.domain.pipeline_config import PipelineConfig
+from hexdag.kernel.domain.pipeline_config import PipelineConfig, _rebuild_pipeline_config
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.ports_builder import PortsBuilder
@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     )
 
 logger = get_logger(__name__)
+
+# Ensure PipelineConfig forward references are resolved.
+_rebuild_pipeline_config()
 
 
 class OrchestratorFactory:

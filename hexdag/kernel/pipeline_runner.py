@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +46,7 @@ from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
 
 if TYPE_CHECKING:
+    from hexdag.kernel.config.models import HexDAGConfig
     from hexdag.kernel.domain.dag import DirectedGraph
     from hexdag.kernel.domain.pipeline_config import PipelineConfig
     from hexdag.kernel.orchestration.components.lifecycle_manager import (
@@ -65,8 +67,19 @@ class PipelineRunner:
     Orchestrates the full lifecycle: build → load secrets → validate env
     vars → instantiate ports → configure hooks → run.
 
+    Configuration follows a four-level override chain::
+
+        kind: Config defaults → constructor args → kind: Pipeline spec → runtime
+
+    When ``config`` is provided, its ``orchestrator`` settings act as defaults.
+    Explicit constructor args (``max_concurrent_nodes`` etc.) override the config.
+    Per-pipeline ``spec.orchestrator`` in the Pipeline YAML overrides both.
+
     Parameters
     ----------
+    config : HexDAGConfig | None
+        Organisation-wide defaults loaded from ``kind: Config``.
+        Used as fallback when explicit params are not set.
     port_overrides : dict[str, Any] | None
         Runtime port overrides. Merges with YAML-declared ports;
         overrides win on name collision.
@@ -75,10 +88,10 @@ class PipelineRunner:
         Overrides any ``secret`` port declared in YAML.
     secret_keys : list[str] | None
         Specific secret keys to load. If None, loads all.
-    max_concurrent_nodes : int
-        Max nodes to execute concurrently (default: 10).
-    strict_validation : bool
-        Raise on validation failure (default: False).
+    max_concurrent_nodes : int | None
+        Max nodes to execute concurrently. None = use config or default (10).
+    strict_validation : bool | None
+        Raise on validation failure. None = use config or default (False).
     default_node_timeout : float | None
         Default per-node timeout in seconds.
     pre_hook_config : HookConfig | None
@@ -94,23 +107,50 @@ class PipelineRunner:
     def __init__(
         self,
         *,
+        config: HexDAGConfig | None = None,
         port_overrides: dict[str, Any] | None = None,
         secrets_provider: SecretStore | None = None,
         secret_keys: list[str] | None = None,
-        max_concurrent_nodes: int = 10,
-        strict_validation: bool = False,
+        max_concurrent_nodes: int | None = None,
+        strict_validation: bool | None = None,
         default_node_timeout: float | None = None,
         pre_hook_config: HookConfig | None = None,
         post_hook_config: PostDagHookConfig | None = None,
         base_path: Path | None = None,
         environment: str | None = None,
     ) -> None:
+        self._config = config
         self._port_overrides = port_overrides
         self._secrets_provider = secrets_provider
         self._secret_keys = secret_keys
-        self._max_concurrent_nodes = max_concurrent_nodes
-        self._strict_validation = strict_validation
-        self._default_node_timeout = default_node_timeout
+
+        # Store raw constructor args (None = not set by caller).
+        # These are kept separate from config/hardcoded defaults so that
+        # _resolve_orchestrator_settings() can implement the full priority
+        # chain: explicit constructor > per-pipeline spec > config > hardcoded.
+        self._explicit_max_concurrent_nodes = max_concurrent_nodes
+        self._explicit_strict_validation = strict_validation
+        self._explicit_default_node_timeout = default_node_timeout
+
+        # Resolve constructor-level defaults: explicit arg > config > hardcoded.
+        # These are the "baseline" values used when no per-pipeline spec exists.
+        cfg_orch = config.orchestrator if config else None
+        self._max_concurrent_nodes = (
+            max_concurrent_nodes
+            if max_concurrent_nodes is not None
+            else (cfg_orch.max_concurrent_nodes if cfg_orch else 10)
+        )
+        self._strict_validation = (
+            strict_validation
+            if strict_validation is not None
+            else (cfg_orch.strict_validation if cfg_orch else False)
+        )
+        self._default_node_timeout = (
+            default_node_timeout
+            if default_node_timeout is not None
+            else (cfg_orch.default_node_timeout if cfg_orch else None)
+        )
+
         self._pre_hook_config = pre_hook_config
         self._post_hook_config = post_hook_config
         self._environment = environment
@@ -156,7 +196,8 @@ class PipelineRunner:
                 yaml_content, environment=env
             )
 
-        return await self._execute(graph, pipeline_config, input_data)
+        effective_config = self._effective_config()
+        return await self._execute(graph, pipeline_config, input_data, effective_config)
 
     async def run_from_string(
         self,
@@ -183,7 +224,8 @@ class PipelineRunner:
         """
         env = environment or self._environment
         graph, pipeline_config = self._builder.build_from_yaml_string(yaml_content, environment=env)
-        return await self._execute(graph, pipeline_config, input_data)
+        effective_config = self._effective_config()
+        return await self._execute(graph, pipeline_config, input_data, effective_config)
 
     async def validate(
         self,
@@ -268,13 +310,43 @@ class PipelineRunner:
 
         raise PipelineRunnerError("Provide either pipeline_path or yaml_content")
 
+    def _effective_config(self) -> Any:
+        """Return the effective HexDAGConfig for the current build.
+
+        Merges the inline ``kind: Config`` from multi-doc YAML with the
+        constructor-provided config.  Constructor config wins on conflict.
+        If neither exists, returns ``None``.
+        """
+        inline = self._builder.inline_config
+        if inline is None:
+            return self._config
+        if self._config is None:
+            return inline
+        # Both exist — constructor config takes precedence.
+        # Return the constructor config (it's the explicitly-provided one).
+        return self._config
+
     async def _execute(
         self,
         graph: DirectedGraph,
         pipeline_config: PipelineConfig,
         input_data: Any,
+        effective_config: Any = None,
     ) -> dict[str, Any]:
-        """Core execution: secrets → validate → instantiate → run."""
+        """Core execution: secrets → validate → instantiate → run.
+
+        Parameters
+        ----------
+        graph:
+            Compiled DAG.
+        pipeline_config:
+            Parsed pipeline configuration.
+        input_data:
+            Initial input for root nodes.
+        effective_config:
+            The effective ``HexDAGConfig`` for this run (may include
+            inline ``kind: Config`` from the YAML file).
+        """
         # 1. Load secrets to os.environ (before port instantiation)
         await self._load_secrets(pipeline_config)
 
@@ -287,18 +359,48 @@ class PipelineRunner:
                 f"Set them in os.environ or use a secrets_provider."
             )
 
-        # 3. Create orchestrator (auto-instantiates ports from YAML config)
+        # 3. Resolve final orchestrator settings.
+        #    Priority: explicit constructor arg > per-pipeline spec > config > hardcoded
+        #    Use effective_config (which may come from inline kind: Config)
+        #    for the config-level defaults when no constructor config was given.
+        max_nodes, strict, timeout = self._resolve_orchestrator_settings(
+            pipeline_config.orchestrator,
+            effective_config,
+        )
+
+        # 4. Resolve effective limits and caps.
+        #    Priority: per-pipeline spec > effective config > None.
+        #    Enforcement is not yet implemented (see Steps 2-3 in ROADMAP);
+        #    this ensures the values are resolved and logged so they're
+        #    ready for the ResourceAccounting / CapSet hooks.
+        effective_limits = self._resolve_field(
+            pipeline_config.limits,
+            effective_config.limits if effective_config else None,
+        )
+        effective_caps = self._resolve_field(
+            pipeline_config.caps,
+            effective_config.caps if effective_config else None,
+        )
+        if effective_limits is not None:
+            logger.info(
+                "Resource limits active: {}",
+                {k: v for k, v in asdict(effective_limits).items() if v is not None},
+            )
+        if effective_caps is not None:
+            logger.info("Capability caps active: {}", asdict(effective_caps))
+
+        # 5. Create orchestrator (auto-instantiates ports from YAML config)
         orchestrator = self._factory.create_orchestrator(
             pipeline_config=pipeline_config,
-            max_concurrent_nodes=self._max_concurrent_nodes,
-            strict_validation=self._strict_validation,
-            default_node_timeout=self._default_node_timeout,
+            max_concurrent_nodes=max_nodes,
+            strict_validation=strict,
+            default_node_timeout=timeout,
             additional_ports=self._port_overrides,
             pre_hook_config=self._pre_hook_config,
             post_hook_config=self._post_hook_config,
         )
 
-        # 4. Execute
+        # 6. Execute
         pipeline_name = pipeline_config.metadata.get("name", "unnamed")
         logger.info("Running pipeline '{}' with {} nodes", pipeline_name, len(graph))
 
@@ -306,6 +408,73 @@ class PipelineRunner:
 
         logger.info("Pipeline '{}' completed with {} node results", pipeline_name, len(result))
         return result
+
+    def _resolve_orchestrator_settings(
+        self,
+        pc_orch: Any,
+        effective_config: Any = None,
+    ) -> tuple[int, bool, float | None]:
+        """Resolve final orchestrator settings with correct priority.
+
+        Priority chain (highest to lowest):
+        1. Explicit constructor args (``max_concurrent_nodes=20``)
+        2. Per-pipeline spec (``pipeline_config.orchestrator``)
+        3. Effective config defaults (constructor config or inline ``kind: Config``)
+        4. Hardcoded defaults (10, False, None)
+
+        Parameters
+        ----------
+        pc_orch:
+            ``pipeline_config.orchestrator`` — may be ``None``.
+        effective_config:
+            The effective ``HexDAGConfig`` for this run.  May differ from
+            ``self._config`` when the YAML file contains an inline
+            ``kind: Config`` document.
+
+        Returns
+        -------
+        tuple[int, bool, float | None]
+            (max_concurrent_nodes, strict_validation, default_node_timeout)
+        """
+        # Start from effective config (which may include inline kind: Config)
+        # or fall back to constructor-resolved baseline.
+        run_config = effective_config or self._config
+        cfg_orch = run_config.orchestrator if run_config else None
+
+        # Level 3+4: config > hardcoded
+        max_nodes = cfg_orch.max_concurrent_nodes if cfg_orch else 10
+        strict = cfg_orch.strict_validation if cfg_orch else False
+        timeout = cfg_orch.default_node_timeout if cfg_orch else None
+
+        # Level 2: per-pipeline spec overrides config (but only for
+        # fields not explicitly set by the constructor).
+        if pc_orch is not None:
+            if self._explicit_max_concurrent_nodes is None:
+                max_nodes = pc_orch.max_concurrent_nodes
+            if self._explicit_strict_validation is None:
+                strict = pc_orch.strict_validation
+            if (
+                self._explicit_default_node_timeout is None
+                and pc_orch.default_node_timeout is not None
+            ):
+                timeout = pc_orch.default_node_timeout
+
+        # Level 1: explicit constructor args always win.
+        if self._explicit_max_concurrent_nodes is not None:
+            max_nodes = self._explicit_max_concurrent_nodes
+        if self._explicit_strict_validation is not None:
+            strict = self._explicit_strict_validation
+        if self._explicit_default_node_timeout is not None:
+            timeout = self._explicit_default_node_timeout
+
+        return max_nodes, strict, timeout
+
+    @staticmethod
+    def _resolve_field(pipeline_value: Any, config_value: Any) -> Any:
+        """Return pipeline-level override if set, else config-level default."""
+        if pipeline_value is not None:
+            return pipeline_value
+        return config_value
 
     async def _load_secrets(self, pipeline_config: PipelineConfig) -> None:
         """Load secrets into os.environ before port instantiation.

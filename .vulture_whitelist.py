@@ -63,3 +63,10 @@ def aget_metadata(remote_path: str) -> None:
 def aset_with_ttl(key: str, value: object, ttl_seconds: int) -> None:
     """Whitelist for SupportsTTL.aset_with_ttl parameters."""
     _ = (key, value, ttl_seconds)
+
+
+# hexdag/stdlib/nodes/tool_call_node.py - ToolCallNode.__call__ parameter
+# Kept in API for YAML compatibility; output envelope was removed so it's unused in body.
+def _tool_call_node_call(tool_call_id: str | None = None) -> None:  # noqa: UP007
+    """Whitelist for ToolCallNode.__call__ tool_call_id parameter."""
+    _ = tool_call_id

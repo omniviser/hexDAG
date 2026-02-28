@@ -34,13 +34,21 @@ from hexdag.compiler.reference_resolver import (
 )
 from hexdag.compiler.yaml_validator import YamlValidator
 from hexdag.kernel.domain.dag import DirectedGraph
-from hexdag.kernel.domain.pipeline_config import BaseNodeConfig, PipelineConfig
+from hexdag.kernel.domain.pipeline_config import (
+    BaseNodeConfig,
+    PipelineConfig,
+    _rebuild_pipeline_config,
+)
 from hexdag.kernel.exceptions import YamlPipelineBuilderError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import register_alias
 from hexdag.kernel.validation.sanitized_types import register_type_from_config
 
 logger = get_logger(__name__)
+
+# Ensure PipelineConfig forward references are resolved even if this
+# module is imported without going through hexdag.kernel.__init__.
+_rebuild_pipeline_config()
 
 
 # ============================================================================
@@ -130,6 +138,11 @@ class YamlPipelineBuilder:
         self._inline_config: Any = None  # HexDAGConfig | None (avoid circular import)
 
         self._register_default_plugins()
+
+    @property
+    def inline_config(self) -> Any:
+        """Return HexDAGConfig parsed from an inline ``kind: Config`` document, if any."""
+        return self._inline_config
 
     def _register_default_plugins(self) -> None:
         """Register default plugins for common use cases."""

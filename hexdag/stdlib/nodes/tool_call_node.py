@@ -1,6 +1,7 @@
 """ToolCallNode - Execute a single tool call as a FunctionNode.
 
 This node wraps a tool function and executes it as a node.
+The raw return value of the tool is passed directly to downstream nodes.
 """
 
 import contextlib
@@ -8,7 +9,7 @@ import inspect
 import time
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hexdag.kernel.context import get_port
 from hexdag.kernel.domain.dag import NodeSpec
@@ -28,17 +29,8 @@ class ToolCallInput(BaseModel):
     """Input for a tool call."""
 
     tool_name: str
-    arguments: dict[str, Any] = {}
+    arguments: dict[str, Any] = Field(default_factory=dict)
     tool_call_id: str | None = None
-
-
-class ToolCallOutput(BaseModel):
-    """Output from a tool call."""
-
-    result: Any
-    tool_call_id: str | None = None
-    tool_name: str
-    error: str | None = None
 
 
 class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
@@ -47,8 +39,11 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
     This node is a simple wrapper that:
     1. Takes a tool name and arguments
     2. Resolves the tool function using the module path resolver
-    3. Executes it and returns the result with metadata
+    3. Executes it and returns the raw result
     4. Emits ToolRouterEvent events
+
+    Errors raise as exceptions (handled by the orchestrator's retry/error
+    system) rather than being wrapped in an output envelope.
 
     Examples
     --------
@@ -64,7 +59,7 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
             graph,
             {"tool_call_id": "1"}
         )
-        # Returns: {"result": [...], "tool_call_id": "1", "tool_name": "search"}
+        # Returns the raw tool result directly
 
     Tool requiring ports::
 
@@ -125,7 +120,7 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
         """
         arguments = arguments or {}
 
-        async def execute_tool(input_data: dict[str, Any]) -> dict[str, Any]:
+        async def execute_tool(input_data: dict[str, Any]) -> Any:
             """Execute the tool call with event emission."""
 
             # Get observer for event emission (optional)
@@ -133,59 +128,45 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
             with contextlib.suppress(Exception):
                 observer_manager = get_port("observer_manager")
 
-            logger.debug("🔧 Executing tool '{}' with args: {}", tool_name, arguments)
+            logger.debug("Executing tool '{}' with args: {}", tool_name, arguments)
 
             start_time = time.time()
-            try:
-                # Resolve tool function using module path
-                tool_fn: Callable[..., Any] = resolve_function(tool_name)
 
-                # Prepare tool arguments
-                tool_kwargs = dict(arguments)
+            # Resolve tool function using module path
+            tool_fn: Callable[..., Any] = resolve_function(tool_name)
 
-                # Execute tool (handle both sync and async)
-                if inspect.iscoroutinefunction(tool_fn):
-                    result = await tool_fn(**tool_kwargs)
-                else:
-                    result = tool_fn(**tool_kwargs)
+            # Prepare tool arguments
+            tool_kwargs = dict(arguments)
 
-                duration_ms = (time.time() - start_time) * 1000
+            # Execute tool (handle both sync and async)
+            if inspect.iscoroutinefunction(tool_fn):
+                result = await tool_fn(**tool_kwargs)
+            else:
+                result = tool_fn(**tool_kwargs)
 
-                # Emit ToolRouterEvent
-                if observer_manager:
-                    await observer_manager.notify(
-                        ToolRouterEvent(
-                            node_name=name,
-                            tool_name=tool_name,
-                            params=arguments,
-                            result=result,
-                            duration_ms=duration_ms,
-                        )
+            duration_ms = (time.time() - start_time) * 1000
+
+            # Emit ToolRouterEvent
+            if observer_manager:
+                await observer_manager.notify(
+                    ToolRouterEvent(
+                        node_name=name,
+                        tool_name=tool_name,
+                        params=arguments,
+                        result=result,
+                        duration_ms=duration_ms,
                     )
+                )
 
-                logger.debug("✅ Tool '{}' completed in {:.2f}ms", tool_name, duration_ms)
+            logger.debug("Tool '{}' completed in {:.2f}ms", tool_name, duration_ms)
 
-                return {
-                    "result": result,
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "error": None,
-                }
-            except Exception as e:
-                duration_ms = (time.time() - start_time) * 1000
-                logger.warning("❌ Tool '{}' failed after {:.2f}ms: {}", tool_name, duration_ms, e)
-                return {
-                    "result": None,
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "error": str(e),
-                }
+            return result
 
         return self.create_node_with_mapping(
             name=name,
             wrapped_fn=execute_tool,
             input_schema={},  # No specific input schema (uses context)
-            output_schema=ToolCallOutput,
+            output_schema=None,
             deps=deps,
             **kwargs,
         )

@@ -107,6 +107,11 @@ def _generate_config(adapters: list[str]) -> str:
             "kernel": {
                 "max_concurrent_nodes": 10,
             },
+            "limits": {
+                "max_llm_calls": 100,
+                "max_cost_usd": 10.0,
+                "warning_threshold": 0.8,
+            },
         },
     }
 

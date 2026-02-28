@@ -42,6 +42,8 @@ NODE_COLORS: dict[str, str] = {
     "composite_node": "#6366f1",  # indigo
     "expression_node": "#06b6d4",  # cyan
     "tool_call_node": "#f97316",  # orange
+    "service_call_node": "#10b981",  # emerald
+    "api_call_node": "#06b6d4",  # cyan
     # Deprecated but still supported
     "conditional_node": "#f59e0b",  # amber
     "loop_node": "#10b981",  # emerald
@@ -56,6 +58,8 @@ NODE_ICONS: dict[str, str] = {
     "composite_node": "Layers",
     "expression_node": "Calculator",
     "tool_call_node": "Wrench",
+    "service_call_node": "Cog",
+    "api_call_node": "Globe",
     # Deprecated but still supported
     "conditional_node": "GitBranch",
     "loop_node": "Repeat",
@@ -70,6 +74,8 @@ DEFAULT_SPECS: dict[str, dict[str, Any]] = {
     "composite_node": {"mode": "for-each", "items": "", "body": []},
     "expression_node": {"expressions": {}},
     "tool_call_node": {"tool_name": "", "arguments": {}},
+    "service_call_node": {"service": "", "method": ""},
+    "api_call_node": {"url": "", "method": "GET"},
     # Deprecated
     "conditional_node": {"branches": [], "else_action": None},
     "loop_node": {"while_condition": "", "body": "", "max_iterations": 100},

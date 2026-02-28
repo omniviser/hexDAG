@@ -100,10 +100,12 @@ graph TD
   - Add `orchestrator: OrchestratorConfig` (reuse existing)
   - Add `limits: DefaultLimits`, `caps: DefaultCaps`
 
-- [ ] **`kind: Config` YAML manifest** (Step 1)
+- [x] **`kind: Config` YAML manifest** (Step 1)
   - Replace `hexdag.toml` with YAML `kind: Config`
   - Parse `spec.kernel`, `spec.limits`, `spec.caps`
   - Backward compat: TOML still works with deprecation warning
+  - Inline `kind: Config` in multi-doc YAML (merged via `PipelineRunner._effective_config()`)
+  - 4-level override chain: explicit constructor args > per-pipeline spec > `kind: Config` defaults > hardcoded
 
 ### Phase 2: Resource Limits & Caps
 
@@ -543,11 +545,11 @@ kernel/ internals (planned)
 
 ## Milestones
 
-### Milestone 1: YAML Compiler Foundation (In Progress)
+### Milestone 1: YAML Compiler Foundation (Complete)
 - [x] Compiler refactor (`pipeline_builder/` -> `compiler/`)
 - [x] Config loader migration
 - [x] Typed defaults (`DefaultLimits`, `DefaultCaps`, `OrchestratorConfig` on `HexDAGConfig`)
-- [ ] `kind: Config` YAML manifest
+- [x] `kind: Config` YAML manifest
 
 ### Milestone 2: Safety Rails
 - [ ] Resource Limits + Caps enforcement

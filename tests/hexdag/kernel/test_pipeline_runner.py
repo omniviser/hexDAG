@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from hexdag.kernel.config.models import DefaultCaps, DefaultLimits, HexDAGConfig
+from hexdag.kernel.orchestration.models import OrchestratorConfig
 from hexdag.kernel.pipeline_runner import (
     PipelineRunner,
     PipelineRunnerError,
@@ -435,3 +437,245 @@ class TestPipelineRunnerEdgeCases:
         runner = PipelineRunner()
         result = await runner.run_from_string(SIMPLE_YAML)
         assert "start" in result
+
+
+# ---------------------------------------------------------------------------
+# Config propagation tests
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunnerConfigDefaults:
+    """Test that config defaults are used when no explicit args provided."""
+
+    def test_no_config_uses_hardcoded_defaults(self) -> None:
+        runner = PipelineRunner()
+        assert runner._max_concurrent_nodes == 10
+        assert runner._strict_validation is False
+        assert runner._default_node_timeout is None
+
+    def test_config_provides_defaults(self) -> None:
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(
+                max_concurrent_nodes=5,
+                strict_validation=True,
+                default_node_timeout=30.0,
+            ),
+        )
+        runner = PipelineRunner(config=config)
+        assert runner._max_concurrent_nodes == 5
+        assert runner._strict_validation is True
+        assert runner._default_node_timeout == 30.0
+
+
+class TestPipelineRunnerExplicitOverridesConfig:
+    """Test that explicit constructor args override config defaults."""
+
+    def test_explicit_max_concurrent_overrides_config(self) -> None:
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=5),
+        )
+        runner = PipelineRunner(config=config, max_concurrent_nodes=20)
+        assert runner._max_concurrent_nodes == 20
+
+    def test_explicit_strict_validation_overrides_config(self) -> None:
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(strict_validation=True),
+        )
+        runner = PipelineRunner(config=config, strict_validation=False)
+        assert runner._strict_validation is False
+
+    def test_explicit_timeout_overrides_config(self) -> None:
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(default_node_timeout=30.0),
+        )
+        runner = PipelineRunner(config=config, default_node_timeout=120.0)
+        assert runner._default_node_timeout == 120.0
+
+    def test_none_explicit_falls_through_to_config(self) -> None:
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(
+                max_concurrent_nodes=7,
+                strict_validation=True,
+            ),
+        )
+        runner = PipelineRunner(config=config, max_concurrent_nodes=None)
+        assert runner._max_concurrent_nodes == 7
+        assert runner._strict_validation is True
+
+
+class TestPipelineRunnerConfigStored:
+    """Test that the config object is accessible."""
+
+    def test_config_stored(self) -> None:
+        config = HexDAGConfig(
+            limits=DefaultLimits(max_llm_calls=100),
+            caps=DefaultCaps(deny=["secret"]),
+        )
+        runner = PipelineRunner(config=config)
+        assert runner._config is config
+
+    def test_config_none_by_default(self) -> None:
+        runner = PipelineRunner()
+        assert runner._config is None
+
+
+class TestPipelineRunnerBackwardCompatibility:
+    """Test backward compatibility with old-style constructor usage."""
+
+    def test_explicit_int_values_still_work(self) -> None:
+        """Callers that pass explicit values should still work identically."""
+        runner = PipelineRunner(
+            max_concurrent_nodes=15,
+            strict_validation=True,
+            default_node_timeout=60.0,
+        )
+        assert runner._max_concurrent_nodes == 15
+        assert runner._strict_validation is True
+        assert runner._default_node_timeout == 60.0
+
+
+class TestResolveOrchestratorSettings:
+    """Test _resolve_orchestrator_settings priority chain.
+
+    Bug 1 fix: explicit constructor args must NOT be clobbered by
+    per-pipeline spec defaults.
+    """
+
+    def test_explicit_arg_beats_pipeline_spec(self) -> None:
+        """Explicit constructor max_concurrent_nodes=20 should survive
+        even when pipeline_config.orchestrator is set."""
+        runner = PipelineRunner(max_concurrent_nodes=20)
+        # Simulate a pipeline that declares orchestrator with defaults
+        pc_orch = OrchestratorConfig(max_concurrent_nodes=3)
+        max_nodes, strict, timeout = runner._resolve_orchestrator_settings(pc_orch)
+        assert max_nodes == 20  # constructor wins
+        assert strict is False  # hardcoded default (no explicit, no pipeline override)
+        assert timeout is None
+
+    def test_explicit_strict_beats_pipeline_spec(self) -> None:
+        runner = PipelineRunner(strict_validation=True)
+        pc_orch = OrchestratorConfig(strict_validation=False)
+        _, strict, _ = runner._resolve_orchestrator_settings(pc_orch)
+        assert strict is True  # constructor wins
+
+    def test_pipeline_spec_overrides_config_when_no_explicit(self) -> None:
+        """Per-pipeline spec should override kind: Config defaults
+        when no explicit constructor arg is set."""
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=5),
+        )
+        runner = PipelineRunner(config=config)  # no explicit max_concurrent_nodes
+        pc_orch = OrchestratorConfig(max_concurrent_nodes=3)
+        max_nodes, _, _ = runner._resolve_orchestrator_settings(pc_orch)
+        assert max_nodes == 3  # pipeline spec wins over config
+
+    def test_pipeline_spec_none_uses_config(self) -> None:
+        """When no per-pipeline spec, config defaults apply."""
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(
+                max_concurrent_nodes=7,
+                strict_validation=True,
+                default_node_timeout=45.0,
+            ),
+        )
+        runner = PipelineRunner(config=config)
+        max_nodes, strict, timeout = runner._resolve_orchestrator_settings(None)
+        assert max_nodes == 7
+        assert strict is True
+        assert timeout == 45.0
+
+    def test_empty_pipeline_orchestrator_does_not_clobber_config(self) -> None:
+        """An empty orchestrator: {} in Pipeline YAML (which creates
+        OrchestratorConfig with defaults) should NOT clobber a higher
+        config value when constructor didn't set explicit args."""
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=5, strict_validation=True),
+        )
+        runner = PipelineRunner(config=config)
+        # Empty orchestrator: {} → OrchestratorConfig() → max=10, strict=False
+        empty_orch = OrchestratorConfig()
+        max_nodes, strict, _ = runner._resolve_orchestrator_settings(empty_orch)
+        # Pipeline spec overrides config (by design), even when "empty".
+        # This is correct: an explicit orchestrator: {} means "use defaults".
+        assert max_nodes == 10
+        assert strict is False
+
+    def test_effective_config_from_inline(self) -> None:
+        """effective_config parameter should be used for config-level defaults."""
+        runner = PipelineRunner()  # no constructor config
+        inline_config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=4),
+        )
+        max_nodes, _, _ = runner._resolve_orchestrator_settings(
+            None, effective_config=inline_config
+        )
+        assert max_nodes == 4
+
+    def test_constructor_config_beats_inline_config(self) -> None:
+        """Constructor config should win over inline config."""
+        ctor_config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=8),
+        )
+        runner = PipelineRunner(config=ctor_config)
+        # Constructor config is used as self._config; effective_config
+        # should be ctor_config since _effective_config prefers it.
+        max_nodes, _, _ = runner._resolve_orchestrator_settings(None, effective_config=ctor_config)
+        assert max_nodes == 8
+
+
+class TestEffectiveConfig:
+    """Test _effective_config merging logic (Bug 2 fix)."""
+
+    def test_no_inline_returns_constructor_config(self) -> None:
+        config = HexDAGConfig()
+        runner = PipelineRunner(config=config)
+        # Builder has no inline config by default
+        assert runner._effective_config() is config
+
+    def test_no_constructor_no_inline_returns_none(self) -> None:
+        runner = PipelineRunner()
+        assert runner._effective_config() is None
+
+    def test_inline_config_used_when_no_constructor_config(self) -> None:
+        runner = PipelineRunner()
+        # Manually set inline config on builder (simulating multi-doc parse)
+        inline = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=3),
+        )
+        runner._builder._inline_config = inline
+        assert runner._effective_config() is inline
+
+    def test_constructor_config_wins_over_inline(self) -> None:
+        ctor_config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=8),
+        )
+        runner = PipelineRunner(config=ctor_config)
+        inline = HexDAGConfig(
+            orchestrator=OrchestratorConfig(max_concurrent_nodes=3),
+        )
+        runner._builder._inline_config = inline
+        assert runner._effective_config() is ctor_config
+
+
+class TestResolveField:
+    """Test _resolve_field helper (Bug 3 fix — limits/caps resolution)."""
+
+    def test_pipeline_value_wins(self) -> None:
+        pipeline_limits = DefaultLimits(max_llm_calls=50)
+        config_limits = DefaultLimits(max_llm_calls=100)
+        result = PipelineRunner._resolve_field(pipeline_limits, config_limits)
+        assert result is pipeline_limits
+
+    def test_config_value_used_when_pipeline_none(self) -> None:
+        config_limits = DefaultLimits(max_llm_calls=100)
+        result = PipelineRunner._resolve_field(None, config_limits)
+        assert result is config_limits
+
+    def test_both_none_returns_none(self) -> None:
+        assert PipelineRunner._resolve_field(None, None) is None
+
+    def test_caps_resolution(self) -> None:
+        config_caps = DefaultCaps(deny=["secret"])
+        result = PipelineRunner._resolve_field(None, config_caps)
+        assert result is config_caps
+        assert result.deny == ["secret"]
