@@ -220,6 +220,7 @@ properties:
           oneOf:
           - $ref: '#/$defs/LlmNodeSpec'
           - $ref: '#/$defs/Api_CallNodeSpec'
+          - $ref: '#/$defs/CheckpointNodeSpec'
           - $ref: '#/$defs/CompositeNodeSpec'
           - $ref: '#/$defs/DataNodeSpec'
           - $ref: '#/$defs/ExpressionNodeSpec'
@@ -363,6 +364,56 @@ $defs:
             description: Optional schema for output validation.
             default: null
         additionalProperties: false
+    required:
+    - kind
+    - metadata
+    - spec
+  CheckpointNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for checkpoint_node type
+    properties:
+      kind:
+        const: checkpoint_node
+        description: 'Node type: checkpoint_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          action:
+            type: string
+            enum:
+            - save
+            - restore
+            description: Whether to save or restore a checkpoint
+          run_id:
+            type: string
+            description: 'Unique identifier for the checkpoint.  Supports template
+              syntax: ``"{{ metadata.run_id }}"``'
+          keys:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+            description: 'For ``save``: list of upstream node-result keys to include.
+              If None, all node results available at execution time are saved.'
+            default: null
+        additionalProperties: false
+        required:
+        - action
+        - run_id
     required:
     - kind
     - metadata

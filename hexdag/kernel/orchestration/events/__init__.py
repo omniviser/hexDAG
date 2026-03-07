@@ -8,6 +8,9 @@ Clean, simplified event system with clear separation of concerns:
 
 # Kernel lifecycle events
 from .events import (
+    BodyCompleted,
+    BodyFailed,
+    BodyStarted,
     Event,
     NodeCancelled,
     NodeCompleted,
@@ -39,6 +42,7 @@ from .observers import (
 NODE_LIFECYCLE_EVENTS = (NodeStarted, NodeCompleted, NodeFailed, NodeCancelled, NodeSkipped)
 WAVE_EVENTS = (WaveCompleted,)
 PIPELINE_EVENTS = (PipelineStarted, PipelineCompleted)
+BODY_EVENTS = (BodyStarted, BodyCompleted, BodyFailed)
 SYSTEM_EVENTS = (SystemStarted, ProcessStarted, ProcessCompleted, SystemCompleted)
 HEALTH_EVENTS = ()  # HealthCheckEvent now lives in kernel.ports.healthcheck
 
@@ -46,6 +50,7 @@ HEALTH_EVENTS = ()  # HealthCheckEvent now lives in kernel.ports.healthcheck
 ALL_NODE_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS
 ALL_EXECUTION_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS + PIPELINE_EVENTS
 ALL_SYSTEM_EVENTS = SYSTEM_EVENTS + ALL_EXECUTION_EVENTS
+ALL_BODY_EVENTS = BODY_EVENTS + NODE_LIFECYCLE_EVENTS
 
 __all__ = [
     # Events
@@ -58,6 +63,9 @@ __all__ = [
     "WaveCompleted",
     "PipelineStarted",
     "PipelineCompleted",
+    "BodyStarted",
+    "BodyCompleted",
+    "BodyFailed",
     "SystemStarted",
     "ProcessStarted",
     "ProcessCompleted",
@@ -76,9 +84,11 @@ __all__ = [
     "NODE_LIFECYCLE_EVENTS",
     "WAVE_EVENTS",
     "PIPELINE_EVENTS",
+    "BODY_EVENTS",
     "SYSTEM_EVENTS",
     "HEALTH_EVENTS",
     "ALL_NODE_EVENTS",
     "ALL_EXECUTION_EVENTS",
+    "ALL_BODY_EVENTS",
     "ALL_SYSTEM_EVENTS",
 ]

@@ -5,16 +5,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from hexdag.kernel.orchestration.events import (
-    AlertingObserver,
-    DataQualityObserver,
-    ExecutionTracerObserver,
+from hexdag.kernel.orchestration.events.events import (
     NodeCompleted,
     NodeFailed,
     NodeStarted,
-    PerformanceMetricsObserver,
     PipelineCompleted,
     PipelineStarted,
+)
+from hexdag.stdlib.lib.observers import (
+    AlertingObserver,
+    DataQualityObserver,
+    ExecutionTracerObserver,
+    PerformanceMetricsObserver,
     ResourceMonitorObserver,
     SimpleLoggingObserver,
 )

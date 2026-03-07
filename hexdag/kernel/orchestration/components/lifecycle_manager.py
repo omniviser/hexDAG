@@ -559,11 +559,24 @@ class LifecycleManager:
 
         from datetime import UTC, datetime  # lazy: deferred to avoid datetime import in hot path
 
+        graph = get_port("_hexdag_graph")
+        initial_input = get_port("_hexdag_initial_input")
+
+        graph_snapshot: dict[str, Any] = {}
+        if graph is not None:
+            for spec in graph:
+                if spec.factory_class is not None:
+                    graph_snapshot[spec.name] = {
+                        "factory_class": spec.factory_class,
+                        "factory_params": dict(spec.factory_params or {}),
+                        "deps": list(spec.deps),
+                    }
+
         state = CheckpointState(
             run_id=context.dag_id,
             dag_id=context.dag_id,
-            graph_snapshot={},
-            initial_input=None,
+            graph_snapshot=graph_snapshot,
+            initial_input=initial_input,
             node_results=node_results,
             completed_node_ids=list(node_results.keys()),
             failed_node_ids=[],

@@ -324,18 +324,32 @@ class Orchestrator:
         if errors:
             raise OrchestratorError("Port capability validation failed:\n" + "\n".join(errors))
 
-    def _check_wave_results_for_failures(self, wave_results: dict[str, ExecutionResult]) -> None:
+    def _check_wave_results_for_failures(
+        self,
+        wave_results: dict[str, ExecutionResult],
+        graph: DirectedGraph | None = None,
+        node_results: dict[str, Any] | None = None,
+    ) -> None:
         """Check wave results for failures and raise appropriate errors.
+
+        When a failed node has ``on_error`` set, the error details are injected
+        into ``node_results`` under the failed node's name so the handler node
+        can read them, and no exception is raised for that node.  Nodes without
+        ``on_error`` are collected and raised as an ``OrchestratorError``.
 
         Parameters
         ----------
         wave_results : dict[str, ExecutionResult]
             Results from executing a wave of nodes
+        graph : DirectedGraph | None
+            The current graph, used to look up ``on_error`` on NodeSpecs.
+        node_results : dict[str, Any] | None
+            Cumulative node results dict; handler input is stored here.
 
         Raises
         ------
         OrchestratorError
-            If any node in the wave failed
+            If any node in the wave failed and has no ``on_error`` handler
         """
         failed_nodes = [
             (name, result)
@@ -343,16 +357,39 @@ class Orchestrator:
             if result.status == PipelineStatus.FAILED
         ]
 
-        if failed_nodes:
-            # Collect all failures into one error message
+        if not failed_nodes:
+            return
+
+        unhandled: list[tuple[str, ExecutionResult]] = []
+        for node_name, result in failed_nodes:
+            on_error: str | None = None
+            if graph is not None and node_name in graph:
+                on_error = graph[node_name].on_error
+
+            if on_error is not None:
+                # Inject error context so the handler node can read it
+                error_payload = {
+                    "_error": {
+                        "node": node_name,
+                        "type": result.error_type or "Unknown",
+                        "message": result.error or "No error message",
+                    }
+                }
+                if node_results is not None:
+                    node_results[node_name] = error_payload
+                logger.info("Node '{}' failed, routing to handler '{}'", node_name, on_error)
+            else:
+                unhandled.append((node_name, result))
+
+        if unhandled:
             error_parts = []
-            for node_name, result in failed_nodes:
+            for node_name, result in unhandled:
                 error_type = result.error_type or "Unknown"
                 error_msg = result.error or "No error message"
                 error_parts.append(f"  - Node '{node_name}' ({error_type}): {error_msg}")
 
             raise OrchestratorError(
-                f"Pipeline execution failed. {len(failed_nodes)} node(s) failed:\n"
+                f"Pipeline execution failed. {len(unhandled)} node(s) failed:\n"
                 + "\n".join(error_parts)
             )
 
@@ -715,12 +752,13 @@ class Orchestrator:
                     # Execute wave using executor
                     wave_results = await self.executor.aexecute_wave(tasks)
 
-                    # Check for failed nodes and raise errors
-                    self._check_wave_results_for_failures(wave_results)
+                    # Check for failed nodes; route on_error handlers, raise unhandled failures
+                    self._check_wave_results_for_failures(wave_results, graph, node_results)
 
-                    # Store successful results
+                    # Store successful results (failed nodes with on_error already stored above)
                     for node_name, result in wave_results.items():
-                        node_results[node_name] = result.output
+                        if result.status != PipelineStatus.FAILED:
+                            node_results[node_name] = result.output
 
                     set_node_results(node_results)
 

@@ -6,6 +6,15 @@ Each lib exposes async methods as agent-callable tools.
 
 from hexdag.stdlib.lib.database_tools import DatabaseTools
 from hexdag.stdlib.lib.entity_state import EntityState
+from hexdag.stdlib.lib.observers import (
+    AlertingObserver,
+    CostProfilerObserver,
+    DataQualityObserver,
+    ExecutionTracerObserver,
+    PerformanceMetricsObserver,
+    ResourceMonitorObserver,
+    SimpleLoggingObserver,
+)
 from hexdag.stdlib.lib.process_registry import ProcessRegistry
 from hexdag.stdlib.lib.process_registry_observer import ProcessRegistryObserver
 from hexdag.stdlib.lib.scheduler import Scheduler
@@ -18,4 +27,12 @@ __all__ = [
     "ProcessRegistryObserver",
     "Scheduler",
     "VFSTools",
+    # Observers
+    "AlertingObserver",
+    "CostProfilerObserver",
+    "DataQualityObserver",
+    "ExecutionTracerObserver",
+    "PerformanceMetricsObserver",
+    "ResourceMonitorObserver",
+    "SimpleLoggingObserver",
 ]
