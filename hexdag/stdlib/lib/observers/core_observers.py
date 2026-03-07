@@ -25,7 +25,7 @@ from hexdag.kernel.orchestration.events.events import (
     PipelineCompleted,
     PipelineStarted,
 )
-from hexdag.kernel.orchestration.events.observers.models import (
+from hexdag.stdlib.lib.observers.models import (
     Alert,
     AlertSeverity,
     AlertType,
@@ -55,17 +55,12 @@ class PerformanceMetricsObserver:
     Example
     -------
         >>> from hexdag.drivers.observer_manager import LocalObserverManager  # doctest: +SKIP
-        >>> from hexdag.kernel.orchestration.events import (  # doctest: +SKIP
+        >>> from hexdag.stdlib.lib.observers import (  # doctest: +SKIP
         ...     PerformanceMetricsObserver,
-        ...     ALL_EXECUTION_EVENTS,
         ... )
         >>> observer_manager = LocalObserverManager()  # doctest: +SKIP
         >>> metrics = PerformanceMetricsObserver()  # doctest: +SKIP
-        >>> # Register with event filtering for ~90% performance improvement
-        >>> observer_manager.register(  # doctest: +SKIP
-        ...     metrics.handle,
-        ...     event_types=ALL_EXECUTION_EVENTS
-        ... )  # doctest: +SKIP
+        >>> observer_manager.register(metrics.handle)  # doctest: +SKIP
         >>> # ... run pipeline ...
         >>> print(metrics.get_summary())  # doctest: +SKIP
     """
@@ -81,10 +76,6 @@ class PerformanceMetricsObserver:
 
     async def handle(self, event: Event) -> None:
         """Handle performance-related events.
-
-        Note: Should be registered with event_types=ALL_EXECUTION_EVENTS
-        for optimal performance. Event filtering at registration provides
-        ~90% reduction in unnecessary handler invocations.
 
         Parameters
         ----------
@@ -193,17 +184,11 @@ class AlertingObserver:
 
     Example
     -------
-        >>> from hexdag.kernel.orchestration.events import NODE_LIFECYCLE_EVENTS
+        >>> from hexdag.stdlib.lib.observers import AlertingObserver, Alert
         >>> def handle_alert(alert: Alert):
         ...     print(f"ALERT: {alert.message}")
         ...     # Send to monitoring system, etc.
         >>> alerting = AlertingObserver(slow_threshold_ms=500.0, on_alert=handle_alert)
-        >>> # Register with event filtering for performance
-        >>> observer_manager.register(  # doctest: +SKIP
-        ...     alerting.handle,
-        ...     event_types=[NodeCompleted, NodeFailed]
-        ... )
-        >>> # Check alerts programmatically
         >>> alerts = alerting.get_alerts()
     """
 
@@ -227,9 +212,6 @@ class AlertingObserver:
 
     async def handle(self, event: Event) -> None:
         """Monitor events and trigger alerts.
-
-        Note: Should be registered with event_types=[NodeCompleted, NodeFailed]
-        for optimal performance.
 
         Parameters
         ----------
@@ -409,13 +391,9 @@ class SimpleLoggingObserver:
 
     Example
     -------
-        >>> from hexdag.kernel.orchestration.events import ALL_EXECUTION_EVENTS
         >>> logger_obs = SimpleLoggingObserver(verbose=True)
-        >>> # Register with event filtering
-        >>> observer_manager.register(  # doctest: +SKIP
-        ...     logger_obs.handle,
-        ...     event_types=ALL_EXECUTION_EVENTS
-        ... )
+        >>> # Register with observer manager
+        >>> # observer_manager.register(logger_obs.handle)
     """
 
     def __init__(self, verbose: bool = False):
@@ -431,8 +409,7 @@ class SimpleLoggingObserver:
     async def handle(self, event: Event) -> None:
         """Log events to console.
 
-        Note: Should be registered with event_types=ALL_EXECUTION_EVENTS
-        for optimal performance. Uses event.log_message() for consistent formatting.
+        Uses event.log_message() for consistent formatting.
 
         Parameters
         ----------
@@ -476,13 +453,8 @@ class ResourceMonitorObserver:
 
     Example
     -------
-        >>> from hexdag.kernel.orchestration.events import NODE_LIFECYCLE_EVENTS
         >>> resource_mon = ResourceMonitorObserver()
-        >>> # Register with event filtering
-        >>> observer_manager.register(  # doctest: +SKIP
-        ...     resource_mon.handle,
-        ...     event_types=NODE_LIFECYCLE_EVENTS
-        ... )
+        >>> # Register with observer manager
         >>> # ... run pipeline ...
         >>> stats = resource_mon.get_stats()  # doctest: +SKIP
         >>> print(f"Max concurrency: {stats['max_concurrent']}")  # doctest: +SKIP
@@ -498,9 +470,6 @@ class ResourceMonitorObserver:
 
     async def handle(self, event: Event) -> None:
         """Track resource usage patterns.
-
-        Note: Should be registered with event_types=NODE_LIFECYCLE_EVENTS
-        for optimal performance.
 
         Parameters
         ----------
@@ -563,11 +532,7 @@ class DataQualityObserver:
     Example
     -------
         >>> quality = DataQualityObserver()
-        >>> # Register with event filtering - only need NodeCompleted
-        >>> observer_manager.register(  # doctest: +SKIP
-        ...     quality.handle,
-        ...     event_types=[NodeCompleted]
-        ... )
+        >>> # Register with observer manager
         >>> # ... run pipeline ...
         >>> if quality.has_issues():
         ...     for issue in quality.get_issues():
@@ -584,9 +549,6 @@ class DataQualityObserver:
 
     async def handle(self, event: Event) -> None:
         """Check data quality in node outputs.
-
-        Note: Should be registered with event_types=[NodeCompleted]
-        for optimal performance.
 
         Parameters
         ----------

@@ -2,16 +2,17 @@
 
 import pytest
 
-from hexdag.kernel.orchestration.events import (
-    CostProfilerObserver,
+from hexdag.kernel.orchestration.events.events import (
     NodeCompleted,
     NodeStarted,
     PipelineCompleted,
     PipelineStarted,
     WaveCompleted,
 )
-from hexdag.kernel.orchestration.events.observers.cost_profiler import NodeCostMetrics
 from hexdag.kernel.ports.llm import LLMGeneration
+from hexdag.stdlib.adapters.memory import InMemoryMemory
+from hexdag.stdlib.lib.observers import CostProfilerObserver
+from hexdag.stdlib.lib.observers.cost_profiler import NodeCostMetrics
 
 # ==============================================================================
 # FIXTURES
@@ -474,3 +475,61 @@ class TestNodeCostMetrics:
         assert m.llm_duration_ms == 0.0
         assert m.node_duration_ms == 0.0
         assert m.estimated_cost == 0.0
+
+
+# ==============================================================================
+# STORAGE TESTS
+# ==============================================================================
+
+
+class TestStorage:
+    """Test CostProfilerObserver storage integration."""
+
+    @pytest.mark.asyncio
+    async def test_save_and_load_report(self):
+        """Verify save_report persists and load_report retrieves it."""
+        store = InMemoryMemory()
+        profiler = CostProfilerObserver(model="gpt-4o-mini", storage=store)
+
+        await profiler.handle(PipelineStarted(name="test", total_waves=1, total_nodes=1))
+        await profiler.handle(
+            LLMGeneration(
+                node_name="node",
+                response="hi",
+                duration_ms=100.0,
+                usage={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+            )
+        )
+        await profiler.handle(PipelineCompleted(name="test", duration_ms=200.0))
+
+        saved = await profiler.save_report("run-1")
+        loaded = await profiler.load_report("run-1")
+
+        assert loaded is not None
+        assert loaded["pipeline_name"] == "test"
+        assert loaded["total_tokens"] == 150
+        assert saved == loaded
+
+    @pytest.mark.asyncio
+    async def test_load_report_missing_key(self):
+        """Verify load_report returns None for missing run_id."""
+        store = InMemoryMemory()
+        profiler = CostProfilerObserver(storage=store)
+
+        result = await profiler.load_report("nonexistent-run")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_save_report_raises_without_storage(self):
+        """Verify save_report raises RuntimeError when no storage configured."""
+        profiler = CostProfilerObserver(model="gpt-4o-mini")
+
+        with pytest.raises(RuntimeError, match="No storage configured"):
+            await profiler.save_report("run-1")
+
+    @pytest.mark.asyncio
+    async def test_load_report_returns_none_without_storage(self):
+        """Verify load_report returns None when no storage configured."""
+        profiler = CostProfilerObserver(model="gpt-4o-mini")
+        result = await profiler.load_report("run-1")
+        assert result is None

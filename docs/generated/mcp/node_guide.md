@@ -57,6 +57,30 @@ Declarative HTTP call node for REST API integration.
   dependencies: []
 ```
 
+### CheckpointNode
+
+Declarative mid-pipeline checkpoint save/restore node.
+
+**Kind**: `checkpoint_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `str` | Yes | Node name |
+| `action` | `Literal['save', 'restore']` | Yes | Whether to save or restore a checkpoint |
+| `run_id` | `str` | Yes | Unique identifier for the checkpoint.  Supports te... |
+| `keys` | `list[str] | None` | No | For ``save``: list of upstream node-result keys to... |
+| `deps` | `list[str] | None` | No | Explicit dependency node names |
+
+**Example:**
+```yaml
+- kind: checkpoint_node
+  metadata:
+    name: my_checkpoint
+  spec:
+    # Add configuration here
+  dependencies: []
+```
+
 ### CompositeNode
 
 Unified control flow node supporting while, for-each, times, if-else, switch.

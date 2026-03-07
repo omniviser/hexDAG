@@ -34,15 +34,18 @@ Basic usage::
 """
 
 import asyncio
+import contextlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from hexdag.kernel.context import get_user_ports
+from hexdag.kernel.context import get_observer_manager, get_user_ports
 from hexdag.kernel.exceptions import BodyExecutorError  # noqa: F401
 from hexdag.kernel.logging import get_logger
+from hexdag.kernel.orchestration.events.events import BodyCompleted, BodyFailed, BodyStarted
 from hexdag.kernel.orchestration.models import NodeExecutionContext
 from hexdag.kernel.resolver import resolve_function
+from hexdag.kernel.utils.node_timer import Timer
 
 logger = get_logger(__name__)
 
@@ -126,6 +129,13 @@ class BodyExecutor:
         self.strict_validation = strict_validation
         self.default_node_timeout = default_node_timeout
 
+    async def _notify(self, event: Any) -> None:
+        """Emit event to the current execution context's observer manager."""
+        observer_manager = get_observer_manager()
+        if observer_manager is not None:
+            with contextlib.suppress(Exception):
+                await observer_manager.notify(event)
+
     async def execute(
         self,
         body: str | list[dict[str, Any]] | Callable[..., Any] | None,
@@ -181,10 +191,22 @@ class BodyExecutor:
         if not ports:
             ports = get_user_ports()
 
+        # Derive a human-readable body name for observability events.
+        # For loop iterations, include the index so observers can correlate
+        # body node events to the correct iteration.
         if body_pipeline:
-            return await self._execute_pipeline(body_pipeline, exec_context, context, ports)
+            body_name = body_pipeline
+        elif iteration_context and "$index" in iteration_context:
+            body_name = f"inline[{iteration_context['$index']}]"
+        else:
+            body_name = "inline"
+
+        if body_pipeline:
+            return await self._execute_pipeline(
+                body_pipeline, exec_context, context, ports, body_name
+            )
         if isinstance(body, list):
-            return await self._execute_inline_nodes(body, exec_context, context, ports)
+            return await self._execute_inline_nodes(body, exec_context, context, ports, body_name)
         if isinstance(body, str):
             return await self._execute_function(body, exec_context, context, ports)
         if callable(body):
@@ -347,6 +369,7 @@ class BodyExecutor:
         input_data: dict[str, Any],
         context: NodeExecutionContext,
         ports: dict[str, Any],
+        body_name: str = "inline",
     ) -> Any:
         """Execute inline nodes as sub-DAG.
 
@@ -398,6 +421,16 @@ class BodyExecutor:
             logger.warning("Inline body has no nodes", node_id=context.node_id)
             return None
 
+        parent_node = context.node_id or ""
+
+        await self._notify(
+            BodyStarted(
+                parent_node=parent_node,
+                body_name=body_name,
+                total_nodes=len(sub_graph),
+            )
+        )
+
         # Create sub-orchestrator with inherited configuration
         sub_orchestrator = Orchestrator(
             max_concurrent_nodes=self.max_concurrent_nodes,
@@ -406,10 +439,26 @@ class BodyExecutor:
             ports=ports,
         )
 
+        timer = Timer()
         try:
             run_result = await sub_orchestrator.run(sub_graph, input_data, validate=False)
         except Exception as e:
+            await self._notify(
+                BodyFailed(
+                    parent_node=parent_node,
+                    body_name=body_name,
+                    error=str(e),
+                )
+            )
             raise BodyExecutorError(f"Inline nodes execution failed: {e}") from e
+
+        await self._notify(
+            BodyCompleted(
+                parent_node=parent_node,
+                body_name=body_name,
+                duration_ms=timer.duration_ms,
+            )
+        )
 
         # Return the result from the last non-skipped node
         # Find nodes in topological order and get last result
@@ -429,6 +478,7 @@ class BodyExecutor:
         input_data: dict[str, Any],
         context: NodeExecutionContext,
         ports: dict[str, Any],
+        body_name: str | None = None,
     ) -> Any:
         """Execute external pipeline from YAML file.
 
@@ -464,10 +514,23 @@ class BodyExecutor:
             node_id=context.node_id,
         )
 
+        parent_node = context.node_id or ""
+        body_name = (
+            body_name or body_pipeline
+        )  # use the pipeline path as the body name if not given
+
         try:
             # Build pipeline
             builder = YamlPipelineBuilder(base_path=pipeline_path.parent)
             graph, config = builder.build_from_yaml_file(str(pipeline_path))
+
+            await self._notify(
+                BodyStarted(
+                    parent_node=parent_node,
+                    body_name=body_name,
+                    total_nodes=len(graph),
+                )
+            )
 
             # Create orchestrator with inherited configuration
             orchestrator = Orchestrator(
@@ -477,8 +540,29 @@ class BodyExecutor:
                 ports=ports,
             )
 
-            # Execute pipeline
-            return await orchestrator.run(graph, input_data, validate=False)
+            timer = Timer()
+            try:
+                result = await orchestrator.run(graph, input_data, validate=False)
+            except Exception as e:
+                await self._notify(
+                    BodyFailed(
+                        parent_node=parent_node,
+                        body_name=body_name,
+                        error=str(e),
+                    )
+                )
+                raise
 
+            await self._notify(
+                BodyCompleted(
+                    parent_node=parent_node,
+                    body_name=body_name,
+                    duration_ms=timer.duration_ms,
+                )
+            )
+            return result
+
+        except BodyExecutorError:
+            raise
         except Exception as e:
             raise BodyExecutorError(f"Pipeline '{body_pipeline}' execution failed: {e}") from e

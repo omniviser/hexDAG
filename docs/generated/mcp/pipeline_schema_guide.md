@@ -27,6 +27,7 @@ spec:
 |-----------|-------------|
 | `agent_node` | Specification for agent_node type |
 | `api_call_node` | Specification for api_call_node type |
+| `checkpoint_node` | Specification for checkpoint_node type |
 | `composite_node` | Specification for composite_node type |
 | `data_node` | Specification for data_node type |
 | `expression_node` | Specification for expression_node type |
@@ -82,6 +83,30 @@ Specification for api_call_node type
   metadata:
     name: my_api_call
   spec:
+  dependencies: []
+```
+
+### checkpoint_node
+
+Specification for checkpoint_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | `"save`" | `"restore`" | Yes | Whether to save or restore a checkpoint |
+| `keys` | array | null | No | For ``save``: list of upstream node-r... |
+| `run_id` | string | Yes | Unique identifier for the checkpoint.... |
+
+**Example:**
+
+```yaml
+- kind: checkpoint_node
+  metadata:
+    name: my_checkpoint
+  spec:
+    action: # required
+    run_id: # required
   dependencies: []
 ```
 

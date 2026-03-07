@@ -9,6 +9,7 @@ See hexdag.stdlib.nodes._discovery for the auto-discovery mechanism.
 
 from .agent_node import ReActAgentNode
 from .api_call_node import ApiCallNode
+from .checkpoint_node import CheckpointNode
 from .composite_node import CompositeNode
 from .data_node import DataNode
 from .expression_node import ExpressionNode
@@ -19,6 +20,7 @@ from .tool_call_node import ToolCallNode
 
 __all__ = [
     "ApiCallNode",
+    "CheckpointNode",
     "CompositeNode",
     "DataNode",
     "ExpressionNode",

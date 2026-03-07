@@ -113,6 +113,7 @@ class NodeSpec:
     retry_backoff: float | None = None  # Multiplier for exponential backoff (default: 2.0)
     retry_max_delay: float | None = None  # Maximum delay cap in seconds (default: 60.0)
     when: str | None = None  # Optional expression to evaluate before execution
+    on_error: str | None = None  # Name of DAG node to run if this node fails (after retries)
     # Factory metadata for distributed execution (set by YAML pipeline builder)
     factory_class: str | None = None  # Module path, e.g. "hexdag.stdlib.nodes.LLMNode"
     factory_params: dict[str, Any] | None = None  # Original factory **kwargs

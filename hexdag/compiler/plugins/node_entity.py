@@ -54,6 +54,7 @@ class NodeEntityPlugin:
         # Extract base fields via the model — single source of truth
         base = BaseNodeConfig.from_node_config(node_config)
         spec.pop("dependencies", None)  # Remove from spec if present (backwards compat)
+        on_error = spec.pop("on_error", None)  # Handled at orchestrator level, not by factory
         deps = list(base.dependencies or [])
         if base.wait_for:
             deps = sorted(set(deps) | set(base.wait_for))
@@ -101,6 +102,10 @@ class NodeEntityPlugin:
             factory_params=factory_params_snapshot,
             literals=settings_values,
         )
+
+        # Apply on_error after factory (factories don't know about this field)
+        if on_error is not None:
+            node = replace(node, on_error=on_error)
 
         # Add dependencies
         if deps:

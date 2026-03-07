@@ -227,6 +227,85 @@ class PipelineCompleted(Event):
         return f"🎉 Pipeline '{self.name}' completed in {self.duration_ms / 1000:.2f}s"
 
 
+# Body events (CompositeNode inline/pipeline body execution)
+@dataclass(slots=True)
+class BodyStarted(Event):
+    """A CompositeNode body has started execution.
+
+    Attributes
+    ----------
+    parent_node : str
+        Name of the CompositeNode that owns this body
+    body_name : str
+        Identifier for the body: filename for body_pipeline,
+        "inline" for body lists, "inline[N]" for loop iterations
+    total_nodes : int
+        Number of nodes in the body (0 if unknown)
+    """
+
+    parent_node: str
+    body_name: str
+    total_nodes: int = 0
+
+    def log_message(self) -> str:
+        """Format log message for body start event."""
+        return f"▶ Body '{self.body_name}' started (parent: {self.parent_node})"
+
+
+@dataclass(slots=True)
+class BodyCompleted(Event):
+    """A CompositeNode body has completed successfully.
+
+    Attributes
+    ----------
+    parent_node : str
+        Name of the CompositeNode that owns this body
+    body_name : str
+        Identifier for the body
+    duration_ms : float
+        Duration in milliseconds
+    status : str
+        "completed" or "failed"
+    """
+
+    parent_node: str
+    body_name: str
+    duration_ms: float
+    status: str = "completed"
+
+    def log_message(self) -> str:
+        """Format log message for body completion event."""
+        return (
+            f"✓ Body '{self.body_name}' {self.status} in "
+            f"{self.duration_ms / 1000:.2f}s (parent: {self.parent_node})"
+        )
+
+
+@dataclass(slots=True)
+class BodyFailed(Event):
+    """A CompositeNode body has failed.
+
+    Emitted before the CompositeNode's error_handling strategy runs.
+
+    Attributes
+    ----------
+    parent_node : str
+        Name of the CompositeNode that owns this body
+    body_name : str
+        Identifier for the body
+    error : str
+        Error message
+    """
+
+    parent_node: str
+    body_name: str
+    error: str
+
+    def log_message(self) -> str:
+        """Format log message for body failure event."""
+        return f"✗ Body '{self.body_name}' failed (parent: {self.parent_node}): {self.error}"
+
+
 # System events (kind: System multi-process orchestration)
 @dataclass(slots=True)
 class SystemStarted(Event):

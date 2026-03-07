@@ -64,6 +64,12 @@ allowed_exceptions:
   hexdag/kernel/lib_base.py:
     - "from hexdag.stdlib.lib_base import HexDAGLib, get_lib_tool_schemas  # noqa: F401"
 
+  # observers/__init__.py is a backward-compat re-export shim.
+  # The canonical location is hexdag.stdlib.lib.observers.
+  # Rationale: Maintains import compatibility while observer implementations live in stdlib.
+  hexdag/kernel/orchestration/events/observers/__init__.py:
+    - "from hexdag.stdlib.lib.observers import ("
+
   # Resolver imports stdlib.nodes to trigger auto-discovery and alias registration
   # Also imports adapter/macro discovery for the unified alias system.
   # These are lazy imports inside _ensure_builtin_bootstrapped(), not module-level dependencies.

@@ -5,8 +5,10 @@ from LLM calls, estimates costs based on model pricing, and identifies
 performance bottlenecks and parallelization opportunities.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.orchestration.events.events import (
     Event,
@@ -17,6 +19,9 @@ from hexdag.kernel.orchestration.events.events import (
     WaveCompleted,
 )
 from hexdag.kernel.ports.llm import LLMEvent
+
+if TYPE_CHECKING:
+    from hexdag.kernel.ports.data_store import SupportsKeyValue
 
 
 @dataclass(slots=True)
@@ -63,10 +68,13 @@ class CostProfilerObserver:
     pricing : dict[str, tuple[float, float]] | None
         Custom pricing table mapping model names to (input_per_1m, output_per_1m).
         Falls back to DEFAULT_PRICING if not provided.
+    storage : SupportsKeyValue | None
+        Optional key-value storage for persisting cost reports across runs.
+        If provided, use save_report(run_id) and load_report(run_id).
 
     Example
     -------
-        >>> from hexdag.kernel.orchestration.events import CostProfilerObserver
+        >>> from hexdag.stdlib.lib.observers import CostProfilerObserver
         >>> profiler = CostProfilerObserver(model="gpt-4o-mini")
         >>> # Register with observer manager using appropriate event types
         >>> # ... run pipeline ...
@@ -101,9 +109,11 @@ class CostProfilerObserver:
         self,
         model: str | None = None,
         pricing: dict[str, tuple[float, float]] | None = None,
+        storage: SupportsKeyValue | None = None,
     ) -> None:
         self.model = model
         self.pricing = pricing or self.DEFAULT_PRICING
+        self._storage = storage
         self.node_metrics: dict[str, NodeCostMetrics] = {}
         self.pipeline_name: str | None = None
         self.pipeline_duration_ms: float = 0.0
@@ -241,6 +251,48 @@ class CostProfilerObserver:
             "highest_token_node": highest_token_node,
             "parallelization_suggestions": suggestions,
         }
+
+    async def save_report(self, run_id: str) -> dict[str, Any]:
+        """Persist current report to storage.
+
+        Parameters
+        ----------
+        run_id : str
+            Unique identifier for this run (used as storage key suffix)
+
+        Returns
+        -------
+        dict[str, Any]
+            The report dict that was saved
+
+        Raises
+        ------
+        RuntimeError
+            If no storage was configured
+        """
+        report = self.get_report()
+        if self._storage is None:
+            raise RuntimeError("No storage configured. Pass storage= to CostProfilerObserver.")
+        await self._storage.aset(f"cost:{run_id}", report)
+        return report
+
+    async def load_report(self, run_id: str) -> dict[str, Any] | None:
+        """Load a previously saved report from storage.
+
+        Parameters
+        ----------
+        run_id : str
+            Unique identifier for the run to load
+
+        Returns
+        -------
+        dict[str, Any] | None
+            The saved report, or None if not found or no storage configured
+        """
+        if self._storage is None:
+            return None
+        result: dict[str, Any] | None = await self._storage.aget(f"cost:{run_id}")
+        return result
 
     def format_report(self) -> str:
         """Generate human-readable profiling report.

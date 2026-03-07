@@ -1,23 +1,19 @@
-"""Observer implementations — re-exported from stdlib.
+"""Observer implementations for the hexDAG event system.
 
-Observers now live in hexdag.stdlib.lib.observers.
-This module re-exports for backward compatibility.
+Observers are passive listeners that accumulate metrics during pipeline runs.
+They live in stdlib because they are implementations, not kernel contracts.
 """
 
-from hexdag.stdlib.lib.observers import (
-    Alert,
+from hexdag.stdlib.lib.observers.core_observers import (
     AlertingObserver,
-    AlertSeverity,
-    AlertType,
-    CostProfilerObserver,
     DataQualityObserver,
     ExecutionTracerObserver,
-    NodeCostMetrics,
-    NodeMetrics,
     PerformanceMetricsObserver,
     ResourceMonitorObserver,
     SimpleLoggingObserver,
 )
+from hexdag.stdlib.lib.observers.cost_profiler import CostProfilerObserver, NodeCostMetrics
+from hexdag.stdlib.lib.observers.models import Alert, AlertSeverity, AlertType, NodeMetrics
 
 __all__ = [
     # Core Observers
