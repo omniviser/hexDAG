@@ -322,6 +322,12 @@ class SchemaCompatibilityError(DirectedGraphError):
     __slots__ = ()
 
 
+class InvalidOnErrorError(DirectedGraphError):
+    """Raised when a node's on_error references a non-existent or invalid node."""
+
+    __slots__ = ()
+
+
 # ============================================================================
 # Compiler Errors
 # ============================================================================
@@ -439,6 +445,7 @@ __all__ = [
     "MissingDependencyError",
     "DuplicateNodeError",
     "SchemaCompatibilityError",
+    "InvalidOnErrorError",
     # Compiler
     "YamlPipelineBuilderError",
     "PyTagError",

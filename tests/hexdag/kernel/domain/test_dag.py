@@ -7,6 +7,7 @@ from hexdag.kernel.domain.dag import (
     CycleDetectedError,
     DirectedGraph,
     DuplicateNodeError,
+    InvalidOnErrorError,
     MissingDependencyError,
     NodeSpec,
     NodeValidationError,
@@ -1327,3 +1328,56 @@ class TestDirectedGraphOperators:
         # Re-validate should set to VALID again
         graph.validate()
         assert graph._validation_cache == ValidationCacheState.VALID
+
+
+class TestOnErrorValidation:
+    """Tests for on_error reference validation in DirectedGraph.validate()."""
+
+    def test_valid_on_error_reference(self):
+        """on_error pointing to an existing node passes validation."""
+        graph = DirectedGraph()
+        graph.add(NodeSpec("risky", dummy_fn, on_error="handler"))
+        graph.add(NodeSpec("handler", dummy_fn).after("risky"))
+        graph.validate()  # Should not raise
+
+    def test_on_error_nonexistent_node_raises(self):
+        """on_error pointing to a non-existent node raises InvalidOnErrorError."""
+        graph = DirectedGraph()
+        graph.add(NodeSpec("risky", dummy_fn, on_error="nonexistent"))
+
+        with pytest.raises(InvalidOnErrorError, match="nonexistent"):
+            graph.validate()
+
+    def test_on_error_self_reference_raises(self):
+        """on_error pointing to the node itself raises InvalidOnErrorError."""
+        graph = DirectedGraph()
+        graph.add(NodeSpec("risky", dummy_fn, on_error="risky"))
+
+        with pytest.raises(InvalidOnErrorError, match="pointing to itself"):
+            graph.validate()
+
+    def test_multiple_nodes_same_handler(self):
+        """Multiple nodes can share the same on_error handler."""
+        graph = DirectedGraph()
+        graph.add(NodeSpec("a", dummy_fn, on_error="handler"))
+        graph.add(NodeSpec("b", dummy_fn, on_error="handler"))
+        graph.add(NodeSpec("handler", dummy_fn).after("a", "b"))
+        graph.validate()  # Should not raise
+
+    def test_on_error_none_is_fine(self):
+        """Nodes without on_error pass validation normally."""
+        graph = DirectedGraph()
+        graph.add(NodeSpec("a", dummy_fn))
+        graph.add(NodeSpec("b", dummy_fn).after("a"))
+        graph.validate()  # Should not raise
+
+    def test_on_error_validation_is_cached(self):
+        """on_error validation is part of structural cache."""
+        graph = DirectedGraph()
+        graph.add(NodeSpec("a", dummy_fn, on_error="handler"))
+        graph.add(NodeSpec("handler", dummy_fn).after("a"))
+        graph.validate()
+        assert graph._validation_cache == ValidationCacheState.VALID
+
+        # Second call uses cache — still passes
+        graph.validate()

@@ -69,34 +69,22 @@ uv run bandit -r hexdag                 # Security scanning
 # Dependency analysis
 uv run deptry .                        # Unused dependencies
 uv run safety check                    # Vulnerability scanning
-./scripts/check_licenses.sh            # License compliance
 
 # Code quality metrics
 uv run vulture hexdag/ --min-confidence 90    # Dead code detection
 uv run radon cc hexdag/ --min B               # Complexity analysis
 
 # Coverage and testing
-./scripts/coverage_report.sh           # Full coverage report
-./scripts/diff_coverage.sh             # Coverage on changed code only
-./scripts/run_mutation_tests.sh        # Mutation testing (slow!)
-
-# API compatibility
-./scripts/check_api_compat.sh          # Check for breaking changes
-
-# Memory profiling
-./scripts/profile_memory.sh            # Memory leak detection
+uv run pytest --cov=hexdag --cov-report=html --cov-report=term-missing
 ```
 
 ### Examples
 ```bash
-# Run all examples
-uv run examples/run_all.py
-
 # Run specific examples
-uv run examples/01_basic_dag.py           # DAG fundamentals
-uv run examples/10_agent_nodes.py         # AI agents with tools
-uv run examples/13_yaml_pipelines.py      # Declarative workflows
-uv run examples/19_complex_workflow.py    # Enterprise patterns
+uv run examples/api_call_node_example.py         # API call nodes
+uv run examples/demo/run_demo_pitch.py           # Demo startup pitch
+uv run examples/libs/run_order_lifecycle.py       # Entity lifecycle
+uv run examples/libs/run_database_agent.py        # Database agent tools
 ```
 
 ### Utilities

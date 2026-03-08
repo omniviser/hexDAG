@@ -22,6 +22,7 @@ from hexdag.kernel.exceptions import (
     CycleDetectedError,
     DirectedGraphError,  # noqa: F401 - re-export for backward compat
     DuplicateNodeError,
+    InvalidOnErrorError,
     MissingDependencyError,
     NodeValidationError,
     SchemaCompatibilityError,
@@ -37,6 +38,7 @@ __all_errors__ = [
     "NodeValidationError",
     "DirectedGraphError",
     "CycleDetectedError",
+    "InvalidOnErrorError",
     "MissingDependencyError",
     "DuplicateNodeError",
     "SchemaCompatibilityError",
@@ -632,6 +634,8 @@ class DirectedGraph:
         ------
         MissingDependencyError
             If any node depends on a non-existent node.
+        InvalidOnErrorError
+            If any node's on_error references a non-existent or self-referencing node.
         CycleDetectedError
             If a cycle is detected in the graph.
         SchemaCompatibilityError
@@ -647,6 +651,22 @@ class DirectedGraph:
 
             if missing_deps:
                 raise MissingDependencyError("; ".join(missing_deps))
+
+            # Validate on_error references
+            invalid_on_error: list[str] = []
+            for node_name, node_spec in self.nodes.items():
+                if node_spec.on_error is not None:
+                    if node_spec.on_error not in self.nodes:
+                        invalid_on_error.append(
+                            f"Node '{node_name}' has on_error='{node_spec.on_error}' "
+                            f"which does not exist in the graph"
+                        )
+                    elif node_spec.on_error == node_name:
+                        invalid_on_error.append(
+                            f"Node '{node_name}' has on_error pointing to itself"
+                        )
+            if invalid_on_error:
+                raise InvalidOnErrorError("; ".join(invalid_on_error))
 
             graph = {name: node_spec.deps for name, node_spec in self.nodes.items()}
             if cycle_message := DirectedGraph.detect_cycle(graph):

@@ -612,6 +612,22 @@ class YamlValidator:
 
             dependency_graph[node_id] = valid_deps
 
+        # Validate on_error references
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+            on_error = node.get("spec", {}).get("on_error")
+            if on_error is not None:
+                if on_error == node_id:
+                    result.add_error(f"Node '{node_id}': on_error cannot reference itself")
+                elif on_error not in node_ids and not any(
+                    on_error.startswith(f"{mi}_") for mi in macro_instances
+                ):
+                    result.add_error(
+                        f"Node '{node_id}': on_error handler '{on_error}' does not exist"
+                    )
+
         # Check for cycles using DirectedGraph's public static method
         if cycle_message := DirectedGraph.detect_cycle(dependency_graph):
             result.add_error(cycle_message)

@@ -209,10 +209,10 @@ class TestLocalExecutor:
 
         orchestrator = Orchestrator(executor=executor)
 
-        # Should raise NodeExecutionError for node failures
-        from hexdag.kernel.orchestration.components import NodeExecutionError
+        # Should raise OrchestratorError for unhandled node failures
+        from hexdag.kernel.exceptions import OrchestratorError
 
-        with pytest.raises(NodeExecutionError, match="failed"):
+        with pytest.raises(OrchestratorError, match="failed"):
             await orchestrator.run(graph, 0)
 
     @pytest.mark.asyncio

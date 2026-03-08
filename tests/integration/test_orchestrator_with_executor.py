@@ -236,10 +236,10 @@ class TestOrchestratorWithExecutor:
 
         orchestrator = Orchestrator(executor=executor)
 
-        # Execution should fail with NodeExecutionError (propagated from executor)
-        from hexdag.kernel.orchestration.components import NodeExecutionError
+        # Execution should fail with OrchestratorError for unhandled node failures
+        from hexdag.kernel.exceptions import OrchestratorError
 
-        with pytest.raises(NodeExecutionError):
+        with pytest.raises(OrchestratorError):
             await orchestrator.run(graph, 0)
 
         # Executor was cleaned up (context manager closed it)

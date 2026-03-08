@@ -1179,3 +1179,72 @@ async def process(item, index, state, **ports):
         errors = validate_py_source("   \n\t  ")
         assert len(errors) == 1
         assert "empty" in errors[0].lower()
+
+
+class TestOnErrorValidation:
+    """Tests for on_error reference validation in YAML validator."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.validator = YamlValidator()
+
+    def test_on_error_referencing_nonexistent_node(self):
+        """on_error referencing a nonexistent node produces a validation error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "risky"},
+                        "spec": {"fn": "json.loads", "on_error": "nonexistent"},
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("on_error" in error and "nonexistent" in error for error in result.errors)
+
+    def test_on_error_self_reference(self):
+        """on_error pointing to itself produces a validation error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "risky"},
+                        "spec": {"fn": "json.loads", "on_error": "risky"},
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("on_error cannot reference itself" in error for error in result.errors)
+
+    def test_valid_on_error_reference(self):
+        """Valid on_error reference passes validation."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "risky"},
+                        "spec": {"fn": "json.loads", "on_error": "handler"},
+                    },
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "handler"},
+                        "spec": {"fn": "json.loads"},
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid

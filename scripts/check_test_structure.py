@@ -24,6 +24,8 @@ _ALLOWED_ORPHANS: frozenset[str] = frozenset({
     "tests/hexdag/stdlib/adapters/memory/test_in_memory_key_value.py",
     # Round-trip serialization tests spanning pipeline_run, scheduled_task, entity_state
     "tests/hexdag/kernel/domain/test_serialization.py",
+    # Tests on_error handler routing in Orchestrator (source: orchestrator.py)
+    "tests/hexdag/kernel/orchestration/test_on_error.py",
 })
 
 
