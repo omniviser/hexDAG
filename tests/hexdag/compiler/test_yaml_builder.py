@@ -1473,3 +1473,171 @@ spec:
         builder.build_from_yaml_string(yaml_content)
 
         assert builder.inline_config is None
+
+
+# ============================================================================
+# on_error Dependency Inference Tests
+# ============================================================================
+
+
+class TestOnErrorDependencyInference:
+    """Tests for on_error dependency auto-inference in _build_graph Pass 3."""
+
+    def test_handler_auto_depends_on_failing_node(self):
+        """Handler node auto-gains dependency on the node that references it."""
+        yaml_content = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: on-error-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: risky_step
+      spec:
+        fn: "json.dumps"
+        on_error: error_handler
+
+    - kind: function_node
+      metadata:
+        name: error_handler
+      spec:
+        fn: "json.dumps"
+        dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, _config = builder.build_from_yaml_string(yaml_content)
+
+        # error_handler must depend on risky_step (auto-injected by Pass 3)
+        assert "risky_step" in graph.nodes["error_handler"].deps
+        assert graph.nodes["risky_step"].on_error == "error_handler"
+
+    def test_handler_already_has_dependency_no_duplicate(self):
+        """If handler already depends on failing node, no duplicate dep added."""
+        yaml_content = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: on-error-dup-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: risky
+      spec:
+        fn: "json.dumps"
+        on_error: handler
+
+    - kind: function_node
+      metadata:
+        name: handler
+      spec:
+        fn: "json.dumps"
+        dependencies: [risky]
+"""
+        builder = YamlPipelineBuilder()
+        graph, _config = builder.build_from_yaml_string(yaml_content)
+
+        assert "risky" in graph.nodes["handler"].deps
+
+    def test_on_error_does_not_reverse_dependency(self):
+        """on_error does NOT make the failing node depend on the handler."""
+        yaml_content = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: on-error-direction-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: risky
+      spec:
+        fn: "json.dumps"
+        on_error: handler
+
+    - kind: function_node
+      metadata:
+        name: handler
+      spec:
+        fn: "json.dumps"
+        dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, _config = builder.build_from_yaml_string(yaml_content)
+
+        # risky must NOT depend on handler
+        assert "handler" not in graph.nodes["risky"].deps
+        # handler MUST depend on risky
+        assert "risky" in graph.nodes["handler"].deps
+
+    def test_multiple_nodes_same_handler(self):
+        """Multiple nodes using the same on_error handler get their deps added."""
+        yaml_content = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: shared-handler-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: step_a
+      spec:
+        fn: "json.dumps"
+        on_error: shared_handler
+        dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: step_b
+      spec:
+        fn: "json.dumps"
+        on_error: shared_handler
+        dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: shared_handler
+      spec:
+        fn: "json.dumps"
+        dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, _config = builder.build_from_yaml_string(yaml_content)
+
+        assert "step_a" in graph.nodes["shared_handler"].deps
+        assert "step_b" in graph.nodes["shared_handler"].deps
+
+    def test_handler_in_later_wave(self):
+        """Handler node must execute in a wave after the failing node."""
+        yaml_content = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: wave-order-test
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: risky
+      spec:
+        fn: "json.dumps"
+        on_error: handler
+        dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: handler
+      spec:
+        fn: "json.dumps"
+        dependencies: []
+"""
+        builder = YamlPipelineBuilder()
+        graph, _config = builder.build_from_yaml_string(yaml_content)
+
+        waves = graph.waves()
+        risky_wave = next(i for i, w in enumerate(waves) if "risky" in w)
+        handler_wave = next(i for i, w in enumerate(waves) if "handler" in w)
+        assert handler_wave > risky_wave

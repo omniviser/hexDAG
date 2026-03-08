@@ -1,0 +1,15 @@
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: test
+  description: 'TODO: Add description'
+spec:
+  nodes:
+  - kind: function_node
+    metadata:
+      name: step1
+    spec:
+      fn: my_module.my_function
+      input_mapping:
+        x: input.value
+      dependencies: []

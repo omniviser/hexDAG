@@ -73,7 +73,8 @@ hexdag/kernel/
   validation/         Type validation, retry logic
   config/             TOML config loading
   resolver.py         Module path resolution
-  lib_base.py         HexDAGLib base class for system libraries
+  service.py          Service base class with @tool/@step decorators
+  lib_base.py         Deprecated shim (re-exports Service as HexDAGLib)
   logging.py          Structured logging
   utils/              Internal utilities (timer, async helpers)
 ```
@@ -141,11 +142,17 @@ kernel/pipeline_builder/
     nodes.py            Node construction from registry
 ```
 
-### kernel/lib_base.py -- HexDAGLib Base Class
+### kernel/service.py -- Service Base Class
 
-Base class for system libraries. Public async methods prefixed with `a` auto-become
-agent-callable tools. This enables libraries like ProcessRegistry and Scheduler to
-expose their functionality to LLM agents.
+Base class for all services (system libraries, port-backed operations). Methods use
+explicit decorators to declare how they can be invoked:
+
+- `@tool` — available as an agent-callable tool during ReAct reasoning
+- `@step` — available as a deterministic DAG node via `service_call_node`
+- Both decorators can be stacked on the same method
+
+> **Note:** `kernel/lib_base.py` is a deprecated shim that re-exports `Service` as
+> `HexDAGLib` for backward compatibility. New code should use `Service` directly.
 
 ### kernel/config/ -- Configuration
 
@@ -165,7 +172,7 @@ ships built-in implementations, and users write their own.
 | Adapters | Protocol in `kernel/ports/` | OpenAI, Anthropic, SQLite, Mock, Memory variants | `myapp.adapters.X` |
 | Macros | (convention) | ReasoningAgent, ConversationAgent | `myapp.macros.X` |
 | Prompts | (convention) | tool_prompts, error_correction | `myapp.prompts.X` |
-| Libs | `HexDAGLib` base class | ProcessRegistry, EntityState, Scheduler, DatabaseTools | `myapp.lib.X` |
+| Services | `Service` base class + `@tool`/`@step` | ProcessRegistry, EntityState, Scheduler, DatabaseTools | `myapp.services.X` |
 
 All entities are referenced by their full Python module path in YAML:
 
@@ -205,7 +212,7 @@ hexdag/stdlib/
   prompts/      Prompt templates
     tool_prompts.py       Tool calling format prompts
     error_correction.py   Error correction prompts
-  lib/          System libraries (HexDAGLib subclasses)
+  lib/          System libraries (Service subclasses with @tool/@step)
     process_registry.py   Track pipeline runs (like ps)
     entity_state.py       Declarative state machines for business entities
     scheduler.py          Delayed/recurring pipeline execution
@@ -442,7 +449,7 @@ Use in YAML: `kind: myapp.nodes.MyNode`
 Implement a kernel Protocol:
 
 ```python
-from hexdag.kernel.ports.llm import SupportsLLM
+from hexdag.kernel.ports.llm import SupportsGeneration
 
 class MyLLMAdapter:
     def __init__(self, api_key: str, model: str = "gpt-4"):
@@ -456,17 +463,29 @@ class MyLLMAdapter:
 
 Use in YAML: `adapter: myapp.adapters.MyLLMAdapter`
 
-### Custom Lib
+### Custom Service
 
 ```python
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.kernel.service import Service, tool, step
 
-class MyLib(HexDAGLib):
-    """Public async a* methods auto-become agent tools."""
+class MyService(Service):
+    """Service with agent-callable tools and DAG step methods."""
 
+    @tool
     async def ado_something(self, query: str) -> str:
-        """This becomes an agent-callable tool."""
+        """Agent-callable tool for querying."""
         return f"Result for {query}"
+
+    @step
+    async def aprocess(self, data: dict) -> dict:
+        """Deterministic DAG step."""
+        return {"processed": True, **data}
+
+    @tool
+    @step
+    async def avalidate(self, item: str) -> dict:
+        """Both agent tool and DAG step."""
+        return {"valid": True, "item": item}
 ```
 
 ### Custom Observer

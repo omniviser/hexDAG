@@ -548,6 +548,18 @@ class YamlPipelineBuilder:
             if node_id:
                 previous_node_id = node_id
 
+        # --- Pass 3: ensure on_error handlers depend on the failing node ---
+        for node_name in list(graph.nodes):
+            node_spec = graph.nodes[node_name]
+            if node_spec.on_error is not None:
+                handler_name = node_spec.on_error
+                if handler_name in graph.nodes and node_name not in graph.nodes[handler_name].deps:
+                    handler_spec = graph.nodes[handler_name]
+                    graph.nodes[handler_name] = handler_spec.after(node_name)
+                    graph._forward_edges[node_name].add(handler_name)
+                    graph._reverse_edges[handler_name].add(node_name)
+                    graph._invalidate_caches()
+
         return graph
 
     @staticmethod

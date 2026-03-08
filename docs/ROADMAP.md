@@ -22,7 +22,7 @@ graph TD
 
     subgraph "Kernel (hexdag/kernel/)"
         E[Orchestrator + Domain Models]
-        F[Ports + Port Wrappers]
+        F[Ports + Port Probes]
         G[SystemRunner / PipelineRunner]
     end
 
@@ -75,15 +75,20 @@ graph TD
 - [x] **Scheduler** -- asyncio-based delayed/recurring pipeline execution
 - [x] **DatabaseTools** -- Agent-callable SQL query tools
 
+### Production Reliability
+- [x] **Error handler blocks** -- `on_error` field on `NodeSpec`; failed nodes route to a named handler node receiving `{"_error": {...}}` instead of halting the pipeline
+- [x] **Body execution observability** -- `BodyStarted` / `BodyCompleted` / `BodyFailed` events for inline body and `body_pipeline` executions; body nodes share the parent pipeline's observer stream
+- [x] **`checkpoint_node`** -- Declarative mid-pipeline save/restore using the `checkpoint` port (`SupportsKeyValue`); supports `action: save | restore`, `run_id` templates, and selective `keys`
+
 ### API & Integration
-- [x] **MCP Server** -- 9 tools in `api/processes.py` for process management
+- [x] **MCP Server** -- 9 process management functions in `api/processes.py` (note: not yet wired into `mcp_server.py`; MCP currently exposes VFS, docs, execution, validation, and pipeline tools)
 - [x] **Studio REST API** -- Pipeline execution, validation, export routes
 - [x] **CLI** -- `hexdag run`, `hexdag validate`, `hexdag studio`
 
 ### Infrastructure
 - [x] **Pre-commit Hooks** -- ruff, pyupgrade, mypy, pyright, nbstripout
 - [x] **CI/CD** -- Azure pipelines
-- [x] **20+ Examples** -- Getting started to enterprise patterns
+- [x] **Examples** -- Getting started to enterprise patterns (`examples/demo/`, `examples/libs/`, `examples/mcp/`)
 - [x] **Jupyter Notebooks** -- Interactive documentation
 
 ---
@@ -107,44 +112,62 @@ graph TD
   - Inline `kind: Config` in multi-doc YAML (merged via `PipelineRunner._effective_config()`)
   - 4-level override chain: explicit constructor args > per-pipeline spec > `kind: Config` defaults > hardcoded
 
-### Phase 2: Resource Limits & Caps
+### Phase 2: Port Probes, Resource Limits & Caps
 
-- [ ] **Resource Limits** (Step 2)
+- [ ] **Port Probes** (Step 2)
+  - Replace `ObservableLLMWrapper` / `ObservableToolRouterWrapper` with kprobe-style
+    in-place method patching via `instrument_ports()`
+  - Fixes `isinstance()` breakage: probes patch methods on the original port object,
+    no proxy classes, protocol checks always pass
+  - Declarative probe registry maps `(protocol, method) → event_factory`:
+    - `SupportsGeneration.aresponse` → `LLMGeneration`
+    - `SupportsFunctionCalling.aresponse_with_tools` → `LLMFunctionCalling`
+    - `ToolRouter.acall_tool` → `ToolRouterEvent`
+    - `SupportsKeyValue.aget/aset` → `DataStoreKeyValue` (NEW)
+    - `SupportsQuery.aexecute_query` → `DataStoreQuery` (NEW)
+  - Adding observability to a new port = adding a row to the registry
+  - New `port_probes.py` in `kernel/orchestration/`; deprecate `port_wrappers.py`
+  - Unified error handling: collapse 4 duplicated `except` blocks in `node_executor.py`
+    into single `_emit_failure_and_raise()` path
+  - **Linux analogy:** kprobes instrument kernel functions at entry/exit without
+    modifying the function or creating wrapper objects
+
+- [ ] **Resource Limits** (Step 3)
   - `ResourceLimits` frozen dataclass in `kernel/domain/`
   - `ResourceAccounting` runtime enforcer in `kernel/orchestration/`
-  - Pre-call checks in `ObservableLLMWrapper` and `ObservableToolRouterWrapper`
+  - Pre-call checks via port probes (probes support pre-call hooks)
   - Events: `ResourceWarning`, `ResourceLimitExceeded`
 
-- [ ] **Caps (Capabilities)** (Step 3)
+- [ ] **Caps (Capabilities)** (Step 4)
   - `CapSet` frozen dataclass with `allows()`, `intersect()`
-  - Port wrapper enforcement
+  - Port probe enforcement (probes check caps before calling underlying method)
   - Child process inheritance (child <= parent)
   - Events: `CapDenied`
 
-- [ ] **Pipeline Integration** (Step 4)
+- [ ] **Pipeline Integration** (Step 5)
   - Wire limits + caps into `PipelineRunner` and YAML `spec.limits`/`spec.caps`
   - ContextVars: `_resource_accounting`, `_cap_set`
 
-- [ ] **`kind: Adapter`** (Step 5)
+- [ ] **`kind: Adapter`** (Step 6)
   - Standalone adapter configs, referenceable by `{ ref: name }`
   - DRY across System manifests
 
-- [ ] **`kind: Policy`** (Step 6)
+- [ ] **`kind: Policy`** (Step 7)
   - Reusable execution policies (retry, timeout, rate-limit)
   - First-class declarative policy definitions
 
 ### Phase 3: `kind: System` + SystemRunner
 
-- [ ] **Pipes domain model** (Step 7)
+- [x] **Pipes domain model** (Step 7)
   - `Pipe` frozen dataclass: `from_process`, `to_process`, `mapping`
   - Jinja2 template resolution for inter-process data flow
 
-- [ ] **`kind: System` + SystemBuilder** (Step 8)
+- [x] **`kind: System` + SystemBuilder** (Step 8)
   - `SystemConfig` Pydantic model
   - SystemBuilder: parse System YAML, resolve exec paths, validate pipe DAG
   - SystemValidator: no cycles, valid process refs
 
-- [ ] **SystemRunner** (Step 9)
+- [x] **SystemRunner** (Step 9)
   - Execute `SystemConfig` via `PipelineRunner` per process
   - Topological execution order from pipe DAG
   - Shared ports with per-process overrides
@@ -245,8 +268,8 @@ class VFS(Protocol):
     async def astat(self, path: str) -> StatResult: ...
 ```
 
-- [ ] `aread`, `alist`, `astat` path-based access
-- [ ] **VFSTools lib** (`stdlib/lib/vfs_tools.py`) -- Agent-callable VFS operations: `aread_path`, `alist_directory`, `astat_path`
+- [x] `aread`, `alist`, `astat` path-based access
+- [x] **VFSTools lib** (`stdlib/lib/vfs_tools.py`) -- Agent-callable VFS operations: `aread_path`, `alist_directory`, `astat_path`
 
 **Phase 2 -- Execution:**
 
@@ -292,6 +315,92 @@ class VFSProvider(Protocol):
 
 **Stdlib default:** `LocalVFS` in `drivers/vfs/local.py` -- in-process, mount-based dispatch.
 **User implementations:** Distributed VFS (etcd/consul), REST-backed VFS.
+
+### Entity-Bound Pipelines
+
+**Location:** `compiler/`, `stdlib/lib/observers/`, pipeline schema
+
+Pipelines don't transition state -- pipelines **are** the transition. Like a Linux
+process doesn't call `set_my_state(RUNNING)` -- the kernel transitions process state
+as a side effect of `fork()`, `exit()`, and scheduling.
+
+Entity-bound pipelines declare which business entities they operate on and what state
+transitions pipeline lifecycle events trigger. The orchestrator handles transitions
+automatically via an observer -- no explicit state-management nodes in the DAG.
+
+**YAML surface:**
+
+```yaml
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: process_order
+spec:
+  entities:
+    - type: order
+      id: $input.order_id
+      transitions:
+        on_start: PROCESSING
+        on_complete: SHIPPED
+        on_failure: FAILED
+
+    - type: fulfillment
+      id: $input.fulfillment_id
+      transitions:
+        on_start: IN_PROGRESS
+        on_complete: COMPLETED
+        on_failure: CANCELLED
+
+  nodes:
+    # Pure business logic -- no state management nodes
+    - kind: llm_node
+      metadata:
+        name: validate_order
+      spec:
+        prompt_template: "Validate: {{order_data}}"
+```
+
+**Architecture:**
+
+```
+spec.entities (YAML declaration)
+    ↓ parsed by pipeline builder
+StateTransitionObserver (stdlib observer, auto-registered)
+    ↓ listens to PipelineStarted / PipelineCompleted events
+EntityState.atransition() (stdlib service)
+    ↓ validates against StateMachineConfig
+State machine validation + audit trail (kernel domain)
+```
+
+One `StateTransitionObserver` per entity in the list. Auto-registered by the pipeline
+builder when `spec.entities` is present. No manual wiring.
+
+**Implementation:**
+
+- [ ] **`StateTransitionObserver`** (`stdlib/lib/observers/state_transition_observer.py`)
+  - Watches `PipelineStarted`, `PipelineCompleted` events
+  - Resolves `entity_id` from `initial_input` via expression (e.g., `$input.order_id`)
+  - Calls `EntityState.atransition()` with validated state
+  - One observer instance per entity binding
+
+- [ ] **`spec.entities` in pipeline schema**
+  - Add optional `entities` section to `kind: Pipeline` spec
+  - Schema: `list[{type: str, id: str, transitions: {on_start?, on_complete?, on_failure?}}]`
+  - Update `schemas/pipeline-schema.yaml`
+
+- [ ] **Pipeline builder auto-wiring**
+  - Parse `spec.entities`, create `StateTransitionObserver` instances
+  - Register with `observer_manager` before pipeline execution
+  - Resolve entity ID expressions against `initial_input`
+
+- [ ] **EntityState `@step` decorator**
+  - Add `@step` to `atransition()`, `aregister_entity()`, `aget_state()`
+  - Makes these methods available via `service_call_node` for edge cases
+    where explicit transitions are still needed
+
+**Open questions:**
+- Entity ID from node results (created mid-pipeline) -- defer to Phase 2
+- Node-level transition hooks (`on_complete.transition` on individual nodes) -- defer
 
 ### EventBus
 
@@ -402,7 +511,7 @@ CentralAgent.
 ### Kernel Internals
 
 - [ ] **RunContext** -- Rename ExecutionContext, add `run_id`, `pipeline_name`, `parent_run_id` as first-class fields, typed accessors for common ports (`.llm`, `.memory`, `.database`)
-- [ ] **NodeHook / PortHook** -- Per-node and per-port lifecycle hooks (before/after execution). Use cases: logging, caching, authorization, retry, circuit breaking.
+- [ ] **Port Probe Hooks** -- Extend port probes with `pre_call` / `on_error` hooks (netfilter-style chains). Enables middleware: caching, authorization, retry, circuit breaking. Port probes (Phase 2, Step 2) provide the foundation; this adds the hook chain on top.
 - [ ] **`hexdag explain`** -- CLI command (like `kubectl explain`) for YAML field docs
 
 ---
@@ -476,6 +585,9 @@ kernel/ports/ (existing)              kernel/ports/ (planned)
   SecretStore
   Memory (deprecated)
 
+kernel/orchestration/ (existing)      kernel/orchestration/ (planned)
+  port_wrappers.py (DEPRECATED)         port_probes.py (replaces wrappers)
+
 kernel/domain/ (planned)
   ResourceLimits
   CapSet
@@ -484,9 +596,9 @@ kernel/domain/ (planned)
 
 compiler/ (existing + planned)
   yaml_builder.py (existing)           system_builder.py (planned)
-  pipeline_config.py (existing)        system_config.py (planned)
-  config_loader.py (existing)          system_validator.py (planned)
-  plugins/macro_definition.py (existing)
+  pipeline_config.py (existing)        system_config.py (existing)
+  config_loader.py (existing)          system_builder.py (existing)
+  plugins/macro_definition.py (existing) system_validator.py (existing)
   plugins/config_definition.py (planned)
   plugins/adapter_definition.py (planned)
   plugins/policy_definition.py (planned)
@@ -496,11 +608,20 @@ stdlib/lib/ (existing)               stdlib/lib/ (planned)
   EntityState
   Scheduler
   DatabaseTools
+  checkpoint_node
+
+stdlib/lib/observers/ (existing)     stdlib/lib/observers/ (planned)
+  PerformanceMetricsObserver             StateTransitionObserver
+  AlertingObserver
+  CostProfilerObserver
+  ExecutionTracerObserver
+  SimpleLoggingObserver
+  ResourceMonitorObserver
+  DataQualityObserver
 
 kernel/ internals (planned)
   RunContext (rename ExecutionContext)
-  NodeHook / PortHook
-  SystemRunner
+  Port Probe Hooks (pre_call / on_error chains)
   ResourceAccounting
 ```
 
@@ -509,16 +630,18 @@ kernel/ internals (planned)
 ## Implementation Priority
 
 1. **YAML Compiler refactor** -- Move `pipeline_builder/` -> `compiler/`, config loader, typed config defaults. **(Steps 0a, 0b, 0c complete)**
-2. **`kind: Config` + Resource Limits + Caps** -- Organization-wide safety defaults. Budget enforcement. Process-scoped permissions.
-3. **`kind: System` + SystemRunner** -- Multi-process orchestration with pipes and topological execution.
-4. **`kind: Adapter` + `kind: Policy`** -- Reusable adapter configs and execution policies.
-5. **VFS Phase 1** -- Uniform introspection. Primary query interface. Simplifies api/ layer.
-6. **EventBus** -- Cross-pipeline IPC. Required by CentralAgent and `init: { type: event }`.
-7. **RunContext rename** -- Low risk, high clarity improvement. Can be done anytime.
-8. **VFS Phase 2 (exec)** -- Entity invocation by path.
-9. **NodeHook / PortHook** -- Enables middleware-style extensibility.
-10. **GovernancePort** -- Required for production multi-tenant deployments.
-11. **Studio MCP Server** -- Expose full api/ surface as MCP tools with permission boundaries.
+2. **Port Probes + Unified Error Handling** -- Replace port wrappers with kprobe-style `instrument_ports()`. Fix `isinstance()` breakage. Unify `node_executor.py` error paths. Foundation for all subsequent port instrumentation.
+3. **Resource Limits + Caps** -- Budget enforcement and process-scoped permissions. Enforced via port probes (not wrappers).
+4. **`kind: System` + SystemRunner** -- Multi-process orchestration with pipes and topological execution. **(Complete)**
+5. **Entity-Bound Pipelines** -- `spec.entities` YAML binding + `StateTransitionObserver`. Pipelines *are* state transitions.
+6. **`kind: Adapter` + `kind: Policy`** -- Reusable adapter configs and execution policies.
+7. **VFS Phase 1** -- Uniform introspection. Primary query interface. Simplifies api/ layer.
+8. **EventBus** -- Cross-pipeline IPC. Required by CentralAgent and `init: { type: event }`.
+9. **RunContext rename** -- Low risk, high clarity improvement. Can be done anytime.
+10. **Port Probe Hooks** -- Extend probes with pre_call/on_error chains (netfilter-style). Enables caching, auth, circuit breaking.
+11. **VFS Phase 2 (exec)** -- Entity invocation by path.
+12. **GovernancePort** -- Required for production multi-tenant deployments.
+13. **Studio MCP Server** -- Expose full api/ surface as MCP tools with permission boundaries.
 
 ---
 
@@ -551,22 +674,31 @@ kernel/ internals (planned)
 - [x] Typed defaults (`DefaultLimits`, `DefaultCaps`, `OrchestratorConfig` on `HexDAGConfig`)
 - [x] `kind: Config` YAML manifest
 
-### Milestone 2: Safety Rails
-- [ ] Resource Limits + Caps enforcement
+### Milestone 2: Port Probes + Safety Rails
+- [ ] Port Probes (`instrument_ports()` replacing `port_wrappers.py`)
+- [ ] Unified error handling in `node_executor.py`
+- [ ] DataStore event classes (`DataStoreKeyValue`, `DataStoreQuery`)
+- [ ] Resource Limits + Caps enforcement (via port probes)
 - [ ] `kind: Adapter` + `kind: Policy`
 - [ ] Pipeline-level limits/caps in YAML
 
-### Milestone 3: Multi-Process Orchestration
-- [ ] `kind: System` + SystemBuilder + SystemRunner
-- [ ] Pipes and topological execution
-- [ ] Manual mode end-to-end
+### Milestone 3: Multi-Process Orchestration (Complete)
+- [x] `kind: System` + SystemBuilder + SystemRunner
+- [x] Pipes and topological execution
+- [x] Manual mode end-to-end
 
-### Milestone 4: Production Runtime
+### Milestone 4: Entity-Bound Pipelines
+- [ ] `StateTransitionObserver` (stdlib observer)
+- [ ] `spec.entities` in pipeline schema
+- [ ] Pipeline builder auto-wiring (parse entities, register observers)
+- [ ] EntityState `@step` decorator additions
+
+### Milestone 5: Production Runtime
 - [ ] Studio as daemon host (schedule/continuous modes)
 - [ ] VFS Phase 1 + EventBus
 - [ ] GovernancePort
 
-### Milestone 5: Stable Release
+### Milestone 6: Stable Release
 - [ ] API freeze and 1.0 release
 - [ ] PyPI publication
 - [ ] Community documentation site

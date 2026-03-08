@@ -224,9 +224,17 @@ class LocalExecutor:
                 duration_ms=_calculate_duration_ms(start_time),
             )
 
-        except NodeExecutionError:
-            # NodeExecutionError should propagate directly (orchestrator will handle)
-            raise
+        except NodeExecutionError as e:
+            # Convert to FAILED result so orchestrator can route via on_error
+            original = e.original_error
+            logger.error("LocalExecutor: Node '{}' failed: {}", task.node_name, original)
+            return ExecutionResult(
+                node_name=task.node_name,
+                status=PipelineStatus.FAILED,
+                error=str(original),
+                error_type=type(original).__name__,
+                duration_ms=_calculate_duration_ms(start_time),
+            )
         except (ValueError, TypeError, KeyError, AttributeError, RuntimeError) as e:
             # Catch expected execution errors (validation, type issues, missing data)
             logger.error("LocalExecutor: Node '{}' failed: {}", task.node_name, e)
