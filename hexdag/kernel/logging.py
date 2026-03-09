@@ -35,7 +35,6 @@ import contextvars
 import logging
 import os
 import sys
-from contextlib import suppress
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -148,11 +147,9 @@ def configure_logging(
     if not force_reconfigure and current_config == _CURRENT_CONFIG:
         return
 
-    # Remove only our previously added handlers (not external ones)
-    # This ensures we don't interfere with pytest or other framework handlers
-    for handler_id in _HANDLER_IDS:
-        with suppress(ValueError):
-            logger.remove(handler_id)
+    # Remove ALL existing handlers (including Loguru's default ID=0).
+    # This prevents duplicate output and ensures clean handler state.
+    logger.remove()
     _HANDLER_IDS.clear()
 
     # Prepare format strings and track handler IDs

@@ -233,10 +233,10 @@ class TestSecurityValidation:
         with pytest.raises(ExpressionError):
             compile_expression("(lambda: True)()")
 
-    def test_comprehension_blocked(self) -> None:
-        """Test that list comprehension is blocked."""
+    def test_generator_expression_blocked(self) -> None:
+        """Test that generator expression is blocked (lazy evaluation)."""
         with pytest.raises(ExpressionError):
-            compile_expression("[x for x in range(10)]")
+            compile_expression("sum(x for x in range(10))")
 
 
 class TestErrorHandling:
@@ -577,3 +577,83 @@ class TestCompileExpressionCaching:
         # Call again — same object from cache
         pred2 = compile_expression("count > 5 and active == True")
         assert pred2({"count": 10, "active": True}, {}) is True
+
+
+class TestComprehensions:
+    """Test list/set/dict comprehension support."""
+
+    def test_list_comp_filter_none(self) -> None:
+        """Test filtering None values — the original use case."""
+        result = evaluate_expression(
+            "[loc for loc in [extracted_origin, extracted_destination] if loc]",
+            {"extracted_origin": "NYC", "extracted_destination": None},
+        )
+        assert result == ["NYC"]
+
+    def test_list_comp_filter_none_all_present(self) -> None:
+        """Test when all values are present."""
+        result = evaluate_expression(
+            "[loc for loc in [extracted_origin, extracted_destination] if loc]",
+            {"extracted_origin": "NYC", "extracted_destination": "LAX"},
+        )
+        assert result == ["NYC", "LAX"]
+
+    def test_list_comp_with_condition(self) -> None:
+        """Test list comprehension with comparison filter."""
+        result = evaluate_expression(
+            "[x for x in items if x > 3]",
+            {"items": [1, 2, 3, 4, 5]},
+        )
+        assert result == [4, 5]
+
+    def test_list_comp_with_transform(self) -> None:
+        """Test list comprehension with function call on element."""
+        result = evaluate_expression(
+            "[upper(name) for name in names]",
+            {"names": ["alice", "bob"]},
+        )
+        assert result == ["ALICE", "BOB"]
+
+    def test_list_comp_with_range(self) -> None:
+        """Test list comprehension with range."""
+        result = evaluate_expression("[x * 2 for x in range(4)]", {})
+        assert result == [0, 2, 4, 6]
+
+    def test_set_comp(self) -> None:
+        """Test set comprehension deduplicates."""
+        result = evaluate_expression("{x for x in items}", {"items": [1, 2, 2, 3, 3]})
+        assert result == {1, 2, 3}
+
+    def test_dict_comp(self) -> None:
+        """Test dict comprehension."""
+        result = evaluate_expression(
+            "{k: v for k, v in zip(keys, vals)}",
+            {"keys": ["a", "b"], "vals": [1, 2]},
+        )
+        assert result == {"a": 1, "b": 2}
+
+    def test_tuple_unpacking_in_comp(self) -> None:
+        """Test tuple unpacking in comprehension target."""
+        result = evaluate_expression(
+            "[k for k, v in zip(names, scores) if v > 80]",
+            {"names": ["alice", "bob", "carol"], "scores": [90, 70, 85]},
+        )
+        assert result == ["alice", "carol"]
+
+    def test_nested_comprehension(self) -> None:
+        """Test nested for-clauses in comprehension."""
+        result = evaluate_expression(
+            "[x for sublist in items for x in sublist]",
+            {"items": [[1, 2], [3, 4]]},
+        )
+        assert result == [1, 2, 3, 4]
+
+    def test_comprehension_still_validates_children(self) -> None:
+        """Test that disallowed functions inside comprehensions are blocked."""
+        with pytest.raises(ExpressionError):
+            compile_expression("[dangerous(x) for x in items]")
+
+    def test_generator_expression_still_blocked(self) -> None:
+        """Test that generator expressions remain blocked."""
+        with pytest.raises(ExpressionError):
+            compile_expression("list(x for x in items)")

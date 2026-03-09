@@ -45,6 +45,9 @@ _current_node_name_context: ContextVar[str | None] = ContextVar("current_node_na
 # Services context - instantiated Service objects available to agent nodes
 _services_context: ContextVar[dict[str, Any] | None] = ContextVar("services", default=None)
 
+# Pipeline name context - for structured log correlation
+_pipeline_name_context: ContextVar[str | None] = ContextVar("pipeline_name", default=None)
+
 
 # ============================================================================
 # Observer Manager Context
@@ -277,6 +280,33 @@ def get_services() -> dict[str, Any] | None:
 
 
 # ============================================================================
+# Pipeline Name Context
+# ============================================================================
+
+
+def set_pipeline_name(name: str | None) -> None:
+    """Set pipeline name for current async execution context.
+
+    Parameters
+    ----------
+    name : str | None
+        Pipeline name for log correlation
+    """
+    _pipeline_name_context.set(name)
+
+
+def get_pipeline_name() -> str | None:
+    """Get pipeline name from current async execution context.
+
+    Returns
+    -------
+    str | None
+        Current pipeline name, or None if not in orchestrator context
+    """
+    return _pipeline_name_context.get()
+
+
+# ============================================================================
 # Current Node Name Context
 # ============================================================================
 
@@ -346,6 +376,7 @@ class ExecutionContext:
         observer_manager: ObserverManager | None = None,
         run_id: str | None = None,
         ports: dict[str, Any] | None = None,
+        pipeline_name: str | None = None,
     ):
         """Initialize execution context.
 
@@ -357,16 +388,20 @@ class ExecutionContext:
             Unique run identifier
         ports : dict[str, Any] | None
             Ports dictionary with all adapters
+        pipeline_name : str | None
+            Pipeline name for log correlation
         """
         self.observer_manager = observer_manager
         self.run_id = run_id
         self.ports = ports
+        self.pipeline_name = pipeline_name
 
     def __enter__(self) -> ExecutionContext:
         """Set up execution context (sync context manager)."""
         set_observer_manager(self.observer_manager)
         set_run_id(self.run_id)
         set_ports(self.ports)
+        set_pipeline_name(self.pipeline_name)
         return self
 
     def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
@@ -378,6 +413,7 @@ class ExecutionContext:
         set_observer_manager(self.observer_manager)
         set_run_id(self.run_id)
         set_ports(self.ports)
+        set_pipeline_name(self.pipeline_name)
         return self
 
     async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
@@ -403,6 +439,7 @@ def clear_execution_context() -> None:
     _node_results_context.set(None)
     _current_node_name_context.set(None)
     _services_context.set(None)
+    _pipeline_name_context.set(None)
 
 
 # ============================================================================

@@ -60,7 +60,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from hexdag.kernel.context import get_user_ports
+from hexdag.kernel.context import get_pipeline_name, get_user_ports
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.expression_parser import compile_expression, evaluate_expression
 from hexdag.kernel.logging import get_logger
@@ -257,7 +257,12 @@ class CompositeNode(BaseNodeFactory, yaml_alias="composite_node"):
             if not ports:
                 ports = get_user_ports()
 
-            node_logger = logger.bind(node=name, node_type="composite_node", mode=_mode)
+            node_logger = logger.bind(
+                node=name,
+                node_type="composite_node",
+                mode=_mode,
+                pipeline_name=get_pipeline_name() or "unknown",
+            )
 
             # Normalize input
             data = normalize_input(input_data)

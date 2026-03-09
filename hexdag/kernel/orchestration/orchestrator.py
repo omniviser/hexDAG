@@ -560,6 +560,7 @@ class Orchestrator:
             observer_manager=observer_manager,
             run_id=run_id,
             ports=wrapped_ports,
+            pipeline_name=pipeline_name,
         ):
             set_current_graph(graph)
             set_node_results(node_results)

@@ -42,8 +42,9 @@ from typing import TYPE_CHECKING, Any
 
 from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.exceptions import PipelineRunnerError  # noqa: F401
-from hexdag.kernel.logging import get_logger
+from hexdag.kernel.logging import configure_logging, get_logger
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
+from hexdag.kernel.utils.node_timer import Timer
 
 if TYPE_CHECKING:
     from hexdag.kernel.config.models import HexDAGConfig
@@ -347,6 +348,22 @@ class PipelineRunner:
             The effective ``HexDAGConfig`` for this run (may include
             inline ``kind: Config`` from the YAML file).
         """
+        # 0. Apply logging configuration from kind: Config (if present)
+        if effective_config and effective_config.logging:
+            log_cfg = effective_config.logging
+            configure_logging(
+                level=log_cfg.level,
+                format=log_cfg.format,
+                output_file=log_cfg.output_file,
+                use_color=log_cfg.use_color,
+                include_timestamp=log_cfg.include_timestamp,
+                use_rich=log_cfg.use_rich,
+                dual_sink=log_cfg.dual_sink,
+                enable_stdlib_bridge=log_cfg.enable_stdlib_bridge,
+                backtrace=log_cfg.backtrace,
+                diagnose=log_cfg.diagnose,
+            )
+
         # 1. Load secrets to os.environ (before port instantiation)
         await self._load_secrets(pipeline_config)
 
@@ -382,12 +399,12 @@ class PipelineRunner:
             effective_config.caps if effective_config else None,
         )
         if effective_limits is not None:
-            logger.info(
+            logger.debug(
                 "Resource limits active: {}",
                 {k: v for k, v in asdict(effective_limits).items() if v is not None},
             )
         if effective_caps is not None:
-            logger.info("Capability caps active: {}", asdict(effective_caps))
+            logger.debug("Capability caps active: {}", asdict(effective_caps))
 
         # 5. Create orchestrator (auto-instantiates ports from YAML config)
         orchestrator = self._factory.create_orchestrator(
@@ -404,9 +421,15 @@ class PipelineRunner:
         pipeline_name = pipeline_config.metadata.get("name", "unnamed")
         logger.info("Running pipeline '{}' with {} nodes", pipeline_name, len(graph))
 
+        t = Timer()
         result = await orchestrator.run(graph, input_data or {})
 
-        logger.info("Pipeline '{}' completed with {} node results", pipeline_name, len(result))
+        logger.info(
+            "Pipeline '{}' completed with {} node results in {}",
+            pipeline_name,
+            len(result),
+            t.duration_str,
+        )
         return result
 
     def _resolve_orchestrator_settings(

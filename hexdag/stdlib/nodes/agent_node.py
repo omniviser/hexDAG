@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
-from hexdag.kernel.context import get_port, get_ports, get_services
+from hexdag.kernel.context import get_pipeline_name, get_port, get_ports, get_services
 from hexdag.kernel.domain.agent_tools import CHANGE_PHASE, TOOL_END, change_phase, tool_end
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.logging import get_logger
@@ -284,7 +284,11 @@ class ReActAgentNode(BaseNodeFactory, yaml_alias="re_act_agent_node"):
 
         async def agent_with_internal_loop(input_data: Any) -> Any:
             """Agent executor with internal loop control."""
-            node_logger = logger.bind(node=name, node_type="agent_node")
+            node_logger = logger.bind(
+                node=name,
+                node_type="agent_node",
+                pipeline_name=get_pipeline_name() or "unknown",
+            )
 
             # Log agent start
             node_logger.info(

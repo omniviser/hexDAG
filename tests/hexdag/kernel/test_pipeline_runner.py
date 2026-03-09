@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from hexdag.kernel.config.models import DefaultCaps, DefaultLimits, HexDAGConfig
+from hexdag.kernel.config.models import DefaultCaps, DefaultLimits, HexDAGConfig, LoggingConfig
 from hexdag.kernel.orchestration.models import OrchestratorConfig
 from hexdag.kernel.pipeline_runner import (
     PipelineRunner,
@@ -679,3 +679,81 @@ class TestResolveField:
         result = PipelineRunner._resolve_field(None, config_caps)
         assert result is config_caps
         assert result.deny == ["secret"]
+
+
+class TestKindConfigLoggingWiring:
+    """Test that kind: Config logging section is applied by PipelineRunner."""
+
+    @pytest.mark.asyncio
+    async def test_logging_config_applied(self, tmp_path: Path) -> None:
+        """kind: Config with logging section should call configure_logging."""
+        from unittest.mock import patch
+
+        log_config = LoggingConfig(level="DEBUG", format="json")
+        config = HexDAGConfig(logging=log_config)
+        runner = PipelineRunner(config=config)
+
+        with patch("hexdag.kernel.pipeline_runner.configure_logging") as mock_configure:
+            await runner.run_from_string(SIMPLE_YAML)
+
+            mock_configure.assert_called_once_with(
+                level="DEBUG",
+                format="json",
+                output_file=None,
+                use_color=True,
+                include_timestamp=True,
+                use_rich=False,
+                dual_sink=False,
+                enable_stdlib_bridge=False,
+                backtrace=True,
+                diagnose=True,
+            )
+
+    @pytest.mark.asyncio
+    async def test_logging_config_with_output_file(self, tmp_path: Path) -> None:
+        """kind: Config with output_file should pass it to configure_logging."""
+        from unittest.mock import patch
+
+        log_file = str(tmp_path / "hexdag.log")
+        log_config = LoggingConfig(
+            level="INFO",
+            format="structured",
+            output_file=log_file,
+        )
+        config = HexDAGConfig(logging=log_config)
+        runner = PipelineRunner(config=config)
+
+        with patch("hexdag.kernel.pipeline_runner.configure_logging") as mock_configure:
+            await runner.run_from_string(SIMPLE_YAML)
+
+            mock_configure.assert_called_once()
+            call_kwargs = mock_configure.call_args
+            assert call_kwargs.kwargs["output_file"] == log_file
+            assert call_kwargs.kwargs["level"] == "INFO"
+            assert call_kwargs.kwargs["format"] == "structured"
+
+    @pytest.mark.asyncio
+    async def test_default_config_applies_default_logging(self) -> None:
+        """HexDAGConfig() has default LoggingConfig — should still call configure_logging."""
+        from unittest.mock import patch
+
+        config = HexDAGConfig()  # Has default LoggingConfig
+        runner = PipelineRunner(config=config)
+
+        with patch("hexdag.kernel.pipeline_runner.configure_logging") as mock_configure:
+            await runner.run_from_string(SIMPLE_YAML)
+            # Default LoggingConfig always exists, so configure_logging is called
+            mock_configure.assert_called_once()
+            assert mock_configure.call_args.kwargs["level"] == "INFO"
+            assert mock_configure.call_args.kwargs["format"] == "structured"
+
+    @pytest.mark.asyncio
+    async def test_no_config_skips_configure(self) -> None:
+        """No config at all (effective_config is None) should not call configure_logging."""
+        from unittest.mock import patch
+
+        runner = PipelineRunner()  # No config
+
+        with patch("hexdag.kernel.pipeline_runner.configure_logging") as mock_configure:
+            await runner.run_from_string(SIMPLE_YAML)
+            mock_configure.assert_not_called()
