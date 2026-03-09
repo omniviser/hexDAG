@@ -1,5 +1,6 @@
 """Tests for centralized logging configuration using Loguru."""
 
+import json
 from pathlib import Path
 
 from loguru import logger
@@ -154,36 +155,31 @@ class TestStdlibLoggingBridge:
 class TestLoggingHandlerIsolation:
     """Test that logging handler cleanup is isolated and safe."""
 
-    def test_handler_cleanup_preserves_external_handlers(self):
-        """Test that reconfiguring logging doesn't remove external handlers."""
+    def test_handler_cleanup_removes_all_handlers(self):
+        """Test that reconfiguring logging removes ALL handlers (including default).
+
+        This prevents duplicate log output from Loguru's default handler (ID=0)
+        co-existing with hexDAG's custom handler.
+        """
         from loguru import logger as loguru_logger
 
-        # Add an external handler (simulating pytest or other framework)
+        # Add an external handler
         external_messages = []
 
         def external_sink(message):
             external_messages.append(message)
 
-        external_handler_id = loguru_logger.add(external_sink, format="{message}")
+        loguru_logger.add(external_sink, format="{message}")
 
-        try:
-            # Configure logging (should only remove its own handlers)
-            configure_logging(level="INFO", format="console")
+        # Configure logging — should remove ALL handlers (including external)
+        # and add only its own. This is intentional to prevent duplicate output.
+        configure_logging(level="INFO", format="console", force_reconfigure=True)
 
-            # Reconfigure with different settings
-            configure_logging(level="DEBUG", format="json", force_reconfigure=True)
+        test_logger = get_logger("test")
+        test_logger.info("Test message")
 
-            # External handler should still be present
-            test_logger = get_logger("test")
-            test_logger.info("Test message")
-
-            # External sink should have received the message
-            assert len(external_messages) > 0
-            assert any("Test message" in str(msg) for msg in external_messages)
-
-        finally:
-            # Clean up external handler
-            loguru_logger.remove(external_handler_id)
+        # External handler should have been removed by configure_logging()
+        assert len(external_messages) == 0
 
     def test_multiple_reconfigurations_dont_leak_handlers(self):
         """Test that multiple reconfigurations don't accumulate handlers."""
@@ -204,3 +200,87 @@ class TestLoggingHandlerIsolation:
         assert final_handlers <= initial_handlers + 2, (
             f"Handler leak detected: started with {initial_handlers}, ended with {final_handlers}"
         )
+
+
+class TestConfigureLoggingExactHandlerCount:
+    """Test that configure_logging produces exactly the expected number of handlers."""
+
+    def setup_method(self):
+        """Reset logging configuration before each test."""
+        logger.remove()
+        import hexdag.kernel.logging as logging_module
+
+        logging_module._CURRENT_CONFIG = None
+
+    def test_console_format_produces_one_handler(self):
+        """Console format should produce exactly 1 handler."""
+        configure_logging(level="INFO", format="console")
+        assert len(logger._core.handlers) == 1
+
+    def test_json_format_produces_one_handler(self):
+        """JSON format should produce exactly 1 handler."""
+        configure_logging(level="INFO", format="json")
+        assert len(logger._core.handlers) == 1
+
+    def test_structured_format_produces_one_handler(self):
+        """Structured format should produce exactly 1 handler."""
+        configure_logging(level="INFO", format="structured")
+        assert len(logger._core.handlers) == 1
+
+    def test_file_output_produces_two_handlers(self, tmp_path: Path):
+        """Console + file should produce exactly 2 handlers."""
+        configure_logging(level="INFO", format="console", output_file=tmp_path / "test.log")
+        assert len(logger._core.handlers) == 2
+
+    def test_reconfigure_removes_previous_handlers(self):
+        """Reconfiguring should not accumulate handlers."""
+        configure_logging(level="INFO", format="console")
+        assert len(logger._core.handlers) == 1
+
+        configure_logging(level="DEBUG", format="json", force_reconfigure=True)
+        assert len(logger._core.handlers) == 1
+
+
+class TestLogFileJsonOutput:
+    """Test that log file output is valid JSON-lines format."""
+
+    def setup_method(self):
+        logger.remove()
+        import hexdag.kernel.logging as logging_module
+
+        logging_module._CURRENT_CONFIG = None
+
+    def test_file_output_is_json_lines(self, tmp_path: Path):
+        """Log file output should be parseable JSON-lines."""
+        log_file = tmp_path / "test.log"
+        configure_logging(level="DEBUG", format="console", output_file=log_file)
+
+        test_logger = get_logger("test.json_output")
+        test_logger.info("First message")
+        test_logger.warning("Second message")
+
+        # Force flush by removing handlers
+        logger.remove()
+
+        lines = log_file.read_text().strip().split("\n")
+        assert len(lines) == 2
+
+        for line in lines:
+            record = json.loads(line)
+            assert "record" in record
+            assert "text" in record
+            assert "message" in record["record"]
+
+    def test_file_output_contains_bound_context(self, tmp_path: Path):
+        """Log file records should contain bound context (module name)."""
+        log_file = tmp_path / "test.log"
+        configure_logging(level="DEBUG", format="console", output_file=log_file)
+
+        test_logger = get_logger("test.context_check")
+        test_logger.info("Context test")
+
+        logger.remove()
+
+        line = log_file.read_text().strip().split("\n")[0]
+        record = json.loads(line)
+        assert record["record"]["extra"]["module"] == "test.context_check"

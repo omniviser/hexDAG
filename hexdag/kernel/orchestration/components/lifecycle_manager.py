@@ -209,7 +209,7 @@ class LifecycleManager:
 
         # 1. Health checks
         if self.pre_config.enable_health_checks:
-            logger.info("Running health checks for pipeline '{}'", pipeline_name)
+            logger.debug("Running health checks for pipeline '{}'", pipeline_name)
             health_results = await self._check_all_adapters(
                 ports=dict(ports),
                 observer_manager=observer_manager,
@@ -232,7 +232,7 @@ class LifecycleManager:
 
         # 2. Secret injection
         if self.pre_config.enable_secret_injection:
-            logger.info("Loading secrets for pipeline '{}'", pipeline_name)
+            logger.debug("Loading secrets for pipeline '{}'", pipeline_name)
             secret_port = get_port("secret")
             memory = get_port("memory")
             secret_results = await self._load_secrets(
@@ -302,7 +302,11 @@ class LifecycleManager:
             logger.debug("Skipping post-DAG hooks for status: {}", pipeline_status)
             return {"skipped": True, "reason": f"Not configured for {pipeline_status}"}
 
-        logger.info("Running post-DAG hooks for pipeline '{}' ({})", pipeline_name, pipeline_status)
+        logger.debug(
+            "Running post-DAG hooks for pipeline '{}' ({})",
+            pipeline_name,
+            pipeline_status,
+        )
 
         try:
             # 1. Save checkpoint (if enabled)
@@ -419,7 +423,7 @@ class LifecycleManager:
             latency_info = (
                 f" ({status.latency_ms:.{LATENCY_PRECISION}f}ms)" if status.latency_ms else ""
             )
-            logger.info("✅ {} health check: {}{}", port_name, status.status, latency_info)
+            logger.debug("✅ {} health check: {}{}", port_name, status.status, latency_info)
         else:
             logger.warning("⚠️ {} health check: {} - {}", port_name, status.status, status.error)
 
@@ -456,7 +460,7 @@ class LifecycleManager:
             memory_keys = list(mapping.values())
             self._loaded_secret_keys[dag_id] = memory_keys
 
-            logger.info(
+            logger.debug(
                 "Loaded {} secrets into memory with prefix '{}'",
                 len(mapping),
                 self.pre_config.secret_prefix,
@@ -497,7 +501,7 @@ class LifecycleManager:
         if dag_id in self._loaded_secret_keys:
             del self._loaded_secret_keys[dag_id]
 
-        logger.info("Secret cleanup: Removed {} secret(s) from memory", removed_count)
+        logger.debug("Secret cleanup: Removed {} secret(s) from memory", removed_count)
         return {"cleaned": True, "keys_removed": removed_count}
 
     # ========================================================================
@@ -529,7 +533,7 @@ class LifecycleManager:
                 try:
                     logger.debug("Cleaning up adapter '{}' via {}()", port_name, method_name)
                     await cleanup_method()
-                    logger.info("✅ Cleaned up adapter: {}", port_name)
+                    logger.debug("✅ Cleaned up adapter: {}", port_name)
                     return True
                 except (RuntimeError, ValueError, TypeError, ConnectionError, OSError) as e:
                     logger.warning("Cleanup failed for {}: {}", port_name, e)

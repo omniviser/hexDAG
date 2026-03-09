@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import orjson
 from pydantic import BaseModel, ValidationError
 
-from hexdag.kernel.context import get_port
+from hexdag.kernel.context import get_pipeline_name, get_port
 from hexdag.kernel.exceptions import ParseError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
@@ -255,7 +255,11 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
 
         async def llm_wrapper(validated_input: dict[str, Any]) -> Any:
             """Execute LLM call with optional parsing."""
-            node_logger = logger.bind(node=name, node_type="llm_node")
+            node_logger = logger.bind(
+                node=name,
+                node_type="llm_node",
+                pipeline_name=get_pipeline_name() or "unknown",
+            )
 
             llm = get_port("llm")
             if not llm:

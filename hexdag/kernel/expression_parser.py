@@ -46,7 +46,7 @@ Basic usage::
 
 import ast
 import operator
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 from functools import lru_cache
@@ -136,6 +136,9 @@ ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "Decimal": Decimal,
     "pow": pow,
     "format": format,
+    # Sequence generation
+    "range": lambda *args: range(*args),
+    "zip": lambda *iterables: list(zip(*iterables, strict=False)),
 }
 
 
@@ -191,6 +194,12 @@ def _validate_ast(node: ast.AST, expression: str) -> None:
         ast.Dict,
         ast.Call,  # Now allowed for whitelisted functions
         ast.keyword,  # For keyword arguments in function calls
+        # Comprehensions
+        ast.ListComp,  # [x for x in items if x]
+        ast.SetComp,  # {x for x in items}
+        ast.DictComp,  # {k: v for k, v in items}
+        ast.comprehension,  # The for-clause inside comprehensions
+        ast.Store,  # Comprehension targets use Store context
         # Comparison operators
         ast.Eq,
         ast.NotEq,
@@ -379,7 +388,8 @@ def _eval_list(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> li
 
 
 def _eval_tuple(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> tuple[Any, ...]:
-    return tuple(_evaluate_node(elt, data, state) for elt in node.elts)  # type: ignore[attr-defined]
+    elts = node.elts  # type: ignore[attr-defined]
+    return tuple(_evaluate_node(elt, data, state) for elt in elts)
 
 
 def _eval_dict(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> dict[Any, Any]:
@@ -418,6 +428,58 @@ def _eval_call(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> An
         raise ExpressionError("", f"Error calling {func_name}: {e}") from e
 
 
+# --- Comprehension helpers ---
+
+
+def _bind_target(target: ast.AST, value: Any, data: dict[str, Any]) -> None:
+    """Bind a comprehension target (simple name or tuple unpacking)."""
+    if isinstance(target, ast.Name):
+        data[target.id] = value
+    elif isinstance(target, ast.Tuple):
+        for t, v in zip(target.elts, value, strict=False):
+            _bind_target(t, v, data)
+
+
+def _iter_comprehension(
+    generators: list[ast.comprehension],
+    data: dict[str, Any],
+    state: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """Iterate over comprehension generators, yielding updated data dicts."""
+    if not generators:
+        yield data
+        return
+
+    gen = generators[0]
+    remaining = generators[1:]
+    iterable = _evaluate_node(gen.iter, data, state)
+
+    for item in iterable:
+        item_data = {**data}
+        _bind_target(gen.target, item, item_data)
+
+        if all(_evaluate_node(if_clause, item_data, state) for if_clause in gen.ifs):
+            yield from _iter_comprehension(remaining, item_data, state)
+
+
+def _eval_listcomp(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> list[Any]:
+    n: ast.ListComp = node  # type: ignore[assignment]
+    return [_evaluate_node(n.elt, d, state) for d in _iter_comprehension(n.generators, data, state)]
+
+
+def _eval_setcomp(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> set[Any]:
+    n: ast.SetComp = node  # type: ignore[assignment]
+    return {_evaluate_node(n.elt, d, state) for d in _iter_comprehension(n.generators, data, state)}
+
+
+def _eval_dictcomp(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> dict[Any, Any]:
+    n: ast.DictComp = node  # type: ignore[assignment]
+    return {
+        _evaluate_node(n.key, item_data, state): _evaluate_node(n.value, item_data, state)
+        for item_data in _iter_comprehension(n.generators, data, state)
+    }
+
+
 # Dispatch table mapping AST node types to their handlers
 _NODE_HANDLERS: dict[type, Callable[[ast.AST, dict[str, Any], dict[str, Any]], Any]] = {
     ast.Constant: _eval_constant,
@@ -433,6 +495,9 @@ _NODE_HANDLERS: dict[type, Callable[[ast.AST, dict[str, Any], dict[str, Any]], A
     ast.Dict: _eval_dict,
     ast.BinOp: _eval_binop,
     ast.Call: _eval_call,
+    ast.ListComp: _eval_listcomp,
+    ast.SetComp: _eval_setcomp,
+    ast.DictComp: _eval_dictcomp,
 }
 
 

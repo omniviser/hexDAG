@@ -40,7 +40,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from hexdag.drivers.http_client import HttpClientDriver  # lazy: avoid circular import
-from hexdag.kernel.context import get_port
+from hexdag.kernel.context import get_pipeline_name, get_port
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
 from hexdag.kernel.ports.api_call import APICall  # noqa: TC001
@@ -232,6 +232,7 @@ class ApiCallNode(BaseNodeFactory, yaml_alias="api_call_node"):
                 node=name,
                 node_type="api_call_node",
                 method=method,
+                pipeline_name=get_pipeline_name() or "unknown",
             )
 
             # Resolve input to dict

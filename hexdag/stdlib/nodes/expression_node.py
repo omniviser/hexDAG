@@ -91,6 +91,7 @@ Merge strategies for multi-dependency aggregation::
 from collections.abc import Callable
 from typing import Any, Literal
 
+from hexdag.kernel.context import get_pipeline_name
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.expression_parser import evaluate_expression
 from hexdag.kernel.logging import get_logger
@@ -371,7 +372,11 @@ class ExpressionNode(BaseNodeFactory, yaml_alias="expression_node"):
             dict[str, Any] | Any
                 Computed values filtered to output_fields, or merged result
             """
-            node_logger = logger.bind(node=name, node_type="expression_node")
+            node_logger = logger.bind(
+                node=name,
+                node_type="expression_node",
+                pipeline_name=get_pipeline_name() or "unknown",
+            )
 
             # Apply merge strategy first if specified
             if _merge_strategy is not None and isinstance(input_data, dict):

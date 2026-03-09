@@ -32,6 +32,7 @@ Available submodules
 - documentation: Guides and references
 - export: Project export
 - processes: Process management (pipeline runs, scheduling, entity state)
+- logs: Log querying (query, summarize, tail JSON log files)
 - vfs: Virtual filesystem (uniform path-based introspection)
 """
 
@@ -40,6 +41,7 @@ from hexdag.api import (
     documentation,
     execution,
     export,
+    logs,
     pipeline,
     processes,
     validation,
@@ -51,6 +53,7 @@ __all__ = [
     "documentation",
     "execution",
     "export",
+    "logs",
     "pipeline",
     "processes",
     "validation",
