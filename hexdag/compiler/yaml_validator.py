@@ -346,9 +346,9 @@ class YamlValidator:
         # Macro and Config definitions have different structure
         kind = config.get("kind")
         if kind == "Macro":
-            # Macro has: metadata, parameters, nodes (no spec)
-            if "nodes" not in config:
-                result.add_error("Macro definition must contain 'nodes' field")
+            # Macro has: metadata, parameters, nodes or nodes_raw (no spec)
+            if "nodes" not in config and "nodes_raw" not in config:
+                result.add_error("Macro definition must contain 'nodes' or 'nodes_raw' field")
                 return
             # Skip rest of validation for Macro kind
             return

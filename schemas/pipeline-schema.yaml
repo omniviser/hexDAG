@@ -67,7 +67,7 @@ properties:
         title: Aliases
         type: object
       custom_types:
-        additionalProperties:
+        additionalProperties: &id001
           additionalProperties: false
           description: Custom sanitized type definition for output_schema validation.
           properties:
@@ -255,6 +255,77 @@ required:
 - metadata
 - spec
 $defs:
+  CustomTypeConfig: *id001
+  DefaultCaps:
+    properties:
+      default_set:
+        anyOf:
+        - items:
+            type: string
+          type: array
+        - type: 'null'
+        default: null
+        title: Default Set
+      deny:
+        anyOf:
+        - items:
+            type: string
+          type: array
+        - type: 'null'
+        default: null
+        title: Deny
+    title: DefaultCaps
+    type: object
+  DefaultLimits:
+    properties:
+      max_total_tokens:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Max Total Tokens
+      max_llm_calls:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Max Llm Calls
+      max_tool_calls:
+        anyOf:
+        - type: integer
+        - type: 'null'
+        default: null
+        title: Max Tool Calls
+      max_cost_usd:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: null
+        title: Max Cost Usd
+      warning_threshold:
+        default: 0.8
+        title: Warning Threshold
+        type: number
+    title: DefaultLimits
+    type: object
+  OrchestratorConfig:
+    properties:
+      max_concurrent_nodes:
+        default: 10
+        title: Max Concurrent Nodes
+        type: integer
+      strict_validation:
+        default: false
+        title: Strict Validation
+        type: boolean
+      default_node_timeout:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: null
+        title: Default Node Timeout
+    title: OrchestratorConfig
+    type: object
   LlmNodeSpec:
     allOf:
     - $ref: '#/$defs/Node'
