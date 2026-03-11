@@ -11,14 +11,28 @@ This module provides:
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Protocol, runtime_checkable
+import contextvars
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 from pydantic import BaseModel, ConfigDict, Field  # noqa: TC002
 
-from hexdag.kernel.exceptions import ValidationError
+from hexdag.kernel.exceptions import ValidationError, YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Circular macro expansion guard
+# ---------------------------------------------------------------------------
+_expansion_stack: contextvars.ContextVar[list[str] | None] = contextvars.ContextVar(
+    "_expansion_stack",
+    default=None,
+)
+_MAX_EXPANSION_DEPTH = 20
 
 
 def _extract_config_fields(kwargs: dict[str, Any], config_class: type[BaseModel]) -> dict[str, Any]:
@@ -260,6 +274,42 @@ class ConfigurableMacro:
             If inputs don't match macro parameter requirements
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement expand() method")
+
+    @contextmanager
+    def expansion_guard(self, instance_name: str) -> Generator[None]:
+        """Context manager that detects circular or excessively deep expansion.
+
+        Cycle detection uses the macro **class name** (not instance name)
+        because nested macros generate unique instance names each level,
+        masking true A→B→A cycles.
+
+        Raises
+        ------
+        YamlPipelineBuilderError
+            On circular reference or depth limit exceeded.
+        """
+        stack = (_expansion_stack.get() or []).copy()
+        class_name = self.__class__.__name__
+        entry = f"{class_name}:{instance_name}"
+
+        # Check for cycles by class name (instance names differ each level)
+        class_stack = [s.split(":")[0] for s in stack]
+        if class_name in class_stack:
+            # Walk back to find the cycle start
+            cycle_start = class_stack.index(class_name)
+            cycle = " -> ".join([*stack[cycle_start:], entry])
+            raise YamlPipelineBuilderError(f"Circular macro expansion detected: {cycle}")
+        if len(stack) >= _MAX_EXPANSION_DEPTH:
+            raise YamlPipelineBuilderError(
+                f"Macro expansion depth limit ({_MAX_EXPANSION_DEPTH}) exceeded. "
+                f"Stack: {' -> '.join(stack)}"
+            )
+        stack.append(entry)
+        token = _expansion_stack.set(stack)
+        try:
+            yield
+        finally:
+            _expansion_stack.reset(token)
 
     def validate_inputs(
         self, inputs: dict[str, Any], required: list[str], optional: dict[str, Any]

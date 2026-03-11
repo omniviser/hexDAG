@@ -67,6 +67,7 @@ class MacroDefinitionPlugin:
             Macro definitions don't add nodes to the graph
         """
         from hexdag.kernel.yaml_macro import (  # lazy: mutual cycle with yaml_builder
+            PortRequirement,
             YamlMacro,
             YamlMacroConfig,
             YamlMacroParameterSpec,
@@ -85,15 +86,22 @@ class MacroDefinitionPlugin:
         raw_parameters = node_config.get("parameters", [])
         parameters = [YamlMacroParameterSpec(**p) for p in raw_parameters]
 
-        # Extract nodes
+        # Extract nodes — support both static list and raw YAML template string
         nodes = node_config.get("nodes", [])
-        if not nodes:
+        nodes_raw = node_config.get("nodes_raw")
+
+        if not nodes and not nodes_raw:
             raise YamlPipelineBuilderError(
-                f"Macro '{macro_name}' has no nodes. Macros must define at least one node."
+                f"Macro '{macro_name}' has no nodes. "
+                f"Macros must define 'nodes' (list) or 'nodes_raw' (template string)."
             )
 
         # Extract outputs (optional)
         outputs = node_config.get("outputs")
+
+        # Extract port requirements (optional)
+        raw_ports = node_config.get("requires_ports", [])
+        requires_ports = [PortRequirement(**p) for p in raw_ports]
 
         # Create YamlMacroConfig
         macro_config = YamlMacroConfig(
@@ -101,6 +109,8 @@ class MacroDefinitionPlugin:
             macro_description=macro_description,
             parameters=parameters,
             nodes=nodes,
+            nodes_raw=nodes_raw,
+            requires_ports=requires_ports,
             outputs=outputs,
         )
 
@@ -108,12 +118,24 @@ class MacroDefinitionPlugin:
         # Create a dynamic class that pre-fills the YamlMacro config
         config_dict = macro_config.model_dump()
 
+        # Structural fields that must not be overridden at invocation time
+        _structural = frozenset({
+            "macro_name",
+            "macro_description",
+            "parameters",
+            "nodes",
+            "nodes_raw",
+            "requires_ports",
+            "outputs",
+        })
+
         class DynamicYamlMacro(YamlMacro):
             """Dynamically generated YamlMacro with pre-filled configuration."""
 
             def __init__(self, **kwargs: Any) -> None:
-                # Merge pre-filled config with any override kwargs
-                merged_config = {**config_dict, **kwargs}
+                # Only allow non-structural overrides (parameter values)
+                safe_kwargs = {k: v for k, v in kwargs.items() if k not in _structural}
+                merged_config = {**config_dict, **safe_kwargs}
                 super().__init__(**merged_config)
 
         # Set class name for better debugging

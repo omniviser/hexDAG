@@ -137,6 +137,10 @@ class YamlPipelineBuilder:
         # Inline config from kind: Config documents in multi-doc YAML
         self._inline_config: Any = None  # HexDAGConfig | None (avoid circular import)
 
+        # Pipeline ports declared in spec.ports — populated during _build_graph()
+        # so entity plugins (e.g., MacroEntityPlugin) can validate port requirements.
+        self.pipeline_ports: dict[str, dict[str, Any]] = {}
+
         self._register_default_plugins()
 
     @property
@@ -361,11 +365,13 @@ class YamlPipelineBuilder:
         # Macro and Config definitions have different structure
         kind = config.get("kind")
         if kind == "Macro":
-            # Macro has: metadata, parameters, nodes (no spec)
+            # Macro has: metadata, parameters, nodes or nodes_raw (no spec)
             if "metadata" not in config:
                 raise YamlPipelineBuilderError("Macro definition must have 'metadata' field")
-            if "nodes" not in config:
-                raise YamlPipelineBuilderError("Macro definition must have 'nodes' field")
+            if "nodes" not in config and "nodes_raw" not in config:
+                raise YamlPipelineBuilderError(
+                    "Macro definition must have 'nodes' or 'nodes_raw' field"
+                )
         elif kind == "Config":
             # Config has: metadata, spec (no nodes)
             if "spec" not in config:
@@ -484,6 +490,9 @@ class YamlPipelineBuilder:
         spec = config.get("spec", {})
         nodes_list = spec.get("nodes", [])
 
+        # Expose pipeline ports for entity plugins (e.g., port requirement validation)
+        self.pipeline_ports = spec.get("ports", {})
+
         # --- Pass 1: collect all node names ---
         known_nodes = frozenset(
             nc.get("metadata", {}).get("name")
@@ -492,7 +501,9 @@ class YamlPipelineBuilder:
         )
 
         # --- Pass 2: infer deps & build ---
-        previous_node_id: str | None = None
+        # Track the previous node(s) for implicit sequential dependencies.
+        # A list because macros may expand to multiple exit nodes.
+        previous_node_ids: list[str] = []
 
         for node_config in nodes_list:
             node_id = node_config.get("metadata", {}).get("name")
@@ -527,26 +538,32 @@ class YamlPipelineBuilder:
                 # No explicit deps — use inferred + wait_for
                 merged_deps = inferred_deps | set(wait_for)
                 node_config = {**node_config, "dependencies": sorted(merged_deps)}
-            elif previous_node_id is not None:
+            elif previous_node_ids:
                 # Implicit sequential dependency (no refs, no wait_for, not first)
-                node_config = {**node_config, "dependencies": [previous_node_id]}
+                node_config = {**node_config, "dependencies": previous_node_ids}
             # else: first node, no deps → root
 
             # Find plugin that can handle this entity
+            handled_by: EntityPlugin | None = None
             for plugin in self.entity_plugins:
                 if plugin.can_handle(node_config):
                     result = plugin.build(node_config, self, graph)
                     if result is not None:
                         graph += result
+                    handled_by = plugin
                     break
             else:
                 # No plugin handled it - error
                 kind = node_config.get("kind", "unknown")
                 raise YamlPipelineBuilderError(f"No plugin can handle kind: {kind}")
 
-            # Track for next iteration
-            if node_id:
-                previous_node_id = node_id
+            # Track exit node(s) for the next iteration's implicit deps.
+            # Macros expand to subgraphs — use their actual exit nodes,
+            # not the macro instance name (which isn't a real node).
+            if isinstance(handled_by, MacroEntityPlugin) and handled_by.last_exit_nodes:
+                previous_node_ids = handled_by.last_exit_nodes
+            elif node_id:
+                previous_node_ids = [node_id]
 
         # --- Pass 3: ensure on_error handlers depend on the failing node ---
         for node_name in list(graph.nodes):

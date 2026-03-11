@@ -12,6 +12,8 @@ allowed_cycles:
   - [hexdag.compiler.yaml_builder, hexdag.compiler.plugins.macro_entity, hexdag.kernel.yaml_macro]
   # Cycle 3: yaml_builder ↔ macro_definition ↔ yaml_macro — lazy imports, safe by design
   - [hexdag.compiler.yaml_builder, hexdag.compiler.plugins.macro_definition, hexdag.kernel.yaml_macro]
+  # Cycle 4: macro_entity ↔ yaml_macro — lazy fallback import + callback injection breaks cycle
+  - [hexdag.compiler.plugins.macro_entity, hexdag.kernel.yaml_macro]
 
 # Modules allowed to use TYPE_CHECKING guards for internal imports.
 # These are hidden cycles that are intentionally masked.

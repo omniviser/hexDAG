@@ -10,12 +10,12 @@ from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import ResolveError, resolve
-from hexdag.kernel.yaml_macro import YamlMacro
+from hexdag.kernel.yaml_macro import YamlMacro, YamlMacroConfig
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+    from hexdag.compiler.yaml_builder import EntityPlugin, YamlPipelineBuilder
     from hexdag.kernel.domain.dag import NodeSpec
 
 logger = get_logger(__name__)
@@ -23,6 +23,11 @@ logger = get_logger(__name__)
 
 class MacroEntityPlugin:
     """Plugin for handling macro_invocation entities."""
+
+    def __init__(self) -> None:
+        # Exit nodes of the last expanded macro, used by the builder
+        # to set correct implicit dependencies for the next node.
+        self.last_exit_nodes: list[str] = []
 
     def can_handle(self, node_config: dict[str, Any]) -> bool:
         """Handle macro_invocation kind."""
@@ -41,10 +46,21 @@ class MacroEntityPlugin:
         # macro_ref is the full module path (e.g., hexdag.stdlib.macros.ReasoningAgentMacro)
         # or a runtime-registered name for YAML-defined macros
 
-        # Get config params for macro initialization
+        # Get config params for macro initialization and inputs for expansion.
+        # config → macro __init__ (class-level settings)
+        # inputs → macro expand() (instance-level values)
         config_params = spec.get("config", {}).copy()
         inputs = spec.get("inputs", {})
         dependencies = spec.get("dependencies", [])
+
+        # Reject overlapping keys — forces users to be explicit about intent
+        overlap = set(config_params) & set(inputs)
+        if overlap:
+            raise YamlPipelineBuilderError(
+                f"Macro '{instance_name}': keys {sorted(overlap)} appear in both "
+                f"'config' and 'inputs'. Use 'config' for macro initialization, "
+                f"'inputs' for expansion parameters."
+            )
 
         # Resolve macro class - either full module path or runtime-registered name
         try:
@@ -67,32 +83,42 @@ class MacroEntityPlugin:
 
         macro_instance: ConfigurableMacro = macro_instance_obj
 
-        # Expand macro - merge config and inputs for validation
-        # config params are the parameter values for the macro
-        # inputs are the value mappings, so they should be merged
-        macro_inputs = {**config_params, **inputs}
+        # Validate port requirements (YAML macros only)
+        self._validate_port_requirements(macro_instance, instance_name, macro_ref, builder)
 
-        # Expand macro — for YamlMacro, inject node_builder callback to
-        # avoid circular import (yaml_macro → compiler → yaml_macro)
+        # Expand macro — only pass inputs (not config) to expand().
+        # Config was already consumed by __init__; passing it again would
+        # double-apply values and silently override inputs on collision.
+        # For YamlMacro, inject node_builder callback to avoid circular
+        # import (yaml_macro → compiler → yaml_macro).
+        # The expansion_guard detects circular A→B→A references and
+        # enforces a depth limit.
         try:
-            if isinstance(macro_instance, YamlMacro):
-                subgraph = macro_instance.expand(
-                    instance_name=instance_name,
-                    inputs=macro_inputs,
-                    dependencies=dependencies,
-                    node_builder=self._make_node_builder(builder),
-                )
-            else:
-                subgraph = macro_instance.expand(
-                    instance_name=instance_name, inputs=macro_inputs, dependencies=dependencies
-                )
-        except ValueError:
-            # Re-raise validation errors directly (e.g., required parameter, enum validation)
+            with macro_instance.expansion_guard(instance_name):
+                if isinstance(macro_instance, YamlMacro):
+                    subgraph = macro_instance.expand(
+                        instance_name=instance_name,
+                        inputs=inputs,
+                        dependencies=dependencies,
+                        node_builder=self._make_node_builder(builder),
+                    )
+                else:
+                    subgraph = macro_instance.expand(
+                        instance_name=instance_name,
+                        inputs=inputs,
+                        dependencies=dependencies,
+                    )
+        except (ValueError, YamlPipelineBuilderError):
+            # Re-raise validation/builder errors directly
             raise
         except Exception as e:
             raise YamlPipelineBuilderError(
                 f"Failed to expand macro '{macro_ref}' (instance '{instance_name}'): {e}"
             ) from e
+
+        # Track exit nodes BEFORE merging (get_exit_nodes checks the
+        # subgraph in isolation, which is what we want).
+        self.last_exit_nodes = subgraph.get_exit_nodes()
 
         # Merge subgraph into main graph
         self._merge_subgraph(graph, subgraph, dependencies)
@@ -108,6 +134,32 @@ class MacroEntityPlugin:
         return None
 
     @staticmethod
+    def _validate_port_requirements(
+        macro_instance: ConfigurableMacro,
+        instance_name: str,
+        macro_ref: str,
+        builder: YamlPipelineBuilder,
+    ) -> None:
+        """Validate that the pipeline provides all ports required by the macro.
+
+        Only applies to YAML macros with ``requires_ports`` declared.
+        """
+        config = getattr(macro_instance, "config", None)
+        if not isinstance(config, YamlMacroConfig):
+            return
+        if not config.requires_ports:
+            return
+
+        pipeline_ports = getattr(builder, "pipeline_ports", {})
+        for req in config.requires_ports:
+            if not req.optional and req.name not in pipeline_ports:
+                raise YamlPipelineBuilderError(
+                    f"Macro '{macro_ref}' (instance '{instance_name}') requires "
+                    f"port '{req.name}' ({req.protocol}) but it is not declared "
+                    f"in pipeline spec.ports"
+                )
+
+    @staticmethod
     def _make_node_builder(
         builder: YamlPipelineBuilder,
     ) -> Callable[[list[dict[str, Any]]], DirectedGraph]:
@@ -116,17 +168,28 @@ class MacroEntityPlugin:
         The callback builds a DirectedGraph from a list of rendered node configs
         using the builder's entity plugins — this is injected into YamlMacro to
         avoid the circular import between yaml_macro and the compiler.
+
+        Supports both regular nodes AND nested macro_invocation nodes,
+        enabling YAML macro composition.
         """
         node_plugin = NodeEntityPlugin(builder)
+        macro_plugin = MacroEntityPlugin()
+        plugins: list[EntityPlugin] = [macro_plugin, node_plugin]
 
         def _build(rendered_nodes: list[dict[str, Any]]) -> DirectedGraph:
             graph = DirectedGraph()
             for node_config in rendered_nodes:
-                if not node_plugin.can_handle(node_config):
+                handled = False
+                for plugin in plugins:
+                    if plugin.can_handle(node_config):
+                        result = plugin.build(node_config, builder, graph)
+                        if result is not None:
+                            graph += result
+                        handled = True
+                        break
+                if not handled:
                     kind = node_config.get("kind", "unknown")
                     raise ValueError(f"Invalid node kind in YAML macro: {kind}")
-                node_spec = node_plugin.build(node_config, builder, graph)
-                graph += node_spec
             return graph
 
         return _build
@@ -143,10 +206,12 @@ class MacroEntityPlugin:
             # Fast path: direct merge when no external dependencies
             graph |= subgraph
         else:
-            # Only process entry nodes that need external dependencies
-            # Use in-place merge for better performance
+            # Collect entry nodes BEFORE any mutation to avoid order-dependent detection
+            entry_nodes = frozenset(
+                node.name for node in subgraph if not subgraph.get_dependencies(node.name)
+            )
             for node in subgraph:
-                if not subgraph.get_dependencies(node.name):
+                if node.name in entry_nodes:
                     # Entry node - add external dependencies
                     graph += node.after(*external_deps)
                 else:

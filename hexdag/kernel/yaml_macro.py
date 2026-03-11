@@ -50,20 +50,33 @@ YAML macro usage::
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from jinja2 import ChainableUndefined, Environment, TemplateSyntaxError, UndefinedError
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from hexdag.kernel.configurable import ConfigurableMacro, MacroConfig
 from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
+from hexdag.kernel.validation.sanitized_types import _BASE_TYPE_MAP
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = get_logger(__name__)
+
+# Extend kernel's _BASE_TYPE_MAP with collection types and Any for macro
+# parameter validation.  int is accepted for float (widening).
+_PARAM_TYPE_MAP: dict[str, tuple[type, ...]] = {
+    **{k: (v,) for k, v in _BASE_TYPE_MAP.items()},
+    "float": (int, float),  # widen: int → float
+    "list": (list,),
+    "dict": (dict,),
+    "Any": (object,),
+}
 
 
 class PreserveUndefined(ChainableUndefined):
@@ -120,6 +133,12 @@ class YamlMacroParameterSpec(BaseModel):
     default: Any = None
     enum: list[Any] | None = None
 
+    @model_validator(mode="after")
+    def _track_explicit_default(self) -> YamlMacroParameterSpec:
+        """Track whether 'default' was explicitly provided (including None)."""
+        object.__setattr__(self, "_has_explicit_default", "default" in self.model_fields_set)
+        return self
+
     @field_validator("type")
     @classmethod
     def validate_type(cls, v: str) -> str:
@@ -134,6 +153,31 @@ class YamlMacroParameterSpec(BaseModel):
                     f"Invalid type '{t}'. Must be one of: {', '.join(valid_base_types)}"
                 )
         return v
+
+
+class PortRequirement(BaseModel):
+    """Declares a port dependency for a YAML macro.
+
+    When a macro uses LLM calls, database access, or other port-backed
+    operations, it should declare those dependencies so the builder can
+    validate at build time that the parent pipeline provides them.
+
+    Attributes
+    ----------
+    name : str
+        Port name as declared in the pipeline's ``spec.ports`` (e.g., ``"llm"``).
+    protocol : str
+        Expected protocol name for documentation (e.g., ``"LLM"``,
+        ``"SupportsKeyValue"``).  Not enforced at build time — serves
+        as a hint for pipeline authors.
+    optional : bool
+        If ``True``, the macro works without this port (graceful degradation).
+        If ``False`` (default), a missing port raises a build-time error.
+    """
+
+    name: str
+    protocol: str
+    optional: bool = False
 
 
 class YamlMacroConfig(MacroConfig):
@@ -153,6 +197,14 @@ class YamlMacroConfig(MacroConfig):
         Parameter definitions
     nodes : list[dict[str, Any]]
         Node templates (will be rendered with Jinja2)
+    nodes_raw : str | None
+        Raw YAML string for pre-parse Jinja2 rendering.
+        When present and contains ``{%`` block tags, the expansion path
+        renders this string with Jinja2 first, then parses the result
+        as YAML to produce the node list.  This enables dynamic node
+        generation with ``{% for %}`` and ``{% if %}`` constructs.
+    requires_ports : list[PortRequirement]
+        Port dependencies that the parent pipeline must provide.
     outputs : dict[str, str] | None
         Output mappings (optional, like Python macros)
     """
@@ -161,6 +213,8 @@ class YamlMacroConfig(MacroConfig):
     macro_description: str | None = None
     parameters: list[YamlMacroParameterSpec] = Field(default_factory=list)
     nodes: list[dict[str, Any]] = Field(default_factory=list)
+    nodes_raw: str | None = None
+    requires_ports: list[PortRequirement] = Field(default_factory=list)
     outputs: dict[str, str] | None = None
 
 
@@ -295,8 +349,13 @@ class YamlMacro(ConfigurableMacro):
         # Step 2: Build Jinja2 context
         context = self._build_template_context(instance_name, validated_inputs, dependencies)
 
-        # Step 3: Render node templates
-        rendered_nodes = self._render_node_templates(config.nodes, context)
+        # Step 3: Render node templates — choose path based on nodes_raw
+        if config.nodes_raw and "{%" in config.nodes_raw:
+            # Pre-parse path: render raw YAML string with Jinja2, then parse
+            rendered_nodes = self._render_nodes_from_raw(config.nodes_raw, context)
+        else:
+            # Post-parse path: render individual string fields in parsed dicts
+            rendered_nodes = self._render_node_templates(config.nodes, context)
 
         # Step 4: Build DirectedGraph from rendered nodes
         graph = self._build_graph_from_nodes(rendered_nodes, node_builder)
@@ -309,6 +368,60 @@ class YamlMacro(ConfigurableMacro):
         )
 
         return graph
+
+    def _render_nodes_from_raw(
+        self,
+        nodes_raw: str,
+        context: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Pre-parse Jinja2 rendering for dynamic node generation.
+
+        Renders the raw YAML nodes template string with Jinja2 first,
+        then parses the result as YAML to produce the node list.  This
+        enables ``{% for %}`` and ``{% if %}`` constructs at the node
+        list level.
+
+        Parameters
+        ----------
+        nodes_raw : str
+            Raw YAML template string with Jinja2 block tags
+        context : dict[str, Any]
+            Template rendering context
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Parsed node configurations after template rendering
+
+        Raises
+        ------
+        YamlPipelineBuilderError
+            If template rendering or YAML parsing fails
+        """
+        config: YamlMacroConfig = self.config  # type: ignore[assignment]
+
+        try:
+            template = self.jinja_env.from_string(nodes_raw)
+            rendered_yaml = template.render(context)
+        except (TemplateSyntaxError, UndefinedError) as e:
+            raise YamlPipelineBuilderError(
+                f"Failed to render nodes_raw template in macro '{config.macro_name}': {e}"
+            ) from e
+
+        try:
+            parsed = yaml.safe_load(rendered_yaml)
+        except yaml.YAMLError as e:
+            raise YamlPipelineBuilderError(
+                f"Failed to parse rendered YAML in macro '{config.macro_name}': {e}"
+            ) from e
+
+        if not isinstance(parsed, list):
+            raise YamlPipelineBuilderError(
+                f"Rendered nodes_raw in macro '{config.macro_name}' must be "
+                f"a YAML list, got {type(parsed).__name__}"
+            )
+
+        return parsed
 
     def _validate_and_normalize_inputs(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Validate inputs against parameter schema and apply defaults.
@@ -344,6 +457,19 @@ class YamlMacro(ConfigurableMacro):
                         f"Parameter '{param_name}' must be one of {param.enum}, got '{value}'"
                     )
 
+                # Type validation
+                if param.type != "Any":
+                    expected: list[type] = []
+                    for t in param.type.split("|"):
+                        t = t.strip()
+                        if t in _PARAM_TYPE_MAP:
+                            expected.extend(_PARAM_TYPE_MAP[t])
+                    if expected and not isinstance(value, tuple(expected)):
+                        raise YamlPipelineBuilderError(
+                            f"Parameter '{param_name}' expected type '{param.type}', "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+
                 result[param_name] = value
 
             elif param.required:
@@ -353,8 +479,8 @@ class YamlMacro(ConfigurableMacro):
                     f"'{config.macro_name}'"
                 )
 
-            elif param.default is not None:
-                # Apply default
+            elif getattr(param, "_has_explicit_default", param.default is not None):
+                # Apply default (including explicit None defaults)
                 result[param_name] = param.default
 
         return result
@@ -497,18 +623,19 @@ class YamlMacro(ConfigurableMacro):
         YamlPipelineBuilderError
             If node building fails
         """
-        # Validate no nested macro_invocations
-        for node_config in rendered_nodes:
-            if node_config.get("kind") == "macro_invocation":
-                raise YamlPipelineBuilderError(
-                    "YAML macros cannot contain nested macro_invocations. "
-                    "Use Python macros for composition."
-                )
-
         if node_builder is not None:
             return node_builder(rendered_nodes)
 
-        # Fallback: lazy import for standalone usage
+        # Fallback: lazy import for standalone usage.
+        # User-registered aliases and custom types are NOT available here.
+        warnings.warn(
+            "YamlMacro._build_graph_from_nodes called without node_builder. "
+            "User-registered aliases and custom types will not be available.",
+            stacklevel=2,
+        )
+        from hexdag.compiler.plugins.macro_entity import (  # lazy: mutual cycle
+            MacroEntityPlugin,
+        )
         from hexdag.compiler.yaml_builder import (  # lazy: mutual cycle with macro_definition
             NodeEntityPlugin,
             YamlPipelineBuilder,
@@ -517,14 +644,20 @@ class YamlMacro(ConfigurableMacro):
         builder = YamlPipelineBuilder()
         graph = DirectedGraph()
         node_plugin = NodeEntityPlugin(builder)
+        macro_plugin = MacroEntityPlugin()
 
         for node_config in rendered_nodes:
-            if not node_plugin.can_handle(node_config):
+            handled = False
+            for plugin in (macro_plugin, node_plugin):
+                if plugin.can_handle(node_config):
+                    result = plugin.build(node_config, builder, graph)
+                    if result is not None:
+                        graph += result
+                    handled = True
+                    break
+            if not handled:
                 kind = node_config.get("kind", "unknown")
                 raise YamlPipelineBuilderError(f"Invalid node kind in YAML macro: {kind}")
-
-            node_spec = node_plugin.build(node_config, builder, graph)
-            graph += node_spec
 
         return graph
 

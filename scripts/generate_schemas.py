@@ -25,8 +25,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from hexdag.kernel.domain.pipeline_config import PipelineConfig
+from hexdag.kernel.domain.pipeline_config import PipelineConfig, _rebuild_pipeline_config
 from hexdag.kernel.schema.generator import SchemaGenerator
+
+# Resolve forward references (OrchestratorConfig, DefaultLimits, DefaultCaps)
+# so model_json_schema() includes their full definitions in $defs.
+_rebuild_pipeline_config()
 
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -98,6 +102,7 @@ def _build_spec_schema() -> dict[str, Any]:
     """
 
     pipeline_schema = PipelineConfig.model_json_schema()
+    pydantic_defs: dict[str, Any] = pipeline_schema.get("$defs", {})
     props: dict[str, Any] = {}
 
     # Fields that are NOT part of spec (they sit at pipeline level)
@@ -107,12 +112,13 @@ def _build_spec_schema() -> dict[str, Any]:
         if field_name in _NON_SPEC_FIELDS:
             continue
 
-        # Resolve $ref pointers that Pydantic generates for nested models
+        # Resolve $ref pointers that Pydantic generates for nested models.
+        # If the definition exists inline, expand it; otherwise keep the $ref
+        # so it can be hoisted into the top-level $defs by the caller.
         if "$ref" in field_schema:
             ref_key = field_schema["$ref"].rsplit("/", 1)[-1]
-            defs = pipeline_schema.get("$defs", {})
-            if ref_key in defs:
-                field_schema = defs[ref_key]
+            if ref_key in pydantic_defs:
+                field_schema = pydantic_defs[ref_key]
 
         # Resolve anyOf used for Optional fields (e.g. anyOf: [{...}, {type: null}])
         if "anyOf" in field_schema:
@@ -128,9 +134,8 @@ def _build_spec_schema() -> dict[str, Any]:
         additional = field_schema.get("additionalProperties")
         if isinstance(additional, dict) and "$ref" in additional:
             ref_key = additional["$ref"].rsplit("/", 1)[-1]
-            defs = pipeline_schema.get("$defs", {})
-            if ref_key in defs:
-                field_schema = {**field_schema, "additionalProperties": defs[ref_key]}
+            if ref_key in pydantic_defs:
+                field_schema = {**field_schema, "additionalProperties": pydantic_defs[ref_key]}
 
         props[field_name] = field_schema
 
@@ -169,6 +174,8 @@ def _build_spec_schema() -> dict[str, Any]:
         "type": "object",
         "properties": props,
         "required": ["nodes"],
+        # Pass pydantic_defs through so the caller can hoist them into $defs
+        "_pydantic_defs": pydantic_defs,
     }
 
 
@@ -183,6 +190,10 @@ def generate_pipeline_schema() -> dict[str, Any]:
     dict[str, Any]
         Complete JSON Schema for pipeline YAML files
     """
+    # Build spec schema first — it carries _pydantic_defs as a side-channel
+    spec_schema = _build_spec_schema()
+    pydantic_defs: dict[str, Any] = spec_schema.pop("_pydantic_defs", {})
+
     # Base schema structure
     schema: dict[str, Any] = {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -227,10 +238,12 @@ def generate_pipeline_schema() -> dict[str, Any]:
                 },
                 "required": ["name"],
             },
-            "spec": _build_spec_schema(),
+            "spec": spec_schema,
         },
         "required": ["kind", "metadata", "spec"],
-        "$defs": {},
+        # Hoist Pydantic-generated $defs (OrchestratorConfig, DefaultLimits, etc.)
+        # so that any $ref inside spec.properties resolves correctly in the IDE.
+        "$defs": dict(pydantic_defs),
     }
 
     # Generate node definitions
