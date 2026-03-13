@@ -393,6 +393,29 @@ class InvalidTransitionError(HexDAGError):
 # ============================================================================
 
 
+class CapDeniedError(HexDAGError):
+    """Raised when an operation is denied by capability restrictions.
+
+    Examples
+    --------
+    Example usage::
+
+        raise CapDeniedError("port.llm", cap_set)
+    """
+
+    def __init__(self, cap: str, cap_set: object = None) -> None:
+        """Initialize capability denied error.
+
+        Args
+        ----
+            cap: The capability that was denied
+            cap_set: The CapSet that denied the capability (optional)
+        """
+        super().__init__(f"Capability '{cap}' denied by CapSet")
+        self.cap = cap
+        self.cap_set = cap_set
+
+
 class VFSError(HexDAGError):
     """Raised when a VFS operation fails.
 
@@ -455,6 +478,8 @@ __all__ = [
     "HttpClientError",
     # Stdlib
     "InvalidTransitionError",
+    # Security
+    "CapDeniedError",
     # VFS
     "VFSError",
 ]

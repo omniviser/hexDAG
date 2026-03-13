@@ -113,6 +113,7 @@ Secrets declared with `secret()` are resolved in this order:
 | `ChromaDBAdapter` | ChromaDB vector store adapter. |
 | `HexDAGAdapter` | Mixin that auto-registers adapters when ``yaml_alias`` is pr... |
 | `PgVectorAdapter` | PostgreSQL pgvector adapter using SQLAlchemy. |
+| `RedisAdapter` | Redis-backed key-value store with TTL support. |
 
 ## Using Adapters in YAML
 

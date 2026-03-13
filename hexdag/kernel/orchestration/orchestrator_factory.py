@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 from hexdag.compiler.component_instantiator import ComponentInstantiator
 from hexdag.kernel.domain.pipeline_config import PipelineConfig, _rebuild_pipeline_config
+from hexdag.kernel.exceptions import CapDeniedError, ComponentInstantiationError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.ports_builder import PortsBuilder
 from hexdag.kernel.resolver import resolve
 
 if TYPE_CHECKING:
+    from hexdag.kernel.domain.caps import CapSet
     from hexdag.kernel.orchestration.components.lifecycle_manager import (
         HookConfig,
         PostDagHookConfig,
@@ -54,6 +56,7 @@ class OrchestratorFactory:
     def __init__(self) -> None:
         """Initialize the orchestrator factory."""
         self.component_instantiator = ComponentInstantiator()
+        self._pipeline_cap_set: CapSet | None = None
 
     def create_orchestrator(
         self,
@@ -258,6 +261,10 @@ class OrchestratorFactory:
 
         for port_name, port_spec in port_specs.items():
             try:
+                # Resolve adapter ref if present
+                if "ref" in port_spec:
+                    port_spec = self._resolve_adapter_ref(port_name, port_spec)
+
                 logger.debug("Instantiating port: {} = {}", port_name, port_spec)
                 adapter = self.component_instantiator.instantiate_adapter(port_spec, port_name)
                 ports[port_name] = adapter
@@ -272,6 +279,75 @@ class OrchestratorFactory:
                 raise
 
         return ports
+
+    def _resolve_adapter_ref(self, port_name: str, port_spec: dict[str, Any]) -> dict[str, Any]:
+        """Resolve a ``ref:`` adapter reference to a full port spec.
+
+        Looks up the named adapter definition from the adapter registry
+        and merges any inline config overrides on top of the base config.
+
+        Parameters
+        ----------
+        port_name : str
+            Port name (for error messages)
+        port_spec : dict[str, Any]
+            Port spec containing ``ref`` key and optional ``config`` overrides
+
+        Returns
+        -------
+        dict[str, Any]
+            Resolved port spec with ``adapter`` and ``config`` keys
+        """
+        from hexdag.compiler.plugins.adapter_definition import (  # lazy: compiler boundary
+            get_adapter_definition,
+        )
+
+        ref_name = port_spec["ref"]
+        adapter_def = get_adapter_definition(ref_name)
+
+        if adapter_def is None:
+            raise ComponentInstantiationError(
+                f"Port '{port_name}': adapter ref '{ref_name}' not found. "
+                f"Define it with 'kind: Adapter' in your YAML."
+            )
+
+        # Validate capability requirements if declared
+        capabilities = adapter_def.get("capabilities")
+        if capabilities and "requires" in capabilities:
+            self._validate_adapter_caps(port_name, ref_name, capabilities["requires"])
+
+        # Merge: ref config as base, inline overrides on top
+        merged_config = {**adapter_def["config"], **port_spec.get("config", {})}
+        return {"adapter": adapter_def["class"], "config": merged_config}
+
+    def _validate_adapter_caps(
+        self,
+        port_name: str,
+        adapter_ref: str,
+        required_caps: list[str],
+    ) -> None:
+        """Validate that the pipeline's CapSet allows the adapter's required caps.
+
+        Parameters
+        ----------
+        port_name : str
+            Port name (for error messages)
+        adapter_ref : str
+            Adapter ref name (for error messages)
+        required_caps : list[str]
+            Capabilities the adapter declares as required
+        """
+        # If no pipeline-level caps are configured, all caps are allowed
+        if self._pipeline_cap_set is None:
+            return
+
+        cap_set = self._pipeline_cap_set
+        for cap in required_caps:
+            if not cap_set.allows(cap):
+                raise CapDeniedError(
+                    f"port '{port_name}' adapter '{adapter_ref}' requires cap '{cap}'",
+                    cap_set,
+                )
 
     def _instantiate_services(
         self,

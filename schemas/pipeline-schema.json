@@ -733,6 +733,27 @@
                     ],
                     "default": null,
                     "title": "Deny"
+                },
+                "profiles": {
+                    "anyOf": [
+                        {
+                            "additionalProperties": {
+                                "additionalProperties": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                },
+                                "type": "object"
+                            },
+                            "type": "object"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Profiles"
                 }
             },
             "title": "DefaultCaps",
