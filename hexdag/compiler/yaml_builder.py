@@ -23,6 +23,7 @@ import yaml
 from hexdag.compiler.plugins.config_definition import ConfigDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.macro_definition import MacroDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.macro_entity import MacroEntityPlugin  # noqa: F401
+from hexdag.compiler.plugins.middleware_definition import MiddlewareDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.node_entity import NodeEntityPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin  # noqa: F401
 from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin  # noqa: F401
@@ -157,6 +158,7 @@ class YamlPipelineBuilder:
 
         # Entity plugins (build specific entity types)
         self.entity_plugins.append(ConfigDefinitionPlugin())  # Process Config definitions
+        self.entity_plugins.append(MiddlewareDefinitionPlugin())  # Process Middleware definitions
         self.entity_plugins.append(MacroDefinitionPlugin())  # Process Macro definitions
         self.entity_plugins.append(MacroEntityPlugin())  # Then macro invocations
         self.entity_plugins.append(NodeEntityPlugin(self))  # Finally regular nodes
@@ -228,6 +230,13 @@ class YamlPipelineBuilder:
                     if not isinstance(plugin, TemplatePlugin):
                         processed_doc = plugin.process(processed_doc)
                 self._process_config_definition(processed_doc)
+            elif kind == "Middleware":
+                # Process Middleware definition
+                processed_doc = doc
+                for plugin in self.preprocess_plugins:
+                    if not isinstance(plugin, TemplatePlugin):
+                        processed_doc = plugin.process(processed_doc)
+                self._process_middleware_definition(processed_doc)
             elif kind == "Macro":
                 # Process includes for macro definitions (but skip template rendering)
                 # Templates in macros should be preserved for expansion-time rendering
@@ -297,8 +306,10 @@ class YamlPipelineBuilder:
 
         Skips Macro definitions when selecting the Pipeline document.
         """
-        # Filter out Config and Macro definitions - they're processed separately
-        pipeline_docs = [doc for doc in documents if doc.get("kind") not in ("Macro", "Config")]
+        # Filter out Config, Macro, and Middleware definitions - they're processed separately
+        pipeline_docs = [
+            doc for doc in documents if doc.get("kind") not in ("Macro", "Config", "Middleware")
+        ]
 
         if not pipeline_docs:
             # No pipeline documents, return first macro (for macro-only files)
@@ -383,6 +394,27 @@ class YamlPipelineBuilder:
 
             if "metadata" not in config:
                 raise YamlPipelineBuilderError("Manifest YAML must have 'metadata' field")
+
+    def _process_middleware_definition(self, middleware_doc: dict[str, Any]) -> None:
+        """Process a kind: Middleware document and register its stack.
+
+        Parameters
+        ----------
+        middleware_doc : dict[str, Any]
+            Validated Middleware document
+        """
+        temp_graph = DirectedGraph()
+
+        middleware_plugin = next(
+            (p for p in self.entity_plugins if isinstance(p, MiddlewareDefinitionPlugin)), None
+        )
+
+        if middleware_plugin is None:
+            raise YamlPipelineBuilderError(
+                "MiddlewareDefinitionPlugin not found. Cannot process Middleware definitions."
+            )
+
+        middleware_plugin.build(middleware_doc, self, temp_graph)
 
     def _process_macro_definitions(self, macro_configs: list[dict[str, Any]]) -> None:
         """Process macro definitions and register them.

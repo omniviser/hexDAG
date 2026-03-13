@@ -17,6 +17,7 @@ from hexdag.kernel.ports.llm import (
     SupportsEmbedding,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsStructuredOutput,
     SupportsUsageTracking,
     SupportsVision,
     TokenUsage,
@@ -59,6 +60,7 @@ class OpenAIAdapter(
     LLM,
     SupportsGeneration,
     SupportsFunctionCalling,
+    SupportsStructuredOutput,
     SupportsVision,
     SupportsEmbedding,
     SupportsUsageTracking,
@@ -334,6 +336,133 @@ class OpenAIAdapter(
         except Exception as e:
             logger.error("OpenAI API error with tools: {}", e, exc_info=True)
             raise
+
+    async def aresponse_structured(
+        self,
+        messages: MessageList,
+        output_schema: dict[str, Any] | type,
+    ) -> dict[str, Any]:
+        """Generate a response conforming to a JSON schema using OpenAI's native JSON Schema mode.
+
+        Uses ``response_format={"type": "json_schema", ...}`` for guaranteed schema compliance.
+
+        Args
+        ----
+            messages: Conversation messages
+            output_schema: Pydantic model class or JSON Schema dict
+
+        Returns
+        -------
+        dict[str, Any]
+            Parsed response data conforming to the schema
+        """
+        from pydantic import BaseModel  # lazy: avoid import at module level
+
+        # Convert to JSON Schema
+        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+            schema = output_schema.model_json_schema()
+            schema_name = output_schema.__name__
+        elif isinstance(output_schema, dict):
+            schema = output_schema
+            schema_name = schema.get("title", "output")
+        else:
+            msg = f"output_schema must be a Pydantic model or dict, got {type(output_schema)}"
+            raise TypeError(msg)
+
+        # Sanitize for OpenAI strict mode: remove unsupported keys
+        sanitized = self._sanitize_schema_for_openai(schema)
+
+        try:
+            openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+
+            if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
+                openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+            request_params: dict[str, Any] = {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "frequency_penalty": self.frequency_penalty,
+                "presence_penalty": self.presence_penalty,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema_name,
+                        "schema": sanitized,
+                        "strict": True,
+                    },
+                },
+            }
+
+            if self.max_tokens is not None:
+                request_params["max_tokens"] = self.max_tokens
+
+            if self.seed is not None:
+                request_params["seed"] = self.seed
+
+            response = await self.client.chat.completions.create(**request_params)
+
+            # Capture token usage
+            self._last_usage = None
+            if response.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens,
+                )
+
+            if response.choices and response.choices[0].message.content:
+                data: dict[str, Any] = json.loads(response.choices[0].message.content)
+                return data
+
+            logger.warning("No content in OpenAI structured output response")
+            return {}
+
+        except Exception as e:
+            logger.error("OpenAI structured output error: {}", e, exc_info=True)
+            raise
+
+    @staticmethod
+    def _sanitize_schema_for_openai(schema: dict[str, Any]) -> dict[str, Any]:
+        """Sanitize a JSON Schema for OpenAI's strict mode.
+
+        OpenAI strict mode requires ``additionalProperties: false`` on all objects
+        and does not support certain schema features. This method recursively
+        sanitizes the schema.
+        """
+        import copy  # lazy: only needed in schema sanitization
+
+        schema = copy.deepcopy(schema)
+
+        def _sanitize(node: dict[str, Any]) -> None:
+            # Remove keys OpenAI doesn't support in strict mode
+            node.pop("$schema", None)
+            node.pop("$id", None)
+
+            if node.get("type") == "object":
+                node["additionalProperties"] = False
+
+                # All properties must be required in strict mode
+                if "properties" in node and "required" not in node:
+                    node["required"] = list(node["properties"].keys())
+
+            # Recurse into properties
+            for prop in node.get("properties", {}).values():
+                if isinstance(prop, dict):
+                    _sanitize(prop)
+
+            # Recurse into items (arrays)
+            if isinstance(node.get("items"), dict):
+                _sanitize(node["items"])
+
+            # Recurse into $defs
+            for defn in node.get("$defs", {}).values():
+                if isinstance(defn, dict):
+                    _sanitize(defn)
+
+        _sanitize(schema)
+        return schema
 
     async def aresponse_with_vision(
         self,

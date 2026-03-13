@@ -8,7 +8,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-from hexdag.kernel.orchestration.events.events import Event
+from hexdag.kernel.orchestration.events.events import PortCallEvent
 
 type MessageRole = Literal["user", "assistant", "system", "tool", "human", "ai"]
 type ToolChoice = Literal["auto", "none", "required"]
@@ -226,6 +226,60 @@ class SupportsFunctionCalling(Protocol):
                 tools,
                 tool_choice={"type": "function", "function": {"name": "search"}}
             )
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsStructuredOutput(Protocol):
+    """Optional protocol for LLMs that support native structured output.
+
+    This protocol enables LLM providers to guarantee JSON output conforming
+    to a given schema, using native API features (e.g., OpenAI JSON Schema mode,
+    Anthropic tool_use). Adapters that don't implement this protocol will be
+    automatically wrapped with a fallback middleware that uses prompt injection.
+
+    Examples
+    --------
+    Native structured output::
+
+        from pydantic import BaseModel
+
+        class Analysis(BaseModel):
+            sentiment: str
+            confidence: float
+
+        result = await llm.aresponse_structured(
+            messages=[Message(role="user", content="Analyze: Great product!")],
+            output_schema=Analysis,
+        )
+        # Returns: {"sentiment": "positive", "confidence": 0.95}
+    """
+
+    @abstractmethod
+    async def aresponse_structured(
+        self,
+        messages: MessageList,
+        output_schema: dict[str, Any] | type[BaseModel],
+    ) -> dict[str, Any]:
+        """Generate a response conforming to the given schema.
+
+        Args
+        ----
+            messages: Conversation messages
+            output_schema: Expected output schema — either a Pydantic model class
+                or a JSON Schema dict. Pydantic models are converted to JSON Schema
+                via ``model.model_json_schema()``.
+
+        Returns
+        -------
+        dict[str, Any]
+            Parsed response data conforming to the schema.
+
+        Raises
+        ------
+        ParseError
+            If the response cannot be parsed or validated against the schema.
         """
         ...
 
@@ -548,47 +602,54 @@ class SupportsEmbedding(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Port events — subtypes mirror Supports* capability protocols
+# Port events — unified LLMPortCall replaces old per-capability subtypes
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
-class LLMEvent(Event):
-    """Base event for all LLM port operations."""
+class LLMPortCall(PortCallEvent):
+    """Event for LLM port calls.
 
-    node_name: str
-    duration_ms: float = 0.0
+    One class covers all LLM methods.  The inherited ``method`` field
+    (``"aresponse"``, ``"aresponse_with_tools"``, ``"aresponse_structured"``,
+    ``"aresponse_with_vision"``, ``"aembed"``) distinguishes call types.
+
+    Attributes
+    ----------
+    usage : dict[str, int] | None
+        Token usage from the call.
+    model : str | None
+        Model identifier.
+    messages : list[dict[str, str]] | None
+        Serialised message list (text calls only).
+    response : str
+        LLM response text.
+    tool_calls : list[dict[str, Any]] | None
+        Tool calls returned (function-calling calls only).
+    """
+
     usage: dict[str, int] | None = None
     model: str | None = None
-
-
-@dataclass(slots=True)
-class LLMGeneration(LLMEvent):
-    """Emitted when SupportsGeneration.aresponse() is called."""
-
-    messages: list[dict[str, str]] | None = None
-    response: str = ""
-
-
-@dataclass(slots=True)
-class LLMFunctionCalling(LLMEvent):
-    """Emitted when SupportsFunctionCalling.aresponse_with_tools() is called."""
-
     messages: list[dict[str, str]] | None = None
     response: str = ""
     tool_calls: list[dict[str, Any]] | None = None
 
 
-@dataclass(slots=True)
-class LLMVision(LLMEvent):
-    """Emitted when SupportsVision.aresponse_with_vision() is called."""
+# ---------------------------------------------------------------------------
+# Backward-compatible aliases (deprecated — use LLMPortCall directly)
+# ---------------------------------------------------------------------------
 
-    response: str = ""
+LLMEvent = LLMPortCall
+"""Deprecated alias for :class:`LLMPortCall`."""
 
+LLMGeneration = LLMPortCall
+"""Deprecated alias for :class:`LLMPortCall` (method="aresponse")."""
 
-@dataclass(slots=True)
-class LLMEmbedding(LLMEvent):
-    """Emitted when SupportsEmbedding.aembed() is called."""
+LLMFunctionCalling = LLMPortCall
+"""Deprecated alias for :class:`LLMPortCall` (method="aresponse_with_tools")."""
 
-    text_count: int = 0
-    dimensions: int = 0
+LLMVision = LLMPortCall
+"""Deprecated alias for :class:`LLMPortCall` (method="aresponse_with_vision")."""
+
+LLMEmbedding = LLMPortCall
+"""Deprecated alias for :class:`LLMPortCall` (method="aembed")."""

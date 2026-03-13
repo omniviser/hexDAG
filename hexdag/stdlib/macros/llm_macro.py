@@ -141,9 +141,7 @@ class LLMMacro(ConfigurableMacro, yaml_alias="llm_macro"):
             name=instance_name,
             prompt_template=config.template,
             output_schema=config.output_schema,
-            system_prompt=config.system_prompt,
-            parse_json=config.output_schema is not None,
-            parse_strategy=config.parse_strategy,
+            system_message=config.system_prompt,
             deps=dependencies,
         )
         graph += llm_spec

@@ -70,6 +70,14 @@ allowed_exceptions:
   hexdag/kernel/orchestration/events/observers/__init__.py:
     - "from hexdag.stdlib.lib.observers import ("
 
+  # port_wrappers.py stacks middleware (observable, structured output) onto ports.
+  # These are lazy imports inside prepare_ports(), not module-level dependencies.
+  # Rationale: Middleware stacking is an orchestration concern that needs concrete middleware.
+  hexdag/kernel/orchestration/port_wrappers.py:
+    - "from hexdag.stdlib.middleware.observable import ObservableLLM"
+    - "from hexdag.stdlib.middleware.observable_tool_router import ObservableToolRouter"
+    - "from hexdag.stdlib.middleware.structured_output import StructuredOutputFallback"
+
   # Resolver imports stdlib.nodes to trigger auto-discovery and alias registration
   # Also imports adapter/macro discovery for the unified alias system.
   # These are lazy imports inside _ensure_builtin_bootstrapped(), not module-level dependencies.

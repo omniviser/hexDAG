@@ -142,6 +142,9 @@ class OrchestratorFactory:
             len(pipeline_config.policies),
         )
 
+        if any(spec.get("middleware") for spec in pipeline_config.ports.values()):
+            logger.info("Middleware declared on ports — will apply user middleware stack")
+
         # Step 1: Build PortsConfiguration if type_ports or node_ports are configured
         use_ports_config = bool(pipeline_config.type_ports)
 
@@ -156,7 +159,10 @@ class OrchestratorFactory:
             if additional_ports:
                 global_ports.update(additional_ports)
 
-        # Step 2: Create orchestrator with configured ports
+        # Step 2: Extract middleware config from port specs
+        middleware_config = self._extract_middleware_config(pipeline_config.ports)
+
+        # Step 3: Create orchestrator with configured ports
         orchestrator = Orchestrator(
             max_concurrent_nodes=max_concurrent_nodes,
             ports=ports_config if ports_config else global_ports,
@@ -164,9 +170,10 @@ class OrchestratorFactory:
             default_node_timeout=default_node_timeout,
             pre_hook_config=pre_hook_config,
             post_hook_config=post_hook_config,
+            middleware_config=middleware_config or None,
         )
 
-        # Step 3: Instantiate services if configured
+        # Step 4: Instantiate services if configured
         services = self._instantiate_services(pipeline_config, global_ports)
 
         if services:
@@ -184,6 +191,55 @@ class OrchestratorFactory:
         )
 
         return orchestrator
+
+    def _extract_middleware_config(
+        self, port_specs: dict[str, dict[str, Any]]
+    ) -> dict[str, list[str]]:
+        """Extract middleware declarations from port specs.
+
+        Looks for ``middleware`` key in each port spec and collects them
+        into a map of port_name → list of middleware module paths.
+
+        Supports three formats:
+        - ``middleware: [path1, path2]`` — inline list of module paths
+        - ``middleware: path`` — single module path (wrapped in list)
+        - ``middleware: stack-name`` — reference to a ``kind: Middleware`` manifest
+
+        Parameters
+        ----------
+        port_specs : dict[str, dict[str, Any]]
+            Raw port specs from PipelineConfig
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Map of port_name → middleware module paths (empty if none declared)
+        """
+        from hexdag.compiler.plugins.middleware_definition import (
+            get_middleware_stack,  # lazy: optional compiler dep
+        )
+
+        config: dict[str, list[str]] = {}
+        for port_name, port_spec in port_specs.items():
+            middleware = port_spec.get("middleware")
+            if middleware:
+                if isinstance(middleware, list):
+                    config[port_name] = middleware
+                elif isinstance(middleware, str):
+                    # Check if it's a named middleware stack (from kind: Middleware)
+                    named_stack = get_middleware_stack(middleware)
+                    if named_stack is not None:
+                        config[port_name] = named_stack
+                    else:
+                        # Single middleware module path
+                        config[port_name] = [middleware]
+                else:
+                    logger.warning(
+                        "Invalid middleware config for port '{}': expected list or string, got {}",
+                        port_name,
+                        type(middleware).__name__,
+                    )
+        return config
 
     def _instantiate_ports(self, port_specs: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Instantiate adapter instances from port specifications.

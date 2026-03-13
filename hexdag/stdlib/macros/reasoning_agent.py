@@ -159,7 +159,7 @@ class ReasoningAgentMacro(ConfigurableMacro, yaml_alias="reasoning_agent_macro")
         llm_factory = LLMNode()
         final_llm = llm_factory(
             name=f"{instance_name}_final",
-            prompt_template=f"""All reasoning steps and tool results:
+            human_message=f"""All reasoning steps and tool results:
 {{{{{prev_step}}}}}
 
 Provide your final conclusion based on all reasoning and evidence gathered.""",
@@ -210,7 +210,7 @@ Continue reasoning. Use tools if needed to gather more information."""
         llm_factory = LLMNode()
         llm_node = llm_factory(
             name=f"{step_name}_llm",
-            prompt_template=full_prompt,
+            human_message=full_prompt,
             deps=deps,
         )
         subgraph += llm_node

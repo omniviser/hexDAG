@@ -127,6 +127,8 @@ dev = [
     "pip-licenses>=5.0.0",  # License reporting
     # Type stubs
     "types-pyyaml==6.0.12",
+    # Tracing and instrumentation (omniviser internal)
+    "omniray",
 ]
 
 docs = [
@@ -148,6 +150,11 @@ packages = ["hexdag", "hexdag_plugins"]
 # For local development with uv - points to local packages not yet on PyPI
 [tool.uv.sources]
 hexdag-studio = { path = "hexdag-studio", editable = true }
+omniray = { git = "https://github.com/omniviser/omniray", subdirectory = "packages/omniray" }
+
+[tool.omniwrap]
+paths = ["hexdag"]
+exclude = ["tests", "examples", "scripts", "notebooks", "hexdag-studio"]
 
 [build-system]
 requires = ["hatchling"]

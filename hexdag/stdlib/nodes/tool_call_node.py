@@ -150,6 +150,8 @@ class ToolCallNode(BaseNodeFactory, yaml_alias="tool_call_node"):
             if observer_manager:
                 await observer_manager.notify(
                     ToolRouterEvent(
+                        port_type="tool_router",
+                        method="acall_tool",
                         node_name=name,
                         tool_name=tool_name,
                         params=arguments,

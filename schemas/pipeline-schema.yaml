@@ -349,32 +349,32 @@ $defs:
       spec:
         type: object
         properties:
-          prompt_template:
+          human_message:
             type: string
-            description: Template for the user prompt. Supports Jinja2-style {{variable}}
-              syntax. Can be a string or PromptTemplate/ChatPromptTemplate object.
-              Can also be provided as 'template' (alias for YAML compatibility).
+            description: User/human message template with ``{{variable}}`` syntax.
+            default: null
+          system_message:
+            type: string
+            description: System message template.
+            default: null
+          examples:
+            type: string
+            default: null
+          conversation:
+            type: string
             default: null
           output_schema:
             type: string
-            description: Expected output schema for structured output. If provided
-              with parse_json=True, the LLM response will be parsed and validated
-              against this schema.
+            default: null
+          prompt_template:
+            type: string
             default: null
           system_prompt:
             type: string
-            description: System message to prepend to the conversation.
             default: null
           parse_json:
             type: string
-            description: If True, parse the LLM response as JSON and validate against
-              output_schema. Default is False (returns raw text).
             default: false
-          parse_strategy:
-            type: string
-            description: 'JSON parsing strategy: "json", "json_in_markdown", or "yaml".
-              Default is "json".'
-            default: json
           template:
             type: string
             default: null

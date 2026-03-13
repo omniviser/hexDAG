@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from hexdag.kernel._alias_registry import resolve_function
 from hexdag.kernel.exceptions import ResourceNotFoundError, TypeMismatchError
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.orchestration.events.events import Event
+from hexdag.kernel.orchestration.events.events import PortCallEvent
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -189,16 +189,29 @@ class ToolRouter:
 
 
 # ---------------------------------------------------------------------------
-# Port event
+# Port event — unified ToolRouterPortCall
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
-class ToolRouterEvent(Event):
-    """Event emitted when ToolRouter.acall_tool() completes."""
+class ToolRouterPortCall(PortCallEvent):
+    """Event for ToolRouter port calls.
 
-    node_name: str
-    tool_name: str
+    Attributes
+    ----------
+    tool_name : str
+        Name of the tool that was called.
+    params : dict[str, Any] | None
+        Parameters passed to the tool.
+    result : Any
+        Tool execution result (or error dict on failure).
+    """
+
+    tool_name: str = ""
     params: dict[str, Any] | None = None
     result: Any = None
-    duration_ms: float = 0.0
+
+
+# Backward-compatible alias
+ToolRouterEvent = ToolRouterPortCall
+"""Deprecated alias for :class:`ToolRouterPortCall`."""

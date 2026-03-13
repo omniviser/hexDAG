@@ -42,7 +42,7 @@ from hexdag.kernel.orchestration.constants import (
 from hexdag.kernel.orchestration.events import WaveCompleted
 from hexdag.kernel.orchestration.hook_context import PipelineStatus
 from hexdag.kernel.orchestration.models import NodeExecutionContext, PortsConfiguration
-from hexdag.kernel.orchestration.port_wrappers import wrap_ports_with_observability
+from hexdag.kernel.orchestration.port_wrappers import prepare_ports
 from hexdag.kernel.ports.executor import ExecutionResult, ExecutionTask, Executor
 from hexdag.kernel.ports_builder import PortsBuilder
 from hexdag.kernel.utils.node_timer import Timer
@@ -179,6 +179,7 @@ class Orchestrator:
         pre_hook_config: HookConfig | None = None,
         post_hook_config: PostDagHookConfig | None = None,
         executor: Executor | None = None,
+        middleware_config: dict[str, list[str]] | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -196,6 +197,8 @@ class Orchestrator:
                 If None (default), creates LocalExecutor with the provided configuration.
                 Set to a custom Executor implementation (e.g., CeleryExecutor,
                 AzureFunctionsExecutor) for distributed or serverless execution.
+            middleware_config: Optional map of port_name -> list of middleware module
+                paths. Declared in YAML via ``spec.ports.<name>.middleware``.
 
         Notes
         -----
@@ -228,6 +231,7 @@ class Orchestrator:
                 )
 
         self.executor = executor
+        self.middleware_config = middleware_config
 
         self.ports_config: PortsConfiguration | None
         if isinstance(ports, PortsConfiguration):
@@ -550,7 +554,7 @@ class Orchestrator:
 
         observer_manager: ObserverManager | None = all_ports.get("observer_manager")
 
-        wrapped_ports = wrap_ports_with_observability(all_ports)
+        wrapped_ports = prepare_ports(all_ports, self.middleware_config)
 
         pipeline_name = getattr(graph, "name", "unnamed")
         context = NodeExecutionContext(dag_id=pipeline_name)

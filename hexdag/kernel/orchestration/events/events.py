@@ -424,3 +424,38 @@ class SystemCompleted(Event):
             f"System '{self.name}' completed in {self.duration_ms / 1000:.2f}s "
             f"({len(self.process_results)} processes)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Port call events — universal base for all port/adapter method calls
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class PortCallEvent(Event):
+    """Base event for all port/adapter method calls.
+
+    Provides a universal base that observers can use to catch *any* port call
+    via ``isinstance(event, PortCallEvent)``.  Typed subtypes (``LLMPortCall``,
+    ``ToolRouterPortCall``, etc.) add port-specific fields.
+
+    Attributes
+    ----------
+    port_type : str
+        Port category: ``"llm"``, ``"tool_router"``, ``"data_store"``, etc.
+    method : str
+        Method name that was called: ``"aresponse"``, ``"acall_tool"``, etc.
+    node_name : str
+        Name of the DAG node that triggered this call.
+    duration_ms : float
+        Wall-clock duration of the call in milliseconds.
+    """
+
+    port_type: str
+    method: str
+    node_name: str
+    duration_ms: float = 0.0
+
+    def log_message(self) -> str:
+        """Format log message for port call event."""
+        return f"⚡ {self.port_type}.{self.method} ({self.node_name}, {self.duration_ms:.1f}ms)"
