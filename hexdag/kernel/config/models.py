@@ -138,10 +138,34 @@ class DefaultCaps:
         Default allowlist of capabilities. None means unrestricted.
     deny : list[str] | None
         Capabilities that are always denied unless explicitly granted.
+    profiles : dict[str, dict[str, list[str]]] | None
+        Named capability profiles. Each profile maps to a dict with
+        ``allow`` and/or ``deny`` keys.
+        Example: ``{"read-only": {"allow": ["vas.read"], "deny": ["vas.exec"]}}``
     """
 
     default_set: list[str] | None = None
     deny: list[str] | None = None
+    profiles: dict[str, dict[str, list[str]]] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MCPPermissions:
+    """MCP client permission mapping.
+
+    Maps MCP client identifiers to capability profile names defined
+    in ``DefaultCaps.profiles``.
+
+    Attributes
+    ----------
+    default_profile : str
+        Default profile applied to clients without explicit mapping.
+    client_profiles : dict[str, str]
+        Maps client_id → profile_name.
+    """
+
+    default_profile: str = "read-only"
+    client_profiles: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -216,3 +240,6 @@ class HexDAGConfig:
 
     # Default capability boundaries
     caps: DefaultCaps = field(default_factory=DefaultCaps)
+
+    # MCP client permission mapping
+    mcp_permissions: MCPPermissions = field(default_factory=MCPPermissions)

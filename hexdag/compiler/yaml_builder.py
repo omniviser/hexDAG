@@ -20,6 +20,7 @@ import yaml
 
 # Re-export extracted classes for backward compatibility.
 # Existing code that imports from ``yaml_builder`` continues to work.
+from hexdag.compiler.plugins.adapter_definition import AdapterDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.config_definition import ConfigDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.macro_definition import MacroDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.macro_entity import MacroEntityPlugin  # noqa: F401
@@ -158,6 +159,7 @@ class YamlPipelineBuilder:
 
         # Entity plugins (build specific entity types)
         self.entity_plugins.append(ConfigDefinitionPlugin())  # Process Config definitions
+        self.entity_plugins.append(AdapterDefinitionPlugin())  # Process Adapter definitions
         self.entity_plugins.append(MiddlewareDefinitionPlugin())  # Process Middleware definitions
         self.entity_plugins.append(MacroDefinitionPlugin())  # Process Macro definitions
         self.entity_plugins.append(MacroEntityPlugin())  # Then macro invocations
@@ -230,6 +232,13 @@ class YamlPipelineBuilder:
                     if not isinstance(plugin, TemplatePlugin):
                         processed_doc = plugin.process(processed_doc)
                 self._process_config_definition(processed_doc)
+            elif kind == "Adapter":
+                # Process Adapter definition
+                processed_doc = doc
+                for plugin in self.preprocess_plugins:
+                    if not isinstance(plugin, TemplatePlugin):
+                        processed_doc = plugin.process(processed_doc)
+                self._process_adapter_definition(processed_doc)
             elif kind == "Middleware":
                 # Process Middleware definition
                 processed_doc = doc
@@ -308,7 +317,9 @@ class YamlPipelineBuilder:
         """
         # Filter out Config, Macro, and Middleware definitions - they're processed separately
         pipeline_docs = [
-            doc for doc in documents if doc.get("kind") not in ("Macro", "Config", "Middleware")
+            doc
+            for doc in documents
+            if doc.get("kind") not in ("Macro", "Config", "Middleware", "Adapter")
         ]
 
         if not pipeline_docs:
@@ -415,6 +426,27 @@ class YamlPipelineBuilder:
             )
 
         middleware_plugin.build(middleware_doc, self, temp_graph)
+
+    def _process_adapter_definition(self, adapter_doc: dict[str, Any]) -> None:
+        """Process a kind: Adapter document and register its definition.
+
+        Parameters
+        ----------
+        adapter_doc : dict[str, Any]
+            Validated Adapter document
+        """
+        temp_graph = DirectedGraph()
+
+        adapter_plugin = next(
+            (p for p in self.entity_plugins if isinstance(p, AdapterDefinitionPlugin)), None
+        )
+
+        if adapter_plugin is None:
+            raise YamlPipelineBuilderError(
+                "AdapterDefinitionPlugin not found. Cannot process Adapter definitions."
+            )
+
+        adapter_plugin.build(adapter_doc, self, temp_graph)
 
     def _process_macro_definitions(self, macro_configs: list[dict[str, Any]]) -> None:
         """Process macro definitions and register them.

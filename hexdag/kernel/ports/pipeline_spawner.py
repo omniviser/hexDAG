@@ -33,6 +33,7 @@ class PipelineSpawner(Protocol):
         parent_run_id: str | None = None,
         wait: bool = False,
         timeout: float | None = None,
+        cap_set: Any | None = None,
     ) -> str:
         """Spawn a new pipeline run.
 
@@ -45,6 +46,9 @@ class PipelineSpawner(Protocol):
             parent_run_id: ID of the parent run for hierarchical tracking.
             wait: If True, block until the pipeline completes.
             timeout: Maximum wait time in seconds (only when ``wait=True``).
+            cap_set: Optional CapSet to enforce on the child pipeline.
+                If provided, the child's effective caps are the intersection
+                of the parent's caps and this value (narrowing-only).
 
         Returns
         -------

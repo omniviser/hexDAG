@@ -47,6 +47,9 @@ database = [
 mcp = [
     "mcp>=1.0.0", # Model Context Protocol server support
 ]
+redis = [
+    "redis>=5.0.0", # Redis adapter for distributed caching
+]
 # Storage plugin extras (bundled with main package)
 storage-postgresql = ["sqlalchemy>=2.0.0", "asyncpg>=0.29.0", "pgvector>=0.3.0"]
 storage-mysql = ["sqlalchemy>=2.0.0", "aiomysql>=0.2.0"]
@@ -77,6 +80,7 @@ all = [
     "hexdag[notebooks]",
     "hexdag[studio]",
     "hexdag[mcp]",
+    "hexdag[redis]",
 ]
 
 [project.urls]
@@ -247,7 +251,7 @@ module = ["tests.*", "hexdag_plugins.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["openai", "anthropic", "orjson"]
+module = ["openai", "anthropic", "orjson", "redis", "redis.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -473,7 +477,8 @@ exclude = [
 
 # Per-rule ignores for specific packages
 [tool.deptry.per_rule_ignores]
-DEP002 = ["openai", "anthropic"]
+DEP001 = ["redis"]
+DEP002 = ["openai", "anthropic", "redis"]
 
 # Package name mappings
-package_module_name_map = { openai = "openai", anthropic = "anthropic" }
+package_module_name_map = { openai = "openai", anthropic = "anthropic", redis = "redis" }

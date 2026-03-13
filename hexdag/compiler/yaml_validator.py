@@ -368,6 +368,14 @@ class YamlValidator:
             # Skip pipeline-specific validation for Middleware kind
             return
 
+        if kind == "Adapter":
+            # Adapter has: metadata, spec.class (no nodes)
+            spec = config.get("spec", {})
+            if not isinstance(spec, dict) or "class" not in spec:
+                result.add_error("Adapter definition must contain 'spec.class' field")
+            # Skip pipeline-specific validation for Adapter kind
+            return
+
         # For Pipeline and other kinds, validate spec
         if "spec" not in config:
             result.add_error("Configuration must contain 'spec' field")

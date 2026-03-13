@@ -5,9 +5,10 @@ from __future__ import annotations
 import pytest
 
 from hexdag.drivers.vfs.local import LocalVFS
+from hexdag.kernel.domain.caps import CapSet
 from hexdag.kernel.domain.vfs import DirEntry, EntryType, StatResult
-from hexdag.kernel.exceptions import VFSError
-from hexdag.kernel.ports.vfs import VFS
+from hexdag.kernel.exceptions import CapDeniedError, VFSError
+from hexdag.kernel.ports.vfs import VFS, VFSProvider
 
 
 class StubProvider:
@@ -262,3 +263,131 @@ class TestAstat:
 
         await vfs.astat("/proc/runs/abc123")
         assert provider.stat_calls == ["abc123"]
+
+
+# ---------------------------------------------------------------------------
+# Capability-based access control tests
+# ---------------------------------------------------------------------------
+
+
+class CapsStubProvider(VFSProvider):
+    """Minimal VFS provider for cap testing."""
+
+    async def read(self, relative_path: str) -> str:
+        return f"content:{relative_path}"
+
+    async def readdir(self, relative_path: str) -> list[DirEntry]:
+        return [DirEntry(name="item", entry_type=EntryType.FILE, path="/cstub/item")]
+
+    async def stat(self, relative_path: str) -> StatResult:
+        return StatResult(
+            path=f"/cstub/{relative_path}",
+            entry_type=EntryType.FILE,
+            description="stub",
+        )
+
+
+@pytest.fixture
+def vfs_with_caps_provider() -> LocalVFS:
+    """VFS with a stub provider mounted for cap tests."""
+    vfs = LocalVFS()
+    vfs.mount("/cstub/", CapsStubProvider())
+    return vfs
+
+
+class TestLocalVFSCapsRead:
+    """Tests for aread with capability checks."""
+
+    @pytest.mark.asyncio()
+    async def test_aread_allowed_with_cap(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"vas.read"}))
+        vfs_with_caps_provider.set_caps(caps)
+        result = await vfs_with_caps_provider.aread("/cstub/file")
+        assert result == "content:file"
+
+    @pytest.mark.asyncio()
+    async def test_aread_denied_without_cap(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"port.llm"}))
+        vfs_with_caps_provider.set_caps(caps)
+        with pytest.raises(CapDeniedError, match="vas.read"):
+            await vfs_with_caps_provider.aread("/cstub/file")
+
+    @pytest.mark.asyncio()
+    async def test_no_capset_allows_everything(self, vfs_with_caps_provider: LocalVFS) -> None:
+        result = await vfs_with_caps_provider.aread("/cstub/file")
+        assert result == "content:file"
+
+
+class TestLocalVFSCapsList:
+    """Tests for alist with capability checks."""
+
+    @pytest.mark.asyncio()
+    async def test_alist_allowed_with_cap(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"vas.read"}))
+        vfs_with_caps_provider.set_caps(caps)
+        entries = await vfs_with_caps_provider.alist("/cstub/")
+        assert len(entries) > 0
+
+    @pytest.mark.asyncio()
+    async def test_alist_denied_without_cap(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"port.llm"}))
+        vfs_with_caps_provider.set_caps(caps)
+        with pytest.raises(CapDeniedError, match="vas.read"):
+            await vfs_with_caps_provider.alist("/cstub/")
+
+    @pytest.mark.asyncio()
+    async def test_alist_root_denied(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"port.llm"}))
+        vfs_with_caps_provider.set_caps(caps)
+        with pytest.raises(CapDeniedError, match="vas.read"):
+            await vfs_with_caps_provider.alist("/")
+
+
+class TestLocalVFSCapsStat:
+    """Tests for astat with capability checks."""
+
+    @pytest.mark.asyncio()
+    async def test_astat_allowed_with_cap(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"vas.read"}))
+        vfs_with_caps_provider.set_caps(caps)
+        result = await vfs_with_caps_provider.astat("/cstub/file")
+        assert result.entry_type == EntryType.FILE
+
+    @pytest.mark.asyncio()
+    async def test_astat_denied_without_cap(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset({"port.llm"}))
+        vfs_with_caps_provider.set_caps(caps)
+        with pytest.raises(CapDeniedError, match="vas.read"):
+            await vfs_with_caps_provider.astat("/cstub/file")
+
+    @pytest.mark.asyncio()
+    async def test_astat_root_denied(self, vfs_with_caps_provider: LocalVFS) -> None:
+        caps = CapSet(_allowed=frozenset())
+        vfs_with_caps_provider.set_caps(caps)
+        with pytest.raises(CapDeniedError, match="vas.read"):
+            await vfs_with_caps_provider.astat("/")
+
+
+class TestLocalVFSCapsInit:
+    """Tests for cap_set initialization."""
+
+    @pytest.mark.asyncio()
+    async def test_init_with_capset(self) -> None:
+        caps = CapSet(_allowed=frozenset({"vas.read"}))
+        vfs = LocalVFS(cap_set=caps)
+        vfs.mount("/cstub/", CapsStubProvider())
+        result = await vfs.aread("/cstub/test")
+        assert result == "content:test"
+
+    @pytest.mark.asyncio()
+    async def test_set_caps_overrides(self) -> None:
+        vfs = LocalVFS()
+        vfs.mount("/cstub/", CapsStubProvider())
+
+        result = await vfs.aread("/cstub/test")
+        assert result == "content:test"
+
+        caps = CapSet(_allowed=frozenset())
+        vfs.set_caps(caps)
+        with pytest.raises(CapDeniedError):
+            await vfs.aread("/cstub/test")

@@ -29,6 +29,7 @@ from hexdag.kernel.config.models import (
     HexDAGConfig,
     LoggingConfig,
     ManifestEntry,
+    MCPPermissions,
 )
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.models import OrchestratorConfig
@@ -377,6 +378,15 @@ class ConfigLoader:
             config.caps = DefaultCaps(
                 default_set=caps_data.get("default_set"),
                 deny=caps_data.get("deny"),
+                profiles=caps_data.get("profiles"),
+            )
+
+        # Parse MCP permissions
+        if "mcp_permissions" in data:
+            mcp_data = data["mcp_permissions"]
+            config.mcp_permissions = MCPPermissions(
+                default_profile=mcp_data.get("default_profile", "read-only"),
+                client_profiles=mcp_data.get("client_profiles", {}),
             )
 
         return config

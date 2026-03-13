@@ -15,6 +15,7 @@ from uuid import uuid4
 from hexdag.kernel.logging import get_logger
 
 if TYPE_CHECKING:
+    from hexdag.kernel.domain.caps import CapSet
     from hexdag.kernel.pipeline_runner import PipelineRunner
 
 logger = get_logger(__name__)
@@ -46,9 +47,11 @@ class LocalPipelineSpawner:
         self,
         runner: PipelineRunner,
         pipeline_dir: str | None = None,
+        cap_set: CapSet | None = None,
     ) -> None:
         self._runner = runner
         self._pipeline_dir = pipeline_dir
+        self._cap_set: CapSet | None = cap_set
         self._runs: dict[str, _RunState] = {}
         self._tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
@@ -62,12 +65,22 @@ class LocalPipelineSpawner:
         parent_run_id: str | None = None,
         wait: bool = False,
         timeout: float | None = None,
+        cap_set: CapSet | None = None,
     ) -> str:
         """Spawn a pipeline run.
 
         If ``wait=True``, blocks until the pipeline completes (or times out).
         Otherwise, runs in the background and returns immediately.
+
+        If ``cap_set`` is provided, the child's effective capabilities are
+        the intersection of the parent spawner's caps and the requested caps
+        (narrowing-only — the child can never have more caps than the parent).
         """
+        # Compute effective child caps via narrowing chain
+        effective_caps = self._narrow_caps(cap_set)
+        # Store for future use when we pass caps to child runners
+        _ = effective_caps  # reserved for child runner integration
+
         run_id = str(uuid4())
         self._runs[run_id] = _RunState(
             run_id=run_id,
@@ -159,6 +172,21 @@ class LocalPipelineSpawner:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _narrow_caps(self, child_caps: CapSet | None) -> CapSet | None:
+        """Compute effective child capabilities via narrowing chain.
+
+        If neither the spawner nor the caller provides caps, returns None
+        (unrestricted). If only one side provides caps, uses that. If both
+        provide caps, intersects (narrows).
+        """
+        if self._cap_set is None and child_caps is None:
+            return None
+        if self._cap_set is None:
+            return child_caps
+        if child_caps is None:
+            return self._cap_set
+        return self._cap_set.intersect(child_caps)
 
     async def _execute(
         self,

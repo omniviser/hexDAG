@@ -33,6 +33,7 @@ Example
 """
 
 from hexdag.stdlib.middleware.compose import compose
+from hexdag.stdlib.middleware.distributed_cache import DistributedCache
 from hexdag.stdlib.middleware.observable import ObservableLLM
 from hexdag.stdlib.middleware.observable_tool_router import ObservableToolRouter
 from hexdag.stdlib.middleware.rate_limiter import RateLimiter
@@ -45,6 +46,7 @@ __all__ = [
     "ObservableLLM",
     "ObservableToolRouter",
     # User middleware (YAML-configurable)
+    "DistributedCache",
     "RetryWithBackoff",
     "RateLimiter",
     "ResponseCache",

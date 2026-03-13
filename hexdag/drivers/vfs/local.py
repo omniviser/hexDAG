@@ -22,9 +22,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from hexdag.kernel.domain.vfs import DirEntry, EntryType, StatResult
-from hexdag.kernel.exceptions import VFSError
+from hexdag.kernel.exceptions import CapDeniedError, VFSError
 
 if TYPE_CHECKING:
+    from hexdag.kernel.domain.caps import CapSet
     from hexdag.kernel.ports.vfs import VFSProvider
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,41 @@ class LocalVFS:
     """In-process VFS with mount-based dispatch.
 
     Routes paths to registered VFSProvider instances using
-    longest-prefix matching.
+    longest-prefix matching.  Optionally enforces capability-based
+    access control via :class:`CapSet`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cap_set: CapSet | None = None) -> None:
         self._mounts: dict[str, VFSProvider] = {}
+        self._cap_set: CapSet | None = cap_set
+
+    def set_caps(self, cap_set: CapSet) -> None:
+        """Set the capability set for access control.
+
+        Parameters
+        ----------
+        cap_set : CapSet
+            Capability set to enforce on all VFS operations.
+        """
+        self._cap_set = cap_set
+
+    def _check_cap(self, cap: str, path: str) -> None:
+        """Check a capability against the active CapSet.
+
+        Parameters
+        ----------
+        cap : str
+            Required capability (e.g. ``"vas.read"``).
+        path : str
+            VFS path being accessed (for error context).
+
+        Raises
+        ------
+        CapDeniedError
+            If the CapSet denies the required capability.
+        """
+        if self._cap_set is not None and not self._cap_set.allows(cap):
+            raise CapDeniedError(cap, self._cap_set)
 
     def mount(self, prefix: str, provider: VFSProvider) -> None:
         """Mount a provider at a path prefix.
@@ -102,6 +133,7 @@ class LocalVFS:
 
     async def aread(self, path: str) -> str:
         """Read the content at an absolute VFS path."""
+        self._check_cap("vas.read", path)
         if path == "/":
             raise VFSError(path, "cannot read root directory; use alist('/') instead")
         provider, relative = self._resolve(path)
@@ -109,6 +141,7 @@ class LocalVFS:
 
     async def alist(self, path: str) -> list[DirEntry]:
         """List entries in a directory at an absolute VFS path."""
+        self._check_cap("vas.read", path)
         if path == "/":
             return self._list_root()
 
@@ -124,6 +157,7 @@ class LocalVFS:
 
     async def astat(self, path: str) -> StatResult:
         """Get metadata about an absolute VFS path."""
+        self._check_cap("vas.read", path)
         if path == "/":
             return StatResult(
                 path="/",
