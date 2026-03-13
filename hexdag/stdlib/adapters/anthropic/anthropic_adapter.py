@@ -8,11 +8,15 @@ from anthropic import AsyncAnthropic
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.llm import (
     LLM,
+    LLMResponse,
     MessageList,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsStructuredOutput,
     SupportsUsageTracking,
     TokenUsage,
+    ToolCall,
+    ToolChoice,
 )
 from hexdag.kernel.types import (
     PositiveInt,
@@ -42,6 +46,7 @@ class AnthropicAdapter(
     LLM,
     SupportsGeneration,
     SupportsFunctionCalling,
+    SupportsStructuredOutput,
     SupportsUsageTracking,
     yaml_alias="anthropic_adapter",
     port="llm",
@@ -194,3 +199,185 @@ class AnthropicAdapter(
         except Exception as e:
             logger.error("Anthropic API error: {}", e, exc_info=True)
             return None
+
+    def _prepare_messages(self, messages: MessageList) -> tuple[list[dict[str, str]], str | None]:
+        """Split messages into Anthropic format (system separate from messages).
+
+        Returns
+        -------
+        tuple[list[dict[str, str]], str | None]
+            (anthropic_messages, system_message)
+        """
+        system_message = self.system_prompt
+        anthropic_messages: list[dict[str, str]] = []
+
+        for msg in messages:
+            if msg.role == "system":
+                if system_message:
+                    system_message += "\n" + msg.content
+                else:
+                    system_message = msg.content
+            else:
+                anthropic_messages.append({"role": msg.role, "content": msg.content})
+
+        return anthropic_messages, system_message
+
+    def _capture_usage(self, response: Any) -> None:
+        """Capture token usage from an Anthropic response."""
+        self._last_usage = None
+        if response.usage:
+            self._last_usage = TokenUsage(
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                total_tokens=(response.usage.input_tokens + response.usage.output_tokens),
+            )
+
+    async def aresponse_with_tools(
+        self,
+        messages: MessageList,
+        tools: list[dict[str, Any]],
+        tool_choice: ToolChoice | dict[str, Any] = "auto",
+    ) -> LLMResponse:
+        """Generate response with native Anthropic tool calling.
+
+        Args
+        ----
+            messages: Conversation messages
+            tools: Tool definitions in Anthropic format
+            tool_choice: Tool selection strategy
+
+        Returns
+        -------
+        LLMResponse
+            Response with content and optional tool calls
+        """
+        anthropic_messages, system_message = self._prepare_messages(messages)
+
+        request_params: dict[str, Any] = {
+            "model": self.model,
+            "messages": anthropic_messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+            "tools": tools,
+        }
+
+        if system_message is not None:
+            request_params["system"] = system_message
+
+        if self.top_k is not None:
+            request_params["top_k"] = self.top_k
+
+        # Handle tool_choice
+        if isinstance(tool_choice, dict):
+            request_params["tool_choice"] = tool_choice
+        elif tool_choice == "required":
+            request_params["tool_choice"] = {"type": "any"}
+        elif tool_choice == "none":
+            # Anthropic doesn't have "none" — omit tools instead
+            request_params.pop("tools", None)
+        # "auto" is the default — no need to set
+
+        response = await self.client.messages.create(**request_params)
+        self._capture_usage(response)
+
+        content = None
+        tool_calls = None
+
+        for block in response.content:
+            if hasattr(block, "text"):
+                content = block.text
+            elif block.type == "tool_use":
+                if tool_calls is None:
+                    tool_calls = []
+                tool_calls.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=block.input,
+                    )
+                )
+
+        return LLMResponse(
+            content=content,
+            tool_calls=tool_calls,
+            finish_reason=response.stop_reason,
+            usage=self._last_usage,
+        )
+
+    async def aresponse_structured(
+        self,
+        messages: MessageList,
+        output_schema: dict[str, Any] | type,
+    ) -> dict[str, Any]:
+        """Generate structured output using Anthropic's tool_use pattern.
+
+        Defines a single tool whose input schema matches the output schema,
+        then forces the model to call it. The tool call arguments ARE the
+        structured output.
+
+        Args
+        ----
+            messages: Conversation messages
+            output_schema: Pydantic model class or JSON Schema dict
+
+        Returns
+        -------
+        dict[str, Any]
+            Parsed response data conforming to the schema
+        """
+        from pydantic import BaseModel  # lazy: avoid import at module level
+
+        # Convert to JSON Schema
+        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+            schema = output_schema.model_json_schema()
+            schema_name = output_schema.__name__
+        elif isinstance(output_schema, dict):
+            schema = output_schema
+            schema_name = schema.get("title", "structured_output")
+        else:
+            msg = f"output_schema must be a Pydantic model or dict, got {type(output_schema)}"
+            raise TypeError(msg)
+
+        # Build a single tool whose input_schema = our output schema
+        tool_name = f"emit_{schema_name.lower()}"
+        tool = {
+            "name": tool_name,
+            "description": (f"Emit structured output matching the {schema_name} schema."),
+            "input_schema": schema,
+        }
+
+        anthropic_messages, system_message = self._prepare_messages(messages)
+
+        request_params: dict[str, Any] = {
+            "model": self.model,
+            "messages": anthropic_messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+            "tools": [tool],
+            "tool_choice": {"type": "tool", "name": tool_name},
+        }
+
+        if system_message is not None:
+            request_params["system"] = system_message
+
+        if self.top_k is not None:
+            request_params["top_k"] = self.top_k
+
+        try:
+            response = await self.client.messages.create(**request_params)
+            self._capture_usage(response)
+
+            # Extract tool call arguments — that's our structured output
+            for block in response.content:
+                if block.type == "tool_use" and block.name == tool_name:
+                    result: dict[str, Any] = block.input
+                    return result
+
+            logger.warning("No tool_use block in Anthropic structured output")
+            return {}
+
+        except Exception as e:
+            logger.error("Anthropic structured output error: {}", e, exc_info=True)
+            raise

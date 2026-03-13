@@ -8,6 +8,7 @@ from hexdag.kernel.ports.llm import (
     MessageList,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsStructuredOutput,
     SupportsUsageTracking,
     TokenUsage,
     ToolChoice,
@@ -15,6 +16,8 @@ from hexdag.kernel.ports.llm import (
 from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 if TYPE_CHECKING:
+    from pydantic import BaseModel
+
     from hexdag.kernel.ports.healthcheck import HealthStatus
 
 
@@ -23,6 +26,7 @@ class MockLLM(
     LLM,
     SupportsGeneration,
     SupportsFunctionCalling,
+    SupportsStructuredOutput,
     SupportsUsageTracking,
     yaml_alias="mock_llm",
     port="llm",
@@ -202,6 +206,33 @@ class MockLLM(
 
         # Return as LLMResponse without tool calls
         return LLMResponse(content=response_text, tool_calls=None, finish_reason="stop")
+
+    async def aresponse_structured(
+        self,
+        messages: MessageList,
+        output_schema: "dict[str, Any] | type[BaseModel]",
+    ) -> dict[str, Any]:
+        """Return mock response parsed as JSON, validated against schema.
+
+        Uses the same response cycling as ``aresponse`` but parses the string
+        as JSON.  If the response is not valid JSON, raises ``ParseError``.
+        """
+        import json  # lazy: only needed for structured output parsing
+
+        response = await self.aresponse(messages)
+        if response is None:
+            raise ValueError("MockLLM returned None — configure a response string")
+
+        try:
+            data: dict[str, Any] = json.loads(response)
+        except json.JSONDecodeError as e:
+            from hexdag.kernel.exceptions import ParseError  # lazy: only on error path
+
+            raise ParseError(
+                f"MockLLM response is not valid JSON: {e}\nResponse: {response}"
+            ) from e
+
+        return data
 
     async def ahealth_check(self) -> "HealthStatus":
         """Health check for Mock LLM (always healthy)."""

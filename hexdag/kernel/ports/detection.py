@@ -53,6 +53,7 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
         SupportsEmbedding,
         SupportsFunctionCalling,
         SupportsGeneration,
+        SupportsStructuredOutput,
         SupportsVision,
     )
     from hexdag.kernel.ports.memory import (
@@ -80,7 +81,14 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
         # then the LLM marker (explicit MRO only).
         (
             "llm",
-            (SupportsGeneration, SupportsFunctionCalling, SupportsVision, SupportsEmbedding, LLM),
+            (
+                SupportsGeneration,
+                SupportsFunctionCalling,
+                SupportsStructuredOutput,
+                SupportsVision,
+                SupportsEmbedding,
+                LLM,
+            ),
         ),
         # Memory (deprecated → DataStore, but still detected)
         ("memory", (Memory,)),

@@ -1027,29 +1027,38 @@
                 "spec": {
                     "additionalProperties": false,
                     "properties": {
+                        "conversation": {
+                            "default": null,
+                            "type": "string"
+                        },
+                        "examples": {
+                            "default": null,
+                            "type": "string"
+                        },
+                        "human_message": {
+                            "default": null,
+                            "description": "User/human message template with ``{{variable}}`` syntax.",
+                            "type": "string"
+                        },
                         "output_schema": {
                             "default": null,
-                            "description": "Expected output schema for structured output. If provided with parse_json=True, the LLM response will be parsed and validated against this schema.",
                             "type": "string"
                         },
                         "parse_json": {
                             "default": false,
-                            "description": "If True, parse the LLM response as JSON and validate against output_schema. Default is False (returns raw text).",
-                            "type": "string"
-                        },
-                        "parse_strategy": {
-                            "default": "json",
-                            "description": "JSON parsing strategy: \"json\", \"json_in_markdown\", or \"yaml\". Default is \"json\".",
                             "type": "string"
                         },
                         "prompt_template": {
                             "default": null,
-                            "description": "Template for the user prompt. Supports Jinja2-style {{variable}} syntax. Can be a string or PromptTemplate/ChatPromptTemplate object. Can also be provided as 'template' (alias for YAML compatibility).",
+                            "type": "string"
+                        },
+                        "system_message": {
+                            "default": null,
+                            "description": "System message template.",
                             "type": "string"
                         },
                         "system_prompt": {
                             "default": null,
-                            "description": "System message to prepend to the conversation.",
                             "type": "string"
                         },
                         "template": {

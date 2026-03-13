@@ -44,6 +44,8 @@ class TestTokenAggregation:
         """Verify tokens from a single LLM call are tracked."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="summarizer",
                 response="Hello world",
                 duration_ms=150.0,
@@ -64,6 +66,8 @@ class TestTokenAggregation:
         for i in range(3):
             await profiler.handle(
                 LLMGeneration(
+                    port_type="llm",
+                    method="aresponse",
                     node_name="agent",
                     response=f"step {i}",
                     duration_ms=100.0,
@@ -83,6 +87,8 @@ class TestTokenAggregation:
         """Verify separate tracking for different nodes."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node_a",
                 response="a",
                 duration_ms=100.0,
@@ -91,6 +97,8 @@ class TestTokenAggregation:
         )
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node_b",
                 response="b",
                 duration_ms=200.0,
@@ -106,6 +114,8 @@ class TestTokenAggregation:
         """Verify report aggregates total tokens across all nodes."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="a",
                 response="",
                 duration_ms=50.0,
@@ -114,6 +124,8 @@ class TestTokenAggregation:
         )
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="b",
                 response="",
                 duration_ms=50.0,
@@ -141,6 +153,8 @@ class TestCostCalculation:
         """Verify cost for gpt-4o-mini: $0.15/$0.60 per 1M tokens."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -164,6 +178,8 @@ class TestCostCalculation:
 
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="",
                 duration_ms=50.0,
@@ -180,6 +196,8 @@ class TestCostCalculation:
         """Verify no cost is estimated when model is None."""
         await profiler_no_model.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -198,6 +216,8 @@ class TestCostCalculation:
 
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -221,6 +241,8 @@ class TestNoUsageFallback:
         """Events with usage=None should be handled gracefully."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="hello",
                 duration_ms=100.0,
@@ -238,6 +260,8 @@ class TestNoUsageFallback:
         """Events with partial usage dict should use defaults."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="",
                 duration_ms=50.0,
@@ -286,6 +310,8 @@ class TestBottleneckDetection:
         """Verify highest_token_node is the node with the most tokens."""
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="light",
                 response="",
                 duration_ms=50.0,
@@ -294,6 +320,8 @@ class TestBottleneckDetection:
         )
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="heavy",
                 response="",
                 duration_ms=200.0,
@@ -385,6 +413,8 @@ class TestFormatReport:
         await profiler.handle(NodeStarted(name="node_a", wave_index=0, dependencies=[]))
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node_a",
                 response="",
                 duration_ms=100.0,
@@ -429,6 +459,8 @@ class TestReset:
         await profiler.handle(PipelineStarted(name="pipeline", total_waves=1, total_nodes=1))
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="",
                 duration_ms=100.0,
@@ -494,6 +526,8 @@ class TestStorage:
         await profiler.handle(PipelineStarted(name="test", total_waves=1, total_nodes=1))
         await profiler.handle(
             LLMGeneration(
+                port_type="llm",
+                method="aresponse",
                 node_name="node",
                 response="hi",
                 duration_ms=100.0,

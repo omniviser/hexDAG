@@ -180,20 +180,23 @@ Simple factory for creating function-based nodes with optional Pydantic validati
 
 ### LLMNode
 
-Unified LLM node - prompt building, API calls, and optional parsing.
+Unified LLM node — prompt building, API calls, and structured output.
 
 **Kind**: `l_l_m_node`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `str` | Yes | Node name (must be unique in the graph) |
-| `prompt_template` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate | None` | No | Template for the user prompt. Supports Jinja2-styl... |
-| `output_schema` | `dict[str, typing.Any] | type[pydantic.main.BaseModel] | None` | No | Expected output schema for structured output. If p... |
-| `system_prompt` | `str | None` | No | System message to prepend to the conversation. |
-| `parse_json` | `bool` | No | If True, parse the LLM response as JSON and valida... |
-| `parse_strategy` | `Literal['json', 'json_in_markdown', 'yaml']` | No | JSON parsing strategy: "json", "json_in_markdown",... |
-| `deps` | `list[str] | None` | No | List of dependency node names. |
-| `template` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate | None` | No |  |
+| `human_message` | `str | None` | No | User/human message template with ``{{variable}}`` ... |
+| `system_message` | `str | None` | No | System message template. |
+| `examples` | `list[dict[str, Any]] | None` | No |  |
+| `conversation` | `str | list[Any] | None` | No |  |
+| `output_schema` | `dict[str, Any] | type[BaseModel] | None` | No |  |
+| `deps` | `list[str] | None` | No |  |
+| `prompt_template` | `PromptInput | str | None` | No |  |
+| `system_prompt` | `str | None` | No |  |
+| `parse_json` | `bool` | No |  |
+| `template` | `PromptInput | str | None` | No |  |
 
 **Example:**
 ```yaml

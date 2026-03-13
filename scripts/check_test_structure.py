@@ -26,6 +26,10 @@ _ALLOWED_ORPHANS: frozenset[str] = frozenset({
     "tests/hexdag/kernel/domain/test_serialization.py",
     # Tests on_error handler routing in Orchestrator (source: orchestrator.py)
     "tests/hexdag/kernel/orchestration/test_on_error.py",
+    # Tests declarative middleware stacking via prepare_ports (source: port_wrappers.py)
+    "tests/hexdag/stdlib/middleware/test_declarative_stacking.py",
+    # Tests LLMNode spec-level behavior (source: llm_node.py)
+    "tests/hexdag/stdlib/nodes/test_llm_node_spec.py",
 })
 
 

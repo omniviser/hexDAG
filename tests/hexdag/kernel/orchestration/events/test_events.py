@@ -149,6 +149,8 @@ class TestPortEvents:
             {"role": "user", "content": "Hello"},
         ]
         event = LLMGeneration(
+            port_type="llm",
+            method="aresponse",
             node_name="llm_node",
             duration_ms=2500.0,
             messages=messages,
@@ -166,6 +168,8 @@ class TestPortEvents:
         params = {"param1": "value1", "param2": 42}
         result = {"calculation": 84}
         event = ToolRouterEvent(
+            port_type="tool_router",
+            method="acall_tool",
             node_name="tool_node",
             tool_name="calculator",
             params=params,

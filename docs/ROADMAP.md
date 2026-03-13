@@ -18,12 +18,12 @@ graph TD
         A[kind: Config]
         B[kind: Pipeline]
         C[kind: System]
-        D[kind: Adapter / Policy / Macro]
+        D[kind: Adapter / Middleware / Macro]
     end
 
     subgraph "Kernel (hexdag/kernel/)"
         E[Orchestrator + Domain Models]
-        F[Ports + Port Probes]
+        F[Ports + Port Middleware]
         G[SystemRunner / PipelineRunner]
     end
 
@@ -41,6 +41,29 @@ graph TD
     E --> I
     E --> J
 ```
+
+### Unified Entity Model
+
+Every extension point in hexDAG follows one pattern: **kernel defines contract → stdlib ships builtins → users write their own → YAML references by module path.**
+
+Two tiers:
+- **Infrastructure (drivers/)** — how hexDAG talks to the runtime. Like kernel modules. Typically one per deployment.
+- **Application (stdlib/)** — composable components users mix and match per pipeline. Like `/usr/lib`.
+
+| Tier | Entity | Kernel Contract | Stdlib Builtins | User Extension | YAML Reference | Status |
+|------|--------|----------------|-----------------|----------------|----------------|--------|
+| Infra | **Drivers** | Port protocols (`kernel/ports/`) | `drivers/` (LocalExecutor, LocalObserverManager, LocalPipelineSpawner) | `myapp.drivers.X` | `spec.driver:` | First-class |
+| App | **Adapters** | Port protocols (`kernel/ports/`) | `stdlib/adapters/` (OpenAI, Anthropic, Mock, SQLite) | `myapp.adapters.X` | `spec.ports.<name>.adapter:` | First-class |
+| App | **Nodes** | `BaseNodeFactory` | `stdlib/nodes/` (LLMNode, AgentNode, LoopNode, ConditionalNode) | `myapp.nodes.X` | `kind:` in node spec | First-class |
+| App | **Macros** | Convention (subgraph expansion) | `stdlib/macros/` (ReasoningAgent) | `myapp.macros.X` | `kind: Macro` | First-class |
+| App | **Middleware** | Protocol interfaces | `stdlib/middleware/` (ObservableLLM, StructuredOutputFallback) | `myapp.middleware.X` | `spec.ports.<name>.middleware:` / `kind: Middleware` | Planned (C2) |
+| App | **Services** | `Service` base (`kernel/service.py`) | `stdlib/lib/` (ProcessRegistry, EntityState, Scheduler) | `myapp.services.X` | `spec.services.<name>.class:` | First-class |
+| App | **Observers** | `Observer` protocol | `stdlib/lib/observers/` (CostProfiler, AlertingObserver) | `myapp.observers.X` | `spec.observers:` | Planned |
+| App | **Prompts** | Convention (callable/template) | `stdlib/prompts/` (tool_prompts) | `myapp.prompts.X` | `spec.prompts:` | Planned |
+
+All entity types use the same `resolve()` mechanism for module path resolution. The `/lib/` VAS namespace exposes all discoverable entity types for agent introspection.
+
+**Middleware in YAML:** Middleware stacks are declared per-port via `spec.ports.<name>.middleware:` (inline list) or as standalone `kind: Middleware` manifests (reusable, referenceable by name). `prepare_ports()` reads these declarations and assembles the stack. Currently `prepare_ports()` hardcodes the stack; Phase C2 makes it data-driven from YAML.
 
 ---
 
@@ -69,6 +92,19 @@ graph TD
 - [x] **ToolRouter** -- Function calling and tool execution
 - [x] **FileStorage, SecretStore, Memory** -- Data access ports
 - [x] **Executor, ObserverManager** -- Infrastructure ports
+- [x] **`SupportsStructuredOutput` Protocol** -- Native structured output for OpenAI (JSON Schema mode), Anthropic (tool_use), Mock (JSON parse). Fallback middleware for adapters without native support.
+
+### Port Middleware (Phase C1)
+- [x] **Composable middleware pattern** -- `stdlib/middleware/` with `StructuredOutputFallback`, `ObservableLLM`, `ObservableToolRouter`. Each layer explicitly implements protocol interfaces so `isinstance()` works.
+- [x] **`prepare_ports()`** -- Orchestrator auto-stacks middleware based on adapter capabilities. Users never configure middleware.
+- [x] **Unified LLM Node YAML spec** -- `human_message`, `system_message`, `examples`, `conversation`, `output_schema`. Presence of `output_schema` implies structured output (no `parse_json` flag). Deprecated fields (`prompt_template`, `system_prompt`, `parse_json`, `template`) still work with warnings.
+
+### Port Events (Phase C1.5)
+- [x] **Unified `PortCallEvent` base** -- `PortCallEvent(Event)` with `port_type`, `method`, `node_name`, `duration_ms`. `LLMPortCall(PortCallEvent)` replaces `LLMEvent`/`LLMGeneration`/`LLMFunctionCalling`/`LLMVision`/`LLMEmbedding`. `ToolRouterPortCall(PortCallEvent)` replaces `ToolRouterEvent`. Old names are backward-compatible aliases.
+- [x] **Observable middleware inline** -- `ObservableLLM` and `ObservableToolRouter` emit `LLMPortCall`/`ToolRouterPortCall` with inline timer/context/notify (no `@observe` decorator — rejected as too much indirection).
+- [x] **Queryable port calls** -- Two complementary observer sinks in `stdlib/lib/observers/port_call_observers.py`:
+  - `PortCallStoreObserver` -- accumulates `StoredPortCall` records in memory, filterable by `port_type`/`node_name`/`method`, optional persistence to `SupportsKeyValue` store via `save(run_id)`/`load(run_id)`.
+  - `PortCallLogObserver` -- structured JSON log lines for external aggregators (Grafana, CloudWatch, ELK). Configurable `include_details` flag.
 
 ### System Libraries (Libs)
 - [x] **ProcessRegistry** -- In-memory pipeline run tracker (like `ps`)
@@ -122,9 +158,12 @@ Port Probes, Resource Limits, and Caps are now part of the **Agent Protocol** tr
   - Standalone adapter configs, referenceable by `{ ref: name }`
   - DRY across System manifests
 
-- [ ] **`kind: Policy`** (Step 7)
-  - Reusable execution policies (retry, timeout, rate-limit)
-  - First-class declarative policy definitions
+- [ ] **`kind: Middleware`** (Step 7)
+  - Standalone reusable middleware stack definitions (retry, timeout, rate-limit, caching, circuit-breaker)
+  - First-class declarative middleware entity, same pattern as `kind: Macro`
+  - Referenced by name from `spec.ports.<name>.middleware:` or inline as a list of module paths
+  - Resolved by `prepare_ports()` into middleware layers (see Phase C2 in Track 2)
+  - Example: `{ ref: production-llm-middleware }` → stacks `RateLimiter` + `RetryWithBackoff` + `CostTracker`
 
 ### Phase 3: `kind: System` + SystemRunner
 
@@ -491,7 +530,7 @@ class AgentSystemProtocol(Protocol):
 ### Namespace Tree
 
 ```
-/lib/nodes|adapters|macros|tools|libs|prompts|tags/    Component discovery
+/lib/nodes|adapters|macros|middleware|services|observers|prompts|tools|tags/    Component discovery
 /proc/runs/<run_id>/status|info                        ProcessRegistry
 /proc/scheduled/<task_id>/status                       Scheduler
 /proc/entities/<type>/<id>/state|history               EntityState
@@ -600,29 +639,46 @@ class VASProvider(Protocol):
   - `child_caps = parent_caps.intersect(child_declared_caps)`
   - Pipeline `spec.caps` narrows from org-level; node `spec.caps` narrows from pipeline
 
-### Phase C: Port Probes + Resource Accounting
+### Phase C: Port Middleware + Resource Accounting
 
-Split into C1 (observability, no deps) and C2+ (enforcement, needs Phase B).
+Split into C1 (observability, complete), C1.5 (unified events + decorator), C2 (declarative stacking via `kind: Middleware`), and C3 (resource accounting).
 
-- [ ] **Port Probes -- Observability** (can run parallel with Phase B)
-  - New `kernel/orchestration/port_probes.py`
-  - `instrument_ports(ports, observer_manager)` -- patches methods in-place
-  - Declarative probe registry: `(protocol, method) → event_factory`
-    - `SupportsGeneration.aresponse` → `LLMGeneration`
-    - `SupportsFunctionCalling.aresponse_with_tools` → `LLMFunctionCalling`
-    - `ToolRouter.acall_tool` → `ToolRouterEvent`
-    - `SupportsKeyValue.aget/aset` → `DataStoreKeyValue` (NEW)
-    - `SupportsQuery.aexecute_query` → `DataStoreQuery` (NEW)
-  - Deprecate `port_wrappers.py`; fixes `isinstance()` breakage
-  - **Linux analogy:** kprobes instrument kernel functions without wrapper objects
+- [x] **Phase C1: Port Middleware -- Observability + Structured Output** (Complete)
+  - Composable middleware pattern in `stdlib/middleware/`
+  - Each middleware explicitly implements protocol interfaces (not `__getattr__`)
+  - `prepare_ports()` in `kernel/orchestration/port_wrappers.py` auto-stacks layers:
+    - `adapter → StructuredOutputFallback (if needed) → ObservableLLM`
+    - `ToolRouter → ObservableToolRouter`
+  - `SupportsStructuredOutput` protocol with native OpenAI (JSON Schema mode) and Anthropic (tool_use)
+  - Fixes `isinstance()` breakage from old wrapper approach
+  - Unified LLM node YAML spec: `human_message`, `system_message`, `examples`, `conversation`, `output_schema`
+  - **Linux analogy:** middleware = netfilter chains wrapping syscall handlers
 
-- [ ] **Port Probes -- Enforcement** (needs Phase B)
-  - `pre_call` hooks: cap checks + resource limit checks before port calls
-  - Netfilter-style chains (pre_call / on_error)
+- [x] **Phase C1.5: Unified Port Events** (Complete)
+  - [x] **Unified `PortCallEvent` base** -- single base event for all port calls (`port_type`, `method`, `node_name`, `duration_ms`)
+    - `LLMPortCall(PortCallEvent)` -- replaces `LLMEvent`/`LLMGeneration`/`LLMFunctionCalling`/`LLMVision`/`LLMEmbedding`
+    - `ToolRouterPortCall(PortCallEvent)` -- replaces `ToolRouterEvent`
+    - Old event names are backward-compatible aliases
+    - Future: `DataStorePortCall`, `FileStoragePortCall`, etc.
+  - [x] **Observable middleware inline** -- `ObservableLLM` and `ObservableToolRouter` emit unified events with inline timer/context/notify. No `@observe` decorator (rejected — too much indirection).
+  - [x] **Queryable port calls** -- two complementary observer sinks in `stdlib/lib/observers/port_call_observers.py`:
+    - `PortCallStoreObserver` -- accumulates `StoredPortCall` records in memory, filterable by `port_type`/`node_name`/`method`, optional persistence to `SupportsKeyValue` via `save()`/`load()`
+    - `PortCallLogObserver` -- structured JSON logs for external aggregators (Grafana, CloudWatch, ELK). Configurable `include_details` flag.
+  - **Linux analogy:** unified `PortCallEvent` = `/proc/syscalls` tracing interface
 
-- [ ] **`ResourceAccounting`** (`kernel/domain/resource_accounting.py`)
+- [x] **Phase C2: Port Middleware -- Declarative Stacking** (Complete)
+  - [x] Data-driven middleware stacking via `prepare_ports(middleware_config=...)` reading from YAML
+  - [x] `kind: Middleware` compiler plugin (`compiler/plugins/middleware_definition.py`) — registers named stacks in module-level registry
+  - [x] Inline `spec.ports.<name>.middleware:` list support — single string, list, or named stack reference
+  - [x] `OrchestratorFactory._extract_middleware_config()` resolves middleware specs (inline, named, single string)
+  - [x] Two-phase stacking: user middleware (inner) → auto-middleware (outermost). Port type classification before user middleware preserves `isinstance()`.
+  - [x] Concrete middleware in `stdlib/middleware/`: `RetryWithBackoff` (exponential backoff + jitter), `RateLimiter` (token-bucket), `ResponseCache` (LRU), `Timeout` (asyncio deadline)
+  - [ ] Remaining: `CostTracker` (token budget enforcement), `CircuitBreaker` (failure threshold → open/half-open/closed)
+  - Stacking order: `Cache → RateLimiter → Retry → Timeout → CostTracker → Observable`
+
+- [ ] **Phase C3: `ResourceAccounting`** (`kernel/domain/resource_accounting.py`)
   - `ResourceUsage`: `llm_calls`, `tool_calls`, `total_tokens`, `estimated_cost_usd`
-  - `ResourceAccountant`: record + check limits
+  - `ResourceAccountant`: reads from `PortCallStoreObserver` data (Phase C1.5) + enforces limits as middleware (Phase C2)
   - Events: `ResourceWarning`, `ResourceLimitExceeded`
 
 - [ ] **`/sys/cgroup/` sub-provider**
@@ -953,7 +1009,8 @@ action = result["decide"]["action"]  # "complete" | "continue" | "fail"
 ### Kernel Internals
 
 - [ ] **RunContext** -- Rename ExecutionContext, add `run_id`, `pipeline_name`, `parent_run_id` as first-class fields, typed accessors for common ports (`.llm`, `.memory`, `.database`)
-- [ ] **Port Probe Hooks** -- Extend port probes with `pre_call` / `on_error` hooks (netfilter-style chains). Enables middleware: caching, authorization, retry, circuit breaking. Part of Agent Protocol Phase C.
+- [x] **Port Middleware (Phase C1)** -- Composable middleware pattern in `stdlib/middleware/`. `prepare_ports()` auto-stacks: `StructuredOutputFallback`, `ObservableLLM`, `ObservableToolRouter`. `SupportsStructuredOutput` protocol. Fixes `isinstance()` breakage.
+- [ ] **Port Middleware Declarative Stacking (Phase C2)** -- `kind: Middleware` + `spec.ports.<name>.middleware:`. Middleware: `RateLimiter`, `RetryWithBackoff`, `ResponseCache`, `CostTracker`, `CircuitBreaker`, `Timeout`. Part of Agent Protocol Phase C.
 - [ ] **`hexdag explain`** -- CLI command (like `kubectl explain`) for YAML field docs
 
 ---
@@ -1029,16 +1086,23 @@ kernel/ports/ (existing)              kernel/ports/ (planned)
   Memory (deprecated)
 
 kernel/orchestration/ (existing)      kernel/orchestration/ (planned)
-  port_wrappers.py (DEPRECATED)         port_probes.py (replaces wrappers)
+  port_wrappers.py (prepare_ports)        ← data-driven middleware stacking from YAML (Phase C2)
+
+stdlib/middleware/ (existing)          stdlib/middleware/ (planned)
+                                          rate_limiter.py [NEW]
+  compose.py                              retry.py [NEW]
+  observable.py                           response_cache.py [NEW]
+  observable_tool_router.py               cost_tracker.py [NEW]
+  structured_output.py
 
 kernel/domain/ (existing + planned)
   vfs.py (DirEntry, StatResult)         caps.py (CapSet) [NEW]
   pipeline_config.py                    resource_accounting.py [NEW]
-  system_config.py                      Policy
+  system_config.py                      middleware_config.py [NEW]
 
 compiler/ (existing + planned)
   yaml_builder.py                      plugins/adapter_definition.py [NEW]
-  pipeline_config.py                   plugins/policy_definition.py [NEW]
+  pipeline_config.py                   plugins/middleware_definition.py [NEW]
   config_loader.py                     plugins/config_definition.py [NEW]
   system_builder.py
   system_validator.py
@@ -1066,11 +1130,14 @@ stdlib/lib/observers/ (existing)     stdlib/lib/observers/ (planned)
   SimpleLoggingObserver
   ResourceMonitorObserver
   DataQualityObserver
+  PortCallStoreObserver (Phase C1.5)
+  PortCallLogObserver (Phase C1.5)
 
 kernel/ internals (planned)
   RunContext (rename ExecutionContext)
-  Port Probe Hooks (pre_call / on_error chains)
-  ResourceAccounting
+  PortCallEvent unified event base (Phase C1.5, complete)
+  Port Middleware declarative stacking (Phase C2, complete — core infra)
+  ResourceAccounting (Phase C3)
 ```
 
 ---
@@ -1080,18 +1147,20 @@ kernel/ internals (planned)
 1. **YAML Compiler refactor** -- **(Complete)**
 2. **Agent Protocol Phase A: VAS Namespace Tree** -- Complete `/etc/pipelines/`, `/dev/ports/`, `/sys/`, `/proc/self/`, `/mem/` providers. Wire `/proc/*` into MCP. Enables agent discovery of the full system.
 3. **Agent Protocol Phase B: CapSet + YAML Security** -- `CapSet` domain model, `kind: Config` security extensions (`caps.profiles`, `mcp.permissions`), `kind: Manifest` loader (adapter-declared profiles + `inherit:` resolution), VAS permission checking, narrowing chain (org → manifest → pipeline → node).
-4. **Agent Protocol Phase C1: Port Probes (Observability)** -- Replace port wrappers with kprobe-style `instrument_ports()`. Fix `isinstance()` breakage. Can run in parallel with Phase B.
-5. **Agent Protocol Phase C2-C5: Port Probes (Enforcement) + ResourceAccounting** -- Pre-call hooks for cap/limit enforcement, `ResourceAccountant`, `/sys/cgroup/` provider, unified error handling.
-6. **`kind: System` + SystemRunner** -- **(Complete)**
-7. **Entity-Bound Pipelines** -- `spec.entities` YAML binding + `StateTransitionObserver`.
-8. **Pipeline Resume & Multi-Round Extraction** -- `pre_seeded_results` + `ExtractionJob` service.
-9. **Agent Protocol Phase D: VAS aexec/awrite** -- Action through VAS paths + mid-pipeline injection.
-10. **`kind: Adapter` + `kind: Policy`** -- Reusable adapter configs and execution policies.
-11. **EventBus** -- Cross-pipeline IPC.
-12. **Agent Protocol Phase E: VAS awatch + areadlink + apipe** -- Reactive subscriptions, cross-references, and inter-pipeline piping.
-13. **RunContext rename** -- Low risk, high clarity improvement.
-14. **GovernancePort** -- Required for production multi-tenant deployments.
-15. **Studio MCP Server** -- Full api/ surface as MCP tools with permission boundaries (leverages Agent Protocol caps).
+4. **Agent Protocol Phase C1: Port Middleware (Observability + Structured Output)** -- **(Complete)** Composable middleware pattern (`stdlib/middleware/`). `prepare_ports()` auto-stacks layers: `StructuredOutputFallback` → `ObservableLLM` / `ObservableToolRouter`. `SupportsStructuredOutput` protocol with native OpenAI (JSON Schema mode) and Anthropic (tool_use) implementations. Fixes `isinstance()` breakage. Unified LLM node YAML spec (`human_message`, `system_message`, `examples`, `conversation`, `output_schema`).
+5. **Agent Protocol Phase C1.5: Unified Port Events** -- **(Complete)** `PortCallEvent` base event with typed subtypes (`LLMPortCall`, `ToolRouterPortCall`). Observable middleware emits unified events inline. `PortCallStoreObserver` + `PortCallLogObserver` for queryable port call history and structured JSON logging.
+6. **Agent Protocol Phase C2: Port Middleware (Declarative Stacking)** -- **(Complete)** Data-driven middleware stacking via `prepare_ports(middleware_config=...)`. `kind: Middleware` compiler plugin + inline `spec.ports.<name>.middleware:`. Two-phase stacking (user → auto). Concrete middleware: `RetryWithBackoff`, `RateLimiter`, `ResponseCache`, `Timeout`. Remaining: `CostTracker`, `CircuitBreaker`.
+7. **Agent Protocol Phase C3: ResourceAccounting** -- `ResourceAccountant` reads from `PortCallStoreObserver`, `/sys/cgroup/` provider, unified error handling for cap/limit enforcement.
+8. **`kind: System` + SystemRunner** -- **(Complete)**
+9. **Entity-Bound Pipelines** -- `spec.entities` YAML binding + `StateTransitionObserver`.
+10. **Pipeline Resume & Multi-Round Extraction** -- `pre_seeded_results` + `ExtractionJob` service.
+11. **Agent Protocol Phase D: VAS aexec/awrite** -- Action through VAS paths + mid-pipeline injection.
+12. **`kind: Adapter` + `kind: Middleware`** -- Reusable adapter configs and middleware stack definitions. `kind: Middleware` drives declarative stacking (see Phase C2).
+13. **EventBus** -- Cross-pipeline IPC.
+14. **Agent Protocol Phase E: VAS awatch + areadlink + apipe** -- Reactive subscriptions, cross-references, and inter-pipeline piping.
+15. **RunContext rename** -- Low risk, high clarity improvement.
+16. **GovernancePort** -- Required for production multi-tenant deployments.
+17. **Studio MCP Server** -- Full api/ surface as MCP tools with permission boundaries (leverages Agent Protocol caps).
 
 ---
 
@@ -1132,7 +1201,9 @@ kernel/ internals (planned)
 - [ ] **Phase B:** `kind: Config` security extensions (`caps.profiles`, `mcp.permissions`)
 - [ ] **Phase B:** `kind: Manifest` loader (adapter-declared mounts + cap profiles + `inherit:` resolution)
 - [ ] **Phase B:** VAS permission checking in `LocalVAS`
-- [ ] **Phase C1:** Port Probes -- observability (`instrument_ports()` replacing `port_wrappers.py`)
+- [x] **Phase C1:** Port Middleware -- observability + structured output (`stdlib/middleware/`, `prepare_ports()`)
+- [x] **Phase C1.5:** Unified `PortCallEvent` base + inline observable middleware + `PortCallStoreObserver` + `PortCallLogObserver`
+- [x] **Phase C2:** Port Middleware -- Declarative Stacking (core infrastructure: `kind: Middleware` plugin, `prepare_ports(middleware_config=...)`, two-phase stacking)
 
 ### Milestone 3: Multi-Process Orchestration (Complete)
 - [x] `kind: System` + SystemBuilder + SystemRunner
@@ -1140,9 +1211,9 @@ kernel/ internals (planned)
 - [x] Manual mode end-to-end
 
 ### Milestone 4: Agent Protocol Enforcement
-- [ ] **Phase C2:** Port Probes -- enforcement (pre_call hooks for caps + limits)
+- [ ] **Phase C2:** Port Middleware -- declarative stacking (`kind: Middleware` / `spec.ports.<name>.middleware:` → `prepare_ports()`)
 - [ ] **Phase C3:** `ResourceAccounting` + `/sys/cgroup/` provider
-- [ ] **Phase C5:** Unified error handling in `node_executor.py`
+- [ ] Unified error handling in `node_executor.py`
 - [ ] Child process cap inheritance (narrowing chain)
 - [ ] Pipeline-level `spec.caps` + `spec.limits` enforcement
 
@@ -1165,7 +1236,7 @@ kernel/ internals (planned)
 ### Milestone 8: Production Runtime
 - [ ] Studio as daemon host (schedule/continuous modes)
 - [ ] EventBus (cross-pipeline IPC)
-- [ ] `kind: Adapter` + `kind: Policy`
+- [ ] `kind: Adapter` + `kind: Middleware` (Middleware drives declarative stacking, see Phase C2)
 - [ ] GovernancePort
 
 ### Milestone 9: Stable Release

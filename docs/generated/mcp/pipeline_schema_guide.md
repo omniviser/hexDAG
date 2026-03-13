@@ -225,11 +225,14 @@ Specification for llm_node type
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `output_schema` | string | No | Expected output schema for structured... |
-| `parse_json` | string | No | If True, parse the LLM response as JS... |
-| `parse_strategy` | string | No | JSON parsing strategy: "json", "json_... |
-| `prompt_template` | string | No | Template for the user prompt. Support... |
-| `system_prompt` | string | No | System message to prepend to the conv... |
+| `conversation` | string | No |  |
+| `examples` | string | No |  |
+| `human_message` | string | No | User/human message template with ``{{... |
+| `output_schema` | string | No |  |
+| `parse_json` | string | No |  |
+| `prompt_template` | string | No |  |
+| `system_message` | string | No | System message template. |
+| `system_prompt` | string | No |  |
 | `template` | string | No |  |
 
 **Example:**
