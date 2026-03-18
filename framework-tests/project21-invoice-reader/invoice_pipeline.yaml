@@ -1,0 +1,74 @@
+# hexDAG Pipeline: Scanned Invoice Reading Agent
+# Ported from LangGraph project-21-scanned-invoice-reading-agent
+#
+# Pattern: Extract -> Structure
+# - Read PDF invoice text
+# - Extract structured data using LLM
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: invoice-reader-agent
+  description: Extract structured data from PDF invoices
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-21"
+    pattern: "Document Processing + Structured Extraction"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Read PDF and extract text
+    - kind: function_node
+      metadata:
+        name: read_invoice
+        annotations:
+          description: Extract text from PDF invoice
+      spec:
+        fn: "read_invoice"
+        dependencies: []
+
+    # Step 2: Extract structured data using LLM
+    - kind: llm_node
+      metadata:
+        name: extract_data
+        annotations:
+          description: Extract structured invoice fields
+      spec:
+        prompt_template: |
+          You are an expert accounting assistant.
+          Analyze the following invoice text and extract key details.
+
+          Invoice Text:
+          ---
+          {{ invoice_text }}
+          ---
+
+          Extract and return ONLY a valid JSON object with these fields:
+          {
+            "vendor_name": "company issuing the invoice",
+            "customer_name": "customer on the invoice",
+            "invoice_number": "unique invoice identifier",
+            "total_amount": 0.00,
+            "due_date": "YYYY-MM-DD or as written"
+          }
+
+          Return ONLY the JSON, no other text.
+
+        model: gemini-2.0-flash
+        temperature: 0
+        dependencies: [read_invoice]
+
+# INVOICE PROCESSING PATTERN:
+#
+#   ┌───────────┐     ┌──────────────┐     ┌──────────────┐
+#   │   PDF     │ --> │  Read Text   │ --> │   Extract    │ --> Structured
+#   │  Invoice  │     │  (pypdf)     │     │   Fields     │     JSON
+#   └───────────┘     └──────────────┘     └──────────────┘
+#                           │                     │
+#                           v                     v
+#                     Raw text              vendor_name
+#                     extraction            customer_name
+#                                          invoice_number
+#                                          total_amount
+#                                          due_date

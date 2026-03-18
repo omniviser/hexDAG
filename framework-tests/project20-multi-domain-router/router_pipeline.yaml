@@ -1,0 +1,57 @@
+# hexDAG Pipeline: Multi-Domain Routing Agent
+# Ported from LangGraph project-20-multi-domain-routing-agent
+#
+# Pattern: Router -> Specialized Agents
+# - Classify query by domain (Finance, HR, Marketing, General)
+# - Route to appropriate specialized agent
+# - Each agent handles its domain-specific logic
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: multi-domain-router
+  description: Unified assistant routing to specialized domain agents
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-20 (Capstone)"
+    pattern: "Multi-Domain Routing"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Classify the query
+    - kind: function_node
+      metadata:
+        name: classify_query
+        annotations:
+          description: Determine which domain the query belongs to
+      spec:
+        fn: "classify_query"
+        dependencies: []
+
+    # Step 2: Route and handle by domain
+    - kind: function_node
+      metadata:
+        name: handle_query
+        annotations:
+          description: Route to appropriate agent and get response
+      spec:
+        fn: "handle_query"
+        dependencies: [classify_query]
+
+# MULTI-DOMAIN ROUTING PATTERN:
+#
+#                         ┌─────────────────┐
+#                         │  Finance Agent  │
+#                         └────────┬────────┘
+#   ┌──────────┐     ┌─────────┐   │
+#   │  Query   │ --> │  Router │ --├──> HR Agent
+#   └──────────┘     └─────────┘   │
+#                         │        └──> Marketing Agent
+#                         v
+#                   ┌─────────────────┐
+#                   │  General Agent  │
+#                   └─────────────────┘
+#
+# LangGraph uses conditional_edges for routing
+# hexDAG handles routing in a single node (no cycles needed)

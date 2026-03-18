@@ -1,0 +1,64 @@
+# hexDAG Pipeline: Log Analysis and Summarization
+# Ported from LangGraph project-17-log-analysis-and-summarization
+#
+# Pattern: Parse -> Analyze -> Summarize
+# - Parse log files to extract errors/warnings
+# - Analyze patterns and severity
+# - Generate human-readable summary with recommendations
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: log-analyzer
+  description: Analyze logs and summarize errors with recommendations
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-17"
+    pattern: "Log Analysis Pipeline"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Parse and categorize log entries
+    - kind: function_node
+      metadata:
+        name: parse_logs
+        annotations:
+          description: Parse logs and extract errors/warnings
+      spec:
+        fn: "parse_logs"
+        dependencies: []
+
+    # Step 2: Generate summary and recommendations
+    - kind: llm_node
+      metadata:
+        name: summarize_errors
+        annotations:
+          description: Summarize errors and provide recommendations
+      spec:
+        prompt_template: |
+          You are a DevOps engineer analyzing system logs.
+
+          LOG ANALYSIS:
+          {{ log_analysis }}
+
+          Provide:
+          1. Summary of issues found
+          2. Severity assessment (Critical/High/Medium/Low)
+          3. Root cause analysis (if possible)
+          4. Recommended actions
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+        dependencies: [parse_logs]
+
+# LOG ANALYSIS PATTERN:
+#
+#   ┌──────────┐     ┌──────────────┐     ┌──────────────┐
+#   │   Logs   │ --> │    Parse     │ --> │   Summarize  │ --> Report
+#   │          │     │   & Filter   │     │   & Advise   │
+#   └──────────┘     └──────────────┘     └──────────────┘
+#                          │                     │
+#                          v                     v
+#                    Extract ERROR,        Human-readable
+#                    WARNING, etc.         summary + actions
