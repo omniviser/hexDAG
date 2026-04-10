@@ -1,0 +1,118 @@
+# hexDAG Self-Compile Pipeline
+#
+# This pipeline IS hexDAG compiling itself.  Every stage -- linting,
+# type-checking, architecture validation, testing, packaging -- is
+# orchestrated by hexDAG's own kernel.
+#
+# Like GCC compiling GCC, or the Linux kernel built by `make` running
+# on Linux, this pipeline is the proof that hexDAG is self-consistent:
+# a system that can build itself.
+#
+# Run:  hexdag bootstrap
+#       hexdag pipeline run hexdag/bootstrap/pipelines/self_compile.yaml
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: hexdag-self-compile
+  description: >
+    hexDAG compiles itself.  This pipeline orchestrates the complete build,
+    validation, and packaging of hexDAG using hexDAG's own orchestration
+    engine -- the bootstrap proof of a self-compiling operating system.
+spec:
+  nodes:
+    # ── Wave 1: Static Analysis (parallel) ──────────────────────────
+    #
+    # These three stages have no dependencies and run concurrently.
+    # They are the fastest feedback loop: catch syntax and type errors
+    # before spending time on tests.
+
+    - kind: function_node
+      metadata:
+        name: lint
+      spec:
+        fn: hexdag.bootstrap.stages.lint
+      dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: format_check
+      spec:
+        fn: hexdag.bootstrap.stages.format_check
+      dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: typecheck
+      spec:
+        fn: hexdag.bootstrap.stages.typecheck
+      dependencies: []
+
+    # ── Wave 2: Architecture Validation (parallel) ──────────────────
+    #
+    # Once the code parses cleanly, validate the deeper structural
+    # invariants: hexagonal boundaries, kernel isolation, async rules.
+
+    - kind: function_node
+      metadata:
+        name: validate_architecture
+      spec:
+        fn: hexdag.bootstrap.stages.validate_architecture
+      dependencies:
+        - lint
+
+    # ── Wave 2b: Self-Validation ────────────────────────────────────
+    #
+    # The meta-recursive step: hexDAG validates THIS pipeline using
+    # its own YAML pipeline validator.  If this passes, the system
+    # is provably self-consistent.
+
+    - kind: function_node
+      metadata:
+        name: validate_self
+      spec:
+        fn: hexdag.bootstrap.stages.validate_self
+      dependencies:
+        - lint
+
+    # ── Wave 3: Test Suite ──────────────────────────────────────────
+    #
+    # Run the full test suite.  Depends on static analysis passing
+    # to avoid wasting CI time on code that won't even type-check.
+
+    - kind: function_node
+      metadata:
+        name: run_tests
+      spec:
+        fn: hexdag.bootstrap.stages.run_tests
+        timeout: 600
+      dependencies:
+        - lint
+        - typecheck
+
+    # ── Wave 4: Build Package ───────────────────────────────────────
+    #
+    # Build the wheel and sdist.  Only runs after all validation and
+    # tests have passed -- we never ship a broken artifact.
+
+    - kind: function_node
+      metadata:
+        name: build_package
+      spec:
+        fn: hexdag.bootstrap.stages.build_package
+      dependencies:
+        - run_tests
+        - validate_architecture
+        - validate_self
+
+    # ── Wave 5: Validate Package ────────────────────────────────────
+    #
+    # Final gate: inspect the built artifacts with twine check.
+
+    - kind: function_node
+      metadata:
+        name: validate_package
+      spec:
+        fn: hexdag.bootstrap.stages.validate_package
+      dependencies:
+        - build_package
