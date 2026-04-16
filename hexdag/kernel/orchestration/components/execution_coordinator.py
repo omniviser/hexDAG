@@ -15,7 +15,12 @@ else:
     ObserverManager = Any
 
 from hexdag.kernel.domain.dag import NodeSpec
-from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS, ExpressionError, evaluate_expression
+from hexdag.kernel.expression_parser import (
+    ALLOWED_FUNCTIONS,
+    MISSING,
+    ExpressionError,
+    evaluate_expression,
+)
 from hexdag.kernel.logging import get_logger
 from hexdag.stdlib.nodes.mapped_input import FieldExtractor
 
@@ -273,7 +278,9 @@ class ExecutionCoordinator:
             actual_path = source[7:]  # Remove "$input." prefix
             if actual_path:
                 if isinstance(initial_input, dict):
-                    return FieldExtractor.extract(initial_input, actual_path)
+                    value = FieldExtractor.extract(initial_input, actual_path)
+                    # Node ($input) is known — deep miss is None, not MISSING
+                    return None if value is MISSING else value
                 return FieldExtractor.extract({"_root": initial_input}, "_root")
             return initial_input
 
@@ -284,7 +291,10 @@ class ExecutionCoordinator:
             parts = source.split(".", 1)
             node_name, field_path = parts[0], parts[1]
             if node_name in node_results:
-                return FieldExtractor.extract(node_results[node_name], field_path)
+                value = FieldExtractor.extract(node_results[node_name], field_path)
+                # Node is known — deep miss is None, not MISSING
+                return None if value is MISSING else value
+            # Node name not found — propagate MISSING
             return FieldExtractor.extract(
                 base_input if isinstance(base_input, dict) else {}, source
             )
@@ -300,6 +310,12 @@ class ExecutionCoordinator:
         node_results: dict[str, Any],
     ) -> dict[str, Any]:
         """Apply field mapping to transform input data.
+
+        The result dict is **additive**: it starts with the full upstream
+        node namespace (n8n-like), then overlays explicit mappings on top.
+        This means nodes can reference upstream data directly in expressions
+        (e.g., ``get_context.negotiation.counter_count``) without needing
+        an explicit ``input_mapping`` entry for every field.
 
         Supports multiple syntaxes:
         - ``$input.field`` - Extract from the initial pipeline input
@@ -323,7 +339,7 @@ class ExecutionCoordinator:
         Returns
         -------
         dict[str, Any]
-            Transformed input with mapped fields
+            Transformed input with upstream namespace + mapped fields
 
         Examples
         --------
@@ -348,10 +364,25 @@ class ExecutionCoordinator:
                 "total": "price * quantity",
             }
         """
+        # Start with full upstream node namespace (n8n-like: all upstream data available)
         result: dict[str, Any] = {}
+        result.update(node_results)
 
+        # Also expose initial input as "input"
+        if isinstance(initial_input, dict):
+            result["input"] = initial_input
+
+        # Overlay explicit input_mapping aliases (win over upstream names)
         for target_field, source in input_mapping.items():
             value = self._resolve_mapping_value(source, base_input, initial_input, node_results)
+
+            if value is MISSING:
+                source_repr = source if isinstance(source, str) else repr(source)
+                raise ValueError(
+                    f"input_mapping: path '{source_repr}' does not exist "
+                    f"(target field: '{target_field}'). "
+                    f"Available node names: {sorted(node_results.keys())}"
+                )
 
             if value is None:
                 source_repr = source if isinstance(source, str) else repr(source)

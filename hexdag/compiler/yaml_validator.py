@@ -1,10 +1,13 @@
 """YAML Pipeline Validator - Validates pipeline configurations."""
 
+import difflib
 from collections.abc import Iterator
 from typing import Any
 
+from hexdag.compiler.reference_resolver import _BUILTIN_NAMES, _NODE_FIELD_RE, _RESERVED_PREFIXES
 from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.domain.pipeline_config import BaseNodeConfig
+from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS
 
 # Separator for namespace:name format
 NAMESPACE_SEPARATOR = ":"
@@ -318,6 +321,9 @@ class YamlValidator:
 
         # Reuse cached node_ids and macro_instances for dependency validation
         self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
+
+        # Validate expression/mapping naming to prevent ambiguous resolution
+        self._validate_naming_collisions(nodes, result, node_ids)
 
         return result
 
@@ -647,3 +653,113 @@ class YamlValidator:
         # Check for cycles using DirectedGraph's public static method
         if cycle_message := DirectedGraph.detect_cycle(dependency_graph):
             result.add_error(cycle_message)
+
+    def _validate_naming_collisions(
+        self,
+        nodes: list[dict[str, Any]],
+        result: ValidationReport,
+        node_ids: set[str],
+    ) -> None:
+        """Validate that expression variables and input_mapping aliases don't collide.
+
+        Checks (all hard errors):
+        1. Expression variable name == node name
+        2. Expression variable name == builtin function name
+        3. input_mapping alias == node name
+        4. First path segment in input_mapping/expressions is a known reference
+        """
+        builtin_names = frozenset(ALLOWED_FUNCTIONS.keys())
+
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+
+            spec = node.get("spec", {})
+            expressions = spec.get("expressions", {})
+            input_mapping = spec.get("input_mapping", {})
+
+            if not isinstance(expressions, dict):
+                expressions = {}
+            if not isinstance(input_mapping, dict):
+                input_mapping = {}
+
+            # Check 1: Expression variable names vs node names
+            for var_name in expressions:
+                if var_name in node_ids:
+                    result.add_error(
+                        f"Node '{node_id}': Expression variable '{var_name}' "
+                        f"collides with node '{var_name}'. Rename the variable "
+                        f"or the node to avoid ambiguous resolution."
+                    )
+
+            # Check 2: Expression variable names vs builtin functions
+            for var_name in expressions:
+                if var_name in builtin_names:
+                    result.add_error(
+                        f"Node '{node_id}': Expression variable '{var_name}' "
+                        f"collides with built-in function '{var_name}'. "
+                        f"Choose a different variable name."
+                    )
+
+            # Check 3: input_mapping alias vs node names
+            for alias in input_mapping:
+                if alias in node_ids:
+                    result.add_error(
+                        f"Node '{node_id}': input_mapping alias '{alias}' "
+                        f"collides with node '{alias}'. Choose a different alias."
+                    )
+
+            # Check 4: First path segment validation in expressions
+            # Build the set of valid first segments for this node
+            valid_first_segments = (
+                node_ids
+                | set(expressions.keys())
+                | set(input_mapping.keys())
+                | _RESERVED_PREFIXES
+                | _BUILTIN_NAMES
+                | {"input", "state"}
+            )
+
+            for var_name, expr in expressions.items():
+                if not isinstance(expr, str):
+                    continue
+                self._check_first_segments(
+                    expr, var_name, node_id, valid_first_segments, node_ids, result
+                )
+
+            for alias, source in input_mapping.items():
+                if not isinstance(source, str):
+                    continue
+                # Skip $input references and expressions
+                if source.startswith("$input") or source == "$input":
+                    continue
+                self._check_first_segments(
+                    source, alias, node_id, valid_first_segments, node_ids, result
+                )
+
+    @staticmethod
+    def _check_first_segments(
+        text: str,
+        field_name: str,
+        node_id: str,
+        valid_first_segments: set[str],
+        node_ids: set[str],
+        result: "ValidationReport",
+    ) -> None:
+        """Check that first path segments in text are known references."""
+        for match in _NODE_FIELD_RE.finditer(text):
+            candidate = match.group(1)
+            if candidate in _RESERVED_PREFIXES or candidate in _BUILTIN_NAMES:
+                continue
+            if candidate in valid_first_segments:
+                continue
+            # Unknown first segment — likely a typo
+            close_matches = difflib.get_close_matches(candidate, sorted(node_ids), n=3, cutoff=0.6)
+            suggestion = ""
+            if close_matches:
+                suggestion = f" Did you mean: {', '.join(close_matches)}?"
+            result.add_error(
+                f"Node '{node_id}': Unknown reference '{candidate}' "
+                f"in field '{field_name}'.{suggestion}"
+            )

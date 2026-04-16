@@ -273,6 +273,12 @@ spec:
   nodes:
     - kind: function_node
       metadata:
+        name: other_node
+      spec:
+        fn: json.loads
+
+    - kind: function_node
+      metadata:
         name: my_node
       spec:
         fn: json.loads

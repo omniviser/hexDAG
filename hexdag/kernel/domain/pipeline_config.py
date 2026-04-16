@@ -87,11 +87,12 @@ class BaseNodeConfig(BaseModel):
     input_mapping: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Field mapping from upstream nodes or pipeline input."
+            "Optional field aliases. Upstream node outputs are available"
+            " directly in expressions and templates (n8n-like)."
+            " Use input_mapping only to create short aliases or to map"
+            " fields to function/service parameter names."
             " Keys are target field names, values use"
             " node_name.field or $input.field syntax."
-            " Values can also be nested dicts whose leaf strings"
-            " are resolved recursively."
         ),
     )
     dependencies: list[str] | None = Field(
