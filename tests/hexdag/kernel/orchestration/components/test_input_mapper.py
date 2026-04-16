@@ -207,7 +207,12 @@ class TestInputMappingWithExecutionCoordinator:
 
         result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
 
-        assert result == {"load_id": "LOAD123", "carrier_mc": "MC456"}
+        # Additive: upstream namespace + explicit mappings
+        assert result["load_id"] == "LOAD123"
+        assert result["carrier_mc"] == "MC456"
+        # Upstream namespace is also available (n8n-like)
+        assert result["producer"] == {"result": "some_data"}
+        assert result["input"] == initial_input
 
     def test_input_mapping_with_dependency_path(self, coordinator):
         """Test node_name.field syntax for accessing dependency output."""
@@ -294,8 +299,28 @@ class TestInputMappingWithExecutionCoordinator:
 
         assert result["deep_value"] == "found_it"
 
-    def test_input_mapping_missing_path_returns_none(self, coordinator):
-        """Test that missing paths result in None values."""
+    def test_input_mapping_unknown_node_raises(self, coordinator):
+        """Test that referencing an unknown node raises a clear error."""
+        import pytest
+
+        node_spec = NodeSpec(
+            "consumer",
+            lambda x: x,
+            deps={"producer"},
+            params={
+                "input_mapping": {
+                    "bad_ref": "unknown_node.field",
+                }
+            },
+        )
+        initial_input = {}
+        node_results = {"producer": {"existing": "data"}}
+
+        with pytest.raises(ValueError, match="does not exist"):
+            coordinator.prepare_node_input(node_spec, node_results, initial_input)
+
+    def test_input_mapping_dollar_input_missing_field_returns_none(self, coordinator):
+        """$input.nonexistent returns None (known root, deep miss)."""
         node_spec = NodeSpec(
             "consumer",
             lambda x: x,
@@ -303,7 +328,6 @@ class TestInputMappingWithExecutionCoordinator:
             params={
                 "input_mapping": {
                     "missing_field": "$input.nonexistent",
-                    "also_missing": "producer.nonexistent.path",
                 }
             },
         )
@@ -312,8 +336,28 @@ class TestInputMappingWithExecutionCoordinator:
 
         result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
 
+        # $input is a known root; nonexistent field is a deep miss → None
         assert result["missing_field"] is None
-        assert result["also_missing"] is None
+
+    def test_input_mapping_missing_deep_path_returns_none(self, coordinator):
+        """Test that missing deep path segments (after first) return None."""
+        node_spec = NodeSpec(
+            "consumer",
+            lambda x: x,
+            deps={"producer"},
+            params={
+                "input_mapping": {
+                    "deep_missing": "producer.existing.nonexistent_deep",
+                }
+            },
+        )
+        initial_input = {}
+        node_results = {"producer": {"existing": "data"}}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
+
+        # Deep path: first segment "existing" found, "nonexistent_deep" not → None
+        assert result["deep_missing"] is None
 
     def test_input_mapping_no_mapping_uses_standard_behavior(self, coordinator):
         """Test that nodes without input_mapping use standard dependency behavior."""
@@ -381,7 +425,8 @@ class TestInputMappingWithExecutionCoordinator:
             },
         )
         extract_input = coordinator.prepare_node_input(extract_spec, node_results, initial_input)
-        assert extract_input == {"load_id": "LOAD001", "carrier_mc": "MC123"}
+        assert extract_input["load_id"] == "LOAD001"
+        assert extract_input["carrier_mc"] == "MC123"
         node_results["extract"] = {"load_data": {"id": "LOAD001"}, "carrier_data": {"mc": "MC123"}}
 
         # 2. Process node - uses extract output

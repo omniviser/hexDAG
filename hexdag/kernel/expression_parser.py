@@ -55,7 +55,38 @@ from typing import Any
 from hexdag.kernel.exceptions import ExpressionError  # noqa: F401
 from hexdag.kernel.logging import get_logger
 
-__all__ = ["compile_expression", "evaluate_expression", "ExpressionError", "ALLOWED_FUNCTIONS"]
+__all__ = [
+    "compile_expression",
+    "evaluate_expression",
+    "ExpressionError",
+    "ALLOWED_FUNCTIONS",
+    "MISSING",
+]
+
+
+class _MissingSentinel:
+    """Sentinel indicating a path's first segment was not found in data.
+
+    Distinguishes "the root name doesn't exist" (typo / missing node)
+    from "a deeper field is None" (optional data).  Returned only when
+    the **first** path segment cannot be resolved.
+    """
+
+    _instance: "_MissingSentinel | None" = None
+
+    def __new__(cls) -> "_MissingSentinel":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "<MISSING>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+MISSING = _MissingSentinel()
 
 logger = get_logger(__name__)
 
@@ -128,10 +159,10 @@ ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "endswith": lambda s, suffix: s.endswith(suffix) if isinstance(s, str) else False,
     "contains": lambda s, sub: sub in s if isinstance(s, str) else False,
     # Conditional/utility functions
-    "default": lambda val, default: val if val is not None else default,
-    "coalesce": lambda *args: next((a for a in args if a is not None), None),
-    "isnone": lambda x: x is None,
-    "isempty": lambda x: x is None or x == "" or x == [] or x == {},
+    "default": lambda val, default: val if val is not None and val is not MISSING else default,
+    "coalesce": lambda *args: next((a for a in args if a is not None and a is not MISSING), None),
+    "isnone": lambda x: x is None or x is MISSING,
+    "isempty": lambda x: x is None or x is MISSING or x == "" or x == [] or x == {},
     # Financial/precision math functions
     "Decimal": Decimal,
     "pow": pow,
@@ -253,6 +284,15 @@ def _validate_ast(node: ast.AST, expression: str) -> None:
 def _get_value(data: dict[str, Any], state: dict[str, Any], path: list[str]) -> Any:
     """Extract value from data or state using a path.
 
+    Returns :data:`MISSING` when the **first** path segment is not found
+    in *data* (or *state*).  This lets callers distinguish a genuine typo
+    (the root name doesn't exist at all) from a deeper field that is
+    legitimately ``None``.
+
+    For deeper segments (index >= 1), a missing key still returns ``None``
+    because the upstream node *was* found — the field is simply absent or
+    optional.
+
     Parameters
     ----------
     data : dict
@@ -265,7 +305,8 @@ def _get_value(data: dict[str, Any], state: dict[str, Any], path: list[str]) -> 
     Returns
     -------
     Any
-        Extracted value or None if not found
+        Extracted value, ``None`` for missing deep fields, or
+        :data:`MISSING` if the first segment doesn't exist.
     """
     if not path:
         return None
@@ -277,15 +318,19 @@ def _get_value(data: dict[str, Any], state: dict[str, Any], path: list[str]) -> 
     else:
         current = data
 
-    for key in path:
+    for idx, key in enumerate(path):
         if current is None:
             return None
         if isinstance(current, dict):
-            current = current.get(key)
+            if key not in current:
+                # First segment missing → MISSING (likely a typo)
+                # Deeper segment missing → None (optional field)
+                return MISSING if idx == 0 else None
+            current = current[key]
         elif hasattr(current, key):
             current = getattr(current, key)
         else:
-            return None
+            return MISSING if idx == 0 else None
 
     return current
 
@@ -317,7 +362,9 @@ def _eval_name(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> An
         return None
     if n.id == "state":
         return state
-    return data.get(n.id)
+    if n.id in data:
+        return data[n.id]
+    return MISSING
 
 
 def _eval_attribute(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
@@ -581,6 +628,14 @@ def compile_expression(expression: str) -> Callable[[dict[str, Any], dict[str, A
         """Evaluate the compiled expression."""
         try:
             result = _evaluate_node(tree.body, data, state)
+            if result is MISSING:
+                logger.warning(
+                    "Predicate '{}' contains a missing reference — evaluating to False. "
+                    "Available names: {}",
+                    expression,
+                    sorted(data.keys()),
+                )
+                return False
             return bool(result)
         except Exception as e:
             logger.warning("Expression '{}' evaluation failed: {}", expression, e)
@@ -644,4 +699,13 @@ def evaluate_expression(
     # Validate AST is safe
     _validate_ast(tree, expression)
 
-    return _evaluate_node(tree.body, data, state)
+    result = _evaluate_node(tree.body, data, state)
+
+    # If the entire expression resolved to MISSING, raise a clear error
+    if result is MISSING:
+        raise ExpressionError(
+            expression,
+            f"Expression resolved to a missing reference. Available names: {sorted(data.keys())}",
+        )
+
+    return result

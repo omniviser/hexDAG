@@ -238,6 +238,50 @@ Ports follow a two-tier naming scheme inspired by Linux kernel structs:
 - Automatic schema compatibility checking between connected nodes
 - Runtime type coercion and validation
 
+### Data Flow Model (n8n-like)
+
+hexDAG uses an **n8n-like data flow model** where upstream node outputs are automatically available to downstream nodes. You don't need to wire every field through `input_mapping` — just reference upstream data directly.
+
+**How it works:**
+- Every node can access upstream node outputs by name: `node_name.field.subfield`
+- `input_mapping` is **optional** — use it only to create short aliases
+- `$input.field` or `input.field` — access the initial pipeline input
+- Dependencies are **auto-inferred** from expressions and input_mapping references
+- Built-in functions like `coalesce()`, `default()`, `isnone()` handle optional fields
+
+**Expression node — reference upstream directly (no mapping needed):**
+```yaml
+- kind: expression_node
+  metadata:
+    name: compute_values
+  spec:
+    expressions:
+      target_pay: "coalesce(get_context.negotiation.snapshot_target_pay, get_context.load.target_pay)"
+      counter_round: "int(default(get_context.negotiation.counter_count, 0)) + 1"
+      rate: "normalize_rates.rate_low"
+    output_fields: [target_pay, counter_round, rate]
+    # No input_mapping needed! No dependencies needed!
+```
+
+**LLM node — template variables from upstream:**
+```yaml
+- kind: llm_node
+  metadata:
+    name: analyze
+  spec:
+    human_message: "Analyze load {{get_context.load.description}} for carrier {{input.carrier_name}}"
+```
+
+**When to still use `input_mapping`:**
+- `step_call` / `function_node` — maps fields to function parameter names
+- Creating short aliases for deeply nested paths used many times in expressions
+
+**Build-time safety:**
+- Expression variable names that collide with node names → **build error**
+- Expression variable names that collide with builtins (`len`, `coalesce`) → **build error**
+- Unknown first path segment (typo) → **build error** with "did you mean?" suggestion
+- Missing deep path at runtime → returns `None` (optional field), not silent failure
+
 # Claude Development Guidelines
 
 ## Modern Python 3.12+ Type Hints

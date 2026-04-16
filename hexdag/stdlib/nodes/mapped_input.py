@@ -7,6 +7,7 @@ from typing import Any, cast
 from pydantic import BaseModel, Field, create_model, model_validator
 
 from hexdag.kernel.exceptions import ResourceNotFoundError, ValidationError
+from hexdag.kernel.expression_parser import MISSING
 from hexdag.kernel.protocols import DictConvertible, is_dict_convertible, is_schema_type
 
 
@@ -69,8 +70,12 @@ class FieldExtractor:
     """Handles extraction of values from nested data structures."""
 
     @staticmethod
-    def extract(data: dict[Any, Any] | DictConvertible, path: str) -> Any:
+    def extract(data: dict[Any, Any] | DictConvertible | None, path: str) -> Any:
         """Extract value from nested data structure using dot notation path.
+
+        Returns :data:`MISSING` when the **first** path segment is not
+        found in *data*, indicating a likely typo or missing node name.
+        Deeper missing segments return ``None`` (optional field).
 
         Args
         ----
@@ -79,25 +84,39 @@ class FieldExtractor:
 
         Returns
         -------
-            The extracted value or None if not found
+            The extracted value, ``None`` for missing deep fields, or
+            :data:`MISSING` if the first segment doesn't exist.
 
         """
         if not path:
             return data
 
+        if data is None:
+            return None
+
         parts = path.split(".")
         current: Any = data
 
-        for part in parts:
+        for idx, part in enumerate(parts):
             current = FieldExtractor._extract_single_level(current, part)
+            if current is FieldExtractor._NOT_FOUND:
+                # First segment not found → MISSING (likely typo / missing node)
+                # Deeper segment not found → None (optional field)
+                return MISSING if idx == 0 else None
             if current is None:
                 break
 
         return current
 
+    _NOT_FOUND = object()  # internal sentinel for _extract_single_level
+
     @staticmethod
     def _extract_single_level(data: Any, key: str) -> Any:
         """Extract a single level from the data.
+
+        Returns the internal ``_NOT_FOUND`` sentinel when the key is not
+        present at all.  The caller (``extract``) converts this to either
+        :data:`MISSING` (first segment) or ``None`` (deeper segments).
 
         Args
         ----
@@ -106,21 +125,23 @@ class FieldExtractor:
 
         Returns
         -------
-            The value at the key or None if not found
+            The value at the key, or ``_NOT_FOUND`` if the key doesn't exist.
 
         """
         if data is None:
-            return None
+            return FieldExtractor._NOT_FOUND
 
         if isinstance(data, dict):
-            return data.get(key)
+            if key in data:
+                return data[key]
+            return FieldExtractor._NOT_FOUND
 
         if is_dict_convertible(data):
-            return getattr(data, key, None)
+            return getattr(data, key, FieldExtractor._NOT_FOUND)
 
         # Try generic attribute access for other objects
         try:
-            return getattr(data, key, None)
+            return getattr(data, key, FieldExtractor._NOT_FOUND)
         except (AttributeError, TypeError):
             return None
 
@@ -339,7 +360,7 @@ class ModelFactory:
                     continue
 
                 value = FieldExtractor.extract(data, source_path)
-                if value is not None:
+                if value is not None and value is not MISSING:
                     result[target_field] = value
 
             return result
@@ -449,7 +470,7 @@ class AutoMappedInput(BaseModel):
         result: dict[str, Any] = {}
         for target_field, source_path in field_mapping.items():
             value = FieldExtractor.extract(data, source_path)
-            if value is not None:
+            if value is not None and value is not MISSING:
                 result[target_field] = value
 
         return result

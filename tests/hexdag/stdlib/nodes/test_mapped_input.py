@@ -272,7 +272,7 @@ class TestAutoMappedInput:
         assert result is None
 
     def test_field_extractor_attribute_error_handling(self):
-        """Test extraction handles AttributeError gracefully."""
+        """Test extraction handles AttributeError gracefully (returns _NOT_FOUND)."""
 
         class BadObject:
             def __getattr__(self, name):
@@ -280,13 +280,13 @@ class TestAutoMappedInput:
 
         bad_obj = BadObject()
         result = FieldExtractor._extract_single_level(bad_obj, "anything")
-        assert result is None
+        assert result is FieldExtractor._NOT_FOUND
 
     def test_field_extractor_type_error_handling(self):
-        """Test extraction handles TypeError gracefully."""
+        """Test extraction handles TypeError gracefully (returns _NOT_FOUND)."""
         # Try to extract from a number (not dict/object)
         result = FieldExtractor._extract_single_level(42, "field")
-        assert result is None
+        assert result is FieldExtractor._NOT_FOUND
 
     def test_type_inferrer_empty_path(self):
         """Test type inference with empty path returns the model itself."""
@@ -441,10 +441,9 @@ class TestAutoMappedInput:
         assert instance.field1 == "default"
 
     def test_field_extractor_general_exception_handling(self):
-        """Test that general exceptions in extraction are caught."""
-        # Test with object that raises exception during isinstance check
+        """Test that None data returns _NOT_FOUND (key doesn't exist)."""
         result = FieldExtractor._extract_single_level(None, "field")
-        assert result is None
+        assert result is FieldExtractor._NOT_FOUND
 
     def test_type_inferrer_nested_path_non_model(self):
         """Test type inference with nested path on non-BaseModel fields."""

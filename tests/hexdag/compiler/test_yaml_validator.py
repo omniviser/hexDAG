@@ -1248,3 +1248,146 @@ class TestOnErrorValidation:
         }
         result = self.validator.validate(config)
         assert result.is_valid
+
+
+class TestNamingCollisionValidation:
+    """Tests for expression/mapping naming collision detection."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_pipeline(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def test_expression_var_collides_with_node_name(self):
+        """Expression variable that matches a node name is a build error."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "rate": "1 + 2",  # 'rate' is also a node name
+                    },
+                },
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "rate"},
+                "spec": {"fn": "json.loads"},
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("collides with node" in e for e in result.errors)
+
+    def test_expression_var_collides_with_builtin(self):
+        """Expression variable that matches a builtin function is a build error."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "len": "42",  # 'len' is a builtin
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("built-in function" in e for e in result.errors)
+
+    def test_input_mapping_alias_collides_with_node(self):
+        """input_mapping alias that matches a node name is a build error."""
+        config = self._make_pipeline([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "producer"},
+                "spec": {"fn": "json.loads"},
+            },
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "consumer"},
+                "spec": {
+                    "input_mapping": {
+                        "producer": "producer.result",  # alias shadows node name
+                    },
+                    "expressions": {"x": "1 + 1"},
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("collides with node" in e for e in result.errors)
+
+    def test_unknown_first_segment_in_expression(self):
+        """Unknown first segment in expression is a build error with suggestion."""
+        config = self._make_pipeline([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "get_context"},
+                "spec": {"fn": "json.loads"},
+            },
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "val": "get_contex.data",  # typo: get_contex vs get_context
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("Unknown reference 'get_contex'" in e for e in result.errors)
+        assert any("get_context" in e for e in result.errors)  # suggestion
+
+    def test_valid_references_pass(self):
+        """Valid node references in expressions and mappings pass validation."""
+        config = self._make_pipeline([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "producer"},
+                "spec": {"fn": "json.loads"},
+            },
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "input_mapping": {
+                        "rate": "producer.rate",
+                    },
+                    "expressions": {
+                        "total": "rate * 2",
+                        "direct": "producer.name",
+                    },
+                    "output_fields": ["total", "direct"],
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert result.is_valid, f"Unexpected errors: {result.errors}"
+
+    def test_input_ref_is_valid(self):
+        """$input references are always valid (not flagged)."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "input_mapping": {
+                        "load_id": "$input.load_id",
+                    },
+                    "expressions": {"x": "load_id"},
+                    "output_fields": ["x"],
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert result.is_valid, f"Unexpected errors: {result.errors}"

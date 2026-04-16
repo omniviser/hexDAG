@@ -126,3 +126,146 @@ class TestAutoWireInputForwarding:
 
         # No matching fields → unchanged
         assert result == upstream_data
+
+
+class TestAdditiveInputMapping:
+    """Tests for n8n-like additive input_mapping behavior.
+
+    When input_mapping is present, the result now includes the full upstream
+    namespace (node_results) PLUS the explicitly mapped fields overlaid on top.
+    """
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_upstream_namespace_available_with_mapping(self, coordinator):
+        """Upstream node results are available alongside mapped fields."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer", "scorer"}),
+            params={"input_mapping": {"rate": "producer.rate"}},
+        )
+        node_results = {
+            "producer": {"rate": 100, "name": "test"},
+            "scorer": {"score": 0.95},
+        }
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        # Explicit mapping works
+        assert result["rate"] == 100
+        # Upstream namespace also available
+        assert result["producer"] == {"rate": 100, "name": "test"}
+        assert result["scorer"] == {"score": 0.95}
+
+    def test_explicit_mapping_overrides_upstream(self, coordinator):
+        """Explicit input_mapping values override upstream namespace keys."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"producer": "producer.inner"}},
+        )
+        node_results = {"producer": {"inner": "extracted_value"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        # The explicit mapping overrides the namespace key
+        assert result["producer"] == "extracted_value"
+
+    def test_initial_input_available_as_input_key(self, coordinator):
+        """Initial pipeline input is available as 'input' in the namespace."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"rate": "producer.rate"}},
+        )
+        initial_input = {"load_id": "LOAD123"}
+        node_results = {"producer": {"rate": 100}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["input"] == {"load_id": "LOAD123"}
+
+    def test_missing_first_segment_raises_error(self, coordinator):
+        """MISSING first path segment in input_mapping raises ValueError."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"bad": "nonexistent_node.field"}},
+        )
+        node_results = {"producer": {"data": "ok"}}
+
+        with pytest.raises(ValueError, match="does not exist"):
+            coordinator.prepare_node_input(node, node_results, initial_input={})
+
+    def test_missing_deep_path_returns_none(self, coordinator):
+        """Missing deep path (after first segment) returns None, not error."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"val": "producer.nonexistent_deep"}},
+        )
+        node_results = {"producer": {"data": "ok"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        # Deep path missing → None (optional field), not error
+        assert result["val"] is None
+
+
+class TestMissingSentinelInExpressions:
+    """Tests for MISSING sentinel behavior in expression evaluation."""
+
+    def test_missing_root_name_in_evaluate_expression(self):
+        """evaluate_expression raises ExpressionError for missing root names."""
+        from hexdag.kernel.expression_parser import ExpressionError, evaluate_expression
+
+        with pytest.raises(ExpressionError, match="missing reference"):
+            evaluate_expression("nonexistent_var", {"known": 42}, {})
+
+    def test_coalesce_skips_missing(self):
+        """coalesce() treats MISSING like None — skips to next arg."""
+        from hexdag.kernel.expression_parser import evaluate_expression
+
+        result = evaluate_expression(
+            "coalesce(missing_var, fallback)",
+            {"fallback": "ok"},
+            {},
+        )
+        # missing_var resolves to MISSING → coalesce skips it → returns "ok"
+        assert result == "ok"
+
+    def test_default_handles_missing(self):
+        """default() treats MISSING like None — returns the default."""
+        from hexdag.kernel.expression_parser import evaluate_expression
+
+        result = evaluate_expression(
+            "default(missing_var, 42)",
+            {},
+            {},
+        )
+        assert result == 42
+
+    def test_deep_path_none_not_missing(self):
+        """Deep path missing returns None (not MISSING) — doesn't error."""
+        from hexdag.kernel.expression_parser import evaluate_expression
+
+        result = evaluate_expression(
+            "default(data.nonexistent_field, 'fallback')",
+            {"data": {"other": "value"}},
+            {},
+        )
+        assert result == "fallback"
+
+    def test_known_root_with_none_value(self):
+        """A key that exists but is None passes through correctly."""
+        from hexdag.kernel.expression_parser import evaluate_expression
+
+        result = evaluate_expression("val", {"val": None}, {})
+        assert result is None
