@@ -190,6 +190,21 @@ properties:
           config: dict}}'
         title: Services
         type: object
+      state_machines:
+        additionalProperties:
+          additionalProperties: true
+          type: object
+        description: 'Entity state machine definitions. Format: {entity_type: {initial:
+          str, transitions: dict}}'
+        title: State Machines
+        type: object
+      observers:
+        description: 'Observer configurations. Format: [{class: str, config: dict}]'
+        items:
+          additionalProperties: true
+          type: object
+        title: Observers
+        type: array
       input_schema:
         additionalProperties: true
         type: object
@@ -227,6 +242,7 @@ properties:
           - $ref: '#/$defs/FunctionNodeSpec'
           - $ref: '#/$defs/Service_CallNodeSpec'
           - $ref: '#/$defs/Tool_CallNodeSpec'
+          - $ref: '#/$defs/TransitionNodeSpec'
           - $ref: '#/$defs/AgentNodeSpec'
       events:
         type: object
@@ -895,6 +911,52 @@ $defs:
         additionalProperties: false
         required:
         - tool_name
+    required:
+    - kind
+    - metadata
+    - spec
+  TransitionNodeSpec:
+    allOf:
+    - $ref: '#/$defs/Node'
+    type: object
+    description: Specification for transition_node type
+    properties:
+      kind:
+        const: transition_node
+        description: 'Node type: transition_node'
+      metadata:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Unique node identifier within the pipeline
+          annotations:
+            type: object
+            description: Optional metadata annotations
+        required:
+        - name
+      spec:
+        type: object
+        properties:
+          entity:
+            type: string
+            description: Entity type (must match a registered state machine).
+          entity_id:
+            type: string
+            description: Entity ID expression (resolved at runtime from input).
+            default: null
+          to_state:
+            type: string
+            description: Target state for the transition.
+          reason:
+            type: string
+            description: Optional reason expression (resolved at runtime). Additional
+              NodeSpec fields (when, on_error, etc.).
+            default: null
+        additionalProperties: false
+        required:
+        - entity
+        - to_state
     required:
     - kind
     - metadata

@@ -11,6 +11,9 @@ from .events import (
     BodyCompleted,
     BodyFailed,
     BodyStarted,
+    EntityCompensationEvent,
+    EntityGarbageCollected,
+    EntityObligationFailed,
     Event,
     NodeCancelled,
     NodeCompleted,
@@ -22,8 +25,10 @@ from .events import (
     PortCallEvent,
     ProcessCompleted,
     ProcessStarted,
+    StateTransitionEvent,
     SystemCompleted,
     SystemStarted,
+    TransitionContext,
     WaveCompleted,
 )
 
@@ -47,6 +52,12 @@ BODY_EVENTS = (BodyStarted, BodyCompleted, BodyFailed)
 SYSTEM_EVENTS = (SystemStarted, ProcessStarted, ProcessCompleted, SystemCompleted)
 HEALTH_EVENTS = ()  # HealthCheckEvent now lives in kernel.ports.healthcheck
 PORT_CALL_EVENTS = (PortCallEvent,)  # Base for all port/adapter method calls
+ENTITY_EVENTS = (
+    StateTransitionEvent,
+    EntityGarbageCollected,
+    EntityObligationFailed,
+    EntityCompensationEvent,
+)
 
 # Commonly used combinations
 ALL_NODE_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS
@@ -73,6 +84,12 @@ __all__ = [
     "ProcessStarted",
     "ProcessCompleted",
     "SystemCompleted",
+    # Entity lifecycle events
+    "TransitionContext",
+    "StateTransitionEvent",
+    "EntityGarbageCollected",
+    "EntityObligationFailed",
+    "EntityCompensationEvent",
     # Core Observers
     "PerformanceMetricsObserver",
     "AlertingObserver",
@@ -91,6 +108,7 @@ __all__ = [
     "SYSTEM_EVENTS",
     "HEALTH_EVENTS",
     "PORT_CALL_EVENTS",
+    "ENTITY_EVENTS",
     "ALL_NODE_EVENTS",
     "ALL_EXECUTION_EVENTS",
     "ALL_BODY_EVENTS",

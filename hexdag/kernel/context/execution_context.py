@@ -279,6 +279,20 @@ def get_services() -> dict[str, Any] | None:
     return _services_context.get()
 
 
+def get_pipeline_memory() -> Any | None:
+    """Convenience getter for the auto-registered PipelineMemory service.
+
+    Returns
+    -------
+    PipelineMemory | None
+        The pipeline memory instance, or None if not available.
+    """
+    services = _services_context.get()
+    if services:
+        return services.get("pipeline_memory")
+    return None
+
+
 # ============================================================================
 # Pipeline Name Context
 # ============================================================================

@@ -160,9 +160,51 @@ class SystemConfig(BaseModel):
         default_factory=dict, description="Global service configurations"
     )
 
+    # Lifecycle extensions (opt-in: presence of state_machines activates lifecycle mode)
+    state_machines: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Entity state machine definitions. "
+            "Format: {entity_type: {initial: str, transitions: dict, handlers: dict}}"
+        ),
+    )
+    states: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "State-to-process mapping. "
+            "Format: {STATE_NAME: {on_enter: process_name, terminal: bool}}"
+        ),
+    )
+    on_transition: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Transition-specific process overrides. Format: {'FROM -> TO': {process: process_name}}"
+        ),
+    )
+    observers: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Observer configurations. Format: [{class: str, config: dict}]",
+    )
+    memory: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Memory configuration (preload hooks).",
+    )
+    gc: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Garbage collection config for terminal entities. "
+            "Format: {check_interval: int, obligation_timeout: int, on_failure: str}"
+        ),
+    )
+
     # ------------------------------------------------------------------
     # Derived helpers
     # ------------------------------------------------------------------
+
+    @property
+    def is_lifecycle(self) -> bool:
+        """Whether this system operates in lifecycle mode."""
+        return bool(self.state_machines)
 
     @property
     def process_names(self) -> list[str]:

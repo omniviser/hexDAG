@@ -35,9 +35,10 @@ from hexdag.kernel.exceptions import InvalidTransitionError  # noqa: F401
 from hexdag.kernel.service import Service, tool
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
+    from hexdag.kernel.orchestration.events.events import TransitionContext
     from hexdag.kernel.ports.data_store import SupportsCollectionStorage
 
 _STATES_COLLECTION = "entity_states"
@@ -75,6 +76,8 @@ class EntityState(Service):
         self._states: dict[tuple[str, str], str] = {}
         # (entity_type, entity_id) → ordered list of transitions
         self._history: dict[tuple[str, str], list[StateTransition]] = {}
+        # entity_type → async handler callable (transactional: failure = rollback)
+        self._transition_handlers: dict[str, Callable[..., Any]] = {}
 
     # ------------------------------------------------------------------
     # Setup API (not tools — called before pipeline runs)
@@ -83,6 +86,35 @@ class EntityState(Service):
     def register_machine(self, config: StateMachineConfig) -> None:
         """Register a state machine config for an entity type."""
         self._machines[config.entity_type] = config
+
+    def register_handler(
+        self,
+        entity_type: str,
+        handler: Callable[..., Any],
+    ) -> None:
+        """Register a transition handler for an entity type.
+
+        Handlers are called asynchronously after a successful transition.
+        **Handler failure = transition failure** — the in-memory state is
+        rolled back and the error propagates to the caller.
+
+        The handler receives keyword arguments::
+
+            async def on_transition(
+                entity_type: str,
+                entity_id: str,
+                from_state: str,
+                to_state: str,
+                reason: str | None,
+                context: TransitionContext | None,
+            ) -> None: ...
+
+        Args
+        ----
+            entity_type: Entity type to attach the handler to.
+            handler: Async callable invoked on every transition.
+        """
+        self._transition_handlers[entity_type] = handler
 
     # ------------------------------------------------------------------
     # Collection interface
@@ -176,10 +208,19 @@ class EntityState(Service):
         entity_id: str,
         to_state: str,
         reason: str | None = None,
+        *,
+        _context: TransitionContext | None = None,
     ) -> dict[str, Any]:
         """Transition an entity to a new state.
 
         Validates the transition against the registered state machine.
+        If a transition handler is registered, it is called after persistence
+        but **before** the in-memory state is updated.  Handler failure rolls
+        back the transition (the entity stays in its previous state).
+
+        After a successful transition the method auto-emits a
+        ``StateTransitionEvent`` through the observer manager (if one is
+        available in the execution context).
 
         Args
         ----
@@ -187,6 +228,7 @@ class EntityState(Service):
             entity_id: Unique identifier for the entity.
             to_state: Target state.
             reason: Optional reason for the transition.
+            _context: Internal — transition context injected by framework.
 
         Returns
         -------
@@ -214,7 +256,7 @@ class EntityState(Service):
             msg = f"State {to_state!r} not valid for {entity_type!r}"
             raise InvalidTransitionError(msg)
 
-        self._states[key] = to_state
+        # Build transition record
         metadata: dict[str, Any] = {}
         if reason:
             metadata["reason"] = reason
@@ -226,8 +268,8 @@ class EntityState(Service):
             timestamp=time.time(),
             metadata=metadata,
         )
-        self._history.setdefault(key, []).append(transition)
 
+        # Write-ahead: persist BEFORE updating in-memory state (P2)
         if self._storage is not None:
             storage_key = _entity_key(entity_type, entity_id)
             await self._storage.asave(
@@ -235,7 +277,6 @@ class EntityState(Service):
                 storage_key,
                 {"entity_type": entity_type, "entity_id": entity_id, "state": to_state},
             )
-            # Append to persisted history
             history_doc = await self._storage.aload(_HISTORY_COLLECTION, storage_key)
             transitions_list = history_doc.get("transitions", []) if history_doc else []
             transitions_list.append(state_transition_to_storage(transition))
@@ -249,12 +290,100 @@ class EntityState(Service):
                 },
             )
 
+        # Call transition handler (transactional: failure = rollback)
+        handler = self._transition_handlers.get(entity_type)
+        if handler is not None:
+            try:
+                await handler(
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    from_state=current,
+                    to_state=to_state,
+                    reason=reason,
+                    context=_context,
+                )
+            except Exception:
+                # Rollback: revert storage to previous state AND history
+                if self._storage is not None:
+                    storage_key = _entity_key(entity_type, entity_id)
+                    await self._storage.asave(
+                        _STATES_COLLECTION,
+                        storage_key,
+                        {
+                            "entity_type": entity_type,
+                            "entity_id": entity_id,
+                            "state": current,
+                        },
+                    )
+                    history_doc = await self._storage.aload(_HISTORY_COLLECTION, storage_key)
+                    if history_doc:
+                        rollback_transitions = history_doc.get("transitions", [])
+                        if rollback_transitions:
+                            rollback_transitions.pop()
+                        await self._storage.asave(
+                            _HISTORY_COLLECTION,
+                            storage_key,
+                            {
+                                "entity_type": entity_type,
+                                "entity_id": entity_id,
+                                "transitions": rollback_transitions,
+                            },
+                        )
+                raise
+
+        # Commit in-memory state (after storage + handler succeeded)
+        self._states[key] = to_state
+        self._history.setdefault(key, []).append(transition)
+
+        # Auto-emit StateTransitionEvent (fire-and-forget via observer)
+        await self._emit_transition_event(
+            entity_type,
+            entity_id,
+            current,
+            to_state,
+            reason,
+            _context,
+        )
+
         return {
             "entity_type": entity_type,
             "entity_id": entity_id,
             "from_state": current,
             "to_state": to_state,
         }
+
+    async def _emit_transition_event(
+        self,
+        entity_type: str,
+        entity_id: str,
+        from_state: str,
+        to_state: str,
+        reason: str | None,
+        context: TransitionContext | None,
+    ) -> None:
+        """Emit StateTransitionEvent if an observer manager is available."""
+        try:
+            from hexdag.kernel.context.execution_context import (
+                get_observer_manager,  # lazy: avoid circular import with kernel
+            )
+            from hexdag.kernel.orchestration.events.events import (
+                StateTransitionEvent,  # lazy: avoid circular import with kernel
+            )
+
+            observer = get_observer_manager()
+            if observer is not None:
+                node_name = context.node_name if context else ""
+                event = StateTransitionEvent(
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    from_state=from_state,
+                    to_state=to_state,
+                    reason=reason,
+                    node_name=node_name,
+                )
+                await observer.notify(event)
+        except Exception:  # noqa: BLE001
+            pass  # Observer failures are best-effort, never block transitions
 
     @tool
     async def aget_state(self, entity_type: str, entity_id: str) -> dict[str, Any] | None:
@@ -329,3 +458,52 @@ class EntityState(Service):
                     for t in data.get("transitions", [])
                 ]
         return []
+
+    # ------------------------------------------------------------------
+    # Schema enrichment — enrich tool descriptions from state machines
+    # ------------------------------------------------------------------
+
+    def _build_transition_map_description(self) -> str:
+        """Build a human-readable transition map from registered machines.
+
+        Used to enrich the ``atransition`` tool description so agents can
+        reason about valid transitions without trial-and-error.
+        """
+        if not self._machines:
+            return ""
+
+        lines = ["\n\nAvailable state machines:"]
+        for entity_type, config in sorted(self._machines.items()):
+            parts = []
+            for from_state, targets in sorted(config.transitions.items()):
+                sorted_targets = sorted(targets)
+                parts.append(f"{from_state} -> [{', '.join(sorted_targets)}]")
+            lines.append(f"- {entity_type}: {' | '.join(parts)}")
+        return "\n".join(lines)
+
+    def get_tools(self) -> dict[str, Any]:
+        """Return tools with enriched descriptions from state machines.
+
+        When state machines are registered, the ``atransition`` tool
+        description is extended with the full transition map and the
+        ``entity_type`` parameter gains an ``enum`` constraint listing
+        valid entity types.
+        """
+        tools = super().get_tools()
+
+        if "atransition" in tools:
+            original = tools["atransition"]
+            fn = getattr(original, "__func__", None)
+            if fn is not None:
+                # Capture the first line of the original docstring once
+                if not hasattr(fn, "_original_first_line"):
+                    raw_doc = fn.__doc__ or ""
+                    fn._original_first_line = raw_doc.strip().split("\n")[0]
+
+                if self._machines:
+                    transition_map = self._build_transition_map_description()
+                    fn.__doc__ = fn._original_first_line + transition_map
+                else:
+                    fn.__doc__ = fn._original_first_line
+
+        return tools

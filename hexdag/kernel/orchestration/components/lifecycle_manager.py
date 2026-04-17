@@ -554,7 +554,8 @@ class LifecycleManager:
         observer_manager: ObserverManager | None,
     ) -> dict[str, Any]:
         """Save final checkpoint state."""
-        memory = get_port("memory")
+        # Prefer dedicated checkpoint storage; fall back to memory port
+        memory = get_port("_hexdag_checkpoint_storage") or get_port("memory")
         if not memory:
             logger.debug("No memory port available for checkpoint save")
             return {"skipped": "No memory port available"}
@@ -576,8 +577,16 @@ class LifecycleManager:
                         "deps": list(spec.deps),
                     }
 
+        # Use the actual run_id from execution context (unique UUID),
+        # not dag_id (pipeline name) which would overwrite on every run.
+        from hexdag.kernel.context.execution_context import (
+            get_run_id,  # lazy: avoid circular import
+        )
+
+        actual_run_id = get_run_id() or context.dag_id
+
         state = CheckpointState(
-            run_id=context.dag_id,
+            run_id=actual_run_id,
             dag_id=context.dag_id,
             graph_snapshot=graph_snapshot,
             initial_input=initial_input,
@@ -590,6 +599,6 @@ class LifecycleManager:
         )
 
         await checkpoint_mgr.save(state)
-        logger.info("Saved checkpoint for run_id: {}", context.dag_id)
+        logger.info("Saved checkpoint for run_id: {} (pipeline: {})", actual_run_id, context.dag_id)
 
-        return {"saved": True, "run_id": context.dag_id, "node_count": len(node_results)}
+        return {"saved": True, "run_id": actual_run_id, "node_count": len(node_results)}

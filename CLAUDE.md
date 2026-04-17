@@ -181,7 +181,8 @@ class OrderService(Service):
 Built-in services (migrating from libs):
 
 - **ProcessRegistry** — tracks pipeline runs (like `ps` in Linux)
-- **EntityState** — declarative state machines for business entities
+- **EntityState** — declarative state machines for business entities (auto-registered from `spec.state_machines`)
+- **PipelineMemory** — run-scoped key-value store (auto-registered for every pipeline run)
 - **Scheduler** — delayed/recurring pipeline execution (asyncio timers)
 - **DatabaseTools** — agent-callable SQL query tools
 - **VFSTools** — virtual filesystem introspection
@@ -227,9 +228,11 @@ Ports follow a two-tier naming scheme inspired by Linux kernel structs:
 - `ReActAgentNode`: ReAct pattern agents with tool access
 - `LoopNode`: Iterative processing with custom conditions
 - `ConditionalNode`: Conditional execution paths
+- `TransitionNode`: Entity state transitions (validates against state machine, fires handlers)
 
 ### Event System
 - Comprehensive observability through events (NodeStarted, NodeCompleted, NodeFailed, etc.)
+- Entity lifecycle events: `StateTransitionEvent`, `EntityGarbageCollected`, `EntityObligationFailed`, `EntityCompensationEvent`
 - Event-driven memory and monitoring
 - Observer pattern for extensible monitoring
 
@@ -507,7 +510,7 @@ For convenience, built-in nodes have short aliases:
 - kind: hexdag.stdlib.nodes.LLMNode       # Full path
 ```
 
-Available aliases: `llm_node`, `function_node`, `agent_node`, `loop_node`, `conditional_node`
+Available aliases: `llm_node`, `function_node`, `agent_node`, `loop_node`, `conditional_node`, `transition`
 
 ### Creating Custom Components
 
@@ -696,6 +699,79 @@ spec:
 - **Universal** - Works with stdlib, third-party packages, and custom code
 
 See [docs/reference/nodes.md](docs/reference/nodes.md#function_node) for complete documentation.
+
+## Entity Lifecycle
+
+hexDAG supports declarative entity lifecycle management. State machines can be declared in YAML at both the pipeline level and the system level.
+
+### Pipeline-Level State Machines
+
+For single-pipeline entities, declare state machines inline:
+
+```yaml
+kind: Pipeline
+spec:
+  state_machines:
+    document:
+      initial: RECEIVED
+      transitions:
+        RECEIVED: [CLASSIFIED, REJECTED]
+        CLASSIFIED: [EXTRACTED, REJECTED]
+        EXTRACTED: [VALIDATED]
+        VALIDATED: [FILED]
+  nodes:
+    - kind: transition
+      metadata:
+        name: mark_classified
+      spec:
+        entity: document
+        entity_id: $input.doc_id
+        to_state: CLASSIFIED
+```
+
+### Lifecycle-Aware Systems
+
+For multi-pipeline entities, declare state machines at the system level. Transitions trigger processes:
+
+```yaml
+kind: System
+spec:
+  state_machines:
+    ticket:
+      initial: OPEN
+      transitions:
+        OPEN: [INVESTIGATING, ESCALATED, CLOSED]
+        INVESTIGATING: [RESOLVED, ESCALATED]
+        RESOLVED: [CLOSED, REOPENED]
+      handlers:
+        on_transition: myapp.hooks.TicketTransitionHandler
+
+  states:
+    INVESTIGATING:
+      on_enter: ticket-investigate
+    CLOSED:
+      terminal: true
+      requires: [resolution_summary]
+
+  processes:
+    - name: ticket-investigate
+      pipeline: pipelines/ticket-investigate.yaml
+```
+
+### Key Concepts
+
+- **TransitionNode** (`kind: transition`): Built-in node for entity state transitions. Validates against the state machine, fires handlers, emits `StateTransitionEvent`.
+- **Transition Handlers**: Declared on state machines via `handlers.on_transition`. Handler failure = transition failure (transactional). Used for persistence and side effects.
+- **Agent Tool Scoping**: Agent nodes declare `entities: [ticket]` to opt into state machine tools. Agents without `entities` get no state machine tools.
+- **PipelineMemory**: Auto-registered run-scoped key-value store. Accessible via `memory('key')` in expressions or `get_pipeline_memory()` in code.
+- **LifecycleRunner**: Event-driven runner for lifecycle-aware Systems. Per-entity tracking, transition guards, cascade depth limits, terminal state GC.
+- **Safe Path Modifiers**: `field | required` (error on None), `field | default('x')` (fallback on None).
+- **Critical Nodes**: `critical: true` on a node means if the node is skipped, the pipeline fails.
+- **Required Inputs**: `required_inputs: [field1, field2]` validates inputs are non-None before execution.
+
+### Ports
+
+- **`SupportsSessionFactory`**: Per-step session factory for saga-safe database access. Each `@step` gets its own session.
 
 ## External Dependencies
 

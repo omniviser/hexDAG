@@ -162,20 +162,27 @@ class NodeExecutor:
 
             # Auto-skip if all upstream dependencies were skipped
             if isinstance(validated_input, dict) and validated_input.get("_upstream_skipped"):
+                reason = "all upstream dependencies were skipped"
+                if node_spec.critical:
+                    raise NodeExecutionError(
+                        node_name,
+                        ValueError(f"Critical node '{node_name}' was skipped: {reason}"),
+                    )
                 logger.info(
-                    "Node '{node}' skipped: all upstream dependencies were skipped",
+                    "Node '{node}' skipped: {reason}",
                     node=node_name,
+                    reason=reason,
                 )
                 skip_event = NodeSkipped(
                     name=node_name,
                     wave_index=wave_index,
-                    reason="all upstream dependencies were skipped",
+                    reason=reason,
                 )
                 await coordinator.notify_observer(observer_mgr, skip_event)
                 return {
                     "_skipped": True,
                     "_upstream_skipped": True,
-                    "reason": "all upstream dependencies were skipped",
+                    "reason": reason,
                 }
 
             # Evaluate when clause - skip node if condition evaluates to False
@@ -194,22 +201,27 @@ class NodeExecutor:
                     condition_result = predicate(data_context, {})
 
                     if not condition_result:
+                        reason = f"when clause '{node_spec.when}' evaluated to False"
+                        if node_spec.critical:
+                            raise NodeExecutionError(
+                                node_name,
+                                ValueError(f"Critical node '{node_name}' was skipped: {reason}"),
+                            )
                         logger.info(
-                            "Node '{node}' skipped: when clause '{when}' evaluated to False",
+                            "Node '{node}' skipped: {reason}",
                             node=node_name,
-                            when=node_spec.when,
+                            reason=reason,
                         )
-                        # Emit NodeSkipped event
                         skip_event = NodeSkipped(
                             name=node_name,
                             wave_index=wave_index,
-                            reason=f"when clause '{node_spec.when}' evaluated to False",
+                            reason=reason,
                         )
                         await coordinator.notify_observer(observer_mgr, skip_event)
 
                         return {
                             "_skipped": True,
-                            "reason": f"when clause '{node_spec.when}' evaluated to False",
+                            "reason": reason,
                         }
                 except ExpressionError as e:
                     logger.error(
@@ -220,6 +232,17 @@ class NodeExecutor:
                     raise NodeExecutionError(
                         node_name, ValueError(f"Invalid when clause: {e}")
                     ) from e
+
+            # Validate required_inputs (after skip checks, before execution)
+            if node_spec.required_inputs:
+                input_dict: Any = validated_input
+                if hasattr(input_dict, "model_dump"):
+                    input_dict = input_dict.model_dump()
+                if isinstance(input_dict, dict):
+                    missing = [f for f in node_spec.required_inputs if input_dict.get(f) is None]
+                    if missing:
+                        msg = f"Node '{node_name}' missing required inputs: {', '.join(missing)}"
+                        raise NodeExecutionError(node_name, ValueError(msg))
 
             # Set current node name for port-level event attribution
             set_current_node_name(node_name)

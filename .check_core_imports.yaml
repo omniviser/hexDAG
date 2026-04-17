@@ -86,3 +86,16 @@ allowed_exceptions:
     - "import hexdag.stdlib.nodes  # noqa: F401  # lazy: bootstrap discovery"
     - "from hexdag.stdlib.adapters._discovery import ("
     - "from hexdag.stdlib.macros._discovery import ("
+
+  # LifecycleRunner uses EntityState as its core entity-management service.
+  # Rationale: EntityState is tightly coupled to lifecycle operation — it's
+  # the default entity backend, similar to how orchestrator.py imports executors.
+  hexdag/kernel/lifecycle_runner.py:
+    - "from hexdag.stdlib.lib.entity_state import EntityState"
+
+  # OrchestratorFactory auto-registers PipelineMemory and EntityState as default services.
+  # These are lazy imports inside create_orchestrator() and _register_state_machines().
+  # Rationale: User convenience — services work out-of-the-box without explicit registration.
+  hexdag/kernel/orchestration/orchestrator_factory.py:
+    - "from hexdag.stdlib.lib.pipeline_memory import PipelineMemory"
+    - "from hexdag.stdlib.lib.entity_state import EntityState"

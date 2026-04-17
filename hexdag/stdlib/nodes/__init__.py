@@ -17,6 +17,7 @@ from .function_node import FunctionNode
 from .llm_node import LLMNode
 from .service_call_node import ServiceCallNode
 from .tool_call_node import ToolCallNode
+from .transition_node import TransitionNode
 
 __all__ = [
     "ApiCallNode",
@@ -29,6 +30,7 @@ __all__ = [
     "ReActAgentNode",
     "ServiceCallNode",
     "ToolCallNode",
+    "TransitionNode",
 ]
 
 # Bootstrap: Register __init_subclass__-discovered node aliases with core resolver.

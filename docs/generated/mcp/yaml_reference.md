@@ -57,6 +57,7 @@ spec:
 | `llm_node` | Specification for llm_node type |
 | `service_call_node` | Specification for service_call_node type |
 | `tool_call_node` | Specification for tool_call_node type |
+| `transition_node` | Specification for transition_node type |
 
 ### agent_node
 
@@ -310,6 +311,31 @@ Specification for tool_call_node type
     name: my_tool_call
   spec:
     tool_name: # required
+  dependencies: []
+```
+
+### transition_node
+
+Specification for transition_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `entity` | string | Yes | Entity type (must match a registered ... |
+| `entity_id` | string | No | Entity ID expression (resolved at run... |
+| `reason` | string | No | Optional reason expression (resolved ... |
+| `to_state` | string | Yes | Target state for the transition. |
+
+**Example:**
+
+```yaml
+- kind: transition_node
+  metadata:
+    name: my_transition
+  spec:
+    entity: # required
+    to_state: # required
   dependencies: []
 ```
 

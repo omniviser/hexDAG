@@ -427,6 +427,174 @@ class SystemCompleted(Event):
 
 
 # ---------------------------------------------------------------------------
+# Entity state transition events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionContext:
+    """Context for an entity state transition.
+
+    Carries metadata about where and why the transition happened — used by
+    transition handlers and observers for audit, persistence, and side effects.
+    """
+
+    run_id: str
+    pipeline_name: str
+    node_name: str
+
+
+@dataclass(slots=True)
+class StateTransitionEvent(Event):
+    """An entity has transitioned to a new state.
+
+    Emitted automatically by ``EntityState.atransition()`` whenever an observer
+    manager is available in the execution context.  Observers receive this as a
+    fire-and-forget notification (best-effort).
+
+    Attributes
+    ----------
+    entity_type : str
+        Entity kind (e.g. ``"ticket"``, ``"load"``, ``"order"``).
+    entity_id : str
+        Unique identifier for the entity instance.
+    from_state : str
+        State the entity was in before the transition.
+    to_state : str
+        State the entity moved to.
+    reason : str | None
+        Optional human-readable reason for the transition.
+    node_name : str
+        Name of the node or tool call that triggered the transition.
+    """
+
+    entity_type: str
+    entity_id: str
+    from_state: str
+    to_state: str
+    reason: str | None = None
+    node_name: str = ""
+
+    def log_message(self) -> str:
+        """Format log message for state transition event."""
+        reason_info = f" ({self.reason})" if self.reason else ""
+        return (
+            f"🔄 {self.entity_type}:{self.entity_id} "
+            f"{self.from_state} → {self.to_state}{reason_info}"
+        )
+
+
+@dataclass(slots=True)
+class EntityGarbageCollected(Event):
+    """An entity has been garbage-collected after reaching a terminal state.
+
+    Emitted when all obligations (hooks, pipelines) have been verified complete
+    and in-memory state is cleaned up.
+
+    Attributes
+    ----------
+    entity_type : str
+        Entity kind.
+    entity_id : str
+        Unique identifier for the entity instance.
+    final_state : str
+        Terminal state the entity was in when collected.
+    lifetime_ms : float
+        Time from entity registration to GC in milliseconds.
+    transition_count : int
+        Total number of transitions during this entity's lifecycle.
+    """
+
+    entity_type: str
+    entity_id: str
+    final_state: str
+    lifetime_ms: float
+    transition_count: int
+
+    def log_message(self) -> str:
+        """Format log message for entity garbage collection event."""
+        return (
+            f"♻️ {self.entity_type}:{self.entity_id} collected "
+            f"(state={self.final_state}, transitions={self.transition_count}, "
+            f"lifetime={self.lifetime_ms / 1000:.1f}s)"
+        )
+
+
+@dataclass(slots=True)
+class EntityObligationFailed(Event):
+    """An obligation for an entity transition failed.
+
+    Attributes
+    ----------
+    entity_type : str
+        Entity kind.
+    entity_id : str
+        Unique identifier for the entity instance.
+    state : str
+        State the entity was in when the obligation failed.
+    obligation : str
+        What failed: ``"handler"``, ``"pipeline"``, ``"child_pipeline"``.
+    pipeline_run_id : str | None
+        Run ID of the failed pipeline, if applicable.
+    error : str | None
+        Error description.
+    """
+
+    entity_type: str
+    entity_id: str
+    state: str
+    obligation: str
+    pipeline_run_id: str | None = None
+    error: str | None = None
+
+    def log_message(self) -> str:
+        """Format log message for entity obligation failure event."""
+        return (
+            f"⚠️ {self.entity_type}:{self.entity_id} obligation failed: "
+            f"{self.obligation} in state {self.state}"
+        )
+
+
+@dataclass(slots=True)
+class EntityCompensationEvent(Event):
+    """A saga compensation was executed after a pipeline failure.
+
+    Attributes
+    ----------
+    entity_type : str
+        Entity kind.
+    entity_id : str
+        Unique identifier for the entity instance.
+    failed_state : str
+        State the entity was transitioning TO when failure occurred.
+    reverted_to : str
+        State the entity reverted back to.
+    steps_compensated : int
+        Number of forward steps that were compensated.
+    compensation_errors : list[str]
+        Errors from compensation steps that also failed (empty if all OK).
+    """
+
+    entity_type: str
+    entity_id: str
+    failed_state: str
+    reverted_to: str
+    steps_compensated: int
+    compensation_errors: list[str] = field(default_factory=list)
+
+    def log_message(self) -> str:
+        """Format log message for entity compensation event."""
+        errors = ""
+        if self.compensation_errors:
+            errors = f" ({len(self.compensation_errors)} compensation errors)"
+        return (
+            f"↩️ {self.entity_type}:{self.entity_id} "
+            f"reverted {self.failed_state} → {self.reverted_to} "
+            f"({self.steps_compensated} steps compensated){errors}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Port call events — universal base for all port/adapter method calls
 # ---------------------------------------------------------------------------
 

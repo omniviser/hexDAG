@@ -28,6 +28,8 @@ ALLOWLIST: dict[str, set[str]] = {
     "hexdag/stdlib/lib/entity_state.py": {"time.time"},
     "hexdag/stdlib/lib/process_registry_observer.py": {"time.time"},
     "hexdag/stdlib/lib/scheduler.py": {"time.time"},
+    # Wall-clock lifetime calculation: EntityRecord.created_at uses time.time() epoch
+    "hexdag/kernel/lifecycle_runner.py": {"time.time"},
 }
 
 # Pre-existing violations from before the M3 audit.
