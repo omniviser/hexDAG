@@ -125,6 +125,12 @@ class SystemBuilder:
                 "ports": spec.get("ports", {}),
                 "policies": spec.get("policies", {}),
                 "services": spec.get("services", {}),
+                "state_machines": spec.get("state_machines", {}),
+                "states": spec.get("states", {}),
+                "on_transition": spec.get("on_transition", {}),
+                "observers": spec.get("observers", []),
+                "memory": spec.get("memory", {}),
+                "gc": spec.get("gc", {}),
             })
         except Exception as e:
             raise SystemBuildError(f"System validation error: {e}") from e
@@ -132,15 +138,23 @@ class SystemBuilder:
         # 5. Validate pipeline paths exist
         self._validate_pipeline_paths(system_config, resolved_base)
 
-        # 6. Validate pipe DAG is acyclic
-        self._validate_no_cycles(system_config)
+        # 6. Validate pipe DAG is acyclic (only for non-lifecycle systems)
+        if not system_config.is_lifecycle:
+            self._validate_no_cycles(system_config)
+
+        # 7. Validate lifecycle constraints (if state machines declared)
+        if system_config.is_lifecycle:
+            self._validate_lifecycle(system_config)
 
         system_name = metadata.get("name", "unnamed")
+        mode = "lifecycle" if system_config.is_lifecycle else "dag"
         logger.info(
-            "Built system '{}': {} processes, {} pipes",
+            "Built system '{}' ({}): {} processes, {} pipes, {} state machines",
             system_name,
+            mode,
             len(system_config.processes),
             len(system_config.pipes),
+            len(system_config.state_machines),
         )
 
         return system_config
@@ -200,6 +214,75 @@ class SystemBuilder:
             raise SystemBuildError(
                 "Cycle detected in pipe DAG. Processes must form a directed acyclic graph."
             )
+
+    @staticmethod
+    def _validate_lifecycle(config: SystemConfig) -> None:
+        """Validate lifecycle-mode constraints.
+
+        Ensures that ``states`` and ``on_transition`` reference valid
+        process names and valid state machine states.
+
+        Raises
+        ------
+        SystemBuildError
+            If lifecycle configuration is invalid.
+        """
+        process_names = set(config.process_names)
+
+        # Collect all valid states from state machines
+        all_states: set[str] = set()
+        for sm_spec in config.state_machines.values():
+            transitions = sm_spec.get("transitions", {})
+            for from_state, targets in transitions.items():
+                all_states.add(from_state)
+                if isinstance(targets, list):
+                    for t in targets:
+                        if isinstance(t, str):
+                            all_states.add(t)
+                        elif isinstance(t, dict) and "to" in t:
+                            all_states.add(t["to"])
+            initial = sm_spec.get("initial")
+            if initial:
+                all_states.add(initial)
+
+        # Validate spec.states references
+        for state_name, state_spec in config.states.items():
+            if state_name not in all_states:
+                raise SystemBuildError(
+                    f"spec.states references unknown state '{state_name}'. "
+                    f"Valid states: {sorted(all_states)}"
+                )
+            on_enter = state_spec.get("on_enter")
+            if on_enter and on_enter not in process_names:
+                raise SystemBuildError(
+                    f"State '{state_name}' references unknown process "
+                    f"'{on_enter}'. Declared processes: {sorted(process_names)}"
+                )
+
+        # Validate spec.on_transition references
+        for transition_key, transition_spec in config.on_transition.items():
+            parts = [p.strip() for p in transition_key.split("->")]
+            if len(parts) != 2:  # noqa: PLR2004
+                raise SystemBuildError(
+                    f"Invalid on_transition key '{transition_key}'. "
+                    "Expected format: 'FROM_STATE -> TO_STATE'"
+                )
+            from_state, to_state = parts
+            if from_state not in all_states:
+                raise SystemBuildError(
+                    f"on_transition '{transition_key}' references unknown state '{from_state}'"
+                )
+            if to_state not in all_states:
+                raise SystemBuildError(
+                    f"on_transition '{transition_key}' references unknown state '{to_state}'"
+                )
+            process_name = transition_spec.get("process")
+            if process_name and process_name not in process_names:
+                raise SystemBuildError(
+                    f"on_transition '{transition_key}' references unknown "
+                    f"process '{process_name}'. "
+                    f"Declared processes: {sorted(process_names)}"
+                )
 
     @staticmethod
     def topological_order(config: SystemConfig) -> list[str]:

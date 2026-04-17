@@ -448,6 +448,7 @@ class Orchestrator:
         validate: bool = True,
         dynamic: bool = False,
         max_dynamic_iterations: int = 100,
+        pre_seeded_results: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute a DAG with concurrent processing and resource limits.
@@ -469,6 +470,10 @@ class Orchestrator:
                 - Iterative expansion until all nodes complete
             max_dynamic_iterations: Maximum number of expansion iterations (safety limit).
                 Prevents infinite loops in dynamic execution.
+            pre_seeded_results: Optional dict of pre-completed node results.
+                Nodes whose names appear here are skipped; downstream nodes
+                see these results as if the nodes had already executed.
+                Used for pipeline resume after checkpoint restore.
             **kwargs: Additional keyword arguments
 
         Returns
@@ -505,7 +510,14 @@ class Orchestrator:
         # Use managed_ports context manager for automatic lifecycle management
         async with _managed_ports(self.ports, additional_ports_dict, self.executor) as all_ports:
             return await self._execute_with_ports(
-                graph, initial_input, all_ports, validate, dynamic, max_dynamic_iterations, **kwargs
+                graph,
+                initial_input,
+                all_ports,
+                validate,
+                dynamic,
+                max_dynamic_iterations,
+                pre_seeded_results=pre_seeded_results,
+                **kwargs,
             )
 
     async def _execute_with_ports(
@@ -516,6 +528,7 @@ class Orchestrator:
         validate: bool,
         dynamic: bool,
         max_dynamic_iterations: int,
+        pre_seeded_results: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute DAG with managed ports (internal method).
@@ -530,6 +543,7 @@ class Orchestrator:
             validate: Whether to validate graph
             dynamic: Enable dynamic graph expansion
             max_dynamic_iterations: Maximum dynamic expansion iterations
+            pre_seeded_results: Pre-completed node results to skip
             **kwargs: Additional arguments
         """
         if validate:
@@ -549,7 +563,17 @@ class Orchestrator:
         self._validate_port_capabilities(graph, all_ports)
 
         node_results: dict[str, Any] = {}
+        if pre_seeded_results:
+            node_results.update(pre_seeded_results)
+
         waves = graph.waves()
+
+        # Filter waves: skip nodes that are already in pre_seeded_results
+        if pre_seeded_results:
+            seeded = set(pre_seeded_results.keys())
+            waves = [[n for n in wave if n not in seeded] for wave in waves]
+            waves = [w for w in waves if w]  # Remove empty waves
+
         pipeline_timer = Timer()
 
         observer_manager: ObserverManager | None = all_ports.get("observer_manager")
@@ -621,6 +645,7 @@ class Orchestrator:
                         context=context,
                         timeout=timeout,
                         validate=validate,
+                        pre_seeded_results=pre_seeded_results,
                         **kwargs,
                     )
             except BaseException as e:
@@ -683,6 +708,7 @@ class Orchestrator:
         context: NodeExecutionContext,
         timeout: float | None,
         validate: bool,
+        pre_seeded_results: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> bool:
         """Execute all waves using the configured executor.
@@ -776,6 +802,11 @@ class Orchestrator:
                     await self._notify_observer(get_observer_manager(), wave_completed)
 
                     new_waves = graph.waves()
+                    # Filter pre-seeded nodes from new waves (if resuming)
+                    if pre_seeded_results:
+                        seeded = set(pre_seeded_results.keys())
+                        new_waves = [[n for n in w if n not in seeded] for w in new_waves]
+                        new_waves = [w for w in new_waves if w]
                     if len(new_waves) != previous_wave_count:
                         # Graph expanded! Re-compute waves
                         logger.info(

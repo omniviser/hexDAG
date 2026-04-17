@@ -1391,3 +1391,28 @@ class TestNamingCollisionValidation:
         ])
         result = self.validator.validate(config)
         assert result.is_valid, f"Unexpected errors: {result.errors}"
+
+    def test_macro_expanded_references_in_input_mapping_and_expressions(self):
+        """Macro-expanded node names are valid references in input_mapping and expressions."""
+        config = self._make_pipeline([
+            {
+                "kind": "macro_invocation",
+                "metadata": {"name": "extract_rate"},
+                "spec": {"macro": "hexdag.stdlib.macros.reasoning_agent.ReasoningAgent"},
+            },
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "input_mapping": {
+                        "rate": "extract_rate_result.rate",
+                    },
+                    "expressions": {
+                        "total": "extract_rate_final.amount * 2",
+                    },
+                    "output_fields": ["total"],
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert result.is_valid, f"Unexpected errors: {result.errors}"

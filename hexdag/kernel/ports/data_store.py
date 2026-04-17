@@ -173,6 +173,46 @@ class SupportsTransactions(Protocol):
         ...
 
 
+@runtime_checkable
+class SupportsSessionFactory(Protocol):
+    """Per-step session factory for saga-safe database access.
+
+    Instead of sharing one session across all nodes, each ``@step`` call
+    obtains its own session from the factory, commits independently, and
+    releases the connection.  This eliminates shared-session coupling and
+    enables the saga pattern (independent commit + compensation on failure).
+
+    Usage in a service::
+
+        class OrderService(Service):
+            def __init__(self, db: SupportsSessionFactory) -> None:
+                self._db = db
+
+            @step
+            async def update_order(self, order_id: str, status: str) -> dict:
+                async with self._db.asession() as session:
+                    order = await session.get(Order, order_id)
+                    order.status = status
+                    await session.commit()
+                    return {"order_id": order_id, "status": status}
+    """
+
+    @abstractmethod
+    def asession(self) -> Any:
+        """Return an async context manager that yields a database session.
+
+        Each call produces an independent session with its own transaction
+        scope.  The session is committed or rolled back by the caller, and
+        the underlying connection is returned to the pool on exit.
+
+        Returns
+        -------
+        AsyncContextManager
+            Context manager yielding a session object.
+        """
+        ...
+
+
 # ---------------------------------------------------------------------------
 # Collection storage capability (lib persistence)
 # ---------------------------------------------------------------------------

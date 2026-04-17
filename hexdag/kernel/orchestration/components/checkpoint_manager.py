@@ -107,6 +107,42 @@ class CheckpointManager:
         # Pydantic handles all deserialization and validation
         return CheckpointState.model_validate_json(serialized)
 
+    async def load_for_resume(self, run_id: str) -> CheckpointState | None:
+        """Load a checkpoint and mark it as "resuming" to block concurrent resumes.
+
+        If the checkpoint is already in "resuming" status, raises
+        ``ValueError`` to prevent concurrent resume of the same run.
+
+        Parameters
+        ----------
+        run_id : str
+            Run identifier to load.
+
+        Returns
+        -------
+        CheckpointState | None
+            Checkpoint state, or None if not found.
+
+        Raises
+        ------
+        ValueError
+            If the checkpoint is already being resumed.
+        """
+        checkpoint = await self.load(run_id)
+        if checkpoint is None:
+            return None
+
+        if checkpoint.status == "resuming":
+            msg = (
+                f"Checkpoint '{run_id}' is already being resumed. Concurrent resume is not allowed."
+            )
+            raise ValueError(msg)
+
+        # Mark as resuming and save back
+        updated = checkpoint.model_copy(update={"status": "resuming"})
+        await self.save(updated)
+        return updated
+
     def filter_completed(self, graph: DirectedGraph, completed: set[str]) -> DirectedGraph:
         """Create graph with only pending nodes.
 

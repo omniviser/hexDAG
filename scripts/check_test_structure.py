@@ -30,6 +30,16 @@ _ALLOWED_ORPHANS: frozenset[str] = frozenset({
     "tests/hexdag/stdlib/middleware/test_declarative_stacking.py",
     # Tests LLMNode spec-level behavior (source: llm_node.py)
     "tests/hexdag/stdlib/nodes/test_llm_node_spec.py",
+    # Tests checkpoint resume flow in CheckpointManager (source: checkpoint_manager.py)
+    "tests/hexdag/kernel/orchestration/components/test_checkpoint_resume.py",
+    # Tests entity state transition handlers (source: entity_state.py)
+    "tests/hexdag/stdlib/lib/test_entity_state_handlers.py",
+    # Tests safe path resolution in ExecutionCoordinator (source: execution_coordinator.py)
+    "tests/hexdag/kernel/orchestration/components/test_safe_paths.py",
+    # Tests entity event emission via observer system (source: events.py)
+    "tests/hexdag/kernel/orchestration/events/test_entity_events.py",
+    # Tests pre-seeded results in Orchestrator (source: orchestrator.py)
+    "tests/hexdag/kernel/orchestration/test_pre_seeded_results.py",
 })
 
 

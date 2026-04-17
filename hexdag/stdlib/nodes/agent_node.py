@@ -85,6 +85,7 @@ class AgentConfig:
     max_steps: int = 20
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
     tools: dict[str, str] | None = None
+    entities: list[str] | None = None
 
 
 class Agent:
@@ -99,11 +100,16 @@ class Agent:
     tools : dict[str, str] | None
         Per-agent tools mapping tool_name to module path string.
         Resolved at execution time via ToolRouter.
+    entities : list[str] | None
+        Entity types this agent can transition.  When set, only
+        ``EntityState`` tools for the listed types are injected.
+        When ``None`` (default), no state machine tools are injected.
     """
 
     max_steps: int = 20
     tool_call_style: ToolCallFormat = ToolCallFormat.MIXED
     tools: dict[str, str] | None = None
+    entities: list[str] | None = None
 
 
 class ReActAgentNode(BaseNodeFactory, yaml_alias="re_act_agent_node"):
@@ -564,11 +570,20 @@ carried_data={'key': 'value'})"""
         # Inject service @tool methods from execution context
         services = get_services()
         if services:
-            for svc in services.values():
-                if hasattr(svc, "get_tools"):
-                    svc_tools = svc.get_tools()
-                    if svc_tools:
-                        tool_router.add_tools_from(ToolRouter(tools=svc_tools))
+            # Determine entity scoping for this agent
+            _entities = getattr(config, "entities", None)
+
+            for svc_name, svc in services.items():
+                if not hasattr(svc, "get_tools"):
+                    continue
+
+                # EntityState tools are opt-in via entities field
+                if svc_name == "entity_state" and _entities is None:
+                    continue  # No entities declared → skip state machine tools
+
+                svc_tools = svc.get_tools()
+                if svc_tools:
+                    tool_router.add_tools_from(ToolRouter(tools=svc_tools))
 
         current_step = max(state.loop_iteration, state.step) + 1
         node_step_name = f"{name}_step_{current_step}"

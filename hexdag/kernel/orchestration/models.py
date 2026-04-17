@@ -120,6 +120,7 @@ class CheckpointState(BaseModel):
     created_at: datetime
     updated_at: datetime
     metadata: dict[str, Any] = {}
+    status: str = "saved"  # "saved", "resuming", "completed"
 
 
 @dataclass(slots=True)

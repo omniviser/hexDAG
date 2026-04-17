@@ -249,6 +249,17 @@ class PipelineConfig(BaseModel):
         default_factory=dict,
         description="Service configurations. Format: {service_name: {class: str, config: dict}}",
     )
+    state_machines: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Entity state machine definitions. "
+            "Format: {entity_type: {initial: str, transitions: dict}}"
+        ),
+    )
+    observers: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=("Observer configurations. Format: [{class: str, config: dict}]"),
+    )
 
     # Schema declarations
     input_schema: dict[str, Any] | None = Field(

@@ -29,6 +29,33 @@ __all__ = ["ExecutionCoordinator"]
 logger = get_logger(__name__)
 
 
+def _parse_default_value(raw: str) -> Any:
+    """Parse a default value from ``| default(X)`` modifier syntax.
+
+    Handles: ``None``, integers, floats, booleans, and quoted strings.
+    Unquoted strings are returned as-is.
+    """
+    if raw == "None":
+        return None
+    if raw in ("True", "true"):
+        return True
+    if raw in ("False", "false"):
+        return False
+    # Strip quotes from string literals
+    if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+        return raw[1:-1]
+    # Try numeric
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    return raw
+
+
 class ExecutionCoordinator:
     """Coordinates execution context: observer notifications and input mapping.
 
@@ -270,7 +297,41 @@ class ExecutionCoordinator:
         if not isinstance(source, str):
             return source
 
+        # --- Safe path modifiers: | required, | default(X) ---
+        modifier = None
+        modifier_arg: Any = None
+        if " | " in source:
+            raw_source, raw_modifier = source.rsplit(" | ", 1)
+            raw_modifier = raw_modifier.strip()
+            if raw_modifier == "required":
+                modifier = "required"
+                source = raw_source.strip()
+            elif raw_modifier.startswith("default(") and raw_modifier.endswith(")"):
+                modifier = "default"
+                source = raw_source.strip()
+                raw_val = raw_modifier[8:-1].strip()
+                # Parse the default value: handle None, numbers, booleans, strings
+                modifier_arg = _parse_default_value(raw_val)
+
         # --- String resolution (existing logic) ---
+        resolved = self._resolve_string_value(source, base_input, initial_input, node_results)
+
+        # --- Apply modifier ---
+        if modifier == "required" and resolved is None:
+            msg = f"Required field resolved to None: '{source}'"
+            raise ValueError(msg)
+        if modifier == "default" and resolved is None:
+            return modifier_arg
+        return resolved
+
+    def _resolve_string_value(
+        self,
+        source: str,
+        base_input: Any,
+        initial_input: Any,
+        node_results: dict[str, Any],
+    ) -> Any:
+        """Resolve a string reference to its value (no modifiers)."""
         if self._is_expression(source):
             return self._evaluate_expression(source, base_input, initial_input, node_results)
 

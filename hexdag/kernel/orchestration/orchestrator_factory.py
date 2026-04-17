@@ -179,6 +179,22 @@ class OrchestratorFactory:
         # Step 4: Instantiate services if configured
         services = self._instantiate_services(pipeline_config, global_ports)
 
+        # Auto-register PipelineMemory (always available, like run_id)
+        if "pipeline_memory" not in services:
+            from hexdag.stdlib.lib.pipeline_memory import (
+                PipelineMemory,  # lazy: arch boundary, optional default service
+            )
+
+            services["pipeline_memory"] = PipelineMemory()
+
+        # Auto-register EntityState from spec.state_machines (if declared)
+        if pipeline_config.state_machines and "entity_state" not in services:
+            self._register_state_machines(pipeline_config.state_machines, services)
+
+        # Register YAML-declared observers with the observer manager
+        if pipeline_config.observers:
+            self._register_observers(pipeline_config.observers, orchestrator)
+
         if services:
             # Store services in orchestrator's ports dict so they are accessible via context
             if isinstance(orchestrator.ports, dict):
@@ -397,6 +413,127 @@ class OrchestratorFactory:
                 raise
 
         return services
+
+    @staticmethod
+    def _register_state_machines(
+        state_machines: dict[str, dict[str, Any]],
+        services: dict[str, Any],
+    ) -> None:
+        """Create an EntityState service from ``spec.state_machines`` definitions.
+
+        Parses each state machine definition into a ``StateMachineConfig``,
+        registers it on a new ``EntityState`` instance, and stores the
+        instance as the ``entity_state`` service.
+
+        Parameters
+        ----------
+        state_machines : dict[str, dict[str, Any]]
+            Map of entity_type -> {initial: str, transitions: dict, handlers: dict}
+        services : dict[str, Any]
+            Services dict to register the EntityState into.
+        """
+        from hexdag.kernel.domain.entity_state import (
+            StateMachineConfig,  # lazy: only needed when state machines declared
+        )
+        from hexdag.kernel.resolver import resolve  # lazy: only needed when state machines declared
+        from hexdag.stdlib.lib.entity_state import (
+            EntityState,  # lazy: arch boundary, only when state machines declared
+        )
+
+        entity_state = EntityState()
+
+        for entity_type, sm_spec in state_machines.items():
+            initial = sm_spec.get("initial", "")
+            transitions_raw = sm_spec.get("transitions", {})
+
+            # Build transitions dict: normalize both list and dict-with-guards formats
+            transitions: dict[str, set[str]] = {}
+            for from_state, targets in transitions_raw.items():
+                if isinstance(targets, list):
+                    # Simple list format: OPEN: [INVESTIGATING, CLOSED]
+                    # Items can be strings or dicts with 'to' key
+                    target_set: set[str] = set()
+                    for t in targets:
+                        if isinstance(t, str):
+                            target_set.add(t)
+                        elif isinstance(t, dict) and "to" in t:
+                            target_set.add(t["to"])
+                    transitions[from_state] = target_set
+                elif isinstance(targets, set):
+                    transitions[from_state] = targets
+
+            # Compute all states from transitions
+            all_states = set(transitions.keys())
+            for target_set in transitions.values():
+                all_states |= target_set
+            if initial:
+                all_states.add(initial)
+
+            config = StateMachineConfig(
+                entity_type=entity_type,
+                states=all_states,
+                initial_state=initial,
+                transitions=transitions,
+            )
+            entity_state.register_machine(config)
+
+            # Register transition handler if declared
+            handlers = sm_spec.get("handlers", {})
+            handler_path = handlers.get("on_transition")
+            if handler_path:
+                handler_cls = resolve(handler_path)
+                # Instantiate if it's a class, use directly if callable
+                handler = handler_cls() if isinstance(handler_cls, type) else handler_cls
+                entity_state.register_handler(entity_type, handler)
+
+            logger.debug(
+                "✅ State machine registered: {} ({} states, {} transition rules)",
+                entity_type,
+                len(all_states),
+                len(transitions),
+            )
+
+        services["entity_state"] = entity_state
+
+    @staticmethod
+    def _register_observers(
+        observers_config: list[dict[str, Any]],
+        orchestrator: Any,
+    ) -> None:
+        """Instantiate and register observers declared in ``spec.observers``.
+
+        Parameters
+        ----------
+        observers_config : list[dict[str, Any]]
+            List of observer specs: [{class: str, config: dict}]
+        orchestrator : Orchestrator
+            The orchestrator instance (to access observer_manager from ports).
+        """
+        observer_manager = (
+            orchestrator.ports.get("observer_manager")
+            if isinstance(orchestrator.ports, dict)
+            else None
+        )
+        if observer_manager is None:
+            logger.warning("No observer_manager available; skipping spec.observers")
+            return
+
+        for obs_spec in observers_config:
+            try:
+                class_path = obs_spec.get("class", "")
+                config = dict(obs_spec.get("config", {}))
+
+                obs_cls = resolve(class_path)
+                observer = obs_cls(**config) if config else obs_cls()
+
+                observer_manager.register(observer)
+                logger.debug("✅ Observer registered: {}", class_path)
+            except Exception as e:
+                logger.error(
+                    "Failed to register observer '{}': {}",
+                    obs_spec.get("class", "?"),
+                    e,
+                )
 
     def _build_ports_configuration(
         self, pipeline_config: PipelineConfig, additional_ports: dict[str, Any] | None

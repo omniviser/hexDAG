@@ -1,6 +1,6 @@
 # hexDAG Gap Tracking
 
-**Last updated:** 2026-03-07 | **Version:** 0.7.0.dev9
+**Last updated:** 2026-04-17 | **Version:** 0.7.0.dev12
 
 This document tracks known gaps between the roadmap, documentation, and implementation.
 
@@ -41,10 +41,10 @@ This document tracks known gaps between the roadmap, documentation, and implemen
 - `kind: Adapter` manifest
 - `kind: Policy` manifest
 
-### Milestone 4: Entity-Bound Pipelines
-- `StateTransitionObserver` in orchestrator
-- `spec.entities` in pipeline manifests
-- Entity-triggered pipeline spawning
+### ~~Milestone 4: Entity-Bound Pipelines~~ → **Completed (Entity Lifecycle v1)**
+- ~~`StateTransitionObserver` in orchestrator~~ → Superseded by `spec.state_machines` + `TransitionNode` + auto-emit `StateTransitionEvent`
+- ~~`spec.entities` in pipeline manifests~~ → Superseded by `spec.state_machines` on Pipeline and System
+- ~~Entity-triggered pipeline spawning~~ → Implemented via `LifecycleRunner` (System-level state→process dispatch)
 
 ### Milestone 5: Production Runtime
 - `SystemRunner` modes (standalone, daemon, cluster)

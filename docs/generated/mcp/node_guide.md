@@ -280,6 +280,30 @@ Execute a single tool call as a FunctionNode.
   dependencies: []
 ```
 
+### TransitionNode
+
+Factory for entity state transition nodes.
+
+**Kind**: `transition_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `str` | Yes | Node name in the DAG. |
+| `entity` | `str` | Yes | Entity type (must match a registered state machine... |
+| `entity_id` | `str | None` | No | Entity ID expression (resolved at runtime from inp... |
+| `to_state` | `str` | Yes | Target state for the transition. |
+| `reason` | `str | None` | No | Optional reason expression (resolved at runtime). ... |
+
+**Example:**
+```yaml
+- kind: transition_node
+  metadata:
+    name: my_transition
+  spec:
+    # Add configuration here
+  dependencies: []
+```
+
 ## Creating Custom Nodes
 
 ```python

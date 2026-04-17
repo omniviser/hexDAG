@@ -323,7 +323,7 @@ class YamlValidator:
         self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
 
         # Validate expression/mapping naming to prevent ambiguous resolution
-        self._validate_naming_collisions(nodes, result, node_ids)
+        self._validate_naming_collisions(nodes, result, node_ids, macro_instances)
 
         return result
 
@@ -659,6 +659,7 @@ class YamlValidator:
         nodes: list[dict[str, Any]],
         result: ValidationReport,
         node_ids: set[str],
+        macro_instances: set[str],
     ) -> None:
         """Validate that expression variables and input_mapping aliases don't collide.
 
@@ -725,7 +726,7 @@ class YamlValidator:
                 if not isinstance(expr, str):
                     continue
                 self._check_first_segments(
-                    expr, var_name, node_id, valid_first_segments, node_ids, result
+                    expr, var_name, node_id, valid_first_segments, node_ids, macro_instances, result
                 )
 
             for alias, source in input_mapping.items():
@@ -735,7 +736,7 @@ class YamlValidator:
                 if source.startswith("$input") or source == "$input":
                     continue
                 self._check_first_segments(
-                    source, alias, node_id, valid_first_segments, node_ids, result
+                    source, alias, node_id, valid_first_segments, node_ids, macro_instances, result
                 )
 
     @staticmethod
@@ -745,6 +746,7 @@ class YamlValidator:
         node_id: str,
         valid_first_segments: set[str],
         node_ids: set[str],
+        macro_instances: set[str],
         result: "ValidationReport",
     ) -> None:
         """Check that first path segments in text are known references."""
@@ -753,6 +755,9 @@ class YamlValidator:
             if candidate in _RESERVED_PREFIXES or candidate in _BUILTIN_NAMES:
                 continue
             if candidate in valid_first_segments:
+                continue
+            # Check if candidate is a macro-expanded node name
+            if any(candidate.startswith(f"{mi}_") for mi in macro_instances):
                 continue
             # Unknown first segment — likely a typo
             close_matches = difflib.get_close_matches(candidate, sorted(node_ids), n=3, cutoff=0.6)

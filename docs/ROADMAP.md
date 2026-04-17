@@ -112,6 +112,12 @@ All entity types use the same `resolve()` mechanism for module path resolution. 
 - [x] **Scheduler** -- asyncio-based delayed/recurring pipeline execution
 - [x] **DatabaseTools** -- Agent-callable SQL query tools
 
+### n8n-Like Data Flow (v0.7.0.dev12)
+- [x] **Additive `input_mapping`** -- `_apply_input_mapping()` now seeds the result with the full upstream node namespace (`node_results`), then overlays explicit mappings. All nodes can reference `node_name.field.path` directly in expressions, templates, and conditions without needing `input_mapping` entries. `input_mapping` is now optional aliases, not required plumbing.
+- [x] **`MISSING` sentinel** -- `_get_value()` and `FieldExtractor.extract()` distinguish "first segment missing" (`MISSING` → error) from "deep field missing" (`None` → optional). Typo'd node names fail loudly; missing optional fields pass through as `None`.
+- [x] **Build-time naming validation** -- Expression variable names colliding with node names or builtin functions → build error. Unknown first path segments → build error with "did you mean?" suggestion. Prevents ambiguous resolution at compile time.
+- [x] **`coalesce()` / `default()` handle MISSING** -- These functions treat `MISSING` like `None`, enabling clean fallback patterns: `coalesce(node_a.field, node_b.field)`.
+
 ### Production Reliability
 - [x] **Error handler blocks** -- `on_error` field on `NodeSpec`; failed nodes route to a named handler node receiving `{"_error": {...}}` instead of halting the pipeline
 - [x] **Body execution observability** -- `BodyStarted` / `BodyCompleted` / `BodyFailed` events for inline body and `body_pipeline` executions; body nodes share the parent pipeline's observer stream
@@ -714,91 +720,60 @@ Needs EventBus for underlying pub/sub.
   - `apipe("/proc/runs/42/output/summary", "/proc/runs/43/input/context", {"summary": "context"})`
   - Like Unix pipes but between pipeline runs, with field mapping
 
-### Entity-Bound Pipelines
+### Entity Lifecycle (Supersedes Entity-Bound Pipelines)
 
-**Location:** `compiler/`, `stdlib/lib/observers/`, pipeline schema
+**Location:** `kernel/lifecycle_runner.py`, `stdlib/nodes/transition_node.py`, `stdlib/lib/entity_state.py`, `stdlib/lib/pipeline_memory.py`, `kernel/domain/system_config.py`
 
-Pipelines don't transition state -- pipelines **are** the transition. Like a Linux
-process doesn't call `set_my_state(RUNNING)` -- the kernel transitions process state
-as a side effect of `fork()`, `exit()`, and scheduling.
+**Status: Implemented (v1)**
 
-Entity-bound pipelines declare which business entities they operate on and what state
-transitions pipeline lifecycle events trigger. The orchestrator handles transitions
-automatically via an observer -- no explicit state-management nodes in the DAG.
+Businesses operate as state machines, not as graphs. hexDAG provides first-class
+entity lifecycle management: declare state machines in YAML, the framework validates
+transitions, dispatches handlers, emits events, and triggers pipelines.
 
-**YAML surface:**
+**Two modes of operation:**
 
-```yaml
-apiVersion: hexdag/v1
-kind: Pipeline
-metadata:
-  name: process_order
-spec:
-  entities:
-    - type: order
-      id: $input.order_id
-      transitions:
-        on_start: PROCESSING
-        on_complete: SHIPPED
-        on_failure: FAILED
+1. **Pipeline-level** (`spec.state_machines` on Pipeline): Single-pipeline entities.
+   TransitionNode is a DAG step. Agents opt into state machine tools via `entities: [type]`.
 
-    - type: fulfillment
-      id: $input.fulfillment_id
-      transitions:
-        on_start: IN_PROGRESS
-        on_complete: COMPLETED
-        on_failure: CANCELLED
+2. **System-level** (`spec.state_machines` on System): Multi-pipeline entities.
+   `LifecycleRunner` triggers processes on state entry. Guards, cascade limits, GC.
 
-  nodes:
-    # Pure business logic -- no state management nodes
-    - kind: llm_node
-      metadata:
-        name: validate_order
-      spec:
-        prompt_template: "Validate: {{order_data}}"
-```
+**What was implemented:**
 
-**Architecture:**
+- [x] **`spec.state_machines`** on both Pipeline and System configs
+- [x] **`TransitionNode`** (`kind: transition`) — stdlib built-in, validates + fires handlers + emits events
+- [x] **`StateTransitionEvent`** + `EntityGarbageCollected` + `EntityObligationFailed` + `EntityCompensationEvent`
+- [x] **Transition handlers** on EntityState — transactional (handler failure = transition failure + rollback)
+- [x] **Write-ahead storage** — persist before in-memory update
+- [x] **Tool schema enrichment** — agent's `transition_entity` tool auto-includes transition map
+- [x] **Agent `entities` field** — per-agent state machine tool scoping (opt-in)
+- [x] **PipelineMemory** — auto-registered run-scoped key-value store
+- [x] **`LifecycleRunner`** — event-driven runner for lifecycle-aware Systems
+- [x] **Transition guards** — expression-based guards on transitions
+- [x] **Cascade depth limit** — configurable max depth for recursive transitions
+- [x] **Terminal state GC** — entities in terminal states are cleaned up (in-memory)
+- [x] **State data contracts** — `requires` on states validates payload before transition
+- [x] **`spec.observers`** — YAML-declared observers registered at build time
+- [x] **`SupportsSessionFactory`** — per-step session factory protocol for saga pattern
+- [x] **`required_inputs`** on NodeSpec — validates inputs are non-None before execution
+- [x] **`critical: true`** on NodeSpec — pipeline fails if critical node is skipped
+- [x] **Safe path modifiers** — `field | required` (error on None), `field | default(X)` (fallback)
 
-```
-spec.entities (YAML declaration)
-    ↓ parsed by pipeline builder
-StateTransitionObserver (stdlib observer, auto-registered)
-    ↓ listens to PipelineStarted / PipelineCompleted events
-EntityState.atransition() (stdlib service)
-    ↓ validates against StateMachineConfig
-State machine validation + audit trail (kernel domain)
-```
+**Deferred to v1.1:**
+- [ ] `$ctx` pipeline context (compiler plugin for shared data)
+- [ ] `kind: route` blocks (compiler plugin for conditional routing)
+- [ ] `spec.memory.preload` + entity state seeding
+- [ ] `memory()` expression function
+- [ ] Pipeline-level `on_failure.compensate` (saga compensation)
+- [ ] State timeouts (auto-transition after duration)
+- [ ] `on_exit` pipelines per state
+- [ ] `await_pipeline: true` (gated transitions)
 
-One `StateTransitionObserver` per entity in the list. Auto-registered by the pipeline
-builder when `spec.entities` is present. No manual wiring.
-
-**Implementation:**
-
-- [ ] **`StateTransitionObserver`** (`stdlib/lib/observers/state_transition_observer.py`)
-  - Watches `PipelineStarted`, `PipelineCompleted` events
-  - Resolves `entity_id` from `initial_input` via expression (e.g., `$input.order_id`)
-  - Calls `EntityState.atransition()` with validated state
-  - One observer instance per entity binding
-
-- [ ] **`spec.entities` in pipeline schema**
-  - Add optional `entities` section to `kind: Pipeline` spec
-  - Schema: `list[{type: str, id: str, transitions: {on_start?, on_complete?, on_failure?}}]`
-  - Update `schemas/pipeline-schema.yaml`
-
-- [ ] **Pipeline builder auto-wiring**
-  - Parse `spec.entities`, create `StateTransitionObserver` instances
-  - Register with `observer_manager` before pipeline execution
-  - Resolve entity ID expressions against `initial_input`
-
-- [ ] **EntityState `@step` decorator**
-  - Add `@step` to `atransition()`, `aregister_entity()`, `aget_state()`
-  - Makes these methods available via `service_call_node` for edge cases
-    where explicit transitions are still needed
-
-**Open questions:**
-- Entity ID from node results (created mid-pipeline) -- defer to Phase 2
-- Node-level transition hooks (`on_complete.transition` on individual nodes) -- defer
+**Deferred to v2:**
+- [ ] Cross-entity event bus (reactive triggers)
+- [ ] Parallel/hierarchical states (statecharts)
+- [ ] Full obligation tracking with sweep + retry
+- [ ] Multi-process distributed lifecycle runner
 
 ### EventBus
 

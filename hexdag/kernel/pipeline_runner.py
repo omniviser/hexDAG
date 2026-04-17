@@ -43,6 +43,9 @@ from typing import TYPE_CHECKING, Any
 from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.exceptions import PipelineRunnerError  # noqa: F401
 from hexdag.kernel.logging import configure_logging, get_logger
+from hexdag.kernel.orchestration.components.lifecycle_manager import (
+    PostDagHookConfig,
+)
 from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
 from hexdag.kernel.utils.node_timer import Timer
 
@@ -52,7 +55,6 @@ if TYPE_CHECKING:
     from hexdag.kernel.domain.pipeline_config import PipelineConfig
     from hexdag.kernel.orchestration.components.lifecycle_manager import (
         HookConfig,
-        PostDagHookConfig,
     )
     from hexdag.kernel.ports.secret import SecretStore
 
@@ -119,9 +121,20 @@ class PipelineRunner:
         post_hook_config: PostDagHookConfig | None = None,
         base_path: Path | None = None,
         environment: str | None = None,
+        checkpoint_storage: Any | None = None,
     ) -> None:
         self._config = config
-        self._port_overrides = port_overrides
+        # Inject checkpoint_storage as a dedicated checkpoint port.
+        # Use a separate key to avoid conflicting with user's memory port.
+        if checkpoint_storage:
+            overrides = dict(port_overrides or {})
+            overrides["_hexdag_checkpoint_storage"] = checkpoint_storage
+            # Also set as memory port if user didn't provide one
+            # (lifecycle_manager._save_checkpoint uses get_port("memory"))
+            overrides.setdefault("memory", checkpoint_storage)
+            self._port_overrides: dict[str, Any] | None = overrides
+        else:
+            self._port_overrides = port_overrides
         self._secrets_provider = secrets_provider
         self._secret_keys = secret_keys
 
@@ -153,6 +166,14 @@ class PipelineRunner:
         )
 
         self._pre_hook_config = pre_hook_config
+        self._checkpoint_storage = checkpoint_storage
+
+        # Auto-enable checkpoint save when storage is provided
+        if checkpoint_storage and post_hook_config is None:
+            post_hook_config = PostDagHookConfig(
+                enable_checkpoint_save=True,
+                checkpoint_on_failure=True,
+            )
         self._post_hook_config = post_hook_config
         self._environment = environment
 
@@ -168,6 +189,7 @@ class PipelineRunner:
         input_data: Any = None,
         *,
         environment: str | None = None,
+        pre_seeded_results: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run a YAML pipeline from file.
 
@@ -179,6 +201,10 @@ class PipelineRunner:
             Initial input data for the pipeline.
         environment : str | None
             Environment override for multi-document YAML.
+        pre_seeded_results : dict[str, Any] | None
+            Pre-completed node results. Nodes whose names appear here
+            are skipped; downstream nodes see these as if already executed.
+            Used for pipeline resume after checkpoint restore.
 
         Returns
         -------
@@ -198,7 +224,13 @@ class PipelineRunner:
             )
 
         effective_config = self._effective_config()
-        return await self._execute(graph, pipeline_config, input_data, effective_config)
+        return await self._execute(
+            graph,
+            pipeline_config,
+            input_data,
+            effective_config,
+            pre_seeded_results=pre_seeded_results,
+        )
 
     async def run_from_string(
         self,
@@ -227,6 +259,117 @@ class PipelineRunner:
         graph, pipeline_config = self._builder.build_from_yaml_string(yaml_content, environment=env)
         effective_config = self._effective_config()
         return await self._execute(graph, pipeline_config, input_data, effective_config)
+
+    async def resume(
+        self,
+        pipeline_path: str | Path,
+        run_id: str,
+        input_data: Any = None,
+        *,
+        environment: str | None = None,
+    ) -> dict[str, Any]:
+        """Resume a pipeline from a saved checkpoint.
+
+        Loads the checkpoint for *run_id* from ``checkpoint_storage``,
+        then re-runs the pipeline with completed nodes pre-seeded so
+        they are skipped.  Downstream nodes execute normally using the
+        checkpointed results.
+
+        Parameters
+        ----------
+        pipeline_path : str | Path
+            Path to the YAML pipeline file (same pipeline that was checkpointed).
+        run_id : str
+            Run identifier to load the checkpoint for.
+        input_data : Any
+            Input data override.  If ``None``, uses the checkpointed
+            ``initial_input``.
+        environment : str | None
+            Environment override for multi-document YAML.
+
+        Returns
+        -------
+        dict[str, Any]
+            Node results keyed by node name (includes both pre-seeded
+            and newly-executed results).
+
+        Raises
+        ------
+        PipelineRunnerError
+            If no checkpoint storage is configured or checkpoint not found.
+        """
+        if self._checkpoint_storage is None:
+            raise PipelineRunnerError(
+                "Cannot resume: no checkpoint_storage configured on PipelineRunner"
+            )
+
+        from hexdag.kernel.orchestration.components.checkpoint_manager import (
+            CheckpointManager,  # lazy: only needed for resume
+        )
+
+        mgr = CheckpointManager(storage=self._checkpoint_storage)
+        try:
+            checkpoint = await mgr.load_for_resume(run_id)
+        except ValueError as e:
+            raise PipelineRunnerError(str(e)) from e
+        if checkpoint is None:
+            raise PipelineRunnerError(f"Checkpoint not found for run_id '{run_id}'")
+
+        # Use checkpointed input if not overridden
+        effective_input = input_data if input_data is not None else checkpoint.initial_input
+
+        # Validate graph hasn't drifted since checkpoint (Bug F)
+        path = Path(pipeline_path)
+        if path.exists() and checkpoint.graph_snapshot:
+            yaml_content = path.read_text(encoding="utf-8")
+            env = environment or self._environment
+            with self._builder._temporary_base_path(path.parent):
+                current_graph, _ = self._builder.build_from_yaml_string(
+                    yaml_content,
+                    environment=env,
+                )
+
+            # Check: all pre-seeded nodes must exist in the current graph
+            current_node_names = {spec.name for spec in current_graph}
+            checkpoint_nodes = set(checkpoint.graph_snapshot.keys())
+            missing_from_graph = checkpoint_nodes - current_node_names
+            if missing_from_graph:
+                logger.warning(
+                    "YAML drift detected: checkpoint has nodes {} "
+                    "that no longer exist in the pipeline. "
+                    "These pre-seeded results will be ignored.",
+                    sorted(missing_from_graph),
+                )
+
+            # Check: pre-seeded nodes' dependencies should match
+            for node_name, snap in checkpoint.graph_snapshot.items():
+                if node_name not in current_node_names:
+                    continue
+                current_spec = current_graph[node_name]
+                old_deps = set(snap.get("deps", []))
+                new_deps = set(current_spec.deps)
+                if old_deps != new_deps:
+                    logger.warning(
+                        "YAML drift: node '{}' dependencies changed "
+                        "({} -> {}). Resume may produce unexpected results.",
+                        node_name,
+                        sorted(old_deps),
+                        sorted(new_deps),
+                    )
+
+        logger.info(
+            "Resuming pipeline '{}' from checkpoint '{}' ({} completed nodes)",
+            pipeline_path,
+            run_id,
+            len(checkpoint.completed_node_ids),
+        )
+
+        return await self.run(
+            pipeline_path=pipeline_path,
+            input_data=effective_input,
+            environment=environment,
+            pre_seeded_results=checkpoint.node_results,
+        )
 
     async def validate(
         self,
@@ -333,6 +476,7 @@ class PipelineRunner:
         pipeline_config: PipelineConfig,
         input_data: Any,
         effective_config: Any = None,
+        pre_seeded_results: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Core execution: secrets → validate → instantiate → run.
 
@@ -347,6 +491,8 @@ class PipelineRunner:
         effective_config:
             The effective ``HexDAGConfig`` for this run (may include
             inline ``kind: Config`` from the YAML file).
+        pre_seeded_results:
+            Pre-completed node results for pipeline resume.
         """
         # 0. Apply logging configuration from kind: Config (if present)
         if effective_config and effective_config.logging:
@@ -422,7 +568,11 @@ class PipelineRunner:
         logger.info("Running pipeline '{}' with {} nodes", pipeline_name, len(graph))
 
         t = Timer()
-        result = await orchestrator.run(graph, input_data or {})
+        result = await orchestrator.run(
+            graph,
+            input_data or {},
+            pre_seeded_results=pre_seeded_results,
+        )
 
         logger.info(
             "Pipeline '{}' completed with {} node results in {}",

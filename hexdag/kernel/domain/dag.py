@@ -116,6 +116,8 @@ class NodeSpec:
     retry_max_delay: float | None = None  # Maximum delay cap in seconds (default: 60.0)
     when: str | None = None  # Optional expression to evaluate before execution
     on_error: str | None = None  # Name of DAG node to run if this node fails (after retries)
+    critical: bool = False  # If True and node is skipped, pipeline fails
+    required_inputs: tuple[str, ...] | list[str] = ()  # Input fields that must be non-None
     # Factory metadata for distributed execution (set by YAML pipeline builder)
     factory_class: str | None = None  # Module path, e.g. "hexdag.stdlib.nodes.LLMNode"
     factory_params: dict[str, Any] | None = None  # Original factory **kwargs
@@ -141,6 +143,9 @@ class NodeSpec:
         object.__setattr__(self, "deps", frozenset(sys.intern(d) for d in self.deps))
         object.__setattr__(self, "params", MappingProxyType(self.params))
         object.__setattr__(self, "literals", MappingProxyType(self.literals))
+        # Normalize required_inputs to tuple for immutability
+        if isinstance(self.required_inputs, list):
+            object.__setattr__(self, "required_inputs", tuple(self.required_inputs))
         # Freeze factory_params if present
         if self.factory_params is not None:
             object.__setattr__(self, "factory_params", MappingProxyType(self.factory_params))
