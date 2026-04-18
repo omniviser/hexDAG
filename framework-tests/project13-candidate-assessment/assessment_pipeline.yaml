@@ -1,0 +1,73 @@
+# hexDAG Pipeline: Candidate Assessment System
+# Ported from LangGraph project-13-candidate-assessment-system
+#
+# Pattern: RAG + Assessment
+# - Retrieve assessment criteria for the role
+# - Evaluate candidate response against criteria
+# - Provide structured feedback
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: candidate-assessor
+  description: Interview coach that assesses candidate responses
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-13"
+    pattern: "RAG + Assessment Pipeline"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Retrieve assessment criteria for the role
+    - kind: function_node
+      metadata:
+        name: retrieve_criteria
+        annotations:
+          description: Get assessment criteria for the job role
+      spec:
+        fn: "retrieve_criteria"
+        dependencies: []
+
+    # Step 2: Assess the candidate response
+    - kind: llm_node
+      metadata:
+        name: assess_response
+        annotations:
+          description: Evaluate candidate against criteria
+      spec:
+        prompt_template: |
+          You are an interview assessor. Evaluate the candidate's response
+          based on the assessment criteria.
+
+          ROLE: {{ job_role }}
+
+          ASSESSMENT CRITERIA:
+          {{ criteria }}
+
+          INTERVIEW QUESTION:
+          {{ question }}
+
+          CANDIDATE'S RESPONSE:
+          {{ candidate_response }}
+
+          Provide:
+          1. Score (1-10)
+          2. Strengths observed
+          3. Areas for improvement
+          4. Overall recommendation (Strong Yes / Yes / Maybe / No)
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+        dependencies: [retrieve_criteria]
+
+# ASSESSMENT PATTERN:
+#
+#   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+#   │  Candidate  │     │  Retrieve   │     │   Assess    │
+#   │  Response   │ --> │  Criteria   │ --> │  Response   │ --> Feedback
+#   └─────────────┘     └─────────────┘     └─────────────┘
+#                            │                    │
+#                            v                    v
+#                     Role-specific         Structured
+#                       rubrics             evaluation

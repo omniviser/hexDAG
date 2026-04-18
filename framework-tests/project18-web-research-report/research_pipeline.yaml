@@ -1,0 +1,68 @@
+# hexDAG Pipeline: Web Research and Report Generation
+# Ported from LangGraph project-18-web-research-and-report-generation
+#
+# Pattern: Search -> Compile -> Generate Report
+# - Search web for information on a topic
+# - Compile and organize research data
+# - Generate comprehensive report
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: web-research-report
+  description: Research a topic online and generate a comprehensive report
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-18"
+    pattern: "Web Research + Report Generation"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Conduct web research
+    - kind: function_node
+      metadata:
+        name: conduct_research
+        annotations:
+          description: Search web for information on the topic
+      spec:
+        fn: "conduct_research"
+        dependencies: []
+
+    # Step 2: Generate comprehensive report
+    - kind: llm_node
+      metadata:
+        name: generate_report
+        annotations:
+          description: Compile research into a structured report
+      spec:
+        prompt_template: |
+          Generate a comprehensive report based on the following research data.
+
+          TOPIC: {{ topic }}
+
+          RESEARCH DATA:
+          {{ research_data }}
+
+          Create a well-structured report with:
+          1. Executive Summary
+          2. Key Findings
+          3. Detailed Analysis
+          4. Conclusions
+          5. Sources
+
+        model: gemini-2.0-flash
+        temperature: 0.5
+        dependencies: [conduct_research]
+
+# WEB RESEARCH PATTERN:
+#
+#   ┌──────────┐     ┌──────────────┐     ┌──────────────┐
+#   │  Topic   │ --> │   Search     │ --> │   Generate   │ --> Report
+#   │          │     │   Web        │     │   Report     │
+#   └──────────┘     └──────────────┘     └──────────────┘
+#                          │                     │
+#                          v                     v
+#                    DuckDuckGo             Structured
+#                    search results         comprehensive
+#                                           report
