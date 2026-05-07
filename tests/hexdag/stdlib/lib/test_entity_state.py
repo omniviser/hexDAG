@@ -355,3 +355,81 @@ class TestEntityStateWithStorage:
         assert result["state"] == "processing"
         history = await lib.aget_history("order", "o-1")
         assert len(history) == 2
+
+
+# ---------------------------------------------------------------------------
+# Entity-Bound Tool Filtering
+# ---------------------------------------------------------------------------
+
+
+def _ticket_config() -> StateMachineConfig:
+    return StateMachineConfig(
+        entity_type="ticket",
+        states={"open", "investigating", "resolved", "closed"},
+        initial_state="open",
+        transitions={
+            "open": {"investigating", "closed"},
+            "investigating": {"resolved", "closed"},
+            "resolved": {"closed"},
+        },
+    )
+
+
+class TestEntityBoundToolFiltering:
+    """Test that get_tools(entities=...) scopes transition map."""
+
+    def test_get_tools_no_filter_includes_all(self) -> None:
+        """Without entities filter, all machines in transition map."""
+        es = EntityState()
+        es.register_machine(_order_config())
+        es.register_machine(_ticket_config())
+
+        tools = es.get_tools()
+        assert "atransition" in tools
+        # Check docstring includes both entity types
+        doc = tools["atransition"].__doc__ or ""
+        assert "order" in doc
+        assert "ticket" in doc
+
+    def test_get_tools_filter_single_entity(self) -> None:
+        """entities=['order'] only includes order in transition map."""
+        es = EntityState()
+        es.register_machine(_order_config())
+        es.register_machine(_ticket_config())
+
+        tools = es.get_tools(entities=["order"])
+        doc = tools["atransition"].__doc__ or ""
+        assert "order" in doc
+        assert "ticket" not in doc
+
+    def test_get_tools_filter_multiple_entities(self) -> None:
+        """entities=['order', 'ticket'] includes both."""
+        es = EntityState()
+        es.register_machine(_order_config())
+        es.register_machine(_ticket_config())
+
+        tools = es.get_tools(entities=["order", "ticket"])
+        doc = tools["atransition"].__doc__ or ""
+        assert "order" in doc
+        assert "ticket" in doc
+
+    def test_get_tools_filter_unknown_entity(self) -> None:
+        """entities=['unknown'] produces no transition map."""
+        es = EntityState()
+        es.register_machine(_order_config())
+
+        tools = es.get_tools(entities=["unknown"])
+        doc = tools["atransition"].__doc__ or ""
+        assert "order" not in doc
+        assert "Available state machines" not in doc
+
+    def test_get_tools_all_tools_present(self) -> None:
+        """Filtering doesn't remove tools — only scopes descriptions."""
+        es = EntityState()
+        es.register_machine(_order_config())
+
+        tools = es.get_tools(entities=["order"])
+        assert "atransition" in tools
+        assert "aget_state" in tools
+        assert "aget_history" in tools
+        assert "aregister_entity" in tools

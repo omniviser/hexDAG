@@ -37,6 +37,10 @@ class MacroEntityPlugin:
         self, node_config: dict[str, Any], builder: YamlPipelineBuilder, graph: DirectedGraph
     ) -> NodeSpec | None:
         """Expand macro into subgraph and merge into main graph."""
+        # Reset exit nodes upfront so a failed expansion doesn't leave
+        # stale state from the previous macro for the next node's implicit deps.
+        self.last_exit_nodes = []
+
         instance_name = node_config["metadata"]["name"]
         spec = node_config.get("spec", {})
         macro_ref = spec.get("macro")

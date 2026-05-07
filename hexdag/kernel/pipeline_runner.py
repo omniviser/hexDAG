@@ -526,7 +526,7 @@ class PipelineRunner:
         #    Priority: explicit constructor arg > per-pipeline spec > config > hardcoded
         #    Use effective_config (which may come from inline kind: Config)
         #    for the config-level defaults when no constructor config was given.
-        max_nodes, strict, timeout = self._resolve_orchestrator_settings(
+        max_nodes, strict, timeout, p_timeout = self._resolve_orchestrator_settings(
             pipeline_config.orchestrator,
             effective_config,
         )
@@ -572,6 +572,7 @@ class PipelineRunner:
             graph,
             input_data or {},
             pre_seeded_results=pre_seeded_results,
+            pipeline_timeout=p_timeout,
         )
 
         logger.info(
@@ -586,14 +587,14 @@ class PipelineRunner:
         self,
         pc_orch: Any,
         effective_config: Any = None,
-    ) -> tuple[int, bool, float | None]:
+    ) -> tuple[int, bool, float | None, float | None]:
         """Resolve final orchestrator settings with correct priority.
 
         Priority chain (highest to lowest):
         1. Explicit constructor args (``max_concurrent_nodes=20``)
         2. Per-pipeline spec (``pipeline_config.orchestrator``)
         3. Effective config defaults (constructor config or inline ``kind: Config``)
-        4. Hardcoded defaults (10, False, None)
+        4. Hardcoded defaults (10, False, None, None)
 
         Parameters
         ----------
@@ -606,8 +607,9 @@ class PipelineRunner:
 
         Returns
         -------
-        tuple[int, bool, float | None]
-            (max_concurrent_nodes, strict_validation, default_node_timeout)
+        tuple[int, bool, float | None, float | None]
+            (max_concurrent_nodes, strict_validation, default_node_timeout,
+            pipeline_timeout)
         """
         # Start from effective config (which may include inline kind: Config)
         # or fall back to constructor-resolved baseline.
@@ -618,6 +620,7 @@ class PipelineRunner:
         max_nodes = cfg_orch.max_concurrent_nodes if cfg_orch else 10
         strict = cfg_orch.strict_validation if cfg_orch else False
         timeout = cfg_orch.default_node_timeout if cfg_orch else None
+        p_timeout = cfg_orch.pipeline_timeout if cfg_orch else None
 
         # Level 2: per-pipeline spec overrides config (but only for
         # fields not explicitly set by the constructor).
@@ -631,6 +634,8 @@ class PipelineRunner:
                 and pc_orch.default_node_timeout is not None
             ):
                 timeout = pc_orch.default_node_timeout
+            if pc_orch.pipeline_timeout is not None:
+                p_timeout = pc_orch.pipeline_timeout
 
         # Level 1: explicit constructor args always win.
         if self._explicit_max_concurrent_nodes is not None:
@@ -640,7 +645,7 @@ class PipelineRunner:
         if self._explicit_default_node_timeout is not None:
             timeout = self._explicit_default_node_timeout
 
-        return max_nodes, strict, timeout
+        return max_nodes, strict, timeout, p_timeout
 
     @staticmethod
     def _resolve_field(pipeline_value: Any, config_value: Any) -> Any:

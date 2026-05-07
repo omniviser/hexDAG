@@ -19,7 +19,7 @@ _NODE_FIELD_RE = re.compile(r"(?<!\$)\b([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-
 _JINJA_VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_.]*\s*\}\}")
 
 # Reserved prefixes that are never node references
-_RESERVED_PREFIXES = frozenset({"$input"})
+_RESERVED_PREFIXES = frozenset({"$input", "ctx"})
 
 # Names that should never be treated as node references, even if they match
 # the ``identifier.identifier`` pattern.  Derived from the expression parser's
@@ -34,12 +34,14 @@ _BUILTIN_NAMES = frozenset(ALLOWED_FUNCTIONS.keys()) | frozenset({
     "False",
     "None",
     "null",
+    "ctx",
 })
 
 
 def extract_refs_from_mapping(
     input_mapping: dict[str, Any],
     known_nodes: frozenset[str],
+    macro_instances: frozenset[str] = frozenset(),
 ) -> set[str]:
     """Extract node names referenced in ``input_mapping`` values.
 
@@ -53,6 +55,8 @@ def extract_refs_from_mapping(
         Mapping of ``{target_field: "source_path"}``.
     known_nodes : frozenset[str]
         Set of all node names in the pipeline (used for validation).
+    macro_instances : frozenset[str]
+        Macro invocation names for prefix-based matching.
 
     Returns
     -------
@@ -61,15 +65,19 @@ def extract_refs_from_mapping(
     """
     refs: set[str] = set()
     for source_path in input_mapping.values():
-        if not isinstance(source_path, str):
-            continue
-        refs.update(_extract_node_refs(source_path, known_nodes))
+        if isinstance(source_path, str):
+            refs.update(_extract_node_refs(source_path, known_nodes, macro_instances))
+        elif isinstance(source_path, list):
+            for item in source_path:
+                if isinstance(item, str):
+                    refs.update(_extract_node_refs(item, known_nodes, macro_instances))
     return refs
 
 
 def extract_refs_from_expressions(
     expressions: dict[str, Any],
     known_nodes: frozenset[str],
+    macro_instances: frozenset[str] = frozenset(),
 ) -> set[str]:
     """Extract node names referenced in expression strings.
 
@@ -82,6 +90,8 @@ def extract_refs_from_expressions(
         Mapping of ``{variable_name: expression_string}``.
     known_nodes : frozenset[str]
         Set of all node names in the pipeline.
+    macro_instances : frozenset[str]
+        Macro invocation names for prefix-based matching.
 
     Returns
     -------
@@ -92,13 +102,14 @@ def extract_refs_from_expressions(
     for expr in expressions.values():
         if not isinstance(expr, str):
             continue
-        refs.update(_extract_node_refs(expr, known_nodes))
+        refs.update(_extract_node_refs(expr, known_nodes, macro_instances))
     return refs
 
 
 def extract_refs_from_template(
     template: str,
     known_nodes: frozenset[str],
+    macro_instances: frozenset[str] = frozenset(),
 ) -> set[str]:
     """Extract node names referenced in Jinja2-style templates.
 
@@ -111,6 +122,8 @@ def extract_refs_from_template(
         Jinja2 template string.
     known_nodes : frozenset[str]
         Set of all node names in the pipeline.
+    macro_instances : frozenset[str]
+        Macro invocation names for prefix-based matching.
 
     Returns
     -------
@@ -120,12 +133,50 @@ def extract_refs_from_template(
     refs: set[str] = set()
     for match in _JINJA_VAR_RE.finditer(template):
         candidate = match.group(1)
-        if candidate in known_nodes and candidate not in _BUILTIN_NAMES:
+        if candidate in _BUILTIN_NAMES:
+            continue
+        if candidate in known_nodes:
             refs.add(candidate)
+        elif macro_instances:
+            for mi in macro_instances:
+                if candidate.startswith(f"{mi}_"):
+                    refs.add(mi)
+                    break
     return refs
 
 
-def _extract_node_refs(source: str, known_nodes: frozenset[str]) -> set[str]:
+def extract_refs_from_string(
+    source: str,
+    known_nodes: frozenset[str],
+    macro_instances: frozenset[str] = frozenset(),
+) -> set[str]:
+    """Extract node references from a single string (condition, items, etc.).
+
+    Public wrapper around :func:`_extract_node_refs` for use by
+    ``_infer_deps`` when scanning composite node fields.
+
+    Parameters
+    ----------
+    source : str
+        A source path or expression string.
+    known_nodes : frozenset[str]
+        Set of all node names in the pipeline.
+    macro_instances : frozenset[str]
+        Macro invocation names for prefix-based matching.
+
+    Returns
+    -------
+    set[str]
+        Node names found.
+    """
+    return _extract_node_refs(source, known_nodes, macro_instances)
+
+
+def _extract_node_refs(
+    source: str,
+    known_nodes: frozenset[str],
+    macro_instances: frozenset[str] = frozenset(),
+) -> set[str]:
     """Extract node references from a single source string.
 
     Parameters
@@ -134,6 +185,8 @@ def _extract_node_refs(source: str, known_nodes: frozenset[str]) -> set[str]:
         A source path or expression string.
     known_nodes : frozenset[str]
         Set of all node names in the pipeline.
+    macro_instances : frozenset[str]
+        Macro invocation names for prefix-based matching.
 
     Returns
     -------
@@ -147,11 +200,32 @@ def _extract_node_refs(source: str, known_nodes: frozenset[str]) -> set[str]:
     if stripped == "$input" or stripped.startswith("$input."):
         return refs
 
+    # Sort macro instances by length descending so longer prefixes match first.
+    # Without this, "extract" could greedily match "extract_rate_node" before
+    # the correct macro "extract_rate" gets a chance.
+    sorted_macros = sorted(macro_instances, key=len, reverse=True) if macro_instances else []
+
     for match in _NODE_FIELD_RE.finditer(source):
         candidate = match.group(1)
         if candidate in _RESERVED_PREFIXES or candidate in _BUILTIN_NAMES:
             continue
         if candidate in known_nodes:
             refs.add(candidate)
+        elif sorted_macros:
+            for mi in sorted_macros:
+                if candidate.startswith(f"{mi}_"):
+                    refs.add(mi)
+                    break
+
+    # Bare names (no dot) — detect known nodes and macro-prefixed names
+    # that the dotted regex above cannot match.
+    if "." not in stripped and stripped.isidentifier() and stripped not in _BUILTIN_NAMES:
+        if stripped in known_nodes:
+            refs.add(stripped)
+        elif sorted_macros:
+            for mi in sorted_macros:
+                if stripped.startswith(f"{mi}_"):
+                    refs.add(mi)
+                    break
 
     return refs

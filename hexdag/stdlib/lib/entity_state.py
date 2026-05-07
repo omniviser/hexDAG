@@ -463,17 +463,32 @@ class EntityState(Service):
     # Schema enrichment — enrich tool descriptions from state machines
     # ------------------------------------------------------------------
 
-    def _build_transition_map_description(self) -> str:
+    def _build_transition_map_description(
+        self,
+        entities: list[str] | None = None,
+    ) -> str:
         """Build a human-readable transition map from registered machines.
 
         Used to enrich the ``atransition`` tool description so agents can
         reason about valid transitions without trial-and-error.
+
+        Parameters
+        ----------
+        entities : list[str] | None
+            If provided, only include state machines for these entity
+            types.  ``None`` means include all registered machines.
         """
-        if not self._machines:
+        machines = self._machines
+        if not machines:
             return ""
 
+        if entities is not None:
+            machines = {k: v for k, v in machines.items() if k in entities}
+            if not machines:
+                return ""
+
         lines = ["\n\nAvailable state machines:"]
-        for entity_type, config in sorted(self._machines.items()):
+        for entity_type, config in sorted(machines.items()):
             parts = []
             for from_state, targets in sorted(config.transitions.items()):
                 sorted_targets = sorted(targets)
@@ -481,13 +496,22 @@ class EntityState(Service):
             lines.append(f"- {entity_type}: {' | '.join(parts)}")
         return "\n".join(lines)
 
-    def get_tools(self) -> dict[str, Any]:
+    def get_tools(
+        self,
+        entities: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Return tools with enriched descriptions from state machines.
 
         When state machines are registered, the ``atransition`` tool
         description is extended with the full transition map and the
         ``entity_type`` parameter gains an ``enum`` constraint listing
         valid entity types.
+
+        Parameters
+        ----------
+        entities : list[str] | None
+            If provided, only include transition maps for these entity
+            types in the tool description.  ``None`` means include all.
         """
         tools = super().get_tools()
 
@@ -501,7 +525,9 @@ class EntityState(Service):
                     fn._original_first_line = raw_doc.strip().split("\n")[0]
 
                 if self._machines:
-                    transition_map = self._build_transition_map_description()
+                    transition_map = self._build_transition_map_description(
+                        entities=entities,
+                    )
                     fn.__doc__ = fn._original_first_line + transition_map
                 else:
                     fn.__doc__ = fn._original_first_line

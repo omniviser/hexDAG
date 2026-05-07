@@ -72,8 +72,17 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Core Concepts: getting-started/concepts.md
+  - Framework Guide: GUIDE.md
+  - Architecture: ARCHITECTURE.md
   - User Guide:
       - Node Types: guide/node-types.md
+      - Creating Nodes: generated/mcp/node_guide.md
+      - Creating Adapters: generated/mcp/adapter_guide.md
+      - Creating Tools: generated/mcp/tool_guide.md
+      - YAML Reference: generated/mcp/yaml_reference.md
+      - Pipeline Schema: generated/mcp/pipeline_schema_guide.md
+      - Syntax Reference: generated/mcp/syntax_reference.md
+      - CLI Reference: generated/mcp/cli_reference.md
   - Reference:
       - Nodes: reference/nodes.md
       - Adapters: reference/adapters.md
@@ -82,6 +91,7 @@ nav:
   - Namespaces:
       - Core: namespaces/core.md
       - Plugin: namespaces/plugin.md
+  - Roadmap: ROADMAP.md
 
 hooks:
   - docs/.hooks/registry_docs.py

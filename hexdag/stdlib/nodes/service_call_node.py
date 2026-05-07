@@ -34,6 +34,49 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _auto_infer_params(
+    filtered: dict[str, Any],
+    missing: set[str],
+    input_data: dict[str, Any],
+    method_name: str,
+    service_name: str,
+) -> dict[str, Any]:
+    """Search upstream node outputs for missing @step parameters.
+
+    When a ``service_call_node`` has no explicit ``input_mapping``, the
+    additive input dict contains ``{node_name: result_dict, ...}``.
+    This function searches those result dicts (and ``input`` for pipeline
+    input) for keys matching the missing param names.
+
+    If a param name is found in exactly one upstream source, it is
+    auto-mapped.  Ambiguous matches (same key in multiple sources)
+    are skipped with a debug log.
+    """
+    result = dict(filtered)
+
+    for param in missing:
+        sources: list[tuple[str, Any]] = []
+
+        for key, value in input_data.items():
+            if isinstance(value, dict) and param in value:
+                sources.append((key, value[param]))
+
+        if len(sources) == 1:
+            result[param] = sources[0][1]
+        elif len(sources) > 1:
+            source_names = [s[0] for s in sources]
+            logger.debug(
+                "Auto-infer: param '{}' for {}.{} found in multiple "
+                "upstream sources: {}. Skipping (use explicit input_mapping).",
+                param,
+                service_name,
+                method_name,
+                source_names,
+            )
+
+    return result
+
+
 class ServiceCallNode(BaseNodeFactory, yaml_alias="service_call_node"):
     """Call a ``@step`` method on a Service as a deterministic DAG node.
 
@@ -130,12 +173,38 @@ class ServiceCallNode(BaseNodeFactory, yaml_alias="service_call_node"):
                 )
                 raise AttributeError(msg)
 
-            # 4. Call the bound method
+            # 4. Filter input to match method signature + auto-infer from
+            #    upstream node outputs when no explicit input_mapping is used.
+            sig = inspect.signature(step_fn)
+            params = sig.parameters
+            if any(p.kind == p.VAR_KEYWORD for p in params.values()):
+                filtered = input_data
+            else:
+                accepted = {
+                    n
+                    for n, p in params.items()
+                    if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+                }
+                filtered = {k: v for k, v in input_data.items() if k in accepted}
+
+                # Auto-infer: for accepted params not found at top level,
+                # search inside upstream node result dicts and $input.
+                missing = accepted - filtered.keys()
+                if missing:
+                    filtered = _auto_infer_params(
+                        filtered,
+                        missing,
+                        input_data,
+                        method_name,
+                        service_name,
+                    )
+
+            # 5. Call the bound method
             with node_timer() as t:
                 if inspect.iscoroutinefunction(step_fn):
-                    result = await step_fn(**input_data)
+                    result = await step_fn(**filtered)
                 else:
-                    result = step_fn(**input_data)
+                    result = step_fn(**filtered)
 
                 logger.debug(
                     "Service step {}.{} completed in {}ms",

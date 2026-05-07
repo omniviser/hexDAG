@@ -547,15 +547,16 @@ class TestResolveOrchestratorSettings:
         runner = PipelineRunner(max_concurrent_nodes=20)
         # Simulate a pipeline that declares orchestrator with defaults
         pc_orch = OrchestratorConfig(max_concurrent_nodes=3)
-        max_nodes, strict, timeout = runner._resolve_orchestrator_settings(pc_orch)
+        max_nodes, strict, timeout, p_timeout = runner._resolve_orchestrator_settings(pc_orch)
         assert max_nodes == 20  # constructor wins
         assert strict is False  # hardcoded default (no explicit, no pipeline override)
         assert timeout is None
+        assert p_timeout is None
 
     def test_explicit_strict_beats_pipeline_spec(self) -> None:
         runner = PipelineRunner(strict_validation=True)
         pc_orch = OrchestratorConfig(strict_validation=False)
-        _, strict, _ = runner._resolve_orchestrator_settings(pc_orch)
+        _, strict, _, _ = runner._resolve_orchestrator_settings(pc_orch)
         assert strict is True  # constructor wins
 
     def test_pipeline_spec_overrides_config_when_no_explicit(self) -> None:
@@ -566,7 +567,7 @@ class TestResolveOrchestratorSettings:
         )
         runner = PipelineRunner(config=config)  # no explicit max_concurrent_nodes
         pc_orch = OrchestratorConfig(max_concurrent_nodes=3)
-        max_nodes, _, _ = runner._resolve_orchestrator_settings(pc_orch)
+        max_nodes, _, _, _ = runner._resolve_orchestrator_settings(pc_orch)
         assert max_nodes == 3  # pipeline spec wins over config
 
     def test_pipeline_spec_none_uses_config(self) -> None:
@@ -579,10 +580,11 @@ class TestResolveOrchestratorSettings:
             ),
         )
         runner = PipelineRunner(config=config)
-        max_nodes, strict, timeout = runner._resolve_orchestrator_settings(None)
+        max_nodes, strict, timeout, p_timeout = runner._resolve_orchestrator_settings(None)
         assert max_nodes == 7
         assert strict is True
         assert timeout == 45.0
+        assert p_timeout is None
 
     def test_empty_pipeline_orchestrator_does_not_clobber_config(self) -> None:
         """An empty orchestrator: {} in Pipeline YAML (which creates
@@ -594,7 +596,7 @@ class TestResolveOrchestratorSettings:
         runner = PipelineRunner(config=config)
         # Empty orchestrator: {} → OrchestratorConfig() → max=10, strict=False
         empty_orch = OrchestratorConfig()
-        max_nodes, strict, _ = runner._resolve_orchestrator_settings(empty_orch)
+        max_nodes, strict, _, _ = runner._resolve_orchestrator_settings(empty_orch)
         # Pipeline spec overrides config (by design), even when "empty".
         # This is correct: an explicit orchestrator: {} means "use defaults".
         assert max_nodes == 10
@@ -606,7 +608,7 @@ class TestResolveOrchestratorSettings:
         inline_config = HexDAGConfig(
             orchestrator=OrchestratorConfig(max_concurrent_nodes=4),
         )
-        max_nodes, _, _ = runner._resolve_orchestrator_settings(
+        max_nodes, _, _, _ = runner._resolve_orchestrator_settings(
             None, effective_config=inline_config
         )
         assert max_nodes == 4
@@ -619,8 +621,26 @@ class TestResolveOrchestratorSettings:
         runner = PipelineRunner(config=ctor_config)
         # Constructor config is used as self._config; effective_config
         # should be ctor_config since _effective_config prefers it.
-        max_nodes, _, _ = runner._resolve_orchestrator_settings(None, effective_config=ctor_config)
+        max_nodes, _, _, _ = runner._resolve_orchestrator_settings(
+            None, effective_config=ctor_config
+        )
         assert max_nodes == 8
+
+    def test_pipeline_timeout_from_pipeline_spec(self) -> None:
+        """pipeline_timeout from per-pipeline spec should be resolved."""
+        runner = PipelineRunner()
+        pc_orch = OrchestratorConfig(pipeline_timeout=120.0)
+        _, _, _, p_timeout = runner._resolve_orchestrator_settings(pc_orch)
+        assert p_timeout == 120.0
+
+    def test_pipeline_timeout_from_config(self) -> None:
+        """pipeline_timeout from config should be resolved when no pipeline spec."""
+        config = HexDAGConfig(
+            orchestrator=OrchestratorConfig(pipeline_timeout=60.0),
+        )
+        runner = PipelineRunner(config=config)
+        _, _, _, p_timeout = runner._resolve_orchestrator_settings(None)
+        assert p_timeout == 60.0
 
 
 class TestEffectiveConfig:

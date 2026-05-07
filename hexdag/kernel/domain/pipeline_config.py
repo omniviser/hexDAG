@@ -95,6 +95,12 @@ class BaseNodeConfig(BaseModel):
             " node_name.field or $input.field syntax."
         ),
     )
+    when: str | None = Field(
+        default=None,
+        description=(
+            "Conditional execution expression. Node is skipped when this evaluates to false."
+        ),
+    )
     dependencies: list[str] | None = Field(
         default=None,
         description=(
@@ -130,6 +136,7 @@ class BaseNodeConfig(BaseModel):
             "dependencies": node_config.get("dependencies") or spec.get("dependencies"),
             "wait_for": wait_for,
             "input_mapping": spec.get("input_mapping"),
+            "when": spec.get("when"),
         })
 
 

@@ -84,7 +84,7 @@ class NodeEntityPlugin:
 
         # Backward compat: if no explicit settings section, auto-partition flat spec
         if not settings_values:
-            settings_values, spec = self._partition_spec(factory_obj, spec)
+            settings_values, spec = self._partition_spec(factory, spec)
 
         # Merge for factory call (factory signature unchanged)
         factory_kwargs = {**settings_values, **spec}

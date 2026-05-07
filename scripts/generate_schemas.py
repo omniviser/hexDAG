@@ -319,7 +319,7 @@ def generate_pipeline_schema() -> dict[str, Any]:
     }
 
     # Partition BaseNodeConfig fields: spec-level vs node-level
-    _SPEC_LEVEL_FIELDS = {"input_mapping"}
+    _SPEC_LEVEL_FIELDS = {"input_mapping", "when"}
 
     spec_props: dict[str, Any] = {}
     for field_name, field_schema in base_node_schema.get("properties", {}).items():

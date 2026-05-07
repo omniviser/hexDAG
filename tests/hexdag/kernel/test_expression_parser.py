@@ -657,3 +657,334 @@ class TestComprehensions:
         """Test that generator expressions remain blocked."""
         with pytest.raises(ExpressionError):
             compile_expression("list(x for x in items)")
+
+
+class TestMethodCalls:
+    """Test whitelisted method calls on objects."""
+
+    def test_dict_get_with_key(self) -> None:
+        result = evaluate_expression("data.get('name')", {"data": {"name": "Alice"}})
+        assert result == "Alice"
+
+    def test_dict_get_with_default(self) -> None:
+        result = evaluate_expression("data.get('missing', 'fallback')", {"data": {}})
+        assert result == "fallback"
+
+    def test_dict_keys(self) -> None:
+        result = evaluate_expression("list(data.keys())", {"data": {"a": 1, "b": 2}})
+        assert sorted(result) == ["a", "b"]
+
+    def test_dict_values(self) -> None:
+        result = evaluate_expression("list(data.values())", {"data": {"a": 1, "b": 2}})
+        assert sorted(result) == [1, 2]
+
+    def test_str_upper_method(self) -> None:
+        result = evaluate_expression("name.upper()", {"name": "hello"})
+        assert result == "HELLO"
+
+    def test_str_split_method(self) -> None:
+        result = evaluate_expression("text.split(',')", {"text": "a,b,c"})
+        assert result == ["a", "b", "c"]
+
+    def test_str_join_method(self) -> None:
+        result = evaluate_expression("','.join(parts)", {"parts": ["a", "b", "c"]})
+        assert result == "a,b,c"
+
+    def test_str_replace_method(self) -> None:
+        result = evaluate_expression("text.replace('old', 'new')", {"text": "old value"})
+        assert result == "new value"
+
+    def test_str_startswith_method(self) -> None:
+        result = evaluate_expression("name.startswith('he')", {"name": "hello"})
+        assert result is True
+
+    def test_method_on_none_returns_none(self) -> None:
+        result = evaluate_expression("data.get('key')", {"data": None})
+        assert result is None
+
+    def test_disallowed_method_blocked(self) -> None:
+        with pytest.raises(ExpressionError):
+            compile_expression("obj.__class__()")
+
+    def test_disallowed_method_name(self) -> None:
+        with pytest.raises(ExpressionError):
+            compile_expression("obj.eval()")
+
+    def test_chained_method_and_function(self) -> None:
+        """Method calls can be combined with allowed functions."""
+        result = evaluate_expression("len(text.split(','))", {"text": "a,b,c"})
+        assert result == 3
+
+
+class TestShortCircuit:
+    """Test short-circuit evaluation of and/or operators."""
+
+    def test_and_short_circuits_on_none(self) -> None:
+        """x is not None and x + 1 must not crash when x is None."""
+        result = evaluate_expression("x is not None and x + 1", {"x": None})
+        assert result is False
+
+    def test_and_evaluates_when_truthy(self) -> None:
+        result = evaluate_expression("x is not None and x + 1", {"x": 5})
+        assert result == 6
+
+    def test_or_short_circuits_on_truthy(self) -> None:
+        result = evaluate_expression("x or 'default'", {"x": "hello"})
+        assert result == "hello"
+
+    def test_or_falls_through_to_default(self) -> None:
+        result = evaluate_expression("x or 'default'", {"x": ""})
+        assert result == "default"
+
+    def test_and_returns_first_falsy_value(self) -> None:
+        """Python semantics: 0 and 42 returns 0."""
+        result = evaluate_expression("0 and 42", {})
+        assert result == 0
+
+    def test_and_returns_last_truthy_value(self) -> None:
+        """Python semantics: 'hello' and 42 returns 42."""
+        result = evaluate_expression("'hello' and 42", {})
+        assert result == 42
+
+    def test_or_returns_first_truthy_value(self) -> None:
+        """Python semantics: 'hello' or 42 returns 'hello'."""
+        result = evaluate_expression("'hello' or 42", {})
+        assert result == "hello"
+
+    def test_or_returns_last_falsy_value(self) -> None:
+        """Python semantics: '' or 0 returns 0."""
+        result = evaluate_expression("'' or 0", {})
+        assert result == 0
+
+    def test_compile_expression_still_returns_bool(self) -> None:
+        """compile_expression wraps with bool() — existing behavior preserved."""
+        pred = compile_expression("'hello' and 42")
+        assert pred({}, {}) is True
+
+    def test_nested_short_circuit(self) -> None:
+        """Nested guard: a is not None and b is not None and a + b."""
+        result = evaluate_expression(
+            "a is not None and b is not None and a + b",
+            {"a": 3, "b": 4},
+        )
+        assert result == 7
+
+        result = evaluate_expression(
+            "a is not None and b is not None and a + b",
+            {"a": None, "b": 4},
+        )
+        assert result is False
+
+
+class TestNegativeIndexing:
+    """Test negative list/tuple indexing."""
+
+    def test_negative_one_returns_last(self) -> None:
+        result = evaluate_expression("items[-1]", {"items": [1, 2, 3, 4, 5]})
+        assert result == 5
+
+    def test_negative_two_returns_second_to_last(self) -> None:
+        result = evaluate_expression("items[-2]", {"items": [10, 20, 30]})
+        assert result == 20
+
+    def test_out_of_range_negative_returns_none(self) -> None:
+        result = evaluate_expression("items[-99]", {"items": [1, 2, 3]})
+        assert result is None
+
+    def test_negative_index_on_tuple(self) -> None:
+        result = evaluate_expression("t[-1]", {"t": (10, 20, 30)})
+        assert result == 30
+
+
+class TestSlicing:
+    """Test slice support in subscript evaluation."""
+
+    def test_basic_slice(self) -> None:
+        result = evaluate_expression("items[1:3]", {"items": [0, 1, 2, 3, 4]})
+        assert result == [1, 2]
+
+    def test_slice_from_start(self) -> None:
+        result = evaluate_expression("items[:2]", {"items": [10, 20, 30, 40]})
+        assert result == [10, 20]
+
+    def test_slice_to_end(self) -> None:
+        result = evaluate_expression("items[2:]", {"items": [10, 20, 30, 40]})
+        assert result == [30, 40]
+
+    def test_negative_slice(self) -> None:
+        result = evaluate_expression("items[-2:]", {"items": [10, 20, 30, 40]})
+        assert result == [30, 40]
+
+    def test_step_slice(self) -> None:
+        result = evaluate_expression("items[::2]", {"items": [0, 1, 2, 3, 4]})
+        assert result == [0, 2, 4]
+
+    def test_string_slice(self) -> None:
+        result = evaluate_expression("text[:5]", {"text": "hello world"})
+        assert result == "hello"
+
+    def test_slice_on_none_returns_none(self) -> None:
+        result = evaluate_expression("items[1:3]", {"items": None})
+        assert result is None
+
+
+class TestFloorDivAndPower:
+    """Test // (floor division) and ** (power) operators."""
+
+    def test_floor_division(self) -> None:
+        result = evaluate_expression("7 // 2", {})
+        assert result == 3
+
+    def test_floor_division_negative(self) -> None:
+        result = evaluate_expression("-7 // 2", {})
+        assert result == -4
+
+    def test_power(self) -> None:
+        result = evaluate_expression("2 ** 10", {})
+        assert result == 1024
+
+    def test_power_float(self) -> None:
+        result = evaluate_expression("9 ** 0.5", {})
+        assert result == 3.0
+
+    def test_floor_div_in_expression(self) -> None:
+        result = evaluate_expression("total // batch_size", {"total": 100, "batch_size": 7})
+        assert result == 14
+
+
+class TestMutatingMethodsBlocked:
+    """Mutating methods (append, extend, update) should be blocked."""
+
+    def test_append_blocked(self) -> None:
+        with pytest.raises(ExpressionError):
+            compile_expression("items.append(1)")
+
+    def test_extend_blocked(self) -> None:
+        with pytest.raises(ExpressionError):
+            compile_expression("items.extend([1, 2])")
+
+    def test_update_blocked(self) -> None:
+        with pytest.raises(ExpressionError):
+            compile_expression("data.update({'key': 'value'})")
+
+    def test_copy_still_allowed(self) -> None:
+        result = evaluate_expression("items.copy()", {"items": [1, 2, 3]})
+        assert result == [1, 2, 3]
+
+
+class TestBinopErrorWrapping:
+    """Binary operation runtime errors should be wrapped in ExpressionError."""
+
+    def test_division_by_zero(self) -> None:
+        with pytest.raises(ExpressionError, match="Division by zero"):
+            evaluate_expression("10 / 0", {})
+
+    def test_floor_division_by_zero(self) -> None:
+        with pytest.raises(ExpressionError, match="Division by zero"):
+            evaluate_expression("10 // 0", {})
+
+    def test_modulo_by_zero(self) -> None:
+        with pytest.raises(ExpressionError, match="Division by zero"):
+            evaluate_expression("10 % 0", {})
+
+    def test_type_error_in_binop(self) -> None:
+        with pytest.raises(ExpressionError, match="Type error"):
+            evaluate_expression("'hello' - 5", {})
+
+
+class TestMissingSentinelBehavior:
+    """Tests for MISSING sentinel behavior in path resolution.
+
+    The expression parser returns MISSING for unknown root names but
+    None for missing deep fields. These tests document and verify
+    that distinction.
+    """
+
+    def test_unknown_root_raises_error(self) -> None:
+        """Referencing an unknown top-level name raises ExpressionError."""
+        with pytest.raises(ExpressionError, match="missing reference"):
+            evaluate_expression("nonexistent_var", {"known": 42}, {})
+
+    def test_known_root_missing_deep_returns_none(self) -> None:
+        """Known root with missing nested field returns None via default()."""
+        result = evaluate_expression(
+            "default(data.nonexistent, 'fallback')",
+            {"data": {"other": "value"}},
+            {},
+        )
+        assert result == "fallback"
+
+    def test_none_value_propagates(self) -> None:
+        """A root that exists but is None propagates correctly."""
+        result = evaluate_expression("val", {"val": None}, {})
+        assert result is None
+
+    def test_none_deep_field_returns_none(self) -> None:
+        """When an intermediate value is None, deeper access returns None."""
+        result = evaluate_expression(
+            "default(data.child.grandchild, 'missing')",
+            {"data": {"child": None}},
+            {},
+        )
+        assert result == "missing"
+
+
+class TestCtxPipelineContext:
+    """Test ctx pipeline context access in expressions."""
+
+    def test_ctx_run_id(self) -> None:
+        """ctx.run_id resolves from data dict."""
+        ctx = {"run_id": "abc-123", "pipeline_name": "test"}
+        result = evaluate_expression("ctx.run_id", {"ctx": ctx}, {})
+        assert result == "abc-123"
+
+    def test_ctx_pipeline_name(self) -> None:
+        """ctx.pipeline_name resolves correctly."""
+        ctx = {"run_id": "", "pipeline_name": "order-processing"}
+        result = evaluate_expression("ctx.pipeline_name", {"ctx": ctx}, {})
+        assert result == "order-processing"
+
+    def test_ctx_node_name(self) -> None:
+        """ctx.node_name resolves correctly."""
+        ctx = {"node_name": "analyzer", "run_id": ""}
+        result = evaluate_expression("ctx.node_name", {"ctx": ctx}, {})
+        assert result == "analyzer"
+
+    def test_ctx_services_list(self) -> None:
+        """ctx.services returns a list."""
+        ctx = {"services": ["pipeline_memory", "entity_state"]}
+        result = evaluate_expression("ctx.services", {"ctx": ctx}, {})
+        assert result == ["pipeline_memory", "entity_state"]
+
+    def test_ctx_missing_field_returns_none(self) -> None:
+        """ctx.nonexistent returns None (deep field miss)."""
+        ctx = {"run_id": "abc"}
+        result = evaluate_expression("ctx.nonexistent", {"ctx": ctx}, {})
+        assert result is None
+
+    def test_ctx_empty_returns_empty_dict(self) -> None:
+        """ctx resolves to empty dict when not injected."""
+        result = evaluate_expression("ctx", {}, {})
+        assert result == {}
+
+    def test_ctx_in_comparison(self) -> None:
+        """ctx fields work in comparison expressions."""
+        ctx = {"pipeline_name": "order-processing"}
+        pred = compile_expression("ctx.pipeline_name == 'order-processing'")
+        assert pred({"ctx": ctx}, {}) is True
+        assert pred({"ctx": {"pipeline_name": "other"}}, {}) is False
+
+    def test_ctx_in_string_concatenation(self) -> None:
+        """ctx fields work in string expressions."""
+        ctx = {"run_id": "xyz"}
+        result = evaluate_expression("'run-' + ctx.run_id", {"ctx": ctx}, {})
+        assert result == "run-xyz"
+
+    def test_ctx_does_not_shadow_node_results(self) -> None:
+        """ctx doesn't interfere with regular node result access."""
+        data = {
+            "ctx": {"run_id": "abc"},
+            "analyzer": {"score": 0.9},
+        }
+        result = evaluate_expression("analyzer.score", data, {})
+        assert result == 0.9

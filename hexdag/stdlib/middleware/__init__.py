@@ -32,6 +32,7 @@ Example
     )
 """
 
+from hexdag.stdlib.middleware.batch_generation import BatchGeneration
 from hexdag.stdlib.middleware.compose import compose
 from hexdag.stdlib.middleware.distributed_cache import DistributedCache
 from hexdag.stdlib.middleware.observable import ObservableLLM
@@ -46,6 +47,7 @@ __all__ = [
     "ObservableLLM",
     "ObservableToolRouter",
     # User middleware (YAML-configurable)
+    "BatchGeneration",
     "DistributedCache",
     "RetryWithBackoff",
     "RateLimiter",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
@@ -59,6 +60,90 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCall] | None = None
     finish_reason: str | None = None
     usage: TokenUsage | None = None
+
+
+class BatchItemStatus(StrEnum):
+    """Status of an individual item within a batch."""
+
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class BatchItemResult(BaseModel):
+    """Result for a single item in a batch response.
+
+    Attributes
+    ----------
+    index : int
+        Original position in the input list (for ordering).
+    content : str | None
+        Generated text (None if failed).
+    status : BatchItemStatus
+        Whether this item succeeded.
+    error : str | None
+        Error message if status is FAILED.
+    usage : TokenUsage | None
+        Per-item token usage (if available).
+    """
+
+    index: int
+    content: str | None
+    status: BatchItemStatus = BatchItemStatus.COMPLETED
+    error: str | None = None
+    usage: TokenUsage | None = None
+
+
+class BatchResult(BaseModel):
+    """Aggregated result of a batch generation call.
+
+    Attributes
+    ----------
+    items : list[BatchItemResult]
+        Per-item results, ordered by original input index.
+    total_usage : TokenUsage | None
+        Aggregated token usage across all items.
+    provider : str | None
+        Which provider fulfilled the batch (e.g. ``"gather"``).
+    """
+
+    items: list[BatchItemResult]
+    total_usage: TokenUsage | None = None
+    provider: str | None = None
+
+    @property
+    def contents(self) -> list[str | None]:
+        """Extract just the content strings in input order."""
+        return [item.content for item in sorted(self.items, key=lambda i: i.index)]
+
+    @staticmethod
+    def aggregate_usage(usages: list[TokenUsage | None]) -> TokenUsage | None:
+        """Sum token usage across multiple items.
+
+        Parameters
+        ----------
+        usages : list[TokenUsage | None]
+            Per-item usage values.
+
+        Returns
+        -------
+        TokenUsage | None
+            Aggregated totals, or None if no usage data.
+        """
+        total_in = total_out = total = 0
+        any_usage = False
+        for u in usages:
+            if u is not None:
+                any_usage = True
+                total_in += u.input_tokens
+                total_out += u.output_tokens
+                total += u.total_tokens
+        if not any_usage:
+            return None
+        return TokenUsage(
+            input_tokens=total_in,
+            output_tokens=total_out,
+            total_tokens=total,
+        )
 
 
 @runtime_checkable
@@ -475,6 +560,49 @@ class SupportsUsageTracking(Protocol):
         -------
         TokenUsage | None
             Token usage data, or None if not available
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsBatchGeneration(Protocol):
+    """Optional protocol for batch text generation.
+
+    Adapters or middleware implementing this protocol can process multiple
+    independent message lists concurrently, similar to LangChain's ``batch()``.
+
+    The ``BatchGeneration`` middleware implements this protocol for any adapter
+    by firing concurrent ``aresponse()`` calls via ``asyncio.gather()`` with
+    a semaphore for concurrency control.
+
+    Examples
+    --------
+    Using via middleware::
+
+        llm = BatchGeneration(OpenAIAdapter(api_key="..."), max_concurrency=10)
+        result = await llm.aresponse_batch([
+            [Message(role="user", content="Summarise doc A")],
+            [Message(role="user", content="Summarise doc B")],
+        ])
+        print(result.contents)  # ["Summary A...", "Summary B..."]
+    """
+
+    @abstractmethod
+    async def aresponse_batch(
+        self,
+        message_lists: list[MessageList],
+    ) -> BatchResult:
+        """Generate responses for multiple message lists concurrently.
+
+        Parameters
+        ----------
+        message_lists : list[MessageList]
+            Independent conversations to process in batch.
+
+        Returns
+        -------
+        BatchResult
+            Aggregated results with per-item status and usage.
         """
         ...
 

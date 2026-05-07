@@ -3,6 +3,7 @@
 from hexdag.compiler.reference_resolver import (
     extract_refs_from_expressions,
     extract_refs_from_mapping,
+    extract_refs_from_string,
     extract_refs_from_template,
 )
 
@@ -109,3 +110,189 @@ class TestExtractRefsFromTemplate:
         template = "Result: {{unknown.field}}"
         refs = extract_refs_from_template(template, KNOWN_NODES)
         assert refs == set()
+
+
+MACRO_INSTANCES = frozenset({"extract_rate"})
+
+
+class TestMacroPrefixedRefs:
+    """Tests for macro-prefixed node reference detection."""
+
+    def test_macro_prefixed_ref_in_mapping(self):
+        """Macro-generated node name in input_mapping infers macro instance as dep."""
+        known = frozenset({"extract_rate", "other"})
+        mapping = {"data": "extract_rate_result.output"}
+        refs = extract_refs_from_mapping(mapping, known, MACRO_INSTANCES)
+        assert refs == {"extract_rate"}
+
+    def test_macro_prefixed_ref_in_expressions(self):
+        """Macro-generated node name in expressions infers macro instance as dep."""
+        known = frozenset({"extract_rate", "other"})
+        expressions = {"total": "extract_rate_final.amount * 2"}
+        refs = extract_refs_from_expressions(expressions, known, MACRO_INSTANCES)
+        assert refs == {"extract_rate"}
+
+    def test_macro_prefixed_ref_in_template(self):
+        """Macro-generated node name in template infers macro instance as dep."""
+        known = frozenset({"extract_rate", "other"})
+        template = "Rate: {{extract_rate_result.rate}}"
+        refs = extract_refs_from_template(template, known, MACRO_INSTANCES)
+        assert refs == {"extract_rate"}
+
+    def test_non_macro_prefix_ignored(self):
+        """Unknown node name not matching a macro prefix is ignored."""
+        known = frozenset({"extract_rate", "other"})
+        mapping = {"data": "unknown_node.output"}
+        refs = extract_refs_from_mapping(mapping, known, MACRO_INSTANCES)
+        assert refs == set()
+
+    def test_no_macro_instances_backward_compatible(self):
+        """Omitting macro_instances works (backward compatible)."""
+        known = frozenset({"analyzer"})
+        mapping = {"data": "analyzer.output"}
+        refs = extract_refs_from_mapping(mapping, known)
+        assert refs == {"analyzer"}
+
+    def test_overlapping_macro_names_longest_wins(self):
+        """When macros have overlapping prefixes, the longest match wins.
+
+        Regression: frozenset iteration is arbitrary, so without sorting by
+        length descending, 'extract' could match 'extract_rate_node' before
+        the correct 'extract_rate' gets a chance.
+        """
+        macros = frozenset({"extract", "extract_rate"})
+        known = frozenset({"extract", "extract_rate"})
+        mapping = {"data": "extract_rate_node.output"}
+        refs = extract_refs_from_mapping(mapping, known, macros)
+        assert refs == {"extract_rate"}
+
+    def test_overlapping_macro_names_bare_name(self):
+        """Bare macro-prefixed name also matches longest prefix."""
+        macros = frozenset({"extract", "extract_rate"})
+        known = frozenset({"extract", "extract_rate"})
+        refs = extract_refs_from_string("extract_rate_node", known, macros)
+        assert refs == {"extract_rate"}
+
+
+class TestExtractRefsFromString:
+    """Tests for extract_refs_from_string (used by composite node scanning)."""
+
+    def test_node_field_reference(self):
+        refs = extract_refs_from_string("checker.done == False", KNOWN_NODES)
+        assert refs == set()  # checker not in KNOWN_NODES
+
+    def test_known_node_reference(self):
+        refs = extract_refs_from_string("analyzer.done == True", KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_macro_prefixed_reference(self):
+        known = frozenset({"extract_rate"})
+        refs = extract_refs_from_string("extract_rate_result.flag == True", known, MACRO_INSTANCES)
+        assert refs == {"extract_rate"}
+
+
+class TestBareNodeNames:
+    """Tests for bare node name detection (no dot) in reference extraction."""
+
+    def test_bare_known_node_in_mapping(self):
+        """Bare node name in input_mapping resolves as a dependency."""
+        mapping = {"data": "analyzer"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_bare_macro_prefixed_name_in_mapping(self):
+        """Bare macro-generated node name infers the macro instance as dep."""
+        known = frozenset({"extract_rate"})
+        mapping = {"data": "extract_rate_result"}
+        refs = extract_refs_from_mapping(mapping, known, MACRO_INSTANCES)
+        assert refs == {"extract_rate"}
+
+    def test_bare_unknown_name_ignored(self):
+        """Bare name not matching any known node or macro is ignored."""
+        mapping = {"data": "unknown_thing"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == set()
+
+    def test_bare_known_node_in_string(self):
+        """Bare node name in a string ref (e.g., when clause)."""
+        refs = extract_refs_from_string("analyzer", KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_bare_builtin_name_not_treated_as_node(self):
+        """Builtin names like 'len' should not be treated as node refs."""
+        refs = extract_refs_from_string("len", KNOWN_NODES)
+        assert refs == set()
+
+
+class TestListValuesInMapping:
+    """Tests for list-valued input_mapping entries."""
+
+    def test_list_of_node_refs(self):
+        """List values in input_mapping should be scanned for node refs."""
+        mapping = {"data": ["analyzer.result", "fetcher.response"]}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer", "fetcher"}
+
+    def test_mixed_list_and_string(self):
+        """Mix of string and list values."""
+        mapping = {
+            "single": "analyzer.output",
+            "multi": ["fetcher.data", "order.id"],
+        }
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer", "fetcher", "order"}
+
+    def test_list_with_non_string_items_skipped(self):
+        """Non-string items within a list are safely skipped."""
+        mapping = {"data": ["analyzer.result", 42, None, True]}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_numeric_value_skipped(self):
+        """Numeric values in input_mapping are silently skipped."""
+        mapping = {"count": 42}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == set()
+
+    def test_empty_list_returns_no_refs(self):
+        """Empty list produces no refs."""
+        mapping = {"data": []}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == set()
+
+
+class TestCtxReservedPrefix:
+    """ctx references must not be treated as node dependencies."""
+
+    def test_ctx_field_not_a_dependency(self):
+        """ctx.run_id should not extract as a node reference."""
+        mapping = {"tag": "ctx.run_id"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == set()
+
+    def test_ctx_in_expression(self):
+        """ctx.pipeline_name in expression is not a dep."""
+        exprs = {"check": "ctx.pipeline_name == 'test'"}
+        refs = extract_refs_from_expressions(exprs, KNOWN_NODES)
+        assert refs == set()
+
+    def test_ctx_in_template(self):
+        """{{ctx.run_id}} in template is not a dep."""
+        template = "Run {{ctx.run_id}} for {{analyzer.result}}"
+        refs = extract_refs_from_template(template, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_ctx_in_when_string(self):
+        """ctx.pipeline_name in a when clause string is not a dep."""
+        refs = extract_refs_from_string("ctx.pipeline_name == 'test'", KNOWN_NODES)
+        assert refs == set()
+
+    def test_ctx_mixed_with_node_refs(self):
+        """ctx refs coexist with real node refs."""
+        mapping = {
+            "tag": "ctx.run_id",
+            "data": "analyzer.output",
+            "input_val": "$input.field",
+        }
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}

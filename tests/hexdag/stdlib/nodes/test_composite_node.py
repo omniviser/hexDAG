@@ -564,6 +564,7 @@ spec:
       spec:
         mode: while
         condition: "state.attempts < 3"
+        body: "json.dumps"
         initial_state:
           attempts: 0
         state_update:
@@ -590,6 +591,7 @@ spec:
       spec:
         mode: for-each
         items: "$input.items"
+        body: "json.dumps"
         concurrency: 5
 """
         builder = YamlPipelineBuilder()

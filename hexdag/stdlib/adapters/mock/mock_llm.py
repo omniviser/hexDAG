@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.ports.llm import (
     LLM,
+    BatchItemResult,
+    BatchItemStatus,
+    BatchResult,
     MessageList,
+    SupportsBatchGeneration,
     SupportsFunctionCalling,
     SupportsGeneration,
     SupportsStructuredOutput,
@@ -28,6 +32,7 @@ class MockLLM(
     SupportsFunctionCalling,
     SupportsStructuredOutput,
     SupportsUsageTracking,
+    SupportsBatchGeneration,
     yaml_alias="mock_llm",
     port="llm",
 ):
@@ -244,6 +249,37 @@ class MockLLM(
             status="healthy",
             adapter_name="MockLLM",
             latency_ms=0.1,
+        )
+
+    async def aresponse_batch(
+        self,
+        message_lists: list[MessageList],
+    ) -> BatchResult:
+        """Mock batch — calls aresponse() for each item sequentially."""
+        items: list[BatchItemResult] = []
+        for i, messages in enumerate(message_lists):
+            try:
+                content = await self.aresponse(messages)
+                items.append(
+                    BatchItemResult(
+                        index=i,
+                        content=content,
+                        status=BatchItemStatus.COMPLETED,
+                    )
+                )
+            except Exception as exc:
+                items.append(
+                    BatchItemResult(
+                        index=i,
+                        content=None,
+                        status=BatchItemStatus.FAILED,
+                        error=str(exc),
+                    )
+                )
+        return BatchResult(
+            items=items,
+            total_usage=BatchResult.aggregate_usage([item.usage for item in items]),
+            provider="mock",
         )
 
     # Testing utilities (not part of the LLM port interface)

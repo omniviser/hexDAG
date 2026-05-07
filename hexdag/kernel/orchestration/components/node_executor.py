@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 else:
     ObserverManager = Any
 
-from hexdag.kernel.context import get_observer_manager, set_current_node_name
+from hexdag.kernel.context import get_ctx_dict, get_observer_manager, set_current_node_name
 from hexdag.kernel.domain.dag import NodeSpec, NodeValidationError
 from hexdag.kernel.exceptions import (
     NodeExecutionError,  # noqa: F401
@@ -198,6 +198,8 @@ class NodeExecutor:
                         data_context.update(validated_input)
                     elif hasattr(validated_input, "model_dump"):
                         data_context.update(validated_input.model_dump())
+                    # Inject read-only pipeline context
+                    data_context["ctx"] = get_ctx_dict(node_name=node_name)
                     condition_result = predicate(data_context, {})
 
                     if not condition_result:

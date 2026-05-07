@@ -32,6 +32,7 @@ from hexdag.compiler.preprocessing.template import TemplatePlugin  # noqa: F401
 from hexdag.compiler.reference_resolver import (
     extract_refs_from_expressions,
     extract_refs_from_mapping,
+    extract_refs_from_string,
     extract_refs_from_template,
 )
 from hexdag.compiler.yaml_validator import YamlValidator
@@ -557,12 +558,28 @@ class YamlPipelineBuilder:
         # Expose pipeline ports for entity plugins (e.g., port requirement validation)
         self.pipeline_ports = spec.get("ports", {})
 
-        # --- Pass 1: collect all node names ---
+        # --- Pass 1: collect all node names and macro instances ---
         known_nodes = frozenset(
             nc.get("metadata", {}).get("name")
             for nc in nodes_list
             if nc.get("metadata", {}).get("name")
         )
+        macro_instances = frozenset(
+            nc.get("metadata", {}).get("name")
+            for nc in nodes_list
+            if nc.get("metadata", {}).get("name") and nc.get("kind") == "macro_invocation"
+        )
+
+        # Validate node names don't collide with reserved expression
+        # namespaces (ctx, $input, state, input).
+        _RESERVED_NAMES = frozenset({"ctx", "$input", "state", "input"})
+        bad = known_nodes & _RESERVED_NAMES
+        if bad:
+            raise YamlPipelineBuilderError(
+                f"Node names conflict with reserved expression "
+                f"namespaces: {sorted(bad)}. "
+                f"Choose different node names."
+            )
 
         # --- Pass 2: infer deps & build ---
         # Track the previous node(s) for implicit sequential dependencies.
@@ -578,7 +595,7 @@ class YamlPipelineBuilder:
             has_deps_key = "dependencies" in node_config or "dependencies" in node_spec
 
             # Infer deps from input_mapping / expressions / templates
-            inferred_deps = self._infer_deps(node_config, known_nodes)
+            inferred_deps = self._infer_deps(node_config, known_nodes, macro_instances)
 
             # Merge wait_for into deps (ordering only, no data flow)
             wait_for = list(base.wait_for) if base.wait_for else []
@@ -594,10 +611,27 @@ class YamlPipelineBuilder:
                         DeprecationWarning,
                         stacklevel=2,
                     )
-                # Merge wait_for into explicit deps
-                if wait_for:
+                # Warn when inferred deps are missing from explicit list —
+                # the node references upstream data that isn't declared as a
+                # dependency, which may cause execution ordering issues.
+                deps_augmented = False
+                if inferred_deps:
+                    missing = inferred_deps - explicit_deps
+                    if missing:
+                        warnings.warn(
+                            f"Node '{node_id}': input_mapping/expressions/templates "
+                            f"reference nodes {sorted(missing)} that are not in "
+                            f"'dependencies'. These will be added automatically. "
+                            f"Consider removing the explicit 'dependencies' key "
+                            f"and letting the builder infer them.",
+                            stacklevel=2,
+                        )
+                        explicit_deps |= missing
+                        deps_augmented = True
+                # Merge wait_for and any augmented deps into node_config
+                if wait_for or deps_augmented:
                     merged = list(explicit_deps | set(wait_for))
-                    node_config = {**node_config, "dependencies": merged}
+                    node_config = {**node_config, "dependencies": sorted(merged)}
             elif inferred_deps or wait_for:
                 # No explicit deps — use inferred + wait_for
                 merged_deps = inferred_deps | set(wait_for)
@@ -629,6 +663,58 @@ class YamlPipelineBuilder:
             elif node_id:
                 previous_node_ids = [node_id]
 
+        # --- Pass 2.5: wire routing switch nodes ---
+        # When a composite_node with mode=switch has route_downstream=true,
+        # auto-inject `when` clauses on target nodes so only the selected
+        # branch executes.  This is a compiler-only transform — at runtime
+        # the switch node returns {"result": "action_name", ...} and the
+        # injected `when` clauses use existing skip mechanics.
+        for node_config in nodes_list:
+            nc_spec = node_config.get("spec", {})
+            if (
+                node_config.get("kind") == "composite_node"
+                and nc_spec.get("mode") == "switch"
+                and nc_spec.get("route_downstream")
+            ):
+                router_name = node_config.get("metadata", {}).get("name")
+                if not router_name or router_name not in graph.nodes:
+                    continue
+
+                # Collect action targets from branches + else_action
+                targets: set[str] = set()
+                for branch in nc_spec.get("branches", []):
+                    action = branch.get("action")
+                    if action:
+                        if action not in graph.nodes:
+                            raise YamlPipelineBuilderError(
+                                f"Route target '{action}' in node "
+                                f"'{router_name}' does not exist. "
+                                f"Available nodes: "
+                                f"{sorted(graph.nodes.keys())}"
+                            )
+                        targets.add(action)
+                else_action = nc_spec.get("else_action")
+                if else_action:
+                    if else_action not in graph.nodes:
+                        raise YamlPipelineBuilderError(
+                            f"Route else_action '{else_action}' in "
+                            f"node '{router_name}' does not exist. "
+                            f"Available nodes: "
+                            f"{sorted(graph.nodes.keys())}"
+                        )
+                    targets.add(else_action)
+
+                for target_name in targets:
+                    target_spec = graph.nodes[target_name]
+                    new_deps = target_spec.deps | {router_name}
+                    route_when = f"{router_name}.result == '{target_name}'"
+                    if target_spec.when:
+                        route_when = f"({target_spec.when}) and ({route_when})"
+                    graph.nodes[target_name] = target_spec.with_when(route_when).with_deps(new_deps)
+                    graph._forward_edges[router_name].add(target_name)
+                    graph._reverse_edges[target_name].add(router_name)
+                graph._invalidate_caches()
+
         # --- Pass 3: ensure on_error handlers depend on the failing node ---
         for node_name in list(graph.nodes):
             node_spec = graph.nodes[node_name]
@@ -644,8 +730,12 @@ class YamlPipelineBuilder:
         return graph
 
     @staticmethod
-    def _infer_deps(node_config: dict[str, Any], known_nodes: frozenset[str]) -> set[str]:
-        """Infer dependencies from input_mapping, expressions, and templates.
+    def _infer_deps(
+        node_config: dict[str, Any],
+        known_nodes: frozenset[str],
+        macro_instances: frozenset[str] = frozenset(),
+    ) -> set[str]:
+        """Infer deps from input_mapping, expressions, templates, composite fields, and when clauses.
 
         Parameters
         ----------
@@ -653,6 +743,8 @@ class YamlPipelineBuilder:
             Node configuration dictionary.
         known_nodes : frozenset[str]
             All node names in the pipeline.
+        macro_instances : frozenset[str]
+            Macro invocation names for prefix-based matching.
 
         Returns
         -------
@@ -669,26 +761,54 @@ class YamlPipelineBuilder:
         # 1. input_mapping
         input_mapping = spec.get("input_mapping")
         if isinstance(input_mapping, dict):
-            refs |= extract_refs_from_mapping(input_mapping, other_nodes)
+            refs |= extract_refs_from_mapping(input_mapping, other_nodes, macro_instances)
 
         # 2. expressions
         expressions = spec.get("expressions")
         if isinstance(expressions, dict):
-            refs |= extract_refs_from_expressions(expressions, other_nodes)
+            refs |= extract_refs_from_expressions(expressions, other_nodes, macro_instances)
 
         # 3. prompt_template / template (string or dict format)
         for key in ("prompt_template", "template", "initial_prompt_template", "main_prompt"):
             template = spec.get(key)
             if isinstance(template, str):
-                refs |= extract_refs_from_template(template, other_nodes)
+                refs |= extract_refs_from_template(template, other_nodes, macro_instances)
             elif isinstance(template, dict):
                 # Dict-format prompt templates: extract refs from sub-fields
                 for subkey in ("template", "human_message", "system_message"):
                     if isinstance(template.get(subkey), str):
-                        refs |= extract_refs_from_template(template[subkey], other_nodes)
+                        refs |= extract_refs_from_template(
+                            template[subkey], other_nodes, macro_instances
+                        )
                 for msg in template.get("messages", []):
                     if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                        refs |= extract_refs_from_template(msg["content"], other_nodes)
+                        refs |= extract_refs_from_template(
+                            msg["content"], other_nodes, macro_instances
+                        )
+
+        # 4. Composite node fields: condition, branches[].condition, items
+        for field_key in ("condition", "items"):
+            field_val = spec.get(field_key)
+            if isinstance(field_val, str):
+                refs |= extract_refs_from_string(field_val, other_nodes, macro_instances)
+
+        branches = spec.get("branches")
+        if isinstance(branches, list):
+            for branch in branches:
+                if isinstance(branch, dict):
+                    cond = branch.get("condition")
+                    if isinstance(cond, str):
+                        refs |= extract_refs_from_string(cond, other_nodes, macro_instances)
+
+        # 5. Composite node state_update (dict of expression strings)
+        state_update = spec.get("state_update")
+        if isinstance(state_update, dict):
+            refs |= extract_refs_from_expressions(state_update, other_nodes, macro_instances)
+
+        # 6. when clause (runtime conditional — still needs data dependency)
+        when_expr = spec.get("when")
+        if isinstance(when_expr, str):
+            refs |= extract_refs_from_string(when_expr, other_nodes, macro_instances)
 
         return refs
 

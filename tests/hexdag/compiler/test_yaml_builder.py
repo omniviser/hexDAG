@@ -501,6 +501,9 @@ kind: Pipeline
 metadata:
   name: test_template_preservation
 spec:
+  ports:
+    llm:
+      adapter: hexdag.stdlib.adapters.mock.MockLLM
   nodes:
     - kind: function_node
       metadata:
@@ -1415,6 +1418,45 @@ class TestDeprecationWarning:
         assert len(deprecation_warnings) == 0
 
 
+class TestMissingInferredDepsWarning:
+    """Regression: when explicit deps miss inferred ones, a warning is emitted
+    and the missing deps are added automatically."""
+
+    def test_missing_inferred_dep_emits_warning_and_adds(self):
+        """Explicit deps [a] + inferred {a, b} -> warns about [b] and adds it."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: a }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: b }
+  spec:
+    fn: "json.dumps"
+  dependencies: []
+
+- kind: function_node
+  metadata: { name: c }
+  spec:
+    fn: "json.dumps"
+    input_mapping:
+      data_a: a.result
+      data_b: b.result
+  dependencies: [a]
+"""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            graph = _build_from_nodes(nodes)
+
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        # Should warn that 'b' is referenced but not in explicit deps
+        msgs = [str(x.message) for x in user_warnings]
+        assert any("b" in m for m in msgs), f"Expected warning about 'b', got: {msgs}"
+        # And 'b' should have been added to the dependencies
+        assert "b" in graph.nodes["c"].deps
+
+
 class TestBuilderInlineConfig:
     """Tests for accessing inline_config from builder after build."""
 
@@ -1641,3 +1683,350 @@ spec:
         risky_wave = next(i for i, w in enumerate(waves) if "risky" in w)
         handler_wave = next(i for i, w in enumerate(waves) if "handler" in w)
         assert handler_wave > risky_wave
+
+
+# ============================================================================
+# Composite Node Condition Dependency Inference Tests
+# ============================================================================
+
+
+class TestCompositeConditionDepInference:
+    """Dependencies inferred from composite node condition, branches, and items fields."""
+
+    def test_condition_infers_dep(self):
+        """spec.condition referencing a node creates a dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: checker }
+  spec:
+    fn: "json.dumps"
+
+- kind: composite_node
+  metadata: { name: loop }
+  spec:
+    mode: while
+    condition: "checker.done == False"
+    body: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "checker" in graph.nodes["loop"].deps
+
+    def test_switch_branch_condition_infers_dep(self):
+        """spec.branches[].condition in switch mode creates a dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: classifier }
+  spec:
+    fn: "json.dumps"
+
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "classifier.category == 'A'"
+        action: "handle_a"
+    else_action: "handle_default"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "classifier" in graph.nodes["router"].deps
+
+    def test_items_infers_dep(self):
+        """spec.items referencing a node creates a dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: producer }
+  spec:
+    fn: "json.dumps"
+
+- kind: composite_node
+  metadata: { name: processor }
+  spec:
+    mode: for-each
+    items: "producer.items"
+    body: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "producer" in graph.nodes["processor"].deps
+
+    def test_condition_without_node_ref_no_dep(self):
+        """Condition with only literals/builtins doesn't create spurious deps."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: step1 }
+  spec:
+    fn: "json.dumps"
+
+- kind: composite_node
+  metadata: { name: loop }
+  spec:
+    mode: while
+    condition: "len(items) > 0"
+    body: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+        # No node refs in condition — should get implicit sequential dep on step1
+        assert "step1" in graph.nodes["loop"].deps
+
+
+class TestWhenClauseDepInference:
+    """Dependencies inferred from when: clause expressions."""
+
+    def test_when_clause_infers_dep(self):
+        """when: referencing a node creates a dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: checker }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: processor }
+  spec:
+    fn: "json.dumps"
+    when: "checker.done == True"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "checker" in graph.nodes["processor"].deps
+
+    def test_when_clause_no_node_ref(self):
+        """when: with only literals/state doesn't create spurious deps."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: step1 }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: step2 }
+  spec:
+    fn: "json.dumps"
+    when: "state.iteration < 10"
+"""
+        graph = _build_from_nodes(nodes)
+        # No node refs in when — should get implicit sequential dep on step1
+        assert "step1" in graph.nodes["step2"].deps
+
+
+class TestStateUpdateDepInference:
+    """Dependencies inferred from state_update expressions in composite nodes."""
+
+    def test_state_update_infers_dep(self):
+        """state_update referencing a node creates a dependency."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: fetcher }
+  spec:
+    fn: "json.dumps"
+
+- kind: composite_node
+  metadata: { name: loop }
+  spec:
+    mode: while
+    condition: "state.counter < 5"
+    initial_state:
+      counter: 0
+      latest: null
+    state_update:
+      counter: "state.counter + 1"
+      latest: "fetcher.value"
+    body: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "fetcher" in graph.nodes["loop"].deps
+
+    def test_state_update_no_node_ref(self):
+        """state_update with only state/literals doesn't create spurious deps."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: step1 }
+  spec:
+    fn: "json.dumps"
+
+- kind: composite_node
+  metadata: { name: loop }
+  spec:
+    mode: while
+    condition: "state.counter < 5"
+    initial_state:
+      counter: 0
+    state_update:
+      counter: "state.counter + 1"
+    body: "json.dumps"
+"""
+        graph = _build_from_nodes(nodes)
+        # No explicit node refs in state_update — implicit sequential dep on step1
+        assert "step1" in graph.nodes["loop"].deps
+
+
+# ============================================================================
+# Route Downstream (Pass 2.5) Tests
+# ============================================================================
+
+
+class TestRouteDownstream:
+    """Tests for route_downstream on composite_node mode=switch."""
+
+    def test_route_downstream_injects_when(self):
+        """Target nodes get when clauses based on router result."""
+        nodes = """
+- kind: function_node
+  metadata: { name: classifier }
+  spec:
+    fn: "json.loads"
+
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "classifier.category == 'urgent'"
+        action: urgent_handler
+      - condition: "classifier.category == 'normal'"
+        action: normal_handler
+    else_action: fallback
+    route_downstream: true
+
+- kind: function_node
+  metadata: { name: urgent_handler }
+  spec:
+    fn: "json.loads"
+
+- kind: function_node
+  metadata: { name: normal_handler }
+  spec:
+    fn: "json.loads"
+
+- kind: function_node
+  metadata: { name: fallback }
+  spec:
+    fn: "json.loads"
+"""
+        graph = _build_from_nodes(nodes)
+
+        # All targets should depend on the router
+        assert "router" in graph.nodes["urgent_handler"].deps
+        assert "router" in graph.nodes["normal_handler"].deps
+        assert "router" in graph.nodes["fallback"].deps
+
+        # All targets should have when clauses
+        assert "router.result == 'urgent_handler'" in (graph.nodes["urgent_handler"].when)
+        assert "router.result == 'normal_handler'" in (graph.nodes["normal_handler"].when)
+        assert "router.result == 'fallback'" in (graph.nodes["fallback"].when)
+
+    def test_route_downstream_preserves_existing_when(self):
+        """Existing when clause is AND'd with the route condition."""
+        nodes = """
+- kind: function_node
+  metadata: { name: classifier }
+  spec:
+    fn: "json.loads"
+
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "classifier.priority == 'high'"
+        action: handler
+    route_downstream: true
+
+- kind: function_node
+  metadata: { name: handler }
+  spec:
+    fn: "json.loads"
+    when: "classifier.score > 0.5"
+"""
+        graph = _build_from_nodes(nodes)
+        when = graph.nodes["handler"].when
+        assert "classifier.score > 0.5" in when
+        assert "router.result == 'handler'" in when
+        assert " and " in when
+
+    def test_route_downstream_invalid_target(self):
+        """Action pointing to non-existent node raises build error."""
+        nodes = """
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "true"
+        action: nonexistent_node
+    route_downstream: true
+"""
+        with pytest.raises(YamlPipelineBuilderError, match="nonexistent_node"):
+            _build_from_nodes(nodes)
+
+    def test_route_downstream_invalid_else_action(self):
+        """else_action pointing to non-existent node raises build error."""
+        nodes = """
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "true"
+        action: router
+    else_action: missing_node
+    route_downstream: true
+"""
+        with pytest.raises(YamlPipelineBuilderError, match="missing_node"):
+            _build_from_nodes(nodes)
+
+    def test_switch_without_route_downstream_unchanged(self):
+        """Switch node without route_downstream doesn't inject when."""
+        nodes = """
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "true"
+        action: handler
+
+- kind: function_node
+  metadata: { name: handler }
+  spec:
+    fn: "json.loads"
+"""
+        graph = _build_from_nodes(nodes)
+        # handler should NOT have a router-injected when clause
+        assert graph.nodes["handler"].when is None
+
+
+class TestReservedNodeNames:
+    """Validate that reserved expression namespace names are rejected."""
+
+    def test_ctx_node_name_rejected(self):
+        """Node named 'ctx' is rejected."""
+        nodes = """
+- kind: function_node
+  metadata: { name: ctx }
+  spec:
+    fn: "json.loads"
+"""
+        with pytest.raises(YamlPipelineBuilderError, match="reserved"):
+            _build_from_nodes(nodes)
+
+    def test_input_node_name_rejected(self):
+        """Node named 'input' is rejected."""
+        nodes = """
+- kind: function_node
+  metadata: { name: input }
+  spec:
+    fn: "json.loads"
+"""
+        with pytest.raises(YamlPipelineBuilderError, match="reserved"):
+            _build_from_nodes(nodes)
+
+    def test_state_node_name_rejected(self):
+        """Node named 'state' is rejected."""
+        nodes = """
+- kind: function_node
+  metadata: { name: state }
+  spec:
+    fn: "json.loads"
+"""
+        with pytest.raises(YamlPipelineBuilderError, match="reserved"):
+            _build_from_nodes(nodes)

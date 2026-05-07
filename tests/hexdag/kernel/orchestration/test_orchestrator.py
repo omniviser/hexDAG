@@ -1274,3 +1274,73 @@ class TestCapabilityValidation:
             )
 
         assert not executed, "No nodes should execute when validation fails"
+
+
+# ---------------------------------------------------------------------------
+# Pipeline timeout tests
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineTimeout:
+    """Verify that pipeline_timeout raises OrchestratorError when exceeded."""
+
+    @pytest.mark.asyncio
+    async def test_pipeline_timeout_raises(self) -> None:
+        """A pipeline that exceeds pipeline_timeout must raise."""
+
+        async def slow_node(x: int, **ports: object) -> int:
+            await asyncio.sleep(5)
+            return x + 1
+
+        graph = DirectedGraph([
+            NodeSpec(name="slow", fn=slow_node, deps=frozenset()),
+        ])
+        orchestrator = Orchestrator()
+
+        with pytest.raises(OrchestratorError, match="timed out"):
+            await orchestrator.run(
+                graph,
+                initial_input=1,
+                validate=False,
+                pipeline_timeout=0.1,
+            )
+
+    @pytest.mark.asyncio
+    async def test_no_timeout_when_fast_enough(self) -> None:
+        """A pipeline that completes within timeout must succeed normally."""
+
+        async def fast_node(x: int, **ports: object) -> int:
+            return x + 1
+
+        graph = DirectedGraph([
+            NodeSpec(name="fast", fn=fast_node, deps=frozenset()),
+        ])
+        orchestrator = Orchestrator()
+
+        result = await orchestrator.run(
+            graph,
+            initial_input=1,
+            validate=False,
+            pipeline_timeout=10.0,
+        )
+        assert result["fast"] == 2
+
+    @pytest.mark.asyncio
+    async def test_no_timeout_when_none(self) -> None:
+        """pipeline_timeout=None means no timeout (default behavior)."""
+
+        async def fast_node(x: int, **ports: object) -> int:
+            return x + 1
+
+        graph = DirectedGraph([
+            NodeSpec(name="fast", fn=fast_node, deps=frozenset()),
+        ])
+        orchestrator = Orchestrator()
+
+        result = await orchestrator.run(
+            graph,
+            initial_input=1,
+            validate=False,
+            pipeline_timeout=None,
+        )
+        assert result["fast"] == 2

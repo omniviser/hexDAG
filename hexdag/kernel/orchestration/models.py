@@ -55,6 +55,7 @@ class OrchestratorConfig:
     max_concurrent_nodes: int = 10
     strict_validation: bool = False
     default_node_timeout: float | None = None
+    pipeline_timeout: float | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -66,6 +67,11 @@ class OrchestratorConfig:
         if self.default_node_timeout is not None and self.default_node_timeout <= 0:
             raise ValidationError(
                 "default_node_timeout", "must be positive or None", self.default_node_timeout
+            )
+
+        if self.pipeline_timeout is not None and self.pipeline_timeout <= 0:
+            raise ValidationError(
+                "pipeline_timeout", "must be positive or None", self.pipeline_timeout
             )
 
 

@@ -293,6 +293,33 @@ def get_pipeline_memory() -> Any | None:
     return None
 
 
+def get_ctx_dict(node_name: str | None = None) -> dict[str, Any]:
+    """Build the read-only ``$ctx`` dict from current execution context.
+
+    Used by the expression evaluation layer to inject pipeline metadata
+    into expressions, ``when`` clauses, and templates.
+
+    Parameters
+    ----------
+    node_name : str | None
+        Override for the current node name.  When provided (e.g. by the
+        node executor which knows the name before ``set_current_node_name``
+        is called), this value takes precedence over the ContextVar.
+
+    Returns
+    -------
+    dict[str, Any]
+        Read-only pipeline context with ``run_id``, ``pipeline_name``,
+        ``node_name``, and ``services`` keys.
+    """
+    return {
+        "run_id": _run_id_context.get() or "",
+        "pipeline_name": _pipeline_name_context.get() or "",
+        "node_name": node_name or _current_node_name_context.get() or "",
+        "services": list((_services_context.get() or {}).keys()),
+    }
+
+
 # ============================================================================
 # Pipeline Name Context
 # ============================================================================
