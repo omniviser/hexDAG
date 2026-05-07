@@ -581,7 +581,11 @@ carried_data={'key': 'value'})"""
                 if svc_name == "entity_state" and _entities is None:
                     continue  # No entities declared → skip state machine tools
 
-                svc_tools = svc.get_tools()
+                # Pass entity filter to EntityState for scoped descriptions
+                if svc_name == "entity_state" and _entities is not None:
+                    svc_tools = svc.get_tools(entities=_entities)
+                else:
+                    svc_tools = svc.get_tools()
                 if svc_tools:
                     tool_router.add_tools_from(ToolRouter(tools=svc_tools))
 

@@ -1,6 +1,7 @@
 """YAML Pipeline Validator - Validates pipeline configurations."""
 
 import difflib
+import inspect
 from collections.abc import Iterator
 from typing import Any
 
@@ -8,6 +9,10 @@ from hexdag.compiler.reference_resolver import _BUILTIN_NAMES, _NODE_FIELD_RE, _
 from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.domain.pipeline_config import BaseNodeConfig
 from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS
+from hexdag.kernel.logging import get_logger
+from hexdag.kernel.resolver import ResolveError, resolve
+
+_logger = get_logger(__name__)
 
 # Separator for namespace:name format
 NAMESPACE_SEPARATOR = ":"
@@ -238,6 +243,22 @@ class _SchemaValidator:
         if body is not None and body_pipeline is not None:
             errors.append("Cannot specify both 'body' and 'body_pipeline'")
 
+        # Iterating modes require a body or body_pipeline
+        if mode in ("while", "for-each", "times") and body is None and body_pipeline is None:
+            errors.append(f"Mode '{mode}' requires 'body' or 'body_pipeline'")
+
+        # Validate count is positive (0 is a silent no-op)
+        if mode == "times" and isinstance(spec.get("count"), int) and spec["count"] <= 0:
+            errors.append("Field 'count' must be a positive integer (> 0)")
+
+        # Validate switch branch structure
+        if mode == "switch" and isinstance(spec.get("branches"), list):
+            for i, branch in enumerate(spec["branches"]):
+                if not isinstance(branch, dict):
+                    errors.append(f"branches[{i}] must be a dict")
+                elif "condition" not in branch:
+                    errors.append(f"branches[{i}] missing required 'condition' field")
+
         # If body is a callable (from !py tag), it's already validated at parse time
         # If body is a list, it should be inline nodes
         if isinstance(body, list):
@@ -315,9 +336,10 @@ class YamlValidator:
 
         spec = config.get("spec", {})
         nodes = spec.get("nodes", [])
+        pipeline_ports = spec.get("ports", {}) if isinstance(spec.get("ports"), dict) else {}
 
         # Validate nodes and cache the IDs and macro instances for reuse
-        node_ids, macro_instances = self._validate_nodes(nodes, result)
+        node_ids, macro_instances = self._validate_nodes(nodes, result, pipeline_ports)
 
         # Reuse cached node_ids and macro_instances for dependency validation
         self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
@@ -408,20 +430,39 @@ class YamlValidator:
         if common_mappings is not None and not isinstance(common_mappings, dict):
             result.add_error("'spec.common_field_mappings' must be a dictionary")
 
+        # Rule 3 (bonus): Validate state machine structure
+        state_machines = spec.get("state_machines")
+        if isinstance(state_machines, dict):
+            for sm_name, sm_spec in state_machines.items():
+                if not isinstance(sm_spec, dict):
+                    result.add_error(f"State machine '{sm_name}' must be a dict")
+                    continue
+                if "initial" not in sm_spec:
+                    result.add_error(f"State machine '{sm_name}': missing required 'initial' field")
+                transitions = sm_spec.get("transitions")
+                if transitions is not None and not isinstance(transitions, dict):
+                    result.add_error(f"State machine '{sm_name}': 'transitions' must be a dict")
+
     # Structural keys valid at the node level (alongside kind/metadata/spec).
     # ``dependencies`` and ``wait_for`` are read from node level by
     # ``BaseNodeConfig.from_node_config()``.
+    # Fields that live inside spec, not at the node level
+    _SPEC_ONLY_FIELDS: frozenset[str] = frozenset({"input_mapping", "when"})
+
     _VALID_NODE_LEVEL_KEYS: frozenset[str] = frozenset(
         {"kind", "metadata", "spec", "settings"}
         | {
             field_name
             for field_name in BaseNodeConfig.model_fields
-            if field_name != "input_mapping"
+            if field_name not in {"input_mapping", "when"}
         }
     )
 
     def _validate_nodes(
-        self, nodes: list[dict[str, Any]], result: ValidationReport
+        self,
+        nodes: list[dict[str, Any]],
+        result: ValidationReport,
+        pipeline_ports: dict[str, Any] | None = None,
     ) -> tuple[set[str], set[str]]:
         """Validate nodes and return node IDs and macro instance names.
 
@@ -467,13 +508,24 @@ class YamlValidator:
 
             # Special case: macro_invocation is not a node type, skip node type validation
             if kind == "macro_invocation":
-                # Validate macro invocation spec (macro reference required)
                 spec = node.get("spec", {})
                 if "macro" not in spec:
                     result.add_error(
                         f"Node '{node_id}': macro_invocation must specify 'spec.macro' field"
                     )
+                else:
+                    # Rule 1: validate macro reference is resolvable
+                    self._validate_resolvable(
+                        spec["macro"],
+                        node_id,
+                        "macro",
+                        result,
+                    )
                 macro_instances.add(node_id)
+                # Validate when clause on macro invocations too
+                macro_when = spec.get("config", {}).get("when") or spec.get("when")
+                if macro_when and isinstance(macro_when, str):
+                    self._validate_when_syntax(node_id, macro_when, result)
                 continue
 
             # Merge settings + spec for parameter validation
@@ -482,18 +534,26 @@ class YamlValidator:
             _spec = node.get("spec", {})
             merged_params = {**_settings, **_spec}
 
+            # Rule 1: Signature-based validation for ALL node kinds
+            # (dotted paths, registered aliases, and builtin aliases).
+            self._validate_spec_against_factory(
+                kind,
+                node_id,
+                merged_params,
+                pipeline_ports,
+                result,
+            )
+
             # Handle module paths (e.g., hexdag.stdlib.nodes.LLMNode)
             if "." in kind and ":" not in kind:
-                # This is a full module path, skip node type validation
-                # (resolution will happen at build time)
+                # Full module path — signature validation above is sufficient;
+                # skip legacy node-type-name checks below.
                 continue
 
-            # Handle user-registered aliases (e.g., "fn" -> "hexdag.stdlib.nodes.FunctionNode")
+            # Handle user-registered aliases
             from hexdag.kernel.resolver import get_registered_aliases
 
             if kind in get_registered_aliases():
-                # This is a registered alias, skip node type validation
-                # (resolution will happen at build time via resolver)
                 continue
 
             if NAMESPACE_SEPARATOR in kind:
@@ -554,7 +614,32 @@ class YamlValidator:
             # Validate node-specific requirements and schema
             self._validate_node_params(node_id, node_type, params, namespace, result)
 
+            # Validate when clause syntax (if present)
+            when_clause = _spec.get("when") or merged_params.get("when")
+            if when_clause and isinstance(when_clause, str):
+                self._validate_when_syntax(node_id, when_clause, result)
+
         return node_ids, macro_instances
+
+    @staticmethod
+    def _validate_when_syntax(
+        node_id: str | None,
+        when_clause: str,
+        result: ValidationReport,
+    ) -> None:
+        """Validate that a ``when`` clause is syntactically valid.
+
+        Calls ``compile_expression`` at build time to catch syntax errors
+        early instead of failing at runtime.
+        """
+        from hexdag.kernel.expression_parser import (
+            compile_expression,  # noqa: PLC0415  # lazy: avoid circular import
+        )
+
+        try:
+            compile_expression(when_clause)
+        except Exception as exc:  # noqa: BLE001
+            result.add_error(f"Node '{node_id}': invalid 'when' expression: {exc}")
 
     def _validate_node_params(
         self,
@@ -711,6 +796,16 @@ class YamlValidator:
                         f"collides with node '{alias}'. Choose a different alias."
                     )
 
+            # Check 3b: Expression variable names vs input_mapping aliases
+            overlap = set(expressions.keys()) & set(input_mapping.keys())
+            if overlap:
+                for name in sorted(overlap):
+                    result.add_error(
+                        f"Node '{node_id}': expression variable '{name}' "
+                        f"collides with input_mapping alias '{name}'. "
+                        f"Rename one to avoid ambiguous resolution."
+                    )
+
             # Check 4: First path segment validation in expressions
             # Build the set of valid first segments for this node
             valid_first_segments = (
@@ -732,12 +827,187 @@ class YamlValidator:
             for alias, source in input_mapping.items():
                 if not isinstance(source, str):
                     continue
+                # Validate expression syntax for mapping values that
+                # contain operators (likely expressions, not simple refs)
+                if any(
+                    op in source for op in ("==", "!=", " and ", " or ", " not ", " if ", " else ")
+                ):
+                    self._validate_when_syntax(node_id, source, result)
                 # Skip $input references and expressions
                 if source.startswith("$input") or source == "$input":
                     continue
                 self._check_first_segments(
                     source, alias, node_id, valid_first_segments, node_ids, macro_instances, result
                 )
+                # Also validate bare names (no dot) — _check_first_segments only
+                # catches dotted paths via regex; a bare input_mapping value like
+                # "typo_node" would be silently ignored.
+                stripped = source.strip()
+                if (
+                    "." not in stripped
+                    and stripped.isidentifier()
+                    and stripped not in _BUILTIN_NAMES
+                    and stripped not in valid_first_segments
+                    and not any(stripped.startswith(f"{mi}_") for mi in macro_instances)
+                ):
+                    close_matches = difflib.get_close_matches(
+                        stripped, sorted(node_ids), n=3, cutoff=0.6
+                    )
+                    suggestion = ""
+                    if close_matches:
+                        suggestion = f" Did you mean: {', '.join(close_matches)}?"
+                    result.add_warning(
+                        f"Node '{node_id}': input_mapping alias '{alias}' "
+                        f"references bare name '{stripped}' which is not a known node "
+                        f"or expression variable.{suggestion}"
+                    )
+
+            # Rule 2: Validate references in composite/conditional fields.
+            # These are the same fields yaml_builder._infer_deps() scans,
+            # so typos here would cause runtime ExpressionError.
+            for field_key in ("condition", "items", "when"):
+                field_val = spec.get(field_key)
+                if isinstance(field_val, str):
+                    self._check_first_segments(
+                        field_val,
+                        field_key,
+                        node_id,
+                        valid_first_segments,
+                        node_ids,
+                        macro_instances,
+                        result,
+                    )
+
+            branches = spec.get("branches")
+            if isinstance(branches, list):
+                for i, branch in enumerate(branches):
+                    if isinstance(branch, dict):
+                        cond = branch.get("condition")
+                        if isinstance(cond, str):
+                            self._check_first_segments(
+                                cond,
+                                f"branches[{i}].condition",
+                                node_id,
+                                valid_first_segments,
+                                node_ids,
+                                macro_instances,
+                                result,
+                            )
+
+            state_update = spec.get("state_update")
+            if isinstance(state_update, dict):
+                for var_name, expr in state_update.items():
+                    if isinstance(expr, str):
+                        self._check_first_segments(
+                            expr,
+                            f"state_update.{var_name}",
+                            node_id,
+                            valid_first_segments,
+                            node_ids,
+                            macro_instances,
+                            result,
+                        )
+
+    # ==================================================================
+    # Rule 1: Signature-based spec validation
+    # ==================================================================
+
+    # Params that belong to the framework, not to the user's YAML spec.
+    _SKIP_PARAMS: frozenset[str] = frozenset({
+        "self",
+        "cls",
+        "name",
+        "deps",
+        "dependencies",
+        "args",
+        "kwargs",
+    })
+
+    def _validate_resolvable(
+        self,
+        module_path: str,
+        node_id: str,
+        label: str,
+        result: ValidationReport,
+    ) -> None:
+        """Check that *module_path* can be resolved to an importable object.
+
+        Reports a warning (not error) because macros may be registered
+        dynamically via YAML macro definitions in multi-document files.
+        """
+        try:
+            resolve(module_path)
+        except (ResolveError, Exception):
+            if "." in module_path:
+                result.add_warning(
+                    f"Node '{node_id}': Cannot resolve {label} '{module_path}'. "
+                    f"Check the module path."
+                )
+
+    def _validate_spec_against_factory(
+        self,
+        kind: str,
+        node_id: str,
+        merged_spec: dict[str, Any],
+        pipeline_ports: dict[str, Any] | None,
+        result: ValidationReport,
+    ) -> None:
+        """Validate spec against factory __call__ signature and port requirements.
+
+        Generic rule: resolve the factory class, introspect its ``__call__``
+        parameters, and verify that every *required* parameter (no default)
+        is present in the merged spec dict.  Also checks port requirements.
+        """
+        try:
+            factory_obj = resolve(kind)
+        except (ResolveError, Exception):
+            # Can't resolve — may be a custom type registered at runtime.
+            # Only warn for dotted paths (explicit module refs that should be importable).
+            if "." in kind:
+                result.add_error(
+                    f"Node '{node_id}': Cannot resolve kind '{kind}'. Check the module path."
+                )
+            return
+
+        # Get callable to introspect
+        target = factory_obj
+        if isinstance(factory_obj, type):
+            try:
+                target = factory_obj()
+            except Exception:
+                return  # factory requires init args — skip introspection
+
+        try:
+            sig = inspect.signature(target)
+        except (ValueError, TypeError):
+            return  # can't introspect — skip gracefully
+
+        for param_name, param in sig.parameters.items():
+            if param_name in self._SKIP_PARAMS:
+                continue
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
+                continue
+            # Required = no default value
+            if param.default is inspect.Parameter.empty and param_name not in merged_spec:
+                result.add_error(
+                    f"Node '{node_id}': Missing required field '{param_name}' for kind '{kind}'."
+                )
+
+        # Rule 3: Port requirement validation
+        # Ports may be configured at runtime via port_overrides, so
+        # missing ports are warnings, not errors.
+        factory_cls = factory_obj if isinstance(factory_obj, type) else type(factory_obj)
+        port_caps = getattr(factory_cls, "_hexdag_port_capabilities", None)
+        if port_caps and pipeline_ports is not None:
+            for port_name in port_caps:
+                if port_name not in pipeline_ports:
+                    result.add_warning(
+                        f"Node '{node_id}': Kind '{kind}' requires port "
+                        f"'{port_name}' but it is not declared in spec.ports."
+                    )
 
     @staticmethod
     def _check_first_segments(

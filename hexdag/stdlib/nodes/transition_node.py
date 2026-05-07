@@ -14,14 +14,39 @@ YAML usage::
         entity_id: $input.load_id
         to_state: ACCEPTED
         reason: "Smart acceptance criteria met"
+
+Dynamic references are auto-wired via ``input_mapping`` so the
+ExecutionCoordinator resolves ``node.field`` / ``$input.field``
+paths before the node function runs::
+
+    - kind: transition
+      metadata:
+        name: escalate
+      spec:
+        entity: load
+        entity_id: resolved_match.load_id          # resolved at runtime
+        to_state: ESCALATED
+        reason: build_escalation_reason.reason      # resolved at runtime
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.stdlib.nodes.base_node_factory import BaseNodeFactory
+
+# Patterns that indicate a value needs runtime resolution via input_mapping
+# rather than being passed as a literal string.
+_DYNAMIC_RE = re.compile(
+    r"^(\$input\.|[A-Za-z_][A-Za-z0-9_]*\.)"  # $input.field or node.field
+)
+
+
+def _is_dynamic_ref(value: str | None) -> bool:
+    """Return True if *value* looks like a runtime reference."""
+    return value is not None and bool(_DYNAMIC_RE.match(value))
 
 
 class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
@@ -54,29 +79,40 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
         entity : str
             Entity type (must match a registered state machine).
         entity_id : str | None
-            Entity ID expression (resolved at runtime from input).
+            Entity ID expression — resolved at runtime from input.
+            Supports ``$input.field`` and ``node_name.field`` syntax.
         to_state : str
             Target state for the transition.
         reason : str | None
-            Optional reason expression (resolved at runtime).
+            Optional reason expression — resolved at runtime.
+            Supports ``$input.field`` and ``node_name.field`` syntax.
         **kwargs
             Additional NodeSpec fields (when, on_error, etc.).
         """
-        # Capture factory params for the closure
         _entity = entity
         _to_state = to_state
-        _reason_expr = reason
-        _entity_id_expr = entity_id
+
+        # Build input_mapping so the ExecutionCoordinator resolves dynamic
+        # references (node.field, $input.field) before the node runs.
+        input_mapping: dict[str, str] = {}
+        if _is_dynamic_ref(entity_id):
+            input_mapping["entity_id"] = entity_id  # type: ignore[assignment]
+        if _is_dynamic_ref(reason):
+            input_mapping["reason"] = reason  # type: ignore[assignment]
+
+        # Keep raw values for the closure fallback (literal strings / None)
+        _entity_id_literal = entity_id if not _is_dynamic_ref(entity_id) else None
+        _reason_literal = reason if not _is_dynamic_ref(reason) else None
 
         async def _transition(inputs: dict[str, Any], **kw: Any) -> dict[str, Any]:
-            from hexdag.kernel.context.execution_context import (
+            from hexdag.kernel.context.execution_context import (  # lazy: runtime-only closure
                 get_current_node_name,
                 get_pipeline_name,
                 get_run_id,
-                get_services,  # lazy: avoid circular import with kernel
+                get_services,
             )
-            from hexdag.kernel.orchestration.events.events import (
-                TransitionContext,  # lazy: avoid circular import with kernel
+            from hexdag.kernel.orchestration.events.events import (  # lazy: runtime-only closure
+                TransitionContext,
             )
 
             services = get_services()
@@ -89,21 +125,17 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
 
             entity_state = services["entity_state"]
 
-            # Resolve entity_id: prefer input_mapping resolution, fall back to factory param
-            resolved_id = inputs.get("entity_id")
-            if resolved_id is None:
-                resolved_id = _entity_id_expr
+            # Resolve entity_id: input_mapping-resolved value first, then literal.
+            # Use .get() with default to preserve falsy resolved values (0, "", False).
+            resolved_id = inputs.get("entity_id", _entity_id_literal)
 
             if resolved_id is None:
                 msg = f"TransitionNode '{name}': entity_id could not be resolved"
                 raise ValueError(msg)
 
-            # Resolve reason from inputs
-            resolved_reason = _reason_expr
-            if _reason_expr is not None:
-                resolved_reason = inputs.get("reason", _reason_expr)
+            # Resolve reason: input_mapping-resolved value first, then literal.
+            resolved_reason = inputs.get("reason", _reason_literal)
 
-            # Build transition context
             context = TransitionContext(
                 run_id=get_run_id() or "",
                 pipeline_name=get_pipeline_name() or "",
@@ -126,13 +158,14 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
         return NodeSpec(
             name=name,
             fn=_transition,
+            params={"input_mapping": input_mapping} if input_mapping else {},
             when=when,
             on_error=on_error,
             factory_class="hexdag.stdlib.nodes.transition_node.TransitionNode",
             factory_params={
                 "entity": _entity,
-                "entity_id": _entity_id_expr,
+                "entity_id": entity_id,
                 "to_state": _to_state,
-                "reason": _reason_expr,
+                "reason": reason,
             },
         )

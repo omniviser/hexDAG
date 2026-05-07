@@ -160,11 +160,11 @@ All entity types use the same `resolve()` mechanism for module path resolution. 
 Port Probes, Resource Limits, and Caps are now part of the **Agent Protocol** track
 (see Track 2). This phase retains only the items that are purely Track 1 concerns.
 
-- [ ] **`kind: Adapter`** (Step 6)
+- [x] **`kind: Adapter`** (Step 6)
   - Standalone adapter configs, referenceable by `{ ref: name }`
   - DRY across System manifests
 
-- [ ] **`kind: Middleware`** (Step 7)
+- [x] **`kind: Middleware`** (Step 7)
   - Standalone reusable middleware stack definitions (retry, timeout, rate-limit, caching, circuit-breaker)
   - First-class declarative middleware entity, same pattern as `kind: Macro`
   - Referenced by name from `spec.ports.<name>.middleware:` or inline as a list of module paths
@@ -760,14 +760,11 @@ transitions, dispatches handlers, emits events, and triggers pipelines.
 - [x] **Safe path modifiers** — `field | required` (error on None), `field | default(X)` (fallback)
 
 **Deferred to v1.1:**
-- [ ] `$ctx` pipeline context (compiler plugin for shared data)
-- [ ] `kind: route` blocks (compiler plugin for conditional routing)
-- [ ] `spec.memory.preload` + entity state seeding
-- [ ] `memory()` expression function
-- [ ] Pipeline-level `on_failure.compensate` (saga compensation)
-- [ ] State timeouts (auto-transition after duration)
-- [ ] `on_exit` pipelines per state
-- [ ] `await_pipeline: true` (gated transitions)
+- [x] `ctx` pipeline context — **read-only** access to `run_id`, `pipeline_name`, `node_name`, `services` in expressions (subsumes RunContext rename)
+- [x] Graph-level routing via `composite_node` — extend `mode: switch` so the compiler auto-injects `when` clauses on downstream nodes based on selected branch (`route_downstream: true`)
+- [ ] Pipeline memory expressions — `memory(key, default)` read + `memory_set(key, value)` write in expressions. Requires Memory port design with pluggable backends (key-value, vector, graph) before implementation.
+- [ ] Pipeline-level `on_failure.compensate` (saga compensation, builds on existing `EntityCompensationEvent` + `SupportsSessionFactory`)
+- [ ] Lifecycle gating — `on_exit` pipelines per state + `await_pipeline: true` (gated transitions)
 
 **Deferred to v2:**
 - [ ] Cross-entity event bus (reactive triggers)
@@ -900,7 +897,7 @@ already-completed nodes via pre-seeded results.
 
 #### Kernel: `pre_seeded_results` on Orchestrator
 
-- [ ] **`Orchestrator.run(pre_seeded_results=...)`**
+- [x] **`Orchestrator.run(pre_seeded_results=...)`**
   - New optional `dict[str, Any] | None` parameter on `run()` and `_execute_with_ports()`
   - Pre-seeds `node_results` dict so downstream nodes see completed upstream results
   - Filters waves to skip nodes whose names appear in `pre_seeded_results`
@@ -908,12 +905,12 @@ already-completed nodes via pre-seeded results.
   - `PipelineStarted` event reflects remaining (not total) waves/nodes
   - Backward compatible: `None` (default) = current behavior
 
-- [ ] **`PipelineRunner.run(pre_seeded_results=...)`**
+- [x] **`PipelineRunner.run(pre_seeded_results=...)`**
   - Pass-through to `orchestrator.run()` via `_execute()`
 
 #### Domain Model: `ExtractionState`
 
-- [ ] **`ExtractionState` + `RoundRecord`** (`kernel/domain/extraction_state.py`)
+- [x] **`ExtractionState` + `RoundRecord`** (`kernel/domain/extraction_state.py`)
   - `ExtractionState`: Pydantic model tracking `job_id`, `entity_type`, `entity_id`,
     `status` (pending|extracting|complete|failed), `current_round`, `max_rounds`,
     `required_fields`, `extracted_data`, `missing_fields` (computed), `round_history`
@@ -922,7 +919,7 @@ already-completed nodes via pre-seeded results.
 
 #### Stdlib Service: `ExtractionJob`
 
-- [ ] **`ExtractionJob`** (`stdlib/lib/extraction_job.py`)
+- [x] **`ExtractionJob`** (`stdlib/lib/extraction_job.py`)
   - `Service` subclass with `@tool`/`@step` methods (follows `EntityState` pattern)
   - Optional `SupportsKeyValue` storage; falls back to in-memory dict
   - Constructor: `storage`, `max_rounds`, `required_fields`
@@ -983,7 +980,7 @@ action = result["decide"]["action"]  # "complete" | "continue" | "fail"
 
 ### Kernel Internals
 
-- [ ] **RunContext** -- Rename ExecutionContext, add `run_id`, `pipeline_name`, `parent_run_id` as first-class fields, typed accessors for common ports (`.llm`, `.memory`, `.database`)
+- [ ] **RunContext** -- Rename ExecutionContext, add `run_id`, `pipeline_name`, `parent_run_id` as first-class fields, typed accessors for common ports (`.llm`, `.memory`, `.database`). Subsumed by `ctx` pipeline context (Entity Lifecycle v1.1).
 - [x] **Port Middleware (Phase C1)** -- Composable middleware pattern in `stdlib/middleware/`. `prepare_ports()` auto-stacks: `StructuredOutputFallback`, `ObservableLLM`, `ObservableToolRouter`. `SupportsStructuredOutput` protocol. Fixes `isinstance()` breakage.
 - [ ] **Port Middleware Declarative Stacking (Phase C2)** -- `kind: Middleware` + `spec.ports.<name>.middleware:`. Middleware: `RateLimiter`, `RetryWithBackoff`, `ResponseCache`, `CostTracker`, `CircuitBreaker`, `Timeout`. Part of Agent Protocol Phase C.
 - [ ] **`hexdag explain`** -- CLI command (like `kubectl explain`) for YAML field docs
@@ -1091,14 +1088,14 @@ drivers/vfs/providers/ (existing)     drivers/vfs/providers/ (planned)
 
 stdlib/lib/ (existing)               stdlib/lib/ (planned)
   ProcessRegistry                       PipelineRegistry [NEW]
-  EntityState                           ExtractionJob [NEW]
+  EntityState                           ExtractionJob (complete)
   Scheduler
   DatabaseTools
   VASTools (was VFSTools)
   checkpoint_node
 
 stdlib/lib/observers/ (existing)     stdlib/lib/observers/ (planned)
-  PerformanceMetricsObserver             StateTransitionObserver [NEW]
+  PerformanceMetricsObserver             StateTransitionObserver (complete)
   AlertingObserver
   CostProfilerObserver
   ExecutionTracerObserver
@@ -1109,7 +1106,7 @@ stdlib/lib/observers/ (existing)     stdlib/lib/observers/ (planned)
   PortCallLogObserver (Phase C1.5)
 
 kernel/ internals (planned)
-  RunContext (rename ExecutionContext)
+  RunContext (rename ExecutionContext — subsumed by `ctx` in Entity Lifecycle v1.1)
   PortCallEvent unified event base (Phase C1.5, complete)
   Port Middleware declarative stacking (Phase C2, complete — core infra)
   ResourceAccounting (Phase C3)
@@ -1127,15 +1124,14 @@ kernel/ internals (planned)
 6. **Agent Protocol Phase C2: Port Middleware (Declarative Stacking)** -- **(Complete)** Data-driven middleware stacking via `prepare_ports(middleware_config=...)`. `kind: Middleware` compiler plugin + inline `spec.ports.<name>.middleware:`. Two-phase stacking (user → auto). Concrete middleware: `RetryWithBackoff`, `RateLimiter`, `ResponseCache`, `Timeout`. Remaining: `CostTracker`, `CircuitBreaker`.
 7. **Agent Protocol Phase C3: ResourceAccounting** -- `ResourceAccountant` reads from `PortCallStoreObserver`, `/sys/cgroup/` provider, unified error handling for cap/limit enforcement.
 8. **`kind: System` + SystemRunner** -- **(Complete)**
-9. **Entity-Bound Pipelines** -- `spec.entities` YAML binding + `StateTransitionObserver`.
-10. **Pipeline Resume & Multi-Round Extraction** -- `pre_seeded_results` + `ExtractionJob` service.
+9. **Entity-Bound Pipelines** -- **(Complete)** `entities` field on agent nodes for scoped tool filtering + `StateTransitionObserver`.
+10. **Pipeline Resume & Multi-Round Extraction** -- **(Complete)** `pre_seeded_results` + `CheckpointManager` + `PipelineRunner.resume()` + `ExtractionJob` service.
 11. **Agent Protocol Phase D: VAS aexec/awrite** -- Action through VAS paths + mid-pipeline injection.
-12. **`kind: Adapter` + `kind: Middleware`** -- Reusable adapter configs and middleware stack definitions. `kind: Middleware` drives declarative stacking (see Phase C2).
+12. **`kind: Adapter` + `kind: Middleware`** -- **(Complete)** Reusable adapter configs (`{ ref: name }` resolution) and middleware stack definitions. `kind: Middleware` drives declarative stacking (see Phase C2).
 13. **EventBus** -- Cross-pipeline IPC.
 14. **Agent Protocol Phase E: VAS awatch + areadlink + apipe** -- Reactive subscriptions, cross-references, and inter-pipeline piping.
-15. **RunContext rename** -- Low risk, high clarity improvement.
-16. **GovernancePort** -- Required for production multi-tenant deployments.
-17. **Studio MCP Server** -- Full api/ surface as MCP tools with permission boundaries (leverages Agent Protocol caps).
+15. **GovernancePort** -- Required for production multi-tenant deployments.
+16. **Studio MCP Server** -- Full api/ surface as MCP tools with permission boundaries (leverages Agent Protocol caps).
 
 ---
 
@@ -1192,16 +1188,19 @@ kernel/ internals (planned)
 - [ ] Child process cap inheritance (narrowing chain)
 - [ ] Pipeline-level `spec.caps` + `spec.limits` enforcement
 
-### Milestone 5: Entity-Bound Pipelines
-- [ ] `StateTransitionObserver` (stdlib observer)
-- [ ] `spec.entities` in pipeline schema
-- [ ] Pipeline builder auto-wiring (parse entities, register observers)
+### Milestone 5: Entity-Bound Pipelines (Complete)
+- [x] `StateTransitionObserver` (stdlib observer)
+- [x] `entities` field on agent nodes — scoped tool filtering via `EntityState.get_tools(entities=...)`
+- [x] `EntityState.get_tools()` — entity-filtered transition map descriptions
 - [ ] EntityState `@step` decorator additions
 
-### Milestone 6: Pipeline Resume & Multi-Round Extraction
-- [ ] `Orchestrator.run(pre_seeded_results=...)` + `PipelineRunner` pass-through
-- [ ] `ExtractionState` + `RoundRecord` domain models
-- [ ] `ExtractionJob` stdlib service (Service subclass with @tool/@step)
+### Milestone 6: Pipeline Resume & Multi-Round Extraction (Complete)
+- [x] `Orchestrator.run(pre_seeded_results=...)` + `PipelineRunner` pass-through
+- [x] `PipelineRunner.resume()` with checkpoint loading + graph drift validation
+- [x] `CheckpointManager` with save/load/load_for_resume + concurrent resume protection
+- [x] `CheckpointNode` declarative mid-pipeline save/restore
+- [x] `ExtractionState` + `RoundRecord` domain models
+- [x] `ExtractionJob` stdlib service (Service subclass with @tool/@step)
 
 ### Milestone 7: Agent Protocol Actions + Reactivity
 - [ ] **Phase D:** VAS `aexec`/`awrite` + provider implementations + mid-pipeline injection
@@ -1211,7 +1210,7 @@ kernel/ internals (planned)
 ### Milestone 8: Production Runtime
 - [ ] Studio as daemon host (schedule/continuous modes)
 - [ ] EventBus (cross-pipeline IPC)
-- [ ] `kind: Adapter` + `kind: Middleware` (Middleware drives declarative stacking, see Phase C2)
+- [x] `kind: Adapter` + `kind: Middleware` (Middleware drives declarative stacking, see Phase C2)
 - [ ] GovernancePort
 
 ### Milestone 9: Stable Release

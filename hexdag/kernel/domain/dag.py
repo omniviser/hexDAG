@@ -249,6 +249,36 @@ class NodeSpec:
         new_deps = self.deps | frozenset(node_names)
         return replace(self, deps=new_deps)
 
+    def with_when(self, when: str) -> "NodeSpec":
+        """Return a copy with the ``when`` clause set or replaced.
+
+        Parameters
+        ----------
+        when : str
+            Expression string for conditional execution.
+
+        Returns
+        -------
+        NodeSpec
+            New NodeSpec with updated ``when`` clause.
+        """
+        return replace(self, when=when)
+
+    def with_deps(self, deps: frozenset[str] | set[str]) -> "NodeSpec":
+        """Return a copy with the dependency set replaced.
+
+        Parameters
+        ----------
+        deps : frozenset[str] | set[str]
+            New set of dependency node names.
+
+        Returns
+        -------
+        NodeSpec
+            New NodeSpec with updated dependencies.
+        """
+        return replace(self, deps=frozenset(deps))
+
     def __rshift__(self, other: "NodeSpec") -> "NodeSpec":
         """Create dependency using >> operator: node_a >> node_b means "b depends on a".
 

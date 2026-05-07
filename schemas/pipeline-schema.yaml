@@ -352,6 +352,12 @@ $defs:
         - type: 'null'
         default: null
         title: Default Node Timeout
+      pipeline_timeout:
+        anyOf:
+        - type: number
+        - type: 'null'
+        default: null
+        title: Pipeline Timeout
     title: OrchestratorConfig
     type: object
   LlmNodeSpec:
@@ -679,6 +685,9 @@ $defs:
             - number
             - 'null'
             default: null
+          route_downstream:
+            type: boolean
+            default: false
         additionalProperties: false
         required:
         - mode
@@ -943,15 +952,17 @@ $defs:
             description: Entity type (must match a registered state machine).
           entity_id:
             type: string
-            description: Entity ID expression (resolved at runtime from input).
+            description: "Entity ID expression \u2014 resolved at runtime from input.\
+              \ Supports ``$input.field`` and ``node_name.field`` syntax."
             default: null
           to_state:
             type: string
             description: Target state for the transition.
           reason:
             type: string
-            description: Optional reason expression (resolved at runtime). Additional
-              NodeSpec fields (when, on_error, etc.).
+            description: "Optional reason expression \u2014 resolved at runtime. Supports\
+              \ ``$input.field`` and ``node_name.field`` syntax. Additional NodeSpec\
+              \ fields (when, on_error, etc.)."
             default: null
         additionalProperties: false
         required:
@@ -1039,6 +1050,14 @@ $defs:
               names. Keys are target field names, values use node_name.field or $input.field
               syntax.
             title: Input Mapping
+          when:
+            anyOf:
+            - type: string
+            - type: 'null'
+            default: null
+            description: Conditional execution expression. Node is skipped when this
+              evaluates to false.
+            title: When
       dependencies:
         anyOf:
         - items:

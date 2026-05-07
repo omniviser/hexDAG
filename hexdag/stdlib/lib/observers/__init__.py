@@ -19,6 +19,10 @@ from hexdag.stdlib.lib.observers.port_call_observers import (
     PortCallStoreObserver,
     StoredPortCall,
 )
+from hexdag.stdlib.lib.observers.state_transition_observer import (
+    StateTransitionObserver,
+    StoredTransition,
+)
 
 __all__ = [
     # Core Observers
@@ -33,6 +37,9 @@ __all__ = [
     "PortCallStoreObserver",
     "PortCallLogObserver",
     "StoredPortCall",
+    # State Transition Observer
+    "StateTransitionObserver",
+    "StoredTransition",
     # Observer Models
     "Alert",
     "AlertType",

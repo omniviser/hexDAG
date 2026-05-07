@@ -60,6 +60,7 @@ __all__ = [
     "evaluate_expression",
     "ExpressionError",
     "ALLOWED_FUNCTIONS",
+    "ALLOWED_METHODS",
     "MISSING",
 ]
 
@@ -105,11 +106,8 @@ _COMPARE_OPS: dict[type[ast.cmpop], Callable[[Any, Any], bool]] = {
     ast.IsNot: operator.is_not,
 }
 
-# Allowed boolean operators
-_BOOL_OPS: dict[type[ast.boolop], Callable[..., bool]] = {
-    ast.And: lambda *args: all(args),
-    ast.Or: lambda *args: any(args),
-}
+# Allowed boolean operators (kept for reference; actual evaluation uses
+# short-circuit logic in _eval_boolop to match Python semantics).
 
 # Allowed unary operators (return Any since they can be bool or numeric)
 _UNARY_OPS: dict[type[ast.unaryop], Callable[..., Any]] = {
@@ -171,6 +169,33 @@ ALLOWED_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "range": lambda *args: range(*args),
     "zip": lambda *iterables: list(zip(*iterables, strict=False)),
 }
+
+# Safe methods that may be called on objects in expressions.
+# Only side-effect-free methods on built-in types are permitted.
+ALLOWED_METHODS: frozenset[str] = frozenset({
+    # dict methods
+    "get",
+    "keys",
+    "values",
+    "items",
+    # str methods
+    "upper",
+    "lower",
+    "strip",
+    "lstrip",
+    "rstrip",
+    "split",
+    "replace",
+    "startswith",
+    "endswith",
+    "join",
+    "format",
+    "count",
+    "find",
+    "index",
+    # list / collection methods (only non-mutating)
+    "copy",
+})
 
 
 def _get_function_name(func_node: ast.AST) -> str | None:
@@ -255,25 +280,33 @@ def _validate_ast(node: ast.AST, expression: str) -> None:
         ast.Mult,
         ast.Div,
         ast.Mod,
+        ast.FloorDiv,
+        ast.Pow,
     )
 
     # Check this node
     if not isinstance(node, allowed_types):
         raise ExpressionError(expression, f"Disallowed expression type: {type(node).__name__}")
 
-    # Check for function calls - only allow whitelisted functions
+    # Check for function calls - only allow whitelisted functions / methods
     if isinstance(node, ast.Call):
         func_name = _get_function_name(node.func)
-        if func_name is None:
+        if func_name is not None:
+            # Standalone function call — must be in ALLOWED_FUNCTIONS
+            if func_name not in ALLOWED_FUNCTIONS:
+                allowed_list = ", ".join(sorted(ALLOWED_FUNCTIONS.keys()))
+                raise ExpressionError(
+                    expression,
+                    f"Function '{func_name}' is not allowed. Allowed functions: {allowed_list}",
+                )
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in ALLOWED_METHODS:
+            # Method call on an object (e.g., result.get('key')) — allowed
+            pass
+        else:
             raise ExpressionError(
                 expression,
-                "Only simple function calls are allowed (e.g., 'len(x)', not 'obj.method()')",
-            )
-        if func_name not in ALLOWED_FUNCTIONS:
-            allowed_list = ", ".join(sorted(ALLOWED_FUNCTIONS.keys()))
-            raise ExpressionError(
-                expression,
-                f"Function '{func_name}' is not allowed. Allowed functions: {allowed_list}",
+                "Only simple function calls or whitelisted method calls are allowed "
+                "(e.g., 'len(x)', 'result.get(key, default)')",
             )
 
     # Recursively check all child nodes
@@ -342,6 +375,8 @@ _BINOP_MAP: dict[type[ast.operator], Callable[[Any, Any], Any]] = {
     ast.Mult: operator.mul,
     ast.Div: operator.truediv,
     ast.Mod: operator.mod,
+    ast.FloorDiv: operator.floordiv,
+    ast.Pow: operator.pow,
 }
 
 
@@ -362,6 +397,8 @@ def _eval_name(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> An
         return None
     if n.id == "state":
         return state
+    if n.id == "ctx":
+        return data.get("ctx", {})
     if n.id in data:
         return data[n.id]
     return MISSING
@@ -375,16 +412,32 @@ def _eval_attribute(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) 
 def _eval_subscript(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
     n: ast.Subscript = node  # type: ignore[assignment]
     value = _evaluate_node(n.value, data, state)
-    if isinstance(n.slice, ast.Index):  # Python 3.8 compat
-        key = _evaluate_node(n.slice.value, data, state)  # type: ignore[attr-defined]
-    else:
-        key = _evaluate_node(n.slice, data, state)
     if value is None:
         return None
+
+    # Handle slice syntax: items[1:3], items[::2], etc.
+    slice_node = n.slice
+    if isinstance(slice_node, ast.Slice):
+        lower = _evaluate_node(slice_node.lower, data, state) if slice_node.lower else None
+        upper = _evaluate_node(slice_node.upper, data, state) if slice_node.upper else None
+        step = _evaluate_node(slice_node.step, data, state) if slice_node.step else None
+        try:
+            return value[lower:upper:step]
+        except TypeError:
+            return None
+
+    # Handle regular index
+    if isinstance(slice_node, ast.Index):  # Python 3.8 compat
+        key = _evaluate_node(slice_node.value, data, state)  # type: ignore[attr-defined]
+    else:
+        key = _evaluate_node(slice_node, data, state)
     if isinstance(value, dict):
         return value.get(key)
     if isinstance(value, (list, tuple)) and isinstance(key, int):
-        return value[key] if 0 <= key < len(value) else None
+        try:
+            return value[key]
+        except IndexError:
+            return None
     return None
 
 
@@ -406,12 +459,29 @@ def _eval_compare(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) ->
 
 
 def _eval_boolop(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
+    """Evaluate boolean operators with Python-style short-circuit semantics.
+
+    ``and`` returns the first falsy value (or the last value if all truthy).
+    ``or``  returns the first truthy value (or the last value if all falsy).
+    This avoids evaluating ``x + y`` in ``x is not None and x + y`` when
+    ``x`` is ``None``.
+    """
     n: ast.BoolOp = node  # type: ignore[assignment]
-    values = [_evaluate_node(v, data, state) for v in n.values]
-    op_func = _BOOL_OPS.get(type(n.op))
-    if op_func is None:
-        raise ExpressionError("", f"Unsupported boolean op: {type(n.op).__name__}")
-    return op_func(*values)
+    if isinstance(n.op, ast.And):
+        result: Any = True
+        for v in n.values:
+            result = _evaluate_node(v, data, state)
+            if not result:
+                return result
+        return result
+    if isinstance(n.op, ast.Or):
+        result = False
+        for v in n.values:
+            result = _evaluate_node(v, data, state)
+            if result:
+                return result
+        return result
+    raise ExpressionError("", f"Unsupported boolean op: {type(n.op).__name__}")
 
 
 def _eval_unaryop(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
@@ -453,26 +523,56 @@ def _eval_binop(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> A
     op_func = _BINOP_MAP.get(type(n.op))
     if op_func is None:
         raise ExpressionError("", f"Unsupported binary op: {type(n.op).__name__}")
-    return op_func(left, right)
+    try:
+        return op_func(left, right)
+    except ZeroDivisionError:
+        raise ExpressionError("", "Division by zero") from None
+    except TypeError as e:
+        raise ExpressionError("", f"Type error in binary operation: {e}") from None
 
 
 def _eval_call(node: ast.AST, data: dict[str, Any], state: dict[str, Any]) -> Any:
     n: ast.Call = node  # type: ignore[assignment]
     func_name = _get_function_name(n.func)
-    if func_name is None or func_name not in ALLOWED_FUNCTIONS:
-        raise ExpressionError("", f"Unknown or disallowed function: {func_name}")
 
-    func = ALLOWED_FUNCTIONS[func_name]
-    args = [_evaluate_node(arg, data, state) for arg in n.args]
-    kwargs = {}
-    for kw in n.keywords:
-        if kw.arg is not None:
-            kwargs[kw.arg] = _evaluate_node(kw.value, data, state)
+    # --- Standalone function call (e.g., len(x)) ---
+    if func_name is not None:
+        if func_name not in ALLOWED_FUNCTIONS:
+            raise ExpressionError("", f"Unknown or disallowed function: {func_name}")
+        func = ALLOWED_FUNCTIONS[func_name]
+        args = [_evaluate_node(arg, data, state) for arg in n.args]
+        kwargs = {}
+        for kw in n.keywords:
+            if kw.arg is not None:
+                kwargs[kw.arg] = _evaluate_node(kw.value, data, state)
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            raise ExpressionError("", f"Error calling {func_name}: {e}") from e
 
-    try:
-        return func(*args, **kwargs)
-    except Exception as e:
-        raise ExpressionError("", f"Error calling {func_name}: {e}") from e
+    # --- Method call on an object (e.g., result.get('key', default)) ---
+    if isinstance(n.func, ast.Attribute) and n.func.attr in ALLOWED_METHODS:
+        receiver = _evaluate_node(n.func.value, data, state)
+        method_name = n.func.attr
+        if receiver is None or receiver is MISSING:
+            return None
+        method = getattr(receiver, method_name, None)
+        if method is None or not callable(method):
+            raise ExpressionError(
+                "",
+                f"Object of type {type(receiver).__name__} has no method '{method_name}'",
+            )
+        args = [_evaluate_node(arg, data, state) for arg in n.args]
+        kwargs = {}
+        for kw in n.keywords:
+            if kw.arg is not None:
+                kwargs[kw.arg] = _evaluate_node(kw.value, data, state)
+        try:
+            return method(*args, **kwargs)
+        except Exception as e:
+            raise ExpressionError("", f"Error calling .{method_name}(): {e}") from e
+
+    raise ExpressionError("", "Unknown or disallowed function call")
 
 
 # --- Comprehension helpers ---

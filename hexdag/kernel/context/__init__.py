@@ -3,6 +3,7 @@
 from hexdag.kernel.context.execution_context import (
     ExecutionContext,
     clear_execution_context,
+    get_ctx_dict,
     get_current_graph,
     get_current_node_name,
     get_node_results,
@@ -29,6 +30,7 @@ from hexdag.kernel.context.execution_context import (
 __all__ = [
     "ExecutionContext",
     "clear_execution_context",
+    "get_ctx_dict",
     "get_current_graph",
     "get_current_node_name",
     "get_node_results",

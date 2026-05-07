@@ -112,6 +112,7 @@ Unified control flow node supporting while, for-each, times, if-else, switch.
 | `max_concurrent_nodes` | `int` | No |  |
 | `strict_validation` | `bool` | No |  |
 | `default_node_timeout` | `float | None` | No |  |
+| `route_downstream` | `bool` | No |  |
 | `deps` | `list[str] | None` | No | Dependency node names |
 | `input_mapping` | `dict[str, str] | None` | No | Field extraction mapping for orchestrator |
 
@@ -290,9 +291,9 @@ Factory for entity state transition nodes.
 |-----------|------|----------|-------------|
 | `name` | `str` | Yes | Node name in the DAG. |
 | `entity` | `str` | Yes | Entity type (must match a registered state machine... |
-| `entity_id` | `str | None` | No | Entity ID expression (resolved at runtime from inp... |
+| `entity_id` | `str | None` | No | Entity ID expression — resolved at runtime from in... |
 | `to_state` | `str` | Yes | Target state for the transition. |
-| `reason` | `str | None` | No | Optional reason expression (resolved at runtime). ... |
+| `reason` | `str | None` | No | Optional reason expression — resolved at runtime. ... |
 
 **Example:**
 ```yaml

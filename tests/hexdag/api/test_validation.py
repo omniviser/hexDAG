@@ -82,6 +82,9 @@ kind: Pipeline
 metadata:
   name: test-pipeline
 spec:
+  ports:
+    llm:
+      adapter: hexdag.stdlib.adapters.mock.MockLLM
   nodes:
     - kind: llm_node
       metadata:

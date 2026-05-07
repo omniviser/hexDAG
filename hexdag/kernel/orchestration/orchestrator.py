@@ -449,6 +449,7 @@ class Orchestrator:
         dynamic: bool = False,
         max_dynamic_iterations: int = 100,
         pre_seeded_results: dict[str, Any] | None = None,
+        pipeline_timeout: float | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute a DAG with concurrent processing and resource limits.
@@ -474,6 +475,9 @@ class Orchestrator:
                 Nodes whose names appear here are skipped; downstream nodes
                 see these results as if the nodes had already executed.
                 Used for pipeline resume after checkpoint restore.
+            pipeline_timeout: Maximum execution time in seconds for the entire
+                pipeline. If exceeded, running nodes are cancelled and
+                ``OrchestratorError`` is raised. ``None`` means no timeout.
             **kwargs: Additional keyword arguments
 
         Returns
@@ -517,6 +521,7 @@ class Orchestrator:
                 dynamic,
                 max_dynamic_iterations,
                 pre_seeded_results=pre_seeded_results,
+                pipeline_timeout=pipeline_timeout,
                 **kwargs,
             )
 
@@ -529,6 +534,7 @@ class Orchestrator:
         dynamic: bool,
         max_dynamic_iterations: int,
         pre_seeded_results: dict[str, Any] | None = None,
+        pipeline_timeout: float | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Execute DAG with managed ports (internal method).
@@ -544,6 +550,7 @@ class Orchestrator:
             dynamic: Enable dynamic graph expansion
             max_dynamic_iterations: Maximum dynamic expansion iterations
             pre_seeded_results: Pre-completed node results to skip
+            pipeline_timeout: Maximum execution time in seconds
             **kwargs: Additional arguments
         """
         if validate:
@@ -616,7 +623,7 @@ class Orchestrator:
             )
             await self._notify_observer(observer_manager, event)
 
-            timeout = None
+            timeout = pipeline_timeout
             pipeline_status: PipelineStatus = PipelineStatus.SUCCESS
             pipeline_error: BaseException | None = None
             cancelled = False
@@ -655,6 +662,11 @@ class Orchestrator:
                 # Success path - determine status after execution
                 if cancelled:
                     pipeline_status = PipelineStatus.CANCELLED
+                    raise OrchestratorError(
+                        f"Pipeline '{pipeline_name}' timed out after "
+                        f"{pipeline_timeout}s. "
+                        f"{len(node_results)}/{len(graph)} nodes completed."
+                    )
             finally:
                 if pipeline_error is not None:
                     pipeline_status = PipelineStatus.FAILED

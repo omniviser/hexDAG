@@ -29,8 +29,12 @@ from hexdag.kernel.ports.file_storage import FileStorage
 from hexdag.kernel.ports.healthcheck import HealthStatus
 from hexdag.kernel.ports.llm import (
     LLM,
+    BatchItemResult,
+    BatchItemStatus,
+    BatchResult,
     ImageContent,
     ImageInput,
+    SupportsBatchGeneration,
     SupportsEmbedding,
     SupportsFunctionCalling,
     SupportsGeneration,
@@ -56,6 +60,9 @@ SecretPort = SecretStore
 
 __all__ = [
     "APICall",
+    "BatchItemResult",
+    "BatchItemStatus",
+    "BatchResult",
     "detect_port_type",
     "ColumnSchema",
     "ColumnType",
@@ -73,6 +80,7 @@ __all__ = [
     "ImageContent",
     "ImageInput",
     "LLM",
+    "SupportsBatchGeneration",
     "Memory",
     "ObserverManager",
     "ObserverManagerPort",

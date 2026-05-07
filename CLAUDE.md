@@ -285,6 +285,65 @@ hexDAG uses an **n8n-like data flow model** where upstream node outputs are auto
 - Unknown first path segment (typo) → **build error** with "did you mean?" suggestion
 - Missing deep path at runtime → returns `None` (optional field), not silent failure
 
+### Expression Namespaces
+
+hexDAG expressions have access to several special namespaces. Each has a clear read/write contract:
+
+| Namespace | Access | Scope | Description |
+|-----------|--------|-------|-------------|
+| `node_name.field` | Read-only | Pipeline | Upstream node outputs |
+| `$input.field` | Read-only | Pipeline | Initial pipeline input |
+| `state.field` | Read-only | Loop | Loop iteration state (composite nodes) |
+| `ctx.field` | **Read-only** | Pipeline | Pipeline execution metadata |
+
+#### `ctx` — Pipeline Context (Read-Only)
+
+`ctx` exposes pipeline execution metadata to expressions, `when` clauses, and templates. It is **read-only** — values are set by the framework and cannot be modified by user code.
+
+**Available fields:**
+- `ctx.run_id` — unique identifier for this pipeline run
+- `ctx.pipeline_name` — name from the pipeline's `metadata.name`
+- `ctx.node_name` — name of the currently executing node
+- `ctx.services` — list of registered service names (e.g., `["pipeline_memory", "entity_state"]`)
+
+**Usage in expressions:**
+```yaml
+- kind: expression_node
+  metadata:
+    name: tag_run
+  spec:
+    expressions:
+      run_tag: "'run-' + ctx.run_id"
+      is_order_pipeline: "ctx.pipeline_name == 'order-processing'"
+```
+
+**Usage in `when` clauses:**
+```yaml
+- kind: llm_node
+  metadata:
+    name: debug_node
+  spec:
+    when: "ctx.pipeline_name == 'debug-pipeline'"
+    human_message: "Debug info for run {{ctx.run_id}}"
+```
+
+**Usage in templates:**
+```yaml
+- kind: llm_node
+  metadata:
+    name: analyzer
+  spec:
+    human_message: "Pipeline {{ctx.pipeline_name}} run {{ctx.run_id}}: analyze {{$input.data}}"
+```
+
+**Why read-only:** `ctx` fields (`run_id`, `pipeline_name`, `node_name`) are framework-owned. Allowing mutation would break event correlation, structured logging, and observability. For mutable cross-node state, use PipelineMemory.
+
+**Build-time:** `ctx` is a reserved prefix — nodes cannot be named `ctx`, and `ctx.field` references are not treated as node dependencies.
+
+#### `memory()` — PipelineMemory Access in Expressions (Planned)
+
+Expression functions for PipelineMemory (`memory()`, `memory_set()`) are planned but deferred — requires designing a proper Memory port with pluggable backends (key-value, vector, graph) before exposing in expressions. Currently, use PipelineMemory service tools (`get`, `set`, `update`, `snapshot`) via `service_call_node` or agent tools.
+
 # Claude Development Guidelines
 
 ## Modern Python 3.12+ Type Hints

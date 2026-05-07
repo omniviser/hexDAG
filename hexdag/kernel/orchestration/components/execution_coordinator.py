@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 else:
     ObserverManager = Any
 
+import re
+
+from hexdag.kernel.context import get_ctx_dict
 from hexdag.kernel.domain.dag import NodeSpec
 from hexdag.kernel.expression_parser import (
     ALLOWED_FUNCTIONS,
@@ -230,9 +233,17 @@ class ExecutionCoordinator:
         bool
             True if the source appears to be an expression
         """
-        # Check for function call patterns (function_name followed by parenthesis)
+        # Check for string literal constants (e.g., 'approved' from YAML "'approved'")
+        stripped = source.strip()
+        if (stripped.startswith("'") and stripped.endswith("'") and len(stripped) >= 2) or (
+            stripped.startswith('"') and stripped.endswith('"') and len(stripped) >= 2
+        ):
+            return True
+
+        # Check for function call patterns (function_name followed by parenthesis).
+        # Use word boundary (\b) to avoid false positives like "my_len(" matching "len(".
         for func_name in ALLOWED_FUNCTIONS:
-            if f"{func_name}(" in source:
+            if re.search(rf"\b{re.escape(func_name)}\(", source):
                 return True
 
         # Check for arithmetic/comparison operators (but not dots which are field paths)
@@ -355,10 +366,17 @@ class ExecutionCoordinator:
                 value = FieldExtractor.extract(node_results[node_name], field_path)
                 # Node is known — deep miss is None, not MISSING
                 return None if value is MISSING else value
-            # Node name not found — propagate MISSING
-            return FieldExtractor.extract(
-                base_input if isinstance(base_input, dict) else {}, source
-            )
+            # Also try base_input (upstream dict may contain dotted-path keys),
+            # but only if the first segment is actually a key in base_input.
+            # If not, return MISSING so callers get a clear error instead of
+            # silently resolving to None from an unrelated dict.
+            if isinstance(base_input, dict) and node_name in base_input:
+                return FieldExtractor.extract(base_input, source)
+            return MISSING
+
+        # Bare node name — return entire node result if it exists
+        if source in node_results:
+            return node_results[source]
 
         # Simple field name - extract from base_input
         return FieldExtractor.extract(base_input if isinstance(base_input, dict) else {}, source)
@@ -504,6 +522,9 @@ class ExecutionCoordinator:
                     data_context[key] = val
         elif initial_input is not None:
             data_context["input"] = initial_input
+
+        # Inject read-only pipeline context
+        data_context["ctx"] = get_ctx_dict()
 
         try:
             # Use evaluate_expression to get the actual value, not a boolean

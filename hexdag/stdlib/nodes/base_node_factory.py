@@ -195,7 +195,9 @@ class BaseNodeFactory(ABC):
         -------
         dict[str, Any]
             Dictionary with keys: timeout, max_retries, retry_delay, retry_backoff,
-            retry_max_delay, when. Values are None if not present in kwargs.
+            retry_max_delay, when, critical, required_inputs.
+            Values are None if not present in kwargs (except critical=False,
+            required_inputs=()).
 
         Examples
         --------
@@ -225,6 +227,8 @@ class BaseNodeFactory(ABC):
             "retry_backoff": kwargs.pop("retry_backoff", None),
             "retry_max_delay": kwargs.pop("retry_max_delay", None),
             "when": kwargs.pop("when", None),
+            "critical": kwargs.pop("critical", False),
+            "required_inputs": kwargs.pop("required_inputs", ()),
         }
 
     def create_node_with_mapping(
@@ -259,6 +263,8 @@ class BaseNodeFactory(ABC):
             retry_backoff=framework["retry_backoff"],
             retry_max_delay=framework["retry_max_delay"],
             when=framework["when"],
+            critical=framework["critical"],
+            required_inputs=framework["required_inputs"],
         )
 
     @abstractmethod

@@ -433,6 +433,10 @@
                                 "null"
                             ]
                         },
+                        "route_downstream": {
+                            "default": false,
+                            "type": "boolean"
+                        },
                         "state_update": {
                             "additionalProperties": {
                                 "type": "string"
@@ -1137,6 +1141,19 @@
                             "default": null,
                             "description": "Optional field aliases. Upstream node outputs are available directly in expressions and templates (n8n-like). Use input_mapping only to create short aliases or to map fields to function/service parameter names. Keys are target field names, values use node_name.field or $input.field syntax.",
                             "title": "Input Mapping"
+                        },
+                        "when": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "default": null,
+                            "description": "Conditional execution expression. Node is skipped when this evaluates to false.",
+                            "title": "When"
                         }
                     },
                     "type": "object"
@@ -1178,6 +1195,18 @@
                     "default": 10,
                     "title": "Max Concurrent Nodes",
                     "type": "integer"
+                },
+                "pipeline_timeout": {
+                    "anyOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Pipeline Timeout"
                 },
                 "strict_validation": {
                     "default": false,
@@ -1342,12 +1371,12 @@
                         },
                         "entity_id": {
                             "default": null,
-                            "description": "Entity ID expression (resolved at runtime from input).",
+                            "description": "Entity ID expression \u2014 resolved at runtime from input. Supports ``$input.field`` and ``node_name.field`` syntax.",
                             "type": "string"
                         },
                         "reason": {
                             "default": null,
-                            "description": "Optional reason expression (resolved at runtime). Additional NodeSpec fields (when, on_error, etc.).",
+                            "description": "Optional reason expression \u2014 resolved at runtime. Supports ``$input.field`` and ``node_name.field`` syntax. Additional NodeSpec fields (when, on_error, etc.).",
                             "type": "string"
                         },
                         "to_state": {

@@ -139,6 +139,7 @@ Specification for composite_node type
 | `max_iterations` | integer | No | Safety limit for while loops (default... |
 | `mode` | `"while`" | `"for-each`" | `"times`" | Yes | Control flow mode: while, for-each, t... |
 | `reducer` | string | null | No | Module path to reducer function for r... |
+| `route_downstream` | boolean | No |  |
 | `state_update` | object | null | No | State update expressions for while mode |
 | `strict_validation` | boolean | No |  |
 
@@ -301,8 +302,8 @@ Specification for transition_node type
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `entity` | string | Yes | Entity type (must match a registered ... |
-| `entity_id` | string | No | Entity ID expression (resolved at run... |
-| `reason` | string | No | Optional reason expression (resolved ... |
+| `entity_id` | string | No | Entity ID expression — resolved at ru... |
+| `reason` | string | No | Optional reason expression — resolved... |
 | `to_state` | string | Yes | Target state for the transition. |
 
 **Example:**

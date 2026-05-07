@@ -631,6 +631,7 @@ class TestCompositeNodeValidation:
                             "mode": "while",
                             "condition": "state.count < 5",
                             "initial_state": {"count": 0},
+                            "body": "json.dumps",
                         },
                     }
                 ]
@@ -653,6 +654,7 @@ class TestCompositeNodeValidation:
                             "mode": "for-each",
                             "items": "$input.items",
                             "concurrency": 5,
+                            "body": "json.dumps",
                         },
                     }
                 ]
@@ -674,6 +676,7 @@ class TestCompositeNodeValidation:
                         "spec": {
                             "mode": "times",
                             "count": 10,
+                            "body": "json.dumps",
                         },
                     }
                 ]
@@ -1416,3 +1419,414 @@ class TestNamingCollisionValidation:
         ])
         result = self.validator.validate(config)
         assert result.is_valid, f"Unexpected errors: {result.errors}"
+
+
+# ============================================================================
+# Rule 1: Signature-based spec validation
+# ============================================================================
+
+
+class TestSignatureBasedValidation:
+    """Rule 1: Resolve factory, introspect __call__, check required params."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_config(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def test_dotted_path_missing_required_param(self):
+        """Dotted-path node with missing required param is caught."""
+        config = self._make_config([
+            {
+                "kind": "hexdag.stdlib.nodes.TransitionNode",
+                "metadata": {"name": "bad"},
+                "spec": {},  # missing entity, to_state
+            }
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("entity" in e for e in result.errors)
+
+    def test_dotted_path_valid_spec_passes(self):
+        """Dotted-path node with all required params passes."""
+        config = self._make_config([
+            {
+                "kind": "hexdag.stdlib.nodes.TransitionNode",
+                "metadata": {"name": "ok"},
+                "spec": {"entity": "order", "to_state": "SHIPPED"},
+            }
+        ])
+        result = self.validator.validate(config)
+        assert result.is_valid, f"Errors: {result.errors}"
+
+    def test_unresolvable_dotted_path_errors(self):
+        """Dotted path that can't be imported is an error."""
+        config = self._make_config([
+            {
+                "kind": "hexdag.stdlib.nodes.NoSuchNode",
+                "metadata": {"name": "bad"},
+                "spec": {},
+            }
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("Cannot resolve" in e for e in result.errors)
+
+    def test_alias_node_missing_required_param(self):
+        """Alias-based node with missing required param is caught."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "bad"},
+                "spec": {},  # missing fn
+            }
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("fn" in e for e in result.errors)
+
+    def test_composite_while_missing_body(self):
+        """while mode without body or body_pipeline is an error."""
+        config = self._make_config([
+            {
+                "kind": "composite_node",
+                "metadata": {"name": "loop"},
+                "spec": {"mode": "while", "condition": "state.x < 3"},
+            }
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("body" in e for e in result.errors)
+
+    def test_composite_times_zero_is_error(self):
+        """times mode with count=0 is caught."""
+        config = self._make_config([
+            {
+                "kind": "composite_node",
+                "metadata": {"name": "repeat"},
+                "spec": {"mode": "times", "count": 0, "body": "json.dumps"},
+            }
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("positive" in e for e in result.errors)
+
+    def test_switch_branch_missing_condition(self):
+        """switch branch without condition field is caught."""
+        config = self._make_config([
+            {
+                "kind": "composite_node",
+                "metadata": {"name": "router"},
+                "spec": {
+                    "mode": "switch",
+                    "branches": [{"action": "do_something"}],
+                },
+            }
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("condition" in e for e in result.errors)
+
+
+# ============================================================================
+# Rule 2: Reference validation for expression-like fields
+# ============================================================================
+
+
+class TestExpressionFieldReferenceValidation:
+    """Rule 2: condition/items/when/state_update refs checked for typos."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_config(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def test_typo_in_condition_caught(self):
+        """Typo in composite condition field is caught."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "checker"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "composite_node",
+                "metadata": {"name": "loop"},
+                "spec": {
+                    "mode": "while",
+                    "condition": "typo_node.done == False",
+                    "body": "json.dumps",
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("typo_node" in e for e in result.errors)
+
+    def test_valid_condition_ref_passes(self):
+        """Valid node reference in condition passes."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "checker"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "composite_node",
+                "metadata": {"name": "loop"},
+                "spec": {
+                    "mode": "while",
+                    "condition": "checker.done == False",
+                    "body": "json.dumps",
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert result.is_valid, f"Errors: {result.errors}"
+
+    def test_typo_in_when_clause_caught(self):
+        """Typo in when clause is caught."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "step1"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "step2"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "when": "typo_node.ready == True",
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("typo_node" in e for e in result.errors)
+
+
+# ============================================================================
+# Rule 3: Port requirement validation
+# ============================================================================
+
+
+class TestPortRequirementValidation:
+    """Rule 3: Nodes requiring ports checked against spec.ports."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def test_llm_node_without_port_is_warning(self):
+        """LLM node without llm port declared emits warning (ports may be runtime-configured)."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "llm_node",
+                        "metadata": {"name": "analyze"},
+                        "spec": {"prompt_template": "Analyze: {{input}}"},
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+        assert any("port" in w and "llm" in w for w in result.warnings)
+
+    def test_llm_node_with_port_passes(self):
+        """LLM node with llm port declared passes."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "ports": {
+                    "llm": {
+                        "adapter": "hexdag.stdlib.adapters.mock.MockLLM",
+                    },
+                },
+                "nodes": [
+                    {
+                        "kind": "llm_node",
+                        "metadata": {"name": "analyze"},
+                        "spec": {"prompt_template": "Analyze: {{input}}"},
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid, f"Errors: {result.errors}"
+
+    def test_state_machine_missing_initial(self):
+        """State machine without initial field is caught."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "state_machines": {
+                    "order": {"transitions": {"NEW": ["SHIPPED"]}},
+                },
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "step"},
+                        "spec": {"fn": "json.dumps"},
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("initial" in e for e in result.errors)
+
+
+class TestWhenClauseValidation:
+    """Tests for build-time when clause syntax validation."""
+
+    def setup_method(self) -> None:
+        self.validator = YamlValidator()
+
+    def test_valid_when_clause_passes(self) -> None:
+        """A syntactically valid when clause should not produce errors."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "step"},
+                        "spec": {
+                            "fn": "json.dumps",
+                            "when": "status == 'active' and count > 5",
+                        },
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        when_errors = [e for e in result.errors if "when" in e.lower()]
+        assert not when_errors
+
+    def test_malformed_when_clause_caught(self) -> None:
+        """A syntactically invalid when clause should produce a build error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "step"},
+                        "spec": {
+                            "fn": "json.dumps",
+                            "when": "status === 'active'",  # invalid operator
+                        },
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert any("when" in e.lower() and "step" in e for e in result.errors)
+
+    def test_when_clause_on_macro_invocation(self) -> None:
+        """when clauses on macro_invocation config should also be validated."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "macro_invocation",
+                        "metadata": {"name": "my_macro"},
+                        "spec": {
+                            "macro": "hexdag.stdlib.macros.llm_macro.LLMMacro",
+                            "config": {
+                                "when": "invalid !! syntax",
+                            },
+                        },
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert any("when" in e.lower() and "my_macro" in e for e in result.errors)
+
+
+class TestInputMappingValidation:
+    """Tests for input_mapping expression syntax validation."""
+
+    def setup_method(self) -> None:
+        self.validator = YamlValidator()
+
+    def test_expression_in_mapping_validated(self) -> None:
+        """input_mapping values containing expressions should be syntax-checked."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "upstream"},
+                        "spec": {"fn": "json.dumps"},
+                    },
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "step"},
+                        "spec": {
+                            "fn": "json.dumps",
+                            "input_mapping": {
+                                "valid_ref": "upstream.field",
+                                "bad_expr": "upstream.status === 'done'",  # invalid operator
+                            },
+                        },
+                    },
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        # The invalid expression should be caught
+        assert any("expression" in e.lower() or "when" in e.lower() for e in result.errors)
+
+    def test_simple_ref_not_flagged_as_expression(self) -> None:
+        """Simple node.field references should not be treated as expressions."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "upstream"},
+                        "spec": {"fn": "json.dumps"},
+                    },
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "step"},
+                        "spec": {
+                            "fn": "json.dumps",
+                            "input_mapping": {
+                                "my_field": "upstream.result",
+                            },
+                        },
+                    },
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        # No expression-related errors for simple references
+        expr_errors = [e for e in result.errors if "expression" in e.lower()]
+        assert not expr_errors

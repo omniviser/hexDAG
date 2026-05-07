@@ -269,3 +269,222 @@ class TestMissingSentinelInExpressions:
 
         result = evaluate_expression("val", {"val": None}, {})
         assert result is None
+
+
+class TestBareNodeNameResolution:
+    """Tests for resolving bare node names (no dot) from node_results."""
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_bare_name_resolves_from_node_results(self, coordinator):
+        """input_mapping 'check: guardrail_check' resolves the whole node result."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"guardrail_check"}),
+            params={"input_mapping": {"check": "guardrail_check"}},
+        )
+        node_results = {"guardrail_check": {"classification": "safe", "score": 0.95}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result["check"] == {"classification": "safe", "score": 0.95}
+
+    def test_bare_name_scalar_node_result(self, coordinator):
+        """Bare name resolves to scalar node result."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"counter"}),
+            params={"input_mapping": {"count": "counter"}},
+        )
+        node_results = {"counter": 42}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result["count"] == 42
+
+    def test_bare_name_not_in_results_falls_to_base_input(self, coordinator):
+        """Bare name not in node_results falls back to base_input field extraction."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"val": "some_field"}},
+        )
+        node_results = {"producer": {"some_field": "hello"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result["val"] == "hello"
+
+
+class TestQuotedStringLiteralResolution:
+    """Tests for quoted string literals in input_mapping."""
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_single_quoted_string_literal(self, coordinator):
+        """YAML "'approved'" resolves to string 'approved'."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"status": "'approved'"}},
+        )
+        node_results = {"producer": {"data": "x"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result["status"] == "approved"
+
+    def test_is_expression_detects_quoted_string(self, coordinator):
+        """_is_expression returns True for quoted string literals."""
+        assert coordinator._is_expression("'approved'") is True
+        assert coordinator._is_expression("'hello world'") is True
+        assert coordinator._is_expression('"double quoted"') is True
+
+    def test_is_expression_does_not_match_unquoted(self, coordinator):
+        """_is_expression returns False for regular field names."""
+        assert coordinator._is_expression("some_field") is False
+        assert coordinator._is_expression("node.field") is False
+
+
+class TestExpressionDetectionFalsePositives:
+    """Regression tests for _is_expression false positives.
+
+    Field paths containing substrings of allowed function names
+    (e.g., 'my_len(data).result' matching 'len(') should NOT be
+    classified as expressions.
+    """
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_field_with_len_suffix_not_expression(self, coordinator):
+        """'my_len' should not match allowed function 'len'."""
+        assert coordinator._is_expression("my_len(data)") is False
+
+    def test_field_with_coalesce_prefix_not_expression(self, coordinator):
+        """'coalesce_results.field' should not match 'coalesce('."""
+        assert coordinator._is_expression("coalesce_results.field") is False
+
+    def test_actual_len_still_detected(self, coordinator):
+        """Actual 'len(items)' is still detected as expression."""
+        assert coordinator._is_expression("len(items)") is True
+
+    def test_actual_coalesce_still_detected(self, coordinator):
+        """Actual 'coalesce(a, b)' is still detected as expression."""
+        assert coordinator._is_expression("coalesce(a, b)") is True
+
+
+class TestUnknownNodeFallback:
+    """Regression tests for unknown node.field resolution.
+
+    When input_mapping references a node name not in node_results,
+    the coordinator should return MISSING (raising an error) instead
+    of silently extracting from base_input.
+    """
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_unknown_node_raises_error(self, coordinator):
+        """Referencing a non-existent node in input_mapping raises ValueError."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"val": "typo_node.field"}},
+        )
+        node_results = {"producer": {"data": "ok"}}
+
+        with pytest.raises(ValueError, match="does not exist"):
+            coordinator.prepare_node_input(node, node_results, initial_input={})
+
+    def test_known_node_name_in_base_input_still_resolves(self, coordinator):
+        """When node_name is in base_input (upstream dict), it still resolves."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"val": "producer.data"}},
+        )
+        node_results = {"producer": {"data": "ok"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result["val"] == "ok"
+
+
+class TestCtxInExpressions:
+    """Test that ctx is injected into expression evaluation."""
+
+    def test_ctx_available_in_expression(self):
+        """ctx fields are accessible in _evaluate_expression."""
+        from hexdag.kernel.context import (
+            ExecutionContext,
+            clear_execution_context,
+        )
+
+        coordinator = ExecutionCoordinator()
+
+        with ExecutionContext(
+            run_id="test-run-123",
+            pipeline_name="my-pipeline",
+        ):
+            result = coordinator._evaluate_expression(
+                "ctx.run_id",
+                base_input={},
+                initial_input={},
+                node_results={},
+            )
+            assert result == "test-run-123"
+
+        clear_execution_context()
+
+    def test_ctx_pipeline_name_in_expression(self):
+        """ctx.pipeline_name resolves in expression evaluation."""
+        from hexdag.kernel.context import (
+            ExecutionContext,
+            clear_execution_context,
+        )
+
+        coordinator = ExecutionCoordinator()
+
+        with ExecutionContext(pipeline_name="order-processing"):
+            result = coordinator._evaluate_expression(
+                "ctx.pipeline_name == 'order-processing'",
+                base_input={},
+                initial_input={},
+                node_results={},
+            )
+            assert result is True
+
+        clear_execution_context()
+
+    def test_ctx_coexists_with_node_results(self):
+        """ctx doesn't interfere with node result access."""
+        from hexdag.kernel.context import (
+            ExecutionContext,
+            clear_execution_context,
+        )
+
+        coordinator = ExecutionCoordinator()
+
+        with ExecutionContext(run_id="run-1", pipeline_name="test"):
+            result = coordinator._evaluate_expression(
+                "analyzer.score",
+                base_input={},
+                initial_input={},
+                node_results={"analyzer": {"score": 0.95}},
+            )
+            assert result == 0.95
+
+        clear_execution_context()

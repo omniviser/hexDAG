@@ -70,3 +70,11 @@ def aset_with_ttl(key: str, value: object, ttl_seconds: int) -> None:
 def _tool_call_node_call(tool_call_id: str | None = None) -> None:  # noqa: UP007
     """Whitelist for ToolCallNode.__call__ tool_call_id parameter."""
     _ = tool_call_id
+
+
+# hexdag/stdlib/nodes/composite_node.py - CompositeNode.__call__ parameter
+# Consumed by the YAML builder at compile time (route_downstream auto-injects when clauses),
+# not used by the node factory at runtime.  Kept in __call__ for schema generation.
+def _composite_node_call(route_downstream: bool = False) -> None:
+    """Whitelist for CompositeNode.__call__ route_downstream parameter."""
+    _ = route_downstream

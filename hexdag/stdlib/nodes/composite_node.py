@@ -56,6 +56,7 @@ YAML usage - switch for routing (no body)::
 """
 
 import asyncio
+import copy
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -139,6 +140,8 @@ class CompositeNode(BaseNodeFactory, yaml_alias="composite_node"):
         max_concurrent_nodes: int = 10,
         strict_validation: bool = False,
         default_node_timeout: float | None = None,
+        # Switch routing
+        route_downstream: bool = False,
         # Dependencies
         deps: list[str] | None = None,
         input_mapping: dict[str, str] | None = None,
@@ -463,7 +466,7 @@ async def _execute_while(
     node_logger: Any,
 ) -> dict[str, Any]:
     """Execute while loop mode."""
-    state = dict(initial_state)
+    state = copy.deepcopy(initial_state)
     results: list[Any] = []
     errors: list[dict[str, Any]] = []
     iteration = 0

@@ -1,227 +1,141 @@
 # Ports Reference
 
-This page documents all registered ports in HexDAG.
+Port protocols define the interfaces that adapters must implement.
+hexDAG follows hexagonal architecture — ports live in the kernel,
+adapters in stdlib or plugins.
 
 ## Overview
 
-Total ports: **10**
-
-## Namespace: `core`
-
-### `api_call`
-
-Base protocol for making external API calls.
-
-    This is a fundamental protocol that provides a standard interface for
-    making HTTP/REST API calls. Other protocols (like LLM) can inherit from
-    this to indicate they also support API call functionality.
-
-    Implementations can use requests, httpx, aiohttp, or any HTTP client.
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `api_call`
+| Port | Module |
+|------|--------|
+| `LLM` | `hexdag.kernel.ports.llm` |
+| `Database` | `hexdag.kernel.ports.database` |
+| `Memory` | `hexdag.kernel.ports.memory` |
+| `ToolRouter` | `hexdag.kernel.ports.tool_router` |
+| `APICall` | `hexdag.kernel.ports.api_call` |
+| `FileStorage` | `hexdag.kernel.ports.file_storage` |
+| `SecretStore` | `hexdag.kernel.ports.secret` |
+| `Executor` | `hexdag.kernel.ports.executor` |
 
 ---
 
-### `database`
+### `LLM`
 
-Port interface for accessing database schema and metadata.
-
-    This port abstracts access to database systems, allowing the analytics engine to work with
-    different database backends. Implementations may use direct connections (psycopg2, SQLAlchemy)
-    or REST APIs for cloud databases (Snowflake, BigQuery, etc.).
-
-    Optional Methods
-    ----------------
-    Adapters may optionally implement:
-    - ahealth_check(): Verify database connectivity and query execution
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `database`
-
----
-
-### `executor`
-
-Port interface for DAG node execution strategies.
-
-    This port abstracts the execution backend, allowing the orchestrator
-    to delegate node execution to different implementations:
-
-    - **LocalExecutor**: In-process async execution (default)
-    - **CeleryExecutor**: Distributed execution via Celery task queue
-    - **AzureFunctionsExecutor**: Serverless execution via Azure Functions
-
-    The port provides a consistent interface regardless of where/how
-    nodes are actually executed.
-
-    Lifecycle
-    ---------
-    Executors may implement optional setup/cleanup methods:
-    - asetup(): Initialize resources (connections, workers, etc.)
-    - aclose(): Cleanup resources (called automatically by orchestrator)
-
-    Optional Methods
-    ----------------
-    Adapters may optionally implement:
-    - asetup(): Initialize executor resources before first use
-    - aclose(): Cleanup executor resources after execution completes
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `executor`
-
----
-
-### `file_storage`
-
-Port for file storage operations.
-
-    Provides a unified interface for local and cloud file storage.
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `file_storage`
-
----
-
-### `llm`
+**Module:** `hexdag.kernel.ports.llm`
 
 Port interface for Large Language Models (LLMs).
 
+---
 
-    LLMs provide natural language generation capabilities. Implementations
-    may use various backends (OpenAI, Anthropic, local models, etc.) but
-    must provide the aresponse method for generating text from messages.
+### `Database`
 
-    Optional Protocols
-    ------------------
-    Adapters may optionally implement:
-    - **SupportsGeneration**: Text generation via `aresponse()`
-    - **SupportsFunctionCalling**: Native tool calling via `aresponse_with_tools()`
-    - **SupportsVision**: Multimodal vision via `aresponse_with_vision()`
-    - **SupportsEmbedding**: Embedding generation via `aembed()`
-    - **SupportsUsageTracking**: Token usage tracking via `get_last_usage()`
-    - ahealth_check(): Verify LLM API connectivity and availability
+**Module:** `hexdag.kernel.ports.database`
 
-    SupportsUsageTracking
-    ---------------------
-    Adapters that track token usage implement `get_last_usage() -> TokenUsage | None`.
-    This enables the `CostProfilerObserver` to compute per-node costs without
-    changing the `SupportsGeneration.aresponse() -> str | None` return type.
+Port interface for accessing database schema and metadata.
 
-    ```python
-    from hexdag.core.ports.llm import SupportsUsageTracking, TokenUsage
+**Methods:**
 
-    class MyAdapter(LLM, SupportsUsageTracking):
-        def get_last_usage(self) -> TokenUsage | None:
-            return self._last_usage  # Set after each API call
-    ```
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `llm`
+- `aexecute_query(self, query: 'str', params: 'dict[str, Any] | None' = None) -> 'list[dict[str, Any]]'`
+- `aget_table_schemas(self) -> 'dict[str, dict[str, Any]]'`
 
 ---
 
-### `memory`
+### `Memory`
+
+**Module:** `hexdag.kernel.ports.memory`
 
 Protocol for long-term memory storage and retrieval.
 
-    Optional Methods
-    ----------------
-    Adapters may optionally implement:
-    - ahealth_check(): Verify storage backend connectivity and availability
+**Methods:**
 
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `memory`
+- `aget(self, key: str) -> Any`
+- `ahealth_check(self) -> 'HealthStatus'`
+- `aset(self, key: str, value: Any) -> None`
 
 ---
 
-### `observer_manager`
+### `ToolRouter`
 
-Port interface for event observation systems.
+**Module:** `hexdag.kernel.ports.tool_router`
 
-    Key Safety Guarantees:
-    - Observers must be READ-ONLY and cannot affect execution
-    - Observer failures must not crash the pipeline (fault isolation)
-    - Fire-and-forget pattern with async, non-blocking execution
-    - Event type filtering for performance optimization
-    - Configurable concurrency control and timeouts
-    - Optional weak reference support for memory management
+Concrete tool router that wraps plain Python functions.
 
-**Metadata:**
+**Methods:**
 
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `observer_manager`
-
----
-
-### `policy_manager`
-
-Port for managing execution control policies.
-
-    Provides subscription-based policy management with automatic cleanup
-    using weak references and categorization by subscriber type.
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `policy_manager`
+- `acall_tool(self, tool_name: 'str', params: 'dict[str, Any]') -> 'Any'`
+- `add_tool(self, name: 'str', fn: 'Callable[..., Any]') -> 'None'`
+- `add_tools_from(self, other: 'ToolRouter') -> 'None'`
+- `aget_all_tool_schemas(self) -> 'dict[str, dict[str, Any]]'`
+- `aget_available_tools(self) -> 'list[str]'`
+- `aget_tool_schema(self, tool_name: 'str') -> 'dict[str, Any]'`
+- `ahealth_check(self) -> 'dict[str, Any]'`
+- `get_all_tool_schemas(self) -> 'dict[str, dict[str, Any]]'`
+- `get_available_tools(self) -> 'list[str]'`
+- `get_tool_schema(self, tool_name: 'str') -> 'dict[str, Any]'`
 
 ---
 
-### `secret`
+### `APICall`
+
+**Module:** `hexdag.kernel.ports.api_call`
+
+Base protocol for making external API calls.
+
+**Methods:**
+
+- `adelete(self, url: str, headers: dict[str, str] | None = None, **kwargs: Any) -> dict[str, typing.Any]`
+- `aget(self, url: str, headers: dict[str, str] | None = None, params: dict[str, typing.Any] | None = None, **kwargs: Any) -> dict[str, typing.Any]`
+- `apost(self, url: str, json: dict[str, typing.Any] | None = None, data: typing.Any | None = None, headers: dict[str, str] | None = None, **kwargs: Any) -> dict[str, typing.Any]`
+- `aput(self, url: str, json: dict[str, typing.Any] | None = None, data: typing.Any | None = None, headers: dict[str, str] | None = None, **kwargs: Any) -> dict[str, typing.Any]`
+- `arequest(self, method: str, url: str, **kwargs: Any) -> dict[str, typing.Any]`
+
+---
+
+### `FileStorage`
+
+**Module:** `hexdag.kernel.ports.file_storage`
+
+Port for file storage operations.
+
+**Methods:**
+
+- `adelete(self, remote_path: str) -> dict`
+- `adownload(self, remote_path: str, local_path: str) -> dict`
+- `aexists(self, remote_path: str) -> bool`
+- `aget_metadata(self, remote_path: str) -> dict`
+- `ahealth_check(self) -> hexdag.kernel.ports.healthcheck.HealthStatus`
+- `alist(self, prefix: str = '') -> list[str]`
+- `aupload(self, local_path: str, remote_path: str) -> dict`
+
+---
+
+### `SecretStore`
+
+**Module:** `hexdag.kernel.ports.secret`
 
 Port interface for secret/credential management systems.
 
-    This port abstracts access to secret management services like:
-    - Azure KeyVault
-    - AWS Secrets Manager
-    - HashiCorp Vault
-    - Google Secret Manager
-    - Environment variables
+**Methods:**
 
-    Secrets are returned as Secret[str] objects to prevent accidental logging.
-
-    Optional Methods
-    ----------------
-    Adapters may optionally implement:
-    - ahealth_check(): Verify secret service connectivity and authentication
-
-**Metadata:**
-
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `secret`
+- `aget_secret(self, key: str) -> 'Secret'`
+- `ahealth_check(self) -> 'HealthStatus'`
+- `alist_secret_names(self) -> list[str]`
+- `aload_secrets_to_memory(self, memory: 'Memory', prefix: str = 'secret:', keys: list[str] | None = None) -> dict[str, str]`
+- `load_to_environ(self, keys: list[str] | None = None, prefix: str = '', overwrite: bool = False) -> dict[str, str]`
 
 ---
 
-### `tool_router`
+### `Executor`
 
-Protocol for routing tool calls.
+**Module:** `hexdag.kernel.ports.executor`
 
-**Metadata:**
+Port interface for DAG node execution strategies.
 
-- **Type:** `port`
-- **Namespace:** `core`
-- **Name:** `tool_router`
+**Methods:**
+
+- `aclose(self) -> None`
+- `aexecute_node(self, task: hexdag.kernel.ports.executor.ExecutionTask) -> hexdag.kernel.ports.executor.ExecutionResult`
+- `aexecute_wave(self, tasks: list[hexdag.kernel.ports.executor.ExecutionTask]) -> dict[str, hexdag.kernel.ports.executor.ExecutionResult]`
+- `asetup(self) -> None`
 
 ---
