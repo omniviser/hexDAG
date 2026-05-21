@@ -12,6 +12,7 @@ without explicit parameter passing.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -318,6 +319,69 @@ def get_ctx_dict(node_name: str | None = None) -> dict[str, Any]:
         "node_name": node_name or _current_node_name_context.get() or "",
         "services": list((_services_context.get() or {}).keys()),
     }
+
+
+# ============================================================================
+# Expression Namespaces — first-class kernel types
+# ============================================================================
+#
+# Three implicit namespaces are available in pipeline expressions:
+#   ctx    — pipeline execution metadata (env vars analogy)
+#   $input — pipeline input data (argv analogy), alias: "input"
+#   state  — loop iteration state (stack locals analogy)
+#
+# These are declared here as the single source of truth. The compiler,
+# validator, builder, and expression parser all derive from these
+# declarations instead of hardcoding namespace names.
+
+
+@dataclass(frozen=True)
+class ExpressionNamespace:
+    """A framework-provided namespace available in pipeline expressions."""
+
+    name: str
+    aliases: frozenset[str]
+    fields: frozenset[str] | None
+    scoped_to: str | None
+
+
+CTX = ExpressionNamespace(
+    name="ctx",
+    aliases=frozenset(),
+    fields=frozenset(get_ctx_dict().keys()),
+    scoped_to=None,
+)
+
+INPUT = ExpressionNamespace(
+    name="$input",
+    aliases=frozenset({"input"}),
+    fields=None,
+    scoped_to=None,
+)
+
+STATE = ExpressionNamespace(
+    name="state",
+    aliases=frozenset(),
+    fields=None,
+    scoped_to="composite",
+)
+
+EXPRESSION_NAMESPACES: tuple[ExpressionNamespace, ...] = (CTX, INPUT, STATE)
+
+RESERVED_NAMES: frozenset[str] = frozenset(
+    n.name for n in EXPRESSION_NAMESPACES
+) | frozenset().union(*(n.aliases for n in EXPRESSION_NAMESPACES))
+
+# Lookup: name-or-alias → namespace for field validation.
+# Names starting with "$" are excluded — the regex _NODE_FIELD_RE uses a
+# negative lookbehind that prevents "$input.field" from matching, so those
+# references are handled by dedicated validation rules instead.
+_NS_LOOKUP: dict[str, ExpressionNamespace] = {}
+for _ns in EXPRESSION_NAMESPACES:
+    if not _ns.name.startswith("$"):
+        _NS_LOOKUP[_ns.name] = _ns
+    for _a in _ns.aliases:
+        _NS_LOOKUP[_a] = _ns
 
 
 # ============================================================================

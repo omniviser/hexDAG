@@ -206,6 +206,13 @@ class TestLifecycle:
         await svc.ateardown()
 
     @pytest.mark.asyncio
+    async def test_ateardown_accepts_success_param(self) -> None:
+        """ateardown accepts success=True/False keyword argument."""
+        svc = Service()
+        await svc.ateardown(success=True)
+        await svc.ateardown(success=False)
+
+    @pytest.mark.asyncio
     async def test_lifecycle_can_be_overridden(self) -> None:
         """Subclasses can override lifecycle methods."""
         events: list[str] = []
@@ -214,13 +221,26 @@ class TestLifecycle:
             async def asetup(self) -> None:
                 events.append("setup")
 
-            async def ateardown(self) -> None:
-                events.append("teardown")
+            async def ateardown(self, *, success: bool = True) -> None:
+                events.append(f"teardown:{'ok' if success else 'fail'}")
 
         svc = MyService()
         await svc.asetup()
-        await svc.ateardown()
-        assert events == ["setup", "teardown"]
+        await svc.ateardown(success=True)
+        assert events == ["setup", "teardown:ok"]
+
+    @pytest.mark.asyncio
+    async def test_ateardown_success_false_on_failure(self) -> None:
+        """Services receive success=False when pipeline fails."""
+        received: list[bool] = []
+
+        class DbService(Service):
+            async def ateardown(self, *, success: bool = True) -> None:
+                received.append(success)
+
+        svc = DbService()
+        await svc.ateardown(success=False)
+        assert received == [False]
 
 
 # ---------------------------------------------------------------------------

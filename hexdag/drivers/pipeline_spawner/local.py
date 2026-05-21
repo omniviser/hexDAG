@@ -16,6 +16,7 @@ from hexdag.kernel.logging import get_logger
 
 if TYPE_CHECKING:
     from hexdag.kernel.domain.caps import CapSet
+    from hexdag.kernel.domain.pipeline_result import PipelineResult
     from hexdag.kernel.pipeline_runner import PipelineRunner
 
 logger = get_logger(__name__)
@@ -53,7 +54,7 @@ class LocalPipelineSpawner:
         self._pipeline_dir = pipeline_dir
         self._cap_set: CapSet | None = cap_set
         self._runs: dict[str, _RunState] = {}
-        self._tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+        self._tasks: dict[str, asyncio.Task[PipelineResult]] = {}
 
     async def aspawn(
         self,
@@ -128,7 +129,7 @@ class LocalPipelineSpawner:
             run_ids.append(run_id)
         return run_ids
 
-    async def await_result(self, run_id: str, timeout: float | None = None) -> dict[str, Any]:
+    async def await_result(self, run_id: str, timeout: float | None = None) -> PipelineResult:
         """Wait for a spawned pipeline to complete."""
         if run_id not in self._runs:
             msg = f"Unknown run ID: {run_id}"
@@ -194,7 +195,7 @@ class LocalPipelineSpawner:
         pipeline_name: str,
         initial_input: dict[str, Any],
         timeout: float | None,
-    ) -> dict[str, Any]:
+    ) -> PipelineResult:
         """Execute the pipeline via PipelineRunner."""
         pipeline_path = pipeline_name
         if self._pipeline_dir:
@@ -207,7 +208,7 @@ class LocalPipelineSpawner:
             return await asyncio.wait_for(coro, timeout=timeout)
         return await coro
 
-    def _on_task_done(self, run_id: str, task: asyncio.Task[dict[str, Any]]) -> None:
+    def _on_task_done(self, run_id: str, task: asyncio.Task[PipelineResult]) -> None:
         """Callback when a background task finishes."""
         if task.cancelled():
             self._runs[run_id].status = RunStatus.CANCELLED
@@ -249,5 +250,5 @@ class _RunState:
         self.ref_id = ref_id
         self.ref_type = ref_type
         self.parent_run_id = parent_run_id
-        self.result: dict[str, Any] | None = None
+        self.result: PipelineResult | None = None
         self.error: str | None = None

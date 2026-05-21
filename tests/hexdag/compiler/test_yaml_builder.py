@@ -1419,11 +1419,11 @@ class TestDeprecationWarning:
 
 
 class TestMissingInferredDepsWarning:
-    """Regression: when explicit deps miss inferred ones, a warning is emitted
-    and the missing deps are added automatically."""
+    """When explicit deps miss inferred ones, the validator catches it
+    as a hard error at build time."""
 
-    def test_missing_inferred_dep_emits_warning_and_adds(self):
-        """Explicit deps [a] + inferred {a, b} -> warns about [b] and adds it."""
+    def test_missing_inferred_dep_is_build_error(self):
+        """Explicit deps [a] + input_mapping refs {a, b} -> validation error for 'b'."""
         nodes = """\
 - kind: function_node
   metadata: { name: a }
@@ -1445,16 +1445,8 @@ class TestMissingInferredDepsWarning:
       data_b: b.result
   dependencies: [a]
 """
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            graph = _build_from_nodes(nodes)
-
-        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
-        # Should warn that 'b' is referenced but not in explicit deps
-        msgs = [str(x.message) for x in user_warnings]
-        assert any("b" in m for m in msgs), f"Expected warning about 'b', got: {msgs}"
-        # And 'b' should have been added to the dependencies
-        assert "b" in graph.nodes["c"].deps
+        with pytest.raises(YamlPipelineBuilderError, match="references node 'b'"):
+            _build_from_nodes(nodes)
 
 
 class TestBuilderInlineConfig:

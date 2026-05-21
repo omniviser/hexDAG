@@ -278,6 +278,16 @@ hexDAG uses an **n8n-like data flow model** where upstream node outputs are auto
 **When to still use `input_mapping`:**
 - `step_call` / `function_node` — maps fields to function parameter names
 - Creating short aliases for deeply nested paths used many times in expressions
+- **Inline expressions** — compute derived values without a separate expression_node:
+  ```yaml
+  input_mapping:
+    total: "order.price * order.quantity"
+    is_valid: "len(analyzer.items) > 0"
+    label: "'Order: ' + order.name"
+    fallback: "coalesce(order.notes, 'none')"
+  ```
+  Dependencies are auto-inferred from both dotted refs (`node.field`) and bare node names.
+  Use `input.field` (not `$input.field`) when referencing initial pipeline input in expressions.
 
 **Build-time safety:**
 - Expression variable names that collide with node names → **build error**

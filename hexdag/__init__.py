@@ -27,6 +27,7 @@ from hexdag.kernel import (
     PromptTemplate,
     ToolRouter,
 )
+from hexdag.kernel.domain.pipeline_result import PipelineResult
 from hexdag.stdlib.nodes import (
     FunctionNode,
     LLMNode,
@@ -121,6 +122,7 @@ __all__ = [
     # Version
     "__version__",
     # Primary API
+    "PipelineResult",
     "PipelineRunner",
     # Node Factories
     "FunctionNode",

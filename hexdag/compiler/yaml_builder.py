@@ -36,6 +36,7 @@ from hexdag.compiler.reference_resolver import (
     extract_refs_from_template,
 )
 from hexdag.compiler.yaml_validator import YamlValidator
+from hexdag.kernel.context.execution_context import RESERVED_NAMES
 from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.domain.pipeline_config import (
     BaseNodeConfig,
@@ -570,10 +571,8 @@ class YamlPipelineBuilder:
             if nc.get("metadata", {}).get("name") and nc.get("kind") == "macro_invocation"
         )
 
-        # Validate node names don't collide with reserved expression
-        # namespaces (ctx, $input, state, input).
-        _RESERVED_NAMES = frozenset({"ctx", "$input", "state", "input"})
-        bad = known_nodes & _RESERVED_NAMES
+        # Validate node names don't collide with reserved expression namespaces.
+        bad = known_nodes & RESERVED_NAMES
         if bad:
             raise YamlPipelineBuilderError(
                 f"Node names conflict with reserved expression "

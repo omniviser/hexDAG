@@ -1,6 +1,12 @@
 """Tests for YAML pipeline validator."""
 
 from hexdag.compiler.yaml_validator import ValidationReport, YamlValidator
+from hexdag.kernel.context.execution_context import (
+    CTX,
+    EXPRESSION_NAMESPACES,
+    RESERVED_NAMES,
+    get_ctx_dict,
+)
 
 
 class TestValidationReport:
@@ -330,8 +336,8 @@ class TestYamlValidator:
         # Type validation of field_mapping value would happen at runtime
         assert result.is_valid
 
-    def test_field_mapping_dependency_suggestion(self):
-        """Test suggestion for missing dependency in field mapping."""
+    def test_field_mapping_undeclared_dependency_error(self):
+        """input_mapping references 'source' but dependencies is [] → error."""
         config = {
             "kind": "Pipeline",
             "metadata": {"name": "test"},
@@ -355,8 +361,8 @@ class TestYamlValidator:
             },
         }
         result = self.validator.validate(config)
-        # Note: Field mapping validation uses legacy format internally
-        assert result.is_valid  # Valid since field mapping validation doesn't check K8s format yet
+        assert not result.is_valid
+        assert any("references node 'source'" in e for e in result.errors)
 
     def test_non_dict_config(self):
         """Test validation of non-dict config."""
@@ -1830,3 +1836,563 @@ class TestInputMappingValidation:
         # No expression-related errors for simple references
         expr_errors = [e for e in result.errors if "expression" in e.lower()]
         assert not expr_errors
+
+
+class TestInputFlowConsistency:
+    """Tests for graph-based $input data-flow consistency validation.
+
+    The validator uses the DAG dependency graph to find sibling groups
+    (nodes sharing a common parent) and checks that $input.X fields are
+    consistently passed within each group.
+    """
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_config(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def _fn_node(self, name, input_mapping, *, deps=None, validated_input_fields=None):
+        spec = {"fn": "json.dumps", "input_mapping": input_mapping}
+        if validated_input_fields:
+            spec["validated_input_fields"] = validated_input_fields
+        node = {
+            "kind": "function_node",
+            "metadata": {"name": name},
+            "spec": spec,
+        }
+        if deps:
+            node["dependencies"] = deps
+        return node
+
+    def test_error_on_missing_field_in_graph_siblings(self):
+        """Siblings from the same parent: 3/4 pass $input.conversation_id."""
+        mapping_both = {
+            "conv": "$input.conversation_id",
+            "load": "$input.load_id",
+        }
+        config = self._make_config([
+            self._fn_node("router", {"x": "$input.load_id"}),
+            self._fn_node("a", mapping_both, deps=["router"]),
+            self._fn_node("b", mapping_both, deps=["router"]),
+            self._fn_node("c", mapping_both, deps=["router"]),
+            self._fn_node("d", {"load": "$input.load_id"}, deps=["router"]),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert len(consistency_errors) == 1
+        assert "'d'" in consistency_errors[0]
+        assert "$input.conversation_id" in consistency_errors[0]
+
+    def test_root_siblings_also_checked(self):
+        """Root nodes (no deps) form a sibling group and are checked."""
+        config = self._make_config([
+            self._fn_node("a", {"conv": "$input.conversation_id"}),
+            self._fn_node("b", {"conv": "$input.conversation_id"}),
+            self._fn_node("c", {"load": "$input.load_id"}),  # missing conversation_id
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert len(consistency_errors) == 1
+        assert "'c'" in consistency_errors[0]
+        assert "$input.conversation_id" in consistency_errors[0]
+
+    def test_no_error_on_different_branches(self):
+        """Nodes on different branches (different parents) are NOT siblings."""
+        config = self._make_config([
+            self._fn_node("parent_a", {"x": "$input.load_id"}),
+            self._fn_node("parent_b", {"x": "$input.load_id"}),
+            self._fn_node(
+                "child_a",
+                {"conv": "$input.conversation_id"},
+                deps=["parent_a"],
+            ),
+            self._fn_node(
+                "child_b",
+                {"load": "$input.load_id"},
+                deps=["parent_b"],
+            ),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_no_error_below_threshold(self):
+        """Only 1/4 siblings passes $input.extra → below threshold."""
+        config = self._make_config([
+            self._fn_node("router", {"x": "$input.load_id"}),
+            self._fn_node(
+                "a",
+                {
+                    "conv": "$input.conversation_id",
+                    "extra": "$input.extra",
+                },
+                deps=["router"],
+            ),
+            self._fn_node(
+                "b",
+                {"conv": "$input.conversation_id"},
+                deps=["router"],
+            ),
+            self._fn_node(
+                "c",
+                {"conv": "$input.conversation_id"},
+                deps=["router"],
+            ),
+            self._fn_node(
+                "d",
+                {"conv": "$input.conversation_id"},
+                deps=["router"],
+            ),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_no_error_when_no_input_mapping(self):
+        """Nodes without input_mapping are excluded from sibling groups."""
+        config = self._make_config([
+            self._fn_node("a", {"conv": "$input.conversation_id"}),
+            self._fn_node("b", {"conv": "$input.conversation_id"}),
+            {
+                "kind": "function_node",
+                "metadata": {"name": "c"},
+                "spec": {"fn": "json.dumps"},  # no input_mapping
+            },
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_no_error_for_expression_node(self):
+        """expression_node is skipped from consistency check."""
+        config = self._make_config([
+            self._fn_node("a", {"conv": "$input.conversation_id"}),
+            self._fn_node("b", {"conv": "$input.conversation_id"}),
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "c"},
+                "spec": {
+                    "expressions": {"x": "a.result"},
+                    "output_fields": ["x"],
+                    "input_mapping": {"data": "a.result"},
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_no_error_when_all_pass(self):
+        """All siblings pass the same $input fields → no error."""
+        conv = {"conv": "$input.conversation_id"}
+        config = self._make_config([
+            self._fn_node("router", {"x": "$input.load_id"}),
+            self._fn_node("a", conv, deps=["router"]),
+            self._fn_node("b", conv, deps=["router"]),
+            self._fn_node("c", conv, deps=["router"]),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_validated_input_fields_suppresses_error(self):
+        """validated_input_fields opt-out suppresses the error."""
+        config = self._make_config([
+            self._fn_node("a", {"conv": "$input.conversation_id"}),
+            self._fn_node("b", {"conv": "$input.conversation_id"}),
+            self._fn_node(
+                "c",
+                {"load": "$input.load_id"},
+                validated_input_fields=["conversation_id"],
+            ),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_single_node_no_error(self):
+        """Single node with input_mapping → no siblings → no error."""
+        config = self._make_config([
+            self._fn_node("a", {"conv": "$input.conversation_id"}),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not consistency_errors
+
+    def test_custom_threshold(self):
+        """Custom threshold=1.0 means ALL siblings must pass for it to be enforced."""
+        validator = YamlValidator(input_mapping_consistency_threshold=1.0)
+        config = self._make_config([
+            self._fn_node("a", {"conv": "$input.conversation_id"}),
+            self._fn_node("b", {"conv": "$input.conversation_id"}),
+            self._fn_node("c", {"load": "$input.load_id"}),
+        ])
+        result = validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        # 2/3 = 0.67, below 1.0 threshold → no error for conversation_id
+        assert not any("conversation_id" in e for e in consistency_errors)
+
+
+class TestInputSchemaValidation:
+    """Tests for $input references validated against declared input_schema."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_config(self, nodes, input_schema=None):
+        spec = {"nodes": nodes}
+        if input_schema is not None:
+            spec["input_schema"] = input_schema
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": spec,
+        }
+
+    def _fn_node(self, name, input_mapping):
+        return {
+            "kind": "function_node",
+            "metadata": {"name": name},
+            "spec": {"fn": "json.dumps", "input_mapping": input_mapping},
+        }
+
+    def test_error_on_unknown_input_field(self):
+        """Node references $input.unknown but schema doesn't declare it → error."""
+        config = self._make_config(
+            [self._fn_node("a", {"x": "$input.unknown_field"})],
+            input_schema={"conversation_id": "str", "load_id": "str"},
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert len(schema_errors) == 1
+        assert "unknown_field" in schema_errors[0]
+
+    def test_no_error_for_known_field(self):
+        """Node references $input.conversation_id which IS in schema → valid."""
+        config = self._make_config(
+            [self._fn_node("a", {"conv": "$input.conversation_id"})],
+            input_schema={"conversation_id": "str"},
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert not schema_errors
+
+    def test_skipped_when_no_schema(self):
+        """No input_schema declared → no schema validation."""
+        config = self._make_config(
+            [self._fn_node("a", {"x": "$input.anything"})],
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert not schema_errors
+
+    def test_multiple_nodes_all_checked(self):
+        """All nodes' $input refs are validated against schema."""
+        config = self._make_config(
+            [
+                self._fn_node("a", {"x": "$input.valid_field"}),
+                self._fn_node("b", {"y": "$input.typo_field"}),
+            ],
+            input_schema={"valid_field": "str"},
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert len(schema_errors) == 1
+        assert "'b'" in schema_errors[0]
+        assert "typo_field" in schema_errors[0]
+
+    def test_embedded_input_ref_in_expression_checked(self):
+        """$input.field embedded in expression is also checked against schema."""
+        config = self._make_config(
+            [self._fn_node("a", {"rate": "coalesce($input.bad_field, 0)"})],
+            input_schema={"conversation_id": "str"},
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert len(schema_errors) == 1
+        assert "bad_field" in schema_errors[0]
+
+
+class TestUndeclaredRefs:
+    """Tests for undeclared node reference detection.
+
+    When a node has explicit dependencies but references another node
+    in its when/input_mapping/expressions that isn't declared as a
+    dependency, the validator should error.
+    """
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_config(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def test_error_when_clause_references_undeclared_dep(self):
+        """when clause references node not in dependencies → error."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "checker"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {"kind": "function_node", "metadata": {"name": "router"}, "spec": {"fn": "json.dumps"}},
+            {
+                "kind": "function_node",
+                "metadata": {"name": "sender"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "when": "checker.done == True",
+                },
+                "dependencies": ["router"],  # missing "checker"
+            },
+        ])
+        result = self.validator.validate(config)
+        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
+        assert len(ref_errors) == 1
+        assert "'sender'" in ref_errors[0]
+        assert "'checker'" in ref_errors[0]
+
+    def test_error_input_mapping_references_undeclared_dep(self):
+        """input_mapping references node not in dependencies → error."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "upstream_a"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "upstream_b"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "consumer"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "input_mapping": {"data": "upstream_b.result"},
+                },
+                "dependencies": ["upstream_a"],  # missing "upstream_b"
+            },
+        ])
+        result = self.validator.validate(config)
+        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
+        assert len(ref_errors) == 1
+        assert "'consumer'" in ref_errors[0]
+        assert "'upstream_b'" in ref_errors[0]
+
+    def test_no_error_when_dep_is_declared(self):
+        """Referenced node IS in dependencies → no error."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "checker"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "sender"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "when": "checker.done == True",
+                },
+                "dependencies": ["checker"],
+            },
+        ])
+        result = self.validator.validate(config)
+        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
+        assert not ref_errors
+
+    def test_no_error_without_explicit_deps(self):
+        """Node without explicit dependencies → auto-infer, no error."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "checker"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "sender"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "when": "checker.done == True",
+                    # no "dependencies" key → builder will infer
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
+        assert not ref_errors
+
+    def test_dollar_input_not_treated_as_undeclared(self):
+        """$input.field references are not node deps → no error."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "sender"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "input_mapping": {"conv": "$input.conversation_id"},
+                },
+                "dependencies": [],
+            },
+        ])
+        result = self.validator.validate(config)
+        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
+        assert not ref_errors
+
+    def test_multiple_missing_refs(self):
+        """Multiple undeclared refs in one node → multiple errors."""
+        config = self._make_config([
+            {"kind": "function_node", "metadata": {"name": "a"}, "spec": {"fn": "json.dumps"}},
+            {"kind": "function_node", "metadata": {"name": "b"}, "spec": {"fn": "json.dumps"}},
+            {"kind": "function_node", "metadata": {"name": "c"}, "spec": {"fn": "json.dumps"}},
+            {
+                "kind": "function_node",
+                "metadata": {"name": "consumer"},
+                "spec": {
+                    "fn": "json.dumps",
+                    "when": "a.done == True",
+                    "input_mapping": {"data": "b.result"},
+                },
+                "dependencies": ["c"],  # missing "a" and "b"
+            },
+        ])
+        result = self.validator.validate(config)
+        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
+        assert len(ref_errors) == 2
+        referenced_nodes = {e.split("'")[3] for e in ref_errors}
+        assert referenced_nodes == {"a", "b"}
+
+
+class TestExpressionNamespaces:
+    """Tests for ExpressionNamespace declarations and ctx field validation."""
+
+    def test_ctx_fields_auto_discovered(self):
+        """CTX.fields matches get_ctx_dict() keys — no hardcoded drift."""
+        assert CTX.fields == frozenset(get_ctx_dict().keys())
+
+    def test_reserved_names_includes_all_namespaces_and_aliases(self):
+        """RESERVED_NAMES covers every namespace name and alias."""
+        expected: set[str] = set()
+        for ns in EXPRESSION_NAMESPACES:
+            expected.add(ns.name)
+            expected |= ns.aliases
+        assert frozenset(expected) == RESERVED_NAMES
+
+    def test_reserved_names_content(self):
+        """Sanity check: the three namespaces + input alias are present."""
+        assert {"ctx", "$input", "input", "state"} <= RESERVED_NAMES
+
+
+class TestCtxFieldValidation:
+    """Tests that ctx.X field references are validated at build time."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_pipeline(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def test_valid_ctx_field_passes(self):
+        """ctx.run_id in expression passes validation."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "tag": "'run-' + ctx.run_id",
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        ctx_errors = [e for e in result.errors if "ctx field" in e.lower() or "ctx" in e.lower()]
+        assert not ctx_errors
+
+    def test_invalid_ctx_field_errors(self):
+        """ctx.typo in expression is a build error."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "tag": "'run-' + ctx.typo_field",
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        ctx_errors = [e for e in result.errors if "Unknown ctx field" in e]
+        assert len(ctx_errors) == 1
+        assert "typo_field" in ctx_errors[0]
+
+    def test_ctx_typo_suggests_close_match(self):
+        """ctx.pipline_name suggests pipeline_name."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "tag": "ctx.pipline_name",
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        ctx_errors = [e for e in result.errors if "Unknown ctx field" in e]
+        assert len(ctx_errors) == 1
+        assert "pipeline_name" in ctx_errors[0]
+
+    def test_state_field_passes_dynamic(self):
+        """state.anything passes — state has dynamic fields."""
+        config = self._make_pipeline([
+            {
+                "kind": "expression_node",
+                "metadata": {"name": "compute"},
+                "spec": {
+                    "expressions": {
+                        "x": "state.whatever_field",
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        state_errors = [e for e in result.errors if "state" in e.lower() and "field" in e.lower()]
+        assert not state_errors
+
+    def test_ctx_field_in_input_mapping(self):
+        """ctx.typo in input_mapping is also caught."""
+        config = self._make_pipeline([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "process"},
+                "spec": {
+                    "fn": "json.loads",
+                    "input_mapping": {
+                        "tag": "ctx.banana",
+                    },
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        ctx_errors = [e for e in result.errors if "Unknown ctx field" in e]
+        assert len(ctx_errors) == 1
+        assert "banana" in ctx_errors[0]

@@ -149,8 +149,12 @@ class TestPipelineRunnerRun:
 
         runner = PipelineRunner()
         result = await runner.run(yaml_file)
-        assert isinstance(result, dict)
+        # PipelineResult supports dict-style access for backwards compatibility
         assert "start" in result
+        assert result["start"] == {"value": "hello"}
+        # New structured access
+        assert result.node_results == {"start": {"value": "hello"}}
+        assert result.pipeline_name == "test-simple"
 
     @pytest.mark.asyncio
     async def test_run_file_not_found(self) -> None:
@@ -165,7 +169,7 @@ class TestPipelineRunnerRun:
 
         runner = PipelineRunner()
         result = await runner.run(yaml_file, input_data={"key": "val"})
-        assert isinstance(result, dict)
+        assert "start" in result
 
     @pytest.mark.asyncio
     async def test_run_none_input_defaults_to_empty(self, tmp_path: Path) -> None:
@@ -174,7 +178,7 @@ class TestPipelineRunnerRun:
 
         runner = PipelineRunner()
         result = await runner.run(yaml_file, input_data=None)
-        assert isinstance(result, dict)
+        assert "start" in result
 
 
 class TestPipelineRunnerRunFromString:
@@ -184,7 +188,7 @@ class TestPipelineRunnerRunFromString:
     async def test_run_from_string_basic(self) -> None:
         runner = PipelineRunner()
         result = await runner.run_from_string(SIMPLE_YAML)
-        assert isinstance(result, dict)
+        assert "start" in result
         assert "start" in result
 
     @pytest.mark.asyncio
@@ -226,7 +230,7 @@ spec:
         override_llm = MockLLM(responses="override_response")
         runner = PipelineRunner(port_overrides={"llm": override_llm})
         result = await runner.run_from_string(yaml_with_port)
-        assert isinstance(result, dict)
+        assert "start" in result
 
 
 class TestPipelineRunnerSecretLoading:
@@ -266,7 +270,7 @@ class TestPipelineRunnerSecretLoading:
         """No secret port configured → no load_to_environ call."""
         runner = PipelineRunner()
         result = await runner.run_from_string(SIMPLE_YAML)
-        assert isinstance(result, dict)
+        assert "start" in result
         assert runner._secrets_loaded is False
 
 

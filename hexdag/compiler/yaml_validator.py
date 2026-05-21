@@ -2,10 +2,22 @@
 
 import difflib
 import inspect
+import re
+from collections import Counter
 from collections.abc import Iterator
 from typing import Any
 
-from hexdag.compiler.reference_resolver import _BUILTIN_NAMES, _NODE_FIELD_RE, _RESERVED_PREFIXES
+from hexdag.compiler.reference_resolver import (
+    _BUILTIN_NAMES,
+    _INPUT_FIELD_RE,
+    _NODE_FIELD_RE,
+    extract_input_refs_from_mapping,
+    extract_refs_from_expressions,
+    extract_refs_from_mapping,
+    extract_refs_from_string,
+    extract_refs_from_template,
+)
+from hexdag.kernel.context.execution_context import _NS_LOOKUP, RESERVED_NAMES
 from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.domain.pipeline_config import BaseNodeConfig
 from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS
@@ -274,20 +286,30 @@ class _SchemaValidator:
 class YamlValidator:
     """Validates YAML pipeline configurations with optimized performance."""
 
+    # Node kinds excluded from $input consistency checking — their input_mapping
+    # serves a different purpose (expression aliases, not function params).
+    _SKIP_CONSISTENCY_KINDS: frozenset[str] = frozenset({"expression_node", "expression"})
+
     def __init__(
         self,
         valid_node_types: set[str] | frozenset[str] | None = None,
+        *,
+        input_mapping_consistency_threshold: float = 0.5,
     ) -> None:
         """Initialize validator with configurable node types.
 
         Args
         ----
             valid_node_types: Set of valid node type names. If None, uses defaults.
+            input_mapping_consistency_threshold: Fraction of sibling nodes that
+                must reference a ``$input.X`` field before a missing reference
+                becomes a build error (default 0.5 = majority).
         """
         self._provided_node_types = (
             frozenset(valid_node_types) if valid_node_types is not None else None
         )
         self._cached_node_types: frozenset[str] | None = None
+        self._input_mapping_consistency_threshold = input_mapping_consistency_threshold
 
         # Schema validator for spec validation
         self.schema_validator = _SchemaValidator()
@@ -342,10 +364,21 @@ class YamlValidator:
         node_ids, macro_instances = self._validate_nodes(nodes, result, pipeline_ports)
 
         # Reuse cached node_ids and macro_instances for dependency validation
-        self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
+        dep_graph = self._validate_dependencies_with_cache(nodes, result, node_ids, macro_instances)
 
         # Validate expression/mapping naming to prevent ambiguous resolution
         self._validate_naming_collisions(nodes, result, node_ids, macro_instances)
+
+        # Validate that all node references are declared as dependencies
+        self._validate_undeclared_refs(nodes, dep_graph, node_ids, macro_instances, result)
+
+        # Validate $input data-flow consistency using the dependency graph
+        self._validate_input_flow_consistency(nodes, dep_graph, result)
+
+        # Validate $input references against declared input_schema (if any)
+        input_schema = spec.get("input_schema")
+        if isinstance(input_schema, dict):
+            self._validate_input_refs_against_schema(nodes, input_schema, result)
 
         return result
 
@@ -606,9 +639,15 @@ class YamlValidator:
                 # Use simple node_type in error if no valid types have namespaces (legacy mode)
                 invalid_type_str = node_type if not has_namespaced else qualified_node_type
 
+                # Suggest close matches for likely typos
+                close = difflib.get_close_matches(
+                    node_kind, sorted(self.valid_node_types), n=3, cutoff=0.5
+                )
+                hint = f" Did you mean: {', '.join(close)}?" if close else ""
+
                 result.add_error(
                     f"Node '{node_id}': Invalid type '{invalid_type_str}'. "
-                    f"Valid types: {valid_types_str}"
+                    f"Valid types: {valid_types_str}.{hint}"
                 )
 
             # Validate node-specific requirements and schema
@@ -672,7 +711,7 @@ class YamlValidator:
         result: ValidationReport,
         node_ids: set[str],
         macro_instances: set[str],
-    ) -> None:
+    ) -> dict[str, set[str]]:
         """Validate node dependencies using cached node IDs and check for cycles.
 
         Dependencies are in spec.dependencies field.
@@ -687,8 +726,14 @@ class YamlValidator:
             Cached set of valid node IDs from _validate_nodes
         macro_instances : set[str]
             Set of macro instance names (nodes will be generated at runtime)
+
+        Returns
+        -------
+        dict[str, set[str]]
+            Dependency graph ``{node_id: set_of_dependency_ids}`` for reuse
+            by downstream validation rules.
         """
-        dependency_graph = {}
+        dependency_graph: dict[str, set[str]] = {}
 
         for node in nodes:
             node_id = node.get("metadata", {}).get("name")
@@ -738,6 +783,8 @@ class YamlValidator:
         # Check for cycles using DirectedGraph's public static method
         if cycle_message := DirectedGraph.detect_cycle(dependency_graph):
             result.add_error(cycle_message)
+
+        return dependency_graph
 
     def _validate_naming_collisions(
         self,
@@ -812,9 +859,8 @@ class YamlValidator:
                 node_ids
                 | set(expressions.keys())
                 | set(input_mapping.keys())
-                | _RESERVED_PREFIXES
+                | RESERVED_NAMES
                 | _BUILTIN_NAMES
-                | {"input", "state"}
             )
 
             for var_name, expr in expressions.items():
@@ -828,10 +874,29 @@ class YamlValidator:
                 if not isinstance(source, str):
                     continue
                 # Validate expression syntax for mapping values that
-                # contain operators (likely expressions, not simple refs)
+                # contain operators or function calls (expressions, not simple refs)
                 if any(
-                    op in source for op in ("==", "!=", " and ", " or ", " not ", " if ", " else ")
-                ):
+                    op in source
+                    for op in (
+                        "==",
+                        "!=",
+                        "<=",
+                        ">=",
+                        " < ",
+                        " > ",
+                        " + ",
+                        " - ",
+                        " * ",
+                        " / ",
+                        " % ",
+                        " and ",
+                        " or ",
+                        " not ",
+                        " if ",
+                        " else ",
+                        " in ",
+                    )
+                ) or any(re.search(rf"\b{re.escape(fn)}\(", source) for fn in ALLOWED_FUNCTIONS):
                     self._validate_when_syntax(node_id, source, result)
                 # Skip $input references and expressions
                 if source.startswith("$input") or source == "$input":
@@ -907,6 +972,109 @@ class YamlValidator:
                             macro_instances,
                             result,
                         )
+
+    # ==================================================================
+    # Rule 6: Undeclared node references
+    # ==================================================================
+
+    def _validate_undeclared_refs(
+        self,
+        nodes: list[dict[str, Any]],
+        dep_graph: dict[str, set[str]],
+        node_ids: set[str],
+        macro_instances: set[str],
+        result: ValidationReport,
+    ) -> None:
+        """Error when a node references another node (in ``when``,
+        ``input_mapping``, ``expressions``, or templates) that is not
+        in its dependency set.
+
+        The builder's ``_infer_deps`` auto-adds missing deps at build time,
+        but if a pipeline declares explicit ``dependencies`` and misses a
+        reference, the orchestrator may evaluate the field before the
+        referenced node completes — resolving the value as ``None``.
+
+        This rule makes that a build error so the YAML must be correct
+        before reaching the builder.
+        """
+        known = frozenset(node_ids)
+
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+
+            # Only check nodes that have explicit dependencies declared —
+            # nodes without explicit deps rely entirely on auto-inference.
+            has_explicit_deps = "dependencies" in node or "dependencies" in node.get("spec", {})
+            if not has_explicit_deps:
+                continue
+
+            declared_deps = dep_graph.get(node_id, set())
+            other_nodes = known - {node_id}
+            mi = frozenset(macro_instances)
+
+            # Infer which nodes this node actually references
+            spec = node.get("spec", {})
+            inferred: set[str] = set()
+
+            # input_mapping
+            input_mapping = spec.get("input_mapping")
+            if isinstance(input_mapping, dict):
+                inferred |= extract_refs_from_mapping(input_mapping, other_nodes, mi)
+
+            # expressions
+            expressions = spec.get("expressions")
+            if isinstance(expressions, dict):
+                inferred |= extract_refs_from_expressions(expressions, other_nodes, mi)
+
+            # templates
+            for key in (
+                "prompt_template",
+                "template",
+                "initial_prompt_template",
+                "main_prompt",
+                "human_message",
+                "system_message",
+            ):
+                tmpl = spec.get(key)
+                if isinstance(tmpl, str):
+                    inferred |= extract_refs_from_template(tmpl, other_nodes, mi)
+
+            # when clause
+            when_expr = spec.get("when")
+            if isinstance(when_expr, str):
+                inferred |= extract_refs_from_string(when_expr, other_nodes, mi)
+
+            # composite fields
+            for field_key in ("condition", "items"):
+                field_val = spec.get(field_key)
+                if isinstance(field_val, str):
+                    inferred |= extract_refs_from_string(field_val, other_nodes, mi)
+
+            branches = spec.get("branches")
+            if isinstance(branches, list):
+                for branch in branches:
+                    if isinstance(branch, dict):
+                        cond = branch.get("condition")
+                        if isinstance(cond, str):
+                            inferred |= extract_refs_from_string(cond, other_nodes, mi)
+
+            # Compare: any inferred ref not in declared deps is an error
+            missing = inferred - declared_deps
+            # Exclude macro-generated nodes (they resolve at macro expansion)
+            missing = {
+                ref for ref in missing if not any(ref.startswith(f"{m}_") for m in macro_instances)
+            }
+
+            for ref in sorted(missing):
+                result.add_error(
+                    f"Node '{node_id}': references node '{ref}' "
+                    f"(in when/input_mapping/expressions/template) "
+                    f"but '{ref}' is not in its dependencies. "
+                    f"Add '{ref}' to dependencies or remove the explicit "
+                    f"dependencies key to let the builder infer them."
+                )
 
     # ==================================================================
     # Rule 1: Signature-based spec validation
@@ -1022,8 +1190,26 @@ class YamlValidator:
         """Check that first path segments in text are known references."""
         for match in _NODE_FIELD_RE.finditer(text):
             candidate = match.group(1)
-            if candidate in _RESERVED_PREFIXES or candidate in _BUILTIN_NAMES:
+            if candidate in _BUILTIN_NAMES:
                 continue
+
+            # Expression namespace — validate field if schema is known
+            ns = _NS_LOOKUP.get(candidate)
+            if ns is not None:
+                if ns.fields is not None:
+                    parts = match.group(0).split(".")
+                    if len(parts) >= 2 and parts[1] not in ns.fields:
+                        close = difflib.get_close_matches(
+                            parts[1], sorted(ns.fields), n=2, cutoff=0.5
+                        )
+                        hint = f" Did you mean: {', '.join(close)}?" if close else ""
+                        result.add_error(
+                            f"Node '{node_id}': Unknown {ns.name} field '{parts[1]}' "
+                            f"in '{field_name}'. "
+                            f"Valid fields: {', '.join(sorted(ns.fields))}.{hint}"
+                        )
+                continue
+
             if candidate in valid_first_segments:
                 continue
             # Check if candidate is a macro-expanded node name
@@ -1038,3 +1224,153 @@ class YamlValidator:
                 f"Node '{node_id}': Unknown reference '{candidate}' "
                 f"in field '{field_name}'.{suggestion}"
             )
+
+    # ==================================================================
+    # Rule 4: Graph-based $input data-flow consistency
+    # ==================================================================
+
+    def _validate_input_flow_consistency(
+        self,
+        nodes: list[dict[str, Any]],
+        dep_graph: dict[str, set[str]],
+        result: ValidationReport,
+    ) -> None:
+        """Error when sibling nodes on the same DAG branch inconsistently
+        pass ``$input.X`` fields.
+
+        Uses the dependency graph to find **graph siblings** — nodes that
+        share at least one common parent.  Within each sibling group, if
+        a ``$input.X`` field is used by ≥ threshold fraction of siblings
+        but one omits it, that node gets a build error.
+
+        This catches copy-paste omissions like ``send_counter_and_mc_request``
+        missing ``conversation_id: $input.conversation_id`` while its four
+        graph-siblings all pass it.
+
+        Nodes can suppress the check for specific fields via
+        ``validated_input_fields: [field_name]`` in their spec.
+        """
+        # Build a lookup: node_id → node config
+        node_by_id: dict[str, dict[str, Any]] = {}
+        for node in nodes:
+            nid = node.get("metadata", {}).get("name", "")
+            if nid:
+                node_by_id[nid] = node
+
+        # Build forward graph (parent → children)
+        forward: dict[str, set[str]] = {}
+        for child, parents in dep_graph.items():
+            for parent in parents:
+                forward.setdefault(parent, set()).add(child)
+
+        # For each node, extract $input refs and validated_input_fields
+        node_input_refs: dict[str, set[str]] = {}
+        node_validated: dict[str, set[str]] = {}
+        for nid, node in node_by_id.items():
+            kind = node.get("kind", "")
+            bare_kind = kind[:-5] if kind.endswith("_node") else kind
+            if kind in self._SKIP_CONSISTENCY_KINDS or bare_kind in self._SKIP_CONSISTENCY_KINDS:
+                continue
+            spec = node.get("spec", {})
+            input_mapping = spec.get("input_mapping")
+            if not isinstance(input_mapping, dict) or not input_mapping:
+                continue
+            node_input_refs[nid] = extract_input_refs_from_mapping(input_mapping)
+            node_validated[nid] = set(spec.get("validated_input_fields") or [])
+
+        # Find sibling groups: nodes that share a common parent
+        # A node can appear in multiple sibling groups (if it has multiple parents)
+        sibling_groups: dict[str, set[str]] = {}
+        for parent, children in forward.items():
+            # Filter to children that have input_mapping (are in node_input_refs)
+            eligible = children & node_input_refs.keys()
+            if len(eligible) >= 2:
+                sibling_groups[parent] = eligible
+
+        # Also treat root nodes (no dependencies) as a sibling group
+        root_nodes = {nid for nid in node_input_refs if not dep_graph.get(nid)}
+        if len(root_nodes) >= 2:
+            sibling_groups["__root__"] = root_nodes
+
+        # Check consistency within each sibling group
+        threshold = self._input_mapping_consistency_threshold
+        reported: set[tuple[str, str]] = set()  # avoid duplicate errors
+
+        for siblings in sibling_groups.values():
+            field_usage: Counter[str] = Counter()
+            for nid in siblings:
+                field_usage.update(node_input_refs[nid])
+
+            total = len(siblings)
+            for nid in siblings:
+                referenced = node_input_refs[nid]
+                validated = node_validated.get(nid, set())
+                for field, count in field_usage.items():
+                    if (
+                        count / total >= threshold
+                        and field not in referenced
+                        and field not in validated
+                        and (nid, field) not in reported
+                    ):
+                        reported.add((nid, field))
+                        result.add_error(
+                            f"Node '{nid}': input_mapping is missing '$input.{field}' "
+                            f"({count}/{total} sibling nodes pass it). "
+                            f"Add '{field}: $input.{field}' to input_mapping, "
+                            f"or add 'validated_input_fields: [{field}]' to suppress."
+                        )
+
+    # ==================================================================
+    # Rule 5: $input references vs declared input_schema
+    # ==================================================================
+
+    def _validate_input_refs_against_schema(
+        self,
+        nodes: list[dict[str, Any]],
+        input_schema: dict[str, Any],
+        result: ValidationReport,
+    ) -> None:
+        """Error when a node references ``$input.X`` but *X* is not declared
+        in the pipeline's ``input_schema``.
+
+        Only runs when ``spec.input_schema`` is present (it is optional).
+        """
+        declared_fields = frozenset(input_schema.keys())
+
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name", "")
+            if not node_id:
+                continue
+            spec = node.get("spec", {})
+
+            # Collect $input refs from input_mapping
+            unknown: set[str] = set()
+            input_mapping = spec.get("input_mapping")
+            if isinstance(input_mapping, dict):
+                unknown |= extract_input_refs_from_mapping(input_mapping) - declared_fields
+
+            # Collect $input refs from expressions
+            expressions = spec.get("expressions")
+            if isinstance(expressions, dict):
+                for expr in expressions.values():
+                    if isinstance(expr, str):
+                        for match in _INPUT_FIELD_RE.finditer(expr):
+                            field = match.group(1)
+                            if field not in declared_fields:
+                                unknown.add(field)
+
+            # Collect $input refs from templates
+            for tmpl_key in ("prompt_template", "template", "human_message", "system_message"):
+                tmpl = spec.get(tmpl_key)
+                if isinstance(tmpl, str):
+                    for match in _INPUT_FIELD_RE.finditer(tmpl):
+                        field = match.group(1)
+                        if field not in declared_fields:
+                            unknown.add(field)
+
+            for field in sorted(unknown):
+                result.add_error(
+                    f"Node '{node_id}': references '$input.{field}' but pipeline "
+                    f"input_schema does not declare field '{field}'. "
+                    f"Declared fields: {', '.join(sorted(declared_fields))}."
+                )

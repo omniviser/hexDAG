@@ -104,7 +104,7 @@ class Scheduler(Service):
                         self._run_recurring(task.task_id, task.interval_seconds or 60.0)
                     )
 
-    async def ateardown(self) -> None:
+    async def ateardown(self, *, success: bool = True) -> None:
         """Cancel all pending asyncio tasks on shutdown."""
         for handle in self._handles.values():
             handle.cancel()

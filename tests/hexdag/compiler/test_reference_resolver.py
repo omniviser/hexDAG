@@ -1,6 +1,7 @@
 """Tests for reference_resolver — extracting node refs from mappings, expressions, templates."""
 
 from hexdag.compiler.reference_resolver import (
+    extract_input_refs_from_mapping,
     extract_refs_from_expressions,
     extract_refs_from_mapping,
     extract_refs_from_string,
@@ -296,3 +297,126 @@ class TestCtxReservedPrefix:
         }
         refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
         assert refs == {"analyzer"}
+
+
+class TestExpressionValuesInMapping:
+    """Tests for expression-valued input_mapping entries (not just plain refs)."""
+
+    def test_arithmetic_expression_extracts_dotted_refs(self):
+        """Arithmetic expression with node.field refs extracts both nodes."""
+        mapping = {"total": "product.price * order.quantity"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"product", "order"}
+
+    def test_function_call_expression_extracts_refs(self):
+        """Function call expression extracts node refs."""
+        mapping = {"count": "len(analyzer.items)"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_comparison_expression_extracts_refs(self):
+        """Comparison expression extracts node refs."""
+        mapping = {"is_valid": "analyzer.score > 0.5"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_ternary_expression_extracts_refs(self):
+        """Ternary expression extracts refs from both branches."""
+        mapping = {"result": "analyzer.output if order.valid else 'N/A'"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer", "order"}
+
+    def test_bare_node_in_arithmetic_expression(self):
+        """Bare node name in arithmetic expression is detected."""
+        mapping = {"total": "analyzer + 1"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_bare_node_in_function_call(self):
+        """Bare node name as function argument is detected."""
+        mapping = {"count": "len(analyzer)"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer"}
+
+    def test_mixed_dotted_and_bare_in_expression(self):
+        """Mix of dotted and bare refs in one expression."""
+        mapping = {"val": "analyzer + fetcher.count"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer", "fetcher"}
+
+    def test_builtins_not_extracted(self):
+        """Builtin function names are not treated as node refs."""
+        mapping = {"val": "len(items) + max(values)"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == set()
+
+    def test_coalesce_expression_extracts_refs(self):
+        """coalesce() with multiple node refs extracts all."""
+        mapping = {"val": "coalesce(analyzer.score, fetcher.default_score)"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer", "fetcher"}
+
+    def test_boolean_expression_extracts_refs(self):
+        """Boolean expression extracts refs."""
+        mapping = {"check": "analyzer.done and order.valid"}
+        refs = extract_refs_from_mapping(mapping, KNOWN_NODES)
+        assert refs == {"analyzer", "order"}
+
+
+class TestExtractInputRefsFromMapping:
+    """Tests for extract_input_refs_from_mapping — collecting $input.X field names."""
+
+    def test_direct_input_ref(self):
+        """Direct $input.field reference extracts the field name."""
+        mapping = {"conversation_id": "$input.conversation_id"}
+        assert extract_input_refs_from_mapping(mapping) == {"conversation_id"}
+
+    def test_multiple_input_refs(self):
+        """Multiple $input references across different values."""
+        mapping = {
+            "conv_id": "$input.conversation_id",
+            "load": "$input.load_id",
+        }
+        assert extract_input_refs_from_mapping(mapping) == {"conversation_id", "load_id"}
+
+    def test_embedded_input_ref_in_expression(self):
+        """$input.field embedded in a coalesce expression."""
+        mapping = {"rate": "coalesce($input.rate, 0)"}
+        assert extract_input_refs_from_mapping(mapping) == {"rate"}
+
+    def test_multiple_input_refs_in_single_value(self):
+        """Multiple $input refs in one expression value."""
+        mapping = {"combined": "$input.rate + $input.margin"}
+        assert extract_input_refs_from_mapping(mapping) == {"rate", "margin"}
+
+    def test_no_input_refs(self):
+        """Node references (not $input) are not extracted."""
+        mapping = {"data": "analyzer.output", "other": "fetcher.response"}
+        assert extract_input_refs_from_mapping(mapping) == set()
+
+    def test_non_string_values_skipped(self):
+        """Non-string values are safely skipped."""
+        mapping = {"count": 42, "conv": "$input.conversation_id"}
+        assert extract_input_refs_from_mapping(mapping) == {"conversation_id"}
+
+    def test_empty_mapping(self):
+        """Empty mapping returns empty set."""
+        assert extract_input_refs_from_mapping({}) == set()
+
+    def test_plain_dollar_input_no_field(self):
+        """Bare $input without a field name extracts nothing."""
+        mapping = {"all": "$input"}
+        assert extract_input_refs_from_mapping(mapping) == set()
+
+    def test_list_values_extract_input_refs(self):
+        """$input.X refs inside list-valued entries are extracted."""
+        mapping = {"items": ["$input.order_id", "$input.customer_id", "node.field"]}
+        assert extract_input_refs_from_mapping(mapping) == {"order_id", "customer_id"}
+
+    def test_mixed_list_and_string_values(self):
+        """Both string and list values are processed."""
+        mapping = {
+            "single": "$input.name",
+            "multi": ["$input.age", "literal"],
+        }
+        assert extract_input_refs_from_mapping(mapping) == {"name", "age"}

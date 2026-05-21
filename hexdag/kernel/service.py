@@ -146,10 +146,18 @@ class Service:
         connection warming, etc.).
         """
 
-    async def ateardown(self) -> None:
+    async def ateardown(self, *, success: bool = True) -> None:
         """Called once after the pipeline finishes.
 
         Override to release resources, flush buffers, etc.
+
+        Parameters
+        ----------
+        success : bool
+            ``True`` if the pipeline completed without errors,
+            ``False`` if it failed or was cancelled.  Services that
+            manage database sessions can use this to decide whether
+            to commit or rollback.
         """
 
     def get_tools(self) -> dict[str, Callable[..., Any]]:

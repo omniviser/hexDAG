@@ -488,3 +488,71 @@ class TestCtxInExpressions:
             assert result == 0.95
 
         clear_execution_context()
+
+
+class TestExpressionValuesInInputMapping:
+    """Runtime tests for expression-valued input_mapping entries."""
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_arithmetic_expression(self, coordinator):
+        """Arithmetic expression evaluates in input_mapping."""
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping={"total": "order.price * order.quantity"},
+            initial_input={},
+            node_results={"order": {"price": 10, "quantity": 5}},
+        )
+        assert result["total"] == 50
+
+    def test_function_call_expression(self, coordinator):
+        """Function call in input_mapping evaluates correctly."""
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping={"count": "len(analyzer.items)"},
+            initial_input={},
+            node_results={"analyzer": {"items": [1, 2, 3]}},
+        )
+        assert result["count"] == 3
+
+    def test_comparison_expression(self, coordinator):
+        """Comparison expression returns boolean."""
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping={"valid": "analyzer.score > 0.5"},
+            initial_input={},
+            node_results={"analyzer": {"score": 0.8}},
+        )
+        assert result["valid"] is True
+
+    def test_mixed_node_and_input_expression(self, coordinator):
+        """Expression mixing node ref and initial input."""
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping={"adjusted": "order.price * input.discount"},
+            initial_input={"discount": 0.9},
+            node_results={"order": {"price": 100}},
+        )
+        assert result["adjusted"] == pytest.approx(90.0)
+
+    def test_coalesce_expression(self, coordinator):
+        """coalesce() works in input_mapping."""
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping={"val": "coalesce(order.notes, 'none')"},
+            initial_input={},
+            node_results={"order": {"notes": None}},
+        )
+        assert result["val"] == "none"
+
+    def test_string_concatenation_expression(self, coordinator):
+        """String concatenation via + in input_mapping."""
+        result = coordinator._apply_input_mapping(
+            base_input={},
+            input_mapping={"label": "'Order: ' + order.name"},
+            initial_input={},
+            node_results={"order": {"name": "ABC-123"}},
+        )
+        assert result["label"] == "Order: ABC-123"

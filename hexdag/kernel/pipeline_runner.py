@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+from hexdag.kernel.domain.pipeline_result import PipelineResult, resolve_output
 from hexdag.kernel.exceptions import PipelineRunnerError  # noqa: F401
 from hexdag.kernel.logging import configure_logging, get_logger
 from hexdag.kernel.orchestration.components.lifecycle_manager import (
@@ -190,7 +191,7 @@ class PipelineRunner:
         *,
         environment: str | None = None,
         pre_seeded_results: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> PipelineResult:
         """Run a YAML pipeline from file.
 
         Parameters
@@ -208,8 +209,10 @@ class PipelineRunner:
 
         Returns
         -------
-        dict[str, Any]
-            Node results keyed by node name.
+        PipelineResult
+            Pipeline result with ``.output`` (declared fields) and
+            ``.node_results`` (full dict).  Supports dict-style access
+            for backwards compatibility.
         """
         path = Path(pipeline_path)
         if not path.exists():
@@ -238,7 +241,7 @@ class PipelineRunner:
         input_data: Any = None,
         *,
         environment: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> PipelineResult:
         """Run a YAML pipeline from a string.
 
         Parameters
@@ -252,8 +255,8 @@ class PipelineRunner:
 
         Returns
         -------
-        dict[str, Any]
-            Node results keyed by node name.
+        PipelineResult
+            Pipeline result with ``.output`` and ``.node_results``.
         """
         env = environment or self._environment
         graph, pipeline_config = self._builder.build_from_yaml_string(yaml_content, environment=env)
@@ -267,7 +270,7 @@ class PipelineRunner:
         input_data: Any = None,
         *,
         environment: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> PipelineResult:
         """Resume a pipeline from a saved checkpoint.
 
         Loads the checkpoint for *run_id* from ``checkpoint_storage``,
@@ -289,9 +292,8 @@ class PipelineRunner:
 
         Returns
         -------
-        dict[str, Any]
-            Node results keyed by node name (includes both pre-seeded
-            and newly-executed results).
+        PipelineResult
+            Pipeline result (includes both pre-seeded and newly-executed results).
 
         Raises
         ------
@@ -477,7 +479,7 @@ class PipelineRunner:
         input_data: Any,
         effective_config: Any = None,
         pre_seeded_results: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> PipelineResult:
         """Core execution: secrets → validate → instantiate → run.
 
         Parameters
@@ -581,7 +583,17 @@ class PipelineRunner:
             len(result),
             t.duration_str,
         )
-        return result
+
+        # Build PipelineResult with declared output mapping
+        output = {}
+        if pipeline_config.output:
+            output = resolve_output(result, pipeline_config.output)
+
+        return PipelineResult(
+            node_results=result,
+            output=output,
+            pipeline_name=pipeline_name,
+        )
 
     def _resolve_orchestrator_settings(
         self,

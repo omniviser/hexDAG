@@ -205,6 +205,13 @@ properties:
           type: object
         title: Observers
         type: array
+      output:
+        additionalProperties:
+          type: string
+        type: object
+        description: Declared pipeline output mapping. Maps output field names to
+          node_name.field paths. When set, PipelineRunner.run() returns a PipelineResult
+          with .output containing these mapped fields.
       input_schema:
         additionalProperties: true
         type: object

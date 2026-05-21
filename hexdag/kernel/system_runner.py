@@ -125,7 +125,7 @@ class SystemRunner:
             pipe_map.setdefault(pipe.to_process, []).append(pipe)
 
         # Track results per process
-        process_results: dict[str, dict[str, Any]] = {}
+        process_results: dict[str, Any] = {}
 
         try:
             for idx, process_name in enumerate(execution_order):
@@ -229,7 +229,7 @@ class SystemRunner:
     def _resolve_process_input(
         process_name: str,
         pipe_map: dict[str, list[Any]],
-        process_results: dict[str, dict[str, Any]],
+        process_results: dict[str, Any],
         initial_input: dict[str, Any],
     ) -> dict[str, Any]:
         """Resolve input data for a process from pipe mappings.
@@ -272,7 +272,7 @@ class SystemRunner:
             await self._observer_manager.notify(event)
 
 
-def _resolve_template(template: str, process_results: dict[str, dict[str, Any]]) -> Any:
+def _resolve_template(template: str, process_results: dict[str, Any]) -> Any:
     """Resolve a ``{{ process.field }}`` template against process results.
 
     If the template is a simple reference (the entire string is one
