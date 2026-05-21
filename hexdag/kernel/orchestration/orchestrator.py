@@ -605,8 +605,29 @@ class Orchestrator:
 
             # Set services in context for agent tool injection
             services = wrapped_ports.get("_hexdag_services")
+            services_initialized: list[str] = []
             if services:
                 set_services(services)
+                # Service lifecycle: call asetup() on all services
+                for svc_name, svc in services.items():
+                    if hasattr(svc, "asetup") and asyncio.iscoroutinefunction(svc.asetup):
+                        try:
+                            await svc.asetup()
+                            services_initialized.append(svc_name)
+                        except Exception as e:
+                            logger.error("Service setup failed: {}: {}", svc_name, e)
+                            # Tear down already-initialized services before re-raising
+                            for done_name in services_initialized:
+                                done_svc = services[done_name]
+                                if hasattr(done_svc, "ateardown") and asyncio.iscoroutinefunction(
+                                    done_svc.ateardown
+                                ):
+                                    with suppress(Exception):
+                                        await done_svc.ateardown(success=False)
+                            raise
+                    else:
+                        # No asetup — still eligible for ateardown
+                        services_initialized.append(svc_name)
 
             # PRE-DAG LIFECYCLE: Execute before pipeline starts
             pre_hook_results = await self._lifecycle_manager.pre_execute(
@@ -689,6 +710,21 @@ class Orchestrator:
                         node_results=node_results,
                     )
                     await self._notify_observer(observer_manager, pipeline_completed)
+
+                # Service lifecycle: call ateardown() on all initialized services
+                if services and services_initialized:
+                    svc_success = pipeline_status == PipelineStatus.SUCCESS
+                    for svc_name in services_initialized:
+                        svc = services[svc_name]
+                        if hasattr(svc, "ateardown") and asyncio.iscoroutinefunction(svc.ateardown):
+                            try:
+                                await svc.ateardown(success=svc_success)
+                            except Exception as svc_err:
+                                logger.warning(
+                                    "Service teardown failed: {}: {}",
+                                    svc_name,
+                                    svc_err,
+                                )
 
                 # POST-DAG LIFECYCLE: Always execute for cleanup (even on failure)
                 try:

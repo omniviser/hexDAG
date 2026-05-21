@@ -15,7 +15,10 @@ Adapters
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from hexdag.kernel.domain.pipeline_result import PipelineResult
 
 
 @runtime_checkable
@@ -83,7 +86,7 @@ class PipelineSpawner(Protocol):
         ...
 
     @abstractmethod
-    async def await_result(self, run_id: str, timeout: float | None = None) -> dict[str, Any]:
+    async def await_result(self, run_id: str, timeout: float | None = None) -> PipelineResult:
         """Wait for a pipeline run to complete and return its results.
 
         Args
@@ -93,7 +96,7 @@ class PipelineSpawner(Protocol):
 
         Returns
         -------
-            The pipeline results dict.
+            The pipeline result.
 
         Raises
         ------

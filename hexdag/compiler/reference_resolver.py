@@ -10,20 +10,21 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from hexdag.kernel.context.execution_context import RESERVED_NAMES
 from hexdag.kernel.expression_parser import ALLOWED_FUNCTIONS
 
 # Pattern: identifier.identifier (but not $input.field)
 _NODE_FIELD_RE = re.compile(r"(?<!\$)\b([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_.]*")
 
+# Pattern: splits a source string into identifier tokens and non-identifier chars.
+# Used to find bare node names in expressions like "analyzer + 1".
+_IDENT_SPLIT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
 # Jinja2 variable pattern: {{node.field}} or {{ node.field }}
 _JINJA_VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_.]*\s*\}\}")
 
-# Reserved prefixes that are never node references
-_RESERVED_PREFIXES = frozenset({"$input", "ctx"})
-
-# Names that should never be treated as node references, even if they match
-# the ``identifier.identifier`` pattern.  Derived from the expression parser's
-# ALLOWED_FUNCTIONS plus Python/YAML keyword-like literals.
+# Names that are never node references — expression namespaces (from kernel)
+# plus Python/YAML keyword-like literals and built-in functions.
 _BUILTIN_NAMES = frozenset(ALLOWED_FUNCTIONS.keys()) | frozenset({
     "self",
     "type",
@@ -34,7 +35,6 @@ _BUILTIN_NAMES = frozenset(ALLOWED_FUNCTIONS.keys()) | frozenset({
     "False",
     "None",
     "null",
-    "ctx",
 })
 
 
@@ -172,6 +172,41 @@ def extract_refs_from_string(
     return _extract_node_refs(source, known_nodes, macro_instances)
 
 
+# Pattern: $input.field_name — captures the field name after $input.
+_INPUT_FIELD_RE = re.compile(r"\$input\.([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def extract_input_refs_from_mapping(input_mapping: dict[str, Any]) -> set[str]:
+    """Extract ``$input.X`` field names from ``input_mapping`` values.
+
+    Unlike :func:`extract_refs_from_mapping` which *skips* ``$input`` references,
+    this function *collects* them — returning the field names (without the
+    ``$input.`` prefix) so the validator can cross-check them against the
+    pipeline's declared ``input_schema`` or sibling nodes.
+
+    Parameters
+    ----------
+    input_mapping : dict[str, Any]
+        Mapping of ``{target_field: "source_path"}``.
+
+    Returns
+    -------
+    set[str]
+        Field names referenced via ``$input.X``.
+    """
+    fields: set[str] = set()
+    for val in input_mapping.values():
+        if isinstance(val, str):
+            for match in _INPUT_FIELD_RE.finditer(val):
+                fields.add(match.group(1))
+        elif isinstance(val, list):
+            for item in val:
+                if isinstance(item, str):
+                    for match in _INPUT_FIELD_RE.finditer(item):
+                        fields.add(match.group(1))
+    return fields
+
+
 def _extract_node_refs(
     source: str,
     known_nodes: frozenset[str],
@@ -207,7 +242,7 @@ def _extract_node_refs(
 
     for match in _NODE_FIELD_RE.finditer(source):
         candidate = match.group(1)
-        if candidate in _RESERVED_PREFIXES or candidate in _BUILTIN_NAMES:
+        if candidate in RESERVED_NAMES or candidate in _BUILTIN_NAMES:
             continue
         if candidate in known_nodes:
             refs.add(candidate)
@@ -217,14 +252,30 @@ def _extract_node_refs(
                     refs.add(mi)
                     break
 
-    # Bare names (no dot) — detect known nodes and macro-prefixed names
-    # that the dotted regex above cannot match.
-    if "." not in stripped and stripped.isidentifier() and stripped not in _BUILTIN_NAMES:
-        if stripped in known_nodes:
-            refs.add(stripped)
+    # Bare identifiers — detect known nodes and macro-prefixed names that
+    # the dotted regex above cannot match.  Handles both simple bare names
+    # ("analyzer") and bare names inside expressions ("analyzer + 1").
+    # Extract all identifier tokens, then look them up in known_nodes directly.
+    # Tokens that are part of a "node.field" chain are skipped because _NODE_FIELD_RE
+    # already handled those and they appear with a trailing or leading dot in the
+    # source — but we filter by checking the char before/after each token position.
+    for token_match in _IDENT_SPLIT_RE.finditer(stripped):
+        start = token_match.start()
+        end = token_match.end()
+        # Skip if preceded by '.' or '$' (part of node.field or $input)
+        if start > 0 and stripped[start - 1] in (".", "$"):
+            continue
+        # Skip if followed by '.' (this is the owner in a node.field pattern)
+        if end < len(stripped) and stripped[end] == ".":
+            continue
+        candidate = token_match.group(0)
+        if candidate in _BUILTIN_NAMES or candidate in RESERVED_NAMES:
+            continue
+        if candidate in known_nodes:
+            refs.add(candidate)
         elif sorted_macros:
             for mi in sorted_macros:
-                if stripped.startswith(f"{mi}_"):
+                if candidate.startswith(f"{mi}_"):
                     refs.add(mi)
                     break
 

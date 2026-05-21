@@ -268,6 +268,17 @@ class PipelineConfig(BaseModel):
         description=("Observer configurations. Format: [{class: str, config: dict}]"),
     )
 
+    # Pipeline output mapping: {alias: "node_name.field.subfield"}
+    output: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Declared pipeline output mapping. "
+            "Maps output field names to node_name.field paths. "
+            "When set, PipelineRunner.run() returns a PipelineResult "
+            "with .output containing these mapped fields."
+        ),
+    )
+
     # Schema declarations
     input_schema: dict[str, Any] | None = Field(
         default=None, description="JSON Schema for pipeline inputs"

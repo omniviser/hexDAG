@@ -12,6 +12,7 @@ Examples
 
 from __future__ import annotations
 
+import difflib
 import importlib
 from typing import Any
 
@@ -263,10 +264,12 @@ def resolve(kind: str) -> type[Any]:
         cls = getattr(module, class_name)
     except AttributeError as e:
         available = [name for name in dir(module) if not name.startswith("_")]
+        close = difflib.get_close_matches(class_name, available, n=3, cutoff=0.6)
+        hint = f" Did you mean: {', '.join(close)}?" if close else ""
         raise ResolveError(
             kind,
             f"Class '{class_name}' not found in '{module_path}'. "
-            f"Available: {', '.join(available[:10])}",
+            f"Available: {', '.join(available[:10])}.{hint}",
         ) from e
 
     if not isinstance(cls, type):
