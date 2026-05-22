@@ -1,0 +1,116 @@
+# hexDAG Pipeline: Human-in-the-Loop Workflow
+# Ported from LangGraph project-03-human-in-the-loop-chatbot
+#
+# WARNING: This YAML shows the DESIRED structure, but hexDAG
+# does NOT support interrupt/resume natively. See README.md.
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: human-in-the-loop
+  description: Workflow with human approval step
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-03-human-in-the-loop-chatbot"
+    llm_provider: "Google Gemini"
+    gap_identified: "No native interrupt/resume support"
+
+spec:
+  nodes:
+    # Node 1: Search for information
+    - kind: function_node
+      metadata:
+        name: search
+        annotations:
+          description: Search the web for information
+      spec:
+        fn: "framework-tests.project3-human-in-the-loop.tools.web_search"
+        input_schema:
+          question: str
+        output_schema:
+          search_results: str
+        dependencies: []
+
+    # Node 2: Draft an answer
+    - kind: llm_node
+      metadata:
+        name: draft
+        annotations:
+          description: Draft answer based on search results
+      spec:
+        prompt_template: |
+          Question: {{ question }}
+
+          Found information:
+          {{ search.search_results }}
+
+          Write a factual draft answer based on the above information.
+          Keep it concise but informative.
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+        dependencies: [search]
+
+    # Node 3: Human Approval
+    # ⚠️ THIS IS WHERE hexDAG FALLS SHORT
+    # In LangGraph: interrupt({"draft": draft})
+    # In hexDAG: NO EQUIVALENT - must use workaround
+    - kind: function_node
+      metadata:
+        name: approve
+        annotations:
+          description: "HUMAN APPROVAL - hexDAG GAP"
+      spec:
+        # This would ideally be:
+        # interrupt: true
+        # resume_on: "user_approval"
+        #
+        # But hexDAG doesn't support this, so we use
+        # a Python workaround in run_hitl.py
+        fn: "framework-tests.project3-human-in-the-loop.tools.human_approval"
+        input_schema:
+          draft: str
+        output_schema:
+          approved: bool
+          final_draft: str
+        dependencies: [draft]
+
+    # Node 4: Finalize answer
+    - kind: conditional_node
+      metadata:
+        name: finalize
+        annotations:
+          description: Output final answer based on approval
+      spec:
+        condition: "approve.approved == true"
+        true_output:
+          final_answer: "{{ approve.final_draft }}"
+        false_output:
+          final_answer: "Answer was not approved."
+        dependencies: [approve]
+
+# ============================================================
+# hexDAG GAP DOCUMENTATION
+# ============================================================
+#
+# LangGraph supports human-in-the-loop via:
+#   1. interrupt() - pauses graph execution
+#   2. Command(resume=...) - resumes with user input
+#   3. Checkpointer - saves state between interrupts
+#
+# hexDAG does NOT have:
+#   - interrupt() primitive
+#   - Resume mechanism
+#   - Built-in checkpointing for HITL
+#
+# WORKAROUND (used in run_hitl.py):
+#   - Split workflow into multiple DAG runs
+#   - Phase 1: search + draft (DAG execution)
+#   - Phase 2: human approval (plain Python)
+#   - Phase 3: finalize (DAG execution)
+#   - Pass state manually between phases
+#
+# RECOMMENDATION:
+#   hexDAG should add interrupt/resume support for
+#   production workflows requiring human oversight.
+# ============================================================

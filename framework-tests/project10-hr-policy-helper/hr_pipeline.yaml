@@ -1,0 +1,67 @@
+# hexDAG Pipeline: HR Policy Helper
+# Ported from LangGraph project-10-decision-making-agent
+#
+# Pattern: RAG (Retrieval Augmented Generation)
+# - Retrieve relevant documents from knowledge base
+# - Use LLM to answer questions based on retrieved context
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: hr-policy-helper
+  description: Answer HR policy questions using RAG pattern
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-10"
+    pattern: "RAG (Retrieval Augmented Generation)"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Retrieve relevant policy documents
+    - kind: function_node
+      metadata:
+        name: retrieve_policies
+        annotations:
+          description: Search policy documents for relevant information
+      spec:
+        fn: "retrieve_policies"
+        dependencies: []
+
+    # Step 2: Generate answer using retrieved context
+    - kind: llm_node
+      metadata:
+        name: hr_assistant
+        annotations:
+          description: Answer HR questions using retrieved policy context
+      spec:
+        prompt_template: |
+          You are an HR Policy Assistant. Answer the employee's question
+          based ONLY on the provided policy documents.
+
+          Employee Question: {{ question }}
+
+          Relevant Policy Documents:
+          {{ retrieved_context }}
+
+          Instructions:
+          - Only use information from the policy documents
+          - If the answer isn't in the documents, say "I don't have information about that in our policy documents"
+          - Be helpful and professional
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+
+        dependencies: [retrieve_policies]
+
+# RAG PATTERN:
+#
+#   ┌──────────┐     ┌───────────────┐     ┌─────────────┐
+#   │ Question │ --> │ Vector Search │ --> │ LLM + Context│ --> Answer
+#   └──────────┘     └───────────────┘     └─────────────┘
+#                     (find relevant         (generate answer
+#                      documents)             from context)
+#
+# LangGraph uses: FAISS + GoogleGenerativeAIEmbeddings
+# hexDAG uses: Simple keyword matching (no external dependencies)
+#              OR can use same FAISS setup

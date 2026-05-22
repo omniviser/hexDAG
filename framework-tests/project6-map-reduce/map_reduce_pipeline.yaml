@@ -1,0 +1,51 @@
+# hexDAG Pipeline: Map-Reduce (Iterative Processing)
+# Ported from LangGraph project-06-iterative-processing-workflow
+#
+# Pattern: Process list of items in parallel, then aggregate results
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: map-reduce-workflow
+  description: Process multiple items and aggregate results
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-06-iterative-processing-workflow"
+    pattern: "Map-Reduce"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # MAP: Process each item (runs in parallel for each item)
+    - kind: function_node
+      metadata:
+        name: process_items
+        annotations:
+          description: Process each item with LLM (map phase)
+      spec:
+        fn: "process_all_items"
+        input_schema:
+          items: list[str]
+        output_schema:
+          processed_results: list[dict]
+        dependencies: []
+
+    # REDUCE: Aggregate all results
+    - kind: function_node
+      metadata:
+        name: aggregate
+        annotations:
+          description: Combine all processed results (reduce phase)
+      spec:
+        fn: "aggregate_results"
+        input_schema:
+          processed_results: list[dict]
+        output_schema:
+          summary: str
+          total_items: int
+        dependencies: [process_items]
+
+# hexDAG handles this well!
+# - process_items runs first (can parallelize internally)
+# - aggregate waits for process_items to complete
+# - Clean DAG structure: process → aggregate

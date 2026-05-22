@@ -1,0 +1,86 @@
+# hexDAG Pipeline: Agent with Search Tool
+# Ported from LangGraph project-02-agent-with-search-tool
+# Uses Google Gemini API + DuckDuckGo Search
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: research-agent
+  description: Agent that can search the web to answer questions
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-02-agent-with-search-tool"
+    llm_provider: "Google Gemini"
+    tools: "DuckDuckGo Search"
+
+spec:
+  nodes:
+    # Node 1: Agent decides if search is needed
+    - kind: llm_node
+      metadata:
+        name: agent
+        annotations:
+          description: Decides whether to search or answer directly
+      spec:
+        prompt_template: |
+          You are a research assistant with access to web search.
+
+          RULES:
+          1. If the user asks a factual question, respond with: SEARCH: <query>
+          2. If you have search results, use them to answer
+          3. Always cite sources when using search results
+
+          {% if search_results %}
+          Search results:
+          {{ search_results }}
+
+          Now provide a helpful answer based on these results.
+          {% else %}
+          User question: {{ user_input }}
+
+          Should you search the web or answer directly?
+          {% endif %}
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+        dependencies: []
+
+    # Node 2: Search tool (function node)
+    - kind: function_node
+      metadata:
+        name: web_search
+        annotations:
+          description: Searches the web using DuckDuckGo
+      spec:
+        fn: "framework-tests.project2-agent-with-search.search_tools.web_search"
+        input_schema:
+          query: str
+        output_schema:
+          results: str
+        dependencies: [agent]
+        # Only runs if agent requests search
+        condition: "agent.output.startswith('SEARCH:')"
+
+    # Node 3: Final response (after search)
+    - kind: llm_node
+      metadata:
+        name: respond
+        annotations:
+          description: Generates final response with search results
+      spec:
+        prompt_template: |
+          User question: {{ user_input }}
+
+          Search results:
+          {{ web_search.results }}
+
+          Provide a helpful, factual answer based on these search results.
+          Cite your sources.
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+        dependencies: [web_search]
+
+# NOTE: This YAML represents the ideal hexDAG structure.
+# The actual implementation in run_agent.py uses a simplified
+# approach due to conditional execution complexity.

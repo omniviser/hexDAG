@@ -1,0 +1,81 @@
+# hexDAG Pipeline: Research and Report Generation
+# Ported from LangGraph project-11-research-and-report-generation
+#
+# Pattern: Multi-Agent Workflow
+# - Researcher agent gathers information
+# - Writer agent creates content from research
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: research-report-generator
+  description: Multi-agent workflow for research and content creation
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-11"
+    pattern: "Multi-Agent Workflow"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Agent 1: Researcher
+    - kind: llm_node
+      metadata:
+        name: researcher
+        annotations:
+          description: Research agent that gathers information on a topic
+      spec:
+        prompt_template: |
+          You are a research specialist. Research the following topic thoroughly:
+
+          Topic: {{ topic }}
+
+          Provide:
+          1. Key facts and statistics
+          2. Current trends
+          3. Important developments
+          4. Expert opinions (if available)
+
+          Be comprehensive but concise. Focus on factual information.
+
+        model: gemini-2.0-flash
+        temperature: 0.5
+        dependencies: []
+
+    # Agent 2: Writer
+    - kind: llm_node
+      metadata:
+        name: writer
+        annotations:
+          description: Writer agent that creates blog post from research
+      spec:
+        prompt_template: |
+          You are a professional blog writer. Based on the research provided,
+          write an engaging blog post.
+
+          Research:
+          {{ research_content }}
+
+          Requirements:
+          - Catchy title
+          - Engaging introduction
+          - Well-structured body with subheadings
+          - Clear conclusion
+          - Professional but accessible tone
+
+        model: gemini-2.0-flash
+        temperature: 0.7
+        dependencies: [researcher]
+
+# MULTI-AGENT PATTERN:
+#
+#   ┌────────────┐     ┌────────────┐
+#   │ Researcher │ --> │   Writer   │ --> Blog Post
+#   │  (Agent 1) │     │  (Agent 2) │
+#   └────────────┘     └────────────┘
+#        │                   │
+#        v                   v
+#   Gathers facts      Creates content
+#   and trends         from research
+#
+# This is a simple linear DAG - perfect fit for hexDAG!

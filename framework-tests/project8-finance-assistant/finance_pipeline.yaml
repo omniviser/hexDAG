@@ -1,0 +1,63 @@
+# hexDAG Pipeline: Finance Assistant
+# Ported from LangGraph project-08-data-extraction-agent
+# (Note: Folder name is misleading - this is about FINANCE/STOCK QUERIES)
+#
+# Pattern: Agent with search tool for real-time data
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: finance-assistant
+  description: Finance assistant that queries stock prices using search
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-08"
+    pattern: "Agent with tool access"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Search for financial data
+    - kind: function_node
+      metadata:
+        name: search_tool
+        annotations:
+          description: Search for stock/financial information
+      spec:
+        fn: "search_financial_data"
+        dependencies: []
+
+    # Step 2: LLM analyzes search results and responds
+    - kind: llm_node
+      metadata:
+        name: finance_analyst
+        annotations:
+          description: Analyze search results and provide financial insights
+      spec:
+        prompt_template: |
+          You are a helpful finance assistant.
+
+          User question: {{ user_query }}
+
+          Search results:
+          {{ search_results }}
+
+          Based on the search results, provide a clear and helpful answer
+          about the financial information requested.
+
+        model: gemini-2.0-flash
+        temperature: 0.3
+
+        dependencies: [search_tool]
+
+# COMPARISON:
+#
+# LangGraph approach:
+#   - Uses TavilySearchResults tool
+#   - Has edge from tool back to chatbot (potential cycle)
+#   - Tool invocation handled by framework
+#
+# hexDAG approach:
+#   - Uses DuckDuckGo search (free, no API key needed)
+#   - Linear DAG: search -> analyze
+#   - Tool invocation handled manually in Python

@@ -1,0 +1,71 @@
+# hexDAG Pipeline: Resume/Job Description Matching
+# Ported from LangGraph project-15-resume-job-description-matching
+#
+# Pattern: Compare -> Analyze -> Feedback
+# - Compare resume to job description
+# - Calculate match score
+# - Generate actionable feedback
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: resume-matcher
+  description: Match resumes to job descriptions with feedback
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-15"
+    pattern: "Document Comparison + LLM Analysis"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Compare resume to job description
+    - kind: function_node
+      metadata:
+        name: compare_documents
+        annotations:
+          description: Calculate match score between resume and job
+      spec:
+        fn: "compare_documents"
+        dependencies: []
+
+    # Step 2: Generate detailed feedback
+    - kind: llm_node
+      metadata:
+        name: generate_feedback
+        annotations:
+          description: Provide actionable feedback on the match
+      spec:
+        prompt_template: |
+          You are a career advisor. Analyze how well this resume matches the job.
+
+          RESUME:
+          {{ resume_text }}
+
+          JOB DESCRIPTION:
+          {{ job_description }}
+
+          MATCH ANALYSIS:
+          {{ match_analysis }}
+
+          Provide:
+          1. Overall match score (0-100%)
+          2. Matching skills/qualifications
+          3. Missing requirements
+          4. Recommendations to improve the match
+
+        model: gemini-2.0-flash
+        temperature: 0.4
+        dependencies: [compare_documents]
+
+# MATCHING PATTERN:
+#
+#   ┌──────────┐     ┌──────────┐     ┌──────────┐
+#   │  Resume  │     │ Compare  │     │ Generate │
+#   │   +      │ --> │   Docs   │ --> │ Feedback │ --> Report
+#   │   Job    │     │          │     │          │
+#   └──────────┘     └──────────┘     └──────────┘
+#                         │                │
+#                         v                v
+#                   Keyword/skill     Detailed advice
+#                    matching         for candidate

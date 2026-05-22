@@ -1,0 +1,83 @@
+# hexDAG Pipeline: Email Response Automation
+# Ported from LangGraph project-12-email-response-automation
+#
+# Pattern: Parse -> Analyze -> Respond
+# - Parse email to extract key information
+# - Classify intent/sentiment
+# - Generate appropriate response
+
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: email-responder
+  description: Automated email parsing and response generation
+  version: "1.0"
+  annotations:
+    source: "Ported from LangGraph project-12"
+    pattern: "Email Automation Pipeline"
+    llm_provider: "Google Gemini"
+
+spec:
+  nodes:
+    # Step 1: Parse the email
+    - kind: llm_node
+      metadata:
+        name: parse_email
+        annotations:
+          description: Extract key information from email
+      spec:
+        prompt_template: |
+          Parse this email and extract key information:
+
+          EMAIL:
+          {{ email_content }}
+
+          Extract:
+          1. Sender intent (question, complaint, request, feedback, etc.)
+          2. Main topic/subject
+          3. Key details or requests
+          4. Urgency level (low, medium, high)
+          5. Sentiment (positive, neutral, negative)
+
+          Format as structured data.
+
+        model: gemini-2.0-flash
+        temperature: 0.2
+        dependencies: []
+
+    # Step 2: Generate response
+    - kind: llm_node
+      metadata:
+        name: write_response
+        annotations:
+          description: Generate appropriate email response
+      spec:
+        prompt_template: |
+          Based on the parsed email information, write a professional response.
+
+          Original Email:
+          {{ email_content }}
+
+          Parsed Information:
+          {{ parsed_info }}
+
+          Requirements:
+          - Professional and friendly tone
+          - Address all concerns raised
+          - Provide helpful information or next steps
+          - Keep response concise but complete
+
+        model: gemini-2.0-flash
+        temperature: 0.5
+        dependencies: [parse_email]
+
+# EMAIL AUTOMATION PATTERN:
+#
+#   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+#   │ Incoming    │ --> │   Parse     │ --> │   Write     │ --> Response
+#   │   Email     │     │   Email     │     │  Response   │
+#   └─────────────┘     └─────────────┘     └─────────────┘
+#                            │                    │
+#                            v                    v
+#                     Extract intent        Generate reply
+#                     and key info          based on context
