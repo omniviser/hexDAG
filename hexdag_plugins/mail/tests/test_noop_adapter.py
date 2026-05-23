@@ -3,7 +3,7 @@
 import pytest
 
 from hexdag_plugins._ports import SendEmailRequest
-from hexdag_plugins.email.adapters.noop import NoopEmailAdapter
+from hexdag_plugins.mail.adapters.noop import NoopEmailAdapter
 
 
 @pytest.fixture

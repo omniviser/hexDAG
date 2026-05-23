@@ -80,7 +80,9 @@ Secrets declared with `secret()` are resolved in this order:
 | `AzureOpenAIAdapter` | Azure OpenAI adapter for LLM port with embedding support. |
 | `LLM` | Port interface for Large Language Models (LLMs). |
 | `MockLLM` | Mock implementation of the LLM interface for testing. |
+| `OllamaAdapter` | Ollama adapter implementing the hexDAG LLM port. |
 | `OpenAIAdapter` | Unified OpenAI implementation of the LLM port. |
+| `VertexAIAdapter` | Vertex AI / Google Gemini adapter implementing the hexDAG LL... |
 
 ### memory
 
@@ -111,7 +113,9 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `PgVectorAdapter` | PostgreSQL adapter with pgvector extension support. |
 | `ChromaDBAdapter` | ChromaDB vector store adapter. |
+| `GraphEmailAdapter` | Microsoft Graph email adapter for production use. |
 | `HexDAGAdapter` | Mixin that auto-registers adapters when ``yaml_alias`` is pr... |
+| `NoopEmailAdapter` | No-op email adapter that logs but does not send anything. |
 | `PgVectorAdapter` | PostgreSQL pgvector adapter using SQLAlchemy. |
 | `RedisAdapter` | Redis-backed key-value store with TTL support. |
 

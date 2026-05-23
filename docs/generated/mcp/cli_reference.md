@@ -7,7 +7,7 @@ This reference is auto-generated from `hexdag --help`.
 ```
 Usage: hexdag [OPTIONS] COMMAND [ARGS]...
 
- HexDAG - Lightweight DAG orchestration framework with hexagonal architecture.
+ hexDAG — Operating system for AI agents.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version             -v        Show version and exit                        │
