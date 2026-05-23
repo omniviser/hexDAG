@@ -182,3 +182,56 @@ spec:
         config = builder.build_from_yaml_string(yaml_content)
         order = SystemBuilder.topological_order(config)
         assert order == ["extract", "transform", "load"]  # declaration order preserved
+
+
+# ---------------------------------------------------------------------------
+# Preprocessing tests
+# ---------------------------------------------------------------------------
+
+
+class TestSystemBuilderPreprocessing:
+    def test_resolves_env_vars(self, tmp_system: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """${VAR} and ${VAR:default} should be resolved in System YAML."""
+        monkeypatch.setenv("MY_SYSTEM_NAME", "resolved-system")
+        yaml_content = """\
+kind: System
+metadata:
+  name: "${MY_SYSTEM_NAME}"
+  env: "${MISSING_VAR:production}"
+spec:
+  processes:
+    - name: extract
+      pipeline: extract.yaml
+  pipes: []
+"""
+        builder = SystemBuilder(base_path=tmp_system)
+        config = builder.build_from_yaml_string(yaml_content)
+        assert config.metadata["name"] == "resolved-system"
+        assert config.metadata["env"] == "production"
+
+    def test_pipe_templates_preserved(self, tmp_system: Path) -> None:
+        """{{ process.field }} in pipe mappings must NOT be rendered at build time."""
+        builder = SystemBuilder(base_path=tmp_system)
+        config = builder.build_from_yaml_string(VALID_SYSTEM_YAML)
+        # The mapping should still contain the raw template
+        pipe = config.pipes[0]
+        assert "{{ extract.records }}" in pipe.mapping["records"]
+
+    def test_env_var_in_pipeline_path(
+        self, tmp_system: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """${VAR} should work in pipeline path fields."""
+        monkeypatch.setenv("PIPELINE_FILE", "extract.yaml")
+        yaml_content = """\
+kind: System
+metadata:
+  name: test
+spec:
+  processes:
+    - name: extract
+      pipeline: "${PIPELINE_FILE}"
+  pipes: []
+"""
+        builder = SystemBuilder(base_path=tmp_system)
+        config = builder.build_from_yaml_string(yaml_content)
+        assert config.processes[0].pipeline == "extract.yaml"

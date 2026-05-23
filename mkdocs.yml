@@ -1,5 +1,5 @@
 site_name: HexDAG Documentation
-site_description: Enterprise-ready AI agent orchestration framework
+site_description: Operating system for AI agents — pipelines, ports, drivers, and stdlib so agents don't reinvent infrastructure
 site_url: https://hexdag.ai
 repo_url: https://github.com/omniviser/hexdag
 repo_name: hexdag

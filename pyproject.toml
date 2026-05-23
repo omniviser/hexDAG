@@ -2,18 +2,20 @@
 name = "hexdag"
 version = "0.7.0"
 
-description = "Lightweight DAG orchestration framework with enterprise pipeline capabilities"
+description = "Operating system for AI agents — pipelines, ports, drivers, and stdlib so agents don't reinvent infrastructure"
 authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
 requires-python = ">=3.12"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 keywords = [
+    "ai-agents",
+    "llm",
+    "operating-system",
     "dag",
     "orchestration",
     "pipeline",
     "workflow",
     "async",
-    "hexagonal-architecture",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

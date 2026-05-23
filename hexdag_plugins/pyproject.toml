@@ -1,7 +1,7 @@
 [project]
 name = "hexdag-plugins"
 version = "0.2.0.dev3"
-description = "Official plugins for hexDAG framework - Azure, MySQL, ETL, and storage adapters"
+description = "Official plugins for hexDAG framework - Azure, Google, Ollama, Email, MySQL, ETL, and storage adapters"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
@@ -10,6 +10,11 @@ keywords = [
     "hexdag",
     "plugins",
     "azure",
+    "google",
+    "gemini",
+    "vertex",
+    "ollama",
+    "email",
     "mysql",
     "etl",
     "storage",
@@ -58,9 +63,26 @@ storage-all = [
     "hexdag-plugins[storage-chromadb]",
 ]
 
+# Google Cloud plugins
+google = ["google-auth>=2.0.0", "httpx>=0.24.0"]
+
+# Ollama plugin
+ollama = ["httpx>=0.24.0"]
+
+# Email plugins
+email-graph = ["httpx>=0.24.0"]
+email-sendgrid = ["httpx>=0.24.0"]
+email-all = [
+    "hexdag-plugins[email-graph]",
+    "hexdag-plugins[email-sendgrid]",
+]
+
 # All plugins
 all = [
     "hexdag-plugins[azure-all]",
+    "hexdag-plugins[google]",
+    "hexdag-plugins[ollama]",
+    "hexdag-plugins[email-all]",
     "hexdag-plugins[mysql]",
     "hexdag-plugins[etl]",
     "hexdag-plugins[storage-all]",
@@ -131,7 +153,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["azure/tests", "mysql_adapter/tests", "hexdag_etl/tests", "storage/tests"]
+testpaths = ["azure/tests", "mysql_adapter/tests", "hexdag_etl/tests", "storage/tests", "google/tests", "ollama/tests", "email/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

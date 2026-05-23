@@ -40,6 +40,7 @@ from hexdag.stdlib.middleware.observable_tool_router import ObservableToolRouter
 from hexdag.stdlib.middleware.rate_limiter import RateLimiter
 from hexdag.stdlib.middleware.response_cache import ResponseCache
 from hexdag.stdlib.middleware.retry import RetryWithBackoff
+from hexdag.stdlib.middleware.round_robin import RoundRobin
 from hexdag.stdlib.middleware.timeout import Timeout
 
 __all__ = [
@@ -52,6 +53,7 @@ __all__ = [
     "RetryWithBackoff",
     "RateLimiter",
     "ResponseCache",
+    "RoundRobin",
     "Timeout",
     # Utilities
     "compose",

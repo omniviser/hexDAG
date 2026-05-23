@@ -25,6 +25,7 @@ from hexdag.kernel import (
     FewShotPromptTemplate,
     PipelineRunner,
     PromptTemplate,
+    System,
     ToolRouter,
 )
 from hexdag.kernel.domain.pipeline_result import PipelineResult
@@ -124,6 +125,7 @@ __all__ = [
     # Primary API
     "PipelineResult",
     "PipelineRunner",
+    "System",
     # Node Factories
     "FunctionNode",
     "LLMNode",

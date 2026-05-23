@@ -16,10 +16,13 @@ Or from a string::
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import yaml
 
+from hexdag.compiler.preprocessing import EnvironmentVariablePlugin, IncludePreprocessPlugin
 from hexdag.kernel.domain.system_config import SystemConfig
 from hexdag.kernel.exceptions import HexDAGError
 from hexdag.kernel.logging import get_logger
@@ -34,6 +37,9 @@ class SystemBuildError(HexDAGError):
 class SystemBuilder:
     """Compile ``kind: System`` YAML manifests into :class:`SystemConfig`.
 
+    Applies preprocessing plugins (``!include``, ``${VAR}``) before
+    validation, mirroring :class:`YamlPipelineBuilder`.
+
     Parameters
     ----------
     base_path:
@@ -43,6 +49,35 @@ class SystemBuilder:
 
     def __init__(self, base_path: Path | None = None) -> None:
         self._base_path = base_path or Path.cwd()
+        self._preprocess_plugins = self._create_default_plugins()
+
+    def _create_default_plugins(self) -> list[Any]:
+        """Register preprocessing plugins.
+
+        TemplatePlugin is intentionally excluded — System YAML uses
+        ``{{ process.field }}`` in pipe mappings which are resolved at
+        runtime by SystemRunner, not at build time.
+        """
+        return [
+            IncludePreprocessPlugin(base_path=self._base_path),
+            EnvironmentVariablePlugin(),
+        ]
+
+    @contextmanager
+    def _temporary_base_path(self, new_base: Path) -> Any:
+        """Temporarily change base_path for include resolution."""
+        original = self._base_path
+        self._base_path = new_base
+        for plugin in self._preprocess_plugins:
+            if hasattr(plugin, "base_path"):
+                plugin.base_path = new_base
+        try:
+            yield
+        finally:
+            self._base_path = original
+            for plugin in self._preprocess_plugins:
+                if hasattr(plugin, "base_path"):
+                    plugin.base_path = original
 
     def build_from_yaml_file(self, path: str | Path) -> SystemConfig:
         """Parse a ``kind: System`` YAML file.
@@ -67,7 +102,8 @@ class SystemBuilder:
             raise SystemBuildError(f"System manifest not found: {file_path}")
 
         yaml_content = file_path.read_text(encoding="utf-8")
-        return self.build_from_yaml_string(yaml_content, base_path=file_path.parent)
+        with self._temporary_base_path(file_path.parent):
+            return self.build_from_yaml_string(yaml_content, base_path=file_path.parent)
 
     def build_from_yaml_string(
         self,
@@ -104,6 +140,13 @@ class SystemBuilder:
 
         if not isinstance(doc, dict):
             raise SystemBuildError("System manifest must be a YAML mapping")
+
+        # 1.5. Apply preprocessing plugins (!include, ${VAR})
+        try:
+            for plugin in self._preprocess_plugins:
+                doc = plugin.process(doc)
+        except Exception as e:
+            raise SystemBuildError(f"Preprocessing failed: {e}") from e
 
         # 2. Validate kind
         kind = doc.get("kind")

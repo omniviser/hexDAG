@@ -252,6 +252,7 @@ from hexdag.kernel.resolver import (
 # ============================================================================
 from hexdag.kernel.schema import SchemaGenerator
 from hexdag.kernel.service import Service, get_service_tool_schemas, step, tool
+from hexdag.kernel.system import System, SystemError
 
 # ============================================================================
 # 14. Types
@@ -263,8 +264,10 @@ from hexdag.kernel.types import Secret
 # ============================================================================
 
 __all__ = [
-    # -- 1. Pipeline Execution --
+    # -- 1. Pipeline & System Execution --
     "PipelineRunner",
+    "System",
+    "SystemError",
     "Orchestrator",
     "OrchestratorConfig",
     "PortsBuilder",

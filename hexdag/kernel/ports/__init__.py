@@ -20,6 +20,7 @@ from hexdag.kernel.ports.database import (
     TableSchema,
 )
 from hexdag.kernel.ports.detection import detect_port_type
+from hexdag.kernel.ports.dict_bridge import dict_bridge_call
 from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -62,6 +63,7 @@ __all__ = [
     "BatchItemStatus",
     "BatchResult",
     "detect_port_type",
+    "dict_bridge_call",
     "ColumnSchema",
     "ColumnType",
     "DataStore",

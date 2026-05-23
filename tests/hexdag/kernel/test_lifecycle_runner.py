@@ -298,3 +298,227 @@ class TestLifecycleRunnerStateDataContracts:
         )
         assert result["to_state"] == "ACCEPTED"
         await runner.stop()
+
+
+# ---------------------------------------------------------------------------
+# Multi-entity namespace collision tests
+# ---------------------------------------------------------------------------
+
+
+def _make_multi_entity_system(**overrides) -> SystemConfig:
+    """Two entity types with overlapping state names but different processes."""
+    base = {
+        "metadata": {"name": "multi-entity-test"},
+        "processes": [
+            {"name": "investigate_ticket", "pipeline": "pipelines/investigate_ticket.yaml"},
+            {"name": "cancel_ticket", "pipeline": "pipelines/cancel_ticket.yaml"},
+            {"name": "investigate_order", "pipeline": "pipelines/investigate_order.yaml"},
+            {"name": "cancel_order", "pipeline": "pipelines/cancel_order.yaml"},
+        ],
+        "state_machines": {
+            "ticket": {
+                "initial": "OPEN",
+                "transitions": {
+                    "OPEN": ["INVESTIGATING", "CANCELLED"],
+                    "INVESTIGATING": ["RESOLVED", "CANCELLED"],
+                    "RESOLVED": ["CLOSED"],
+                },
+            },
+            "order": {
+                "initial": "PENDING",
+                "transitions": {
+                    "PENDING": ["INVESTIGATING", "CANCELLED"],
+                    "INVESTIGATING": ["FULFILLED", "CANCELLED"],
+                    "FULFILLED": ["CLOSED"],
+                },
+            },
+        },
+        "states": {
+            "INVESTIGATING": {"on_enter": "investigate_ticket"},
+            "CANCELLED": {"on_enter": "cancel_ticket", "terminal": True},
+            "CLOSED": {"terminal": True},
+        },
+    }
+    base.update(overrides)
+    return SystemConfig.model_validate(base)
+
+
+class TestLifecycleRunnerMultiEntity:
+    """Tests for entity-type-qualified state lookups (namespace collision fix)."""
+
+    @pytest.mark.asyncio()
+    async def test_same_state_different_entity_types(self):
+        """Both ticket and order can enter INVESTIGATING without collision."""
+        runner = LifecycleRunner()
+        await runner.start(_make_multi_entity_system())
+        runner._spawn_process = AsyncMock()  # type: ignore[method-assign]
+
+        await runner.transition("ticket", "T-1", "INVESTIGATING")
+        await runner.transition("order", "O-1", "INVESTIGATING")
+
+        assert runner._spawn_process.call_count == 2
+        # Both should spawn "investigate_ticket" (the process mapped to INVESTIGATING)
+        for call in runner._spawn_process.call_args_list:
+            assert call[0][0] == "investigate_ticket"
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_per_entity_type_state_processes(self):
+        """Different entity types with per-type state process overrides."""
+        config = SystemConfig.model_validate({
+            "metadata": {"name": "test"},
+            "processes": [
+                {"name": "handle_ticket", "pipeline": "p/a.yaml"},
+                {"name": "handle_order", "pipeline": "p/b.yaml"},
+            ],
+            "state_machines": {
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": ["PROCESSING"]},
+                },
+                "order": {
+                    "initial": "NEW",
+                    "transitions": {"NEW": ["PROCESSING"]},
+                },
+            },
+            "states": {
+                # Both entity types share PROCESSING state but map to same process.
+                # The key point: no collision between ticket.PROCESSING and order.PROCESSING
+                "PROCESSING": {"on_enter": "handle_ticket"},
+            },
+        })
+        runner = LifecycleRunner()
+        await runner.start(config)
+        runner._spawn_process = AsyncMock()  # type: ignore[method-assign]
+
+        await runner.transition("ticket", "T-1", "PROCESSING")
+        await runner.transition("order", "O-1", "PROCESSING")
+
+        # Both should trigger since PROCESSING is in both state machines
+        assert runner._spawn_process.call_count == 2
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_per_entity_terminal_states(self):
+        """Terminal state for one entity type doesn't affect another."""
+        config = SystemConfig.model_validate({
+            "metadata": {"name": "test"},
+            "processes": [],
+            "state_machines": {
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {
+                        "OPEN": ["DONE"],
+                        "DONE": ["REOPENED"],
+                    },
+                },
+                "order": {
+                    "initial": "NEW",
+                    "transitions": {
+                        "NEW": ["DONE"],
+                    },
+                },
+            },
+            "states": {
+                "DONE": {"terminal": True},
+            },
+        })
+        runner = LifecycleRunner()
+        await runner.start(config)
+
+        # Both entity types reach DONE — both should be GC'd since
+        # DONE is terminal for both (it's in both state machines).
+        await runner.transition("ticket", "T-1", "DONE")
+        await runner.transition("order", "O-1", "DONE")
+
+        assert runner.active_entities == 0
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_per_entity_requires(self):
+        """Required fields can be different per entity type sharing a state name."""
+        config = SystemConfig.model_validate({
+            "metadata": {"name": "test"},
+            "processes": [],
+            "state_machines": {
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": ["ACCEPTED"]},
+                },
+                "order": {
+                    "initial": "NEW",
+                    "transitions": {"NEW": ["ACCEPTED"]},
+                },
+            },
+            "states": {
+                "ACCEPTED": {"requires": ["assignee"]},
+            },
+        })
+        runner = LifecycleRunner()
+        await runner.start(config)
+
+        # Both entity types should enforce the requires
+        with pytest.raises(LifecycleError, match="requires fields"):
+            await runner.transition("ticket", "T-1", "ACCEPTED")
+
+        # With payload it passes
+        result = await runner.transition("order", "O-1", "ACCEPTED", payload={"assignee": "user-1"})
+        assert result["to_state"] == "ACCEPTED"
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_per_entity_guards(self):
+        """Guards are entity-type-qualified — same transition name, different guards."""
+        config = SystemConfig.model_validate({
+            "metadata": {"name": "test"},
+            "processes": [],
+            "state_machines": {
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {
+                        "OPEN": [
+                            {"to": "ESCALATED", "guard": "priority == 'critical'"},
+                        ],
+                    },
+                },
+                "order": {
+                    "initial": "NEW",
+                    "transitions": {
+                        "NEW": [
+                            {"to": "ESCALATED", "guard": "amount > 1000"},
+                        ],
+                    },
+                },
+            },
+        })
+        runner = LifecycleRunner()
+        await runner.start(config)
+
+        # Ticket guard checks priority
+        with pytest.raises(InvalidTransitionError, match="Guard blocked"):
+            await runner.transition("ticket", "T-1", "ESCALATED", payload={"priority": "low"})
+
+        # Order guard checks amount — ticket guard should NOT apply
+        result = await runner.transition("order", "O-1", "ESCALATED", payload={"amount": 5000})
+        assert result["to_state"] == "ESCALATED"
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_payload_does_not_shadow_framework_fields(self):
+        """Payload key named 'entity_type' should not override framework field."""
+        runner = LifecycleRunner()
+        await runner.start(_make_multi_entity_system())
+        runner._spawn_process = AsyncMock()  # type: ignore[method-assign]
+
+        await runner.transition(
+            "ticket",
+            "T-1",
+            "INVESTIGATING",
+            payload={"entity_type": "SHOULD_NOT_OVERRIDE"},
+        )
+
+        # Verify spawn was called and input_data has correct entity_type
+        call_args = runner._spawn_process.call_args
+        request = call_args[0][1]  # TransitionRequest
+        assert request.entity_type == "ticket"
+        await runner.stop()

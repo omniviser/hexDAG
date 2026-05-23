@@ -19,7 +19,7 @@ import hexdag.cli.commands as _commands_pkg
 
 app = typer.Typer(
     name="hexdag",
-    help="HexDAG - Lightweight DAG orchestration framework with hexagonal architecture.",
+    help="hexDAG — Operating system for AI agents.",
     no_args_is_help=True,
     rich_markup_mode="rich",
     pretty_exceptions_enable=False,
@@ -56,7 +56,7 @@ def callback(
         help="Show version and exit",
     ),
 ) -> None:
-    """HexDAG CLI - Modular DAG orchestration framework."""
+    """hexDAG CLI — Operating system for AI agents."""
     if version:
         # Read version from package metadata
         try:

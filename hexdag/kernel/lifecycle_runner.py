@@ -117,6 +117,7 @@ class LifecycleRunner:
         base_path: Path | None = None,
         max_cascade_depth: int = _DEFAULT_MAX_CASCADE_DEPTH,
     ) -> None:
+        """Initialize the lifecycle runner with optional config and port overrides."""
         self._config = config
         self._port_overrides = port_overrides
         self._observer_manager = observer_manager
@@ -130,13 +131,13 @@ class LifecycleRunner:
         self._running = False
         self._draining = False
 
-        # Lookup tables built from system config
-        self._state_to_process: dict[str, str] = {}  # STATE -> process_name
+        # Lookup tables built from system config (entity-type-qualified)
+        self._state_to_process: dict[tuple[str, str], str] = {}  # (entity_type, state) -> process
         self._transition_to_process: dict[tuple[str, str], str] = {}
-        self._terminal_states: set[str] = set()
-        self._state_requires: dict[str, list[str]] = {}  # STATE -> required fields
+        self._terminal_states: set[tuple[str, str]] = set()  # (entity_type, state)
+        self._state_requires: dict[tuple[str, str], list[str]] = {}  # (entity_type, state)
         self._process_map: dict[str, Any] = {}
-        self._guards: dict[tuple[str, str], str] = {}  # (from, to) -> expression
+        self._guards: dict[tuple[str, str, str], str] = {}  # (entity_type, from, to) -> expr
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -172,7 +173,7 @@ class LifecycleRunner:
                             # Extract guard if present
                             guard = t.get("guard")
                             if guard:
-                                self._guards[(from_state, t["to"])] = guard
+                                self._guards[(entity_type, from_state, t["to"])] = guard
                 transitions[from_state] = target_set
 
             all_states = set(transitions.keys())
@@ -200,16 +201,35 @@ class LifecycleRunner:
                 handler = handler_cls() if isinstance(handler_cls, type) else handler_cls
                 self._entity_state.register_handler(entity_type, handler)
 
-        # Build state -> process lookup + data contracts
+        # Build reverse map: state_name -> set of entity types that declare it
+        state_owners: dict[str, set[str]] = {}
+        for entity_type, sm_spec in system_config.state_machines.items():
+            transitions_raw = sm_spec.get("transitions", {})
+            for from_state, targets in transitions_raw.items():
+                state_owners.setdefault(from_state, set()).add(entity_type)
+                if isinstance(targets, list):
+                    for t in targets:
+                        if isinstance(t, str):
+                            state_owners.setdefault(t, set()).add(entity_type)
+                        elif isinstance(t, dict) and "to" in t:
+                            state_owners.setdefault(t["to"], set()).add(entity_type)
+            initial = sm_spec.get("initial", "")
+            if initial:
+                state_owners.setdefault(initial, set()).add(entity_type)
+
+        # Build entity-qualified state -> process lookup + data contracts
         for state_name, state_spec in system_config.states.items():
             on_enter = state_spec.get("on_enter")
-            if on_enter:
-                self._state_to_process[state_name] = on_enter
-            if state_spec.get("terminal"):
-                self._terminal_states.add(state_name)
+            is_terminal = state_spec.get("terminal")
             requires = state_spec.get("requires")
-            if requires and isinstance(requires, list):
-                self._state_requires[state_name] = requires
+
+            for owner in state_owners.get(state_name, set()):
+                if on_enter:
+                    self._state_to_process[(owner, state_name)] = on_enter
+                if is_terminal:
+                    self._terminal_states.add((owner, state_name))
+                if requires and isinstance(requires, list):
+                    self._state_requires[(owner, state_name)] = requires
 
         # Build transition-specific process lookup
         for transition_key, transition_spec in system_config.on_transition.items():
@@ -378,7 +398,7 @@ class LifecycleRunner:
         )
         current = current_state["state"] if current_state else None
         if current:
-            guard_expr = self._guards.get((current, request.to_state))
+            guard_expr = self._guards.get((request.entity_type, current, request.to_state))
             if guard_expr and not self._evaluate_guard(guard_expr, request):
                 msg = (
                     f"Guard blocked transition "
@@ -388,7 +408,7 @@ class LifecycleRunner:
                 raise InvalidTransitionError(msg)
 
         # Validate state data contract (requires)
-        required_fields = self._state_requires.get(request.to_state)
+        required_fields = self._state_requires.get((request.entity_type, request.to_state))
         if required_fields:
             missing = [f for f in required_fields if request.payload.get(f) is None]
             if missing:
@@ -424,17 +444,17 @@ class LifecycleRunner:
         from_state = result.get("from_state", "")
 
         # Determine which process to spawn
-        process_name = self._resolve_process(from_state, request.to_state)
+        process_name = self._resolve_process(request.entity_type, from_state, request.to_state)
         if process_name:
             await self._spawn_process(process_name, request, from_state)
 
         # Check terminal state → basic GC
-        if request.to_state in self._terminal_states:
+        if (request.entity_type, request.to_state) in self._terminal_states:
             await self._gc_entity(key)
 
         return result
 
-    def _resolve_process(self, from_state: str, to_state: str) -> str | None:
+    def _resolve_process(self, entity_type: str, from_state: str, to_state: str) -> str | None:
         """Determine which process to run for a transition.
 
         Resolution order:
@@ -446,8 +466,8 @@ class LifecycleRunner:
         if process:
             return process
 
-        # Fall back to state on_enter
-        return self._state_to_process.get(to_state)
+        # Fall back to entity-qualified state on_enter
+        return self._state_to_process.get((entity_type, to_state))
 
     async def _spawn_process(
         self,
@@ -464,14 +484,18 @@ class LifecycleRunner:
             )
             return
 
-        # Build input data for the pipeline
+        # Build input data for the pipeline.
+        # Payload is spread first so framework fields take precedence
+        # (consistent with _evaluate_guard). Original payload also
+        # available under the "payload" key.
         input_data = {
+            **request.payload,
             "entity_type": request.entity_type,
             "entity_id": request.entity_id,
             "from_state": from_state,
             "to_state": request.to_state,
             "reason": request.reason,
-            **request.payload,
+            "payload": request.payload,
         }
 
         runner = PipelineRunner(
@@ -522,6 +546,7 @@ class LifecycleRunner:
             data_context = {
                 **request.payload,
                 "input": request.payload,
+                "payload": request.payload,
                 "entity_type": request.entity_type,
                 "entity_id": request.entity_id,
                 "to_state": request.to_state,
