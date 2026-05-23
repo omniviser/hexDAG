@@ -6,7 +6,10 @@ Delegates to core YamlValidator for structural validation.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import yaml
 
@@ -14,7 +17,11 @@ from hexdag.compiler import YamlPipelineBuilder
 from hexdag.compiler.yaml_validator import YamlValidator
 
 
-def validate(yaml_content: str, lenient: bool = False) -> dict[str, Any]:
+def validate(
+    yaml_content: str,
+    lenient: bool = False,
+    base_path: Path | None = None,
+) -> dict[str, Any]:
     """Validate a YAML pipeline configuration.
 
     Parameters
@@ -25,6 +32,10 @@ def validate(yaml_content: str, lenient: bool = False) -> dict[str, Any]:
         If True, validate structure only without requiring environment variables.
         Useful for CI/CD validation where secrets aren't available.
         Default: False
+    base_path : Path | None
+        Base directory for resolving ``!include`` directives.
+        Required for full validation of pipelines that use includes.
+        Default: None (uses current working directory)
 
     Returns
     -------
@@ -58,13 +69,16 @@ def validate(yaml_content: str, lenient: bool = False) -> dict[str, Any]:
     """
     if lenient:
         return _validate_lenient(yaml_content)
-    return _validate_full(yaml_content)
+    return _validate_full(yaml_content, base_path=base_path)
 
 
-def _validate_full(yaml_content: str) -> dict[str, Any]:
+def _validate_full(
+    yaml_content: str,
+    base_path: Path | None = None,
+) -> dict[str, Any]:
     """Full validation with YamlPipelineBuilder."""
     try:
-        builder = YamlPipelineBuilder()
+        builder = YamlPipelineBuilder(base_path=base_path)
         graph, config = builder.build_from_yaml_string(yaml_content)
 
         return {
@@ -82,6 +96,46 @@ def _validate_full(yaml_content: str) -> dict[str, Any]:
         }
 
 
+def _strip_includes(
+    obj: Any,
+    warnings: list[str],
+    *,
+    _counter: list[int] | None = None,
+) -> Any:
+    """Strip ``{"!include": "..."}`` entries from parsed YAML.
+
+    In node lists, replaces includes with placeholder data_node entries.
+    Elsewhere, replaces with None.  Collects warnings for each stripped include.
+    """
+    if _counter is None:
+        _counter = [0]
+
+    if isinstance(obj, dict):
+        if "!include" in obj and len(obj) == 1:
+            path = obj["!include"]
+            warnings.append(f"!include '{path}' skipped during lenient validation")
+            return None
+        return {k: _strip_includes(v, warnings, _counter=_counter) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+        result = []
+        for item in obj:
+            if isinstance(item, dict) and "!include" in item and len(item) == 1:
+                path = item["!include"]
+                warnings.append(f"!include '{path}' skipped during lenient validation")
+                _counter[0] += 1
+                result.append({
+                    "kind": "data_node",
+                    "metadata": {"name": f"__included_{_counter[0]}__"},
+                    "spec": {"data": {}},
+                })
+            else:
+                result.append(_strip_includes(item, warnings, _counter=_counter))
+        return result
+
+    return obj
+
+
 def _validate_lenient(yaml_content: str) -> dict[str, Any]:
     """Structure-only validation using core YamlValidator.
 
@@ -90,6 +144,10 @@ def _validate_lenient(yaml_content: str) -> dict[str, Any]:
     - Manifest structure (kind, metadata, spec)
     - Node structure and dependencies
     - Cycle detection
+
+    ``!include`` directives (dict-key syntax) are stripped and replaced
+    with placeholder nodes so that structural validation can proceed
+    without requiring access to included files.
     """
     try:
         parsed = yaml.safe_load(yaml_content)
@@ -99,6 +157,10 @@ def _validate_lenient(yaml_content: str) -> dict[str, Any]:
                 "error": "YAML must be a dictionary",
                 "error_type": "ParseError",
             }
+
+        # Strip !include directives before validation
+        include_warnings: list[str] = []
+        parsed = _strip_includes(parsed, include_warnings)
 
         # Use core validator for structural validation
         validator = YamlValidator()
@@ -122,7 +184,7 @@ def _validate_lenient(yaml_content: str) -> dict[str, Any]:
             "message": "Pipeline structure is valid",
             "node_count": len(nodes),
             "nodes": nodes,
-            "warnings": report.warnings,
+            "warnings": include_warnings + report.warnings,
         }
 
     except yaml.YAMLError as e:

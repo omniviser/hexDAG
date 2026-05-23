@@ -25,7 +25,6 @@ from hexdag.kernel.ports.executor import (
     ExecutionTask,
     Executor,
 )
-from hexdag.kernel.ports.file_storage import FileStorage
 from hexdag.kernel.ports.healthcheck import HealthStatus
 from hexdag.kernel.ports.llm import (
     LLM,
@@ -54,7 +53,6 @@ from hexdag.kernel.ports.vfs import VFS, VFSProvider
 # Backward-compat aliases (deprecated: use new names)
 DatabasePort = Database
 ExecutorPort = Executor
-FileStoragePort = FileStorage
 ObserverManagerPort = ObserverManager
 SecretPort = SecretStore
 
@@ -74,8 +72,6 @@ __all__ = [
     "ExecutionResult",
     "ExecutionTask",
     "ExecutorPort",
-    "FileStorage",
-    "FileStoragePort",
     "HealthStatus",
     "ImageContent",
     "ImageInput",

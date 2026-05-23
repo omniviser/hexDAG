@@ -264,7 +264,7 @@ class LifecycleManager:
         self,
         context: NodeExecutionContext,
         pipeline_name: str,
-        pipeline_status: Literal["success", "failed", "cancelled"],
+        pipeline_status: Literal["success", "failed", "cancelled", "suspended"],
         node_results: dict[str, Any],
         error: BaseException | None = None,
     ) -> dict[str, Any]:
@@ -296,6 +296,7 @@ class LifecycleManager:
             (pipeline_status == "success" and self.post_config.run_on_success)
             or (pipeline_status == "failed" and self.post_config.run_on_failure)
             or (pipeline_status == "cancelled" and self.post_config.run_on_cancellation)
+            or pipeline_status == "suspended"  # Always save checkpoint on suspend
         )
 
         if not should_run:
@@ -309,10 +310,12 @@ class LifecycleManager:
         )
 
         try:
-            # 1. Save checkpoint (if enabled)
-            if self.post_config.enable_checkpoint_save and (
-                pipeline_status == "success" or self.post_config.checkpoint_on_failure
-            ):
+            # 1. Save checkpoint (if enabled, or always for suspended pipelines)
+            should_checkpoint = (
+                self.post_config.enable_checkpoint_save
+                and (pipeline_status == "success" or self.post_config.checkpoint_on_failure)
+            ) or pipeline_status == "suspended"
+            if should_checkpoint:
                 try:
                     checkpoint_result = await self._save_checkpoint(
                         dict(ports), context, node_results, pipeline_status, observer_manager
@@ -585,17 +588,29 @@ class LifecycleManager:
 
         actual_run_id = get_run_id() or context.dag_id
 
+        # Build checkpoint metadata
+        checkpoint_metadata: dict[str, Any] = {"pipeline_status": status}
+
+        # Include wait state for suspended pipelines
+        suspend_meta = context.metadata.get("_suspend")
+        if suspend_meta and status == "suspended":
+            checkpoint_metadata["wait"] = suspend_meta
+
+        # Strip internal sentinel from node_results before persisting
+        clean_results = {k: v for k, v in node_results.items() if not k.startswith("_hexdag_")}
+
         state = CheckpointState(
             run_id=actual_run_id,
             dag_id=context.dag_id,
             graph_snapshot=graph_snapshot,
             initial_input=initial_input,
-            node_results=node_results,
-            completed_node_ids=list(node_results.keys()),
+            node_results=clean_results,
+            completed_node_ids=list(clean_results.keys()),
             failed_node_ids=[],
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
-            metadata={"pipeline_status": status},
+            metadata=checkpoint_metadata,
+            status="suspended" if status == "suspended" else "saved",
         )
 
         await checkpoint_mgr.save(state)

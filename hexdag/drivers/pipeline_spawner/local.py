@@ -50,6 +50,7 @@ class LocalPipelineSpawner:
         pipeline_dir: str | None = None,
         cap_set: CapSet | None = None,
     ) -> None:
+        """Initialize with a PipelineRunner and optional pipeline directory."""
         self._runner = runner
         self._pipeline_dir = pipeline_dir
         self._cap_set: CapSet | None = cap_set

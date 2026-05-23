@@ -9,19 +9,17 @@ See hexdag.stdlib.nodes._discovery for the auto-discovery mechanism.
 
 from .agent_node import ReActAgentNode
 from .api_call_node import ApiCallNode
-from .checkpoint_node import CheckpointNode
 from .composite_node import CompositeNode
 from .data_node import DataNode
 from .expression_node import ExpressionNode
 from .function_node import FunctionNode
 from .llm_node import LLMNode
 from .service_call_node import ServiceCallNode
-from .tool_call_node import ToolCallNode
 from .transition_node import TransitionNode
+from .wait_node import WaitNode
 
 __all__ = [
     "ApiCallNode",
-    "CheckpointNode",
     "CompositeNode",
     "DataNode",
     "ExpressionNode",
@@ -29,8 +27,8 @@ __all__ = [
     "LLMNode",
     "ReActAgentNode",
     "ServiceCallNode",
-    "ToolCallNode",
     "TransitionNode",
+    "WaitNode",
 ]
 
 # Bootstrap: Register __init_subclass__-discovered node aliases with core resolver.

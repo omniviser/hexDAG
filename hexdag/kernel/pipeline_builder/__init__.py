@@ -22,12 +22,10 @@ from hexdag.compiler import (  # noqa: E402, F401
     discover_tags,
     get_known_tag_names,
     get_tag_schema,
-    set_include_base_path,
 )
 
 __all__ = [
     "YamlPipelineBuilder",
-    "set_include_base_path",
     "discover_tags",
     "get_known_tag_names",
     "get_tag_schema",

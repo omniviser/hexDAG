@@ -13,13 +13,6 @@ from hexdag.kernel.domain.pipeline_run import (
     pipeline_run_from_storage,
     pipeline_run_to_storage,
 )
-from hexdag.kernel.domain.scheduled_task import (
-    ScheduledTask,
-    ScheduleType,
-    TaskStatus,
-    scheduled_task_from_storage,
-    scheduled_task_to_storage,
-)
 
 
 class TestPipelineRunRoundTrip:
@@ -62,51 +55,6 @@ class TestPipelineRunRoundTrip:
         restored = pipeline_run_from_storage(data)
         assert isinstance(restored.status, RunStatus)
         assert restored.status == RunStatus.FAILED
-
-
-class TestScheduledTaskRoundTrip:
-    def test_once_task(self) -> None:
-        task = ScheduledTask(
-            task_id="t1",
-            pipeline_name="p1",
-            schedule_type=ScheduleType.ONCE,
-            delay_seconds=30.0,
-        )
-        data = scheduled_task_to_storage(task)
-        restored = scheduled_task_from_storage(data)
-        assert restored.task_id == "t1"
-        assert restored.schedule_type == ScheduleType.ONCE
-        assert restored.status == TaskStatus.PENDING
-        assert restored.delay_seconds == 30.0
-
-    def test_recurring_task(self) -> None:
-        task = ScheduledTask(
-            task_id="t2",
-            pipeline_name="p2",
-            schedule_type=ScheduleType.RECURRING,
-            interval_seconds=300.0,
-            status=TaskStatus.RUNNING,
-            run_count=5,
-        )
-        data = scheduled_task_to_storage(task)
-        restored = scheduled_task_from_storage(data)
-        assert restored.schedule_type == ScheduleType.RECURRING
-        assert restored.status == TaskStatus.RUNNING
-        assert restored.run_count == 5
-
-    def test_enum_coercion(self) -> None:
-        task = ScheduledTask(
-            task_id="t3",
-            pipeline_name="p3",
-            schedule_type=ScheduleType.ONCE,
-            status=TaskStatus.CANCELLED,
-        )
-        data = scheduled_task_to_storage(task)
-        assert data["schedule_type"] == "once"
-        assert data["status"] == "cancelled"
-        restored = scheduled_task_from_storage(data)
-        assert isinstance(restored.schedule_type, ScheduleType)
-        assert isinstance(restored.status, TaskStatus)
 
 
 class TestStateTransitionRoundTrip:

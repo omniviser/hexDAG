@@ -21,13 +21,6 @@ class TestDiscoverTags:
         assert tags["!py"]["name"] == "!py"
         assert "hexdag.compiler.py_tag" in tags["!py"]["module"]
 
-    def test_discovers_include_tag(self) -> None:
-        """The !include tag should be discovered."""
-        tags = discover_tags()
-        assert "!include" in tags
-        assert tags["!include"]["name"] == "!include"
-        assert "hexdag.compiler.include_tag" in tags["!include"]["module"]
-
     def test_tags_have_descriptions(self) -> None:
         """All tags should have descriptions."""
         tags = discover_tags()
@@ -72,23 +65,10 @@ class TestGetTagSchema:
         assert "input_schema" in schema
         assert schema["input_schema"]["type"] == "string"
 
-    def test_get_include_tag_schema(self) -> None:
-        """Get schema for !include tag."""
-        schema = get_tag_schema("!include")
-        assert schema["name"] == "!include"
-        assert schema["type"] == "yaml_tag"
-        assert "input_schema" in schema
-        assert "oneOf" in schema["input_schema"]
-
     def test_tag_without_prefix(self) -> None:
         """Tags can be looked up without ! prefix."""
         schema = get_tag_schema("py")
         assert schema["name"] == "!py"
-
-    def test_include_tag_without_prefix(self) -> None:
-        """Include tag can be looked up without ! prefix."""
-        schema = get_tag_schema("include")
-        assert schema["name"] == "!include"
 
     def test_unknown_tag_raises_error(self) -> None:
         """Unknown tags should raise ValueError."""
@@ -101,20 +81,11 @@ class TestGetTagSchema:
         assert "security_warning" in schema
         assert "arbitrary Python code" in schema["security_warning"]
 
-    def test_include_tag_has_no_security_warning(self) -> None:
-        """The !include tag should not have a security warning."""
-        schema = get_tag_schema("!include")
-        assert "security_warning" not in schema
-
     def test_schema_has_output_info(self) -> None:
         """Schemas should include output information."""
         py_schema = get_tag_schema("!py")
         assert "output" in py_schema
         assert py_schema["output"]["type"] == "callable"
-
-        include_schema = get_tag_schema("!include")
-        assert "output" in include_schema
-        assert include_schema["output"]["type"] == "any"
 
 
 class TestGetKnownTagNames:
@@ -129,7 +100,6 @@ class TestGetKnownTagNames:
         """Should contain known tag names."""
         names = get_known_tag_names()
         assert "!py" in names
-        assert "!include" in names
 
     def test_frozenset_is_immutable(self) -> None:
         """The returned set should be immutable."""
@@ -146,12 +116,6 @@ class TestGetTagSyntax:
         syntax = _get_tag_syntax("!py")
         assert len(syntax) > 0
         assert any("!py" in s for s in syntax)
-
-    def test_include_tag_syntax(self) -> None:
-        """Should return syntax info for !include tag."""
-        syntax = _get_tag_syntax("!include")
-        assert len(syntax) > 0
-        assert any("!include" in s for s in syntax)
 
     def test_unknown_tag_returns_empty(self) -> None:
         """Unknown tags should return empty list."""

@@ -480,14 +480,14 @@ class YamlValidator:
     # ``dependencies`` and ``wait_for`` are read from node level by
     # ``BaseNodeConfig.from_node_config()``.
     # Fields that live inside spec, not at the node level
-    _SPEC_ONLY_FIELDS: frozenset[str] = frozenset({"input_mapping", "when"})
+    _SPEC_ONLY_FIELDS: frozenset[str] = frozenset({"input_mapping", "strict_mapping", "when"})
 
     _VALID_NODE_LEVEL_KEYS: frozenset[str] = frozenset(
         {"kind", "metadata", "spec", "settings"}
         | {
             field_name
             for field_name in BaseNodeConfig.model_fields
-            if field_name not in {"input_mapping", "when"}
+            if field_name not in {"input_mapping", "strict_mapping", "when"}
         }
     )
 
@@ -657,6 +657,12 @@ class YamlValidator:
             when_clause = _spec.get("when") or merged_params.get("when")
             if when_clause and isinstance(when_clause, str):
                 self._validate_when_syntax(node_id, when_clause, result)
+
+            # Validate strict_mapping requires input_mapping
+            if _spec.get("strict_mapping") and not _spec.get("input_mapping"):
+                result.add_error(
+                    f"Node '{node_id}': strict_mapping requires input_mapping to be set"
+                )
 
         return node_ids, macro_instances
 

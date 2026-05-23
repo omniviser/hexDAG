@@ -373,6 +373,88 @@ class PipelineRunner:
             pre_seeded_results=checkpoint.node_results,
         )
 
+    async def resume_with_event(
+        self,
+        pipeline_path: str | Path,
+        run_id: str,
+        event_data: Any,
+        *,
+        environment: str | None = None,
+    ) -> PipelineResult:
+        """Resume a suspended pipeline with external event data.
+
+        Loads the checkpoint for *run_id*, injects *event_data* as the
+        wait node's output in ``pre_seeded_results``, then re-runs the
+        pipeline.  Downstream nodes execute with the original context
+        fully preserved.
+
+        Parameters
+        ----------
+        pipeline_path : str | Path
+            Path to the YAML pipeline file.
+        run_id : str
+            Run identifier of the suspended pipeline.
+        event_data : Any
+            External event data (e.g. email reply content).  Becomes
+            the wait node's output — downstream nodes access it through
+            normal dependency resolution.
+        environment : str | None
+            Environment override for multi-document YAML.
+
+        Returns
+        -------
+        PipelineResult
+            Pipeline result including both pre-seeded and newly-executed
+            node results.
+
+        Raises
+        ------
+        PipelineRunnerError
+            If no checkpoint storage configured, checkpoint not found,
+            or checkpoint is not suspended.
+        """
+        if self._checkpoint_storage is None:
+            raise PipelineRunnerError(
+                "Cannot resume: no checkpoint_storage configured on PipelineRunner"
+            )
+
+        from hexdag.kernel.orchestration.components.checkpoint_manager import (
+            CheckpointManager,  # lazy: only needed for resume
+        )
+
+        mgr = CheckpointManager(storage=self._checkpoint_storage)
+        try:
+            checkpoint = await mgr.load_for_resume(run_id)
+        except ValueError as e:
+            raise PipelineRunnerError(str(e)) from e
+        if checkpoint is None:
+            raise PipelineRunnerError(f"Checkpoint not found for run_id '{run_id}'")
+
+        wait_meta = checkpoint.metadata.get("wait", {})
+        wait_node_name = wait_meta.get("wait_node_name")
+        if not wait_node_name:
+            raise PipelineRunnerError(f"Checkpoint '{run_id}' is not suspended (no wait metadata)")
+
+        # Inject event data as the wait node's output
+        pre_seeded = dict(checkpoint.node_results)
+        pre_seeded[wait_node_name] = event_data
+
+        effective_input = checkpoint.initial_input
+
+        logger.info(
+            "Resuming pipeline '{}' from suspension at '{}' (run_id: {})",
+            pipeline_path,
+            wait_node_name,
+            run_id,
+        )
+
+        return await self.run(
+            pipeline_path=pipeline_path,
+            input_data=effective_input,
+            environment=environment,
+            pre_seeded_results=pre_seeded,
+        )
+
     async def validate(
         self,
         pipeline_path: str | Path | None = None,
@@ -576,6 +658,25 @@ class PipelineRunner:
             pre_seeded_results=pre_seeded_results,
             pipeline_timeout=p_timeout,
         )
+
+        # Check for suspension signal from orchestrator
+        suspend_meta = result.pop("_hexdag_suspended", None)
+        if suspend_meta:
+            logger.info(
+                "Pipeline '{}' suspended at '{}' waiting for '{}' ({})",
+                pipeline_name,
+                suspend_meta.get("wait_node_name"),
+                suspend_meta.get("event_key"),
+                t.duration_str,
+            )
+            return PipelineResult(
+                node_results=result,
+                output={},
+                pipeline_name=pipeline_name,
+                status="suspended",
+                run_id=suspend_meta.get("run_id", ""),
+                suspend_metadata=suspend_meta,
+            )
 
         logger.info(
             "Pipeline '{}' completed with {} node results in {}",

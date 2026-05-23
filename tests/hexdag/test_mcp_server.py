@@ -51,15 +51,6 @@ class TestVFSToolsRead:
         assert "yaml_example" in result
 
     @pytest.mark.asyncio
-    async def test_read_include_tag_schema(self) -> None:
-        """Reading /lib/tags/!include/schema should return schema."""
-        from hexdag.mcp_server import vfs_read
-
-        result = json.loads(await vfs_read("/lib/tags/!include/schema"))
-        assert result["name"] == "!include"
-        assert result["type"] == "yaml_tag"
-
-    @pytest.mark.asyncio
     async def test_read_nodes(self) -> None:
         """Reading /lib/nodes should return node list."""
         from hexdag.mcp_server import vfs_read
@@ -110,7 +101,6 @@ class TestVFSToolsList:
         result = json.loads(await vfs_list("/lib/tags/"))
         names = [e["name"] for e in result]
         assert "!py" in names
-        assert "!include" in names
 
 
 class TestVFSToolsStat:

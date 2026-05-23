@@ -200,13 +200,15 @@ Merges another YAML file inline. Processed first, before anything else.
 ```yaml
 # main.yaml
 spec:
-  ports: !include shared/ports.yaml       # entire file merged here
-  nodes: !include nodes/analysis.yaml#nodes  # specific anchor
+  ports:
+    "!include": shared/ports.yaml              # entire file merged here
+  nodes:
+    - "!include": nodes/analysis.yaml#nodes    # specific anchor
 ```
 
 - Supports `!include path.yaml#anchor` to pick a section
 - Circular references detected and blocked
-- Located in: [`hexdag/compiler/include_tag.py`](../hexdag/compiler/include_tag.py)
+- Located in: [`hexdag/compiler/preprocessing/include.py`](../hexdag/compiler/preprocessing/include.py)
 
 ### `${VAR}` — Environment Variables
 
@@ -824,9 +826,9 @@ The compiler (`YamlPipelineBuilder`) transforms YAML into kernel domain models t
 ### Phase 1: Parse + Include
 
 - Parse YAML into Python dict
-- Resolve `!include` tags (recursive, circular reference detection)
-- Custom tag discovery (`!include`, `!py`)
-- Located in: [`hexdag/compiler/include_tag.py`](../hexdag/compiler/include_tag.py), [`hexdag/compiler/tag_discovery.py`](../hexdag/compiler/tag_discovery.py)
+- Resolve `!include` directives (recursive, circular reference detection)
+- Custom tag discovery (`!py`)
+- Located in: [`hexdag/compiler/preprocessing/include.py`](../hexdag/compiler/preprocessing/include.py), [`hexdag/compiler/tag_discovery.py`](../hexdag/compiler/tag_discovery.py)
 
 ### Phase 2: Environment Selection
 
@@ -985,7 +987,6 @@ hexdag/
 │   ├── component_instantiator.py    #   Alias resolution + deferred secrets
 │   ├── system_builder.py            #   kind: System builder
 │   ├── config_loader.py             #   kind: Config loader
-│   ├── include_tag.py               #   !include YAML tag
 │   └── py_tag.py                    #   !py YAML tag
 │
 ├── stdlib/                          # Built-in components

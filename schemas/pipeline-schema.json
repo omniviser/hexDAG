@@ -160,75 +160,6 @@
             ],
             "type": "object"
         },
-        "CheckpointNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for checkpoint_node type",
-            "properties": {
-                "kind": {
-                    "const": "checkpoint_node",
-                    "description": "Node type: checkpoint_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "action": {
-                            "description": "Whether to save or restore a checkpoint",
-                            "enum": [
-                                "save",
-                                "restore"
-                            ],
-                            "type": "string"
-                        },
-                        "keys": {
-                            "default": null,
-                            "description": "For ``save``: list of upstream node-result keys to include. If None, all node results available at execution time are saved.",
-                            "items": {
-                                "type": "string"
-                            },
-                            "type": [
-                                "array",
-                                "null"
-                            ]
-                        },
-                        "run_id": {
-                            "description": "Unique identifier for the checkpoint.  Supports template syntax: ``\"{{ metadata.run_id }}\"``",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "action",
-                        "run_id"
-                    ],
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
         "CompositeNodeSpec": {
             "allOf": [
                 {
@@ -1158,6 +1089,12 @@
                     },
                     "type": "object"
                 },
+                "strict_mapping": {
+                    "default": false,
+                    "description": "When true, input_mapping becomes exclusive: the node receives ONLY the fields declared in input_mapping, not the full upstream namespace. Requires input_mapping to be set.",
+                    "title": "Strict Mapping",
+                    "type": "boolean"
+                },
                 "wait_for": {
                     "anyOf": [
                         {
@@ -1269,71 +1206,6 @@
             ],
             "type": "object"
         },
-        "Tool_CallNodeSpec": {
-            "allOf": [
-                {
-                    "$ref": "#/$defs/Node"
-                }
-            ],
-            "description": "Specification for tool_call_node type",
-            "properties": {
-                "kind": {
-                    "const": "tool_call_node",
-                    "description": "Node type: tool_call_node"
-                },
-                "metadata": {
-                    "properties": {
-                        "annotations": {
-                            "description": "Optional metadata annotations",
-                            "type": "object"
-                        },
-                        "name": {
-                            "description": "Unique node identifier within the pipeline",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "name"
-                    ],
-                    "type": "object"
-                },
-                "spec": {
-                    "additionalProperties": false,
-                    "properties": {
-                        "arguments": {
-                            "default": null,
-                            "description": "Arguments to pass to the tool (default: {})",
-                            "type": [
-                                "object",
-                                "null"
-                            ]
-                        },
-                        "tool_call_id": {
-                            "default": null,
-                            "description": "Optional ID for tracking (from LLM tool calls)",
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        },
-                        "tool_name": {
-                            "description": "Full module path to the tool function (e.g., 'mymodule.my_tool')",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "tool_name"
-                    ],
-                    "type": "object"
-                }
-            },
-            "required": [
-                "kind",
-                "metadata",
-                "spec"
-            ],
-            "type": "object"
-        },
         "TransitionNodeSpec": {
             "allOf": [
                 {
@@ -1387,6 +1259,70 @@
                     "required": [
                         "entity",
                         "to_state"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "kind",
+                "metadata",
+                "spec"
+            ],
+            "type": "object"
+        },
+        "WaitNodeSpec": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Node"
+                }
+            ],
+            "description": "Specification for wait_node type",
+            "properties": {
+                "kind": {
+                    "const": "wait_node",
+                    "description": "Node type: wait_node"
+                },
+                "metadata": {
+                    "properties": {
+                        "annotations": {
+                            "description": "Optional metadata annotations",
+                            "type": "object"
+                        },
+                        "name": {
+                            "description": "Unique node identifier within the pipeline",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "name"
+                    ],
+                    "type": "object"
+                },
+                "spec": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "event_key": {
+                            "description": "Correlation key template (e.g. ``\"email_reply:{{$input.conversation_id}}\"``).",
+                            "type": "string"
+                        },
+                        "on_timeout": {
+                            "default": null,
+                            "description": "Node name to route to on timeout.",
+                            "type": "string"
+                        },
+                        "setup_fn": {
+                            "default": null,
+                            "description": "Module path to async setup function.",
+                            "type": "string"
+                        },
+                        "timeout": {
+                            "default": null,
+                            "description": "Wait duration.  Accepts ``\"7d\"``, ``\"24h\"``, ``3600``, or ``None``.",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "event_key"
                     ],
                     "type": "object"
                 }
@@ -1708,9 +1644,6 @@
                                 "$ref": "#/$defs/Api_CallNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/CheckpointNodeSpec"
-                            },
-                            {
                                 "$ref": "#/$defs/CompositeNodeSpec"
                             },
                             {
@@ -1726,10 +1659,10 @@
                                 "$ref": "#/$defs/Service_CallNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/Tool_CallNodeSpec"
+                                "$ref": "#/$defs/TransitionNodeSpec"
                             },
                             {
-                                "$ref": "#/$defs/TransitionNodeSpec"
+                                "$ref": "#/$defs/WaitNodeSpec"
                             },
                             {
                                 "$ref": "#/$defs/AgentNodeSpec"

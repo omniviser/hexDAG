@@ -313,7 +313,7 @@ class PostDagHookManager:
         self,
         context: NodeExecutionContext,
         pipeline_name: str,
-        pipeline_status: Literal["success", "failed", "cancelled"],
+        pipeline_status: Literal["success", "failed", "cancelled", "suspended"],
         node_results: dict[str, Any],
         error: BaseException | None = None,
     ) -> dict[str, Any]:

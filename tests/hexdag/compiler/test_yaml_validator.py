@@ -1016,6 +1016,73 @@ class TestMisplacedNodeFields:
             "'input_mapping' is not a valid node-level field" in err for err in result.errors
         )
 
+    def test_strict_mapping_without_input_mapping_is_error(self):
+        """strict_mapping: true requires input_mapping to be set."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {
+                            "fn": "test",
+                            "strict_mapping": True,
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("strict_mapping requires input_mapping" in err for err in result.errors)
+
+    def test_strict_mapping_with_input_mapping_is_valid(self):
+        """strict_mapping: true with input_mapping should not produce this specific error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {
+                            "fn": "test",
+                            "strict_mapping": True,
+                            "input_mapping": {"x": "$input.x"},
+                        },
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        # Should not have the strict_mapping error (may have other unrelated errors)
+        assert not any("strict_mapping requires input_mapping" in err for err in result.errors)
+
+    def test_misplaced_strict_mapping_at_node_level(self):
+        """strict_mapping at node level should be flagged as an error."""
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test-pipeline"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "node1"},
+                        "spec": {"fn": "test"},
+                        "strict_mapping": True,  # Misplaced
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any(
+            "'strict_mapping' is not a valid node-level field" in err for err in result.errors
+        )
+
     def test_misplaced_max_retries_at_node_level(self):
         """Test that 'max_retries' at node level is flagged as an error."""
         config = {

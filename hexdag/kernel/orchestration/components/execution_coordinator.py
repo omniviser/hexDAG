@@ -202,8 +202,15 @@ class ExecutionCoordinator:
 
         # Apply input_mapping if present in node params
         input_mapping = node_spec.params.get("input_mapping") if node_spec.params else None
-        if input_mapping:
-            return self._apply_input_mapping(base_input, input_mapping, initial_input, node_results)
+        strict = bool(node_spec.params.get("strict_mapping")) if node_spec.params else False
+        if input_mapping or (strict and input_mapping is not None):
+            return self._apply_input_mapping(
+                base_input,
+                input_mapping,
+                initial_input,
+                node_results,
+                strict=strict,
+            )
 
         # Auto-wire: when a single-dep node has in_model and no explicit input_mapping,
         # extract only the fields whose names match the in_model from the upstream dict.
@@ -387,14 +394,15 @@ class ExecutionCoordinator:
         input_mapping: dict[str, Any],
         initial_input: Any,
         node_results: dict[str, Any],
+        *,
+        strict: bool = False,
     ) -> dict[str, Any]:
         """Apply field mapping to transform input data.
 
-        The result dict is **additive**: it starts with the full upstream
-        node namespace (n8n-like), then overlays explicit mappings on top.
-        This means nodes can reference upstream data directly in expressions
-        (e.g., ``get_context.negotiation.counter_count``) without needing
-        an explicit ``input_mapping`` entry for every field.
+        By default the result dict is **additive**: it starts with the full
+        upstream node namespace (n8n-like), then overlays explicit mappings
+        on top.  When *strict* is ``True``, the result starts empty and
+        contains **only** the explicitly mapped fields.
 
         Supports multiple syntaxes:
         - ``$input.field`` - Extract from the initial pipeline input
@@ -414,11 +422,16 @@ class ExecutionCoordinator:
             The original pipeline input (for $input references)
         node_results : dict[str, Any]
             Results from all previously executed nodes
+        strict : bool
+            When ``True``, only explicitly mapped fields are included in
+            the result.  References (``node.field``, ``$input.field``) still
+            resolve against ``node_results`` / ``initial_input`` normally.
 
         Returns
         -------
         dict[str, Any]
-            Transformed input with upstream namespace + mapped fields
+            Transformed input with mapped fields (and upstream namespace
+            when *strict* is ``False``).
 
         Examples
         --------
@@ -443,13 +456,13 @@ class ExecutionCoordinator:
                 "total": "price * quantity",
             }
         """
-        # Start with full upstream node namespace (n8n-like: all upstream data available)
         result: dict[str, Any] = {}
-        result.update(node_results)
 
-        # Also expose initial input as "input"
-        if isinstance(initial_input, dict):
-            result["input"] = initial_input
+        if not strict:
+            # Additive mode (default): full upstream namespace available
+            result.update(node_results)
+            if isinstance(initial_input, dict):
+                result["input"] = initial_input
 
         # Overlay explicit input_mapping aliases (win over upstream names)
         for target_field, source in input_mapping.items():

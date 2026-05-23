@@ -5,8 +5,9 @@ import shutil
 import time
 from pathlib import Path
 
-from hexdag.kernel.ports.file_storage import FileStorage
 from hexdag.kernel.ports.healthcheck import HealthStatus
+
+from hexdag_plugins._ports import FileStorage
 
 
 class LocalFileStorage(FileStorage):

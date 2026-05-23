@@ -68,11 +68,12 @@ class SchemaGenerator:
         "fn",
         "input_schema",
         "input_mapping",
+        "strict_mapping",
         "unpack_input",
     }
 
     # Dynamic params: runtime wiring that is never a literal setting.
-    DYNAMIC_PARAMS = {"input_mapping", "unpack_input"}
+    DYNAMIC_PARAMS = {"input_mapping", "strict_mapping", "unpack_input"}
 
     # Structural params: node identity/wiring, not user-configurable settings.
     _STRUCTURAL_PARAMS = {"name", "deps", "dependencies", "self", "cls", "args", "kwargs"}

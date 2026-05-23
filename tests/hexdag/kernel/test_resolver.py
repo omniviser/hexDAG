@@ -122,7 +122,6 @@ class TestResolve:
             "llm_node",
             "function_node",
             "agent_node",
-            "tool_call_node",
         ]
         for name in legacy_names:
             result = resolve(name)

@@ -79,7 +79,6 @@ from hexdag.kernel.discovery import (
 from hexdag.kernel.domain import DirectedGraph, NodeSpec
 from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
 from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
-from hexdag.kernel.domain.scheduled_task import ScheduledTask, ScheduleType, TaskStatus
 from hexdag.kernel.domain.vfs import DirEntry, EntryType, StatResult
 
 # ============================================================================
@@ -96,7 +95,6 @@ from hexdag.kernel.exceptions import (
     ExpressionError,
     HexDAGError,
     HttpClientError,
-    IncludeTagError,
     InvalidTransitionError,
     MissingDependencyError,
     MissingVariableError,
@@ -191,7 +189,6 @@ from hexdag.kernel.ports import (
     ExecutionResult,
     ExecutionTask,
     Executor,
-    FileStorage,
     HealthStatus,
     ImageContent,
     ImageInput,
@@ -278,9 +275,6 @@ __all__ = [
     "NodeSpec",
     "PipelineRun",
     "RunStatus",
-    "ScheduledTask",
-    "ScheduleType",
-    "TaskStatus",
     "StateMachineConfig",
     "StateTransition",
     "DirEntry",
@@ -293,7 +287,6 @@ __all__ = [
     "APICall",
     "ToolRouter",
     "Memory",
-    "FileStorage",
     "SecretStore",
     "Executor",
     "ObserverManager",
@@ -367,7 +360,6 @@ __all__ = [
     "SchemaCompatibilityError",
     "YamlPipelineBuilderError",
     "ComponentInstantiationError",
-    "IncludeTagError",
     "HttpClientError",
     "InvalidTransitionError",
     "VFSError",

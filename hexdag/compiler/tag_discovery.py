@@ -266,12 +266,6 @@ def _get_tag_syntax(tag_name: str) -> list[str]:
             "The code block must define exactly one function",
             "Function signature: async def process(item, index, state, **ports)",
         ]
-    if tag_name == "!include":
-        return [
-            "!include ./path/to/file.yaml  # Simple file inclusion",
-            "!include {path: ./file.yaml, vars: {key: value}}  # With variable substitution",
-            "Variables use {{var}} placeholder syntax in included files",
-        ]
     return []
 
 
@@ -343,45 +337,6 @@ def get_tag_schema(tag_name: str) -> dict[str, Any]:
   async def process(item, index, state, **ports):
       return item * 2"""
 
-    elif normalized_name == "!include":
-        schema["input_schema"] = {
-            "oneOf": [
-                {
-                    "type": "string",
-                    "description": "Path to YAML file to include",
-                    "examples": ["./shared/nodes.yaml"],
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Path to YAML file",
-                        },
-                        "vars": {
-                            "type": "object",
-                            "description": "Variables to substitute using {{var}} syntax",
-                        },
-                    },
-                    "required": ["path"],
-                },
-            ],
-        }
-        schema["output"] = {
-            "type": "any",
-            "description": "Parsed YAML content from the included file",
-        }
-        # Add schema and yaml_example for MCP compatibility
-        schema["schema"] = schema["input_schema"]
-        schema["yaml_example"] = """# Simple include
-nodes: !include ./shared/nodes.yaml
-
-# Include with variable substitution
-config: !include
-  path: ./templates/config.yaml
-  vars:
-    env: production"""
-
     return schema
 
 
@@ -399,7 +354,7 @@ def get_known_tag_names() -> frozenset[str]:
     >>> "!py" in names
     True
     >>> "!include" in names
-    True
+    False
     """
     return frozenset(discover_tags().keys())
 

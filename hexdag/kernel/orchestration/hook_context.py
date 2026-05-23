@@ -30,6 +30,7 @@ class PipelineStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    SUSPENDED = "suspended"
 
 
 @dataclass(slots=True)

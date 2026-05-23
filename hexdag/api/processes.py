@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from hexdag.kernel import PipelineSpawner
     from hexdag.stdlib.lib.entity_state import EntityState
     from hexdag.stdlib.lib.process_registry import ProcessRegistry
-    from hexdag.stdlib.lib.scheduler import Scheduler
 
 
 # ---------------------------------------------------------------------------
@@ -117,94 +116,6 @@ async def spawn_pipeline(
         timeout=timeout,
     )
     return {"run_id": run_id, "pipeline_name": pipeline_name, "status": "spawned"}
-
-
-# ---------------------------------------------------------------------------
-# Scheduler tools
-# ---------------------------------------------------------------------------
-
-
-async def schedule_pipeline(
-    scheduler: Scheduler,
-    pipeline_name: str,
-    initial_input: dict[str, Any] | None = None,
-    *,
-    delay_seconds: float | None = None,
-    interval_seconds: float | None = None,
-    ref_id: str | None = None,
-    ref_type: str | None = None,
-) -> dict[str, Any]:
-    """Schedule a pipeline for delayed or recurring execution.
-
-    Provide ``delay_seconds`` for one-shot or ``interval_seconds`` for
-    recurring. If both given, recurring takes precedence.
-
-    Args
-    ----
-        scheduler: Scheduler instance.
-        pipeline_name: Name of the pipeline to execute.
-        initial_input: Input data for the pipeline.
-        delay_seconds: Seconds to wait before one-shot execution.
-        interval_seconds: Seconds between recurring executions.
-        ref_id: Business reference ID.
-        ref_type: Business reference type.
-
-    Returns
-    -------
-        Dict with task_id and schedule details.
-    """
-    if interval_seconds is not None:
-        return await scheduler.aschedule_recurring(
-            pipeline_name,
-            initial_input,
-            interval_seconds=interval_seconds,
-            ref_id=ref_id,
-            ref_type=ref_type,
-        )
-    return await scheduler.aschedule_once(
-        pipeline_name,
-        initial_input,
-        delay_seconds=delay_seconds or 0.0,
-        ref_id=ref_id,
-        ref_type=ref_type,
-    )
-
-
-async def cancel_scheduled(
-    scheduler: Scheduler,
-    task_id: str,
-) -> dict[str, Any]:
-    """Cancel a scheduled task.
-
-    Args
-    ----
-        scheduler: Scheduler instance.
-        task_id: The task ID to cancel.
-
-    Returns
-    -------
-        Dict with task_id and cancellation status.
-    """
-    return await scheduler.acancel(task_id)
-
-
-async def list_scheduled(
-    scheduler: Scheduler,
-    *,
-    ref_id: str | None = None,
-) -> list[dict[str, Any]]:
-    """List scheduled tasks, optionally filtered by ref_id.
-
-    Args
-    ----
-        scheduler: Scheduler instance.
-        ref_id: Filter by business reference ID.
-
-    Returns
-    -------
-        List of scheduled task dicts.
-    """
-    return await scheduler.alist_scheduled(ref_id=ref_id)
 
 
 # ---------------------------------------------------------------------------

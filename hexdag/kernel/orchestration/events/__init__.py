@@ -21,7 +21,9 @@ from .events import (
     NodeSkipped,
     NodeStarted,
     PipelineCompleted,
+    PipelineResumed,
     PipelineStarted,
+    PipelineSuspended,
     PortCallEvent,
     ProcessCompleted,
     ProcessStarted,
@@ -34,20 +36,14 @@ from .events import (
 
 # Observer implementations
 from .observers import (
-    AlertingObserver,
-    CostProfilerObserver,
-    DataQualityObserver,
     ExecutionTracerObserver,
-    NodeCostMetrics,
-    PerformanceMetricsObserver,
-    ResourceMonitorObserver,
     SimpleLoggingObserver,
 )
 
 # Event taxonomy - grouped event types for observer filtering
 NODE_LIFECYCLE_EVENTS = (NodeStarted, NodeCompleted, NodeFailed, NodeCancelled, NodeSkipped)
 WAVE_EVENTS = (WaveCompleted,)
-PIPELINE_EVENTS = (PipelineStarted, PipelineCompleted)
+PIPELINE_EVENTS = (PipelineStarted, PipelineCompleted, PipelineSuspended, PipelineResumed)
 BODY_EVENTS = (BodyStarted, BodyCompleted, BodyFailed)
 SYSTEM_EVENTS = (SystemStarted, ProcessStarted, ProcessCompleted, SystemCompleted)
 HEALTH_EVENTS = ()  # HealthCheckEvent now lives in kernel.ports.healthcheck
@@ -77,6 +73,8 @@ __all__ = [
     "WaveCompleted",
     "PipelineStarted",
     "PipelineCompleted",
+    "PipelineSuspended",
+    "PipelineResumed",
     "BodyStarted",
     "BodyCompleted",
     "BodyFailed",
@@ -91,15 +89,8 @@ __all__ = [
     "EntityObligationFailed",
     "EntityCompensationEvent",
     # Core Observers
-    "PerformanceMetricsObserver",
-    "AlertingObserver",
     "ExecutionTracerObserver",
     "SimpleLoggingObserver",
-    "ResourceMonitorObserver",
-    "DataQualityObserver",
-    "CostProfilerObserver",
-    # Observer Models
-    "NodeCostMetrics",
     # Event Taxonomy
     "NODE_LIFECYCLE_EVENTS",
     "WAVE_EVENTS",

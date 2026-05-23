@@ -9,7 +9,6 @@ from hexdag.kernel.domain.entity_state import StateMachineConfig
 from hexdag.kernel.domain.pipeline_run import PipelineRun, RunStatus
 from hexdag.stdlib.lib.entity_state import EntityState, InvalidTransitionError
 from hexdag.stdlib.lib.process_registry import ProcessRegistry
-from hexdag.stdlib.lib.scheduler import Scheduler
 
 # ---------------------------------------------------------------------------
 # Mock spawner
@@ -112,73 +111,6 @@ class TestSpawnPipeline:
         spawner = _MockSpawner()
         result = await processes.spawn_pipeline(spawner, "p", ref_id="order-1", ref_type="order")
         assert result["run_id"] == "run-1"
-
-
-# ---------------------------------------------------------------------------
-# Scheduler API
-# ---------------------------------------------------------------------------
-
-
-class TestSchedulePipeline:
-    @pytest.mark.asyncio()
-    async def test_schedule_once(self) -> None:
-        sched = Scheduler()
-        result = await processes.schedule_pipeline(sched, "p1", delay_seconds=60.0)
-        assert result["pipeline_name"] == "p1"
-        assert result["schedule_type"] == "once"
-        await sched.ateardown()
-
-    @pytest.mark.asyncio()
-    async def test_schedule_recurring(self) -> None:
-        sched = Scheduler()
-        result = await processes.schedule_pipeline(sched, "p1", interval_seconds=300.0)
-        assert result["schedule_type"] == "recurring"
-        await sched.ateardown()
-
-    @pytest.mark.asyncio()
-    async def test_recurring_takes_precedence(self) -> None:
-        sched = Scheduler()
-        result = await processes.schedule_pipeline(
-            sched, "p1", delay_seconds=10.0, interval_seconds=300.0
-        )
-        assert result["schedule_type"] == "recurring"
-        await sched.ateardown()
-
-
-class TestCancelScheduled:
-    @pytest.mark.asyncio()
-    async def test_cancel(self) -> None:
-        sched = Scheduler()
-        task = await processes.schedule_pipeline(sched, "p1", delay_seconds=100.0)
-        result = await processes.cancel_scheduled(sched, task["task_id"])
-        assert result["cancelled"] is True
-        await sched.ateardown()
-
-    @pytest.mark.asyncio()
-    async def test_cancel_missing(self) -> None:
-        sched = Scheduler()
-        result = await processes.cancel_scheduled(sched, "nope")
-        assert result["cancelled"] is False
-
-
-class TestListScheduled:
-    @pytest.mark.asyncio()
-    async def test_list_all(self) -> None:
-        sched = Scheduler()
-        await processes.schedule_pipeline(sched, "p1", delay_seconds=100.0)
-        await processes.schedule_pipeline(sched, "p2", delay_seconds=100.0)
-        result = await processes.list_scheduled(sched)
-        assert len(result) == 2
-        await sched.ateardown()
-
-    @pytest.mark.asyncio()
-    async def test_list_by_ref(self) -> None:
-        sched = Scheduler()
-        await processes.schedule_pipeline(sched, "p1", delay_seconds=100.0, ref_id="o1")
-        await processes.schedule_pipeline(sched, "p2", delay_seconds=100.0, ref_id="o2")
-        result = await processes.list_scheduled(sched, ref_id="o1")
-        assert len(result) == 1
-        await sched.ateardown()
 
 
 # ---------------------------------------------------------------------------

@@ -27,15 +27,14 @@ spec:
 |-----------|-------------|
 | `agent_node` | Specification for agent_node type |
 | `api_call_node` | Specification for api_call_node type |
-| `checkpoint_node` | Specification for checkpoint_node type |
 | `composite_node` | Specification for composite_node type |
 | `data_node` | Specification for data_node type |
 | `expression_node` | Specification for expression_node type |
 | `function_node` | Specification for function_node type |
 | `llm_node` | Specification for llm_node type |
 | `service_call_node` | Specification for service_call_node type |
-| `tool_call_node` | Specification for tool_call_node type |
 | `transition_node` | Specification for transition_node type |
+| `wait_node` | Specification for wait_node type |
 
 ### agent_node
 
@@ -84,30 +83,6 @@ Specification for api_call_node type
   metadata:
     name: my_api_call
   spec:
-  dependencies: []
-```
-
-### checkpoint_node
-
-Specification for checkpoint_node type
-
-**Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `action` | `"save`" | `"restore`" | Yes | Whether to save or restore a checkpoint |
-| `keys` | array | null | No | For ``save``: list of upstream node-r... |
-| `run_id` | string | Yes | Unique identifier for the checkpoint.... |
-
-**Example:**
-
-```yaml
-- kind: checkpoint_node
-  metadata:
-    name: my_checkpoint
-  spec:
-    action: # required
-    run_id: # required
   dependencies: []
 ```
 
@@ -270,29 +245,6 @@ Specification for service_call_node type
   dependencies: []
 ```
 
-### tool_call_node
-
-Specification for tool_call_node type
-
-**Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `arguments` | object | null | No | Arguments to pass to the tool (defaul... |
-| `tool_call_id` | string | null | No | Optional ID for tracking (from LLM to... |
-| `tool_name` | string | Yes | Full module path to the tool function... |
-
-**Example:**
-
-```yaml
-- kind: tool_call_node
-  metadata:
-    name: my_tool_call
-  spec:
-    tool_name: # required
-  dependencies: []
-```
-
 ### transition_node
 
 Specification for transition_node type
@@ -315,6 +267,30 @@ Specification for transition_node type
   spec:
     entity: # required
     to_state: # required
+  dependencies: []
+```
+
+### wait_node
+
+Specification for wait_node type
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event_key` | string | Yes | Correlation key template (e.g. ``"ema... |
+| `on_timeout` | string | No | Node name to route to on timeout. |
+| `setup_fn` | string | No | Module path to async setup function. |
+| `timeout` | string | No | Wait duration.  Accepts ``"7d"``, ``"... |
+
+**Example:**
+
+```yaml
+- kind: wait_node
+  metadata:
+    name: my_wait
+  spec:
+    event_key: # required
   dependencies: []
 ```
 

@@ -219,6 +219,153 @@ class TestAdditiveInputMapping:
         assert result["val"] is None
 
 
+class TestStrictInputMapping:
+    """Tests for strict_mapping mode: only explicitly mapped fields are passed.
+
+    When ``strict_mapping: true`` is set alongside ``input_mapping``, the
+    result dict starts empty and contains ONLY the explicitly mapped fields.
+    References (``node.field``, ``$input.field``) still resolve normally.
+    """
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_strict_mapping_only_mapped_fields(self, coordinator):
+        """With strict_mapping, result contains only explicitly mapped fields."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer", "scorer"}),
+            params={
+                "input_mapping": {"rate": "producer.rate"},
+                "strict_mapping": True,
+            },
+        )
+        node_results = {
+            "producer": {"rate": 100, "name": "test"},
+            "scorer": {"score": 0.95},
+        }
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={"load_id": "L1"})
+
+        assert result == {"rate": 100}
+
+    def test_strict_mapping_no_upstream_namespace(self, coordinator):
+        """Upstream node results are NOT present in strict mode."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={
+                "input_mapping": {"val": "producer.data"},
+                "strict_mapping": True,
+            },
+        )
+        node_results = {"producer": {"data": "ok", "extra": "noise"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={"x": 1})
+
+        assert "producer" not in result
+        assert "input" not in result
+        assert result == {"val": "ok"}
+
+    def test_strict_mapping_empty_mapping_returns_empty(self, coordinator):
+        """strict_mapping + empty input_mapping returns empty dict."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={
+                "input_mapping": {},
+                "strict_mapping": True,
+            },
+        )
+        node_results = {"producer": {"data": "ok"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result == {}
+
+    def test_strict_mapping_false_is_additive(self, coordinator):
+        """strict_mapping=False preserves current additive behavior."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={
+                "input_mapping": {"rate": "producer.rate"},
+                "strict_mapping": False,
+            },
+        )
+        node_results = {"producer": {"rate": 100, "name": "test"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={"load_id": "L1"})
+
+        # Additive: upstream namespace present
+        assert result["producer"] == {"rate": 100, "name": "test"}
+        assert result["input"] == {"load_id": "L1"}
+        # Explicit mapping also present
+        assert result["rate"] == 100
+
+    def test_strict_mapping_resolves_references_normally(self, coordinator):
+        """$input.field and node.field references resolve even in strict mode."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={
+                "input_mapping": {
+                    "from_input": "$input.load_id",
+                    "from_node": "producer.rate",
+                },
+                "strict_mapping": True,
+            },
+        )
+        node_results = {"producer": {"rate": 42}}
+
+        result = coordinator.prepare_node_input(
+            node, node_results, initial_input={"load_id": "LOAD99"}
+        )
+
+        assert result == {"from_input": "LOAD99", "from_node": 42}
+
+    def test_strict_mapping_with_modifiers(self, coordinator):
+        """Safe path modifiers (| default) work in strict mode."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={
+                "input_mapping": {
+                    "val": "producer.missing | default('fallback')",
+                },
+                "strict_mapping": True,
+            },
+        )
+        node_results = {"producer": {"data": "ok"}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        assert result == {"val": "fallback"}
+
+    def test_strict_mapping_default_is_false(self, coordinator):
+        """Without strict_mapping in params, behavior is additive (default)."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"rate": "producer.rate"}},
+        )
+        node_results = {"producer": {"rate": 100}}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input={})
+
+        # Default additive: upstream namespace present
+        assert "producer" in result
+        assert result["rate"] == 100
+
+
 class TestMissingSentinelInExpressions:
     """Tests for MISSING sentinel behavior in expression evaluation."""
 

@@ -60,7 +60,6 @@ def _setup_workspace_path() -> None:
     try:
         workspace_root = get_workspace_root()
         # Check if workspace has a parent with tools/adapters (project root pattern)
-        # e.g., workspace is "examples/raven/pipelines", project root is "examples/raven"
         project_root = (
             workspace_root.parent if workspace_root.name == "pipelines" else workspace_root
         )

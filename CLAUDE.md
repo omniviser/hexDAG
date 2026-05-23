@@ -84,7 +84,6 @@ uv run pytest --cov=hexdag --cov-report=html --cov-report=term-missing
 uv run examples/api_call_node_example.py         # API call nodes
 uv run examples/demo/run_demo_pitch.py           # Demo startup pitch
 uv run examples/libs/run_order_lifecycle.py       # Entity lifecycle
-uv run examples/libs/run_database_agent.py        # Database agent tools
 ```
 
 ### Utilities
@@ -116,14 +115,14 @@ hexdag/
 │   ├── nodes/               #   Node factories (LLMNode, AgentNode, etc.)
 │   ├── macros/              #   Macro components (ReasoningAgent, etc.)
 │   ├── prompts/             #   Prompt templates (tool prompts, etc.)
-│   └── lib/                 #   System libs (ProcessRegistry, EntityState, Scheduler)
+│   └── lib/                 #   System libs (ProcessRegistry, EntityState, PipelineMemory)
 ├── drivers/                 # Low-level infrastructure (/drivers)
 │   ├── executors/           #   LocalExecutor (Executor)
 │   ├── observer_manager/    #   LocalObserverManager (ObserverManager)
 │   └── pipeline_spawner/    #   LocalPipelineSpawner (PipelineSpawner)
 ├── api/                     # Unified API layer (/usr/bin)
 │   ├── execution.py         #   Pipeline execution
-│   ├── processes.py         #   Process management (9 MCP tools)
+│   ├── processes.py         #   Process management API
 │   └── ...                  #   Components, validation, documentation
 ├── docs/                    # Documentation utilities
 └── cli/                     # Command-line interface
@@ -183,23 +182,12 @@ Built-in services (migrating from libs):
 - **ProcessRegistry** — tracks pipeline runs (like `ps` in Linux)
 - **EntityState** — declarative state machines for business entities (auto-registered from `spec.state_machines`)
 - **PipelineMemory** — run-scoped key-value store (auto-registered for every pipeline run)
-- **Scheduler** — delayed/recurring pipeline execution (asyncio timers)
-- **DatabaseTools** — agent-callable SQL query tools
-- **VFSTools** — virtual filesystem introspection
-
-### The Six Pillars
-1. **Async-First Architecture** - Non-blocking execution for maximum performance
-2. **Event-Driven Observability** - Real-time monitoring via comprehensive event system
-3. **Pydantic Validation Everywhere** - Type safety at every layer
-4. **Hexagonal Architecture** - Clean separation of business logic and infrastructure
-5. **Composable Declarative Files** - Complex workflows from simple YAML components
-6. **DAG-Based Orchestration** - Intelligent dependency management and parallelization
 
 ### Port Naming Convention
 
 Ports follow a two-tier naming scheme inspired by Linux kernel structs:
 
-- **Standalone ports** use plain domain nouns (like Linux structs): `LLM`, `Executor`, `FileStorage`, `DataStore`, `SecretStore`, `Database`
+- **Standalone ports** use plain domain nouns (like Linux structs): `LLM`, `Executor`, `DataStore`, `SecretStore`, `Database`
 - **Capability sub-protocols** use the `Supports*` prefix (like struct fields): `SupportsGeneration`, `SupportsKeyValue`, `SupportsQuery`, `SupportsTTL`
 
 **Rule of thumb:** If it answers "what kind of port is this?" use a plain noun. If it answers "can this adapter do X?" use `Supports*`.
@@ -225,10 +213,13 @@ Ports follow a two-tier naming scheme inspired by Linux kernel structs:
 ### Node Types
 - `FunctionNode`: Execute Python functions with validation
 - `LLMNode`: Language model interactions with prompt templating
-- `ReActAgentNode`: ReAct pattern agents with tool access
-- `LoopNode`: Iterative processing with custom conditions
-- `ConditionalNode`: Conditional execution paths
+- `ExpressionNode`: Safe expression evaluation for data transformation
+- `DataNode`: Literal data/constants
+- `CompositeNode`: Unified control flow (while, for-each, times, if-else, switch)
 - `TransitionNode`: Entity state transitions (validates against state machine, fires handlers)
+- `ServiceCallNode`: Invoke service `@step` methods from YAML
+- `ApiCallNode`: HTTP API calls with response parsing
+- `ReActAgentNode`: ReAct pattern agents with tool access (see [advanced features](docs/reference/advanced_features.md))
 
 ### Event System
 - Comprehensive observability through events (NodeStarted, NodeCompleted, NodeFailed, etc.)
@@ -306,53 +297,7 @@ hexDAG expressions have access to several special namespaces. Each has a clear r
 | `state.field` | Read-only | Loop | Loop iteration state (composite nodes) |
 | `ctx.field` | **Read-only** | Pipeline | Pipeline execution metadata |
 
-#### `ctx` — Pipeline Context (Read-Only)
-
-`ctx` exposes pipeline execution metadata to expressions, `when` clauses, and templates. It is **read-only** — values are set by the framework and cannot be modified by user code.
-
-**Available fields:**
-- `ctx.run_id` — unique identifier for this pipeline run
-- `ctx.pipeline_name` — name from the pipeline's `metadata.name`
-- `ctx.node_name` — name of the currently executing node
-- `ctx.services` — list of registered service names (e.g., `["pipeline_memory", "entity_state"]`)
-
-**Usage in expressions:**
-```yaml
-- kind: expression_node
-  metadata:
-    name: tag_run
-  spec:
-    expressions:
-      run_tag: "'run-' + ctx.run_id"
-      is_order_pipeline: "ctx.pipeline_name == 'order-processing'"
-```
-
-**Usage in `when` clauses:**
-```yaml
-- kind: llm_node
-  metadata:
-    name: debug_node
-  spec:
-    when: "ctx.pipeline_name == 'debug-pipeline'"
-    human_message: "Debug info for run {{ctx.run_id}}"
-```
-
-**Usage in templates:**
-```yaml
-- kind: llm_node
-  metadata:
-    name: analyzer
-  spec:
-    human_message: "Pipeline {{ctx.pipeline_name}} run {{ctx.run_id}}: analyze {{$input.data}}"
-```
-
-**Why read-only:** `ctx` fields (`run_id`, `pipeline_name`, `node_name`) are framework-owned. Allowing mutation would break event correlation, structured logging, and observability. For mutable cross-node state, use PipelineMemory.
-
-**Build-time:** `ctx` is a reserved prefix — nodes cannot be named `ctx`, and `ctx.field` references are not treated as node dependencies.
-
-#### `memory()` — PipelineMemory Access in Expressions (Planned)
-
-Expression functions for PipelineMemory (`memory()`, `memory_set()`) are planned but deferred — requires designing a proper Memory port with pluggable backends (key-value, vector, graph) before exposing in expressions. Currently, use PipelineMemory service tools (`get`, `set`, `update`, `snapshot`) via `service_call_node` or agent tools.
+See [docs/reference/advanced_features.md](docs/reference/advanced_features.md) for `ctx` namespace details, PipelineMemory, critical nodes, required_inputs, safe path modifiers, and other advanced features.
 
 # Claude Development Guidelines
 
@@ -579,7 +524,7 @@ For convenience, built-in nodes have short aliases:
 - kind: hexdag.stdlib.nodes.LLMNode       # Full path
 ```
 
-Available aliases: `llm_node`, `function_node`, `agent_node`, `loop_node`, `conditional_node`, `transition`
+Available aliases: `llm_node`, `function_node`, `agent_node`, `expression_node`, `data_node`, `composite_node`, `transition`, `api_call_node`, `service_call_node`
 
 ### Creating Custom Components
 
@@ -662,7 +607,7 @@ def search_database(query: str, limit: int = 10) -> list[dict]:
 
 **Why this matters:**
 - `SchemaGenerator.from_callable()` introspects `__init__` signatures to generate JSON Schema
-- Studio UI, MCP server, and API all use these schemas to show configuration options
+- MCP server, API layer, and downstream tools use these schemas to show configuration options
 - `**kwargs`-only signatures result in **empty schemas** - users can't see what options exist
 
 **✅ CORRECT - Explicit parameters:**
@@ -717,7 +662,7 @@ Key components:
 - **Dependencies**: Explicit via `depends_on` array
 - **Parameters**: Node-specific configuration
 - **Template System**: Jinja2-style templating for dynamic content
-- **Libs**: System libraries whose methods auto-become agent tools (ProcessRegistry, EntityState, Scheduler)
+- **Libs**: System libraries whose methods auto-become agent tools (ProcessRegistry, EntityState)
 
 ### Function Nodes with Module Path Strings
 
@@ -798,45 +743,12 @@ spec:
         to_state: CLASSIFIED
 ```
 
-### Lifecycle-Aware Systems
-
-For multi-pipeline entities, declare state machines at the system level. Transitions trigger processes:
-
-```yaml
-kind: System
-spec:
-  state_machines:
-    ticket:
-      initial: OPEN
-      transitions:
-        OPEN: [INVESTIGATING, ESCALATED, CLOSED]
-        INVESTIGATING: [RESOLVED, ESCALATED]
-        RESOLVED: [CLOSED, REOPENED]
-      handlers:
-        on_transition: myapp.hooks.TicketTransitionHandler
-
-  states:
-    INVESTIGATING:
-      on_enter: ticket-investigate
-    CLOSED:
-      terminal: true
-      requires: [resolution_summary]
-
-  processes:
-    - name: ticket-investigate
-      pipeline: pipelines/ticket-investigate.yaml
-```
-
 ### Key Concepts
 
 - **TransitionNode** (`kind: transition`): Built-in node for entity state transitions. Validates against the state machine, fires handlers, emits `StateTransitionEvent`.
 - **Transition Handlers**: Declared on state machines via `handlers.on_transition`. Handler failure = transition failure (transactional). Used for persistence and side effects.
-- **Agent Tool Scoping**: Agent nodes declare `entities: [ticket]` to opt into state machine tools. Agents without `entities` get no state machine tools.
-- **PipelineMemory**: Auto-registered run-scoped key-value store. Accessible via `memory('key')` in expressions or `get_pipeline_memory()` in code.
-- **LifecycleRunner**: Event-driven runner for lifecycle-aware Systems. Per-entity tracking, transition guards, cascade depth limits, terminal state GC.
-- **Safe Path Modifiers**: `field | required` (error on None), `field | default('x')` (fallback on None).
-- **Critical Nodes**: `critical: true` on a node means if the node is skipped, the pipeline fails.
-- **Required Inputs**: `required_inputs: [field1, field2]` validates inputs are non-None before execution.
+
+For `kind: System` (lifecycle-aware multi-pipeline systems), PipelineMemory, critical nodes, required_inputs, safe path modifiers, and other advanced features, see [docs/reference/advanced_features.md](docs/reference/advanced_features.md).
 
 ### Ports
 

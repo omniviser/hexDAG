@@ -51,6 +51,9 @@ class PipelineResult:
     node_results: dict[str, Any]
     output: dict[str, Any] = field(default_factory=dict)
     pipeline_name: str = ""
+    status: str = "completed"
+    run_id: str = ""
+    suspend_metadata: dict[str, Any] | None = None
 
     # Backwards-compatible dict-style access
     def __getitem__(self, key: str) -> Any:

@@ -72,6 +72,7 @@ class ExecutionResult(BaseModel):
     status: PipelineStatus = PipelineStatus.SUCCESS
     error: str | None = None
     error_type: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 @runtime_checkable

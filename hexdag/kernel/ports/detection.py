@@ -45,9 +45,6 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
     from hexdag.kernel.ports.database import (
         Database,  # lazy: loaded on first use to avoid import-time side effects
     )
-    from hexdag.kernel.ports.file_storage import (
-        FileStorage,  # lazy: loaded on first use to avoid import-time side effects
-    )
     from hexdag.kernel.ports.llm import (  # lazy: deferred port loading
         LLM,
         SupportsEmbedding,
@@ -96,8 +93,6 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
         ("database", (Database,)),
         # Secret store
         ("secret", (SecretStore,)),
-        # File storage
-        ("storage", (FileStorage,)),
         # Vector search (standalone, not inside DataStore)
         ("vector_search", (SupportsVectorSearch,)),
         # DataStore — after memory/database so those win when ambiguous

@@ -57,30 +57,6 @@ Declarative HTTP call node for REST API integration.
   dependencies: []
 ```
 
-### CheckpointNode
-
-Declarative mid-pipeline checkpoint save/restore node.
-
-**Kind**: `checkpoint_node`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `str` | Yes | Node name |
-| `action` | `Literal['save', 'restore']` | Yes | Whether to save or restore a checkpoint |
-| `run_id` | `str` | Yes | Unique identifier for the checkpoint.  Supports te... |
-| `keys` | `list[str] | None` | No | For ``save``: list of upstream node-result keys to... |
-| `deps` | `list[str] | None` | No | Explicit dependency node names |
-
-**Example:**
-```yaml
-- kind: checkpoint_node
-  metadata:
-    name: my_checkpoint
-  spec:
-    # Add configuration here
-  dependencies: []
-```
-
 ### CompositeNode
 
 Unified control flow node supporting while, for-each, times, if-else, switch.
@@ -257,30 +233,6 @@ Call a ``@step`` method on a Service as a deterministic DAG node.
   dependencies: []
 ```
 
-### ToolCallNode
-
-Execute a single tool call as a FunctionNode.
-
-**Kind**: `tool_call_node`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `str` | Yes | Node name (should be unique) |
-| `tool_name` | `str` | Yes | Full module path to the tool function (e.g., 'mymo... |
-| `arguments` | `dict[str, typing.Any] | None` | No | Arguments to pass to the tool (default: {}) |
-| `tool_call_id` | `str | None` | No | Optional ID for tracking (from LLM tool calls) |
-| `deps` | `list[str] | None` | No | Dependencies (typically the LLM node that requeste... |
-
-**Example:**
-```yaml
-- kind: tool_call_node
-  metadata:
-    name: my_tool_call
-  spec:
-    # Add configuration here
-  dependencies: []
-```
-
 ### TransitionNode
 
 Factory for entity state transition nodes.
@@ -300,6 +252,31 @@ Factory for entity state transition nodes.
 - kind: transition_node
   metadata:
     name: my_transition
+  spec:
+    # Add configuration here
+  dependencies: []
+```
+
+### WaitNode
+
+Wait node factory — suspends execution until an external event.
+
+**Kind**: `wait_node`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `str` | Yes | Node name (must be unique within the pipeline). |
+| `event_key` | `str` | Yes | Correlation key template (e.g. ``"email_reply:{{$i... |
+| `timeout` | `str | float | None` | No | Wait duration.  Accepts ``"7d"``, ``"24h"``, ``360... |
+| `on_timeout` | `str | None` | No | Node name to route to on timeout. |
+| `setup_fn` | `str | None` | No | Module path to async setup function. |
+| `deps` | `list[str] | None` | No | Dependency node names. |
+
+**Example:**
+```yaml
+- kind: wait_node
+  metadata:
+    name: my_wait
   spec:
     # Add configuration here
   dependencies: []

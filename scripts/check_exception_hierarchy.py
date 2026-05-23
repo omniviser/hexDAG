@@ -36,7 +36,6 @@ KNOWN_HEXDAG_ERRORS: set[str] = {
     "ResolveError",
     "PyTagError",
     "ExpressionError",
-    "IncludeTagError",
     "PromptTemplateError",
     "MissingVariableError",
     "YamlPipelineBuilderError",

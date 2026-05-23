@@ -416,18 +416,22 @@ def dry_run_pipeline(yaml_content: str, inputs: dict[str, Any] | None = None) ->
 
 
 @mcp.tool()  # type: ignore[misc]
-def validate_yaml_pipeline(yaml_content: str) -> str:
+def validate_yaml_pipeline(yaml_content: str, base_path: str | None = None) -> str:
     """Validate a YAML pipeline configuration.
 
     Args
     ----
         yaml_content: YAML pipeline configuration as a string
+        base_path: Base directory for resolving !include directives (optional)
 
     Returns
     -------
         JSON string with validation results (success/errors)
     """
-    result = api.validation.validate(yaml_content, lenient=False)
+    from pathlib import Path
+
+    bp = Path(base_path) if base_path else None
+    result = api.validation.validate(yaml_content, lenient=False, base_path=bp)
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 

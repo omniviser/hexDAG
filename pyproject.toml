@@ -25,12 +25,12 @@ classifiers = [
 ]
 dependencies = [
     "pydantic~=2.0",
-    "pyyaml~=6.0",   # YAML pipeline support (core feature)
-    "jinja2>=3.1.0", # YAML templating support (enables dynamic configs)
-    "orjson>=3.9.0", # Fast JSON serialization (2-5x faster than stdlib json)
+    "pyyaml~=6.0",      # YAML pipeline support (core feature)
+    "jinja2>=3.1.0",    # YAML templating support (enables dynamic configs)
+    "orjson>=3.9.0",    # Fast JSON serialization (2-5x faster than stdlib json)
     "loguru>=0.7.0",
-    "typer>=0.9.0",  # CLI framework (previously optional)
-    "rich>=13.0.0",  # Rich terminal output and logging (previously optional)
+    "typer>=0.9.0",     # CLI framework (previously optional)
+    "rich>=13.0.0",     # Rich terminal output and logging (previously optional)
     "aiofiles>=23.0.0", # Async file I/O (used in core API)
 ]
 
@@ -388,9 +388,7 @@ convention = "numpy"
     "E501",
     "TC003",
 ] # Prompts: long template strings are ok, runtime Callable usage
-"hexdag/compiler/yaml_builder.py" = [
-    "E501",
-] # YAML examples can be long
+"hexdag/compiler/yaml_builder.py" = ["E501"] # YAML examples can be long
 
 [tool.ruff.lint.isort]
 known-first-party = ["hexdag"]
@@ -466,7 +464,7 @@ exclude = [
     "build",                                  # Build artifacts directory
     "examples/demo",                          # Demo files with mock langchain imports
     "examples/plugins",                       # Plugin examples have their own dependencies
-    "examples/*",                             # Raven example has its own pyproject.toml and venv
+    "examples/*",                             # Example has its own pyproject.toml and venv
     "examples/run_text_analysis_pipeline.py", # Uses plugin-specific transformers
     "examples/simple_text_analysis.py",       # Uses plugin-specific transformers
     "examples/mcp",                           # MCP examples use optional MCP-specific dependencies (tavily)

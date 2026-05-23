@@ -119,6 +119,12 @@ async def validate_yaml(request: ValidationRequest) -> ValidationResponse:
             )
         )
 
+    # Strip !include directives so they don't confuse node validation
+    from hexdag.api.validation import _strip_includes
+
+    _include_warnings: list[str] = []
+    parsed = _strip_includes(parsed, _include_warnings)
+
     spec = parsed.get("spec", {})
     nodes = spec.get("nodes", [])
 

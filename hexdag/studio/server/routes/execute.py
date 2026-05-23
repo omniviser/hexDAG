@@ -60,7 +60,7 @@ async def execute_pipeline(request: ExecuteRequest) -> ExecuteResponse:
     try:
         workspace_root = get_workspace_root()
         # Check if workspace has a parent with tools/adapters (project root pattern)
-        # e.g., workspace is "examples/raven/pipelines", project root is "examples/raven"
+        # e.g., workspace is "examples/pipelines", project root is "examples"
         project_root = (
             workspace_root.parent if workspace_root.name == "pipelines" else workspace_root
         )

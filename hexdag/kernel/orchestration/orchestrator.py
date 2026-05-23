@@ -663,9 +663,10 @@ class Orchestrator:
                         max_iterations=max_dynamic_iterations,
                         **kwargs,
                     )
+                    exec_status = PipelineStatus.CANCELLED if cancelled else PipelineStatus.SUCCESS
                 else:
                     # Static execution (traditional wave-based)
-                    cancelled = await self._execute_with_executor(
+                    exec_status = await self._execute_with_executor(
                         waves=waves,
                         graph=graph,
                         node_results=node_results,
@@ -680,21 +681,46 @@ class Orchestrator:
                 pipeline_error = e
                 raise  # Re-raise immediately
             else:
-                # Success path - determine status after execution
-                if cancelled:
+                # Determine pipeline status after execution
+                if exec_status == PipelineStatus.CANCELLED:
                     pipeline_status = PipelineStatus.CANCELLED
                     raise OrchestratorError(
                         f"Pipeline '{pipeline_name}' timed out after "
                         f"{pipeline_timeout}s. "
                         f"{len(node_results)}/{len(graph)} nodes completed."
                     )
+                if exec_status == PipelineStatus.SUSPENDED:
+                    pipeline_status = PipelineStatus.SUSPENDED
             finally:
                 if pipeline_error is not None:
                     pipeline_status = PipelineStatus.FAILED
-                # Fire appropriate completion/cancellation event
+                # Fire appropriate completion/cancellation/suspension event
                 duration_ms = pipeline_timer.duration_ms
 
-                if cancelled:
+                if pipeline_status == PipelineStatus.SUSPENDED:
+                    # Fire suspended event (checkpoint save happens in post_execute)
+                    from hexdag.kernel.orchestration.events.events import PipelineSuspended
+
+                    suspend_meta = context.metadata.get("_suspend", {})
+                    suspended_event = PipelineSuspended(
+                        name=pipeline_name,
+                        run_id=run_id,
+                        event_key=suspend_meta.get("event_key", ""),
+                        wait_node=suspend_meta.get("wait_node_name", ""),
+                        timeout_seconds=suspend_meta.get("timeout_seconds"),
+                    )
+                    await self._notify_observer(observer_manager, suspended_event)
+
+                    # Also fire PipelineCompleted with status="suspended"
+                    pipeline_completed = PipelineCompleted(
+                        name=pipeline_name,
+                        duration_ms=duration_ms,
+                        node_results=node_results,
+                        status="suspended",
+                    )
+                    await self._notify_observer(observer_manager, pipeline_completed)
+
+                elif pipeline_status == PipelineStatus.CANCELLED:
                     pipeline_completed = PipelineCompleted(
                         name=pipeline_name,
                         duration_ms=duration_ms,
@@ -745,6 +771,15 @@ class Orchestrator:
                         exc_info=True,
                     )
 
+        # If suspended, inject metadata so PipelineRunner can detect it
+        if pipeline_status == PipelineStatus.SUSPENDED:
+            suspend_meta = context.metadata.get("_suspend", {})
+            node_results["_hexdag_suspended"] = {
+                "run_id": run_id,
+                "pipeline_name": pipeline_name,
+                **suspend_meta,
+            }
+
         return node_results
 
     async def _execute_with_executor(
@@ -758,7 +793,7 @@ class Orchestrator:
         validate: bool,
         pre_seeded_results: dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> bool:
+    ) -> PipelineStatus:
         """Execute all waves using the configured executor.
 
         This method delegates execution to the executor (LocalExecutor by default,
@@ -785,8 +820,8 @@ class Orchestrator:
 
         Returns
         -------
-        bool
-            True if cancelled (timeout), False if completed
+        PipelineStatus
+            SUCCESS, CANCELLED, or SUSPENDED
         """
         # Note: We extend the existing ports with executor-specific context.
         # This is safe because set_ports() wraps in MappingProxyType (immutable).
@@ -834,12 +869,26 @@ class Orchestrator:
                     # Check for failed nodes; route on_error handlers, raise unhandled failures
                     self._check_wave_results_for_failures(wave_results, graph, node_results)
 
-                    # Store successful results (failed nodes with on_error already stored above)
+                    # Check for suspended nodes — store results and break wave loop
+                    suspended_result = None
                     for node_name, result in wave_results.items():
-                        if result.status != PipelineStatus.FAILED:
+                        if result.status == PipelineStatus.SUSPENDED:
+                            suspended_result = result
+                            # Store setup_result so downstream can see it on resume
+                            node_results[node_name] = result.output
+                        elif result.status != PipelineStatus.FAILED:
                             node_results[node_name] = result.output
 
                     set_node_results(node_results)
+
+                    if suspended_result is not None:
+                        # Pipeline suspended — store metadata in context for
+                        # lifecycle_manager to include in checkpoint
+                        context.metadata["_suspend"] = {
+                            "wait_node_name": suspended_result.node_name,
+                            **suspended_result.metadata,
+                        }
+                        return PipelineStatus.SUSPENDED
 
                     # Fire wave completed event
                     wave_completed = WaveCompleted(
@@ -869,10 +918,10 @@ class Orchestrator:
                     # Move to next wave
                     wave_idx += 1
 
-            return False  # Not cancelled
+            return PipelineStatus.SUCCESS
 
         except TimeoutError:
-            return True  # Cancelled due to timeout
+            return PipelineStatus.CANCELLED
 
     async def _execute_dynamic(
         self,

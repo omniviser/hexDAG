@@ -627,3 +627,65 @@ class PortCallEvent(Event):
     def log_message(self) -> str:
         """Format log message for port call event."""
         return f"⚡ {self.port_type}.{self.method} ({self.node_name}, {self.duration_ms:.1f}ms)"
+
+
+# Pipeline suspension events (async human-in-the-loop)
+@dataclass(slots=True)
+class PipelineSuspended(Event):
+    """Pipeline has been suspended waiting for an external event.
+
+    Attributes
+    ----------
+    name : str
+        Pipeline name.
+    run_id : str
+        Unique run identifier (needed to resume).
+    event_key : str
+        Correlation key for the awaited external event.
+    wait_node : str
+        Name of the node that triggered suspension.
+    timeout_seconds : float | None
+        How long until the wait expires, or None for no timeout.
+    """
+
+    name: str
+    run_id: str
+    event_key: str
+    wait_node: str
+    timeout_seconds: float | None = None
+
+    def log_message(self) -> str:
+        """Format log message for pipeline suspended event."""
+        timeout = f", timeout={self.timeout_seconds}s" if self.timeout_seconds else ""
+        return (
+            f"Pipeline '{self.name}' suspended at '{self.wait_node}'"
+            f" waiting for '{self.event_key}'{timeout}"
+        )
+
+
+@dataclass(slots=True)
+class PipelineResumed(Event):
+    """Pipeline has been resumed after receiving an external event.
+
+    Attributes
+    ----------
+    name : str
+        Pipeline name.
+    run_id : str
+        Unique run identifier.
+    event_key : str
+        Correlation key that triggered the resume.
+    wait_node : str
+        Name of the node that was waiting.
+    """
+
+    name: str
+    run_id: str
+    event_key: str
+    wait_node: str
+
+    def log_message(self) -> str:
+        """Format log message for pipeline resumed event."""
+        return (
+            f"▶️  Pipeline '{self.name}' resumed at '{self.wait_node}' (event: '{self.event_key}')"
+        )

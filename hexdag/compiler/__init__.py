@@ -6,9 +6,7 @@ from declarative YAML configurations, plus the configuration loader.
 """
 
 # Import tags to register YAML custom tags
-from . import include_tag as _include_tag  # noqa: F401
 from . import py_tag as _py_tag  # noqa: F401
-from .include_tag import set_include_base_path
 from .tag_discovery import discover_tags, get_known_tag_names, get_tag_schema
 from .yaml_builder import YamlPipelineBuilder
 
@@ -34,5 +32,4 @@ __all__ = [
     "discover_tags",
     "get_known_tag_names",
     "get_tag_schema",
-    "set_include_base_path",
 ]

@@ -7,8 +7,9 @@ import os
 import time
 from typing import Any
 
-from hexdag.kernel.ports.file_storage import FileStorage
 from hexdag.kernel.ports.healthcheck import HealthStatus
+
+from hexdag_plugins._ports import FileStorage
 
 
 class AzureBlobAdapter(FileStorage):

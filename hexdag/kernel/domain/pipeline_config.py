@@ -95,6 +95,14 @@ class BaseNodeConfig(BaseModel):
             " node_name.field or $input.field syntax."
         ),
     )
+    strict_mapping: bool = Field(
+        default=False,
+        description=(
+            "When true, input_mapping becomes exclusive: the node receives"
+            " ONLY the fields declared in input_mapping, not the full"
+            " upstream namespace. Requires input_mapping to be set."
+        ),
+    )
     when: str | None = Field(
         default=None,
         description=(
@@ -136,6 +144,7 @@ class BaseNodeConfig(BaseModel):
             "dependencies": node_config.get("dependencies") or spec.get("dependencies"),
             "wait_for": wait_for,
             "input_mapping": spec.get("input_mapping"),
+            "strict_mapping": spec.get("strict_mapping", False),
             "when": spec.get("when"),
         })
 

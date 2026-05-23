@@ -23,6 +23,7 @@ from hexdag.kernel.orchestration.constants import (
 )
 from hexdag.kernel.orchestration.hook_context import PipelineStatus
 from hexdag.kernel.orchestration.models import NodeExecutionContext
+from hexdag.kernel.orchestration.suspension import Suspended
 from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -216,6 +217,20 @@ class LocalExecutor:
                 node_results=node_results,
                 **task.params,
             )
+
+            # Check for suspension signal (WaitNode returns Suspended)
+            if isinstance(output, Suspended):
+                return ExecutionResult(
+                    node_name=task.node_name,
+                    output=output.setup_result,
+                    status=PipelineStatus.SUSPENDED,
+                    duration_ms=_calculate_duration_ms(start_time),
+                    metadata={
+                        "event_key": output.event_key,
+                        "timeout_seconds": output.timeout_seconds,
+                        "suspended_metadata": output.metadata,
+                    },
+                )
 
             return ExecutionResult(
                 node_name=task.node_name,

@@ -345,12 +345,6 @@ class PyTagError(HexDAGError):
     pass
 
 
-class IncludeTagError(HexDAGError):
-    """Error including external YAML file."""
-
-    pass
-
-
 class ComponentInstantiationError(HexDAGError):
     """Error instantiating component from specification."""
 
@@ -472,7 +466,6 @@ __all__ = [
     # Compiler
     "YamlPipelineBuilderError",
     "PyTagError",
-    "IncludeTagError",
     "ComponentInstantiationError",
     # Drivers
     "HttpClientError",
