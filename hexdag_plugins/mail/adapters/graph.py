@@ -12,7 +12,7 @@ YAML configuration::
     spec:
       ports:
         email:
-          adapter: hexdag_plugins.email.GraphEmailAdapter
+          adapter: hexdag_plugins.mail.GraphEmailAdapter
           config:
             tenant_id: ${GRAPH_TENANT_ID}
             client_id: ${GRAPH_CLIENT_ID}

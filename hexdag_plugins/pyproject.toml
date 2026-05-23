@@ -70,11 +70,11 @@ google = ["google-auth>=2.0.0", "httpx>=0.24.0"]
 ollama = ["httpx>=0.24.0"]
 
 # Email plugins
-email-graph = ["httpx>=0.24.0"]
-email-sendgrid = ["httpx>=0.24.0"]
-email-all = [
-    "hexdag-plugins[email-graph]",
-    "hexdag-plugins[email-sendgrid]",
+mail-graph = ["httpx>=0.24.0"]
+mail-sendgrid = ["httpx>=0.24.0"]
+mail-all = [
+    "hexdag-plugins[mail-graph]",
+    "hexdag-plugins[mail-sendgrid]",
 ]
 
 # All plugins
@@ -82,7 +82,7 @@ all = [
     "hexdag-plugins[azure-all]",
     "hexdag-plugins[google]",
     "hexdag-plugins[ollama]",
-    "hexdag-plugins[email-all]",
+    "hexdag-plugins[mail-all]",
     "hexdag-plugins[mysql]",
     "hexdag-plugins[etl]",
     "hexdag-plugins[storage-all]",
@@ -153,7 +153,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["azure/tests", "mysql_adapter/tests", "hexdag_etl/tests", "storage/tests", "google/tests", "ollama/tests", "email/tests"]
+testpaths = ["azure/tests", "mysql_adapter/tests", "hexdag_etl/tests", "storage/tests", "google/tests", "ollama/tests", "mail/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
