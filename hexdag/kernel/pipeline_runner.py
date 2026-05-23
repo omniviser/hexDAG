@@ -123,6 +123,7 @@ class PipelineRunner:
         base_path: Path | None = None,
         environment: str | None = None,
         checkpoint_storage: Any | None = None,
+        service_overrides: dict[str, Any] | None = None,
     ) -> None:
         self._config = config
         # Inject checkpoint_storage as a dedicated checkpoint port.
@@ -180,6 +181,8 @@ class PipelineRunner:
 
         self._builder = YamlPipelineBuilder(base_path=base_path)
         self._factory = OrchestratorFactory()
+
+        self._service_overrides = service_overrides
 
         # Runner-level secret cache: skip load_to_environ on repeat runs
         self._secrets_loaded = False
@@ -645,6 +648,7 @@ class PipelineRunner:
             additional_ports=self._port_overrides,
             pre_hook_config=self._pre_hook_config,
             post_hook_config=self._post_hook_config,
+            service_overrides=self._service_overrides,
         )
 
         # 6. Execute

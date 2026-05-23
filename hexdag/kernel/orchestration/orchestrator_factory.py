@@ -67,6 +67,7 @@ class OrchestratorFactory:
         additional_ports: dict[str, Any] | None = None,
         pre_hook_config: "HookConfig | None" = None,
         post_hook_config: "PostDagHookConfig | None" = None,
+        service_overrides: dict[str, Any] | None = None,
     ) -> Orchestrator:
         """Create an orchestrator instance from pipeline configuration.
 
@@ -86,6 +87,10 @@ class OrchestratorFactory:
             Configuration for pre-DAG hooks (health checks, secrets, etc.)
         post_hook_config : PostDagHookConfig | None, optional
             Configuration for post-DAG hooks (cleanup, checkpoints, etc.)
+        service_overrides : dict[str, Any] | None, optional
+            Pre-instantiated services injected by a parent (e.g. System).
+            Merged before auto-registration guards so overrides prevent
+            fresh service creation.
 
         Returns
         -------
@@ -178,6 +183,11 @@ class OrchestratorFactory:
 
         # Step 4: Instantiate services if configured
         services = self._instantiate_services(pipeline_config, global_ports)
+
+        # Merge parent-injected services (e.g. System's shared EntityState).
+        # Must run before auto-registration guards so overrides take precedence.
+        if service_overrides:
+            services.update(service_overrides)
 
         # Auto-register PipelineMemory (always available, like run_id)
         if "pipeline_memory" not in services:
