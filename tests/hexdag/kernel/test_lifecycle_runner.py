@@ -1,6 +1,6 @@
 """Tests for LifecycleRunner (Phase 3)."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -521,4 +521,41 @@ class TestLifecycleRunnerMultiEntity:
         call_args = runner._spawn_process.call_args
         request = call_args[0][1]  # TransitionRequest
         assert request.entity_type == "ticket"
+        await runner.stop()
+
+
+class TestLifecycleRunnerEntityStateSharing:
+    """Tests that spawned pipelines receive the System's shared EntityState."""
+
+    @pytest.mark.asyncio()
+    async def test_spawn_process_passes_shared_entity_state(self):
+        """PipelineRunner receives the LifecycleRunner's EntityState via service_overrides."""
+        runner = LifecycleRunner()
+        config = _make_ticket_system()
+        await runner.start(config)
+
+        captured_kwargs: dict = {}
+
+        original_init = __import__(
+            "hexdag.kernel.pipeline_runner", fromlist=["PipelineRunner"]
+        ).PipelineRunner.__init__
+
+        def capture_init(self_inner, **kwargs):
+            captured_kwargs.update(kwargs)
+            original_init(self_inner, **kwargs)
+
+        with (
+            patch(
+                "hexdag.kernel.lifecycle_runner.PipelineRunner.__init__",
+                capture_init,
+            ),
+            patch(
+                "hexdag.kernel.lifecycle_runner.PipelineRunner.run",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await runner.transition("ticket", "T-1", "INVESTIGATING")
+
+        assert "service_overrides" in captured_kwargs
+        assert captured_kwargs["service_overrides"]["entity_state"] is runner.entity_state
         await runner.stop()

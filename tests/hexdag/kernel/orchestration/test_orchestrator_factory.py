@@ -174,6 +174,95 @@ class TestOrchestratorFactory:
         assert "memory" in ports
 
 
+class TestOrchestratorFactoryServiceOverrides:
+    """Tests for service_overrides parameter."""
+
+    def test_service_overrides_merged_into_services(self) -> None:
+        """Overrides appear in the orchestrator's services dict."""
+        factory = OrchestratorFactory()
+        config = PipelineConfig(
+            ports={},
+            type_ports={},
+            policies={},
+            metadata={"name": "test"},
+            nodes=[],
+        )
+        sentinel = object()
+        orchestrator = factory.create_orchestrator(
+            config,
+            service_overrides={"my_service": sentinel},
+        )
+        services = orchestrator.ports["_hexdag_services"]
+        assert services["my_service"] is sentinel
+
+    def test_service_overrides_prevents_fresh_entity_state(self) -> None:
+        """When entity_state is in overrides, factory skips auto-registration."""
+        from hexdag.stdlib.lib.entity_state import EntityState
+
+        factory = OrchestratorFactory()
+        shared_es = EntityState()
+        config = PipelineConfig(
+            ports={},
+            type_ports={},
+            policies={},
+            metadata={"name": "test"},
+            nodes=[],
+            state_machines={
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": {"CLOSED"}},
+                },
+            },
+        )
+        orchestrator = factory.create_orchestrator(
+            config,
+            service_overrides={"entity_state": shared_es},
+        )
+        services = orchestrator.ports["_hexdag_services"]
+        assert services["entity_state"] is shared_es
+
+    def test_none_service_overrides_preserves_existing_behaviour(self) -> None:
+        """Without overrides, EntityState is auto-created from state_machines."""
+        from hexdag.stdlib.lib.entity_state import EntityState
+
+        factory = OrchestratorFactory()
+        config = PipelineConfig(
+            ports={},
+            type_ports={},
+            policies={},
+            metadata={"name": "test"},
+            nodes=[],
+            state_machines={
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": {"CLOSED"}},
+                },
+            },
+        )
+        orchestrator = factory.create_orchestrator(config)
+        services = orchestrator.ports["_hexdag_services"]
+        assert isinstance(services["entity_state"], EntityState)
+
+    def test_pipeline_memory_still_auto_registered_with_overrides(self) -> None:
+        """PipelineMemory auto-registration is not blocked by service_overrides."""
+        from hexdag.stdlib.lib.pipeline_memory import PipelineMemory
+
+        factory = OrchestratorFactory()
+        config = PipelineConfig(
+            ports={},
+            type_ports={},
+            policies={},
+            metadata={"name": "test"},
+            nodes=[],
+        )
+        orchestrator = factory.create_orchestrator(
+            config,
+            service_overrides={"custom": "value"},
+        )
+        services = orchestrator.ports["_hexdag_services"]
+        assert isinstance(services["pipeline_memory"], PipelineMemory)
+
+
 class TestOrchestratorFactoryIntegration:
     """Integration tests for OrchestratorFactory."""
 

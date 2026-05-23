@@ -502,6 +502,7 @@ class LifecycleRunner:
             config=self._config,
             port_overrides=self._port_overrides,
             base_path=self._base_path,
+            service_overrides={"entity_state": self._entity_state},
         )
 
         try:
