@@ -66,7 +66,7 @@ class VertexAIAdapter(
         Google API key. Falls back to ``GOOGLE_API_KEY`` env var.
         Ignored when Application Default Credentials are available.
     model : str
-        Gemini model name (e.g. ``gemini-2.0-flash``, ``gemini-1.5-pro``).
+        Gemini model name (e.g. ``gemini-2.5-flash``, ``gemini-1.5-pro``).
     temperature : float
         Sampling temperature (0.0–2.0).
     max_tokens : int
@@ -93,7 +93,7 @@ class VertexAIAdapter(
             llm:
               adapter: hexdag_plugins.google.VertexAIAdapter
               config:
-                model: gemini-2.0-flash
+                model: gemini-2.5-flash
                 temperature: 0.0
                 thinking_level: low
     """
@@ -104,7 +104,7 @@ class VertexAIAdapter(
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-2.5-flash",
         temperature: float = 0.0,
         max_tokens: int = 1024,
         timeout: float = 30.0,
@@ -131,9 +131,9 @@ class VertexAIAdapter(
         self._cache_lock = asyncio.Lock()
         self._cache_lookups = 0
 
-        self._use_adc = self._try_init_adc()
         self.api_key = api_key or os.environ.get("GOOGLE_API_KEY", "")
-        self._fallback_base_url = "https://aiplatform.googleapis.com/v1/publishers/google/models"
+        self._use_adc = self._try_init_adc()
+        self._fallback_base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
         if self._use_adc:
             if self._explicit_project_id:
@@ -141,22 +141,32 @@ class VertexAIAdapter(
             if not self._project_id:
                 self._project_id = os.environ.get("GCP_PROJECT_ID", "")
             if not self._project_id:
-                raise ValueError(
-                    "ADC requires a GCP project ID. "
-                    "Ensure service account JSON contains project_id, "
-                    "or set GCP_PROJECT_ID."
+                # ADC found credentials but no project ID — fall back to API key if available
+                if self.api_key:
+                    logger.warning(
+                        "ADC credentials found but no GCP project ID. "
+                        "Falling back to API key authentication."
+                    )
+                    self._use_adc = False
+                    self._base_url = self._fallback_base_url
+                else:
+                    raise ValueError(
+                        "ADC requires a GCP project ID. "
+                        "Ensure service account JSON contains project_id, "
+                        "or set GCP_PROJECT_ID."
+                    )
+            if self._use_adc:
+                self._base_url = (
+                    f"https://aiplatform.googleapis.com/v1"
+                    f"/projects/{self._project_id}"
+                    f"/locations/global"
+                    f"/publishers/google/models"
                 )
-            self._base_url = (
-                f"https://aiplatform.googleapis.com/v1"
-                f"/projects/{self._project_id}"
-                f"/locations/global"
-                f"/publishers/google/models"
-            )
-            logger.info(
-                "Using ADC (service account), project=%s, API key fallback=%s",
-                self._project_id,
-                "available" if self.api_key else "none",
-            )
+                logger.info(
+                    "Using ADC (service account), project=%s, API key fallback=%s",
+                    self._project_id,
+                    "available" if self.api_key else "none",
+                )
         else:
             if not self.api_key:
                 raise ValueError(

@@ -155,7 +155,7 @@ class ReActAgentNode(BaseNodeFactory, yaml_alias="re_act_agent_node"):
         main_prompt: PromptInput,
         continuation_prompts: dict[str, PromptInput] | None = None,
         output_schema: dict[str, type] | type[BaseModel] | None = None,
-        config: AgentConfig | None = None,
+        config: AgentConfig | dict[str, Any] | None = None,
         deps: list[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
@@ -176,7 +176,12 @@ class ReActAgentNode(BaseNodeFactory, yaml_alias="re_act_agent_node"):
         NodeSpec
             A configured node specification for the agent
         """
-        config = config or AgentConfig()
+        if isinstance(config, dict):
+            config = AgentConfig(**{
+                k: v for k, v in config.items() if k in AgentConfig.__dataclass_fields__
+            })
+        elif config is None:
+            config = AgentConfig()
 
         # Infer input schema from prompt
         input_schema = self._infer_input_schema(main_prompt)

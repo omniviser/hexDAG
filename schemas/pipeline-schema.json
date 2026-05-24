@@ -32,12 +32,16 @@
                     "additionalProperties": false,
                     "properties": {
                         "config": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ],
                             "default": null,
-                            "description": "Agent configuration",
-                            "type": [
-                                "string",
-                                "null"
-                            ]
+                            "description": "Agent configuration"
                         },
                         "continuation_prompts": {
                             "additionalProperties": {

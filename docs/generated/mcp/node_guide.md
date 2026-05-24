@@ -197,7 +197,7 @@ Multi-step reasoning agent.
 | `main_prompt` | `str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate` | Yes | Initial reasoning prompt |
 | `continuation_prompts` | `dict[str, str | hexdag.kernel.orchestration.prompt.template.PromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatPromptTemplate | hexdag.kernel.orchestration.prompt.template.ChatFewShotTemplate | hexdag.kernel.orchestration.prompt.template.FewShotPromptTemplate] | None` | No | Phase-specific prompts |
 | `output_schema` | `dict[str, type] | type[pydantic.main.BaseModel] | None` | No | Custom output schema for tool_end results |
-| `config` | `hexdag.stdlib.nodes.agent_node.AgentConfig | None` | No | Agent configuration |
+| `config` | `hexdag.stdlib.nodes.agent_node.AgentConfig | dict[str, typing.Any] | None` | No | Agent configuration |
 | `deps` | `list[str] | None` | No | Dependencies |
 
 **Example:**
