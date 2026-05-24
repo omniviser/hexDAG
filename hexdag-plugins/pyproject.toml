@@ -108,6 +108,15 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+exclude = [
+    "**/tests/",
+    "**/test_*.py",
+    "**/examples/",
+    "**/*.pyc",
+    "**/__pycache__/",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["hexdag_plugins"]
 
@@ -118,8 +127,9 @@ include = [
     "LICENSE",
 ]
 exclude = [
-    "*/tests/",
+    "**/tests/",
     "**/test_*.py",
+    "**/examples/",
     "**/*.pyc",
     "**/__pycache__/",
 ]
@@ -153,7 +163,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["azure/tests", "mysql_adapter/tests", "hexdag_etl/tests", "storage/tests", "google/tests", "ollama/tests", "mail/tests"]
+testpaths = ["hexdag_plugins/azure/tests", "hexdag_plugins/mysql_adapter/tests", "hexdag_plugins/hexdag_etl/tests", "hexdag_plugins/storage/tests", "hexdag_plugins/google/tests", "hexdag_plugins/ollama/tests", "hexdag_plugins/mail/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

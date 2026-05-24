@@ -40,7 +40,7 @@ jobs:
           uv sync
           uv run pytest -x -q
       - name: Run lint
-        run: uv run ruff check hexdag/ hexdag_plugins/ hexdag-forge/
+        run: uv run ruff check hexdag/ hexdag-plugins/hexdag_plugins/ hexdag-forge/
 
   # ── Detect changed packages ─────────────────────────────────────────
   detect:
@@ -152,11 +152,11 @@ jobs:
       - name: Release hexdag-plugins
         uses: ./.github/actions/release-package
         with:
-          pyproject_path: hexdag_plugins/pyproject.toml
+          pyproject_path: hexdag-plugins/pyproject.toml
           release_type: ${{ inputs.release_type }}
           publish_to: ${{ inputs.publish_to }}
           tag_prefix: plugins-v
-          working_directory: hexdag_plugins
+          working_directory: hexdag-plugins
           test_name: hexdag-plugins-test
           package_name: hexdag-plugins
 
@@ -165,13 +165,13 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          packages-dir: hexdag_plugins/dist/
+          packages-dir: hexdag-plugins/dist/
 
       - name: Publish to PyPI
         if: inputs.publish_to == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: hexdag_plugins/dist/
+          packages-dir: hexdag-plugins/dist/
 
   # ── Release hexdag-studio ───────────────────────────────────────────
   release-studio:

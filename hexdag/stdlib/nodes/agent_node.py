@@ -606,12 +606,26 @@ carried_data={'key': 'value'})"""
 
         current_phase_context = state.phase_contexts.get(state.current_phase, {})
 
-        # Build LLM input - only convert to dict when needed for template
-        # Merge state fields with template-specific overrides
+        # Build reasoning_so_far by interleaving steps and tool results
+        # so the LLM sees the full action-observation history.
+        reasoning_parts: list[str] = []
+        for i, step in enumerate(state.reasoning_steps):
+            reasoning_parts.append(step)
+            if i < len(state.tool_results):
+                reasoning_parts.append(f"  Result: {state.tool_results[i]}")
+        reasoning_so_far = "\n".join(reasoning_parts)
+
+        # Append reasoning history to the prompt so the LLM always sees
+        # prior actions and observations, regardless of the user's template.
+        if reasoning_so_far:
+            if isinstance(enhanced_prompt, str):
+                enhanced_prompt = PromptTemplate(enhanced_prompt)
+            enhanced_prompt = enhanced_prompt + ("\n\n## Reasoning History\n{{reasoning_so_far}}")
+
         llm_input = {
             **state.model_dump(),  # Convert only once, at template boundary
             **state.input_data,
-            "reasoning_so_far": "\n".join(state.reasoning_steps) or "Starting reasoning...",
+            "reasoning_so_far": reasoning_so_far or "Starting reasoning...",
             "phase_context": current_phase_context,
             "phase_reason": current_phase_context.get("reason", ""),
             "phase_target": current_phase_context.get("target_output", ""),
