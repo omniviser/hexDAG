@@ -66,7 +66,7 @@ Specification for agent_node type
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `config` | string | null | No | Agent configuration |
+| `config` | string | object | No | Agent configuration |
 | `continuation_prompts` | object | null | No | Phase-specific prompts |
 | `main_prompt` | string | Yes | Initial reasoning prompt |
 | `output_schema` | object | string | No | Custom output schema for tool_end res... |

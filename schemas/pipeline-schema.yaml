@@ -972,9 +972,9 @@ $defs:
             description: Custom output schema for tool_end results
             default: null
           config:
-            type:
-            - string
-            - 'null'
+            anyOf:
+            - type: string
+            - type: object
             description: Agent configuration
             default: null
         additionalProperties: false
