@@ -535,7 +535,7 @@ class VertexAIAdapter(
             )
             if cache_key is not None:
                 await self._cache_cancel_inflight(cache_key)
-            return None
+            raise
         except Exception as e:
             if isinstance(e, TimeoutError):
                 logger.error("Gemini API call timed out", exc_info=True)
@@ -543,7 +543,7 @@ class VertexAIAdapter(
                 logger.error("Gemini API error: %s", e, exc_info=True)
             if cache_key is not None:
                 await self._cache_cancel_inflight(cache_key)
-            return None
+            raise
 
     async def aresponse_structured(
         self,

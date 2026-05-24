@@ -19,7 +19,7 @@ PACKAGES: dict[str, dict[str, str]] = {
     },
     "hexdag-plugins": {
         "tag_prefix": "plugins-v",
-        "paths": "hexdag_plugins/",
+        "paths": "hexdag-plugins/",
     },
     "hexdag-studio": {
         "tag_prefix": "studio-v",

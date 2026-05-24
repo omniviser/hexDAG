@@ -4,10 +4,10 @@ Provides file storage and retrieval for pipelines and agents.
 """
 
 import os
-import time
 from typing import Any
 
 from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.utils.node_timer import Timer
 
 from hexdag_plugins._ports import FileStorage
 
@@ -410,7 +410,7 @@ class AzureBlobAdapter(FileStorage):
             HealthStatus with connectivity details
         """
         try:
-            start_time = time.time()
+            timer = Timer()
             container = await self._get_container()
 
             # Count blobs to verify access
@@ -420,7 +420,7 @@ class AzureBlobAdapter(FileStorage):
                 if count >= 10:  # Sample only
                     break
 
-            latency_ms = (time.time() - start_time) * 1000
+            latency_ms = timer.duration_ms
 
             return HealthStatus(
                 status="healthy",

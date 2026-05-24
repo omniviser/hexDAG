@@ -1,7 +1,6 @@
 """Azure OpenAI LLM adapter for hexDAG framework."""
 
 import os
-import time
 from typing import Any, Literal
 
 from hexdag.kernel.ports.healthcheck import HealthStatus
@@ -15,6 +14,7 @@ from hexdag.kernel.ports.llm import (
     SupportsGeneration,
     ToolCall,
 )
+from hexdag.kernel.utils.node_timer import Timer
 from openai import AsyncAzureOpenAI
 
 # Convention: Azure OpenAI API version options for dropdown menus in Studio UI
@@ -265,13 +265,13 @@ class AzureOpenAIAdapter(LLM, SupportsGeneration, SupportsEmbedding):
             HealthStatus with connectivity and model availability details
         """
         try:
-            start_time = time.time()
+            timer = Timer()
 
             # Simple health check with minimal token usage
             test_messages = [Message(role="user", content="Hi")]
             response = await self.aresponse(test_messages)
 
-            latency_ms = (time.time() - start_time) * 1000
+            latency_ms = timer.duration_ms
 
             if response:
                 return HealthStatus(

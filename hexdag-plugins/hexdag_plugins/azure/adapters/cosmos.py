@@ -9,6 +9,7 @@ from typing import Any
 
 from hexdag.kernel.ports.healthcheck import HealthStatus
 from hexdag.kernel.ports.memory import Memory
+from hexdag.kernel.utils.node_timer import Timer
 
 
 class AzureCosmosAdapter(Memory):
@@ -335,7 +336,7 @@ class AzureCosmosAdapter(Memory):
             HealthStatus with connectivity details
         """
         try:
-            start_time = time.time()
+            timer = Timer()
             container = await self._get_container()
 
             # Simple query to verify connectivity
@@ -345,7 +346,7 @@ class AzureCosmosAdapter(Memory):
             async for item in items:
                 count = item
 
-            latency_ms = (time.time() - start_time) * 1000
+            latency_ms = timer.duration_ms
 
             return HealthStatus(
                 status="healthy",

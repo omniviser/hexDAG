@@ -2,10 +2,10 @@
 
 import contextlib
 import shutil
-import time
 from pathlib import Path
 
 from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.utils.node_timer import Timer
 
 from hexdag_plugins._ports import FileStorage
 
@@ -252,7 +252,7 @@ class LocalFileStorage(FileStorage):
         HealthStatus
             Health status of the local storage
         """
-        start_time = time.time()
+        timer = Timer()
 
         try:
             # Check if base path exists and is writable
@@ -260,7 +260,7 @@ class LocalFileStorage(FileStorage):
                 return HealthStatus(
                     status="unhealthy",
                     adapter_name="LocalFileStorage",
-                    latency_ms=(time.time() - start_time) * 1000,
+                    latency_ms=timer.duration_ms,
                     details={
                         "base_path": str(self._base_path),
                         "error": "Base path does not exist",
@@ -276,7 +276,7 @@ class LocalFileStorage(FileStorage):
                 return HealthStatus(
                     status="unhealthy",
                     adapter_name="LocalFileStorage",
-                    latency_ms=(time.time() - start_time) * 1000,
+                    latency_ms=timer.duration_ms,
                     details={
                         "base_path": str(self._base_path),
                         "error": f"Cannot write to base path: {e}",
@@ -289,7 +289,7 @@ class LocalFileStorage(FileStorage):
             return HealthStatus(
                 status="healthy",
                 adapter_name="LocalFileStorage",
-                latency_ms=(time.time() - start_time) * 1000,
+                latency_ms=timer.duration_ms,
                 details={
                     "base_path": str(self._base_path.absolute()),
                     "file_count": file_count,
@@ -301,7 +301,7 @@ class LocalFileStorage(FileStorage):
             return HealthStatus(
                 status="unhealthy",
                 adapter_name="LocalFileStorage",
-                latency_ms=(time.time() - start_time) * 1000,
+                latency_ms=timer.duration_ms,
                 details={
                     "base_path": str(self._base_path),
                     "error": str(e),

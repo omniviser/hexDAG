@@ -30,6 +30,11 @@ ALLOWLIST: dict[str, set[str]] = {
     "hexdag/stdlib/lib/scheduler.py": {"time.time"},
     # Wall-clock lifetime calculation: EntityRecord.created_at uses time.time() epoch
     "hexdag/kernel/lifecycle_runner.py": {"time.time"},
+    # Plugin wall-clock timestamps (document metadata, cache TTL)
+    "hexdag-plugins/hexdag_plugins/azure/adapters/cosmos.py": {"time.time"},
+    "hexdag-plugins/hexdag_plugins/azure/adapters/keyvault.py": {"time.time"},
+    # Test fixtures populating cache with wall-clock timestamps
+    "hexdag-plugins/hexdag_plugins/azure/tests/test_azure_keyvault_adapter.py": {"time.time"},
 }
 
 # Pre-existing violations from before the M3 audit.
@@ -41,14 +46,6 @@ GRANDFATHERED: set[str] = {
     "hexdag/stdlib/adapters/openai/openai_adapter.py",
     "hexdag/drivers/executors/local_executor.py",
     "hexdag/stdlib/nodes/tool_call_node.py",
-    # Plugins — pre-existing timer/timestamp usage
-    "hexdag_plugins/azure/adapters/blob.py",
-    "hexdag_plugins/azure/adapters/cosmos.py",
-    "hexdag_plugins/azure/adapters/keyvault.py",
-    "hexdag_plugins/azure/adapters/openai.py",
-    "hexdag_plugins/azure/tests/test_azure_keyvault_adapter.py",
-    "hexdag_plugins/storage/adapters/file/local.py",
-    "hexdag_plugins/storage/adapters/vector/pgvector.py",
 }
 
 DEFAULT_EXCLUDES: list[str] = [

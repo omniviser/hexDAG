@@ -9,11 +9,11 @@ repos:
       # Run the linter with auto-fix (main code)
       - id: ruff-check
         args: [--fix, --config=pyproject.toml]
-        exclude: ^hexdag_plugins/
+        exclude: ^hexdag-plugins/
       # Run the formatter with auto-formatting (main code)
       - id: ruff-format
         args: [--config=pyproject.toml]
-        exclude: ^hexdag_plugins/
+        exclude: ^hexdag-plugins/
 
   # Pyupgrade - Automatically upgrade Python syntax
   - repo: https://github.com/asottile/pyupgrade
@@ -64,7 +64,7 @@ repos:
         entry: uv run mypy hexdag/
         language: system
         types: [python]
-        exclude: '^(tests/|examples/|scripts/|hexdag_plugins/|hexdag/studio/|hexdag/cli/)'
+        exclude: '^(tests/|examples/|scripts/|hexdag-plugins/|hexdag/studio/|hexdag/cli/)'
         pass_filenames: false
 
       - id: pyright
@@ -72,12 +72,12 @@ repos:
         entry: uv run pyright
         language: system
         types: [python]
-        exclude: ^(tests/|examples/|hexdag_plugins/|hexdag/studio/)
+        exclude: ^(tests/|examples/|hexdag-plugins/|hexdag/studio/)
         pass_filenames: false
 
 
   # ============================================================================
-  # Plugin-specific hooks (only run on hexdag_plugins/ files)
+  # Plugin-specific hooks (only run on hexdag-plugins/ files)
   # ============================================================================
 
   # Plugin linting - uses each plugin's own pyproject.toml
@@ -87,12 +87,12 @@ repos:
       - id: ruff
         name: ruff-plugins
         args: [--fix]  # Will use plugin's own pyproject.toml
-        files: ^hexdag_plugins/
-        exclude: ^hexdag_plugins/.*\.venv/
+        files: ^hexdag-plugins/
+        exclude: ^hexdag-plugins/.*\.venv/
       - id: ruff-format
         name: ruff-format-plugins
-        files: ^hexdag_plugins/
-        exclude: ^hexdag_plugins/.*\.venv/
+        files: ^hexdag-plugins/
+        exclude: ^hexdag-plugins/.*\.venv/
 
   # Plugin type checking - with plugin dependencies
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -102,36 +102,36 @@ repos:
         name: mypy-plugins
         # Add plugin deps here
         additional_dependencies: [pymysql>=1.1.0, pydantic>=2.0, types-PyYAML]
-        args: [--ignore-missing-imports, --python-version=3.12, hexdag_plugins/]
-        files: ^hexdag_plugins/.*\.py$
-        exclude: ^hexdag_plugins/.*\.venv/
+        args: [--ignore-missing-imports, --python-version=3.12, hexdag-plugins/hexdag_plugins/]
+        files: ^hexdag-plugins/.*\.py$
+        exclude: ^hexdag-plugins/.*\.venv/
 
         pass_filenames: false
 
-  # Plugin convention checks (only run on hexdag_plugins/ files)
+  # Plugin convention checks (only run on hexdag-plugins/ files)
   - repo: local
     hooks:
       - id: check-exception-hierarchy-plugins
         name: Check plugin exception hierarchy
-        entry: uv run python scripts/check_exception_hierarchy.py --path hexdag_plugins/
+        entry: uv run python scripts/check_exception_hierarchy.py --path hexdag-plugins/hexdag_plugins/
         language: system
-        files: ^hexdag_plugins/.*\.py$
+        files: ^hexdag-plugins/.*\.py$
         stages: [pre-commit]
         pass_filenames: false
 
       - id: check-timer-usage-plugins
         name: Check plugin Timer usage
-        entry: uv run python scripts/check_timer_usage.py --path hexdag_plugins/
+        entry: uv run python scripts/check_timer_usage.py --path hexdag-plugins/hexdag_plugins/
         language: system
-        files: ^hexdag_plugins/.*\.py$
+        files: ^hexdag-plugins/.*\.py$
         stages: [pre-commit]
         pass_filenames: false
 
       - id: check-init-params-plugins
         name: Check plugin adapter __init__ params
-        entry: uv run python scripts/check_init_params.py --path hexdag_plugins/
+        entry: uv run python scripts/check_init_params.py --path hexdag-plugins/hexdag_plugins/
         language: system
-        files: ^hexdag_plugins/.*\.py$
+        files: ^hexdag-plugins/.*\.py$
         stages: [pre-commit]
         pass_filenames: false
 
@@ -144,7 +144,7 @@ repos:
     hooks:
       - id: bandit
         args: [-ll, -c, pyproject.toml]  # Medium/High severity, load config for skips
-        exclude: ^(tests/|hexdag_plugins/|hexdag/studio/)
+        exclude: ^(tests/|hexdag-plugins/|hexdag/studio/)
 
   # Security - Dependency vulnerabilities
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety

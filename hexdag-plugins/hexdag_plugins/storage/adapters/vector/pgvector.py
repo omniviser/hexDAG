@@ -5,10 +5,10 @@ and the official pgvector Python library.
 """
 
 import os
-import time
 from typing import Any
 
 from hexdag.kernel.ports.healthcheck import HealthStatus
+from hexdag.kernel.utils.node_timer import Timer
 from hexdag.kernel.utils.sql_validation import validate_sql_identifier
 from sqlalchemy import Column, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -404,7 +404,7 @@ class PgVectorAdapter(VectorStorePort):
 
     async def ahealth_check(self) -> HealthStatus:
         """Check PostgreSQL, pgvector, and connection pool health."""
-        start_time = time.time()
+        timer = Timer()
 
         try:
             if not self._initialized:
@@ -430,7 +430,7 @@ class PgVectorAdapter(VectorStorePort):
                     {"table_name": self._table_name},
                 )
 
-                latency_ms = (time.time() - start_time) * 1000
+                latency_ms = timer.duration_ms
 
                 if not table_exists:
                     return HealthStatus(
@@ -473,7 +473,7 @@ class PgVectorAdapter(VectorStorePort):
                 )
 
         except Exception as e:
-            latency_ms = (time.time() - start_time) * 1000
+            latency_ms = timer.duration_ms
             return HealthStatus(
                 status="unhealthy",
                 adapter_name="pgvector",

@@ -10,6 +10,7 @@ from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.healthcheck import HealthStatus
 from hexdag.kernel.ports.secret import SecretStore
 from hexdag.kernel.types import Secret
+from hexdag.kernel.utils.node_timer import Timer
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.memory import Memory
@@ -285,16 +286,14 @@ class AzureKeyVaultAdapter(SecretStore):
         -------
             HealthStatus with connectivity details
         """
-        import time
-
         try:
-            start_time = time.time()
+            timer = Timer()
             client = self._get_client()
 
             # Try to list secrets (limited to 1) to verify connectivity
             list(client.list_properties_of_secrets())
 
-            latency_ms = (time.time() - start_time) * 1000
+            latency_ms = timer.duration_ms
 
             return HealthStatus(
                 status="healthy",
