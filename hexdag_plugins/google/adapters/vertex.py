@@ -132,8 +132,14 @@ class VertexAIAdapter(
         self._cache_lookups = 0
 
         self.api_key = api_key or os.environ.get("GOOGLE_API_KEY", "")
-        self._use_adc = self._try_init_adc()
         self._fallback_base_url = "https://generativelanguage.googleapis.com/v1beta/models"
+        if api_key:
+            # Explicit api_key parameter — use API key mode directly,
+            # try ADC in background only as runtime fallback for rate limits
+            self._use_adc = False
+        else:
+            # No explicit key — try ADC, fall back to env GOOGLE_API_KEY
+            self._use_adc = self._try_init_adc()
 
         if self._use_adc:
             if self._explicit_project_id:
