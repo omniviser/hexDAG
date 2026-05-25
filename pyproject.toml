@@ -396,7 +396,7 @@ convention = "numpy"
 "hexdag/compiler/yaml_builder.py" = ["E501"] # YAML examples can be long
 
 [tool.ruff.lint.isort]
-known-first-party = ["hexdag", "hexdag_forge"]
+known-first-party = ["hexdag"]
 
 [tool.vulture]
 min_confidence = 90
@@ -477,7 +477,6 @@ exclude = [
     "hexdag-plugins",                         # Separate package with its own dependencies
     "hexdag-studio",                          # Separate package with its own dependencies
     "hexdag-studio/.venv",                    # Nested venv in studio package
-    "hexdag-forge",                           # Separate package with its own dependencies
 ]
 
 # Per-rule ignores for specific packages

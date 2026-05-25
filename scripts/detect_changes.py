@@ -25,10 +25,6 @@ PACKAGES: dict[str, dict[str, str]] = {
         "tag_prefix": "studio-v",
         "paths": "hexdag-studio/",
     },
-    "hexdag-forge": {
-        "tag_prefix": "forge-v",
-        "paths": "hexdag-forge/",
-    },
 }
 
 
