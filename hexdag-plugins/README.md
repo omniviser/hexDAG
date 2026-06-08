@@ -4,9 +4,10 @@ This directory contains plugins that extend hexDAG's functionality.
 
 ## Available Plugins
 
-| Plugin | Description | Port |
-|--------|-------------|------|
+| Plugin | Description | Port / Role |
+|--------|-------------|-------------|
 | `mysql_adapter` | Production MySQL adapter with JSON support | database |
+| `langfuse` | Langfuse LLM observability (traces, spans, generations) | observer |
 
 ## Simple Plugin Workflow
 

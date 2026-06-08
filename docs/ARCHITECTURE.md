@@ -1,12 +1,15 @@
 # hexDAG System Architecture
 
-hexDAG is an **operating system for AI agents**. Just as Linux provides processes,
-syscalls, drivers, and libraries so that programs don't reinvent the wheel, hexDAG
-provides pipelines, ports, drivers, and a standard library so that AI agents don't
-reinvent orchestration.
+hexDAG is a **developer-first workflow engine for AI agents**. Its internal
+architecture borrows from operating-system design: scheduling, isolation, ports,
+adapters, and controlled execution.
 
-The codebase is organized around a Linux-kernel-inspired directory structure. This
-document explains what belongs where, what each layer does, and how they interact.
+Just as Linux provides processes, syscalls, drivers, and libraries so that programs
+don't reinvent the wheel, hexDAG provides pipelines, ports, drivers, and a standard
+library so that AI agents don't reinvent orchestration.
+
+The codebase is organized around this OS-inspired directory structure. This document
+explains what belongs where, what each layer does, and how they interact.
 
 ---
 

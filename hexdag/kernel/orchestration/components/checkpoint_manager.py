@@ -14,7 +14,7 @@ class CheckpointManager:
 
     This implementation is storage-agnostic and works with any Memory backend:
     - SQL databases (via SQLiteMemoryAdapter)
-    - File storage (JSON, YAML, pickle via FileMemoryAdapter)
+    - File storage (JSON, text via FileMemoryAdapter)
     - In-memory storage (for testing)
     - Redis, S3, etc.
 

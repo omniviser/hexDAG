@@ -136,6 +136,16 @@ class EntityState(Service):
         """Get all entity IDs for a given type."""
         return sorted(eid for (etype, eid) in self._states if etype == entity_type)
 
+    def cleanup_entity(self, entity_type: str, entity_id: str) -> None:
+        """Remove all in-memory data for a specific entity instance.
+
+        Called by the lifecycle runner during garbage collection to
+        prevent memory leaks after an entity reaches a terminal state.
+        """
+        key = (entity_type, entity_id)
+        self._states.pop(key, None)
+        self._history.pop(key, None)
+
     # ------------------------------------------------------------------
     # Agent-callable tools
     # ------------------------------------------------------------------

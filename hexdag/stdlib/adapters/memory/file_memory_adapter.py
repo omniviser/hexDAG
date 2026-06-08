@@ -1,15 +1,10 @@
-"""File-based Memory adapter for JSON/YAML/pickle storage.
+"""File-based Memory adapter for JSON/text storage.
 
 This adapter provides file-based key-value storage, allowing Memory Port
 to work with various file formats.
-
-SECURITY WARNING: The pickle format can execute arbitrary code during
-deserialization. Only use pickle with trusted data sources. For untrusted
-data, use JSON or TEXT formats instead.
 """
 
 import json
-import pickle  # nosec B403 - Pickle usage documented, user must choose format
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -22,18 +17,9 @@ logger = get_logger(__name__)
 
 
 class FileFormat(StrEnum):
-    """Supported file formats for storage.
-
-    Security Notes
-    --------------
-    - JSON: Safe for untrusted data, human-readable
-    - TEXT: Safe for untrusted data, stores as plain text
-    - PICKLE: **UNSAFE for untrusted data** - can execute arbitrary code
-      Only use pickle with data you control or trust completely.
-    """
+    """Supported file formats for storage."""
 
     JSON = "json"
-    PICKLE = "pickle"
     TEXT = "text"
 
 
@@ -46,7 +32,7 @@ class FileMemoryAdapter(
     """Memory adapter backed by file system.
 
     Provides persistent key-value storage using files, with support for
-    multiple formats (JSON, pickle, text). Each key is stored as a separate
+    multiple formats (JSON, text). Each key is stored as a separate
     file in the specified directory.
 
     This adapter is ideal for:
@@ -60,7 +46,7 @@ class FileMemoryAdapter(
     base_path : str | Path
         Base directory for file storage
     format : FileFormat, default=FileFormat.JSON
-        File format to use (json, pickle, text)
+        File format to use (json, text)
     create_dirs : bool, default=True
         Automatically create directory structure
     extension : str | None
@@ -71,7 +57,7 @@ class FileMemoryAdapter(
     Example usage::
 
         memory = FileMemoryAdapter(base_path="./data", format="json")
-        memory = FileMemoryAdapter(base_path="./cache", format="pickle")
+        memory = FileMemoryAdapter(base_path="./notes", format="text")
     """
 
     def __init__(
@@ -88,7 +74,7 @@ class FileMemoryAdapter(
         base_path : str | Path
             Base directory for file storage
         format : FileFormat | str
-            File format (json, pickle, text)
+            File format (json, text)
         create_dirs : bool
             Automatically create directory if it doesn't exist
         extension : str | None
@@ -120,7 +106,7 @@ class FileMemoryAdapter(
         safe_key = key.replace("/", "_").replace(":", "_")
         return self.base_path / f"{safe_key}.{self.extension}"
 
-    def _serialize(self, value: Any) -> bytes | str:
+    def _serialize(self, value: Any) -> str:
         """Serialize value based on format.
 
         Parameters
@@ -130,22 +116,20 @@ class FileMemoryAdapter(
 
         Returns
         -------
-        bytes | str
+        str
             Serialized value
         """
         if self.format == FileFormat.JSON:
             return json.dumps(value, indent=2)
-        if self.format == FileFormat.PICKLE:
-            return pickle.dumps(value)
         # TEXT
         return str(value)
 
-    def _deserialize(self, data: bytes | str) -> Any:
+    def _deserialize(self, data: str) -> Any:
         """Deserialize value based on format.
 
         Parameters
         ----------
-        data : bytes | str
+        data : str
             Serialized data
 
         Returns
@@ -154,16 +138,7 @@ class FileMemoryAdapter(
             Deserialized value
         """
         if self.format == FileFormat.JSON:
-            # JSON only accepts str, not bytes
-            if isinstance(data, bytes):
-                data = data.decode("utf-8")
             return json.loads(data)
-        if self.format == FileFormat.PICKLE:
-            # Pickle only accepts bytes
-            if isinstance(data, str):
-                data = data.encode("utf-8")
-            # WARNING: Pickle can execute arbitrary code - only use with trusted data
-            return pickle.loads(data)  # nosec B301 - User explicitly chose pickle format
         # TEXT
         return data
 
@@ -186,12 +161,7 @@ class FileMemoryAdapter(
             return None
 
         try:
-            data: bytes | str
-            if self.format == FileFormat.PICKLE:
-                data = file_path.read_bytes()
-            else:
-                data = file_path.read_text(encoding="utf-8")
-
+            data = file_path.read_text(encoding="utf-8")
             return self._deserialize(data)
         except Exception as e:
             logger.error("Failed to read key '{}' from {}: {}", key, file_path, e)
@@ -215,19 +185,7 @@ class FileMemoryAdapter(
 
         try:
             serialized = self._serialize(value)
-
-            if self.format == FileFormat.PICKLE:
-                # Pickle always returns bytes
-                if not isinstance(serialized, bytes):
-                    raise TypeError(f"Expected bytes for pickle format, got {type(serialized)}")
-                file_path.write_bytes(serialized)
-            else:
-                # JSON and TEXT always return str
-                if not isinstance(serialized, str):
-                    raise TypeError(
-                        f"Expected str for {self.format} format, got {type(serialized)}"
-                    )
-                file_path.write_text(serialized, encoding="utf-8")
+            file_path.write_text(serialized, encoding="utf-8")
 
             logger.debug("Stored key '{}' at {}", key, file_path)
         except Exception as e:

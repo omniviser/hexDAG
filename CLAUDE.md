@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-hexDAG is an **operating system for AI agents** -- an orchestration framework that provides pipelines (processes), ports (syscalls), drivers, and a standard library so that AI agents don't reinvent orchestration. It transforms complex AI workflows into deterministic, testable, and maintainable systems through declarative YAML configurations and DAG-based execution.
+hexDAG is a **developer-first workflow engine for AI agents** -- an orchestration framework that lets you compose AI workflows in YAML or Python, run them as typed DAGs, and ship them with observability, replay, and human approval. It provides pipelines, ports, drivers, and a standard library so that AI agents don't reinvent orchestration. It transforms complex AI workflows into deterministic, testable, and maintainable systems through declarative YAML configurations and DAG-based execution.
 
 ## Development Commands
 
@@ -97,7 +97,7 @@ uv run scripts/check_examples.py
 
 ## Architecture Overview
 
-hexDAG is structured like an operating system -- kernel (execution engine), stdlib (built-in components), drivers (infrastructure), and api (user-facing tools):
+hexDAG's architecture borrows from operating-system design -- kernel (execution engine), stdlib (built-in components), drivers (infrastructure), and api (user-facing tools):
 
 ### Framework Structure
 ```

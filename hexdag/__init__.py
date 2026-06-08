@@ -1,7 +1,7 @@
-"""hexDAG — Operating system for AI agents.
+"""hexDAG — Developer-first workflow engine for AI agents.
 
-A modular, deterministic, and extensible architecture for orchestrating LLM-powered agents alongside
-traditional code with YAML pipeline configuration.
+Compose AI workflows in YAML or Python, run them as typed DAGs, and ship them
+with observability, replay, and human approval.
 """
 
 import warnings

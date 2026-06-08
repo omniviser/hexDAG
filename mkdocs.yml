@@ -1,5 +1,5 @@
 site_name: HexDAG Documentation
-site_description: Operating system for AI agents — pipelines, ports, drivers, and stdlib so agents don't reinvent infrastructure
+site_description: Developer-first workflow engine for AI agents — compose YAML/Python workflows as typed, observable, replayable DAGs
 site_url: https://hexdag.ai
 repo_url: https://github.com/omniviser/hexdag
 repo_name: hexdag
@@ -75,7 +75,6 @@ nav:
   - Framework Guide: GUIDE.md
   - Architecture: ARCHITECTURE.md
   - User Guide:
-      - Node Types: guide/node-types.md
       - Creating Nodes: generated/mcp/node_guide.md
       - Creating Adapters: generated/mcp/adapter_guide.md
       - Creating Tools: generated/mcp/tool_guide.md
@@ -88,9 +87,6 @@ nav:
       - Adapters: reference/adapters.md
       - Ports: reference/ports.md
       - Tools: reference/tools.md
-  - Namespaces:
-      - Core: namespaces/core.md
-      - Plugin: namespaces/plugin.md
   - Roadmap: ROADMAP.md
 
 hooks:

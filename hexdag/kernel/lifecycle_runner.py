@@ -42,13 +42,14 @@ from hexdag.kernel.orchestration.events.events import (
 )
 from hexdag.kernel.pipeline_runner import PipelineRunner
 from hexdag.kernel.utils.node_timer import Timer
-from hexdag.stdlib.lib.entity_state import EntityState
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from hexdag.kernel.config.models import HexDAGConfig
     from hexdag.kernel.domain.system_config import SystemConfig
+    from hexdag.kernel.ports.entity_state import EntityState
     from hexdag.kernel.ports.observer_manager import ObserverManager
 
 logger = get_logger(__name__)
@@ -116,6 +117,7 @@ class LifecycleRunner:
         observer_manager: ObserverManager | None = None,
         base_path: Path | None = None,
         max_cascade_depth: int = _DEFAULT_MAX_CASCADE_DEPTH,
+        entity_state_factory: Callable[[], EntityState] | None = None,
     ) -> None:
         """Initialize the lifecycle runner with optional config and port overrides."""
         self._config = config
@@ -123,6 +125,7 @@ class LifecycleRunner:
         self._observer_manager = observer_manager
         self._base_path = base_path
         self._max_cascade_depth = max_cascade_depth
+        self._entity_state_factory = entity_state_factory or self._default_entity_state_factory
 
         # Populated on start()
         self._system_config: SystemConfig | None = None
@@ -133,11 +136,19 @@ class LifecycleRunner:
 
         # Lookup tables built from system config (entity-type-qualified)
         self._state_to_process: dict[tuple[str, str], str] = {}  # (entity_type, state) -> process
-        self._transition_to_process: dict[tuple[str, str], str] = {}
+        self._transition_to_process: dict[tuple[str, str, str], str] = {}  # (entity_type, from, to)
         self._terminal_states: set[tuple[str, str]] = set()  # (entity_type, state)
         self._state_requires: dict[tuple[str, str], list[str]] = {}  # (entity_type, state)
         self._process_map: dict[str, Any] = {}
         self._guards: dict[tuple[str, str, str], str] = {}  # (entity_type, from, to) -> expr
+
+    @staticmethod
+    def _default_entity_state_factory() -> EntityState:
+        from hexdag.stdlib.lib.entity_state import (
+            EntityState as ConcreteEntityState,  # lazy: avoid top-level stdlib dep
+        )
+
+        return ConcreteEntityState()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -158,7 +169,7 @@ class LifecycleRunner:
         self._draining = False
 
         # Build EntityState from state machines
-        self._entity_state = EntityState()
+        self._entity_state = self._entity_state_factory()
         for entity_type, sm_spec in system_config.state_machines.items():
             transitions_raw = sm_spec.get("transitions", {})
             transitions: dict[str, set[str]] = {}
@@ -231,14 +242,17 @@ class LifecycleRunner:
                 if requires and isinstance(requires, list):
                     self._state_requires[(owner, state_name)] = requires
 
-        # Build transition-specific process lookup
+        # Build transition-specific process lookup (entity-type-qualified)
         for transition_key, transition_spec in system_config.on_transition.items():
             parts = [p.strip() for p in transition_key.split("->")]
             if len(parts) == 2:  # noqa: PLR2004
                 from_state, to_state = parts
                 process_name = transition_spec.get("process")
                 if process_name:
-                    self._transition_to_process[(from_state, to_state)] = process_name
+                    from_owners = state_owners.get(from_state, set())
+                    to_owners = state_owners.get(to_state, set())
+                    for owner in from_owners & to_owners:
+                        self._transition_to_process[(owner, from_state, to_state)] = process_name
 
         # Build process map
         self._process_map = {p.name: p for p in system_config.processes}
@@ -461,8 +475,8 @@ class LifecycleRunner:
         1. Transition-specific process (on_transition: FROM -> TO)
         2. State on_enter process (states: TO_STATE.on_enter)
         """
-        # Check transition-specific override first
-        process = self._transition_to_process.get((from_state, to_state))
+        # Check transition-specific override first (entity-type-qualified)
+        process = self._transition_to_process.get((entity_type, from_state, to_state))
         if process:
             return process
 
@@ -584,8 +598,7 @@ class LifecycleRunner:
 
         # Clean up EntityState in-memory data to prevent memory leaks
         if self._entity_state:
-            self._entity_state._states.pop(key, None)
-            self._entity_state._history.pop(key, None)
+            self._entity_state.cleanup_entity(entity_type, entity_id)
 
         # Calculate lifetime
         lifetime_ms = (time.time() - record.created_at) * 1000

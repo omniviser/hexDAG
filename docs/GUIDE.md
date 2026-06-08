@@ -1,10 +1,10 @@
 # hexDAG Framework Guide
 
-> **Operations and knowledge as code.** hexDAG is an operating system for AI agents — a platform where companies encode how they operate and what they know into executable, version-controlled, composable code.
+> **Developer-first workflow engine for AI agents.** Compose n8n-like automations in YAML or Python, run LangGraph-style agent flows as typed DAGs, and ship them with observability, replay, and human approval.
 >
 > Designed to be read by developers joining the team and by AI agents exploring the codebase.
 
-**Related docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (design philosophy) · [ROADMAP.md](ROADMAP.md) (strategic direction) · [quickstart.md](quickstart.md) (first pipeline)
+**Related docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (design philosophy) · [ROADMAP.md](ROADMAP.md) (strategic direction) · [Quick Start](getting-started/quickstart.md) (first pipeline)
 
 ---
 
@@ -46,24 +46,7 @@ hexDAG enables **operations and knowledge as code** — companies encode how the
 - **Expressions** — business rules encoded as safe evaluable logic
 - **Configuration** — environment management, secrets, capability narrowing
 
-### The Linux Analogy
-
-The architecture mirrors Linux — this isn't just marketing, it's the actual structure:
-
-| Linux | hexDAG | What it does |
-|-------|--------|-------------|
-| **Kernel** (scheduler, VFS, syscalls) | [`hexdag/kernel/`](../hexdag/kernel/) | DAG orchestrator, port protocols, event system |
-| **Kernel module interfaces** | `agent_base`, `entity_base` | How agents and entities plug into the kernel |
-| **Loadable modules** (ext4, e1000) | [`hexdag/stdlib/`](../hexdag/stdlib/) agents, entities, nodes | ReAct agent, state machines, LLM nodes |
-| **glibc** (`/lib/`) | [`hexdag/stdlib/nodes/`](../hexdag/stdlib/nodes/) | LLMNode, FunctionNode — every pipeline uses these |
-| **Daemons** (systemd, crond) | Services (ProcessRegistry, Scheduler) | Track runs, schedule execution |
-| **Device drivers** | [`hexdag/stdlib/adapters/`](../hexdag/stdlib/adapters/) | OpenAI, Postgres, Mock — implement port protocols |
-| **I/O schedulers** | [`hexdag/stdlib/middleware/`](../hexdag/stdlib/middleware/) | Retry, timeout, cache — transparent port wrappers |
-| **`/drivers/`** | [`hexdag/drivers/`](../hexdag/drivers/) | LocalExecutor, VFS providers, ObserverManager |
-| **`gcc`** | [`hexdag/compiler/`](../hexdag/compiler/) | YAML manifests → kernel domain models |
-| **`/usr/bin`** | [`hexdag/api/`](../hexdag/api/) | User-facing functions |
-| **Shell** | [`hexdag/cli/`](../hexdag/cli/) | Command-line interface |
-| **Signals** | Events | NodeStarted, StateTransitionEvent, PipelineCompleted |
+> For the OS-inspired directory mapping, see [Architecture](ARCHITECTURE.md#the-os-analogy).
 
 ---
 

@@ -2,7 +2,7 @@
 name = "hexdag"
 version = "0.8.0.dev4"
 
-description = "Operating system for AI agents — pipelines, ports, drivers, and stdlib so agents don't reinvent infrastructure"
+description = "Developer-first workflow engine for AI agents — compose YAML/Python workflows as typed, observable, replayable DAGs"
 authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
 requires-python = ">=3.12"
 readme = "README.md"
@@ -10,7 +10,7 @@ license = { text = "Apache-2.0" }
 keywords = [
     "ai-agents",
     "llm",
-    "operating-system",
+    "workflow-engine",
     "dag",
     "orchestration",
     "pipeline",

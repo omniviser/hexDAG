@@ -1,4 +1,4 @@
-# hexDAG -- Operating System for AI Agents
+# hexDAG -- Developer-First Workflow Engine for AI Agents
 
 [![PyPI version](https://img.shields.io/pypi/v/hexdag.svg)](https://pypi.org/project/hexdag/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12.*-blue.svg)](https://www.python.org/downloads/)
@@ -6,31 +6,32 @@
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> Just as Linux provides processes, syscalls, drivers, and `/lib` so programs don't
-> reinvent the wheel, hexDAG provides **pipelines**, **ports**, **drivers**, and a
-> **standard library** so AI agents don't reinvent orchestration.
+> Compose n8n-like automations in YAML or Python, run LangGraph-style agent flows
+> as typed DAGs, and ship them with observability, replay, and human approval.
 
-hexDAG transforms complex AI workflows into deterministic, testable, and maintainable
-systems through declarative YAML pipelines and DAG-based execution. It is async-first,
-type-safe with Pydantic, and built on hexagonal architecture so you can swap any
-infrastructure dependency without touching business logic.
+## Why hexDAG?
+
+- **Visual/workflow mindset like n8n** -- define workflows in YAML, version them in git
+- **Programmable control like LangGraph** -- typed DAGs with conditional branching, loops, and agent reasoning
+- **Runtime guarantees like production infrastructure** -- observability, replay, human approval gates
+- **YAML or Python source of truth** -- declarative-first, code when you need it
+- **Typed node contracts** -- Pydantic validation at every boundary
+- **Event stream, replay, audit** -- every execution step tracked
+
+hexDAG is async-first, type-safe with Pydantic, and built on hexagonal architecture
+so you can swap any infrastructure dependency without touching business logic.
 
 ---
 
-## The OS Analogy
+## How hexDAG Compares
 
-| Linux             | hexDAG            | Purpose                                                                  |
-| ----------------- | ----------------- | ------------------------------------------------------------------------ |
-| Kernel            | `kernel/`         | Core execution engine, system call interfaces (Protocols), domain models |
-| System calls      | `kernel/ports/`   | Contracts for external capabilities (LLM, Memory, Database, etc.)        |
-| Drivers           | `drivers/`        | Low-level infrastructure (executor, observer manager, pipeline spawner)  |
-| `/lib`            | `stdlib/`         | Standard library -- built-in nodes, adapters, macros, system libs        |
-| Processes         | Pipeline runs     | Tracked by `ProcessRegistry` (like `ps`)                                 |
-| `fork`/`exec`     | `PipelineSpawner` | Launch sub-pipelines from within a running pipeline                      |
-| Process scheduler | `Scheduler`       | Delayed and recurring pipeline execution                                 |
-| State machines    | `EntityState`     | Business entity lifecycle management                                     |
-| `/usr/bin`        | `api/`            | User-facing tools (MCP + Studio REST)                                    |
-| Shell             | `cli/`            | Command-line interface (`hexdag init`, `hexdag lint`, etc.)              |
+| Tool | Best for | Limitation hexDAG targets |
+|---|---|---|
+| n8n | Visual automations | Harder to version, test, type, and embed deeply in Python apps |
+| LangGraph | Agent control flow | Less workflow/product-infra oriented out of the box |
+| Prefect | Data/infra workflows | Not AI-agent native |
+| Airflow | Scheduled batch DAGs | Heavy, not agent-native, less interactive |
+| **hexDAG** | **Programmable AI workflows** | **Code/YAML-first, typed, observable, replayable** |
 
 ---
 
@@ -139,10 +140,10 @@ issues = await runner.validate(pipeline_path="research_agent.yaml")
 
 ```
 hexdag/
-  kernel/   -- Core primitives. Protocols, domain models, orchestration.     (/kernel)
-  stdlib/   -- Standard library. Built-in nodes, adapters, macros, libs.     (/lib)
-  drivers/  -- Low-level infrastructure. Executor, observer, spawner.        (/drivers)
-  api/      -- Public API. MCP tools + Studio REST endpoints.                (/usr/bin)
+  kernel/   -- Core primitives. Protocols, domain models, orchestration.
+  stdlib/   -- Standard library. Built-in nodes, adapters, macros, libs.
+  drivers/  -- Low-level infrastructure. Executor, observer, spawner.
+  api/      -- Public API. MCP tools + Studio REST endpoints.
   cli/      -- CLI commands (hexdag init, hexdag lint, hexdag studio, etc.)
 ```
 
@@ -190,12 +191,12 @@ nodes:
 Libs are system-level capabilities for multi-pipeline coordination. Every public async
 method on a `HexDAGLib` subclass auto-becomes an agent-callable tool.
 
-| Lib                 | Linux Analogy  | Purpose                                                                                      |
-| ------------------- | -------------- | -------------------------------------------------------------------------------------------- |
-| **ProcessRegistry** | `ps`           | Track pipeline runs -- status, duration, results, parent/child relationships                 |
-| **EntityState**     | State machines | Declarative state machines for business entities with validated transitions and audit trails |
-| **Scheduler**       | `cron` / `at`  | Delayed and recurring pipeline execution via asyncio timers                                  |
-| **DatabaseTools**   | `sqlite3` CLI  | Agent-callable SQL query tools wrapping any `SupportsQuery` adapter                          |
+| Lib                 | Purpose                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| **ProcessRegistry** | Track pipeline runs -- status, duration, results, parent/child relationships                 |
+| **EntityState**     | Declarative state machines for business entities with validated transitions and audit trails |
+| **Scheduler**       | Delayed and recurring pipeline execution via asyncio timers                                  |
+| **DatabaseTools**   | Agent-callable SQL query tools wrapping any `SupportsQuery` adapter                          |
 
 ```python
 from hexdag.kernel.lib_base import HexDAGLib
@@ -323,9 +324,9 @@ export HEXDAG_PLUGIN_PATHS="./my_adapters:./my_nodes"
 
 ### Docs
 
-- [Architecture](docs/ARCHITECTURE.md) -- System architecture and the OS analogy
+- [Architecture](docs/ARCHITECTURE.md) -- System architecture and design philosophy
 - [Roadmap](docs/ROADMAP.md) -- Development roadmap and planned kernel extensions
-- [Quick Start](docs/quickstart.md) -- Build your first workflow
+- [Quick Start](docs/getting-started/quickstart.md) -- Build your first workflow
 - [All Documentation](docs/README.md) -- Full documentation index
 
 ### Examples
@@ -354,7 +355,7 @@ uv run pre-commit run --all-files
 
 ---
 
-## The Six Pillars
+## Design Principles
 
 1. **Async-First Architecture** -- Non-blocking execution for maximum performance
 2. **Event-Driven Observability** -- Real-time monitoring via comprehensive event system

@@ -1,6 +1,6 @@
 # hexDAG
 
-**Operations and knowledge as code.** hexDAG is an operating system for AI agents — a platform where companies encode how they operate and what they know into executable, version-controlled, composable code.
+**Developer-first workflow engine for AI agents.** Compose n8n-like automations in YAML or Python, run LangGraph-style agent flows as typed DAGs, and ship them with observability, replay, and human approval.
 
 <div class="grid cards" markdown>
 
@@ -24,7 +24,7 @@
 
     ---
 
-    Design philosophy, OS analogy, hexagonal architecture, and decision rules.
+    Design philosophy, hexagonal architecture, and decision rules.
 
     [:octicons-arrow-right-24: Architecture](ARCHITECTURE.md)
 

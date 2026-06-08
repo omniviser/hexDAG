@@ -7,7 +7,7 @@ This reference is auto-generated from `hexdag --help`.
 ```
 Usage: hexdag [OPTIONS] COMMAND [ARGS]...
 
- hexDAG — Operating system for AI agents.
+ hexDAG — Developer-first workflow engine for AI agents.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version             -v        Show version and exit                        │

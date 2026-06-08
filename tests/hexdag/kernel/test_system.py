@@ -329,3 +329,37 @@ class TestSystemClose:
         async with System(_dag_config()) as system:
             assert system.process_names == ["extract", "load"]
         # close() was called — no assertion needed, just no exception
+
+
+# ---------------------------------------------------------------------------
+# Entity state access
+# ---------------------------------------------------------------------------
+
+
+class TestSystemEntityState:
+    def test_entity_state_none_for_dag_mode(self) -> None:
+        system = System(_dag_config())
+        assert system.entity_state is None
+
+    def test_entity_state_none_before_start(self) -> None:
+        system = System(_lifecycle_config())
+        assert system.entity_state is None
+
+    @pytest.mark.asyncio
+    async def test_entity_state_available_after_transition(self) -> None:
+        system = System(_lifecycle_config())
+        assert system._lifecycle_runner is not None
+
+        # Mock start + transition to trigger _started = True
+        system._lifecycle_runner.start = AsyncMock()  # type: ignore[method-assign]
+        system._lifecycle_runner.transition = AsyncMock(  # type: ignore[method-assign]
+            return_value={"from_state": "OPEN", "to_state": "INVESTIGATING"}
+        )
+        # Provide a mock entity_state on the runner
+        mock_entity_state = MagicMock()
+        system._lifecycle_runner._entity_state = mock_entity_state
+        system._lifecycle_runner._running = True
+
+        await system.transition("ticket", "T-1", "INVESTIGATING")
+
+        assert system.entity_state is mock_entity_state

@@ -21,6 +21,7 @@ from hexdag.kernel.ports.database import (
 )
 from hexdag.kernel.ports.detection import detect_port_type
 from hexdag.kernel.ports.dict_bridge import dict_bridge_call
+from hexdag.kernel.ports.entity_state import EntityState
 from hexdag.kernel.ports.executor import (
     ExecutionResult,
     ExecutionTask,
@@ -68,6 +69,7 @@ __all__ = [
     "ColumnType",
     "DataStore",
     "Database",
+    "EntityState",
     "SupportsCollectionStorage",
     "DatabasePort",
     "Executor",

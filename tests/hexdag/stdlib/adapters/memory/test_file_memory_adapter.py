@@ -23,11 +23,6 @@ class TestFileMemoryAdapter:
         """Provide a JSON file memory adapter."""
         return FileMemoryAdapter(base_path=str(temp_dir / "json"), format="json")
 
-    @pytest.fixture
-    def memory_pickle(self, temp_dir):
-        """Provide a pickle file memory adapter."""
-        return FileMemoryAdapter(base_path=str(temp_dir / "pickle"), format="pickle")
-
     @pytest.mark.asyncio
     async def test_set_and_get_json(self, memory_json):
         """Test basic set and get with JSON format."""
@@ -35,17 +30,6 @@ class TestFileMemoryAdapter:
 
         await memory_json.aset("test", data)
         retrieved = await memory_json.aget("test")
-
-        assert retrieved == data
-
-    @pytest.mark.asyncio
-    async def test_set_and_get_pickle(self, memory_pickle):
-        """Test basic set and get with pickle format."""
-        # Use a standard Python object that can be pickled
-        data = {"key": "value", "nested": {"list": [1, 2, 3]}}
-
-        await memory_pickle.aset("obj", data)
-        retrieved = await memory_pickle.aget("obj")
 
         assert retrieved == data
 
@@ -198,23 +182,3 @@ class TestFileMemoryAdapter:
         """Test listing keys when storage is empty."""
         keys = await memory_json.alist_keys()
         assert keys == []
-
-    @pytest.mark.asyncio
-    async def test_pickle_preserves_types(self, memory_pickle):
-        """Test that pickle preserves Python types correctly."""
-        complex_data = {
-            "string": "text",
-            "int": 42,
-            "float": 3.14,
-            "list": [1, 2, 3],
-            "dict": {"nested": "value"},
-            "tuple": (1, 2, 3),
-            "set": {1, 2, 3},
-        }
-
-        await memory_pickle.aset("data", complex_data)
-        retrieved = await memory_pickle.aget("data")
-
-        assert retrieved == complex_data
-        assert isinstance(retrieved["tuple"], tuple)
-        assert isinstance(retrieved["set"], set)

@@ -69,6 +69,9 @@ google = ["google-auth>=2.0.0", "httpx>=0.24.0"]
 # Ollama plugin
 ollama = ["httpx>=0.24.0"]
 
+# Langfuse observability
+langfuse = ["langfuse>=2.0.0"]
+
 # Email plugins
 mail-graph = ["httpx>=0.24.0"]
 mail-sendgrid = ["httpx>=0.24.0"]
@@ -86,6 +89,7 @@ all = [
     "hexdag-plugins[mysql]",
     "hexdag-plugins[etl]",
     "hexdag-plugins[storage-all]",
+    "hexdag-plugins[langfuse]",
 ]
 
 # Development dependencies
@@ -163,7 +167,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["hexdag_plugins/azure/tests", "hexdag_plugins/mysql_adapter/tests", "hexdag_plugins/hexdag_etl/tests", "hexdag_plugins/storage/tests", "hexdag_plugins/google/tests", "hexdag_plugins/ollama/tests", "hexdag_plugins/mail/tests"]
+testpaths = ["hexdag_plugins/azure/tests", "hexdag_plugins/mysql_adapter/tests", "hexdag_plugins/hexdag_etl/tests", "hexdag_plugins/storage/tests", "hexdag_plugins/google/tests", "hexdag_plugins/ollama/tests", "hexdag_plugins/mail/tests", "hexdag_plugins/langfuse/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

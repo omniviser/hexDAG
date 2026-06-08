@@ -523,6 +523,72 @@ class TestLifecycleRunnerMultiEntity:
         assert request.entity_type == "ticket"
         await runner.stop()
 
+    @pytest.mark.asyncio()
+    async def test_on_transition_entity_qualified(self):
+        """on_transition with overlapping state pairs is expanded per entity type."""
+        config = SystemConfig.model_validate({
+            "metadata": {"name": "collision-test"},
+            "processes": [
+                {"name": "cancel_ticket", "pipeline": "p/a.yaml"},
+                {"name": "cancel_order", "pipeline": "p/b.yaml"},
+            ],
+            "state_machines": {
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": ["CANCELLED"]},
+                },
+                "order": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": ["CANCELLED"]},
+                },
+            },
+            "on_transition": {
+                "OPEN -> CANCELLED": {"process": "cancel_ticket"},
+            },
+            "states": {"CANCELLED": {"terminal": True}},
+        })
+        runner = LifecycleRunner()
+        await runner.start(config)
+
+        # Both entity types should have entity-qualified entries
+        assert ("ticket", "OPEN", "CANCELLED") in runner._transition_to_process
+        assert ("order", "OPEN", "CANCELLED") in runner._transition_to_process
+        # Flat 2-tuple key should NOT exist
+        assert ("OPEN", "CANCELLED") not in runner._transition_to_process  # type: ignore[operator]
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_on_transition_resolves_per_entity_type(self):
+        """_resolve_process uses entity-qualified on_transition lookup."""
+        config = SystemConfig.model_validate({
+            "metadata": {"name": "resolve-test"},
+            "processes": [
+                {"name": "process_a", "pipeline": "p/a.yaml"},
+            ],
+            "state_machines": {
+                "ticket": {
+                    "initial": "OPEN",
+                    "transitions": {"OPEN": ["CLOSED"]},
+                },
+                "order": {
+                    "initial": "NEW",
+                    "transitions": {"NEW": ["CLOSED"]},
+                },
+            },
+            "on_transition": {
+                "OPEN -> CLOSED": {"process": "process_a"},
+            },
+            "states": {"CLOSED": {"terminal": True}},
+        })
+        runner = LifecycleRunner()
+        await runner.start(config)
+
+        # ticket owns OPEN -> CLOSED, so should resolve
+        assert runner._resolve_process("ticket", "OPEN", "CLOSED") == "process_a"
+        # order does NOT own OPEN state, so on_transition should NOT apply
+        assert runner._resolve_process("order", "NEW", "CLOSED") is None
+        await runner.stop()
+
 
 class TestLifecycleRunnerEntityStateSharing:
     """Tests that spawned pipelines receive the System's shared EntityState."""

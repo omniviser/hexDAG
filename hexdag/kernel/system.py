@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from hexdag.kernel.config.models import HexDAGConfig
     from hexdag.kernel.domain.pipeline_result import PipelineResult
     from hexdag.kernel.domain.system_config import SystemConfig
+    from hexdag.kernel.ports.entity_state import EntityState
     from hexdag.kernel.ports.observer_manager import ObserverManager
 
 logger = get_logger(__name__)
@@ -344,6 +345,17 @@ class System:
     def ports(self) -> dict[str, Any]:
         """Return the shared port instances."""
         return dict(self._shared_ports)
+
+    @property
+    def entity_state(self) -> EntityState | None:
+        """Return the entity state manager (lifecycle mode only).
+
+        Returns ``None`` if the system is in DAG mode or the lifecycle
+        runner has not been started yet.
+        """
+        if self._lifecycle_runner is not None and self._started:
+            return self._lifecycle_runner.entity_state
+        return None
 
     # ------------------------------------------------------------------
     # Async context manager
