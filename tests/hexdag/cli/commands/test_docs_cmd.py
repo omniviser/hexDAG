@@ -60,19 +60,18 @@ class TestBuildDocs:
 class TestNewPage:
     """Tests for docs new subcommand."""
 
-    def test_new_page_creates_file(self, runner, tmp_path) -> None:
+    def test_new_page_creates_file(self, runner, tmp_path, monkeypatch) -> None:
         """New page creates markdown file with template."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            # Create docs directory first (required by the command)
-            Path("docs").mkdir()
-            result = runner.invoke(app, ["new", "guide.md", "--title", "My Guide"])
-            assert result.exit_code == 0
-            assert Path("docs/guide.md").exists()
+        monkeypatch.chdir(tmp_path)
+        Path("docs").mkdir()
+        result = runner.invoke(app, ["new", "guide.md", "--title", "My Guide"])
+        assert result.exit_code == 0
+        assert Path("docs/guide.md").exists()
 
-    def test_new_page_creates_parent_dirs(self, runner, tmp_path) -> None:
+    def test_new_page_creates_parent_dirs(self, runner, tmp_path, monkeypatch) -> None:
         """New page creates parent directories."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path("docs").mkdir()
-            result = runner.invoke(app, ["new", "deep/nested/page.md"])
-            assert result.exit_code == 0
-            assert Path("docs/deep/nested/page.md").exists()
+        monkeypatch.chdir(tmp_path)
+        Path("docs").mkdir()
+        result = runner.invoke(app, ["new", "deep/nested/page.md"])
+        assert result.exit_code == 0
+        assert Path("docs/deep/nested/page.md").exists()

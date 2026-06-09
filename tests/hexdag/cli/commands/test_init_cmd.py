@@ -22,103 +22,102 @@ def mock_console():
         yield mock
 
 
+@pytest.fixture
+def _chdir(tmp_path, monkeypatch):
+    """Change working directory to tmp_path for the test."""
+    monkeypatch.chdir(tmp_path)
+
+
+@pytest.mark.usefixtures("_chdir")
 class TestInit:
     """Test the init command."""
 
-    def test_init_creates_config_in_current_dir(self, runner, tmp_path):
+    def test_init_creates_config_in_current_dir(self, runner):
         """Test init creates hexdag.yaml in current directory."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            result = runner.invoke(app, [])
-            assert result.exit_code == 0
+        result = runner.invoke(app, [])
+        assert result.exit_code == 0
 
-            config_file = Path("hexdag.yaml")
-            assert config_file.exists()
+        config_file = Path("hexdag.yaml")
+        assert config_file.exists()
 
-            content = config_file.read_text()
-            assert "kind: Config" in content
-            assert "hexdag.kernel.ports" in content
+        content = config_file.read_text()
+        assert "kind: Config" in content
+        assert "hexdag.kernel.ports" in content
 
-    def test_init_creates_config_in_specified_dir(self, runner, tmp_path):
+    def test_init_creates_config_in_specified_dir(self, runner):
         """Test init creates hexdag.yaml in specified directory."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            test_dir = Path("my_project")
-            result = runner.invoke(app, [str(test_dir)])
-            assert result.exit_code == 0
+        test_dir = Path("my_project")
+        result = runner.invoke(app, [str(test_dir)])
+        assert result.exit_code == 0
 
-            config_file = test_dir / "hexdag.yaml"
-            assert config_file.exists()
+        config_file = test_dir / "hexdag.yaml"
+        assert config_file.exists()
 
-    def test_init_with_adapters(self, runner, tmp_path):
+    def test_init_with_adapters(self, runner):
         """Test init with adapter list."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            result = runner.invoke(app, ["--with", "openai,anthropic"])
-            assert result.exit_code == 0
+        result = runner.invoke(app, ["--with", "openai,anthropic"])
+        assert result.exit_code == 0
 
-            config_file = Path("hexdag.yaml")
-            content = config_file.read_text()
-            assert "openai" in content.lower()
-            assert "anthropic" in content.lower()
+        config_file = Path("hexdag.yaml")
+        content = config_file.read_text()
+        assert "openai" in content.lower()
+        assert "anthropic" in content.lower()
 
-    def test_init_with_force_flag(self, runner, tmp_path):
+    def test_init_with_force_flag(self, runner):
         """Test init --force overwrites existing config."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            # Create existing config
-            config_file = Path("hexdag.yaml")
-            config_file.write_text("# Old config")
+        # Create existing config
+        config_file = Path("hexdag.yaml")
+        config_file.write_text("# Old config")
 
-            result = runner.invoke(app, ["--force"])
-            assert result.exit_code == 0
+        result = runner.invoke(app, ["--force"])
+        assert result.exit_code == 0
 
-            # Should be overwritten
-            content = config_file.read_text()
-            assert "kind: Config" in content
-            assert "Old config" not in content
+        # Should be overwritten
+        content = config_file.read_text()
+        assert "kind: Config" in content
+        assert "Old config" not in content
 
-    def test_init_refuses_overwrite_without_force(self, runner, tmp_path):
+    def test_init_refuses_overwrite_without_force(self, runner):
         """Test init refuses to overwrite without --force."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            # Create existing config
-            config_file = Path("hexdag.yaml")
-            config_file.write_text("# Old config")
+        # Create existing config
+        config_file = Path("hexdag.yaml")
+        config_file.write_text("# Old config")
 
-            # Simulate user declining overwrite
-            result = runner.invoke(app, [], input="n\n")
-            assert result.exit_code == 1
-            assert "cancelled" in result.stdout.lower()
+        # Simulate user declining overwrite
+        result = runner.invoke(app, [], input="n\n")
+        assert result.exit_code == 1
+        assert "cancelled" in result.stdout.lower()
 
-    def test_init_accepts_overwrite_with_confirmation(self, runner, tmp_path):
+    def test_init_accepts_overwrite_with_confirmation(self, runner):
         """Test init overwrites when user confirms."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            # Create existing config
-            config_file = Path("hexdag.yaml")
-            config_file.write_text("# Old config")
+        # Create existing config
+        config_file = Path("hexdag.yaml")
+        config_file.write_text("# Old config")
 
-            # Simulate user confirming overwrite
-            result = runner.invoke(app, [], input="y\n")
-            assert result.exit_code == 0
+        # Simulate user confirming overwrite
+        result = runner.invoke(app, [], input="y\n")
+        assert result.exit_code == 0
 
-            content = config_file.read_text()
-            assert "kind: Config" in content
+        content = config_file.read_text()
+        assert "kind: Config" in content
 
-    def test_init_creates_directory_if_not_exists(self, runner, tmp_path):
+    def test_init_creates_directory_if_not_exists(self, runner):
         """Test init creates directory if it doesn't exist."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            nested_dir = Path("nested/project/dir")
-            result = runner.invoke(app, [str(nested_dir)])
-            assert result.exit_code == 0
+        nested_dir = Path("nested/project/dir")
+        result = runner.invoke(app, [str(nested_dir)])
+        assert result.exit_code == 0
 
-            assert nested_dir.exists()
-            assert (nested_dir / "hexdag.yaml").exists()
+        assert nested_dir.exists()
+        assert (nested_dir / "hexdag.yaml").exists()
 
-    def test_init_shows_next_steps(self, runner, tmp_path):
+    def test_init_shows_next_steps(self, runner):
         """Test init shows helpful next steps."""
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            result = runner.invoke(app, [])
-            assert result.exit_code == 0
-            assert "Next steps:" in result.stdout
-            assert "hexdag.yaml" in result.stdout
+        result = runner.invoke(app, [])
+        assert result.exit_code == 0
+        assert "Next steps:" in result.stdout
+        assert "hexdag.yaml" in result.stdout
 
-    def test_init_with_context_invoked_subcommand(self, tmp_path):
+    def test_init_with_context_invoked_subcommand(self):
         """Test init callback returns early when subcommand is invoked."""
         ctx = MagicMock()
         ctx.invoked_subcommand = "some_subcommand"
