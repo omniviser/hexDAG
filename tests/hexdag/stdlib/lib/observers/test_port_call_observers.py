@@ -10,7 +10,7 @@ import pytest
 
 from hexdag.kernel.orchestration.events.events import NodeCompleted
 from hexdag.kernel.ports.llm import LLMPortCall
-from hexdag.kernel.ports.tool_router import ToolRouterPortCall
+from hexdag.kernel.tool_router import ToolRouterCall
 from hexdag.stdlib.lib.observers.port_call_observers import (
     PortCallLogObserver,
     PortCallStoreObserver,
@@ -49,8 +49,8 @@ def _tool_event(
     params: dict[str, Any] | None = None,
     result: Any = None,
     duration_ms: float = 25.0,
-) -> ToolRouterPortCall:
-    return ToolRouterPortCall(
+) -> ToolRouterCall:
+    return ToolRouterCall(
         port_type="tool_router",
         method="acall_tool",
         node_name=node_name,
@@ -89,7 +89,7 @@ class TestPortCallStoreObserver:
 
     @pytest.mark.asyncio
     async def test_stores_tool_router_port_call(self) -> None:
-        """ToolRouterPortCall events are stored with tool details."""
+        """ToolRouterCall events are stored with tool details."""
         observer = PortCallStoreObserver()
         event = _tool_event()
 
@@ -275,7 +275,7 @@ class TestPortCallLogObserver:
 
     @pytest.mark.asyncio
     async def test_logs_tool_router_port_call(self) -> None:
-        """ToolRouterPortCall is logged with tool details."""
+        """ToolRouterCall is logged with tool details."""
         observer = PortCallLogObserver()
         logged: list[str] = []
         observer._logger = type(

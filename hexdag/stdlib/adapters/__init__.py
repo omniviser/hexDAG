@@ -30,16 +30,16 @@ def __getattr__(name: str) -> Any:
     AttributeError
         If the requested name is not found in any adapter module.
     """
-    # ToolRouter lives in core/ports, not in this package
+    # ToolRouter lives in kernel/, not in this package
     if name == "ToolRouter":
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
 
         globals()["ToolRouter"] = ToolRouter
         return ToolRouter
 
     # Backward compat: UnifiedToolRouter → ToolRouter
     if name in ("UnifiedToolRouter", "FunctionBasedToolRouter"):
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
 
         globals()[name] = ToolRouter
         return ToolRouter

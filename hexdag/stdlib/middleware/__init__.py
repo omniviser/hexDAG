@@ -12,7 +12,7 @@ Middleware falls into two categories:
 
 Full stack order (inner → outer)::
 
-    adapter → [Cache → RateLimiter → Retry → Timeout]
+    adapter → [Cache → RateLimiter → CircuitBreaker → Retry → Timeout]
             → StructuredOutputFallback (if needed) → ObservableLLM
 
 Example
@@ -33,11 +33,13 @@ Example
 """
 
 from hexdag.stdlib.middleware.batch_generation import BatchGeneration
+from hexdag.stdlib.middleware.circuit_breaker import CircuitBreaker
 from hexdag.stdlib.middleware.compose import compose
 from hexdag.stdlib.middleware.distributed_cache import DistributedCache
 from hexdag.stdlib.middleware.observable import ObservableLLM
 from hexdag.stdlib.middleware.observable_tool_router import ObservableToolRouter
 from hexdag.stdlib.middleware.rate_limiter import RateLimiter
+from hexdag.stdlib.middleware.resource_accounting import ResourceAccountingObserver
 from hexdag.stdlib.middleware.response_cache import ResponseCache
 from hexdag.stdlib.middleware.retry import RetryWithBackoff
 from hexdag.stdlib.middleware.round_robin import RoundRobin
@@ -49,12 +51,15 @@ __all__ = [
     "ObservableToolRouter",
     # User middleware (YAML-configurable)
     "BatchGeneration",
+    "CircuitBreaker",
     "DistributedCache",
     "RetryWithBackoff",
     "RateLimiter",
     "ResponseCache",
     "RoundRobin",
     "Timeout",
+    # Observer middleware
+    "ResourceAccountingObserver",
     # Utilities
     "compose",
 ]

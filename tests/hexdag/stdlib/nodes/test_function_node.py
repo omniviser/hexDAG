@@ -399,3 +399,61 @@ class TestFunctionNodeHelpers:
             "user_id": "user_data.id",
             "user_name": "user_data.name",
         }
+
+
+class TestFunctionNodeAcceptedParams:
+    """Tests for accepted_params auto-inference support."""
+
+    def test_unpack_input_sets_accepted_params(self) -> None:
+        """unpack_input=True populates accepted_params from function signature."""
+        factory = FunctionNode()
+
+        def process(order_id: str, amount: float) -> dict[str, Any]:
+            return {"ok": True}
+
+        node = factory(
+            name="test_node",
+            fn=process,
+            input_mapping={"order_id": "$input.oid", "amount": "$input.amt"},
+            unpack_input=True,
+        )
+
+        assert node.accepted_params == frozenset({"order_id", "amount"})
+
+    def test_unpack_input_kwargs_function_has_no_accepted_params(self) -> None:
+        """Functions with **kwargs get accepted_params=None (accept anything)."""
+        factory = FunctionNode()
+
+        def process(**kwargs: Any) -> dict[str, Any]:
+            return kwargs
+
+        node = factory(
+            name="test_node",
+            fn=process,
+            input_mapping={"x": "$input.x"},
+            unpack_input=True,
+        )
+
+        assert node.accepted_params is None
+
+    def test_standard_mode_no_accepted_params(self) -> None:
+        """Without unpack_input, accepted_params is not set."""
+        factory = FunctionNode()
+
+        def process(input_data: dict[str, Any]) -> dict[str, Any]:
+            return input_data
+
+        node = factory(name="test_node", fn=process)
+
+        assert node.accepted_params is None
+
+    def test_unpack_input_without_input_mapping_sets_accepted_params(self) -> None:
+        """unpack_input=True without input_mapping still sets accepted_params."""
+        factory = FunctionNode()
+
+        def process(load_id: str, rate: float) -> dict[str, Any]:
+            return {"load_id": load_id, "rate": rate}
+
+        node = factory(name="test_node", fn=process, unpack_input=True)
+
+        assert node.accepted_params == frozenset({"load_id", "rate"})

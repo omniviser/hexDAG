@@ -8,7 +8,7 @@ Two complementary sinks for ``PortCallEvent`` data:
   aggregators (Grafana, CloudWatch, ELK).
 
 Both observers listen to all ``PortCallEvent`` subtypes (``LLMPortCall``,
-``ToolRouterPortCall``, and any future port call events).
+``ToolRouterCall``, and any future port call events).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.events.events import Event, PortCallEvent
 from hexdag.kernel.ports.llm import LLMPortCall
-from hexdag.kernel.ports.tool_router import ToolRouterPortCall
+from hexdag.kernel.tool_router import ToolRouterCall
 
 if TYPE_CHECKING:
     from hexdag.kernel.ports.data_store import SupportsKeyValue
@@ -324,7 +324,7 @@ def _extract_details(event: PortCallEvent) -> dict[str, Any]:
         if event.response:
             details["response_length"] = len(event.response)
 
-    elif isinstance(event, ToolRouterPortCall):
+    elif isinstance(event, ToolRouterCall):
         if event.tool_name:
             details["tool_name"] = event.tool_name
         if event.params is not None:

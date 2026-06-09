@@ -18,6 +18,7 @@ Usage: hexdag [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ build           Build Docker containers for pipelines                        │
+│ explain         Explain hexDAG YAML fields, node types, adapters, and syntax │
 │ generate-types  Generate type stubs from YAML pipelines                      │
 │ lint            Lint YAML pipeline files for best practices                  │
 │ validate        Validate YAML pipeline files                                 │
@@ -107,6 +108,27 @@ Usage: hexdag docs [OPTIONS] COMMAND [ARGS]...
 │ serve   Serve documentation with live reload.                                │
 │ deploy  Deploy documentation to GitHub Pages.                                │
 │ new     Create a new documentation page.                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `hexdag explain`
+
+Explain hexDAG YAML fields, node types, adapters, and syntax
+
+```
+Usage: hexdag explain [OPTIONS] [RESOURCE] [NAME]
+
+ Explain hexDAG YAML fields, node types, adapters, and syntax
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   resource      [RESOURCE]  What to explain: node, adapter, middleware,      │
+│                             macro, tag, syntax, types, or a specific         │
+│                             component (e.g. 'node llm_node')                 │
+│   name          [NAME]      Component name (e.g. 'llm_node',                 │
+│                             'OpenAIAdapter')                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

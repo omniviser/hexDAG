@@ -17,7 +17,7 @@ from hexdag.kernel.orchestration.events.events import (
     SystemStarted,
 )
 from hexdag.kernel.ports.llm import LLMPortCall
-from hexdag.kernel.ports.tool_router import ToolRouterPortCall
+from hexdag.kernel.tool_router import ToolRouterCall
 
 from hexdag_plugins.langfuse.observer import LangfuseObserver
 
@@ -306,7 +306,7 @@ async def test_tool_call_creates_and_ends_span(
 
     await observer.handle(NodeStarted(name="agent", wave_index=0))
     await observer.handle(
-        ToolRouterPortCall(
+        ToolRouterCall(
             port_type="tool_router",
             method="acall_tool",
             node_name="agent",

@@ -324,62 +324,26 @@ class NodeExecutor:
             return validated_output
 
         except NodeTimeoutError:
-            # Node timed out - emit cancelled event and re-raise
             cancel_event = NodeCancelled(
                 name=node_name,
                 wave_index=wave_index,
                 reason="timeout",
             )
             await coordinator.notify_observer(observer_mgr, cancel_event)
-            set_current_node_name(None)  # Clear on timeout
-            raise  # Re-raise original timeout error
-
-        except NodeExecutionError:
-            # Already wrapped - just re-raise
-            set_current_node_name(None)  # Clear on error
+            set_current_node_name(None)
             raise
 
-        except (
-            NodeValidationError,
-            ValueError,
-            TypeError,
-            KeyError,
-            AttributeError,
-        ) as validation_err:
-            # Validation/type errors - emit failure event
-            fail_event = NodeFailed(
-                name=node_name,
-                wave_index=wave_index,
-                error=validation_err,
-            )
-            await coordinator.notify_observer(observer_mgr, fail_event)
-
-            # Wrap and propagate
-            set_current_node_name(None)  # Clear on validation error
-            raise NodeExecutionError(node_name, validation_err) from validation_err
-
-        except RuntimeError as runtime_err:
-            # Runtime execution errors
-            fail_event = NodeFailed(
-                name=node_name,
-                wave_index=wave_index,
-                error=runtime_err,
-            )
-            await coordinator.notify_observer(observer_mgr, fail_event)
-
-            set_current_node_name(None)  # Clear on runtime error
-            raise NodeExecutionError(node_name, runtime_err) from runtime_err
+        except NodeExecutionError:
+            set_current_node_name(None)
+            raise
 
         except Exception as err:
-            # Catch-all for any remaining errors (e.g. ParseError, HexDAGError
-            # subclasses) so every node error carries node name context.
             fail_event = NodeFailed(
                 name=node_name,
                 wave_index=wave_index,
                 error=err,
             )
             await coordinator.notify_observer(observer_mgr, fail_event)
-
             set_current_node_name(None)
             raise NodeExecutionError(node_name, err) from err
 

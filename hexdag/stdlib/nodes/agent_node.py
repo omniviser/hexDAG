@@ -15,8 +15,8 @@ from hexdag.kernel.logging import get_logger
 from hexdag.kernel.orchestration.prompt import PromptInput
 from hexdag.kernel.orchestration.prompt.template import PromptTemplate
 from hexdag.kernel.ports.llm import SupportsGeneration  # noqa: TC001
-from hexdag.kernel.ports.tool_router import ToolRouter
 from hexdag.kernel.protocols import to_dict
+from hexdag.kernel.tool_router import ToolRouter
 from hexdag.kernel.utils.node_timer import node_timer
 
 from .base_node_factory import BaseNodeFactory

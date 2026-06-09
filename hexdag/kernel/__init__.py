@@ -122,7 +122,7 @@ from hexdag.kernel.expression_parser import (
     compile_expression,
     evaluate_expression,
 )
-from hexdag.kernel.lib_base import HexDAGLib
+from hexdag.kernel.lib_base import HexDAGLib  # noqa: F401 — backward compat, not in __all__
 
 # ============================================================================
 # 11. Linting
@@ -380,7 +380,6 @@ __all__ = [
     "SecretField",
     "ConfigurableMacro",
     "MacroConfig",
-    "HexDAGLib",
     "Service",
     "tool",
     "step",

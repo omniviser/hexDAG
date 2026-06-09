@@ -89,8 +89,8 @@ class TestDiscoverAdapterAliases:
         assert resolve("MockLLM") is MockLLM
 
     def test_resolve_tool_router_by_alias(self) -> None:
-        from hexdag.kernel.ports.tool_router import ToolRouter
         from hexdag.kernel.resolver import resolve
+        from hexdag.kernel.tool_router import ToolRouter
 
         assert resolve("tool_router") is ToolRouter
 

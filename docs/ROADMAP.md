@@ -6,7 +6,7 @@ For the current architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## Architecture: Three Layers
+## Architecture: Core + Brain
 
 ```
 hexdag (core)           pip install hexdag
@@ -23,36 +23,27 @@ hexdag-brain            pip install hexdag-brain
 ├── runtime api/        — execution, systems, processes, logs
 ├── mcp_server.py       — runtime MCP: run pipeline, transition entity, process management
 └── sdk                 — HexDAGBrain class for programmatic agent control
-
-hexdag-forge            pip install hexdag-forge
-├── generator/          — code generation from business profiles (pipelines, services, Django)
-├── runtime/            — Django entity store, domain-specific adapters
-├── mcp/                — forge-specific MCP: generate, migrate, implement stubs
-└── cli.py              — hexdag-forge generate, validate, run
 ```
 
-**Dependency chain:** `hexdag-forge → hexdag-brain → hexdag`
+**Dependency:** `hexdag-brain → hexdag`
 
 ### What Each Layer Owns
 
-| Concern | hexdag (core) | hexdag-brain | hexdag-forge |
-|---|---|---|---|
-| Compile YAML to DAG | x | | |
-| Execute pipelines (PipelineRunner) | x | | |
-| Port contracts + middleware | x | | |
-| System, LifecycleRunner | x | | |
-| Component discovery (MCP) | x | | |
-| Build-time MCP (validate, edit, explain, docs) | x | | |
-| Pipeline YAML manipulation | x | | |
-| Documentation generation | x | | |
-| Runtime MCP (run, transition, process mgmt) | | x | |
-| Run process / transition entity (api) | | x | |
-| Process management (spawn, schedule, list) | | x | |
-| Log querying | | x | |
-| HexDAGBrain SDK class | | x | |
-| Code generation from prompts | | | x |
-| Django models / migrations | | | x |
-| Domain-specific MCP tools | | | x |
+| Concern | hexdag (core) | hexdag-brain |
+|---|---|---|
+| Compile YAML to DAG | x | |
+| Execute pipelines (PipelineRunner) | x | |
+| Port contracts + middleware | x | |
+| System, LifecycleRunner | x | |
+| Component discovery (MCP) | x | |
+| Build-time MCP (validate, edit, explain, docs) | x | |
+| Pipeline YAML manipulation | x | |
+| Documentation generation | x | |
+| Runtime MCP (run, transition, process mgmt) | | x |
+| Run process / transition entity (api) | | x |
+| Process management (spawn, schedule, list) | | x |
+| Log querying | | x |
+| HexDAGBrain SDK class | | x |
 
 ---
 
@@ -115,28 +106,27 @@ hexdag-forge            pip install hexdag-forge
 ## Next: v1.0 Release (core)
 
 ### Remaining Middleware
-- [ ] **CircuitBreaker** -- failure threshold -> open/half-open/closed, prevents cascade failures
+- [x] **CircuitBreaker** -- failure threshold -> open/half-open/closed, prevents cascade failures
 
 ### Resource Accounting
-- [ ] **ResourceAccounting** (`kernel/domain/resource_accounting.py`) -- `ResourceUsage` model, reads from `PortCallStoreObserver`. Events: `ResourceWarning`, `ResourceLimitExceeded`
-- [ ] **ResourceAccounting middleware** -- enforces per-pipeline limits
+- [x] **ResourceAccounting** (`kernel/domain/resource_accounting.py`) -- `ResourceUsage` model, `ResourceLimits`, `LimitCheck`. Events: `ResourceWarning`, `ResourceLimitExceeded`
+- [x] **ResourceAccounting observer** (`stdlib/middleware/resource_accounting.py`) -- `ResourceAccountingObserver` enforces per-pipeline limits with warning/exceeded events
 
 ### Mental Model & Docs
-- [ ] **"How to Build" mental model** -- decision tree in README (Pipeline vs System, which node type, which port). Clear path from business problem to running YAML.
-- [ ] **Simplify GUIDE.md** -- remove architecture sections (already in ARCHITECTURE.md) and node reference (auto-generated). GUIDE becomes a practical builder's guide: YAML syntax, data flow, services, entity lifecycle. Add mental model at top.
-- [ ] **Drop VAS from core MCP** -- replace `vas_read`/`vas_list`/`vas_stat` with direct typed tools from `api/components.py`. Prerequisite for brain extraction.
+- [x] **"How to Build" mental model** -- decision tree in README (Pipeline vs System, which node type, which port). Clear path from business problem to running YAML.
+- [x] **Simplify GUIDE.md** -- remove architecture sections (already in ARCHITECTURE.md) and node reference (auto-generated). GUIDE becomes a practical builder's guide: YAML syntax, data flow, services, entity lifecycle. Add mental model at top.
+- [x] **Drop VAS from core MCP** -- replaced `vas_read`/`vas_list`/`vas_stat` with direct typed tools (`list_nodes`, `list_adapters`, `list_tools`, `list_macros`, `list_tags`, `get_component_schema`). Removed execution tools (brain territory).
 
 ### Developer Experience
-- [ ] **`hexdag explain`** -- CLI command (like `kubectl explain`) for YAML field docs
+- [x] **`hexdag explain`** -- CLI command (like `kubectl explain`) for YAML field docs
 - [x] **JSON Schema export** -- per-kind schemas in `schemas/` + `hexdag generate-types` CLI
-- [ ] **Graph optimizer passes** -- dead-node elimination, constant-folding
 
 ### Cleanup
-- [ ] **Fix stale completed items** -- Scheduler, DatabaseTools, CheckpointNode were deleted but still referenced in docs
-- [ ] **Unified error handling** -- collapse duplicated `except` blocks in `node_executor.py`
+- [x] **Fix stale completed items** -- Scheduler, DatabaseTools, CheckpointNode references cleaned up
+- [x] **Unified error handling** -- collapsed 3 duplicated `except` blocks into 1 in `node_executor.py`
 
 ### Release
-- [ ] **API freeze** -- backward compatibility commitment
+- [x] **API freeze** -- backward compatibility commitment. See [PUBLIC_API.md](PUBLIC_API.md)
 - [ ] **PyPI publication** -- `pip install hexdag` with semantic versioning
 
 ---
@@ -202,8 +192,9 @@ Before brain extraction, replace the 3 VAS MCP tools (`vas_read`, `vas_list`, `v
 
 ---
 
-## After v1.0: Entity Lifecycle v1.1 (core)
+## After v1.0: v1.1 (core)
 
+- [ ] **Graph optimizer passes** -- dead-node elimination, constant-folding
 - [ ] **Pipeline memory expressions** -- `memory(key, default)` read + `memory_set(key, value)` in expressions
 - [ ] **Saga compensation** -- pipeline-level `on_failure.compensate`
 - [ ] **Lifecycle gating** -- `on_exit` pipelines per state + `await_pipeline: true`
@@ -218,7 +209,7 @@ Items not planned for the foreseeable future. Existing code remains but receives
 |---|---|
 | **VAS / VFS** (entire abstraction) | Filesystem abstraction for things that aren't files. Component discovery is `resolver.get_builtin_aliases()`. Process state is `process_registry.get_run()`. VAS adds indirection for no benefit. Existing code (`drivers/vfs/`, `kernel/ports/vfs.py`, `api/vfs.py`, `stdlib/lib/vfs_tools.py`, VFS providers) stays in the codebase but is not used by MCP and receives no investment. Core MCP uses direct typed tools instead. |
 | **CapSet enforcement / YAML security** | `CapSet` domain model exists. Enforcement is a platform concern — host apps control access. |
-| **Daemon host modes** (schedule, continuous, event) | hexdag-forge territory. Core is a library, not a process supervisor. |
+| **Daemon host modes** (schedule, continuous, event) | Core is a library, not a process supervisor. Host apps own scheduling and supervision. |
 | **EventBus port** | App-level concern. Users integrate their own message bus. |
 | **GovernancePort** | Authorization/audit belongs in the host application. |
 | **CostTracker middleware** | External observability (Langfuse, OpenTelemetry) via observer pattern. Not framework-internal. |

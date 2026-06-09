@@ -122,6 +122,12 @@ class FunctionNode(BaseNodeFactory, yaml_alias="function_node"):
             name, resolved_fn, input_model, output_model, unpack_input=unpack_input
         )
 
+        # When unpack_input is set, expose the target function's parameter
+        # names so the orchestrator can auto-infer values from upstream dicts.
+        accepted_params: frozenset[str] | None = None
+        if unpack_input:
+            accepted_params = self._extract_accepted_params(resolved_fn)
+
         # Extract framework-level parameters from kwargs
         framework = self.extract_framework_params(kwargs)
 
@@ -132,6 +138,7 @@ class FunctionNode(BaseNodeFactory, yaml_alias="function_node"):
             out_model=output_model,
             deps=frozenset(deps or []),
             params=kwargs,
+            accepted_params=accepted_params,
             timeout=framework["timeout"],
             max_retries=framework["max_retries"],
             when=framework["when"],
@@ -387,6 +394,22 @@ class FunctionNode(BaseNodeFactory, yaml_alias="function_node"):
         except (TypeError, AttributeError, ValueError):
             # If type hints are malformed or unavailable, skip inference
             return None, None
+
+    @staticmethod
+    def _extract_accepted_params(fn: Callable[..., Any]) -> frozenset[str] | None:
+        """Extract parameter names the target function accepts.
+
+        Returns None if the function uses ``**kwargs`` (accepts anything).
+        Excludes ``self`` and ``VAR_KEYWORD`` parameters.
+        """
+        sig = inspect.signature(fn)
+        if any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values()):
+            return None
+        return frozenset(
+            n
+            for n, p in sig.parameters.items()
+            if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+        )
 
     @staticmethod
     def create_passthrough_mapping(fields: list[str]) -> dict[str, str]:

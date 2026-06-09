@@ -26,7 +26,6 @@ from hexdag.kernel import (
     PipelineRunner,
     PromptTemplate,
     System,
-    ToolRouter,
 )
 from hexdag.kernel.domain.pipeline_result import PipelineResult
 from hexdag.stdlib.nodes import (
@@ -112,6 +111,10 @@ def __getattr__(name: str) -> Any:
         from hexdag.stdlib.adapters.mock import MockHttpClient as _MockHttpClient
 
         return _MockHttpClient
+    if name == "InMemoryMemory":
+        from hexdag.stdlib.adapters.memory import InMemoryMemory as _InMemoryMemory
+
+        return _InMemoryMemory
     if name == "HttpClientDriver":
         from hexdag.drivers.http_client import HttpClientDriver as _HttpClientDriver
 
@@ -136,9 +139,7 @@ __all__ = [
     # Port Interfaces
     "LLM",
     "APICall",
-    "ToolRouter",
     "Database",
-    "DatabasePort",
     # Drivers
     "HttpClientDriver",
     # Testing and Development Adapters

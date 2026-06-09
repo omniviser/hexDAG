@@ -293,7 +293,7 @@ All concepts are tightly integrated via Events, Services, and the kernel executi
   <rect class="box" x="630" y="440" width="258" height="52" fill="#fff" stroke="#656d76" stroke-width="1.5"/>
   <text class="label" x="759" y="458" font-size="11" font-weight="600" fill="#656d76" text-anchor="middle">Services (wrap ports)</text>
   <text class="note" x="759" y="472" text-anchor="middle">@tool = agent-callable &middot; @step = DAG node</text>
-  <text class="note" x="759" y="486" text-anchor="middle">ProcessRegistry &middot; EntityState &middot; Scheduler &middot; Memory</text>
+  <text class="note" x="759" y="486" text-anchor="middle">ProcessRegistry &middot; EntityState &middot; PipelineMemory</text>
 </a>
 
 <!-- Entity lifecycle -->

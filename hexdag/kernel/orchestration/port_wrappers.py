@@ -26,7 +26,7 @@ from typing import Any
 
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.ports.llm import SupportsGeneration
-from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.kernel.tool_router import ToolRouter
 
 logger = get_logger(__name__)
 

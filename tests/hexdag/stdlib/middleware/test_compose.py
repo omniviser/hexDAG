@@ -8,7 +8,7 @@ from hexdag.kernel.ports.llm import (
     SupportsGeneration,
     SupportsStructuredOutput,
 )
-from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.kernel.tool_router import ToolRouter
 from hexdag.stdlib.adapters.mock import MockLLM
 from hexdag.stdlib.middleware.observable import ObservableLLM
 from hexdag.stdlib.middleware.structured_output import StructuredOutputFallback

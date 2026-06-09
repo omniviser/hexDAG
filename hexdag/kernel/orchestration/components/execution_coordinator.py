@@ -212,9 +212,17 @@ class ExecutionCoordinator:
                 strict=strict,
             )
 
+        # Auto-infer: when the node declares accepted_params (from target fn
+        # signature), search upstream result dicts for matching parameter names.
+        # This supersedes the in_model auto-wire below (handles multi-dep and
+        # nested dict search).
+        if not input_mapping and node_spec.accepted_params and isinstance(base_input, dict):
+            base_input = self._auto_infer_params(
+                base_input, node_spec.accepted_params, node_spec.name, initial_input
+            )
         # Auto-wire: when a single-dep node has in_model and no explicit input_mapping,
         # extract only the fields whose names match the in_model from the upstream dict.
-        if (
+        elif (
             not input_mapping
             and node_spec.in_model
             and len(node_spec.deps) == 1
@@ -226,6 +234,58 @@ class ExecutionCoordinator:
                 base_input = {k: base_input[k] for k in matching}
 
         return base_input
+
+    def _auto_infer_params(
+        self,
+        input_data: dict[str, Any],
+        accepted: frozenset[str],
+        node_name: str,
+        initial_input: Any = None,
+    ) -> dict[str, Any]:
+        """Match target function parameters against upstream node outputs.
+
+        When the additive input dict is ``{node_name: result_dict, ...}``,
+        searches those result dicts for keys matching *accepted* parameter
+        names.  If a param is found in exactly one upstream source it is
+        auto-mapped; ambiguous matches (same key in multiple sources) are
+        skipped with a debug log.
+
+        Pipeline ``initial_input`` is included in the search (as the
+        ``"input"`` source) so that function params can also match fields
+        from the pipeline's entry data.
+
+        Top-level keys already matching accepted params take priority.
+        """
+        # Build search space: input_data + pipeline initial_input
+        search = dict(input_data)
+        if isinstance(initial_input, dict) and "input" not in search:
+            search["input"] = initial_input
+
+        # Start with top-level matches
+        result = {k: v for k, v in search.items() if k in accepted}
+        missing = accepted - result.keys()
+        if not missing:
+            return result
+
+        for param in missing:
+            sources: list[tuple[str, Any]] = []
+            for key, value in search.items():
+                if isinstance(value, dict) and param in value:
+                    sources.append((key, value[param]))
+
+            if len(sources) == 1:
+                result[param] = sources[0][1]
+            elif len(sources) > 1:
+                source_names = [s[0] for s in sources]
+                logger.debug(
+                    "Auto-infer: param '{}' for node '{}' found in multiple "
+                    "upstream sources: {}. Skipping (use explicit input_mapping).",
+                    param,
+                    node_name,
+                    source_names,
+                )
+
+        return result
 
     def _is_expression(self, source: str) -> bool:
         """Check if a source string is an expression (contains function calls or operators).

@@ -8,7 +8,7 @@ import pytest
 
 from hexdag.kernel.domain.agent_tools import CHANGE_PHASE, TOOL_END, change_phase, tool_end
 from hexdag.kernel.exceptions import ResourceNotFoundError, TypeMismatchError
-from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.kernel.tool_router import ToolRouter
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

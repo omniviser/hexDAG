@@ -225,7 +225,7 @@ class TestBuildToolInstructions:
 
     def test_no_tools_returns_no_tools_message(self) -> None:
         """Empty tool router produces no-tools message."""
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
 
         router = ToolRouter(tools={})
         result = self.node._build_tool_instructions(router, AgentConfig())
@@ -233,7 +233,7 @@ class TestBuildToolInstructions:
 
     def test_includes_tool_names_and_params(self) -> None:
         """Tool instructions include tool name and parameter names."""
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
 
         def my_tool(query: str, limit: int = 10) -> str:
             """Search for items."""
@@ -248,7 +248,7 @@ class TestBuildToolInstructions:
 
     def test_caches_after_first_call(self) -> None:
         """Second call returns cached result."""
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
 
         def dummy(x: str) -> str:
             """A tool."""
@@ -415,7 +415,7 @@ class TestEnhancePromptWithTools:
 
     def test_enhances_with_tool_router(self) -> None:
         """With tool router, prompt is enhanced with instructions."""
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
 
         def dummy_tool(x: str) -> str:
             """A dummy tool."""

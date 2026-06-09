@@ -4,53 +4,30 @@
 >
 > Designed to be read by developers joining the team and by AI agents exploring the codebase.
 
-**Related docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (design philosophy) · [ROADMAP.md](ROADMAP.md) (strategic direction) · [Quick Start](getting-started/quickstart.md) (first pipeline)
+**Related docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (design philosophy, layers, compiler, orchestrator internals) · [PUBLIC_API.md](PUBLIC_API.md) (all public symbols, version policy, import paths) · [ROADMAP.md](ROADMAP.md) (strategic direction) · [Quick Start](getting-started/quickstart.md) (first pipeline)
 
 ---
 
 ## Table of Contents
 
-1. [What hexDAG Is](#1-what-hexdag-is) — Operations and knowledge as code
-2. [The Integration Model](#2-the-integration-model) — How all concepts work together
-3. [The Layer Model](#3-the-layer-model) — Kernel, compiler, stdlib, drivers
-4. [How a Pipeline Runs](#4-how-a-pipeline-runs-end-to-end) — End-to-end execution flow
-5. [YAML Syntax](#5-yaml-syntax-the-4-special-syntaxes) — The 4 special syntaxes
-6. [The Uniform Entity Pattern](#6-the-uniform-entity-pattern) — Nodes, adapters, macros, services
-7. [Ports, Adapters, and Middleware](#7-ports-adapters-and-middleware) — Contracts and implementations
-8. [Node Types](#8-node-types) — Processing steps in the DAG
-9. [Data Flow Between Nodes](#9-data-flow-between-nodes) — input_mapping, expressions, templates
-10. [Services](#10-services) — @tool and @step decorators
-11. [Macros vs Nodes](#11-macros-vs-nodes) — Single step vs template expansion
-12. [Entity Lifecycle](#12-entity-lifecycle-state-machines) — State machines for business objects
-13. [The Compiler](#13-the-compiler-in-detail) — YAML to kernel objects
-14. [The Orchestrator](#14-the-orchestrator-in-detail) — Wave-based execution engine
-15. [File Index](#15-file-index-where-to-find-things) — Where to find things
+1. [How Everything Connects](#1-how-everything-connects) — Integration model
+2. [How a Pipeline Runs](#2-how-a-pipeline-runs) — End-to-end execution flow
+3. [YAML Syntax](#3-yaml-syntax) — The 4 special syntaxes
+4. [Ports, Adapters, and Middleware](#4-ports-adapters-and-middleware) — Contracts and implementations
+5. [Data Flow Between Nodes](#5-data-flow-between-nodes) — input_mapping, expressions, templates
+6. [Services](#6-services) — @tool and @step decorators
+7. [Macros vs Nodes](#7-macros-vs-nodes) — Single step vs template expansion
+8. [Composite Nodes](#8-composite-nodes-control-flow) — if/else, while, for-each, switch
+9. [Entity Lifecycle](#9-entity-lifecycle) — State machines for business objects
+10. [Suspension & Resume](#10-suspension--resume) — Human-in-the-loop, external events
+
+For architecture internals (layers, compiler phases, orchestrator, file index), see [ARCHITECTURE.md](ARCHITECTURE.md).
+For all public symbols and import paths, see [PUBLIC_API.md](PUBLIC_API.md).
+For node/adapter/port reference, see the auto-generated [Reference docs](reference/nodes.md).
 
 ---
 
-## 1. What hexDAG Is
-
-hexDAG enables **operations and knowledge as code** — companies encode how they operate (workflows, decisions, agent strategies, process rules) and what they know (entity states, business rules, transition logic, memory) into executable, version-controlled code.
-
-### Operations as Code
-
-- **Processes** — workflows defined in YAML, compiled into DAGs, executed with concurrency
-- **Agents** — autonomous reasoning strategies (ReAct, conversation, planner)
-- **Scheduling** — delayed and recurring execution (`cron` for operations)
-- **System orchestration** — multi-pipeline coordination, lifecycle management
-
-### Knowledge as Code
-
-- **Entities** — business objects with states, transitions, and enforcement rules
-- **Memory** — per-run state, conversation history, shared context
-- **Expressions** — business rules encoded as safe evaluable logic
-- **Configuration** — environment management, secrets, capability narrowing
-
-> For the OS-inspired directory mapping, see [Architecture](ARCHITECTURE.md#the-os-analogy).
-
----
-
-## 2. The Integration Model
+## 1. How Everything Connects
 
 These concepts aren't independent modules — they're ONE tightly integrated system. A real company operation flows through all of them:
 
@@ -62,69 +39,29 @@ These concepts aren't independent modules — they're ONE tightly integrated sys
 5. Event triggers a fulfillment pipeline                        → PROCESSES
 6. Pipeline uses memory to carry order context between nodes    → MEMORY
 7. Expressions encode: "if total > 1000, require_approval"      → EXPRESSIONS
-8. Capabilities restrict which agents can transition what       → SECURITY
-9. Observers track everything for audit trail                   → OBSERVABILITY
-10. Fulfillment completes → entity transitions to "shipped"     → ENTITIES
-11. "shipped" triggers notification pipeline                    → PROCESSES
+8. Observers track everything for audit trail                   → OBSERVABILITY
+9. Fulfillment completes → entity transitions to "shipped"      → ENTITIES
+10. "shipped" triggers notification pipeline                    → PROCESSES
 ```
 
 ### The Connective Tissue
 
-- **Events** are the glue — an entity transition emits an event that a scheduler responds to
+- **Events** are the glue — an entity transition emits an event that triggers pipelines
 - **Services (@tool/@step)** are the unified interface — agents interact with entities, memory, and processes through the same mechanism
-- **Capabilities (CapSet)** are the security model — they scope what each agent/process can do
-- **VAS** is the introspection layer — agents inspect the system through a uniform path-based namespace (`/proc/`, `/lib/`, `/sys/`)
+- **Expressions** encode business rules inline in YAML — no Python needed for simple logic
 
 ---
 
-## 3. The Layer Model
+## 2. How a Pipeline Runs
 
-hexDAG has 6 layers. Data flows top to bottom. Ports sit alongside because every layer can reach them.
-
-```
-┌─────────────────────────────────────────┐
-│  CLI & API                              │  User-facing surface
-│  hexdag validate · hexdag run · API     │  hexdag/cli/, hexdag/api/
-└────────────────────┬────────────────────┘
-                     │ calls
-┌────────────────────▼────────────────────┐
-│  Compiler                               │  YAML → kernel objects
-│  YamlPipelineBuilder · Validator        │  hexdag/compiler/
-│  Resolver · ReferenceResolver           │
-└────────────────────┬────────────────────┘
-                     │ outputs: DirectedGraph + PipelineConfig
-┌────────────────────▼────────────────────┐    ┌─────────────────────┐
-│  Kernel                                 │    │  Ports & Adapters   │
-│  Orchestrator · PipelineRunner          │◄──►│  LLM · DataStore    │
-│  DirectedGraph · NodeSpec               │    │  Database · Memory   │
-│  Events · ExecutionContext              │    │  + Middleware        │
-└────────────────────┬────────────────────┘    │  + Services         │
-                     │ uses                     └─────────────────────┘
-┌────────────────────▼────────────────────┐
-│  Standard Library                       │  Built-in components
-│  Nodes · Adapters · Macros · Middleware  │  hexdag/stdlib/
-└────────────────────┬────────────────────┘
-                     │ backed by
-┌────────────────────▼────────────────────┐
-│  Drivers                                │  Infrastructure
-│  LocalExecutor · ObserverManager · VFS  │  hexdag/drivers/
-└─────────────────────────────────────────┘
-```
-
-**Key insight:** The Kernel never imports from Stdlib. Stdlib implements contracts defined by the Kernel. This is the hexagonal architecture — business logic and infrastructure are cleanly separated.
-
----
-
-## 4. How a Pipeline Runs (End to End)
-
-This is the journey from a YAML file to execution results:
+The journey from a YAML file to execution results:
 
 ```
 1. You write a YAML file (kind: Pipeline)
                 │
 2. PipelineRunner receives it
                 │
-3. Compiler: YamlPipelineBuilder processes YAML
+3. Compiler processes YAML
    ├── Phase 1: Parse YAML, resolve !include tags
    ├── Phase 2: Select environment (dev/staging/prod)
    ├── Phase 3: Validate schema, types, detect cycles
@@ -137,37 +74,31 @@ This is the journey from a YAML file to execution results:
                 │
 6. Orchestrator walks the DAG:
    ├── Compute waves (groups of nodes with no mutual dependencies)
-   ├── For each wave:
-   │   ├── Run all nodes in the wave concurrently (asyncio.gather)
-   │   ├── For each node:
-   │   │   ├── Check `when` condition (skip if false)
-   │   │   ├── Prepare inputs (upstream results + input_mapping)
-   │   │   ├── Validate input against Pydantic schema
-   │   │   ├── Execute async function (with timeout)
-   │   │   ├── Validate output against Pydantic schema
-   │   │   └── On failure: retry with exponential backoff
-   │   └── Emit events: NodeStarted → NodeCompleted/NodeFailed
-   └── Emit: WaveCompleted → PipelineCompleted
+   ├── For each wave: run all nodes concurrently (asyncio.gather)
+   │   ├── Check `when` condition (skip if false)
+   │   ├── Prepare inputs (upstream results + input_mapping)
+   │   ├── Execute async function (with timeout)
+   │   └── On failure: retry with exponential backoff or route to error handler
+   └── Emit events: NodeStarted → NodeCompleted/NodeFailed → PipelineCompleted
                 │
 7. Results: dict of {node_name: output} for every node
 ```
 
 **In Python:**
 ```python
-from hexdag.kernel.pipeline_runner import PipelineRunner
+from hexdag import PipelineRunner, MockLLM
 
 runner = PipelineRunner(port_overrides={"llm": MockLLM()})
 results = await runner.run("my_pipeline.yaml", input_data={"query": "hello"})
-# results == {"analyzer": {"result": "..."}, "summarizer": {"summary": "..."}}
 ```
+
+For compiler and orchestrator internals, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## 5. YAML Syntax — The 4 Special Syntaxes
+## 3. YAML Syntax
 
 hexDAG YAML has 4 special syntaxes. They look similar but do different things at different times. This is the most common source of confusion.
-
-### Overview
 
 | Syntax | Purpose | When | Example |
 |--------|---------|------|---------|
@@ -181,7 +112,6 @@ hexDAG YAML has 4 special syntaxes. They look similar but do different things at
 Merges another YAML file inline. Processed first, before anything else.
 
 ```yaml
-# main.yaml
 spec:
   ports:
     "!include": shared/ports.yaml              # entire file merged here
@@ -189,13 +119,7 @@ spec:
     - "!include": nodes/analysis.yaml#nodes    # specific anchor
 ```
 
-- Supports `!include path.yaml#anchor` to pick a section
-- Circular references detected and blocked
-- Located in: [`hexdag/compiler/preprocessing/include.py`](../hexdag/compiler/preprocessing/include.py)
-
 ### `${VAR}` — Environment Variables
-
-Substitutes environment variable values at build time.
 
 ```yaml
 spec:
@@ -206,13 +130,9 @@ spec:
         base_url: ${LLM_BASE_URL}     # resolved at build time
 ```
 
-- Secret-pattern names (`*_API_KEY`, `*_SECRET`) are **deferred** to runtime
-- Other variables resolved immediately during preprocessing
-- Located in: [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) (EnvironmentVariablePlugin)
+Secret-pattern names (`*_API_KEY`, `*_SECRET`) are **deferred** to runtime. Others resolved immediately.
 
 ### `{{ expr }}` — Jinja2 Templates
-
-Renders data into text. Timing depends on where it appears:
 
 ```yaml
 metadata:
@@ -225,13 +145,9 @@ spec:
         prompt: "Analyze {{ analyzer.result }}"   # RUNTIME (node spec)
 ```
 
-- **Build-time:** metadata, top-level fields — uses build-time variables
-- **Runtime:** anything inside node `spec:` — uses actual upstream node outputs
-- Located in: [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) (TemplatePlugin) and [`hexdag/kernel/orchestration/prompt/`](../hexdag/kernel/orchestration/prompt/)
-
 ### `node.field` — Value Extraction
 
-Extracts a value from an upstream node's output. **Not a template** — this is direct object access.
+Extracts the actual Python object (not a string). Used in `input_mapping`, `expressions`, `when` conditions.
 
 ```yaml
 spec:
@@ -239,16 +155,8 @@ spec:
     data: "analyzer.result"         # passes the actual Python object
     query: "$input.user_query"      # from pipeline input
   expressions:
-    total: "analyzer.count * 2"     # used in expression evaluation
-    ok: "analyzer.status == 'done'" # boolean expression
+    total: "analyzer.count * 2"     # expression evaluation
 ```
-
-- Used in: `input_mapping` values, `expressions`, `when` conditions
-- `$input.field` reads from pipeline input
-- `$ctx.run_id` reads execution context
-- `state.counter` reads loop iteration state
-- `memory('key')` reads PipelineMemory
-- Located in: [`hexdag/compiler/reference_resolver.py`](../hexdag/compiler/reference_resolver.py), [`hexdag/kernel/expression_parser.py`](../hexdag/kernel/expression_parser.py)
 
 ### The Critical Difference
 
@@ -261,58 +169,9 @@ input_mapping:
   data: "analyzer.result"
 ```
 
-These look similar but are completely different operations. Templates produce strings. Extraction passes the raw Python object.
-
 ---
 
-## 6. The Uniform Entity Pattern
-
-Nodes, adapters, macros, and services are all "entities." They follow the same pattern:
-
-1. **Kernel defines a base class** (the contract)
-2. **Stdlib ships built-in implementations**
-3. **Users write their own** by subclassing the same base
-4. **YAML references by alias** or full module path
-5. **Resolver maps alias to class** at build time
-
-| Entity | Base Class | Registers Via | Produces | YAML Reference |
-|--------|-----------|---------------|----------|----------------|
-| **Node** | `BaseNodeFactory` | `yaml_alias="llm_node"` | 1 NodeSpec (single step) | `kind: llm_node` |
-| **Adapter** | `HexDAGAdapter` | `yaml_alias` + `port` | Port implementation | `adapter: openai` |
-| **Macro** | `ConfigurableMacro` | `yaml_alias` or YAML `kind: Macro` | Sub-graph (N nodes) | `kind: macro_name` |
-| **Service** | `Service` | Full module path (no alias) | @tool and @step methods | `class: myapp.OrderService` |
-
-### How Registration Works
-
-All entities use `__init_subclass__` to auto-register:
-
-```python
-# When you write this...
-class MyNode(BaseNodeFactory, yaml_alias="my_node"):
-    def __call__(self, name, **kwargs):
-        return NodeSpec(name=name, fn=my_async_fn)
-
-# ...it auto-registers "my_node" → MyNode in the alias registry.
-# Now YAML can say: kind: my_node
-```
-
-### How Resolution Works
-
-The Resolver ([`hexdag/kernel/resolver.py`](../hexdag/kernel/resolver.py)) checks in order:
-
-1. Runtime components (YAML-defined macros)
-2. User-registered aliases
-3. Built-in aliases (auto-discovered from stdlib at bootstrap)
-4. `ConfigurableMacro` registry
-5. Full module path fallback (`myapp.nodes.MyNode`)
-
-Located in: [`hexdag/kernel/resolver.py`](../hexdag/kernel/resolver.py), [`hexdag/kernel/_alias_registry.py`](../hexdag/kernel/_alias_registry.py)
-
----
-
-## 7. Ports, Adapters, and Middleware
-
-### The Relationship
+## 4. Ports, Adapters, and Middleware
 
 **Port** = abstract contract. "I need something that can generate text."
 **Supports*** = fine-grained capability. "Can it also call tools?"
@@ -323,56 +182,24 @@ Located in: [`hexdag/kernel/resolver.py`](../hexdag/kernel/resolver.py), [`hexda
 Node ──requires──► Port (contract)
                      ▲
                      │ implements
-                     │
                   Adapter (OpenAI / Anthropic / Mock)
                      ▲
                      │ wraps
-                     │
                   Middleware (Retry → Timeout → Cache)
 ```
 
 ### Ports and Supports* Protocols
 
-Each port is split into fine-grained `Supports*` sub-protocols:
+| Port | Key sub-protocols |
+|------|-------------------|
+| **LLM** | `SupportsGeneration`, `SupportsFunctionCalling`, `SupportsStructuredOutput`, `SupportsVision`, `SupportsEmbedding` |
+| **DataStore** | `SupportsKeyValue`, `SupportsQuery`, `SupportsTTL`, `SupportsTransactions` |
+| **Database** | `SupportsQuery`, `SupportsRawSQL`, `SupportsTransactions`, `SupportsSchema` |
+| **Other** | APICall, FileStorage, SecretStore, Executor, PipelineSpawner, ObserverManager |
 
-| Port | Sub-protocols | Located in |
-|------|---------------|-----------|
-| **LLM** | `SupportsGeneration`, `SupportsFunctionCalling`, `SupportsEmbedding`, `SupportsVision`, `SupportsStructuredOutput`, `SupportsUsageTracking` | [`kernel/ports/llm.py`](../hexdag/kernel/ports/llm.py) |
-| **DataStore** | `SupportsKeyValue`, `SupportsQuery`, `SupportsTTL`, `SupportsTransactions`, `SupportsCollectionStorage` | [`kernel/ports/data_store.py`](../hexdag/kernel/ports/data_store.py) |
-| **Database** | `SupportsQuery`, `SupportsRawSQL`, `SupportsTransactions`, `SupportsSchema`, `SupportsStreamingQuery` | [`kernel/ports/database.py`](../hexdag/kernel/ports/database.py) |
-| **Memory** | `aappend`, `aget`, `aclear` | [`kernel/ports/memory.py`](../hexdag/kernel/ports/memory.py) |
-| **Other** | APICall, FileStorage, SecretStore, ToolRouter, Executor, VFS, PipelineSpawner, ObserverManager, VectorSearch | `kernel/ports/` |
+**Naming:** "What kind of port?" → plain noun (`LLM`, `DataStore`). "Can this adapter do X?" → `Supports*`.
 
-**Naming convention:**
-- Plain noun = port type: `LLM`, `DataStore`, `Database`
-- `Supports*` = capability check: `SupportsGeneration`, `SupportsKeyValue`
-- Rule of thumb: "What kind of port?" → plain noun. "Can this adapter do X?" → `Supports*`
-
-### How Nodes Declare Port Needs
-
-```python
-class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
-    _hexdag_port_capabilities: ClassVar[dict[str, list[type]]] = {
-        "llm": [SupportsGeneration, SupportsFunctionCalling]
-    }
-```
-
-The orchestrator validates at startup that the configured adapter implements all required `Supports*` protocols. If OpenAI provides `SupportsGeneration + SupportsFunctionCalling` but your node needs `SupportsEmbedding`, you get a clear error.
-
-### Built-in Adapters
-
-| Adapter | Port | Capabilities | Located in |
-|---------|------|-------------|-----------|
-| `OpenAILLM` | LLM | Generation, FunctionCalling, Vision, Embedding, StructuredOutput | [`stdlib/adapters/openai/`](../hexdag/stdlib/adapters/openai/) |
-| `AnthropicLLM` | LLM | Generation, FunctionCalling, Vision | [`stdlib/adapters/anthropic/`](../hexdag/stdlib/adapters/anthropic/) |
-| `MockLLM` | LLM | Generation (predefined responses) | [`stdlib/adapters/mock/`](../hexdag/stdlib/adapters/mock/) |
-| `PostgresAdapter` | Database | Query, Transactions, Schema | [`stdlib/adapters/database/`](../hexdag/stdlib/adapters/database/) |
-| `SQLiteAdapter` | Database | Query, Schema | [`stdlib/adapters/database/`](../hexdag/stdlib/adapters/database/) |
-| `InMemoryMemory` | Memory | Full protocol | [`stdlib/adapters/memory/`](../hexdag/stdlib/adapters/memory/) |
-| `RedisMemory` | Memory | Full protocol | [`stdlib/adapters/redis/`](../hexdag/stdlib/adapters/redis/) |
-| `MockDatabaseAdapter` | Database | In-memory | [`stdlib/adapters/mock/`](../hexdag/stdlib/adapters/mock/) |
-
-### Port Override Levels (3 tiers)
+### Port Override Levels
 
 ```yaml
 spec:
@@ -398,138 +225,54 @@ spec:
 
 ### Middleware
 
-Middleware wraps adapters transparently. Nodes don't know middleware exists.
+Declared per-port in YAML. Nodes don't know middleware exists.
 
 ```yaml
-# In pipeline config (planned: spec.ports.llm.middleware)
-# Currently configured in Python:
-from hexdag.stdlib.middleware import compose, RetryMiddleware, TimeoutMiddleware
+spec:
+  ports:
+    llm:
+      adapter: openai
+      middleware:
+        - hexdag.stdlib.middleware.RetryWithBackoff:
+            max_retries: 3
+        - hexdag.stdlib.middleware.Timeout:
+            timeout_seconds: 30
+```
+
+Available: `RetryWithBackoff`, `RateLimiter`, `ResponseCache`, `Timeout`, `RoundRobin`, `CircuitBreaker`, `BatchGeneration`, `DistributedCache`.
+
+**Python equivalent** — use `compose()` to stack middleware programmatically:
+
+```python
+from hexdag.stdlib.middleware import compose, ResponseCache, RetryWithBackoff, Timeout
+from hexdag import MockLLM
 
 llm = compose(
-    RetryMiddleware(max_retries=3),
-    TimeoutMiddleware(timeout=30),
-)(OpenAILLM(model="gpt-4"))
+    MockLLM(),
+    ResponseCache,       # cache identical calls
+    RetryWithBackoff,    # retry transient failures
+    Timeout,             # enforce time limits
+)
 ```
 
-Available middleware:
+**Full middleware stack order** (inner → outer):
 
-| Middleware | Purpose | Located in |
-|-----------|---------|-----------|
-| `RetryMiddleware` | Exponential backoff retry | [`stdlib/middleware/retry.py`](../hexdag/stdlib/middleware/retry.py) |
-| `TimeoutMiddleware` | Per-call timeout | [`stdlib/middleware/timeout.py`](../hexdag/stdlib/middleware/timeout.py) |
-| `RateLimiterMiddleware` | Token bucket rate limiting | [`stdlib/middleware/rate_limiter.py`](../hexdag/stdlib/middleware/rate_limiter.py) |
-| `ResponseCacheMiddleware` | Response memoization | [`stdlib/middleware/response_cache.py`](../hexdag/stdlib/middleware/response_cache.py) |
-| `StructuredOutputMiddleware` | JSON schema enforcement | [`stdlib/middleware/structured_output.py`](../hexdag/stdlib/middleware/structured_output.py) |
-| `ObservableMiddleware` | Event tracking for port calls | [`stdlib/middleware/observable.py`](../hexdag/stdlib/middleware/observable.py) |
+```
+adapter → [Cache → RateLimiter → CircuitBreaker → Retry → Timeout]
+        → StructuredOutputFallback (if needed) → ObservableLLM
+```
 
-`compose()` stacks them: `compose(retry, timeout, cache)(adapter)`.
+Auto-middleware (`ObservableLLM`, `ObservableToolRouter`) is framework-managed and always outermost — you never declare it in YAML.
+
+For all middleware symbols and signatures, see [PUBLIC_API.md > Middleware](PUBLIC_API.md#middleware-from-hexdagstdlibmiddleware-import-).
 
 ---
 
-## 8. Node Types
+## 5. Data Flow Between Nodes
 
-Every node is a factory that produces a `NodeSpec`. The `NodeSpec` wraps an async function with metadata (schemas, dependencies, retry config).
+Upstream node outputs are automatically available downstream. There are 3 mechanisms:
 
-### Built-in Nodes
-
-| Node | YAML `kind` | Purpose | Requires Port? |
-|------|-------------|---------|---------------|
-| **LLMNode** | `llm_node` | Send prompts to LLM, get responses | Yes: LLM (SupportsGeneration) |
-| **AgentNode** | `agent_node` / `react_agent` | ReAct reasoning loop with tools | Yes: LLM (Generation + FunctionCalling) |
-| **FunctionNode** | `function_node` | Run any Python function | No |
-| **ExpressionNode** | `expression_node` | Compute values from upstream data | No |
-| **TransitionNode** | `transition` | Move entity through state machine | No (uses EntityState service) |
-| **CompositeNode** | `composite` | Embed a sub-DAG | No |
-| **DataNode** | `data_node` | Output static values | No |
-| **ApiCallNode** | `api_call` | HTTP requests with URL templating | Yes: APICall |
-| **ServiceCallNode** | `service_call` | Invoke @step methods on services | No |
-| **ToolCallNode** | `tool_call` | Invoke @tool methods on services | No |
-| **CheckpointNode** | `checkpoint` | Save execution state | No |
-| **MappedInput** | `mapped_input` | Iterate over lists (for_each) | No |
-
-### LLMNode — Talk to AI Models
-
-```yaml
-- kind: llm_node
-  metadata:
-    name: analyzer
-  spec:
-    system_message: "You are an analyst."
-    human_message: "Analyze: {{ $input.topic }}"
-    output_schema:           # optional: enforce JSON structure
-      sentiment: str
-      confidence: float
-```
-
-- Prompt templating with `{{ var }}` (Jinja2, rendered at runtime)
-- Few-shot examples via `examples` field
-- Structured output via `output_schema` (uses SupportsStructuredOutput)
-- Conversation history from upstream nodes
-- Located in: [`hexdag/stdlib/nodes/llm_node.py`](../hexdag/stdlib/nodes/llm_node.py)
-
-### AgentNode — ReAct Reasoning
-
-```yaml
-- kind: agent_node
-  metadata:
-    name: researcher
-  spec:
-    initial_prompt: "Research {{ $input.topic }}"
-    max_steps: 10
-    entities: [ticket]       # opt-in to state machine tools
-```
-
-- Multi-step think → act → observe loop
-- Calls tools via ToolRouter (including @tool methods from services)
-- Phase transitions: main → refinement → response
-- `entities` field opts into state machine tools for those entity types
-- Located in: [`hexdag/stdlib/nodes/agent_node.py`](../hexdag/stdlib/nodes/agent_node.py)
-
-### FunctionNode — Run Python Code
-
-```yaml
-- kind: function_node
-  metadata:
-    name: process
-  spec:
-    fn: "myapp.utils.process_data"    # module path — no import needed
-    input_mapping:
-      raw_data: "analyzer.result"
-    unpack_input: true                # spread dict into function params
-```
-
-- `fn` is a module path string — fully declarative, no Python imports in YAML
-- Input schema inferred from type hints
-- `unpack_input: true` spreads the dict into function keyword arguments
-- Located in: [`hexdag/stdlib/nodes/function_node.py`](../hexdag/stdlib/nodes/function_node.py)
-
-### ExpressionNode — Compute Values
-
-```yaml
-- kind: expression_node
-  metadata:
-    name: compute
-  spec:
-    expressions:
-      total: "analyzer.count * 2"
-      rate: "normalize.rate_low"
-      valid: "analyzer.status in ['active', 'pending']"
-    output_fields: [total, rate, valid]
-```
-
-- Evaluates safe Python-like expressions (AST-validated, no `eval()`)
-- References upstream nodes directly — no input_mapping needed
-- Located in: [`hexdag/stdlib/nodes/expression_node.py`](../hexdag/stdlib/nodes/expression_node.py), [`hexdag/kernel/expression_parser.py`](../hexdag/kernel/expression_parser.py)
-
----
-
-## 9. Data Flow Between Nodes
-
-hexDAG uses an n8n-like data flow model. Upstream outputs are automatically available downstream. There are 3 mechanisms:
-
-### Mechanism 1: `input_mapping` — Wire Fields Explicitly
-
-Maps specific upstream output fields to node input parameters.
+### 1. `input_mapping` — Wire Fields Explicitly
 
 ```yaml
 spec:
@@ -538,14 +281,31 @@ spec:
     query: "$input.user_query"       # pipeline input
 ```
 
-- Syntax: `"node_name.field.subfield"` (raw path, no wrapping)
-- **Required for:** `function_node`, `service_call` (parameter names matter)
-- **Optional for:** `llm_node`, `expression_node` (they have their own access patterns)
-- Located in: [`hexdag/stdlib/nodes/mapped_input.py`](../hexdag/stdlib/nodes/mapped_input.py)
+`input_mapping` is **optional for all node types.** The orchestrator auto-infers parameter values from the upstream namespace:
 
-### Mechanism 2: `expressions` — Compute Values
+- **LLM and expression nodes** pull what they need via templates (`{{ analyzer.result }}`) or expressions (`analyzer.count * 2`).
+- **Function and service_call nodes** auto-match upstream fields to function parameter names. Use `unpack_input: true` on function nodes to enable this.
 
-Evaluate safe Python-like expressions using upstream data.
+Explicit `input_mapping` is only needed when upstream field names **differ** from the target parameter names, or when you want to compute derived values.
+
+**Inline expressions** — mapping values can be expressions, not just references:
+
+```yaml
+input_mapping:
+  total: "order.price * order.quantity"
+  label: "'Order: ' + order.name"
+  fallback: "coalesce(order.notes, 'none')"
+```
+
+**Modifiers** — control what happens when a value is missing:
+
+```yaml
+input_mapping:
+  data: "analyzer.result | required"       # fail if None
+  notes: "analyzer.notes | default('n/a')" # use 'n/a' if None
+```
+
+### 2. `expressions` — Compute Values
 
 ```yaml
 spec:
@@ -555,75 +315,76 @@ spec:
     pay: "coalesce(negotiation.target_pay, load.target_pay)"
 ```
 
-- AST-validated — no `eval()`, only whitelisted operations
-- 100+ built-in functions: `coalesce`, `default`, `isnone`, `isempty`, `len`, `min`, `max`, `sum`, `abs`, `round`, `str`, `int`, `float`, `bool`, `now`, `utcnow`, `upper`, `lower`, `split`, `join`, etc.
-- Located in: [`hexdag/kernel/expression_parser.py`](../hexdag/kernel/expression_parser.py)
+AST-validated — no `eval()`. Built-in functions: `coalesce`, `default`, `isnone`, `len`, `min`, `max`, `sum`, `round`, `str`, `int`, `float`, `now`, `upper`, `lower`, `split`, `join`, etc.
 
-### Mechanism 3: `{{ templates }}` — Build Text
-
-Jinja2 rendering at runtime, producing strings.
+### 3. `{{ templates }}` — Build Text
 
 ```yaml
 spec:
   human_message: "Analyze {{ analyzer.result }} for topic {{ $input.topic }}"
 ```
 
-- Used for: LLM prompts, messages, any text that includes data
-- Rendered **after** upstream nodes complete
+Jinja2 rendering at runtime, producing strings.
 
-### Auto-Dependency Detection
+### Dependency Detection
 
-**You do not manually list dependencies.** The compiler (`ReferenceResolver`) scans all three mechanisms — input_mapping, expressions, and templates — and auto-detects which nodes are referenced.
+The compiler **auto-infers** dependencies by scanning `input_mapping`, `expressions`, and `{{ templates }}` for upstream node references. This is the recommended approach — no manual wiring needed:
 
 ```yaml
 nodes:
   - kind: llm_node
-    name: analyzer               # no dependencies field needed!
+    name: analyzer                           # no dependencies field needed
 
   - kind: expression_node
     name: compute
     spec:
       expressions:
-        total: "analyzer.count * 2"    # compiler sees "analyzer" → adds dependency
-
-  - kind: llm_node
-    name: summarizer
-    spec:
-      prompt: "Summarize: {{ compute.total }}"  # compiler sees "compute" → adds dependency
+        total: "analyzer.count * 2"          # compiler sees "analyzer" → adds dependency
 ```
 
-Located in: [`hexdag/compiler/reference_resolver.py`](../hexdag/compiler/reference_resolver.py)
+**Three dependency mechanisms exist:**
 
-### MISSING Sentinel — Typo Safety
+| Mechanism | Status | Purpose |
+|-----------|--------|---------|
+| Auto-inferred | **Recommended** | Compiler detects from data references |
+| `wait_for: [node_a]` | **Active** | Ordering-only — "run after this, but don't consume its output" |
+| `dependencies: [node_a]` | **Deprecated** | Explicit listing (compiler warns if redundant) |
 
-- `typo_node.field` (unknown node name) → **BUILD ERROR** with "did you mean?" suggestion
-- `real_node.typo_field` (unknown field on known node) → `None` at runtime
-- This prevents silent data loss from misspelled node names
-
-### Safe Path Modifiers
+**`wait_for`** is useful for side-effect sequencing — e.g., ensure a logging node runs after a save node even though it doesn't use the save result:
 
 ```yaml
-field | required        # fail at runtime if value is None
-field | default('x')    # use 'x' if value is None
+- kind: function_node
+  metadata: { name: notify }
+  spec:
+    fn: "myapp.send_notification"
+  wait_for: [save_order]             # ordering only, no data dependency
 ```
+
+**`dependencies`** still works but the compiler will warn you:
+- If your explicit deps are a subset of what it already inferred → *"Consider removing the redundant 'dependencies' key"*
+- If inferred deps are missing from your explicit list → the compiler auto-adds them
+
+### Safety
+
+- `typo_node.field` (unknown node) → **BUILD ERROR** with "did you mean?"
+- `real_node.typo_field` (unknown field) → `None` at runtime
+- `field | required` → fail if None
+- `field | default('x')` → use 'x' if None
 
 ### Expression Namespaces
 
-| Namespace | Access Pattern | Purpose |
-|-----------|---------------|---------|
-| Upstream nodes | `node_name.field.subfield` | Output of completed nodes |
-| Pipeline input | `$input.field` or `input.field` | Initial input data |
-| Execution context | `$ctx.run_id`, `$ctx.pipeline_name` | Runtime metadata |
-| Loop state | `state.counter`, `state.item` | Current iteration in LoopNode |
-| Pipeline memory | `memory('key')`, `memory('key', default)` | Shared key-value store |
+| Namespace | Pattern | Purpose |
+|-----------|---------|---------|
+| Upstream nodes | `node_name.field` | Output of completed nodes |
+| Pipeline input | `$input.field` | Initial input data |
+| Execution context | `$ctx.run_id` | Runtime metadata |
+| Loop state | `state.counter` | Current iteration |
 
 ---
 
-## 10. Services
+## 6. Services
 
-Services are the unified abstraction for port-backed operations. They replace the deprecated `PortCallNode` and `HexDAGLib`.
-
-### Creating a Service
+Services wrap port-backed business logic behind `@tool` and `@step` decorators.
 
 ```python
 from hexdag.kernel.service import Service, tool, step
@@ -634,12 +395,12 @@ class OrderService(Service):
 
     @tool
     async def get_order(self, order_id: str) -> dict:
-        """Get order by ID. Agent-callable during ReAct reasoning."""
+        """Agent-callable during ReAct reasoning."""
         return await self._store.aget(f"order:{order_id}")
 
     @step
     async def save_order(self, order_id: str, data: dict) -> dict:
-        """Persist an order. Usable as a DAG node via ServiceCallNode."""
+        """Deterministic DAG node via ServiceCallNode."""
         await self._store.aset(f"order:{order_id}", data)
         return {"saved": True}
 
@@ -650,43 +411,98 @@ class OrderService(Service):
         ...
 ```
 
-- `@tool` — agent-callable during ReAct reasoning (auto-generates OpenAI-compatible tool schemas)
-- `@step` — deterministic DAG node (invoked by `ServiceCallNode`)
+- `@tool` — agent-callable during ReAct reasoning (auto-generates tool schemas)
+- `@step` — deterministic DAG node (invoked by `service_call_node`)
 - Both can be stacked on the same method
-- `asetup()` / `ateardown()` — lifecycle hooks, called before/after pipeline
+
+### YAML Usage
+
+Register services and call `@step` methods via `service_call_node`:
+
+```yaml
+spec:
+  services:
+    orders:
+      class: myapp.services.OrderService
+      config:
+        store: { ref: main_store }
+
+  nodes:
+    # @step methods — called as deterministic DAG nodes
+    - kind: service_call_node
+      metadata: { name: save }
+      spec:
+        service: orders
+        method: save_order
+
+    # @tool methods — available to agents during ReAct reasoning
+    - kind: agent_node
+      metadata: { name: order_agent }
+      spec:
+        initial_prompt_template: "Handle order {{ $input.order_id }}"
+        available_tools: ["orders:get_order", "orders:validate_order"]
+        max_steps: 5
+```
+
+`@tool` methods use the pattern `service_name:method_name` in `available_tools`. The agent can call these tools during multi-step reasoning.
+
+For all service-related symbols, see [PUBLIC_API.md > Services](PUBLIC_API.md#services--extension-points).
 
 ### Built-in Services
 
-| Service | Purpose | Linux Analogy | Located in |
-|---------|---------|--------------|-----------|
-| `ProcessRegistry` | Track pipeline runs | `ps` | [`stdlib/lib/process_registry.py`](../hexdag/stdlib/lib/process_registry.py) |
-| `EntityState` | Declarative state machines | — | [`stdlib/lib/entity_state.py`](../hexdag/stdlib/lib/entity_state.py) |
-| `Scheduler` | Delayed/recurring execution | `cron` | [`stdlib/lib/scheduler.py`](../hexdag/stdlib/lib/scheduler.py) |
-| `PipelineMemory` | Run-scoped key-value store | — | [`stdlib/lib/pipeline_memory.py`](../hexdag/stdlib/lib/pipeline_memory.py) |
-| `DatabaseTools` | Agent-callable SQL queries | — | [`stdlib/lib/database_tools.py`](../hexdag/stdlib/lib/database_tools.py) |
-| `VFSTools` | Virtual filesystem introspection | — | [`stdlib/lib/vfs_tools.py`](../hexdag/stdlib/lib/vfs_tools.py) |
-
-Located in: [`hexdag/kernel/service.py`](../hexdag/kernel/service.py) (base class)
+| Service | Purpose |
+|---------|---------|
+| `ProcessRegistry` | Track pipeline runs — status, duration, results |
+| `EntityState` | Declarative state machines with validated transitions |
+| `PipelineMemory` | Run-scoped key-value store (auto-registered) |
 
 ---
 
-## 11. Macros vs Nodes
-
-This is a common source of confusion.
+## 7. Macros vs Nodes
 
 **A Node** produces **1 NodeSpec** — a single processing step.
 **A Macro** expands into **a sub-graph** — multiple nodes with internal dependencies.
 
 | | Node | Macro |
 |---|------|-------|
-| **YAML** | `kind: llm_node` | `kind: Macro` (definition) or macro invocation |
-| **Output** | 1 NodeSpec | DirectedGraph (N nodes) |
-| **When expanded** | At build time (single step) | At build time (multiple steps) |
-| **Names** | `analyzer` | Auto-prefixed: `macro_instance_step_1` |
-| **Nesting** | Nodes don't contain nodes | Macros **cannot** contain other macros |
-| **Use when** | Single operation | Reusable multi-step pattern |
+| YAML | `kind: llm_node` | `kind: macro_invocation` |
+| Output | 1 NodeSpec | DirectedGraph (N nodes) |
+| Names | `analyzer` | Auto-prefixed: `instance_step_1` |
+| Use when | Single operation | Reusable multi-step pattern |
 
-### Defining a Macro in YAML
+### Built-in Macros
+
+| Macro | YAML alias | Purpose |
+|---|---|---|
+| `ReasoningAgentMacro` | `core:reasoning_agent` | Multi-step ReAct reasoning with tool calling |
+| `ConversationMacro` | `core:conversation_agent` | Multi-turn chat with memory |
+| `LLMMacro` | `core:llm_macro` | Structured LLM call (consider `llm_node` for simple cases) |
+
+### Invoking a Built-in Macro
+
+From [deep_research_agent.yaml](../examples/mcp/deep_research_agent.yaml):
+
+```yaml
+nodes:
+  - kind: macro_invocation
+    metadata:
+      name: research_agent
+    spec:
+      macro: core:reasoning_agent
+      config:
+        main_prompt: |
+          You are a deep research agent with web search.
+          Research Question: {{research_question}}
+        max_steps: 10
+        allowed_tools:
+          - research:tavily_search
+          - research:tavily_qna_search
+        tool_format: mixed
+```
+
+The macro expands at build time into an internal sub-graph (prompt node, tool dispatch, reasoning loop) — you only configure the high-level behavior.
+
+### Defining a Custom Macro
 
 ```yaml
 kind: Macro
@@ -701,44 +517,117 @@ spec:
       default: 3
   nodes:
     - kind: function_node
-      metadata:
-        name: "attempt"
+      metadata: { name: attempt }
       spec:
         fn: "{{ fn }}"
 ```
 
-### Invoking a Macro
+Invoke with:
 
 ```yaml
-- kind: retry_pattern        # or kind: macro_invocation
-  metadata:
-    name: fetch_data
+- kind: macro_invocation
+  metadata: { name: fetch_data }
   spec:
     macro: retry_pattern
-    inputs:
+    config:
       fn: "myapp.fetch"
       max_retries: 5
 ```
 
-The compiler expands this into nodes named `fetch_data_attempt` (prefixed with the instance name).
+---
 
-### Defining a Macro in Python
+## 8. Composite Nodes (Control Flow)
 
-```python
-class RetryMacro(ConfigurableMacro, yaml_alias="retry"):
-    def expand(self, instance_name, inputs, dependencies):
-        graph = DirectedGraph()
-        # Build sub-graph with actual NodeSpec objects
-        return graph
+`CompositeNode` provides unified control flow: `while`, `for-each`, `times`, `if-else`, and `switch`.
+
+All modes support two execution patterns:
+- **Inline body** — when `body` is specified, the composite node executes it internally
+- **Yield to downstream** — when no body, the node yields state to downstream nodes
+
+### if-else — Single Condition Branch
+
+```yaml
+- kind: composite_node
+  metadata: { name: route_by_priority }
+  spec:
+    mode: if-else
+    condition: "$input.priority == 'urgent'"
+    body: "myapp.handle_urgent"
+    else_body: "myapp.handle_normal"
 ```
 
-Located in: [`hexdag/stdlib/macros/`](../hexdag/stdlib/macros/), [`hexdag/compiler/plugins/macro_entity.py`](../hexdag/compiler/plugins/macro_entity.py)
+### for-each — Collection Iteration
+
+```yaml
+- kind: composite_node
+  metadata: { name: process_items }
+  spec:
+    mode: for-each
+    items: "$input.items"
+    concurrency: 5
+    body:
+      - kind: expression_node
+        spec:
+          expressions:
+            result: "$item * 2"
+```
+
+### while — Condition Loop
+
+```yaml
+- kind: composite_node
+  metadata: { name: retry_loop }
+  spec:
+    mode: while
+    condition: "state.attempts < 3 and not state.success"
+    initial_state:
+      attempts: 0
+      success: false
+    body: "myapp.attempt_operation"
+    collect: last
+```
+
+### times — Fixed Count Loop
+
+```yaml
+- kind: composite_node
+  metadata: { name: generate_variants }
+  spec:
+    mode: times
+    count: 5
+    body: "myapp.generate_one"
+    collect: list
+```
+
+### switch — Multi-Branch Routing
+
+```yaml
+- kind: composite_node
+  metadata: { name: router }
+  spec:
+    mode: switch
+    branches:
+      - condition: "status == 'urgent'"
+        action: "urgent_path"
+      - condition: "status == 'normal'"
+        action: "normal_path"
+    else_action: "default_path"
+```
+
+### Parameters
+
+| Parameter | Values | Purpose |
+|-----------|--------|---------|
+| `collect` | `list`, `last`, `first`, `dict`, `reduce` | How to aggregate iteration results |
+| `error_handling` | `fail_fast`, `continue`, `collect` | What happens when an iteration fails |
+| `concurrency` | integer | Max parallel iterations (for-each) |
+| `max_iterations` | integer | Safety limit for while loops |
 
 ---
 
-## 12. Entity Lifecycle (State Machines)
+## 9. Entity Lifecycle
 
-hexDAG supports declarative state machines for business entities (orders, tickets, documents).
+hexDAG supports declarative state machines for business entities.
 
 ### Pipeline-Level (Single Pipeline)
 
@@ -756,8 +645,7 @@ spec:
 
   nodes:
     - kind: transition
-      metadata:
-        name: mark_classified
+      metadata: { name: mark_classified }
       spec:
         entity: document
         entity_id: "$input.doc_id"
@@ -790,220 +678,60 @@ spec:
       pipeline: pipelines/investigate.yaml
 ```
 
+### Python Usage
+
+```python
+from hexdag import System
+
+async with System.from_yaml("ticket-system.yaml") as system:
+    await system.transition("ticket", "T-1", "INVESTIGATING")
+    result = await system.run_process("extract", {"ticket_id": "T-1"})
+```
+
+See [examples/libs/run_order_lifecycle.py](../examples/libs/run_order_lifecycle.py) for a complete runnable example.
+
 ### Key Concepts
 
-- **TransitionNode** (`kind: transition`): validates transition against state machine, fires handlers, emits `StateTransitionEvent`
+- **TransitionNode** (`kind: transition`): validates against state machine, fires handlers, emits `StateTransitionEvent`
 - **Handlers are transactional**: handler failure = transition rollback
-- **Agent tool scoping**: agents must declare `entities: [ticket]` to access state machine tools
-- **Events**: `StateTransitionEvent`, `EntityGarbageCollected`, `EntityObligationFailed`, `EntityCompensationEvent`
+- **Agent tool scoping**: agents declare `entities: [ticket]` to access state machine tools
 - **LifecycleRunner**: event-driven multi-pipeline runner with cascade depth limits and terminal state GC
 
-Located in: [`hexdag/kernel/domain/entity_state.py`](../hexdag/kernel/domain/entity_state.py), [`hexdag/stdlib/nodes/transition_node.py`](../hexdag/stdlib/nodes/transition_node.py), [`hexdag/stdlib/lib/entity_state.py`](../hexdag/stdlib/lib/entity_state.py)
-
 ---
 
-## 13. The Compiler in Detail
+## 10. Suspension & Resume
 
-The compiler (`YamlPipelineBuilder`) transforms YAML into kernel domain models through 5 phases.
+hexDAG supports pipeline suspension for human-in-the-loop and external event patterns. A pipeline can pause at a `wait_node`, persist its state, and resume when external data arrives.
 
-### Phase 1: Parse + Include
+### WaitNode
 
-- Parse YAML into Python dict
-- Resolve `!include` directives (recursive, circular reference detection)
-- Custom tag discovery (`!py`)
-- Located in: [`hexdag/compiler/preprocessing/include.py`](../hexdag/compiler/preprocessing/include.py), [`hexdag/compiler/tag_discovery.py`](../hexdag/compiler/tag_discovery.py)
-
-### Phase 2: Environment Selection
-
-- Select dev/staging/prod configuration
-- Merge environment-specific overrides
-- Located in: [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py)
-
-### Phase 3: Validate
-
-- `YamlValidator` checks: node types exist, port configs valid, no dependency cycles, schema compliance
-- Located in: [`hexdag/compiler/yaml_validator.py`](../hexdag/compiler/yaml_validator.py)
-
-### Phase 4: Preprocess (Plugin Pipeline)
-
-Three preprocessing plugins run in order:
-
-| Plugin | What it does | Located in |
-|--------|-------------|-----------|
-| `IncludePreprocessPlugin` | `!include` resolution | [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) |
-| `EnvironmentVariablePlugin` | `${VAR}` substitution (defers secrets) | [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) |
-| `TemplatePlugin` | `{{ }}` Jinja2 rendering (non-spec fields only) | [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) |
-
-### Phase 5: Build Graph (Entity Plugins)
-
-Entity plugins process YAML into kernel objects:
-
-| Plugin | What it does | Located in |
-|--------|-------------|-----------|
-| `NodeEntityPlugin` | Instantiate node factories → NodeSpec objects | [`hexdag/compiler/plugins/node_entity.py`](../hexdag/compiler/plugins/node_entity.py) |
-| `MacroEntityPlugin` | Expand macros → sub-graphs | [`hexdag/compiler/plugins/macro_entity.py`](../hexdag/compiler/plugins/macro_entity.py) |
-| `MacroDefinitionPlugin` | Register `kind: Macro` definitions | [`hexdag/compiler/plugins/`](../hexdag/compiler/plugins/) |
-| `AdapterDefinitionPlugin` | Process adapter overrides | [`hexdag/compiler/plugins/`](../hexdag/compiler/plugins/) |
-| `ConfigDefinitionPlugin` | Process config overrides | [`hexdag/compiler/plugins/`](../hexdag/compiler/plugins/) |
-| `MiddlewareDefinitionPlugin` | Process middleware stacking | [`hexdag/compiler/plugins/`](../hexdag/compiler/plugins/) |
-
-After entity plugins, the `ReferenceResolver` scans all input_mapping, expressions, and templates to auto-detect node dependencies. Then `ComponentInstantiator` resolves aliases and handles deferred secret resolution.
-
-**Output:** `DirectedGraph` + `PipelineConfig`
-
-### YAML Manifest Types
-
-| Kind | Purpose | Located in |
-|------|---------|-----------|
-| `kind: Pipeline` | Single workflow (most common) | [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) |
-| `kind: System` | Multi-pipeline orchestration | [`hexdag/compiler/system_builder.py`](../hexdag/compiler/system_builder.py) |
-| `kind: Config` | Shared configuration | [`hexdag/compiler/config_loader.py`](../hexdag/compiler/config_loader.py) |
-| `kind: Macro` | Reusable node template | [`hexdag/compiler/plugins/macro_entity.py`](../hexdag/compiler/plugins/macro_entity.py) |
-| `kind: Adapter` | Adapter definition | [`hexdag/compiler/plugins/`](../hexdag/compiler/plugins/) |
-| `kind: Middleware` | Port wrapper definition | [`hexdag/compiler/plugins/`](../hexdag/compiler/plugins/) |
-
----
-
-## 14. The Orchestrator in Detail
-
-The Orchestrator ([`hexdag/kernel/orchestration/orchestrator.py`](../hexdag/kernel/orchestration/orchestrator.py)) is the core execution engine.
-
-### Wave-Based Execution
-
-```
-DirectedGraph:  A → C
-                B → C → D
-
-Waves:
-  Wave 1: [A, B]     ← run concurrently
-  Wave 2: [C]        ← depends on A and B
-  Wave 3: [D]        ← depends on C
+```yaml
+- kind: wait_node
+  metadata: { name: await_reply }
+  spec:
+    event_key: "email_reply:{{$input.conversation_id}}"
+    timeout: 7d
+    on_timeout: timeout_handler
 ```
 
-Nodes in the same wave have no mutual dependencies and run concurrently via `asyncio.gather()`. The `OrchestratorConfig` controls `max_concurrent_nodes` (default: 10).
+On suspend, the node returns a `Suspended` signal. The pipeline result has `status: SUSPENDED` and includes `run_id` for later resumption.
 
-### Execution Components
+### Resuming with External Data
 
-| Component | Role | Located in |
-|-----------|------|-----------|
-| `Orchestrator` | Main loop: wave computation, concurrent execution | [`kernel/orchestration/orchestrator.py`](../hexdag/kernel/orchestration/orchestrator.py) |
-| `OrchestratorFactory` | Creates Orchestrator from PipelineConfig | [`kernel/orchestration/orchestrator_factory.py`](../hexdag/kernel/orchestration/orchestrator_factory.py) |
-| `NodeExecutor` | Per-node execution: timeout, retry, validation | [`kernel/orchestration/components/node_executor.py`](../hexdag/kernel/orchestration/components/node_executor.py) |
-| `ExecutionCoordinator` | Input mapping, `when` evaluation, observer notifications | [`kernel/orchestration/components/execution_coordinator.py`](../hexdag/kernel/orchestration/components/execution_coordinator.py) |
-| `BodyExecutor` | Schema validation, port access, service invocation | [`kernel/orchestration/body_executor.py`](../hexdag/kernel/orchestration/body_executor.py) |
-| `LifecycleManager` | Port asetup/aclose, service lifecycle, hooks | [`kernel/orchestration/components/lifecycle_manager.py`](../hexdag/kernel/orchestration/components/lifecycle_manager.py) |
-| `CheckpointManager` | Save/restore execution state between waves | [`kernel/orchestration/components/checkpoint_manager.py`](../hexdag/kernel/orchestration/components/checkpoint_manager.py) |
+```python
+from hexdag import PipelineRunner, InMemoryMemory
 
-### Event System
+runner = PipelineRunner(checkpoint_storage=InMemoryMemory())
+result = await runner.run("approval_pipeline.yaml", input_data=data)
+# result.status == PipelineStatus.SUSPENDED
 
-Every orchestrator action emits events. Observers react to them.
-
-| Event | When | Data |
-|-------|------|------|
-| `PipelineStarted` | Execution begins | total_waves, total_nodes |
-| `PipelineCompleted` | Execution ends | name, duration_ms, node_results |
-| `NodeStarted` | Node begins | node_name, wave_index |
-| `NodeCompleted` | Node succeeds | node_name, output, duration_ms |
-| `NodeFailed` | Node fails | node_name, error, attempt |
-| `NodeSkipped` | `when` evaluates false | node_name, reason |
-| `WaveCompleted` | All nodes in wave done | wave_index, results |
-| `StateTransitionEvent` | Entity state changes | entity, from_state, to_state |
-| `PortCallEvent` | Port method called | port_name, method, duration |
-
-**Built-in observers:** SimpleLogging, ExecutionTracer, PerformanceMetrics, CostProfiler, Alerting, DataQuality.
-
-Located in: [`hexdag/kernel/orchestration/events/`](../hexdag/kernel/orchestration/events/)
-
----
-
-## 15. File Index — Where to Find Things
-
-### "I want to..."
-
-| Goal | Look in |
-|------|---------|
-| Understand how YAML is compiled | [`hexdag/compiler/yaml_builder.py`](../hexdag/compiler/yaml_builder.py) |
-| Add a new node type | [`hexdag/stdlib/nodes/`](../hexdag/stdlib/nodes/) — subclass `BaseNodeFactory` |
-| Add a new adapter | [`hexdag/stdlib/adapters/`](../hexdag/stdlib/adapters/) — subclass `HexDAGAdapter` |
-| Add a new service | Subclass `hexdag.kernel.service.Service` |
-| See how the orchestrator works | [`hexdag/kernel/orchestration/orchestrator.py`](../hexdag/kernel/orchestration/orchestrator.py) |
-| See how expressions are evaluated | [`hexdag/kernel/expression_parser.py`](../hexdag/kernel/expression_parser.py) |
-| See how dependencies are auto-detected | [`hexdag/compiler/reference_resolver.py`](../hexdag/compiler/reference_resolver.py) |
-| See how aliases are resolved | [`hexdag/kernel/resolver.py`](../hexdag/kernel/resolver.py) |
-| See all port contracts | [`hexdag/kernel/ports/`](../hexdag/kernel/ports/) |
-| See all events | [`hexdag/kernel/orchestration/events/events.py`](../hexdag/kernel/orchestration/events/events.py) |
-| See built-in middleware | [`hexdag/stdlib/middleware/`](../hexdag/stdlib/middleware/) |
-| See state machine logic | [`hexdag/stdlib/lib/entity_state.py`](../hexdag/stdlib/lib/entity_state.py) |
-| Run a pipeline from Python | [`hexdag/kernel/pipeline_runner.py`](../hexdag/kernel/pipeline_runner.py) |
-| Run a multi-pipeline system | [`hexdag/kernel/system_runner.py`](../hexdag/kernel/system_runner.py) |
-
-### Directory Map
-
+# Later, when the external event arrives:
+result = await runner.resume_with_event(
+    "approval_pipeline.yaml",
+    run_id=result.run_id,
+    event_data={"approved": True, "reviewer": "jane@co.com"},
+)
+# Downstream nodes execute with original context preserved
 ```
-hexdag/
-├── kernel/                          # Core execution engine
-│   ├── domain/                      #   Domain models: NodeSpec, DirectedGraph, PipelineConfig
-│   ├── orchestration/               #   Orchestrator, events, observers, components
-│   │   ├── components/              #     NodeExecutor, ExecutionCoordinator, etc.
-│   │   ├── events/                  #     Event types and observer base
-│   │   └── prompt/                  #     PromptTemplate, FewShotPromptTemplate
-│   ├── ports/                       #   Port protocols: LLM, DataStore, Database, Memory, etc.
-│   ├── context/                     #   ExecutionContext (async-safe via contextvars)
-│   ├── validation/                  #   Sanitized types, secure JSON
-│   ├── schema/                      #   SchemaGenerator (JSON Schema from types)
-│   ├── config/                      #   HexDAGConfig model and loader
-│   ├── linting/                     #   Pipeline lint rules
-│   ├── utils/                       #   Caching, serialization, timers
-│   ├── service.py                   #   Service base, @tool, @step decorators
-│   ├── resolver.py                  #   Component alias → class resolution
-│   ├── expression_parser.py         #   Safe expression evaluation (AST-based)
-│   ├── pipeline_runner.py           #   One-liner YAML → results
-│   ├── system_runner.py             #   Multi-pipeline orchestration
-│   └── discovery.py                 #   Plugin/adapter/tool auto-discovery
-│
-├── compiler/                        # YAML → kernel domain models
-│   ├── plugins/                     #   Entity plugins: node, macro, adapter, config
-│   ├── preprocessing/               #   Include, env var, template plugins
-│   ├── yaml_builder.py              #   Main 5-phase compiler
-│   ├── yaml_validator.py            #   Schema validation
-│   ├── reference_resolver.py        #   Auto-dependency detection
-│   ├── component_instantiator.py    #   Alias resolution + deferred secrets
-│   ├── system_builder.py            #   kind: System builder
-│   ├── config_loader.py             #   kind: Config loader
-│   └── py_tag.py                    #   !py YAML tag
-│
-├── stdlib/                          # Built-in components
-│   ├── nodes/                       #   Node factories: LLMNode, AgentNode, FunctionNode, etc.
-│   ├── adapters/                    #   Port adapters: openai, anthropic, mock, database, memory
-│   │   ├── openai/
-│   │   ├── anthropic/
-│   │   ├── mock/
-│   │   ├── database/
-│   │   ├── memory/
-│   │   └── secret/
-│   ├── macros/                      #   Reusable DAG templates: reasoning_agent, conversation
-│   ├── middleware/                   #   Port wrappers: retry, timeout, rate_limiter, cache
-│   ├── lib/                         #   System services: ProcessRegistry, EntityState, Scheduler
-│   │   └── observers/               #     Built-in observers
-│   └── prompts/                     #   Prompt templates: chat, tool, few-shot, error correction
-│
-├── drivers/                         # Infrastructure implementations
-│   ├── executors/                   #   LocalExecutor
-│   ├── observer_manager/            #   LocalObserverManager
-│   ├── pipeline_spawner/            #   LocalPipelineSpawner
-│   ├── http_client/                 #   HttpClientDriver
-│   └── vfs/                         #   VFS providers: /lib, /sys, /proc
-│
-├── api/                             # User-facing API layer
-│   ├── execution.py                 #   execute(), execute_streaming()
-│   ├── pipeline.py                  #   init_pipeline(), add_node(), remove_node()
-│   ├── components.py                #   list_nodes(), list_adapters(), get_node_schema()
-│   ├── validation.py                #   validate_pipeline()
-│   ├── processes.py                 #   list_runs(), get_run(), cancel_run()
-│   ├── documentation.py             #   get_quick_start(), get_node_guide()
-│   ├── vfs.py                       #   list_path(), read_path()
-│   └── logs.py                      #   query_logs(), tail_logs()
-│
-└── cli/                             # Command-line interface
-    └── commands/                    #   validate, build, init, lint, docs, studio, plugins
-```
+
+Requires `checkpoint_storage` to be configured so pipeline state survives between suspend and resume.

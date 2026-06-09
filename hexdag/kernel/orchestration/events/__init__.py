@@ -27,6 +27,8 @@ from .events import (
     PortCallEvent,
     ProcessCompleted,
     ProcessStarted,
+    ResourceLimitExceeded,
+    ResourceWarning,
     StateTransitionEvent,
     SystemCompleted,
     SystemStarted,
@@ -54,6 +56,7 @@ ENTITY_EVENTS = (
     EntityObligationFailed,
     EntityCompensationEvent,
 )
+RESOURCE_EVENTS = (ResourceWarning, ResourceLimitExceeded)
 
 # Commonly used combinations
 ALL_NODE_EVENTS = NODE_LIFECYCLE_EVENTS + WAVE_EVENTS
@@ -88,6 +91,10 @@ __all__ = [
     "EntityGarbageCollected",
     "EntityObligationFailed",
     "EntityCompensationEvent",
+    # Resource accounting events
+    "ResourceWarning",
+    "ResourceLimitExceeded",
+    "RESOURCE_EVENTS",
     # Core Observers
     "ExecutionTracerObserver",
     "SimpleLoggingObserver",

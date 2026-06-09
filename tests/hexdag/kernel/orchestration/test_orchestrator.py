@@ -349,7 +349,7 @@ class TestOrchestrator:
     @pytest.mark.asyncio
     async def test_ports_with_mocks(self, orchestrator, observers):
         """Test orchestrator with mock LLM and ToolRouter ports."""
-        from hexdag.kernel.ports.tool_router import ToolRouter
+        from hexdag.kernel.tool_router import ToolRouter
         from hexdag.stdlib.adapters.mock.mock_llm import MockLLM
 
         async def async_dummy_node_with_ports(input_data):

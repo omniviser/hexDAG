@@ -1,6 +1,6 @@
 """Observability middleware for ToolRouter ports.
 
-Wraps a ``ToolRouter`` and emits ``ToolRouterPortCall`` events for every
+Wraps a ``ToolRouter`` and emits ``ToolRouterCall`` events for every
 tool call, including error cases.
 """
 
@@ -10,7 +10,7 @@ from typing import Any
 
 from hexdag.kernel.context import get_current_node_name, get_observer_manager
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.tool_router import ToolRouterPortCall
+from hexdag.kernel.tool_router import ToolRouterCall
 from hexdag.kernel.utils.node_timer import Timer
 
 logger = get_logger(__name__)
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 class ObservableToolRouter:
     """Observability middleware for ToolRouter ports.
 
-    Wraps a ToolRouter and emits ``ToolRouterPortCall`` for every tool call.
+    Wraps a ToolRouter and emits ``ToolRouterCall`` for every tool call.
 
     Does NOT inherit from ``ToolRouter`` to avoid triggering health-check
     paths that expect ``HealthStatus`` objects.
@@ -30,7 +30,7 @@ class ObservableToolRouter:
         self._inner = inner
 
     async def acall_tool(self, tool_name: str, params: dict[str, Any]) -> Any:
-        """Forward acall_tool and emit a ToolRouterPortCall event."""
+        """Forward acall_tool and emit a ToolRouterCall event."""
         node_name = get_current_node_name() or "unknown"
         timer = Timer()
         try:
@@ -39,7 +39,7 @@ class ObservableToolRouter:
             logger.error("Tool '{}' failed in {:.2f}ms: {}", tool_name, timer.duration_ms, exc)
             if mgr := get_observer_manager():
                 await mgr.notify(
-                    ToolRouterPortCall(
+                    ToolRouterCall(
                         port_type="tool_router",
                         method="acall_tool",
                         node_name=node_name,
@@ -53,7 +53,7 @@ class ObservableToolRouter:
 
         if mgr := get_observer_manager():
             await mgr.notify(
-                ToolRouterPortCall(
+                ToolRouterCall(
                     port_type="tool_router",
                     method="acall_tool",
                     node_name=node_name,

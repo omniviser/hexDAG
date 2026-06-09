@@ -56,7 +56,7 @@ results = await db.aexecute_query("SELECT * FROM customers LIMIT 5")
 For tool routing in tests, use the base `ToolRouter` with mock functions:
 
 ```python
-from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.kernel.tool_router import ToolRouter
 
 router = ToolRouter(tools={
     "search": lambda query="", **kw: {"results": [f"Result for: {query}"]},

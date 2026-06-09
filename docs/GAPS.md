@@ -73,10 +73,9 @@ The following features lack runnable examples:
 
 - `SystemRunner` / `kind: System`
 - `Service` + `@tool` + `@step` pattern
-- `CheckpointNode` save/restore
 - `CompositeNode` (while, for-each, times, if-else, switch)
 - `PipelineSpawner` fork/exec
-- `VFSTools` virtual filesystem
+- `WaitNode` + `EventCorrelationRegistry` suspend/resume
 
 ---
 

@@ -62,14 +62,14 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
     from hexdag.kernel.ports.secret import (
         SecretStore,  # lazy: loaded on first use to avoid import-time side effects
     )
-    from hexdag.kernel.ports.tool_router import (
-        ToolRouter,  # lazy: loaded on first use to avoid import-time side effects
-    )
     from hexdag.kernel.ports.vector_search import (
         SupportsVectorSearch,  # lazy: loaded on first use to avoid import-time side effects
     )
     from hexdag.kernel.ports.vfs import (
         VFS,  # lazy: loaded on first use to avoid import-time side effects
+    )
+    from hexdag.kernel.tool_router import (
+        ToolRouter,  # lazy: loaded on first use to avoid import-time side effects
     )
 
     # Order matters: specific before general.

@@ -23,7 +23,7 @@ explains what belongs where, what each layer does, and how they interact.
 | `/lib` | `stdlib/` | Standard library -- built-in nodes, adapters, macros, system libs |
 | Processes | Pipeline runs | Tracked by `ProcessRegistry` (like `ps`) |
 | `fork`/`exec` | `PipelineSpawner` | Launch sub-pipelines from within a running pipeline |
-| Process scheduler | `Scheduler` | Delayed and recurring pipeline execution |
+| Event correlation | `EventCorrelationRegistry` | Suspend/resume pipelines on external events |
 | State machines | `EntityState` | Business entity lifecycle management |
 | `/usr/bin` | `api/` | User-facing tools (MCP + Studio REST) |
 | Shell | `cli/` | Command-line interface (`hexdag init`, `hexdag run`, etc.) |
@@ -175,7 +175,7 @@ ships built-in implementations, and users write their own.
 | Adapters | Protocol in `kernel/ports/` | OpenAI, Anthropic, SQLite, Mock, Memory variants | `myapp.adapters.X` |
 | Macros | (convention) | ReasoningAgent, ConversationAgent | `myapp.macros.X` |
 | Prompts | (convention) | tool_prompts, error_correction | `myapp.prompts.X` |
-| Services | `Service` base class + `@tool`/`@step` | ProcessRegistry, EntityState, Scheduler, DatabaseTools | `myapp.services.X` |
+| Services | `Service` base class + `@tool`/`@step` | ProcessRegistry, EntityState, PipelineMemory | `myapp.services.X` |
 
 All entities are referenced by their full Python module path in YAML:
 
@@ -293,9 +293,9 @@ Libs                No (different API)        Yes (auto-tool)            Often y
   raw PostgreSQL wire protocol. Adds business-domain convenience (e.g. `alist_tables()`,
   `adescribe_table()`). Agents call libs explicitly by name.
 
-An ORM-like abstraction over the Database port is a **Lib** — it wraps a
-`SupportsQuery` port with higher-level operations and exposes them as agent
-tools. `DatabaseTools` in `stdlib/lib/` is exactly this pattern.
+An ORM-like abstraction over the Database port would be a **Lib** — wrapping a
+`SupportsQuery` port with higher-level operations and exposing them as agent
+tools.
 
 ---
 
@@ -336,9 +336,7 @@ to browse the system uniformly.
 branching logic. The `api/processes.py` functions take typed parameters and
 delegate to the appropriate lib method.
 
-Both delegate to the same underlying libs (`ProcessRegistry`, `EntityState`,
-`Scheduler`). They coexist — VFS doesn't replace syscalls, and syscalls
-don't make VFS redundant.
+Both delegate to the same underlying libs (`ProcessRegistry`, `EntityState`).
 
 ---
 
@@ -558,12 +556,11 @@ kernel/ports/ (existing)              kernel/ports/ (planned)
   VectorSearch
   VFS (Phase 1)
 
-stdlib/lib/ (existing)               stdlib/lib/ (planned)
-  ProcessRegistry                       CentralAgent
+stdlib/lib/ (existing)
+  ProcessRegistry
   EntityState
-  Scheduler
-  DatabaseTools
-  VFSTools
+  PipelineMemory
+  ExtractionJob
 ```
 
 ---

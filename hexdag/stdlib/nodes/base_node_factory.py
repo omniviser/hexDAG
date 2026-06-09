@@ -238,9 +238,18 @@ class BaseNodeFactory(ABC):
         input_schema: dict[str, Any] | None,
         output_schema: dict[str, Any] | type[BaseModel] | None,
         deps: list[str] | None = None,
+        accepted_params: frozenset[str] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
-        """Universal NodeSpec creation."""
+        """Universal NodeSpec creation.
+
+        Parameters
+        ----------
+        accepted_params:
+            Target function parameter names for orchestrator auto-inference.
+            When set, the orchestrator matches upstream fields to these names
+            so ``input_mapping`` becomes optional.
+        """
         # Copy port capabilities metadata to wrapper
         self._copy_port_capabilities_to_wrapper(wrapped_fn)
 
@@ -257,6 +266,7 @@ class BaseNodeFactory(ABC):
             out_model=output_model,
             deps=frozenset(deps or []),
             params=kwargs,
+            accepted_params=accepted_params,
             timeout=framework["timeout"],
             max_retries=framework["max_retries"],
             retry_delay=framework["retry_delay"],

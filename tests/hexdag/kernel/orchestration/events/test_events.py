@@ -19,7 +19,7 @@ from hexdag.kernel.orchestration.events.events import (
     WaveCompleted,
 )
 from hexdag.kernel.ports.llm import LLMGeneration
-from hexdag.kernel.ports.tool_router import ToolRouterEvent
+from hexdag.kernel.tool_router import ToolRouterEvent
 
 
 class TestNodeEvents:

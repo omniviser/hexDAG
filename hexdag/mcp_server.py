@@ -1,7 +1,9 @@
 """MCP (Model Context Protocol) server for hexDAG.
 
-Exposes hexDAG functionality as MCP tools for LLM-powered editors like Claude Code and Cursor.
-This server uses the unified hexdag.api layer for all business logic.
+Exposes hexDAG build-time functionality as MCP tools for LLM-powered editors
+like Claude Code and Cursor. Covers component discovery, validation, pipeline
+YAML editing, and documentation. Runtime tools (execution, process management)
+belong in hexdag-brain.
 
 Installation
 ------------
@@ -51,7 +53,7 @@ from typing import Any
 import orjson
 from mcp.server.fastmcp import FastMCP
 
-from hexdag import api
+from hexdag.api import components, documentation, pipeline, validation
 
 # Configure user plugin paths from environment variable
 # This allows MCP users to discover custom adapters/nodes
@@ -69,96 +71,94 @@ mcp = FastMCP(
 
 
 # ============================================================================
-# VFS Tools — unified path-based introspection
+# Component Discovery Tools
 # ============================================================================
 
-# Create a VFS instance for component and process introspection.
-# /lib/ is always available; /proc/* providers need lib instances
-# which are not wired here (they'll be added when the MCP server
-# supports process management).
-_vfs = api.vfs.create_vfs()
-
 
 @mcp.tool()  # type: ignore[misc]
-async def vfs_read(path: str) -> str:
-    """Read content at a VFS path.
+def list_nodes() -> str:
+    """List all available node types with their schemas.
 
-    Use this to inspect individual components, pipeline runs, scheduled
-    tasks, or entity states.
-
-    Paths
-    -----
-    - ``/lib/nodes/llm_node`` — JSON detail for a specific node
-    - ``/lib/nodes/llm_node/schema`` — JSON schema for a node
-    - ``/lib/adapters/OpenAIAdapter`` — adapter detail
-    - ``/lib/tools/tool_end`` — tool detail
-    - ``/lib/macros/ReasoningAgentMacro`` — macro detail
-    - ``/lib/tags/!py`` — tag detail
-    - ``/proc/runs/<run_id>`` — pipeline run detail
-    - ``/proc/scheduled/<task_id>`` — scheduled task detail
-    - ``/proc/entities/<type>/<id>`` — entity state
-
-    Parameters
-    ----------
-    path : str
-        Absolute VFS path (e.g. ``/lib/nodes/llm_node``)
+    Returns every registered node (builtin + plugins) with kind, description,
+    parameters, and JSON Schema.
 
     Returns
     -------
-        JSON content at the path
+        JSON array of node info dicts
     """
-    return await api.vfs.read_path(_vfs, path)
+    return orjson.dumps(components.list_nodes(), option=orjson.OPT_INDENT_2).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
-async def vfs_list(path: str) -> str:
-    """List entries in a VFS directory.
-
-    Use this to discover available components, runs, or entities.
-
-    Paths
-    -----
-    - ``/lib/`` — list entity types (nodes, adapters, macros, tools, tags)
-    - ``/lib/nodes/`` — list all available nodes
-    - ``/lib/adapters/`` — list all adapters
-    - ``/lib/tools/`` — list all tools
-    - ``/lib/macros/`` — list all macros
-    - ``/lib/tags/`` — list all YAML tags
-    - ``/proc/runs/`` — list pipeline runs
-    - ``/proc/scheduled/`` — list scheduled tasks
-    - ``/proc/entities/`` — list entity types
+def list_adapters(port_type: str | None = None) -> str:
+    """List all available adapters, optionally filtered by port type.
 
     Parameters
     ----------
-    path : str
-        Absolute VFS directory path (e.g. ``/lib/nodes/``)
+    port_type : str | None
+        Filter by port type (e.g., "llm", "memory", "database", "secret").
+        If None, returns all adapters.
 
     Returns
     -------
-        JSON array of entries with name, entry_type, and path
+        JSON array of adapter info dicts
     """
-    entries = await api.vfs.list_path(_vfs, path)
-    return orjson.dumps(entries, option=orjson.OPT_INDENT_2).decode()
+    return orjson.dumps(
+        components.list_adapters(port_type=port_type), option=orjson.OPT_INDENT_2
+    ).decode()
 
 
 @mcp.tool()  # type: ignore[misc]
-async def vfs_stat(path: str) -> str:
-    """Get metadata about a VFS path.
-
-    Returns structured metadata including description, entity type,
-    module path, capabilities, and tags (e.g. is_builtin, port_type).
-
-    Parameters
-    ----------
-    path : str
-        Absolute VFS path (e.g. ``/lib/adapters/OpenAIAdapter``)
+def list_tools() -> str:
+    """List all available agent tools.
 
     Returns
     -------
-        JSON metadata dict
+        JSON array of tool info dicts
     """
-    result = await api.vfs.stat_path(_vfs, path)
-    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+    return orjson.dumps(components.list_tools(), option=orjson.OPT_INDENT_2).decode()
+
+
+@mcp.tool()  # type: ignore[misc]
+def list_macros() -> str:
+    """List all available macros (reusable pipeline templates).
+
+    Returns
+    -------
+        JSON array of macro info dicts
+    """
+    return orjson.dumps(components.list_macros(), option=orjson.OPT_INDENT_2).decode()
+
+
+@mcp.tool()  # type: ignore[misc]
+def list_tags() -> str:
+    """List all available YAML custom tags (e.g., !py, !include).
+
+    Returns
+    -------
+        JSON array of tag info dicts
+    """
+    return orjson.dumps(components.list_tags(), option=orjson.OPT_INDENT_2).decode()
+
+
+@mcp.tool()  # type: ignore[misc]
+def get_component_schema(component_type: str, name: str) -> str:
+    """Get detailed JSON Schema for a specific component.
+
+    Parameters
+    ----------
+    component_type : str
+        Type: "node", "adapter", "tool", "macro", "tag"
+    name : str
+        Component name or alias (e.g., "llm_node", "OpenAIAdapter", "!py")
+
+    Returns
+    -------
+        JSON Schema dict, or error dict if not found
+    """
+    return orjson.dumps(
+        components.get_component_schema(component_type, name), option=orjson.OPT_INDENT_2
+    ).decode()
 
 
 # ============================================================================
@@ -180,7 +180,7 @@ def get_syntax_reference() -> str:
     -------
         Detailed syntax reference documentation
     """
-    return api.documentation.get_syntax_reference()
+    return documentation.get_syntax_reference()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -191,7 +191,7 @@ def explain_yaml_structure() -> str:
     -------
         YAML structure documentation
     """
-    return api.documentation.explain_yaml_structure()
+    return documentation.explain_yaml_structure()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -208,7 +208,7 @@ def get_type_reference() -> str:
     -------
         Type system reference documentation
     """
-    return api.documentation.get_type_reference()
+    return documentation.get_type_reference()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -225,7 +225,7 @@ def get_custom_adapter_guide() -> str:
     -------
         Detailed guide for creating custom adapters
     """
-    return api.documentation.get_custom_adapter_guide()
+    return documentation.get_custom_adapter_guide()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -242,7 +242,7 @@ def get_custom_node_guide() -> str:
     -------
         Detailed guide for creating custom nodes
     """
-    return api.documentation.get_custom_node_guide()
+    return documentation.get_custom_node_guide()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -258,7 +258,7 @@ def get_custom_tool_guide() -> str:
     -------
         Detailed guide for creating custom tools
     """
-    return api.documentation.get_custom_tool_guide()
+    return documentation.get_custom_tool_guide()
 
 
 @mcp.tool()  # type: ignore[misc]
@@ -275,139 +275,7 @@ def get_extension_guide(component_type: str | None = None) -> str:
     -------
         Extension guide documentation
     """
-    return api.documentation.get_extension_guide(component_type)
-
-
-# ============================================================================
-# Execution Tools
-# ============================================================================
-
-
-@mcp.tool()  # type: ignore[misc]
-async def execute_pipeline(
-    yaml_content: str,
-    inputs: dict[str, Any] | None = None,
-    environment: dict[str, Any] | None = None,
-    timeout: float = 30.0,
-) -> str:
-    """Execute a YAML pipeline and return results.
-
-    This is useful for testing pipelines during development.
-    For production execution, use the hexDAG CLI or programmatic API.
-
-    Parameters
-    ----------
-    yaml_content : str
-        YAML pipeline configuration as a string
-    inputs : dict | None
-        Initial input values for the pipeline
-    environment : dict | None
-        Optional environment configuration with port adapters.
-        Format: {"ports": {"llm": {"adapter": "mock_llm"}, ...}}
-        If None, uses mock adapters for safe testing.
-    timeout : float
-        Execution timeout in seconds (default: 30.0)
-
-    Returns
-    -------
-    str
-        JSON with execution results:
-        {
-            "success": bool,
-            "nodes": [{"name", "status", "output", "error", "duration_ms"}],
-            "final_output": Any,
-            "error": str | None,
-            "duration_ms": float
-        }
-
-    Examples
-    --------
-    Execute a simple pipeline::
-
-        result = execute_pipeline('''
-        apiVersion: hexdag/v1
-        kind: Pipeline
-        metadata:
-          name: test
-        spec:
-          nodes:
-            - kind: data_node
-              metadata:
-                name: start
-              spec:
-                value: "hello world"
-              dependencies: []
-        ''')
-    """
-    # Parse environment configuration to create ports
-    ports = None
-    if environment and "ports" in environment:
-        ports = api.execution.create_ports_from_config(environment["ports"])
-
-    result = await api.execution.execute(
-        yaml_content=yaml_content,
-        inputs=inputs or {},
-        ports=ports,
-        timeout=timeout,
-    )
-    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
-
-
-@mcp.tool()  # type: ignore[misc]
-def dry_run_pipeline(yaml_content: str, inputs: dict[str, Any] | None = None) -> str:
-    """Analyze a pipeline without executing it.
-
-    Returns execution plan, dependency order, and wave structure.
-    Useful for understanding how a pipeline will execute.
-
-    Parameters
-    ----------
-    yaml_content : str
-        YAML pipeline configuration as a string
-    inputs : dict | None
-        Input values (used for analysis, not execution)
-
-    Returns
-    -------
-    str
-        JSON with analysis:
-        {
-            "valid": bool,
-            "execution_order": [str],
-            "node_count": int,
-            "waves": [[str]],  # Nodes that can run in parallel
-            "dependency_map": {node: {dependencies, wave}},
-            "error": str | None
-        }
-
-    Examples
-    --------
-    Analyze execution order::
-
-        result = dry_run_pipeline('''
-        apiVersion: hexdag/v1
-        kind: Pipeline
-        metadata:
-          name: test
-        spec:
-          nodes:
-            - kind: data_node
-              metadata:
-                name: a
-              spec:
-                value: 1
-              dependencies: []
-            - kind: data_node
-              metadata:
-                name: b
-              spec:
-                value: 2
-              dependencies: [a]
-        ''')
-        # Returns: {"execution_order": ["a", "b"], "waves": [["a"], ["b"]], ...}
-    """
-    result = api.execution.dry_run(yaml_content, inputs)
-    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+    return documentation.get_extension_guide(component_type)
 
 
 # ============================================================================
@@ -431,7 +299,7 @@ def validate_yaml_pipeline(yaml_content: str, base_path: str | None = None) -> s
     from pathlib import Path
 
     bp = Path(base_path) if base_path else None
-    result = api.validation.validate(yaml_content, lenient=False, base_path=bp)
+    result = validation.validate(yaml_content, lenient=False, base_path=bp)
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
@@ -461,7 +329,7 @@ def validate_yaml_pipeline_lenient(yaml_content: str) -> str:
     -------
         JSON string with validation results (success/errors/warnings)
     """
-    result = api.validation.validate(yaml_content, lenient=True)
+    result = validation.validate(yaml_content, lenient=True)
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
@@ -488,7 +356,7 @@ def init_pipeline(name: str, description: str = "") -> str:
     str
         JSON with {success: bool, yaml_content: str}
     """
-    result = api.pipeline.init(name, description)
+    result = pipeline.init(name, description)
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
@@ -524,7 +392,7 @@ def add_node_to_pipeline(yaml_content: str, node_config: dict[str, Any]) -> str:
             option=orjson.OPT_INDENT_2,
         ).decode()
 
-    result = api.pipeline.add_node(
+    result = pipeline.add_node(
         yaml_content,
         kind=node_config["kind"],
         name=node_config["name"],
@@ -551,7 +419,7 @@ def remove_node_from_pipeline(yaml_content: str, node_name: str) -> str:
         JSON with {success: bool, yaml_content: str, warnings: list}
         Warns if other nodes depend on the removed node.
     """
-    result = api.pipeline.remove_node(yaml_content, node_name)
+    result = pipeline.remove_node(yaml_content, node_name)
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
@@ -576,7 +444,7 @@ def update_node_config(yaml_content: str, node_name: str, config_updates: dict[s
     str
         JSON with {success: bool, yaml_content: str}
     """
-    result = api.pipeline.update_node(
+    result = pipeline.update_node(
         yaml_content,
         node_name,
         spec=config_updates.get("spec"),
@@ -607,7 +475,7 @@ def list_pipeline_nodes(yaml_content: str) -> str:
             execution_order: [str]
         }
     """
-    result = api.pipeline.list_nodes(yaml_content)
+    result = pipeline.list_nodes(yaml_content)
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
 
 
@@ -636,7 +504,7 @@ def generate_pipeline_template(
     """
 
     # Start with init
-    result = api.pipeline.init(pipeline_name, description)
+    result = pipeline.init(pipeline_name, description)
     if not result["success"]:
         return orjson.dumps(
             {"success": False, "error": result.get("error")}, option=orjson.OPT_INDENT_2
@@ -649,7 +517,7 @@ def generate_pipeline_template(
         node_name = f"{node_type.replace('_node', '')}_{i + 1}"
         deps = [f"{node_types[i - 1].replace('_node', '')}_{i}"] if i > 0 else []
 
-        add_result = api.pipeline.add_node(
+        add_result = pipeline.add_node(
             yaml_content,
             kind=node_type,
             name=node_name,

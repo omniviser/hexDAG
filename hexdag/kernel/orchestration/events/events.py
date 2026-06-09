@@ -605,7 +605,7 @@ class PortCallEvent(Event):
 
     Provides a universal base that observers can use to catch *any* port call
     via ``isinstance(event, PortCallEvent)``.  Typed subtypes (``LLMPortCall``,
-    ``ToolRouterPortCall``, etc.) add port-specific fields.
+    ``ToolRouterCall``, etc.) add port-specific fields.
 
     Attributes
     ----------
@@ -688,4 +688,71 @@ class PipelineResumed(Event):
         """Format log message for pipeline resumed event."""
         return (
             f"▶️  Pipeline '{self.name}' resumed at '{self.wait_node}' (event: '{self.event_key}')"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Resource accounting events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class ResourceWarning(Event):
+    """Resource usage has reached the warning threshold.
+
+    Attributes
+    ----------
+    pipeline_name : str
+        Pipeline that triggered the warning.
+    resource : str
+        Resource type (e.g., ``"total_tokens"``, ``"llm_calls"``).
+    current : float
+        Current usage value.
+    limit : float
+        Configured limit.
+    ratio : float
+        Usage as fraction of limit (0.0–1.0).
+    """
+
+    pipeline_name: str
+    resource: str
+    current: float
+    limit: float
+    ratio: float
+
+    def log_message(self) -> str:
+        """Format log message for resource warning."""
+        pct = self.ratio * 100
+        return (
+            f"Resource warning: {self.resource} at {pct:.0f}% "
+            f"({self.current}/{self.limit}) in '{self.pipeline_name}'"
+        )
+
+
+@dataclass(slots=True)
+class ResourceLimitExceeded(Event):
+    """Resource usage has exceeded a configured limit.
+
+    Attributes
+    ----------
+    pipeline_name : str
+        Pipeline that exceeded the limit.
+    resource : str
+        Resource type (e.g., ``"total_tokens"``, ``"llm_calls"``).
+    current : float
+        Current usage value.
+    limit : float
+        Configured limit.
+    """
+
+    pipeline_name: str
+    resource: str
+    current: float
+    limit: float
+
+    def log_message(self) -> str:
+        """Format log message for resource limit exceeded."""
+        return (
+            f"Resource EXCEEDED: {self.resource} "
+            f"({self.current}/{self.limit}) in '{self.pipeline_name}'"
         )

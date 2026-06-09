@@ -128,6 +128,137 @@ class TestAutoWireInputForwarding:
         assert result == upstream_data
 
 
+class TestAutoInferParams:
+    """Tests for accepted_params-based auto-inference in prepare_node_input.
+
+    When a node declares ``accepted_params``, the coordinator searches
+    upstream result dicts for matching parameter names — same mechanism
+    as service_call_node, but unified in the coordinator.
+    """
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_infers_from_upstream_dicts(self, coordinator):
+        """Params found in upstream result dicts are auto-mapped."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            deps=frozenset({"fetch_order", "compute"}),
+            accepted_params=frozenset({"order_id", "amount"}),
+        )
+        results = {
+            "fetch_order": {"order_id": "ORD-1", "customer": "Alice"},
+            "compute": {"amount": 99.5, "tax": 5.0},
+        }
+
+        result = coordinator.prepare_node_input(node, results, initial_input=None)
+
+        assert result == {"order_id": "ORD-1", "amount": 99.5}
+
+    def test_ambiguous_param_skipped(self, coordinator):
+        """Param found in multiple upstream sources is skipped."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            deps=frozenset({"source_a", "source_b"}),
+            accepted_params=frozenset({"order_id", "amount"}),
+        )
+        results = {
+            "source_a": {"order_id": "A1", "amount": 10.0},
+            "source_b": {"order_id": "B1"},
+        }
+
+        result = coordinator.prepare_node_input(node, results, initial_input=None)
+
+        # order_id is ambiguous (in both sources) → skipped
+        # amount is only in source_a → mapped
+        assert result == {"amount": 10.0}
+
+    def test_top_level_keys_take_priority(self, coordinator):
+        """Top-level keys matching accepted_params are used directly."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            deps=frozenset({"upstream"}),
+            accepted_params=frozenset({"order_id", "amount"}),
+        )
+        results = {
+            "upstream": {"order_id": "TOP", "amount": 50.0, "extra": "ignored"},
+        }
+
+        result = coordinator.prepare_node_input(node, results, initial_input=None)
+
+        # Single dep → base_input is the upstream dict itself, not nested
+        # So order_id and amount are top-level matches
+        assert result["order_id"] == "TOP"
+        assert result["amount"] == 50.0
+        assert "extra" not in result
+
+    def test_explicit_input_mapping_overrides_accepted_params(self, coordinator):
+        """input_mapping takes precedence over accepted_params."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            deps=frozenset({"upstream"}),
+            accepted_params=frozenset({"order_id"}),
+            params={"input_mapping": {"order_id": "upstream.custom_field"}},
+        )
+        results = {"upstream": {"order_id": "DIRECT", "custom_field": "MAPPED"}}
+
+        result = coordinator.prepare_node_input(node, results, initial_input=None)
+
+        # input_mapping was applied, not auto-infer
+        assert result["order_id"] == "MAPPED"
+
+    def test_no_accepted_params_no_inference(self, coordinator):
+        """Without accepted_params, no auto-inference happens."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            deps=frozenset({"a", "b"}),
+        )
+        results = {"a": {"x": 1}, "b": {"y": 2}}
+
+        result = coordinator.prepare_node_input(node, results, initial_input=None)
+
+        # Raw namespace dict, no filtering
+        assert result == {"a": {"x": 1}, "b": {"y": 2}}
+
+    def test_accepted_params_supersedes_in_model(self, coordinator):
+        """accepted_params takes priority over in_model auto-wire."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            in_model=DownstreamInput,  # expects name, score
+            deps=frozenset({"upstream"}),
+            accepted_params=frozenset({"name"}),  # only wants name
+        )
+        results = {"upstream": {"name": "Alice", "score": 0.95, "extra": "x"}}
+
+        result = coordinator.prepare_node_input(node, results, initial_input=None)
+
+        # accepted_params wins: only "name" extracted, not "score"
+        assert result == {"name": "Alice"}
+
+    def test_infers_from_initial_input(self, coordinator):
+        """Params not in upstream dicts are found in initial_input."""
+        node = NodeSpec(
+            "process",
+            noop_fn,
+            deps=frozenset({"compute"}),
+            accepted_params=frozenset({"amount", "user_id"}),
+        )
+        results = {"compute": {"amount": 99.5}}
+
+        result = coordinator.prepare_node_input(
+            node, results, initial_input={"user_id": "U42", "extra": "ignored"}
+        )
+
+        assert result == {"amount": 99.5, "user_id": "U42"}
+
+
 class TestAdditiveInputMapping:
     """Tests for n8n-like additive input_mapping behavior.
 

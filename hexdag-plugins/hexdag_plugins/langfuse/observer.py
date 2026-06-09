@@ -7,7 +7,7 @@ Maps hexDAG's event taxonomy to Langfuse's trace/span/generation model:
         PipelineStarted  ->     process_span.span(name=pipeline)
           NodeStarted    ->       span.span(name=node)
             LLMPortCall  ->         span.generation(model, input, output, usage)
-            ToolRouterPortCall ->   span.span(name="tool:X")
+            ToolRouterCall ->   span.span(name="tool:X")
           NodeCompleted  ->       node_span.end()
         PipelineCompleted ->    pipeline_span.end()
       ProcessCompleted   ->   process_span.end()
@@ -31,7 +31,7 @@ from hexdag.kernel.orchestration.events.events import (
     SystemStarted,
 )
 from hexdag.kernel.ports.llm import LLMPortCall
-from hexdag.kernel.ports.tool_router import ToolRouterPortCall
+from hexdag.kernel.tool_router import ToolRouterCall
 
 if TYPE_CHECKING:
     from langfuse import Langfuse
@@ -94,7 +94,7 @@ class LangfuseObserver:
                 self._on_node_started(event)
             case LLMPortCall():
                 self._on_llm_port_call(event)
-            case ToolRouterPortCall():
+            case ToolRouterCall():
                 self._on_tool_call(event)
             case NodeCompleted():
                 self._on_node_completed(event)
@@ -210,7 +210,7 @@ class LangfuseObserver:
             },
         )
 
-    def _on_tool_call(self, event: ToolRouterPortCall) -> None:
+    def _on_tool_call(self, event: ToolRouterCall) -> None:
         parent = self._node_spans.get(event.node_name) or self._trace
         if parent is None:
             return

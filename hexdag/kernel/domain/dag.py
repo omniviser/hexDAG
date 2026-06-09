@@ -118,6 +118,7 @@ class NodeSpec:
     on_error: str | None = None  # Name of DAG node to run if this node fails (after retries)
     critical: bool = False  # If True and node is skipped, pipeline fails
     required_inputs: tuple[str, ...] | list[str] = ()  # Input fields that must be non-None
+    accepted_params: frozenset[str] | None = None  # Target fn parameter names for auto-inference
     # Factory metadata for distributed execution (set by YAML pipeline builder)
     factory_class: str | None = None  # Module path, e.g. "hexdag.stdlib.nodes.LLMNode"
     factory_params: dict[str, Any] | None = None  # Original factory **kwargs

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from hexdag.compiler.yaml_builder import YamlPipelineBuilder
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
-from hexdag.kernel.ports.tool_router import ToolRouter
+from hexdag.kernel.tool_router import ToolRouter
 from hexdag.mcp_server import build_yaml_pipeline_interactive
 from hexdag.stdlib.adapters.mock import MockLLM
 
