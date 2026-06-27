@@ -174,6 +174,7 @@ class SystemBuilder:
                 "observers": spec.get("observers", []),
                 "memory": spec.get("memory", {}),
                 "gc": spec.get("gc", {}),
+                "transaction": spec.get("transaction", "unified"),
             })
         except Exception as e:
             raise SystemBuildError(f"System validation error: {e}") from e

@@ -12,10 +12,9 @@ from hexdag.compiler.reference_resolver import (
     _INPUT_FIELD_RE,
     _NODE_FIELD_RE,
     extract_input_refs_from_mapping,
-    extract_refs_from_expressions,
-    extract_refs_from_mapping,
-    extract_refs_from_string,
-    extract_refs_from_template,
+    extract_jinja_head_names,
+    extract_refs_from_spec,
+    iter_spec_strings,
 )
 from hexdag.kernel.context.execution_context import _NS_LOOKUP, RESERVED_NAMES
 from hexdag.kernel.domain.dag import DirectedGraph
@@ -167,13 +166,14 @@ class _SchemaValidator:
         # Basic validation - without registry, we can only do structural checks
         errors: list[str] = []
 
-        # LLM nodes require template or prompt_template
+        # LLM nodes require human_message (or legacy template/prompt_template)
         if (
             node_type in ("llm", "llm_node")
+            and "human_message" not in spec
             and "template" not in spec
             and "prompt_template" not in spec
         ):
-            errors.append("Missing required field 'template' (or 'prompt_template')")
+            errors.append("Missing required field 'human_message' (or legacy 'prompt_template')")
 
         # Prompt nodes require template
         if (
@@ -371,6 +371,9 @@ class YamlValidator:
 
         # Validate that all node references are declared as dependencies
         self._validate_undeclared_refs(nodes, dep_graph, node_ids, macro_instances, result)
+
+        # Warn on {{name}} refs that look like typos of real node names
+        self._validate_template_typos(nodes, dep_graph, node_ids, macro_instances, result)
 
         # Validate $input data-flow consistency using the dependency graph
         self._validate_input_flow_consistency(nodes, dep_graph, result)
@@ -991,17 +994,16 @@ class YamlValidator:
         macro_instances: set[str],
         result: ValidationReport,
     ) -> None:
-        """Error when a node references another node (in ``when``,
-        ``input_mapping``, ``expressions``, or templates) that is not
-        in its dependency set.
+        """Warn when a node references another node that is not in its
+        explicit ``dependencies`` list.
 
-        The builder's ``_infer_deps`` auto-adds missing deps at build time,
-        but if a pipeline declares explicit ``dependencies`` and misses a
-        reference, the orchestrator may evaluate the field before the
-        referenced node completes — resolving the value as ``None``.
-
-        This rule makes that a build error so the YAML must be correct
-        before reaching the builder.
+        Uses the same :func:`extract_refs_from_spec` scan as the builder's
+        ``_infer_deps``, so builder and validator can never disagree about
+        what counts as a reference. The builder auto-merges these missing
+        deps at build time (emitting the same warning), so the pipeline
+        executes correctly either way — an incomplete explicit list is
+        declaration hygiene, not a correctness error. Explicit deps are a
+        supplement to inference, not an exhaustive promise.
         """
         known = frozenset(node_ids)
 
@@ -1020,53 +1022,9 @@ class YamlValidator:
             other_nodes = known - {node_id}
             mi = frozenset(macro_instances)
 
-            # Infer which nodes this node actually references
-            spec = node.get("spec", {})
-            inferred: set[str] = set()
+            # Same scan the builder runs — single source of truth.
+            inferred = extract_refs_from_spec(node.get("spec", {}), other_nodes, mi)
 
-            # input_mapping
-            input_mapping = spec.get("input_mapping")
-            if isinstance(input_mapping, dict):
-                inferred |= extract_refs_from_mapping(input_mapping, other_nodes, mi)
-
-            # expressions
-            expressions = spec.get("expressions")
-            if isinstance(expressions, dict):
-                inferred |= extract_refs_from_expressions(expressions, other_nodes, mi)
-
-            # templates
-            for key in (
-                "prompt_template",
-                "template",
-                "initial_prompt_template",
-                "main_prompt",
-                "human_message",
-                "system_message",
-            ):
-                tmpl = spec.get(key)
-                if isinstance(tmpl, str):
-                    inferred |= extract_refs_from_template(tmpl, other_nodes, mi)
-
-            # when clause
-            when_expr = spec.get("when")
-            if isinstance(when_expr, str):
-                inferred |= extract_refs_from_string(when_expr, other_nodes, mi)
-
-            # composite fields
-            for field_key in ("condition", "items"):
-                field_val = spec.get(field_key)
-                if isinstance(field_val, str):
-                    inferred |= extract_refs_from_string(field_val, other_nodes, mi)
-
-            branches = spec.get("branches")
-            if isinstance(branches, list):
-                for branch in branches:
-                    if isinstance(branch, dict):
-                        cond = branch.get("condition")
-                        if isinstance(cond, str):
-                            inferred |= extract_refs_from_string(cond, other_nodes, mi)
-
-            # Compare: any inferred ref not in declared deps is an error
             missing = inferred - declared_deps
             # Exclude macro-generated nodes (they resolve at macro expansion)
             missing = {
@@ -1074,13 +1032,91 @@ class YamlValidator:
             }
 
             for ref in sorted(missing):
-                result.add_error(
+                result.add_warning(
                     f"Node '{node_id}': references node '{ref}' "
-                    f"(in when/input_mapping/expressions/template) "
-                    f"but '{ref}' is not in its dependencies. "
+                    f"but '{ref}' is not in its explicit dependencies. "
+                    f"The builder will add it automatically. "
                     f"Add '{ref}' to dependencies or remove the explicit "
                     f"dependencies key to let the builder infer them."
                 )
+
+    def _validate_template_typos(
+        self,
+        nodes: list[dict[str, Any]],
+        dep_graph: dict[str, set[str]],
+        node_ids: set[str],
+        macro_instances: set[str],
+        result: ValidationReport,
+    ) -> None:
+        """Warn on ``{{name}}`` refs whose name matches no node but is a
+        close match of one — almost always a typo.
+
+        A typo'd reference creates no dependency edge and resolves to
+        ``None`` at runtime, so it fails silently. Two precision guards
+        keep noise down:
+
+        - Only close matches of real node names warn — template vars
+          legitimately come from input_mapping aliases, ``$input``
+          fields, and dependency output fields.
+        - If the suggested node is already upstream (declared dep,
+          inferred ref, or the implicit-chain predecessor), the name is
+          most plausibly one of its *output fields* — single-dep nodes
+          receive that output flat, so ``{{thread_context}}`` fed by
+          ``fetch_thread_context`` resolves fine. A genuine typo breaks
+          inference, so the suggested node is typically not upstream.
+        """
+        known = frozenset(node_ids)
+        node_id_list = sorted(node_ids)
+        mi = frozenset(macro_instances)
+        previous_node_id: str | None = None
+
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+            spec = node.get("spec", {})
+
+            # Names that legitimately appear in templates without being nodes
+            allowed = (
+                known
+                | _BUILTIN_NAMES
+                | RESERVED_NAMES
+                # loop-scope variables available inside composite bodies
+                | {"item", "index", "loop"}
+            )
+            input_mapping = spec.get("input_mapping")
+            if isinstance(input_mapping, dict):
+                allowed |= set(input_mapping.keys())
+            expressions = spec.get("expressions")
+            if isinstance(expressions, dict):
+                allowed |= set(expressions.keys())
+
+            candidates: set[str] = set()
+            for text in iter_spec_strings(spec):
+                if "{{" in text:
+                    candidates |= extract_jinja_head_names(text)
+
+            unknown = sorted(candidates - allowed)
+            if unknown:
+                upstream = dep_graph.get(node_id, set()) | extract_refs_from_spec(
+                    spec, known - {node_id}, mi
+                )
+                if previous_node_id:
+                    upstream.add(previous_node_id)
+
+                for name in unknown:
+                    if any(name.startswith(f"{m}_") for m in macro_instances):
+                        continue
+                    close = difflib.get_close_matches(name, node_id_list, n=1, cutoff=0.8)
+                    if close and close[0] not in upstream:
+                        result.add_warning(
+                            f"Node '{node_id}': template references "
+                            f"'{{{{{name}}}}}' but no node named '{name}' exists. "
+                            f"Did you mean '{close[0]}'? Unknown references "
+                            f"resolve to None at runtime."
+                        )
+
+            previous_node_id = node_id
 
     # ==================================================================
     # Rule 1: Signature-based spec validation
@@ -1145,7 +1181,7 @@ class YamlValidator:
 
         # Get callable to introspect
         target = factory_obj
-        if isinstance(factory_obj, type):
+        if isinstance(factory_obj, type):  # pyright: ignore[reportUnnecessaryIsInstance]
             try:
                 target = factory_obj()
             except Exception:
@@ -1173,7 +1209,7 @@ class YamlValidator:
         # Rule 3: Port requirement validation
         # Ports may be configured at runtime via port_overrides, so
         # missing ports are warnings, not errors.
-        factory_cls = factory_obj if isinstance(factory_obj, type) else type(factory_obj)
+        factory_cls = factory_obj if isinstance(factory_obj, type) else type(factory_obj)  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
         port_caps = getattr(factory_cls, "_hexdag_port_capabilities", None)
         if port_caps and pipeline_ports is not None:
             for port_name in port_caps:

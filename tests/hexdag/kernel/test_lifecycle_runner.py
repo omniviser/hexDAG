@@ -625,3 +625,34 @@ class TestLifecycleRunnerEntityStateSharing:
         assert "service_overrides" in captured_kwargs
         assert captured_kwargs["service_overrides"]["entity_state"] is runner.entity_state
         await runner.stop()
+
+
+class TestLifecycleTransactionStrategy:
+    """The unified|saga transaction strategy (declared via spec.transaction)."""
+
+    @pytest.mark.asyncio()
+    async def test_defaults_to_unified(self):
+        config = _make_ticket_system()
+        assert config.transaction == "unified"
+
+    @pytest.mark.asyncio()
+    async def test_unified_transition_succeeds(self):
+        runner = LifecycleRunner()
+        await runner.start(_make_ticket_system(transaction="unified"))
+        result = await runner.transition("ticket", "T-1", "CLOSED")
+        assert result["to_state"] == "CLOSED"
+        await runner.stop()
+
+    @pytest.mark.asyncio()
+    async def test_saga_strategy_not_implemented(self):
+        runner = LifecycleRunner()
+        await runner.start(_make_ticket_system(transaction="saga"))
+        with pytest.raises(NotImplementedError, match="saga"):
+            await runner.transition("ticket", "T-1", "CLOSED")
+        await runner.stop()
+
+    def test_invalid_strategy_rejected(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            _make_ticket_system(transaction="bogus")

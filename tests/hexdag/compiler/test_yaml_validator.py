@@ -336,8 +336,8 @@ class TestYamlValidator:
         # Type validation of field_mapping value would happen at runtime
         assert result.is_valid
 
-    def test_field_mapping_undeclared_dependency_error(self):
-        """input_mapping references 'source' but dependencies is [] → error."""
+    def test_field_mapping_undeclared_dependency_warns(self):
+        """input_mapping references 'source' but dependencies is [] → warning."""
         config = {
             "kind": "Pipeline",
             "metadata": {"name": "test"},
@@ -361,8 +361,8 @@ class TestYamlValidator:
             },
         }
         result = self.validator.validate(config)
-        assert not result.is_valid
-        assert any("references node 'source'" in e for e in result.errors)
+        assert result.is_valid
+        assert any("references node 'source'" in w for w in result.warnings)
 
     def test_non_dict_config(self):
         """Test validation of non-dict config."""
@@ -2190,7 +2190,8 @@ class TestUndeclaredRefs:
 
     When a node has explicit dependencies but references another node
     in its when/input_mapping/expressions that isn't declared as a
-    dependency, the validator should error.
+    dependency, the validator warns — the builder auto-merges the
+    missing deps, so the pipeline executes correctly either way.
     """
 
     def setup_method(self):
@@ -2203,8 +2204,8 @@ class TestUndeclaredRefs:
             "spec": {"nodes": nodes},
         }
 
-    def test_error_when_clause_references_undeclared_dep(self):
-        """when clause references node not in dependencies → error."""
+    def test_warns_when_clause_references_undeclared_dep(self):
+        """when clause references node not in dependencies → warning."""
         config = self._make_config([
             {
                 "kind": "function_node",
@@ -2223,13 +2224,14 @@ class TestUndeclaredRefs:
             },
         ])
         result = self.validator.validate(config)
-        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
-        assert len(ref_errors) == 1
-        assert "'sender'" in ref_errors[0]
-        assert "'checker'" in ref_errors[0]
+        assert result.is_valid
+        ref_warnings = [w for w in result.warnings if "not in its explicit dependencies" in w]
+        assert len(ref_warnings) == 1
+        assert "'sender'" in ref_warnings[0]
+        assert "'checker'" in ref_warnings[0]
 
-    def test_error_input_mapping_references_undeclared_dep(self):
-        """input_mapping references node not in dependencies → error."""
+    def test_warns_input_mapping_references_undeclared_dep(self):
+        """input_mapping references node not in dependencies → warning."""
         config = self._make_config([
             {
                 "kind": "function_node",
@@ -2252,13 +2254,14 @@ class TestUndeclaredRefs:
             },
         ])
         result = self.validator.validate(config)
-        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
-        assert len(ref_errors) == 1
-        assert "'consumer'" in ref_errors[0]
-        assert "'upstream_b'" in ref_errors[0]
+        assert result.is_valid
+        ref_warnings = [w for w in result.warnings if "not in its explicit dependencies" in w]
+        assert len(ref_warnings) == 1
+        assert "'consumer'" in ref_warnings[0]
+        assert "'upstream_b'" in ref_warnings[0]
 
-    def test_no_error_when_dep_is_declared(self):
-        """Referenced node IS in dependencies → no error."""
+    def test_no_warning_when_dep_is_declared(self):
+        """Referenced node IS in dependencies → no warning."""
         config = self._make_config([
             {
                 "kind": "function_node",
@@ -2276,11 +2279,11 @@ class TestUndeclaredRefs:
             },
         ])
         result = self.validator.validate(config)
-        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
-        assert not ref_errors
+        ref_warnings = [w for w in result.warnings if "not in its explicit dependencies" in w]
+        assert not ref_warnings
 
-    def test_no_error_without_explicit_deps(self):
-        """Node without explicit dependencies → auto-infer, no error."""
+    def test_no_warning_without_explicit_deps(self):
+        """Node without explicit dependencies → auto-infer, no warning."""
         config = self._make_config([
             {
                 "kind": "function_node",
@@ -2298,11 +2301,11 @@ class TestUndeclaredRefs:
             },
         ])
         result = self.validator.validate(config)
-        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
-        assert not ref_errors
+        ref_warnings = [w for w in result.warnings if "not in its explicit dependencies" in w]
+        assert not ref_warnings
 
     def test_dollar_input_not_treated_as_undeclared(self):
-        """$input.field references are not node deps → no error."""
+        """$input.field references are not node deps → no warning."""
         config = self._make_config([
             {
                 "kind": "function_node",
@@ -2315,11 +2318,11 @@ class TestUndeclaredRefs:
             },
         ])
         result = self.validator.validate(config)
-        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
-        assert not ref_errors
+        ref_warnings = [w for w in result.warnings if "not in its explicit dependencies" in w]
+        assert not ref_warnings
 
     def test_multiple_missing_refs(self):
-        """Multiple undeclared refs in one node → multiple errors."""
+        """Multiple undeclared refs in one node → multiple warnings."""
         config = self._make_config([
             {"kind": "function_node", "metadata": {"name": "a"}, "spec": {"fn": "json.dumps"}},
             {"kind": "function_node", "metadata": {"name": "b"}, "spec": {"fn": "json.dumps"}},
@@ -2336,9 +2339,10 @@ class TestUndeclaredRefs:
             },
         ])
         result = self.validator.validate(config)
-        ref_errors = [e for e in result.errors if "not in its dependencies" in e]
-        assert len(ref_errors) == 2
-        referenced_nodes = {e.split("'")[3] for e in ref_errors}
+        assert result.is_valid
+        ref_warnings = [w for w in result.warnings if "not in its explicit dependencies" in w]
+        assert len(ref_warnings) == 2
+        referenced_nodes = {w.split("'")[3] for w in ref_warnings}
         assert referenced_nodes == {"a", "b"}
 
 
@@ -2463,3 +2467,121 @@ class TestCtxFieldValidation:
         ctx_errors = [e for e in result.errors if "Unknown ctx field" in e]
         assert len(ctx_errors) == 1
         assert "banana" in ctx_errors[0]
+
+
+class TestTemplateTypoLint:
+    """Tests for _validate_template_typos — near-miss unknown {{refs}} warn."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    def _make_config(self, nodes):
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {"nodes": nodes},
+        }
+
+    def test_near_miss_warns_with_suggestion(self):
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "get_context"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "padding"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "llm_node",
+                "metadata": {"name": "analyze"},
+                "spec": {"human_message": "Analyze {{get_contxt.load}}"},
+            },
+        ])
+        result = self.validator.validate(config)
+        typo_warnings = [w for w in result.warnings if "Did you mean" in w]
+        assert len(typo_warnings) == 1
+        assert "get_contxt" in typo_warnings[0]
+        assert "get_context" in typo_warnings[0]
+
+    def test_no_warning_when_suggested_node_is_upstream(self):
+        """Bare {{field}} matching an upstream node's name pattern is its
+        output field (single-dep flat pass-through), not a typo."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "fetch_thread_context"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "function_node",
+                "metadata": {"name": "padding"},
+                "spec": {"fn": "json.dumps"},
+                "dependencies": [],
+            },
+            {
+                "kind": "llm_node",
+                "metadata": {"name": "analyze"},
+                "spec": {
+                    "human_message": "History: {{thread_context}}",
+                },
+                "dependencies": ["fetch_thread_context"],
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not [w for w in result.warnings if "Did you mean" in w]
+
+    def test_unrelated_unknown_name_is_silent(self):
+        """Template vars from aliases/dep fields are not flagged — only near-misses."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "get_context"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "llm_node",
+                "metadata": {"name": "analyze"},
+                "spec": {"human_message": "Subject {{email_subject}}"},
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not [w for w in result.warnings if "Did you mean" in w]
+
+    def test_input_mapping_alias_is_allowed(self):
+        """A {{var}} matching the node's own input_mapping key never warns."""
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "get_contexts"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "llm_node",
+                "metadata": {"name": "analyze"},
+                "spec": {
+                    "human_message": "Analyze {{get_context}}",
+                    "input_mapping": {"get_context": "$input.context"},
+                },
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not [w for w in result.warnings if "Did you mean" in w]
+
+    def test_namespaces_never_flagged(self):
+        config = self._make_config([
+            {
+                "kind": "function_node",
+                "metadata": {"name": "inputs_node"},
+                "spec": {"fn": "json.dumps"},
+            },
+            {
+                "kind": "llm_node",
+                "metadata": {"name": "analyze"},
+                "spec": {"human_message": "{{input.x}} {{state.y}} {{ctx.z}}"},
+            },
+        ])
+        result = self.validator.validate(config)
+        assert not [w for w in result.warnings if "Did you mean" in w]

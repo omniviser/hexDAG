@@ -263,6 +263,71 @@ class TestOrchestratorFactoryServiceOverrides:
         assert isinstance(services["pipeline_memory"], PipelineMemory)
 
 
+class CountingService:
+    """Module-level service class, instantiated via resolver in tests."""
+
+    instantiations = 0
+
+    def __init__(self) -> None:
+        type(self).instantiations += 1
+
+
+class TestServicesAccessor:
+    def test_services_property_exposes_resolved_instances(self) -> None:
+        """Host code reaches the same instances pipeline runs use."""
+        factory = OrchestratorFactory()
+        config = PipelineConfig(
+            ports={},
+            type_ports={},
+            policies={},
+            metadata={"name": "test"},
+            nodes=[],
+        )
+        sentinel = object()
+        orchestrator = factory.create_orchestrator(
+            config,
+            service_overrides={"my_service": sentinel},
+        )
+        assert orchestrator.services["my_service"] is sentinel
+        assert "pipeline_memory" in orchestrator.services
+
+    def test_services_property_empty_without_services(self) -> None:
+        from hexdag.kernel.orchestration.orchestrator import Orchestrator
+
+        orchestrator = Orchestrator(ports={})
+        assert orchestrator.services == {}
+
+    def test_override_skips_yaml_instantiation(self) -> None:
+        """A YAML-declared service covered by an override is never built."""
+        factory = OrchestratorFactory()
+        config = PipelineConfig(
+            ports={},
+            type_ports={},
+            policies={},
+            metadata={"name": "test"},
+            nodes=[],
+            services={
+                "counter": {
+                    "class": (
+                        "tests.hexdag.kernel.orchestration"
+                        ".test_orchestrator_factory.CountingService"
+                    ),
+                },
+            },
+        )
+        CountingService.instantiations = 0
+        injected = CountingService()
+        assert CountingService.instantiations == 1
+
+        orchestrator = factory.create_orchestrator(
+            config,
+            service_overrides={"counter": injected},
+        )
+        assert orchestrator.services["counter"] is injected
+        # The YAML spec was NOT instantiated on top of the override
+        assert CountingService.instantiations == 1
+
+
 class TestOrchestratorFactoryIntegration:
     """Integration tests for OrchestratorFactory."""
 

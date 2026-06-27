@@ -208,6 +208,7 @@ Specification for llm_node type
 | `output_schema` | string | No |  |
 | `parse_json` | string | No |  |
 | `prompt_template` | string | No |  |
+| `stream` | string | No |  |
 | `system_message` | string | No | System message template. |
 | `system_prompt` | string | No |  |
 | `template` | string | No |  |
@@ -255,6 +256,7 @@ Specification for transition_node type
 |-----------|------|----------|-------------|
 | `entity` | string | Yes | Entity type (must match a registered ... |
 | `entity_id` | string | No | Entity ID expression — resolved at ru... |
+| `payload` | string | No | Optional domain context forwarded to ... |
 | `reason` | string | No | Optional reason expression — resolved... |
 | `to_state` | string | Yes | Target state for the transition. |
 

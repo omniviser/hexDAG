@@ -3,6 +3,7 @@
 import json
 import os
 import time
+from collections.abc import AsyncIterator
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
@@ -17,6 +18,7 @@ from hexdag.kernel.ports.llm import (
     SupportsEmbedding,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsStreaming,
     SupportsStructuredOutput,
     SupportsUsageTracking,
     SupportsVision,
@@ -59,6 +61,7 @@ class OpenAIAdapter(
     HexDAGAdapter,
     LLM,
     SupportsGeneration,
+    SupportsStreaming,
     SupportsFunctionCalling,
     SupportsStructuredOutput,
     SupportsVision,
@@ -241,6 +244,60 @@ class OpenAIAdapter(
         except Exception as e:
             logger.error("OpenAI API error: {}", e, exc_info=True)
             return None
+
+    async def astream(self, messages: MessageList) -> AsyncIterator[str]:
+        """Stream a response as incremental text deltas.
+
+        Uses OpenAI's streaming API. Token usage is captured from the
+        final usage chunk and exposed via ``get_last_usage()``.
+
+        Args
+        ----
+            messages: List of Message objects with role and content
+
+        Yields
+        ------
+        str
+            Incremental text deltas.
+        """
+        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+
+        if self.system_prompt and not any(msg["role"] == "system" for msg in openai_messages):
+            openai_messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+        request_params: dict[str, Any] = {
+            "model": self.model,
+            "messages": openai_messages,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "frequency_penalty": self.frequency_penalty,
+            "presence_penalty": self.presence_penalty,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+        if self.max_tokens is not None:
+            request_params["max_tokens"] = self.max_tokens
+
+        if self.seed is not None:
+            request_params["seed"] = self.seed
+
+        if stop_seq := self._extra_kwargs.get("stop_sequences"):
+            request_params["stop"] = stop_seq
+
+        self._last_usage = None
+        stream = await self.client.chat.completions.create(**request_params)
+
+        async for chunk in stream:
+            # Final chunk carries usage (include_usage), with empty choices
+            if chunk.usage:
+                self._last_usage = TokenUsage(
+                    input_tokens=chunk.usage.prompt_tokens,
+                    output_tokens=chunk.usage.completion_tokens,
+                    total_tokens=chunk.usage.total_tokens,
+                )
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
     async def aresponse_with_tools(
         self,

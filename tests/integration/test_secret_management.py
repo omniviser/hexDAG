@@ -16,7 +16,10 @@ import pytest
 
 from hexdag.compiler.component_instantiator import _resolve_deferred_env_vars
 from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
-from hexdag.kernel.orchestration.hooks import HookConfig, PostDagHookConfig
+from hexdag.kernel.orchestration.components.lifecycle_manager import (
+    HookConfig,
+    PostDagHookConfig,
+)
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.types import Secret
 from hexdag.stdlib.adapters.anthropic.anthropic_adapter import AnthropicAdapter

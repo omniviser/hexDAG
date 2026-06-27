@@ -68,6 +68,7 @@ Secrets declared with `secret()` are resolved in this order:
 | `MySQLAdapter` | MySQL database adapter with async connection pooling. |
 | `PostgreSQLAdapter` | PostgreSQL database adapter with async connection pooling. |
 | `SQLAdapter` | Base SQL adapter with SQLAlchemy connection pooling. |
+| `SQLAlchemyAdapter` | Adapter for SQLAlchemy-supported databases. |
 | `SQLiteAdapter` | Async SQLite adapter for database port. |
 | `MySQLAdapter` | MySQL document-store adapter for hexDAG. |
 | `MySQLAdapter` | MySQL adapter for database port. |
@@ -113,6 +114,7 @@ Secrets declared with `secret()` are resolved in this order:
 |---------|-------------|
 | `PgVectorAdapter` | PostgreSQL adapter with pgvector extension support. |
 | `ChromaDBAdapter` | ChromaDB vector store adapter. |
+| `ConsoleNotificationAdapter` | Notification adapter that writes to the hexDAG logger. |
 | `GraphEmailAdapter` | Microsoft Graph email adapter for production use. |
 | `HexDAGAdapter` | Mixin that auto-registers adapters when ``yaml_alias`` is pr... |
 | `NoopEmailAdapter` | No-op email adapter that logs but does not send anything. |

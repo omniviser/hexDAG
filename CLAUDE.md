@@ -240,7 +240,8 @@ hexDAG uses an **n8n-like data flow model** where upstream node outputs are auto
 - Every node can access upstream node outputs by name: `node_name.field.subfield`
 - `input_mapping` is **optional** — use it only to create short aliases
 - `$input.field` or `input.field` — access the initial pipeline input
-- Dependencies are **auto-inferred** from expressions and input_mapping references
+- Dependencies are **auto-inferred**: any `{{node.field}}` or `{{node}}` ref in **any spec string** (any field name, any nesting depth — including custom node fields) creates an edge; bare expression refs (`node.field` without braces) are inferred in framework fields (`input_mapping`, `expressions`, `when`, `condition`, `items`, `state_update`, `branches[].condition`, `payload`)
+- Use `wait_for: [node]` for ordering-only edges (run after a side-effect node without reading its data)
 - Built-in functions like `coalesce()`, `default()`, `isnone()` handle optional fields
 
 **Expression node — reference upstream directly (no mapping needed):**
@@ -284,6 +285,8 @@ hexDAG uses an **n8n-like data flow model** where upstream node outputs are auto
 - Expression variable names that collide with node names → **build error**
 - Expression variable names that collide with builtins (`len`, `coalesce`) → **build error**
 - Unknown first path segment (typo) → **build error** with "did you mean?" suggestion
+- `{{name}}` near-miss of a real node name (template typo) → **validation warning** with "did you mean?" suggestion
+- Explicit `dependencies` missing a referenced node → **warning**, builder auto-merges the missing edge
 - Missing deep path at runtime → returns `None` (optional field), not silent failure
 
 ### Expression Namespaces

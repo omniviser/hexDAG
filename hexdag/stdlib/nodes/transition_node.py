@@ -68,6 +68,7 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
         entity_id: str | None = None,
         to_state: str,
         reason: str | None = None,
+        payload: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> NodeSpec:
         """Build a transition node spec.
@@ -86,6 +87,10 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
         reason : str | None
             Optional reason expression — resolved at runtime.
             Supports ``$input.field`` and ``node_name.field`` syntax.
+        payload : dict[str, Any] | None
+            Optional domain context forwarded to the transition handler.
+            Values support ``$input.field`` / ``node_name.field`` syntax
+            (resolved at runtime); other values are passed as literals.
         **kwargs
             Additional NodeSpec fields (when, on_error, etc.).
         """
@@ -99,6 +104,18 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
             input_mapping["entity_id"] = entity_id  # type: ignore[assignment]
         if _is_dynamic_ref(reason):
             input_mapping["reason"] = reason  # type: ignore[assignment]
+
+        # Payload values: dynamic refs go through input_mapping under a
+        # prefixed key; everything else is captured as a literal.
+        _payload_literals: dict[str, Any] = {}
+        _payload_dynamic_keys: list[str] = []
+        if payload:
+            for p_key, p_value in payload.items():
+                if isinstance(p_value, str) and _is_dynamic_ref(p_value):
+                    input_mapping[f"payload__{p_key}"] = p_value
+                    _payload_dynamic_keys.append(p_key)
+                else:
+                    _payload_literals[p_key] = p_value
 
         # Keep raw values for the closure fallback (literal strings / None)
         _entity_id_literal = entity_id if not _is_dynamic_ref(entity_id) else None
@@ -136,6 +153,13 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
             # Resolve reason: input_mapping-resolved value first, then literal.
             resolved_reason = inputs.get("reason", _reason_literal)
 
+            # Assemble payload: literals + runtime-resolved dynamic values.
+            resolved_payload: dict[str, Any] | None = None
+            if _payload_literals or _payload_dynamic_keys:
+                resolved_payload = dict(_payload_literals)
+                for p_key in _payload_dynamic_keys:
+                    resolved_payload[p_key] = inputs.get(f"payload__{p_key}")
+
             context = TransitionContext(
                 run_id=get_run_id() or "",
                 pipeline_name=get_pipeline_name() or "",
@@ -147,6 +171,7 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
                 entity_id=str(resolved_id),
                 to_state=_to_state,
                 reason=str(resolved_reason) if resolved_reason else None,
+                payload=resolved_payload,
                 _context=context,
             )
             return result
@@ -167,5 +192,6 @@ class TransitionNode(BaseNodeFactory, yaml_alias="transition"):
                 "entity_id": entity_id,
                 "to_state": _to_state,
                 "reason": reason,
+                "payload": payload,
             },
         )

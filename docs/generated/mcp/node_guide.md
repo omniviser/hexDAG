@@ -169,6 +169,7 @@ Unified LLM node — prompt building, API calls, and structured output.
 | `examples` | `list[dict[str, Any]] | None` | No |  |
 | `conversation` | `str | list[Any] | None` | No |  |
 | `output_schema` | `dict[str, Any] | type[BaseModel] | None` | No |  |
+| `stream` | `bool` | No |  |
 | `deps` | `list[str] | None` | No |  |
 | `prompt_template` | `PromptInput | str | None` | No |  |
 | `system_prompt` | `str | None` | No |  |
@@ -246,6 +247,7 @@ Factory for entity state transition nodes.
 | `entity_id` | `str | None` | No | Entity ID expression — resolved at runtime from in... |
 | `to_state` | `str` | Yes | Target state for the transition. |
 | `reason` | `str | None` | No | Optional reason expression — resolved at runtime. ... |
+| `payload` | `dict[str, typing.Any] | None` | No | Optional domain context forwarded to the transitio... |
 
 **Example:**
 ```yaml

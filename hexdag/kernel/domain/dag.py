@@ -365,6 +365,7 @@ class DirectedGraph:
         self,
         nodes: list[NodeSpec] | None = None,
         strict_add: bool = False,
+        name: str = "unnamed",
     ) -> None:
         """Initialize DirectedGraph, optionally with a list of nodes.
 
@@ -375,7 +376,10 @@ class DirectedGraph:
                 If False (default), allow adding nodes with missing dependencies
                 and defer validation to validate() call. Set to True for dynamic
                 graphs to catch errors early.
+            name: Human-readable pipeline name. Used in events, logs, and
+                checkpoints. Set by YamlPipelineBuilder / PipelineRunner.
         """
+        self.name = name
         self.nodes: dict[str, NodeSpec] = {}
         self._forward_edges: defaultdict[str, set[str]] = defaultdict(
             set

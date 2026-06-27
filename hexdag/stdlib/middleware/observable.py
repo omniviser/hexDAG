@@ -22,6 +22,8 @@ from hexdag.kernel.ports.llm import (
 from hexdag.kernel.utils.node_timer import Timer
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from pydantic import BaseModel
 
 
@@ -130,6 +132,47 @@ class ObservableLLM(SupportsGeneration, SupportsStructuredOutput):
             )
         return result  # type: ignore[no-any-return]
 
+    def _observed_astream(self, messages: MessageList) -> AsyncIterator[str]:
+        """Forward astream, accumulate the response, and emit an LLMPortCall.
+
+        The event is emitted after the stream completes (or is closed early)
+        so streamed calls produce the same port-call span and usage trace as
+        the non-streaming methods.
+        """
+        node_name = get_current_node_name() or "unknown"
+        timer = Timer()
+        parts: list[str] = []
+
+        async def _gen() -> AsyncIterator[str]:
+            try:
+                async for delta in self._inner.astream(messages):
+                    parts.append(delta)
+                    yield delta
+            finally:
+                if mgr := get_observer_manager():
+                    await mgr.notify(
+                        LLMPortCall(
+                            port_type="llm",
+                            method="astream",
+                            node_name=node_name,
+                            duration_ms=timer.duration_ms,
+                            usage=_extract_usage(self._inner),
+                            model=getattr(self._inner, "model", None),
+                            messages=[{"role": m.role, "content": m.content} for m in messages],
+                            response="".join(parts),
+                        )
+                    )
+
+        return _gen()
+
     def __getattr__(self, name: str) -> Any:
-        """Forward attribute access to the inner adapter."""
+        """Forward attribute access to the inner adapter.
+
+        ``astream`` is wrapped so streamed calls emit ``LLMPortCall`` events,
+        but only when the inner adapter actually supports streaming — accessing
+        ``self._inner.astream`` first lets ``hasattr(llm, "astream")`` stay
+        accurate for non-streaming adapters.
+        """
+        if name == "astream" and hasattr(self._inner, "astream"):
+            return self._observed_astream
         return getattr(self._inner, name)

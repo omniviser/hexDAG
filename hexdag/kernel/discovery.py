@@ -675,10 +675,6 @@ def _detect_adapter_port_type(adapter_class: type) -> str:
 
     Delegates to the canonical implementation in ``kernel.ports.detection``.
     """
-    from hexdag.kernel.ports.detection import (
-        detect_port_type,  # lazy: avoid loading all port protocols at import time
-    )
-
     return detect_port_type(adapter_class)
 
 
@@ -742,13 +738,85 @@ def load_plugin_components() -> None:
         pass
 
 
+_plugin_ports_loaded: bool = False
+
+
+def load_plugin_ports() -> None:
+    """Load plugin-contributed port protocols via the ``hexdag.ports`` group.
+
+    Importing each entry-point module triggers its ``register_port`` calls
+    (see :mod:`hexdag.kernel.ports.registry`), making plugin-owned protocols
+    resolvable from ``hexdag.kernel.ports``.  Cached — runs at most once until
+    :func:`clear_discovery_cache` is called.
+    """
+    global _plugin_ports_loaded
+    if _plugin_ports_loaded:
+        return
+
+    # 1. Entry-points based discovery (preferred for pip-installed plugins).
+    try:
+        from importlib.metadata import (
+            entry_points as _ep,  # lazy: deferred to avoid import cost at module load
+        )
+
+        for ep in _ep(group="hexdag.ports"):
+            try:
+                ep.load()  # imports the module → register_port() fires
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Failed to load hexdag.ports entry point: %s", ep
+                )
+    except ImportError:
+        pass
+
+    # 2. Namespace-convention fallback: import ``hexdag_plugins.<sub>._ports``.
+    #    Robust for editable/namespace installs where entry points are not
+    #    registered.  Importing the module triggers its ``register_port`` calls.
+    try:
+        import importlib.util  # lazy: deferred to avoid import cost at module load
+
+        import hexdag_plugins  # lazy: optional namespace package
+
+        for _finder, name, ispkg in pkgutil.iter_modules(hexdag_plugins.__path__):
+            if not ispkg:
+                continue
+            module = f"hexdag_plugins.{name}._ports"
+            # Absent _ports module is expected (most plugins have none) — skip
+            # quietly.  A module that EXISTS but fails to import is a real
+            # problem and must not break port discovery for other plugins.
+            try:
+                spec = importlib.util.find_spec(module)
+            except Exception:
+                continue
+            if spec is None:
+                continue
+            try:
+                importlib.import_module(module)
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Failed to load plugin ports module '%s'", module, exc_info=True
+                )
+    except ImportError:
+        pass
+
+    # Mark loaded only after the scan completes (defense-in-depth: with the
+    # per-module guards above the loop always finishes, but this ensures an
+    # unexpected abort leaves the flag False so a later call retries).
+    _plugin_ports_loaded = True
+
+
 def clear_discovery_cache() -> None:
     """Clear all discovery caches.
 
     Useful for testing or when plugins are dynamically loaded/unloaded.
     """
-    global _plugin_components_loaded
+    global _plugin_components_loaded, _plugin_ports_loaded
     _plugin_components_loaded = False
+    _plugin_ports_loaded = False
     discover_modules.cache_clear()
     discover_plugins.cache_clear()
     discover_user_modules.cache_clear()

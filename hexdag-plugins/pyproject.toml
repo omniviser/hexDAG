@@ -47,6 +47,13 @@ azure-all = [
     "hexdag-plugins[azure-keyvault]",
 ]
 
+# Database plugin (declarative transactions + ready-made DatabaseService)
+database = [
+    "sqlalchemy[asyncio]>=2.0.0",
+    "greenlet>=3.0.0",
+    "aiosqlite>=0.20.0",
+]
+
 # MySQL plugin
 mysql = ["pymysql>=1.1.0"]
 
@@ -90,6 +97,7 @@ all = [
     "hexdag-plugins[etl]",
     "hexdag-plugins[storage-all]",
     "hexdag-plugins[langfuse]",
+    "hexdag-plugins[database]",
 ]
 
 # Development dependencies
@@ -101,6 +109,15 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0.0",
 ]
+
+[project.entry-points."hexdag.ports"]
+database = "hexdag_plugins.database._ports"
+
+[project.entry-points."hexdag.adapters"]
+sqlalchemy = "hexdag_plugins.database.adapters.sqlalchemy_adapter"
+
+[project.entry-points."hexdag.macros"]
+transaction = "hexdag_plugins.database.macros.transaction"
 
 [project.urls]
 "Homepage" = "https://hexdag.ai"
@@ -167,7 +184,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["hexdag_plugins/azure/tests", "hexdag_plugins/mysql_adapter/tests", "hexdag_plugins/hexdag_etl/tests", "hexdag_plugins/storage/tests", "hexdag_plugins/google/tests", "hexdag_plugins/ollama/tests", "hexdag_plugins/mail/tests", "hexdag_plugins/langfuse/tests"]
+testpaths = ["hexdag_plugins/azure/tests", "hexdag_plugins/mysql_adapter/tests", "hexdag_plugins/hexdag_etl/tests", "hexdag_plugins/storage/tests", "hexdag_plugins/google/tests", "hexdag_plugins/ollama/tests", "hexdag_plugins/mail/tests", "hexdag_plugins/langfuse/tests", "hexdag_plugins/database/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

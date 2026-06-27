@@ -30,10 +30,11 @@ The exports are grouped by category, mirroring OS concepts:
 - VFS domain
 """
 
+from typing import Any
+
 # ============================================================================
 # 1. Pipeline Execution (primary syscalls)
 # ============================================================================
-
 # ============================================================================
 # 8. Extension Points
 # ============================================================================
@@ -206,7 +207,6 @@ from hexdag.kernel.ports import (
     SupportsReadOnly,
     SupportsSchema,
     SupportsStreamingQuery,
-    SupportsTransactions,
     SupportsTTL,
     SupportsUsageTracking,
     SupportsVectorSearch,
@@ -217,7 +217,7 @@ from hexdag.kernel.ports import (
     VisionMessage,
 )
 from hexdag.kernel.ports.detection import detect_port_type
-from hexdag.kernel.ports.llm import Message, MessageList
+from hexdag.kernel.ports.llm import LLMTokenStreamed, Message, MessageList
 from hexdag.kernel.ports_builder import PortsBuilder
 
 # ============================================================================
@@ -258,6 +258,7 @@ from hexdag.kernel.system import System, SystemError
 # 14. Types
 # ============================================================================
 from hexdag.kernel.types import Secret
+from hexdag.kernel.validation.sanitized_types import register_type_from_config
 
 # ============================================================================
 # __all__ — the complete syscall table
@@ -308,7 +309,7 @@ __all__ = [
     "SupportsQuery",
     "SupportsTTL",
     "SupportsSchema",
-    "SupportsTransactions",
+    "SupportsTransactions",  # noqa: F822 # pyright: ignore[reportUnsupportedDunderAll]
     "SupportsCollectionStorage",
     "SupportsRawSQL",
     "SupportsReadOnly",
@@ -338,6 +339,7 @@ __all__ = [
     "unregister_alias",
     "get_registered_aliases",
     "get_builtin_aliases",
+    "register_type_from_config",
     # -- 6. Exceptions --
     "HexDAGError",
     "ConfigurationError",
@@ -394,6 +396,7 @@ __all__ = [
     "WaveCompleted",
     "PipelineStarted",
     "PipelineCompleted",
+    "LLMTokenStreamed",
     # -- 10. Schema Introspection --
     "SchemaGenerator",
     # -- 11. Linting --
@@ -444,3 +447,17 @@ from hexdag.kernel.domain.pipeline_config import (  # noqa: E402
 
 _rebuild()
 del _rebuild
+
+
+# Plugin-contributed port protocols (kept in __all__ for back-compat) are
+# resolved lazily so importing ``hexdag.kernel`` never forces the plugin to load.
+_PLUGIN_PORTS = ("SupportsTransactions", "SupportsSessionFactory")
+
+
+def __getattr__(name: str) -> Any:  # PEP 562
+    """Lazily resolve plugin-contributed ports re-exported from the kernel."""
+    if name in _PLUGIN_PORTS:
+        import hexdag.kernel.ports as _ports
+
+        return getattr(_ports, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

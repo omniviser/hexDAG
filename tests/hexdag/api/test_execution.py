@@ -258,3 +258,45 @@ class TestCreatePortsFromConfig:
         }
         ports = create_ports_from_config(config)
         assert "llm" in ports
+
+
+class TestExecuteStreamingTokens:
+    """execute_streaming() yields token events for streaming LLM nodes."""
+
+    STREAMING_YAML = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: token-stream-test
+spec:
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: writer
+      spec:
+        human_message: "Write about {{input}}"
+        stream: true
+      dependencies: []
+"""
+
+    @pytest.mark.asyncio()
+    async def test_token_events_streamed(self) -> None:
+        from hexdag.api.execution import execute_streaming
+        from hexdag.stdlib.adapters.mock import MockLLM
+
+        events = []
+        async for event in execute_streaming(
+            self.STREAMING_YAML,
+            inputs={"input": "tests"},
+            ports={"llm": MockLLM(responses="one two three")},
+        ):
+            events.append(event)
+
+        token_events = [e for e in events if e["event"] == "token"]
+        assert token_events, f"expected token events, got: {[e['event'] for e in events]}"
+        assert "".join(e["data"]["delta"] for e in token_events) == "one two three"
+        assert all(e["data"]["node"] == "writer" for e in token_events)
+
+        complete = [e for e in events if e["event"] == "complete"]
+        assert len(complete) == 1
+        assert complete[0]["data"]["success"] is True

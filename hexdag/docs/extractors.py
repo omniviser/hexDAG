@@ -292,12 +292,12 @@ class DocExtractor:
         return examples
 
     @staticmethod
-    def extract_adapter_doc(cls: type) -> AdapterDoc:
+    def extract_adapter_doc(adapter_cls: type) -> AdapterDoc:
         """Extract documentation from an adapter class.
 
         Parameters
         ----------
-        cls : type
+        adapter_cls : type
             Adapter class to document
 
         Returns
@@ -305,28 +305,28 @@ class DocExtractor:
         AdapterDoc
             Extracted adapter documentation
         """
-        description, full_docstring, examples = DocExtractor.extract_docstring_parts(cls)
-        parameters = DocExtractor.extract_parameters(cls)
+        description, full_docstring, examples = DocExtractor.extract_docstring_parts(adapter_cls)
+        parameters = DocExtractor.extract_parameters(adapter_cls)
 
         # Determine port type from class name or protocol
-        port_type = DocExtractor._guess_port_type(cls)
+        port_type = DocExtractor._guess_port_type(adapter_cls)
 
         # Extract secrets from signature
-        secrets = DocExtractor._extract_secrets(cls)
+        secrets = DocExtractor._extract_secrets(adapter_cls)
 
         # Generate module path
-        module_path = f"{cls.__module__}.{cls.__name__}"
+        module_path = f"{adapter_cls.__module__}.{adapter_cls.__name__}"
 
         # Generate decorator example
         decorator_example = DocExtractor._generate_adapter_decorator_example(
-            cls, port_type, secrets
+            adapter_cls, port_type, secrets
         )
 
         # Generate YAML example
-        yaml_example = DocExtractor._generate_adapter_yaml_example(cls, port_type)
+        yaml_example = DocExtractor._generate_adapter_yaml_example(adapter_cls, port_type)
 
         return AdapterDoc(
-            name=cls.__name__,
+            name=adapter_cls.__name__,
             module_path=module_path,
             description=description,
             full_docstring=full_docstring,
@@ -339,12 +339,12 @@ class DocExtractor:
         )
 
     @staticmethod
-    def _guess_port_type(cls: type) -> str:
+    def _guess_port_type(adapter_cls: type) -> str:
         """Guess port type from adapter class name or implemented protocols.
 
         Parameters
         ----------
-        cls : type
+        adapter_cls : type
             Adapter class
 
         Returns
@@ -352,7 +352,7 @@ class DocExtractor:
         str
             Guessed port type
         """
-        name_lower = cls.__name__.lower()
+        name_lower = adapter_cls.__name__.lower()
 
         # Check class name patterns
         if "llm" in name_lower or "openai" in name_lower or "anthropic" in name_lower:
@@ -373,7 +373,7 @@ class DocExtractor:
             return "observer_manager"
 
         # Check implemented protocols via base classes
-        for base in cls.__mro__:
+        for base in adapter_cls.__mro__:
             base_name = base.__name__.lower()
             if "generation" in base_name or "llm" in base_name:
                 return "llm"
@@ -385,12 +385,12 @@ class DocExtractor:
         return "unknown"
 
     @staticmethod
-    def _extract_secrets(cls: type) -> dict[str, str]:
+    def _extract_secrets(adapter_cls: type) -> dict[str, str]:
         """Extract secret declarations from __init__ signature.
 
         Parameters
         ----------
-        cls : type
+        adapter_cls : type
             Class to inspect
 
         Returns
@@ -399,7 +399,7 @@ class DocExtractor:
             Mapping of parameter name to environment variable name
         """
         try:
-            sig = inspect.signature(cls.__init__)
+            sig = inspect.signature(adapter_cls.__init__)
         except (ValueError, TypeError):
             return {}
 
@@ -415,13 +415,13 @@ class DocExtractor:
 
     @staticmethod
     def _generate_adapter_decorator_example(
-        cls: type, port_type: str, secrets: dict[str, str]
+        adapter_cls: type, port_type: str, secrets: dict[str, str]
     ) -> str:
         """Generate example @adapter decorator usage.
 
         Parameters
         ----------
-        cls : type
+        adapter_cls : type
             Adapter class
         port_type : str
             Port type
@@ -433,7 +433,7 @@ class DocExtractor:
         str
             Example decorator code
         """
-        name = cls.__name__.replace("Adapter", "").lower()
+        name = adapter_cls.__name__.replace("Adapter", "").lower()
 
         if secrets:
             secrets_str = ", ".join(f'"{k}": "{v}"' for k, v in secrets.items())
@@ -441,12 +441,12 @@ class DocExtractor:
         return f'@adapter("{port_type}", name="{name}")'
 
     @staticmethod
-    def _generate_adapter_yaml_example(cls: type, port_type: str) -> str:
+    def _generate_adapter_yaml_example(adapter_cls: type, port_type: str) -> str:
         """Generate YAML usage example for adapter.
 
         Parameters
         ----------
-        cls : type
+        adapter_cls : type
             Adapter class
         port_type : str
             Port type
@@ -456,7 +456,7 @@ class DocExtractor:
         str
             YAML example
         """
-        module_path = f"{cls.__module__}.{cls.__name__}"
+        module_path = f"{adapter_cls.__module__}.{adapter_cls.__name__}"
         return f"""ports:
   {port_type}:
     adapter: {module_path}
@@ -464,12 +464,12 @@ class DocExtractor:
       # Add configuration here"""
 
     @staticmethod
-    def extract_node_doc(cls: type) -> NodeDoc:
+    def extract_node_doc(node_cls: type) -> NodeDoc:
         """Extract documentation from a node factory class.
 
         Parameters
         ----------
-        cls : type
+        node_cls : type
             Node factory class to document
 
         Returns
@@ -477,10 +477,10 @@ class DocExtractor:
         NodeDoc
             Extracted node documentation
         """
-        description, full_docstring, examples = DocExtractor.extract_docstring_parts(cls)
+        description, full_docstring, examples = DocExtractor.extract_docstring_parts(node_cls)
 
         # Check for _yaml_schema
-        yaml_schema = getattr(cls, "_yaml_schema", None)
+        yaml_schema = getattr(node_cls, "_yaml_schema", None)
 
         # If has explicit schema, extract parameters from it
         if yaml_schema and isinstance(yaml_schema, dict):
@@ -490,22 +490,22 @@ class DocExtractor:
         else:
             # Extract from __call__ method
             try:
-                instance = cls()
+                instance = node_cls()
                 parameters = DocExtractor.extract_parameters(instance)
             except Exception:
-                parameters = DocExtractor.extract_parameters(cls)
+                parameters = DocExtractor.extract_parameters(node_cls)
 
         # Generate module path
-        module_path = f"{cls.__module__}.{cls.__name__}"
+        module_path = f"{node_cls.__module__}.{node_cls.__name__}"
 
         # Determine kind from class name
-        kind = DocExtractor._class_name_to_kind(cls.__name__)
+        kind = DocExtractor._class_name_to_kind(node_cls.__name__)
 
         # Generate YAML example
-        yaml_example = DocExtractor._generate_node_yaml_example(cls, kind, yaml_schema)
+        yaml_example = DocExtractor._generate_node_yaml_example(node_cls, kind, yaml_schema)
 
         return NodeDoc(
-            name=cls.__name__,
+            name=node_cls.__name__,
             module_path=module_path,
             description=description,
             full_docstring=full_docstring,
@@ -578,13 +578,13 @@ class DocExtractor:
 
     @staticmethod
     def _generate_node_yaml_example(
-        cls: type, kind: str, yaml_schema: dict[str, Any] | None
+        node_cls: type, kind: str, yaml_schema: dict[str, Any] | None
     ) -> str:
         """Generate YAML usage example for node.
 
         Parameters
         ----------
-        cls : type
+        node_cls : type
             Node class
         kind : str
             Node kind

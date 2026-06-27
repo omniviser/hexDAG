@@ -1,6 +1,7 @@
 """Anthropic adapter for LLM interactions."""
 
 import os
+from collections.abc import AsyncIterator
 from typing import Any, Literal
 
 from anthropic import AsyncAnthropic
@@ -12,6 +13,7 @@ from hexdag.kernel.ports.llm import (
     MessageList,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsStreaming,
     SupportsStructuredOutput,
     SupportsUsageTracking,
     TokenUsage,
@@ -45,6 +47,7 @@ class AnthropicAdapter(
     HexDAGAdapter,
     LLM,
     SupportsGeneration,
+    SupportsStreaming,
     SupportsFunctionCalling,
     SupportsStructuredOutput,
     SupportsUsageTracking,
@@ -199,6 +202,56 @@ class AnthropicAdapter(
         except Exception as e:
             logger.error("Anthropic API error: {}", e, exc_info=True)
             return None
+
+    async def astream(self, messages: MessageList) -> AsyncIterator[str]:
+        """Stream a response as incremental text deltas.
+
+        Uses Anthropic's streaming API. Token usage is captured from the
+        final message and exposed via ``get_last_usage()``.
+
+        Args
+        ----
+            messages: List of Message objects with role and content
+
+        Yields
+        ------
+        str
+            Incremental text deltas.
+        """
+        anthropic_messages, system_message = self._prepare_messages(messages)
+
+        request_params: dict[str, Any] = {
+            "model": self.model,
+            "messages": anthropic_messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+        }
+
+        if system_message is not None:
+            request_params["system"] = system_message
+
+        if self.top_k is not None:
+            request_params["top_k"] = self.top_k
+
+        if stop_sequences := self._extra_kwargs.get("stop_sequences"):
+            request_params["stop_sequences"] = stop_sequences
+
+        self._last_usage = None
+        async with self.client.messages.stream(**request_params) as stream:
+            try:
+                async for text in stream.text_stream:
+                    yield text
+            finally:
+                # Capture usage even when the consumer stops early or the
+                # generator is closed/cancelled (the finally runs during
+                # aclose()). Guard against an incomplete stream that cannot
+                # produce a final message.
+                try:
+                    final_message = await stream.get_final_message()
+                    self._capture_usage(final_message)
+                except Exception as e:
+                    logger.debug("Could not capture Anthropic streaming usage: {}", e)
 
     def _prepare_messages(self, messages: MessageList) -> tuple[list[dict[str, str]], str | None]:
         """Split messages into Anthropic format (system separate from messages).

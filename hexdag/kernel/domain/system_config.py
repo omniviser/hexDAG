@@ -39,7 +39,7 @@ YAML example::
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -158,6 +158,25 @@ class SystemConfig(BaseModel):
     )
     services: dict[str, dict[str, Any]] = Field(
         default_factory=dict, description="Global service configurations"
+    )
+
+    # Lifecycle transaction strategy: how a state transition relates to the
+    # process it triggers.
+    #
+    # - "unified" (default): the transition and its triggered process are one
+    #   logical operation — the process runs and, on success, the transition is
+    #   committed; if the process fails the entity does NOT advance.  This is the
+    #   guarantee a state machine should give ("RESOLVED implies its effects
+    #   happened").  Single-DB-transaction atomicity across the status write and
+    #   the process's own writes additionally holds when a DB-backed
+    #   ``SupportsStateBackend`` and the process share one adapter.
+    # - "saga": status commits first, the process runs independently, and a
+    #   compensating transition reverts on failure.  NOT IMPLEMENTED YET.
+    transaction: Literal["unified", "saga"] = Field(
+        default="unified",
+        description=(
+            "Lifecycle transaction strategy: 'unified' (default) or 'saga' (not implemented yet)."
+        ),
     )
 
     # Lifecycle extensions (opt-in: presence of state_machines activates lifecycle mode)

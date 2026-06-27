@@ -175,7 +175,7 @@ class LocalExecutor:
             node_results: dict[str, Any] = get_port(EXECUTOR_CONTEXT_NODE_RESULTS)
             initial_input: Any = get_port(EXECUTOR_CONTEXT_INITIAL_INPUT)
 
-            if graph is None:
+            if graph is None:  # pyright: ignore[reportUnnecessaryComparison]
                 raise RuntimeError(
                     "LocalExecutor requires execution context with graph. "
                     "Ensure orchestrator has set up context properly."

@@ -79,7 +79,7 @@ class StructuredOutputFallback(SupportsGeneration, SupportsStructuredOutput):
         from pydantic import BaseModel  # lazy: avoid import at module level for optional dep
 
         # Build schema instruction
-        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
             schema = output_schema.model_json_schema()
         else:
             schema = output_schema

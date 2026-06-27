@@ -51,7 +51,7 @@ def normalize_event_types(event_types: EventTypesInput) -> set[EventType] | None
         _ensure_event_subclass(event_types)
         return {event_types}
 
-    if isinstance(event_types, Iterable):
+    if isinstance(event_types, Iterable):  # pyright: ignore[reportUnnecessaryIsInstance]
         normalized: set[EventType] = set()
         for item in event_types:
             normalized.add(_ensure_event_subclass(item))

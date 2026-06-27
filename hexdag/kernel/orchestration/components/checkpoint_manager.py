@@ -107,6 +107,43 @@ class CheckpointManager:
         # Pydantic handles all deserialization and validation
         return CheckpointState.model_validate_json(serialized)
 
+    async def alist_runs(self) -> list[CheckpointState]:
+        """List all persisted checkpoints (crash recovery discovery).
+
+        Requires the storage backend to support key listing
+        (``alist_keys``). Checkpoints that fail to deserialize are skipped.
+
+        Returns
+        -------
+        list[CheckpointState]
+            All checkpoints under this manager's key prefix, most
+            recently updated first.
+
+        Raises
+        ------
+        NotImplementedError
+            If the storage backend does not support key listing.
+        """
+        list_keys = getattr(self.storage, "alist_keys", None)
+        if list_keys is None:
+            raise NotImplementedError(
+                f"Storage backend {type(self.storage).__name__} does not support "
+                f"key listing (alist_keys) — cannot enumerate runs"
+            )
+
+        states: list[CheckpointState] = []
+        for key in await list_keys(prefix=self.key_prefix):
+            serialized = await self.storage.aget(key)
+            if serialized is None:
+                continue
+            try:
+                states.append(CheckpointState.model_validate_json(serialized))
+            except ValueError:  # noqa: PERF203 — skip corrupt entries, keep listing
+                continue
+
+        states.sort(key=lambda s: s.updated_at, reverse=True)
+        return states
+
     async def load_for_resume(self, run_id: str) -> CheckpointState | None:
         """Load a checkpoint and mark it as "resuming" to block concurrent resumes.
 

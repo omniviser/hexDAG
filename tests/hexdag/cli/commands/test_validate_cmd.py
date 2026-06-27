@@ -61,6 +61,79 @@ class TestValidate:
             except (SystemExit, typer.Exit):
                 pass  # Expected
 
+    def test_validate_expands_includes(self, tmp_path) -> None:
+        """Cross-fragment node references validate after !include expansion."""
+        fragments = tmp_path / "fragments"
+        fragments.mkdir()
+        # Fragment defines a node that references a parent node
+        (fragments / "extra.yaml").write_text(
+            yaml.dump([
+                {
+                    "kind": "expression_node",
+                    "metadata": {"name": "frag_node"},
+                    "spec": {
+                        "expressions": {"result": "seed.value * 2"},
+                        "output_fields": ["result"],
+                    },
+                    "dependencies": ["seed"],
+                }
+            ])
+        )
+        # Parent references the fragment-defined node
+        pipeline = {
+            "apiVersion": "hexdag/v1",
+            "kind": "Pipeline",
+            "metadata": {"name": "include-test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "data_node",
+                        "metadata": {"name": "seed"},
+                        "spec": {"output": {"value": 1}},
+                        "dependencies": [],
+                    },
+                    {"!include": "./fragments/extra.yaml"},
+                    {
+                        "kind": "expression_node",
+                        "metadata": {"name": "combine"},
+                        "spec": {
+                            "expressions": {"total": "frag_node.result + seed.value"},
+                            "output_fields": ["total"],
+                        },
+                        "dependencies": ["frag_node", "seed"],
+                    },
+                ]
+            },
+        }
+        yaml_file = tmp_path / "parent.yaml"
+        yaml_file.write_text(yaml.dump(pipeline))
+
+        with patch("hexdag.cli.commands.validate_cmd.console"):
+            try:
+                validate(yaml_file=yaml_file, explain=False)
+            except (SystemExit, typer.Exit) as e:
+                exit_code = getattr(e, "exit_code", getattr(e, "code", 0))
+                assert exit_code in (0, None), "validation should pass once !include is expanded"
+
+    def test_validate_missing_include_file(self, tmp_path) -> None:
+        """Missing include file reports a clean Preprocessing Error, exit code 1."""
+        pipeline = {
+            "apiVersion": "hexdag/v1",
+            "kind": "Pipeline",
+            "metadata": {"name": "broken-include"},
+            "spec": {"nodes": [{"!include": "./missing.yaml"}]},
+        }
+        yaml_file = tmp_path / "parent.yaml"
+        yaml_file.write_text(yaml.dump(pipeline))
+
+        with patch("hexdag.cli.commands.validate_cmd.console") as mock_console:
+            with pytest.raises((SystemExit, typer.Exit)) as exc_info:
+                validate(yaml_file=yaml_file, explain=False)
+            exit_code = getattr(exc_info.value, "exit_code", getattr(exc_info.value, "code", None))
+            assert exit_code == 1
+            printed = " ".join(str(c) for c in mock_console.print.call_args_list)
+            assert "Preprocessing Error" in printed
+
     def test_validate_with_explain(self, tmp_path) -> None:
         """Validate with --explain produces detailed output."""
         pipeline = {

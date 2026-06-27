@@ -253,6 +253,23 @@ class Orchestrator:
         self._execution_coordinator = ExecutionCoordinator()
         self._lifecycle_manager = LifecycleManager(pre_hook_config, post_hook_config)
 
+        # Run ID of the most recent run() call (set at execution start).
+        # PipelineRunner reads this to correlate results with checkpoints.
+        self.last_run_id: str | None = None
+
+    @property
+    def services(self) -> dict[str, Any]:
+        """Resolved service instances for this orchestrator.
+
+        Includes YAML-instantiated services, injected ``service_overrides``,
+        and auto-registered defaults (PipelineMemory, EntityState).  Host
+        code can use this to reach the same instances pipeline runs use —
+        e.g. to register transition handlers or call ``@step`` methods
+        outside a pipeline.
+        """
+        services = self.ports.get("_hexdag_services")
+        return services if isinstance(services, dict) else {}
+
     async def _notify_observer(self, observer_manager: ObserverManager | None, event: Any) -> None:
         """Notify observer if it exists (delegates to ExecutionCoordinator)."""
         await self._execution_coordinator.notify_observer(observer_manager, event)
@@ -590,6 +607,8 @@ class Orchestrator:
         pipeline_name = getattr(graph, "name", "unnamed")
         context = NodeExecutionContext(dag_id=pipeline_name)
         run_id = str(uuid.uuid4())
+        # Expose for callers (PipelineRunner) to correlate with checkpoints
+        self.last_run_id = run_id
 
         async with ExecutionContext(
             observer_manager=observer_manager,
@@ -889,6 +908,13 @@ class Orchestrator:
                             **suspended_result.metadata,
                         }
                         return PipelineStatus.SUSPENDED
+
+                    # Journal: persist progress after each completed wave so a
+                    # crashed process can resume from here (never raises)
+                    if self._lifecycle_manager.post_config.enable_incremental_checkpoint:
+                        await self._lifecycle_manager.asave_incremental_checkpoint(
+                            context, node_results
+                        )
 
                     # Fire wave completed event
                     wave_completed = WaveCompleted(

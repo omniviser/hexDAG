@@ -170,11 +170,13 @@ class PipelineRunner:
         self._pre_hook_config = pre_hook_config
         self._checkpoint_storage = checkpoint_storage
 
-        # Auto-enable checkpoint save when storage is provided
+        # Auto-enable checkpoint save + wave-level journaling when storage
+        # is provided (crash recovery via resume() works out of the box)
         if checkpoint_storage and post_hook_config is None:
             post_hook_config = PostDagHookConfig(
                 enable_checkpoint_save=True,
                 checkpoint_on_failure=True,
+                enable_incremental_checkpoint=True,
             )
         self._post_hook_config = post_hook_config
         self._environment = environment
@@ -458,6 +460,54 @@ class PipelineRunner:
             pre_seeded_results=pre_seeded,
         )
 
+    async def list_runs(self, *, status: str | None = None) -> list[dict[str, Any]]:
+        """List persisted runs from checkpoint storage (crash recovery).
+
+        Use after a process crash to discover resumable runs: checkpoints
+        with status ``"running"`` belong to runs that were journaled
+        mid-execution but never completed.
+
+        Parameters
+        ----------
+        status : str | None
+            Filter by checkpoint status (``"running"``, ``"saved"``,
+            ``"suspended"``, ``"resuming"``).  ``None`` returns all.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Run summaries (most recently updated first) with keys:
+            ``run_id``, ``pipeline``, ``status``, ``completed_nodes``,
+            ``updated_at``.
+
+        Raises
+        ------
+        PipelineRunnerError
+            If no checkpoint storage is configured.
+        """
+        if self._checkpoint_storage is None:
+            raise PipelineRunnerError(
+                "Cannot list runs: no checkpoint_storage configured on PipelineRunner"
+            )
+
+        from hexdag.kernel.orchestration.components.checkpoint_manager import (
+            CheckpointManager,  # lazy: only needed for run listing
+        )
+
+        mgr = CheckpointManager(storage=self._checkpoint_storage)
+        states = await mgr.alist_runs()
+        return [
+            {
+                "run_id": s.run_id,
+                "pipeline": s.dag_id,
+                "status": s.status,
+                "completed_nodes": len(s.completed_node_ids),
+                "updated_at": s.updated_at,
+            }
+            for s in states
+            if status is None or s.status == status
+        ]
+
     async def validate(
         self,
         pipeline_path: str | Path | None = None,
@@ -653,6 +703,9 @@ class PipelineRunner:
 
         # 6. Execute
         pipeline_name = pipeline_config.metadata.get("name", "unnamed")
+        # Propagate the name to the graph so orchestrator events and
+        # checkpoints carry the real pipeline name (not "unnamed")
+        graph.name = pipeline_name
         logger.info("Running pipeline '{}' with {} nodes", pipeline_name, len(graph))
 
         t = Timer()
@@ -662,6 +715,9 @@ class PipelineRunner:
             pre_seeded_results=pre_seeded_results,
             pipeline_timeout=p_timeout,
         )
+
+        # Correlates results with checkpoints (set by orchestrator at run start)
+        run_id = orchestrator.last_run_id or ""
 
         # Check for suspension signal from orchestrator
         suspend_meta = result.pop("_hexdag_suspended", None)
@@ -678,7 +734,7 @@ class PipelineRunner:
                 output={},
                 pipeline_name=pipeline_name,
                 status="suspended",
-                run_id=suspend_meta.get("run_id", ""),
+                run_id=suspend_meta.get("run_id", run_id),
                 suspend_metadata=suspend_meta,
             )
 
@@ -698,6 +754,7 @@ class PipelineRunner:
             node_results=result,
             output=output,
             pipeline_name=pipeline_name,
+            run_id=run_id,
         )
 
     def _resolve_orchestrator_settings(

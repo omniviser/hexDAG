@@ -133,6 +133,8 @@ class LifecycleRunner:
         self._entities: dict[tuple[str, str], EntityRecord] = {}
         self._running = False
         self._draining = False
+        # Lifecycle transaction strategy (set from system_config on start()).
+        self._transaction_strategy: str = "unified"
 
         # Lookup tables built from system config (entity-type-qualified)
         self._state_to_process: dict[tuple[str, str], str] = {}  # (entity_type, state) -> process
@@ -165,6 +167,7 @@ class LifecycleRunner:
             raise LifecycleError(msg)
 
         self._system_config = system_config
+        self._transaction_strategy = system_config.transaction
         self._running = True
         self._draining = False
 
@@ -209,7 +212,7 @@ class LifecycleRunner:
                 from hexdag.kernel.resolver import resolve
 
                 handler_cls = resolve(handler_path)
-                handler = handler_cls() if isinstance(handler_cls, type) else handler_cls
+                handler = handler_cls() if isinstance(handler_cls, type) else handler_cls  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
                 self._entity_state.register_handler(entity_type, handler)
 
         # Build reverse map: state_name -> set of entity types that declare it
@@ -392,6 +395,13 @@ class LifecycleRunner:
         request: TransitionRequest,
     ) -> dict[str, Any]:
         """Execute a single transition: validate, commit, spawn pipeline."""
+        if self._transaction_strategy == "saga":
+            raise NotImplementedError(
+                "The 'saga' lifecycle transaction strategy is not implemented yet. "
+                "Use transaction: unified (the default), or contribute the "
+                "compensating-transaction implementation. See SystemConfig.transaction."
+            )
+
         if self._entity_state is None or self._system_config is None:
             msg = "LifecycleRunner not initialized"
             raise LifecycleError(msg)

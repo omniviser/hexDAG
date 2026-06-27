@@ -5,11 +5,14 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
-from hexdag.kernel.orchestration.events.events import PortCallEvent
+from hexdag.kernel.orchestration.events.events import Event, PortCallEvent
 
 type MessageRole = Literal["user", "assistant", "system", "tool", "human", "ai"]
 type ToolChoice = Literal["auto", "none", "required"]
@@ -248,6 +251,44 @@ class SupportsGeneration(Protocol):
             ]
             response = await llm.aresponse(messages)
             # Returns: "2+2 equals 4."
+        """
+        ...
+
+
+@runtime_checkable
+class SupportsStreaming(Protocol):
+    """Optional protocol for LLMs that support token streaming.
+
+    Adapters implementing this protocol can yield response text
+    incrementally as it is generated, enabling real-time UIs
+    (chat interfaces, SSE endpoints) without waiting for the full
+    completion.
+
+    The stream yields text deltas; concatenating all deltas produces
+    the same text ``aresponse()`` would have returned.  Adapters that
+    also implement ``SupportsUsageTracking`` should populate usage
+    after the stream is exhausted.
+
+    Examples
+    --------
+    Consuming a token stream::
+
+        async for delta in llm.astream(messages):
+            print(delta, end="", flush=True)
+    """
+
+    def astream(self, messages: MessageList) -> AsyncIterator[str]:
+        """Stream a response as incremental text deltas (async).
+
+        Args
+        ----
+            messages: List of Message objects with role and content
+
+        Returns
+        -------
+        AsyncIterator[str]
+            Async iterator of text deltas.  Concatenated deltas form
+            the complete response.
         """
         ...
 
@@ -735,12 +776,44 @@ class SupportsEmbedding(Protocol):
 
 
 @dataclass(slots=True)
+class LLMTokenStreamed(Event):
+    """A text delta was streamed from an LLM during node execution.
+
+    Emitted by ``LLMNode`` (one event per delta) when streaming is
+    enabled and the adapter implements ``SupportsStreaming``.  Observers
+    can forward these to SSE endpoints, websockets, or terminal UIs for
+    real-time token display.
+
+    Attributes
+    ----------
+    node_name : str
+        Name of the DAG node that is streaming.
+    delta : str
+        The incremental text chunk.
+    index : int
+        Zero-based position of this delta in the stream.
+    pipeline_name : str
+        Name of the pipeline the node belongs to.
+    """
+
+    node_name: str
+    delta: str
+    index: int
+    pipeline_name: str = ""
+
+    def log_message(self) -> str:
+        """Format log message for token stream event."""
+        return f"LLM token [{self.index}] from '{self.node_name}': {self.delta!r}"
+
+
+@dataclass(slots=True)
 class LLMPortCall(PortCallEvent):
     """Event for LLM port calls.
 
     One class covers all LLM methods.  The inherited ``method`` field
     (``"aresponse"``, ``"aresponse_with_tools"``, ``"aresponse_structured"``,
-    ``"aresponse_with_vision"``, ``"aembed"``) distinguishes call types.
+    ``"aresponse_with_vision"``, ``"aembed"``, ``"astream"``) distinguishes
+    call types.
 
     Attributes
     ----------

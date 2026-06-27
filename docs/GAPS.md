@@ -75,7 +75,8 @@ The following features lack runnable examples:
 - `Service` + `@tool` + `@step` pattern
 - `CompositeNode` (while, for-each, times, if-else, switch)
 - `PipelineSpawner` fork/exec
-- `WaitNode` + `EventCorrelationRegistry` suspend/resume
+
+**Done:** `WaitNode` suspend/resume + `Notification` port → `examples/approval_flow/`
 
 ---
 

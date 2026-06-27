@@ -145,72 +145,33 @@ class SupportsSchema(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Transaction capability
+# Transaction capability — plugin-owned (see hexdag_plugins.database._ports)
 # ---------------------------------------------------------------------------
+#
+# ``SupportsTransactions`` and ``SupportsSessionFactory`` are transaction
+# contracts only the database plugin and its users consume — the kernel and
+# stdlib never reference them.  They now live in the database plugin alongside
+# their implementation.  For back-compat they remain importable from here via
+# the lazy resolver below (PEP 562), backed by the kernel port registry.
 
 
-@runtime_checkable
-class SupportsTransactions(Protocol):
-    """Adapter-owned transaction lifecycle.
+def __getattr__(name: str) -> Any:
+    """Resolve plugin-contributed port protocols lazily (PEP 562).
 
-    Transaction ownership is at the adapter level — the orchestrator
-    never begins/commits/rolls-back transactions itself.
+    Keeps ``from hexdag.kernel.ports.data_store import SupportsTransactions``
+    working after the protocols moved to the database plugin.
     """
+    if name in ("SupportsTransactions", "SupportsSessionFactory"):
+        from hexdag.kernel.ports.registry import resolve_plugin_port
 
-    @abstractmethod
-    async def abegin(self) -> None:
-        """Begin a new transaction."""
-        ...
-
-    @abstractmethod
-    async def acommit(self) -> None:
-        """Commit the current transaction."""
-        ...
-
-    @abstractmethod
-    async def arollback(self) -> None:
-        """Roll back the current transaction."""
-        ...
-
-
-@runtime_checkable
-class SupportsSessionFactory(Protocol):
-    """Per-step session factory for saga-safe database access.
-
-    Instead of sharing one session across all nodes, each ``@step`` call
-    obtains its own session from the factory, commits independently, and
-    releases the connection.  This eliminates shared-session coupling and
-    enables the saga pattern (independent commit + compensation on failure).
-
-    Usage in a service::
-
-        class OrderService(Service):
-            def __init__(self, db: SupportsSessionFactory) -> None:
-                self._db = db
-
-            @step
-            async def update_order(self, order_id: str, status: str) -> dict:
-                async with self._db.asession() as session:
-                    order = await session.get(Order, order_id)
-                    order.status = status
-                    await session.commit()
-                    return {"order_id": order_id, "status": status}
-    """
-
-    @abstractmethod
-    def asession(self) -> Any:
-        """Return an async context manager that yields a database session.
-
-        Each call produces an independent session with its own transaction
-        scope.  The session is committed or rolled back by the caller, and
-        the underlying connection is returned to the pool on exit.
-
-        Returns
-        -------
-        AsyncContextManager
-            Context manager yielding a session object.
-        """
-        ...
+        proto = resolve_plugin_port(name)
+        if proto is not None:
+            return proto
+        raise AttributeError(
+            f"{name!r} is provided by the database plugin; "
+            f"install it with `pip install hexdag-plugins[database]`"
+        )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -293,5 +254,5 @@ __all__ = [
     "SupportsQuery",
     "SupportsSchema",
     "SupportsTTL",
-    "SupportsTransactions",
+    "SupportsTransactions",  # noqa: F822 # pyright: ignore[reportUnsupportedDunderAll]
 ]

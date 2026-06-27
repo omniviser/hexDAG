@@ -103,7 +103,7 @@ async def execute(
                 {
                     "name": node_name,
                     "status": "completed",
-                    "output": result.get(node_name) if isinstance(result, dict) else None,
+                    "output": result.get(node_name) if isinstance(result, dict) else None,  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
                     "duration_ms": None,
                 }
                 for node_name in execution_order
@@ -334,7 +334,7 @@ async def _execute_with_node_ports(
                 {
                     "name": node_name,
                     "status": "completed",
-                    "output": result.get(node_name) if isinstance(result, dict) else None,
+                    "output": result.get(node_name) if isinstance(result, dict) else None,  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
                     "duration_ms": None,
                 }
                 for node_name in execution_order
@@ -390,8 +390,9 @@ async def execute_streaming(
     dict
         Event dictionaries with keys:
         - event: str - Event type (plan, wave_start, node_start, node_complete,
-          node_failed, complete, error)
-        - data: dict - Event-specific data
+          node_failed, token, complete, error)
+        - data: dict - Event-specific data. For "token" events (LLM nodes with
+          ``stream: true``): {node, delta, index}.
 
     Examples
     --------
@@ -410,6 +411,7 @@ async def execute_streaming(
         from hexdag.compiler import YamlPipelineBuilder
         from hexdag.drivers.observer_manager import LocalObserverManager
         from hexdag.kernel import (
+            LLMTokenStreamed,
             NodeCompleted,
             NodeFailed,
             NodeStarted,
@@ -443,7 +445,16 @@ async def execute_streaming(
 
         async def queue_observer(event: Any) -> None:
             """Observer that pushes events to the async queue."""
-            if isinstance(event, NodeStarted):
+            if isinstance(event, LLMTokenStreamed):
+                await event_queue.put({
+                    "event": "token",
+                    "data": {
+                        "node": event.node_name,
+                        "delta": event.delta,
+                        "index": event.index,
+                    },
+                })
+            elif isinstance(event, NodeStarted):
                 await event_queue.put({
                     "event": "node_start",
                     "data": {
@@ -492,6 +503,7 @@ async def execute_streaming(
                 NodeFailed,
                 WaveCompleted,
                 PipelineCompleted,
+                LLMTokenStreamed,
             ],
         )
 

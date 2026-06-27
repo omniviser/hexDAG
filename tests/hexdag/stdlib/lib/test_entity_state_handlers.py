@@ -98,6 +98,97 @@ class TestTransitionHandlers:
         assert len(ticket_calls) == 1
 
 
+class TestHandlerPayload:
+    @pytest.mark.asyncio()
+    async def test_handler_with_payload_param_receives_it(self):
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        received = []
+
+        async def handler(entity_type, entity_id, from_state, to_state, reason, context, payload):
+            received.append(payload)
+
+        es.register_handler("ticket", handler)
+        await es.atransition(
+            "ticket",
+            "T-1",
+            "INVESTIGATING",
+            payload={"resolved_by": "user-1", "priority": 2},
+        )
+
+        assert received == [{"resolved_by": "user-1", "priority": 2}]
+
+    @pytest.mark.asyncio()
+    async def test_handler_with_kwargs_receives_payload(self):
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        received = []
+
+        async def handler(**kwargs):
+            received.append(kwargs.get("payload"))
+
+        es.register_handler("ticket", handler)
+        await es.atransition("ticket", "T-1", "INVESTIGATING", payload={"a": 1})
+
+        assert received == [{"a": 1}]
+
+    @pytest.mark.asyncio()
+    async def test_legacy_handler_without_payload_param_unchanged(self):
+        """Handlers with the original six-kwarg signature never see payload."""
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        calls = []
+
+        async def legacy_handler(entity_type, entity_id, from_state, to_state, reason, context):
+            calls.append(entity_id)
+
+        es.register_handler("ticket", legacy_handler)
+        # Passing payload must not break a handler that can't accept it.
+        await es.atransition("ticket", "T-1", "INVESTIGATING", payload={"ignored": True})
+
+        assert calls == ["T-1"]
+
+    @pytest.mark.asyncio()
+    async def test_payload_defaults_to_none(self):
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        received = []
+
+        async def handler(payload=None, **kwargs):
+            received.append(payload)
+
+        es.register_handler("ticket", handler)
+        await es.atransition("ticket", "T-1", "INVESTIGATING")
+
+        assert received == [None]
+
+    @pytest.mark.asyncio()
+    async def test_payload_handler_failure_still_rolls_back(self):
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        async def failing_handler(payload=None, **kwargs):
+            msg = f"rejected: {payload}"
+            raise RuntimeError(msg)
+
+        es.register_handler("ticket", failing_handler)
+
+        with pytest.raises(RuntimeError, match="rejected"):
+            await es.atransition("ticket", "T-1", "INVESTIGATING", payload={"x": 1})
+
+        state = await es.aget_state("ticket", "T-1")
+        assert state["state"] == "OPEN"
+
+
 class TestSchemaEnrichment:
     def test_get_tools_enriches_description(self):
         es = EntityState()

@@ -1,13 +1,17 @@
-"""Tests for pre-DAG and post-DAG hook system."""
+"""Tests for LifecycleManager — pre-DAG and post-DAG lifecycle hooks.
+
+Ported from the legacy PreDagHookManager / PostDagHookManager tests when
+those managers (and the duplicate hook configs in ``orchestration/hooks.py``)
+were consolidated into LifecycleManager.
+"""
 
 import pytest
 
 from hexdag.kernel.context import ExecutionContext
-from hexdag.kernel.orchestration.hooks import (
+from hexdag.kernel.orchestration.components.lifecycle_manager import (
     HookConfig,
+    LifecycleManager,
     PostDagHookConfig,
-    PostDagHookManager,
-    PreDagHookManager,
 )
 from hexdag.kernel.orchestration.models import NodeExecutionContext
 from hexdag.kernel.ports.healthcheck import HealthStatus
@@ -98,13 +102,12 @@ def mock_context():
     return NodeExecutionContext(dag_id="test_pipeline")
 
 
-class TestPreDagHookManager:
-    """Test PreDagHookManager functionality."""
+class TestPreExecute:
+    """Test LifecycleManager.pre_execute (health checks, secrets, custom hooks)."""
 
     @pytest.mark.asyncio
     async def test_health_checks_healthy_adapters(self, mock_context):
         """Test health checks with healthy adapters."""
-        # Setup
         adapter1 = MockAdapterWithHealth(health_status="healthy")
         adapter2 = MockAdapterWithHealth(health_status="healthy")
 
@@ -113,24 +116,20 @@ class TestPreDagHookManager:
             "database": adapter2,
         }
 
-        config = HookConfig(
-            enable_health_checks=True,
-            enable_secret_injection=False,
+        manager = LifecycleManager(
+            pre_config=HookConfig(
+                enable_health_checks=True,
+                enable_secret_injection=False,
+            )
         )
 
-        manager = PreDagHookManager(config)
-
-        # Execute
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports=ports,
         ):
-            results = await manager.execute_hooks(
-                context=mock_context, pipeline_name="test_pipeline"
-            )
+            results = await manager.pre_execute(context=mock_context, pipeline_name="test_pipeline")
 
-        # Assert
         assert "health_checks" in results
         assert len(results["health_checks"]) == 2
         assert all(h.status == "healthy" for h in results["health_checks"])
@@ -140,7 +139,6 @@ class TestPreDagHookManager:
     @pytest.mark.asyncio
     async def test_health_checks_unhealthy_with_warning(self, mock_context):
         """Test health checks with unhealthy adapter (warn only)."""
-        # Setup
         healthy_adapter = MockAdapterWithHealth(health_status="healthy")
         unhealthy_adapter = MockAdapterWithHealth(health_status="unhealthy")
 
@@ -149,25 +147,22 @@ class TestPreDagHookManager:
             "database": unhealthy_adapter,
         }
 
-        config = HookConfig(
-            enable_health_checks=True,
-            health_check_fail_fast=False,
-            health_check_warn_only=True,
+        manager = LifecycleManager(
+            pre_config=HookConfig(
+                enable_health_checks=True,
+                health_check_fail_fast=False,
+                health_check_warn_only=True,
+            )
         )
 
-        manager = PreDagHookManager(config)
-
-        # Execute - should not raise
+        # Should not raise
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports=ports,
         ):
-            results = await manager.execute_hooks(
-                context=mock_context, pipeline_name="test_pipeline"
-            )
+            results = await manager.pre_execute(context=mock_context, pipeline_name="test_pipeline")
 
-        # Assert
         assert "health_checks" in results
         health_statuses = {h.status for h in results["health_checks"]}
         assert "unhealthy" in health_statuses
@@ -175,33 +170,30 @@ class TestPreDagHookManager:
     @pytest.mark.asyncio
     async def test_health_checks_fail_fast(self, mock_context):
         """Test health checks with fail-fast enabled."""
-        from hexdag.kernel.orchestration.components import OrchestratorError
+        from hexdag.kernel.exceptions import OrchestratorError
 
-        # Setup
         unhealthy_adapter = MockAdapterWithHealth(health_status="unhealthy")
 
         ports = {"llm": unhealthy_adapter}
 
-        config = HookConfig(
-            enable_health_checks=True,
-            health_check_fail_fast=True,
+        manager = LifecycleManager(
+            pre_config=HookConfig(
+                enable_health_checks=True,
+                health_check_fail_fast=True,
+            )
         )
 
-        manager = PreDagHookManager(config)
-
-        # Execute and assert raises
         with pytest.raises(OrchestratorError, match="Health check failed"):
             async with ExecutionContext(
                 observer_manager=None,
                 run_id="test-run",
                 ports=ports,
             ):
-                await manager.execute_hooks(context=mock_context, pipeline_name="test_pipeline")
+                await manager.pre_execute(context=mock_context, pipeline_name="test_pipeline")
 
     @pytest.mark.asyncio
     async def test_secret_injection(self, mock_context):
         """Test secret injection from SecretStore to Memory."""
-        # Setup
         secret_port = MockSecretStore(
             secrets={
                 "OPENAI_API_KEY": "sk-test-123",
@@ -216,26 +208,22 @@ class TestPreDagHookManager:
             "memory": memory,
         }
 
-        config = HookConfig(
-            enable_health_checks=False,
-            enable_secret_injection=True,
-            secret_keys=["OPENAI_API_KEY", "DATABASE_PASSWORD"],
-            secret_prefix="secret:",
+        manager = LifecycleManager(
+            pre_config=HookConfig(
+                enable_health_checks=False,
+                enable_secret_injection=True,
+                secret_keys=["OPENAI_API_KEY", "DATABASE_PASSWORD"],
+                secret_prefix="secret:",
+            )
         )
 
-        manager = PreDagHookManager(config)
-
-        # Execute
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports=ports,
         ):
-            results = await manager.execute_hooks(
-                context=mock_context, pipeline_name="test_pipeline"
-            )
+            results = await manager.pre_execute(context=mock_context, pipeline_name="test_pipeline")
 
-        # Assert
         assert "secrets_loaded" in results
         assert results["secrets_loaded"]["OPENAI_API_KEY"] == "secret:OPENAI_API_KEY"
         assert results["secrets_loaded"]["DATABASE_PASSWORD"] == "secret:DATABASE_PASSWORD"
@@ -247,8 +235,7 @@ class TestPreDagHookManager:
 
     @pytest.mark.asyncio
     async def test_custom_hooks(self, mock_context):
-        """Test custom user-defined hooks."""
-        # Setup
+        """Test custom user-defined pre-DAG hooks."""
         hook_called = False
 
         async def custom_hook(ports, context):
@@ -256,25 +243,21 @@ class TestPreDagHookManager:
             hook_called = True
             return {"custom_data": "test"}
 
-        config = HookConfig(
-            enable_health_checks=False,
-            enable_secret_injection=False,
-            custom_hooks=[custom_hook],
+        manager = LifecycleManager(
+            pre_config=HookConfig(
+                enable_health_checks=False,
+                enable_secret_injection=False,
+                custom_hooks=[custom_hook],
+            )
         )
 
-        manager = PreDagHookManager(config)
-
-        # Execute
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports={},
         ):
-            results = await manager.execute_hooks(
-                context=mock_context, pipeline_name="test_pipeline"
-            )
+            results = await manager.pre_execute(context=mock_context, pipeline_name="test_pipeline")
 
-        # Assert
         assert hook_called
         assert "custom_hook" in results
         assert results["custom_hook"]["custom_data"] == "test"
@@ -282,7 +265,6 @@ class TestPreDagHookManager:
     @pytest.mark.asyncio
     async def test_skips_manager_ports(self, mock_context):
         """Test that manager ports are skipped during health checks."""
-        # Setup
         adapter = MockAdapterWithHealth(health_status="healthy")
 
         # Include manager ports that should be skipped
@@ -291,30 +273,25 @@ class TestPreDagHookManager:
             "observer_manager": "should_be_skipped",
         }
 
-        config = HookConfig(enable_health_checks=True)
-        manager = PreDagHookManager(config)
+        manager = LifecycleManager(pre_config=HookConfig(enable_health_checks=True))
 
-        # Execute
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports=ports,
         ):
-            results = await manager.execute_hooks(
-                context=mock_context, pipeline_name="test_pipeline"
-            )
+            results = await manager.pre_execute(context=mock_context, pipeline_name="test_pipeline")
 
-        # Assert - only one health check (for llm adapter)
+        # Only one health check (for llm adapter)
         assert len(results["health_checks"]) == 1
 
 
-class TestPostDagHookManager:
-    """Test PostDagHookManager functionality."""
+class TestPostExecute:
+    """Test LifecycleManager.post_execute (cleanup, custom hooks, gating)."""
 
     @pytest.mark.asyncio
     async def test_adapter_cleanup(self, mock_context):
         """Test adapter cleanup calls aclose()."""
-        # Setup
         adapter1 = MockAdapterWithHealth()
         adapter2 = MockAdapterWithHealth()
 
@@ -323,27 +300,25 @@ class TestPostDagHookManager:
             "database": adapter2,
         }
 
-        config = PostDagHookConfig(
-            enable_adapter_cleanup=True,
-            enable_secret_cleanup=False,
+        manager = LifecycleManager(
+            post_config=PostDagHookConfig(
+                enable_adapter_cleanup=True,
+                enable_secret_cleanup=False,
+            )
         )
 
-        manager = PostDagHookManager(config)
-
-        # Execute
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports=ports,
         ):
-            results = await manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
                 pipeline_status="success",
                 node_results={},
             )
 
-        # Assert
         assert "adapter_cleanup" in results
         assert results["adapter_cleanup"]["count"] == 2
         assert adapter1.close_called
@@ -354,20 +329,19 @@ class TestPostDagHookManager:
         """Test hooks run when pipeline fails."""
         adapter = MockAdapterWithHealth()
 
-        config = PostDagHookConfig(
-            run_on_failure=True,
-            enable_adapter_cleanup=True,
+        manager = LifecycleManager(
+            post_config=PostDagHookConfig(
+                run_on_failure=True,
+                enable_adapter_cleanup=True,
+            )
         )
 
-        manager = PostDagHookManager(config)
-
-        # Execute with failed status
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports={"llm": adapter},
         ):
-            results = await manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
                 pipeline_status="failed",
@@ -375,7 +349,7 @@ class TestPostDagHookManager:
                 error=Exception("Test error"),
             )
 
-        # Assert cleanup still ran
+        # Cleanup still ran
         assert adapter.close_called
         assert results["adapter_cleanup"]["count"] == 1
 
@@ -384,27 +358,25 @@ class TestPostDagHookManager:
         """Test hooks skip when configured not to run on success."""
         adapter = MockAdapterWithHealth()
 
-        config = PostDagHookConfig(
-            run_on_success=False,  # Don't run on success
-            run_on_failure=True,
+        manager = LifecycleManager(
+            post_config=PostDagHookConfig(
+                run_on_success=False,  # Don't run on success
+                run_on_failure=True,
+            )
         )
 
-        manager = PostDagHookManager(config)
-
-        # Execute with success status
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports={"llm": adapter},
         ):
-            results = await manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
                 pipeline_status="success",
                 node_results={},
             )
 
-        # Assert hooks were skipped
         assert results.get("skipped") is True
         assert not adapter.close_called
 
@@ -420,69 +392,64 @@ class TestPostDagHookManager:
             received_status = pipeline_status
             return {"cleaned": True}
 
-        config = PostDagHookConfig(
-            custom_hooks=[custom_cleanup],
-            enable_adapter_cleanup=False,
+        manager = LifecycleManager(
+            post_config=PostDagHookConfig(
+                custom_hooks=[custom_cleanup],
+                enable_adapter_cleanup=False,
+            )
         )
 
-        manager = PostDagHookManager(config)
-
-        # Execute
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports={},
         ):
-            results = await manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
                 pipeline_status="success",
                 node_results={"node1": "result1"},
             )
 
-        # Assert
         assert hook_called
         assert received_status == "success"
         assert "custom_cleanup" in results
         assert results["custom_cleanup"]["cleaned"] is True
 
 
-class TestPostHookCleanupRobustness:
+class TestCleanupRobustness:
     """Test that critical cleanup happens even when other hooks fail."""
 
     @pytest.mark.asyncio
     async def test_secret_cleanup_runs_even_when_custom_hook_fails(self):
         """Test that secret cleanup runs even if custom hook raises unexpected exception."""
-        # Setup
         mock_memory = MockMemory()
         mock_secret = MockSecretStore({"API_KEY": "secret123"})
 
-        # Pre-hook manager to inject secrets
-        pre_config = HookConfig(enable_secret_injection=True)
-        pre_manager = PreDagHookManager(pre_config)
-
-        # Create a custom hook that fails with unexpected exception
-        def failing_hook(ports, context, node_results, status, error):
+        # Custom post hook that fails with unexpected exception
+        async def failing_hook(ports, context, node_results, status, error):
             raise AttributeError("Unexpected attribute error in custom hook!")
 
-        # Post-hook config with failing custom hook
-        post_config = PostDagHookConfig(
-            custom_hooks=[failing_hook],
-            enable_secret_cleanup=True,
-            enable_adapter_cleanup=False,
+        # One manager for the full lifecycle: it tracks injected secret keys
+        # internally (per dag_id) so post_execute knows what to clean up
+        manager = LifecycleManager(
+            pre_config=HookConfig(enable_health_checks=False, enable_secret_injection=True),
+            post_config=PostDagHookConfig(
+                custom_hooks=[failing_hook],
+                enable_secret_cleanup=True,
+                enable_adapter_cleanup=False,
+            ),
         )
-        post_manager = PostDagHookManager(post_config, pre_manager)
 
         mock_context = NodeExecutionContext(dag_id="test-dag")
 
-        # Execute: First inject secrets, then try cleanup with failing hook
         async with ExecutionContext(
             observer_manager=None,
             run_id="test-run",
             ports={"memory": mock_memory, "secret": mock_secret},
         ):
             # Inject secrets
-            await pre_manager.execute_hooks(
+            await manager.pre_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
             )
@@ -493,19 +460,19 @@ class TestPostHookCleanupRobustness:
             assert stored_secret == "secret123"
 
             # Run post-hooks with failing custom hook
-            results = await post_manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
                 pipeline_status="success",
                 node_results={},
             )
 
-            # Assert: Custom hook failed but secret cleanup still ran
+            # Custom hook failed but its error was captured
             assert "failing_hook" in results
             assert "error" in results["failing_hook"]
             assert "Unexpected attribute error" in results["failing_hook"]["error"]
 
-            # Critical: Secret cleanup should have run despite custom hook failure
+            # Critical: secret cleanup ran despite custom hook failure
             assert "secret_cleanup" in results
             assert results["secret_cleanup"]["keys_removed"] == 1
 
@@ -516,21 +483,18 @@ class TestPostHookCleanupRobustness:
     @pytest.mark.asyncio
     async def test_adapter_cleanup_runs_even_when_checkpoint_fails(self):
         """Test that adapter cleanup runs even if checkpoint save fails."""
-        # Setup
         mock_adapter = MockAdapterWithHealth()
-        MockMemory()
 
-        # Post-hook config with checkpoint enabled but it will fail
-        post_config = PostDagHookConfig(
-            enable_checkpoint_save=True,
-            enable_adapter_cleanup=True,
-            enable_secret_cleanup=False,
+        manager = LifecycleManager(
+            post_config=PostDagHookConfig(
+                enable_checkpoint_save=True,
+                enable_adapter_cleanup=True,
+                enable_secret_cleanup=False,
+            )
         )
-        post_manager = PostDagHookManager(post_config, None)
 
         mock_context = NodeExecutionContext(dag_id="test-dag")
 
-        # Make memory fail during checkpoint save by not having required methods
         class BrokenMemory:
             async def aget(self, key, dag_id=None):
                 raise RuntimeError("Memory is broken!")
@@ -543,47 +507,42 @@ class TestPostHookCleanupRobustness:
             run_id="test-run",
             ports={"memory": BrokenMemory(), "test_adapter": mock_adapter},
         ):
-            # Run post-hooks
-            results = await post_manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test_pipeline",
                 pipeline_status="success",
                 node_results={"node1": "result1"},
             )
 
-            # Checkpoint should have failed
+            # Checkpoint failed but its error was captured
             assert "checkpoint" in results
-            # Note: checkpoint might be skipped if memory port check fails early
-            # The important thing is adapter cleanup still runs
+            assert "error" in results["checkpoint"]
 
-            # Critical: Adapter cleanup should have run despite checkpoint issues
+            # Critical: adapter cleanup ran despite checkpoint failure
             assert "adapter_cleanup" in results
             assert mock_adapter.close_called is True
 
     @pytest.mark.asyncio
     async def test_all_cleanup_runs_with_multiple_failures(self):
         """Test that all cleanup operations run even with multiple failures."""
-        # Setup
         mock_memory = MockMemory()
         mock_secret = MockSecretStore({"KEY": "value"})
         mock_adapter = MockAdapterWithHealth()
 
-        pre_config = HookConfig(enable_secret_injection=True)
-        pre_manager = PreDagHookManager(pre_config)
-
-        # Multiple failing custom hooks
-        def hook1(ports, context, node_results, status, error):
+        async def hook1(ports, context, node_results, status, error):
             raise ValueError("Hook 1 failed")
 
-        def hook2(ports, context, node_results, status, error):
+        async def hook2(ports, context, node_results, status, error):
             raise TypeError("Hook 2 failed")
 
-        post_config = PostDagHookConfig(
-            custom_hooks=[hook1, hook2],
-            enable_secret_cleanup=True,
-            enable_adapter_cleanup=True,
+        manager = LifecycleManager(
+            pre_config=HookConfig(enable_health_checks=False, enable_secret_injection=True),
+            post_config=PostDagHookConfig(
+                custom_hooks=[hook1, hook2],
+                enable_secret_cleanup=True,
+                enable_adapter_cleanup=True,
+            ),
         )
-        post_manager = PostDagHookManager(post_config, pre_manager)
 
         mock_context = NodeExecutionContext(dag_id="test-dag")
 
@@ -593,10 +552,10 @@ class TestPostHookCleanupRobustness:
             ports={"memory": mock_memory, "secret": mock_secret, "adapter": mock_adapter},
         ):
             # Inject secret
-            await pre_manager.execute_hooks(context=mock_context, pipeline_name="test")
+            await manager.pre_execute(context=mock_context, pipeline_name="test")
 
             # Run post-hooks with multiple failures
-            results = await post_manager.execute_hooks(
+            results = await manager.post_execute(
                 context=mock_context,
                 pipeline_name="test",
                 pipeline_status="success",
@@ -607,7 +566,7 @@ class TestPostHookCleanupRobustness:
             assert "hook1" in results and "error" in results["hook1"]
             assert "hook2" in results and "error" in results["hook2"]
 
-            # Critical: Both cleanup operations still ran
+            # Critical: both cleanup operations still ran
             assert "secret_cleanup" in results
             assert results["secret_cleanup"]["keys_removed"] == 1
 

@@ -81,7 +81,7 @@ class FileMemoryAdapter(
             Custom file extension (defaults to format name)
         """
         self.base_path = Path(base_path)
-        self.format = FileFormat(format) if isinstance(format, str) else format
+        self.format = FileFormat(format) if isinstance(format, str) else format  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
         self.create_dirs = create_dirs
         self.extension = extension or self.format.value
 

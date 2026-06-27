@@ -54,12 +54,12 @@ redis = [
     "redis>=5.0.0", # Redis adapter for distributed caching
 ]
 # Storage plugin extras (bundled with main package)
-storage-postgresql = ["sqlalchemy>=2.0.0", "asyncpg>=0.29.0", "pgvector>=0.3.0"]
-storage-mysql = ["sqlalchemy>=2.0.0", "aiomysql>=0.2.0"]
-storage-sqlite = ["sqlalchemy>=2.0.0", "aiosqlite>=0.20.0"]
+storage-postgresql = ["sqlalchemy[asyncio]>=2.0.0", "asyncpg>=0.29.0", "pgvector>=0.3.0"]
+storage-mysql = ["sqlalchemy[asyncio]>=2.0.0", "aiomysql>=0.2.0"]
+storage-sqlite = ["sqlalchemy[asyncio]>=2.0.0", "aiosqlite>=0.20.0"]
 storage-chromadb = ["chromadb>=0.4.0"]
 storage-all = [
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0",
     "pgvector>=0.3.0",
     "aiomysql>=0.2.0",
@@ -75,6 +75,12 @@ notebooks = [
     "pandas>=2.1.0",     # Data analysis (common in notebooks)
 ]
 studio = ["hexdag-studio>=0.1.0"] # Visual Studio UI for hexDAG pipelines
+# Observability exporter (OpenTelemetryObserver).
+# Langfuse exporter lives in hexdag-plugins[langfuse].
+otel = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+]
 all = [
     "hexdag[openai]",
     "hexdag[anthropic]",
@@ -84,6 +90,7 @@ all = [
     "hexdag[studio]",
     "hexdag[mcp]",
     "hexdag[redis]",
+    "hexdag[otel]",
 ]
 
 [project.urls]

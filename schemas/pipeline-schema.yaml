@@ -406,6 +406,9 @@ $defs:
           output_schema:
             type: string
             default: null
+          stream:
+            type: string
+            default: false
           prompt_template:
             type: string
             default: null
@@ -872,8 +875,14 @@ $defs:
           reason:
             type: string
             description: "Optional reason expression \u2014 resolved at runtime. Supports\
-              \ ``$input.field`` and ``node_name.field`` syntax. Additional NodeSpec\
-              \ fields (when, on_error, etc.)."
+              \ ``$input.field`` and ``node_name.field`` syntax."
+            default: null
+          payload:
+            type: string
+            description: Optional domain context forwarded to the transition handler.
+              Values support ``$input.field`` / ``node_name.field`` syntax (resolved
+              at runtime); other values are passed as literals. Additional NodeSpec
+              fields (when, on_error, etc.).
             default: null
         additionalProperties: false
         required:

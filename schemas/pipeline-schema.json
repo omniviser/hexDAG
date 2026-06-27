@@ -1012,6 +1012,10 @@
                             "default": null,
                             "type": "string"
                         },
+                        "stream": {
+                            "default": false,
+                            "type": "string"
+                        },
                         "system_message": {
                             "default": null,
                             "description": "System message template.",
@@ -1250,9 +1254,14 @@
                             "description": "Entity ID expression \u2014 resolved at runtime from input. Supports ``$input.field`` and ``node_name.field`` syntax.",
                             "type": "string"
                         },
+                        "payload": {
+                            "default": null,
+                            "description": "Optional domain context forwarded to the transition handler. Values support ``$input.field`` / ``node_name.field`` syntax (resolved at runtime); other values are passed as literals. Additional NodeSpec fields (when, on_error, etc.).",
+                            "type": "string"
+                        },
                         "reason": {
                             "default": null,
-                            "description": "Optional reason expression \u2014 resolved at runtime. Supports ``$input.field`` and ``node_name.field`` syntax. Additional NodeSpec fields (when, on_error, etc.).",
+                            "description": "Optional reason expression \u2014 resolved at runtime. Supports ``$input.field`` and ``node_name.field`` syntax.",
                             "type": "string"
                         },
                         "to_state": {

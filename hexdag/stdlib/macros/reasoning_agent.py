@@ -218,7 +218,7 @@ Continue reasoning. Use tools if needed to gather more information."""
         # Node 2: Adapter function to normalize response and parse tool calls
         async def normalize_response(input_data: str, **kwargs: Any) -> dict[str, Any]:
             """Normalize LLM response to unified format with tool parsing."""
-            text = input_data if isinstance(input_data, str) else str(input_data)
+            text = input_data if isinstance(input_data, str) else str(input_data)  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
 
             # Text-based - parse tool calls from text
             parsed_calls = ToolParser.parse_tool_calls(text, format=config.tool_format)

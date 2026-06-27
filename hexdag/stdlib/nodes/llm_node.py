@@ -83,7 +83,7 @@ def _resolve_conversation(
         # Treat as literal text (edge case)
         return [Message(role="user", content=conversation)]
 
-    if isinstance(conversation, list) and conversation:
+    if isinstance(conversation, list) and conversation:  # pyright: ignore[reportUnnecessaryIsInstance]
         first = conversation[0]
         if isinstance(first, dict):
             # Detect form: inline static [{role, content}]
@@ -190,6 +190,7 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
         examples: list[dict[str, Any]] | None = None,
         conversation: str | list[Any] | None = None,
         output_schema: dict[str, Any] | type[BaseModel] | None = None,
+        stream: bool = False,
         deps: list[str] | None = None,
         # --- Deprecated (backward compat) ---
         prompt_template: PromptInput | str | None = None,
@@ -214,6 +215,13 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
             Conversation history. See class docstring for three forms.
         output_schema : dict[str, Any] | type[BaseModel] | None
             Structured output schema. Presence enables structured output.
+        stream : bool
+            Stream the response token-by-token. Each delta is emitted as
+            an ``LLMTokenStreamed`` event through the observer manager;
+            the node's result is the full concatenated text (downstream
+            nodes are unaffected). Requires an adapter implementing
+            ``SupportsStreaming``; silently falls back to ``aresponse()``
+            otherwise. Ignored when ``output_schema`` is set.
         deps : list[str] | None
             List of dependency node names.
         prompt_template : str | None
@@ -300,6 +308,15 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
         if output_schema is not None:
             output_model = self.create_pydantic_model(f"{name}Output", output_schema)
 
+        if stream and output_model is not None:
+            warnings.warn(
+                f"LLMNode '{name}': 'stream' is ignored when 'output_schema' is set "
+                "(structured output cannot be streamed)",
+                UserWarning,
+                stacklevel=2,
+            )
+            stream = False
+
         # Create the LLM wrapper function
         llm_wrapper = self._create_llm_wrapper(
             name=name,
@@ -308,6 +325,7 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
             system_message=actual_system,
             examples=examples,
             conversation=conversation,
+            stream=stream,
         )
 
         return self.create_node_with_mapping(
@@ -344,6 +362,7 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
         system_message: str | None,
         examples: list[dict[str, Any]] | None,
         conversation: str | list[Any] | None,
+        stream: bool = False,
     ) -> Callable[..., Any]:
         """Create an async LLM wrapper function."""
 
@@ -390,7 +409,7 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
                         conversation=conversation,
                     )
 
-                    # Call LLM — structured or plain
+                    # Call LLM — structured, streaming, or plain
                     if output_model:
                         result_dict = await llm.aresponse_structured(messages, output_model)
                         node_logger.debug(
@@ -398,6 +417,22 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
                             duration_ms=t.duration_str,
                         )
                         return output_model.model_validate(result_dict)
+
+                    # hasattr (not isinstance) — wrapped/observable ports
+                    # fail runtime protocol checks but still delegate astream
+                    if stream and hasattr(llm, "astream"):
+                        full_text = await _stream_response(llm, messages, name)
+                        node_logger.debug(
+                            "Streamed response complete",
+                            response_length=len(full_text),
+                            duration_ms=t.duration_str,
+                        )
+                        return full_text
+                    if stream:
+                        node_logger.debug(
+                            "Streaming requested but adapter lacks astream; "
+                            "falling back to aresponse"
+                        )
 
                     response = await llm.aresponse(messages)
                     node_logger.debug(
@@ -444,6 +479,37 @@ class LLMNode(BaseNodeFactory, yaml_alias="llm_node"):
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
+
+
+async def _stream_response(llm: Any, messages: list[Message], node_name: str) -> str:
+    """Consume an adapter token stream, emitting LLMTokenStreamed events.
+
+    Each delta is forwarded to the observer manager (if one is active)
+    so SSE endpoints / UIs can render tokens in real time.  The full
+    concatenated text is returned as the node result, keeping DAG
+    semantics identical to a non-streamed call.
+    """
+    from hexdag.kernel.context import get_observer_manager  # lazy: avoid import cycle
+    from hexdag.kernel.ports.llm import LLMTokenStreamed  # lazy: avoid import cycle
+
+    observer_manager = get_observer_manager()
+    pipeline_name = get_pipeline_name() or ""
+
+    parts: list[str] = []
+    index = 0
+    async for delta in llm.astream(messages):
+        parts.append(delta)
+        if observer_manager is not None:
+            await observer_manager.notify(
+                LLMTokenStreamed(
+                    node_name=node_name,
+                    delta=delta,
+                    index=index,
+                    pipeline_name=pipeline_name,
+                )
+            )
+        index += 1
+    return "".join(parts)
 
 
 def _build_messages(
@@ -508,7 +574,7 @@ def _extract_conversation_vars(
     if isinstance(conversation, str):
         match = re.findall(pattern, conversation)
         vars_found.extend(match)
-    elif isinstance(conversation, list):
+    elif isinstance(conversation, list):  # pyright: ignore[reportUnnecessaryIsInstance]
         for item in conversation:
             if isinstance(item, dict) and isinstance(msg_ref := item.get("messages"), str):
                 vars_found.extend(re.findall(pattern, msg_ref))

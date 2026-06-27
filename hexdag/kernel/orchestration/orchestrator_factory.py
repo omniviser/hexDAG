@@ -181,8 +181,15 @@ class OrchestratorFactory:
             middleware_config=middleware_config or None,
         )
 
-        # Step 4: Instantiate services if configured
-        services = self._instantiate_services(pipeline_config, global_ports)
+        # Step 4: Instantiate services if configured.
+        # Names covered by service_overrides are skipped — instantiating a
+        # YAML service only to discard it wastes work and may run __init__
+        # side effects (connections, registrations) on a throwaway instance.
+        services = self._instantiate_services(
+            pipeline_config,
+            global_ports,
+            skip=set(service_overrides) if service_overrides else None,
+        )
 
         # Merge parent-injected services (e.g. System's shared EntityState).
         # Must run before auto-registration guards so overrides take precedence.
@@ -207,7 +214,7 @@ class OrchestratorFactory:
 
         if services:
             # Store services in orchestrator's ports dict so they are accessible via context
-            if isinstance(orchestrator.ports, dict):
+            if isinstance(orchestrator.ports, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
                 orchestrator.ports["_hexdag_services"] = services
             logger.info(
                 "✅ {} services instantiated",
@@ -379,6 +386,7 @@ class OrchestratorFactory:
         self,
         pipeline_config: PipelineConfig,
         ports: dict[str, Any],
+        skip: set[str] | None = None,
     ) -> dict[str, Any]:
         """Instantiate Service instances from pipeline configuration.
 
@@ -388,6 +396,8 @@ class OrchestratorFactory:
             Pipeline configuration with services specs
         ports : dict[str, Any]
             Already-instantiated ports (for resolving port references in config)
+        skip : set[str] | None
+            Service names to skip (covered by pre-built overrides)
 
         Returns
         -------
@@ -397,6 +407,9 @@ class OrchestratorFactory:
         services: dict[str, Any] = {}
 
         for service_name, service_spec in pipeline_config.services.items():
+            if skip and service_name in skip:
+                logger.debug("Skipping service '{}' (override provided)", service_name)
+                continue
             try:
                 logger.debug("Instantiating service: {} = {}", service_name, service_spec)
 
@@ -493,7 +506,7 @@ class OrchestratorFactory:
             if handler_path:
                 handler_cls = resolve(handler_path)
                 # Instantiate if it's a class, use directly if callable
-                handler = handler_cls() if isinstance(handler_cls, type) else handler_cls
+                handler = handler_cls() if isinstance(handler_cls, type) else handler_cls  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
                 entity_state.register_handler(entity_type, handler)
 
             logger.debug(

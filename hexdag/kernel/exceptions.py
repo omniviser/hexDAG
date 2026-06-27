@@ -382,6 +382,15 @@ class InvalidTransitionError(HexDAGError):
     """Raised when a state transition violates the machine config."""
 
 
+class StaleStateError(HexDAGError):
+    """Raised when a compare-and-swap state write finds the entity changed.
+
+    A ``SupportsStateBackend`` raises this when ``awrite_state(expected=...)``
+    detects the entity is no longer in the expected state — i.e. a concurrent
+    worker transitioned it first.
+    """
+
+
 # ============================================================================
 # VFS Errors
 # ============================================================================

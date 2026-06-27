@@ -74,7 +74,7 @@ class NodeEntityPlugin:
         # Handle factory classes vs factory functions
         # Factory classes need to be instantiated first, then called
         # Factory functions can be called directly
-        if isinstance(factory_obj, type):
+        if isinstance(factory_obj, type):  # pyright: ignore[reportUnnecessaryIsInstance]
             # It's a class - instantiate then call
             factory_instance = factory_obj()
             factory = cast("Callable[..., NodeSpec]", factory_instance)
@@ -109,7 +109,7 @@ class NodeEntityPlugin:
 
         # Add dependencies
         if deps:
-            node = node.after(*deps) if isinstance(deps, list) else node.after(deps)
+            node = node.after(*deps) if isinstance(deps, list) else node.after(deps)  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
 
         return node
 

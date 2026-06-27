@@ -149,7 +149,7 @@ class ComponentInstantiator:
         ComponentInstantiationError
             If specification format is invalid
         """
-        if not isinstance(spec, dict):
+        if not isinstance(spec, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ComponentInstantiationError(
                 f"Component specification must be a dict, got {type(spec).__name__}. "
                 f"Use format: {{adapter: 'module.path.Class', config: {{...}}}}"
@@ -210,7 +210,7 @@ class ComponentInstantiator:
                 ) from e
 
             # Instantiate the adapter class with parameters
-            if isinstance(adapter_class, type):
+            if isinstance(adapter_class, type):  # pyright: ignore[reportUnnecessaryIsInstance]
                 try:
                     # Resolve any deferred environment variables at instantiation time
                     resolved_params = _resolve_deferred_env_vars(component_spec.params)
@@ -291,7 +291,7 @@ class ComponentInstantiator:
                     f"Make sure the module path is correct. Error: {e}"
                 ) from e
 
-            if not isinstance(policy_class, type):
+            if not isinstance(policy_class, type):  # pyright: ignore[reportUnnecessaryIsInstance]
                 raise ComponentInstantiationError(
                     f"Policy '{component_spec.module_path}' resolved to an instance, "
                     f"not a class. Cannot instantiate from instance."

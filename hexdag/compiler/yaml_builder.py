@@ -29,12 +29,7 @@ from hexdag.compiler.plugins.node_entity import NodeEntityPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin  # noqa: F401
 from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.template import TemplatePlugin  # noqa: F401
-from hexdag.compiler.reference_resolver import (
-    extract_refs_from_expressions,
-    extract_refs_from_mapping,
-    extract_refs_from_string,
-    extract_refs_from_template,
-)
+from hexdag.compiler.reference_resolver import extract_refs_from_spec
 from hexdag.compiler.yaml_validator import YamlValidator
 from hexdag.kernel.context.execution_context import RESERVED_NAMES
 from hexdag.kernel.domain.dag import DirectedGraph
@@ -734,7 +729,11 @@ class YamlPipelineBuilder:
         known_nodes: frozenset[str],
         macro_instances: frozenset[str] = frozenset(),
     ) -> set[str]:
-        """Infer deps from input_mapping, expressions, templates, composite fields, and when clauses.
+        """Infer deps from any ``{{node.field}}`` ref in the spec plus framework expression fields.
+
+        Delegates to :func:`extract_refs_from_spec` — Jinja refs are found in
+        every spec string at any nesting depth; bare expression refs only in
+        framework-owned fields (``input_mapping``, ``when``, ``expressions``, …).
 
         Parameters
         ----------
@@ -750,66 +749,13 @@ class YamlPipelineBuilder:
         set[str]
             Inferred dependency node names.
         """
-        refs: set[str] = set()
         spec = node_config.get("spec", {})
         node_id = node_config.get("metadata", {}).get("name")
 
         # Exclude self-references
         other_nodes = known_nodes - {node_id} if node_id else known_nodes
 
-        # 1. input_mapping
-        input_mapping = spec.get("input_mapping")
-        if isinstance(input_mapping, dict):
-            refs |= extract_refs_from_mapping(input_mapping, other_nodes, macro_instances)
-
-        # 2. expressions
-        expressions = spec.get("expressions")
-        if isinstance(expressions, dict):
-            refs |= extract_refs_from_expressions(expressions, other_nodes, macro_instances)
-
-        # 3. prompt_template / template (string or dict format)
-        for key in ("prompt_template", "template", "initial_prompt_template", "main_prompt"):
-            template = spec.get(key)
-            if isinstance(template, str):
-                refs |= extract_refs_from_template(template, other_nodes, macro_instances)
-            elif isinstance(template, dict):
-                # Dict-format prompt templates: extract refs from sub-fields
-                for subkey in ("template", "human_message", "system_message"):
-                    if isinstance(template.get(subkey), str):
-                        refs |= extract_refs_from_template(
-                            template[subkey], other_nodes, macro_instances
-                        )
-                for msg in template.get("messages", []):
-                    if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                        refs |= extract_refs_from_template(
-                            msg["content"], other_nodes, macro_instances
-                        )
-
-        # 4. Composite node fields: condition, branches[].condition, items
-        for field_key in ("condition", "items"):
-            field_val = spec.get(field_key)
-            if isinstance(field_val, str):
-                refs |= extract_refs_from_string(field_val, other_nodes, macro_instances)
-
-        branches = spec.get("branches")
-        if isinstance(branches, list):
-            for branch in branches:
-                if isinstance(branch, dict):
-                    cond = branch.get("condition")
-                    if isinstance(cond, str):
-                        refs |= extract_refs_from_string(cond, other_nodes, macro_instances)
-
-        # 5. Composite node state_update (dict of expression strings)
-        state_update = spec.get("state_update")
-        if isinstance(state_update, dict):
-            refs |= extract_refs_from_expressions(state_update, other_nodes, macro_instances)
-
-        # 6. when clause (runtime conditional — still needs data dependency)
-        when_expr = spec.get("when")
-        if isinstance(when_expr, str):
-            refs |= extract_refs_from_string(when_expr, other_nodes, macro_instances)
-
-        return refs
+        return extract_refs_from_spec(spec, other_nodes, macro_instances)
 
     @staticmethod
     def _extract_pipeline_config(config: dict[str, Any]) -> PipelineConfig:

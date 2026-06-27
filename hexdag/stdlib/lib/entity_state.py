@@ -28,11 +28,15 @@ Programmatic::
 
 from __future__ import annotations
 
+import inspect
 import time
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.exceptions import InvalidTransitionError  # noqa: F401
+from hexdag.kernel.logging import get_logger
 from hexdag.kernel.service import Service, tool
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -40,6 +44,7 @@ if TYPE_CHECKING:
     from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
     from hexdag.kernel.orchestration.events.events import TransitionContext
     from hexdag.kernel.ports.data_store import SupportsCollectionStorage
+    from hexdag.kernel.ports.entity_state import SupportsStateBackend
 
 _STATES_COLLECTION = "entity_states"
 _HISTORY_COLLECTION = "state_history"
@@ -48,6 +53,21 @@ _HISTORY_COLLECTION = "state_history"
 def _entity_key(entity_type: str, entity_id: str) -> str:
     """Build a storage key from entity type and ID."""
     return f"{entity_type}:{entity_id}"
+
+
+def _accepts_payload(handler: Callable[..., Any]) -> bool:
+    """Check whether a handler can receive the ``payload`` kwarg.
+
+    True when the handler declares a ``payload`` parameter or ``**kwargs``.
+    Existing six-kwarg handlers return False and are called unchanged.
+    """
+    try:
+        params = inspect.signature(handler).parameters
+    except (TypeError, ValueError):
+        return False
+    if "payload" in params:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 class EntityState(Service):
@@ -61,15 +81,24 @@ class EntityState(Service):
     - ``aregister_entity(entity_type, entity_id)`` — create new entity
     """
 
-    def __init__(self, storage: SupportsCollectionStorage | None = None) -> None:
+    def __init__(
+        self,
+        storage: SupportsCollectionStorage | None = None,
+        state_backend: SupportsStateBackend | None = None,
+    ) -> None:
         """Initialise state machines, entity states, and history stores.
 
         Args
         ----
             storage: Optional persistent backend.  When ``None`` (default),
                 all data lives only in memory.
+            state_backend: Optional domain-database backend.  When set, it
+                is the source of truth for *current state* (reads and
+                compare-and-swap writes go through it); ``_states`` becomes
+                a cache.  History stays in ``storage`` / memory.
         """
         self._storage = storage
+        self._state_backend = state_backend
         # entity_type → StateMachineConfig
         self._machines: dict[str, StateMachineConfig] = {}
         # (entity_type, entity_id) → current state string
@@ -78,6 +107,8 @@ class EntityState(Service):
         self._history: dict[tuple[str, str], list[StateTransition]] = {}
         # entity_type → async handler callable (transactional: failure = rollback)
         self._transition_handlers: dict[str, Callable[..., Any]] = {}
+        # entity_type → whether the handler accepts a ``payload`` kwarg
+        self._handler_accepts_payload: dict[str, bool] = {}
 
     # ------------------------------------------------------------------
     # Setup API (not tools — called before pipeline runs)
@@ -109,12 +140,19 @@ class EntityState(Service):
                 context: TransitionContext | None,
             ) -> None: ...
 
+        Handlers that additionally declare a ``payload`` parameter (or
+        ``**kwargs``) receive the caller-supplied payload dict from
+        ``atransition(..., payload=...)``::
+
+            async def on_transition(..., payload: dict | None) -> None: ...
+
         Args
         ----
             entity_type: Entity type to attach the handler to.
             handler: Async callable invoked on every transition.
         """
         self._transition_handlers[entity_type] = handler
+        self._handler_accepts_payload[entity_type] = _accepts_payload(handler)
 
     # ------------------------------------------------------------------
     # Collection interface
@@ -182,6 +220,11 @@ class EntityState(Service):
             raise InvalidTransitionError(msg)
 
         key = (entity_type, entity_id)
+        # Registration establishes the initial state, so the backend write is
+        # intentionally unconditional (no compare-and-swap) — unlike
+        # ``atransition``, there is no prior state to guard against.
+        if self._state_backend is not None:
+            await self._state_backend.awrite_state(entity_type, entity_id, state)
         self._states[key] = state
         transition = StateTransition(
             entity_type=entity_type,
@@ -218,6 +261,7 @@ class EntityState(Service):
         entity_id: str,
         to_state: str,
         reason: str | None = None,
+        payload: dict[str, Any] | None = None,
         *,
         _context: TransitionContext | None = None,
     ) -> dict[str, Any]:
@@ -238,6 +282,9 @@ class EntityState(Service):
             entity_id: Unique identifier for the entity.
             to_state: Target state.
             reason: Optional reason for the transition.
+            payload: Optional domain context forwarded to the transition
+                handler (e.g. ``{"resolved_by": "user-1"}``).  Only passed
+                to handlers that declare a ``payload`` parameter.
             _context: Internal — transition context injected by framework.
 
         Returns
@@ -250,7 +297,10 @@ class EntityState(Service):
         )
 
         key = (entity_type, entity_id)
-        current = self._states.get(key)
+        if self._state_backend is not None:
+            current = await self._state_backend.aread_state(entity_type, entity_id)
+        else:
+            current = self._states.get(key)
         if current is None:
             msg = f"Entity {entity_type!r}/{entity_id!r} not registered"
             raise InvalidTransitionError(msg)
@@ -279,7 +329,14 @@ class EntityState(Service):
             metadata=metadata,
         )
 
-        # Write-ahead: persist BEFORE updating in-memory state (P2)
+        # Write-ahead: persist BEFORE updating in-memory state (P2).
+        # With a state backend, the write is compare-and-swap on the
+        # current state — a concurrent transition raises StaleStateError
+        # from the backend instead of silently losing an update.
+        if self._state_backend is not None:
+            await self._state_backend.awrite_state(
+                entity_type, entity_id, to_state, expected=current
+            )
         if self._storage is not None:
             storage_key = _entity_key(entity_type, entity_id)
             await self._storage.asave(
@@ -303,17 +360,39 @@ class EntityState(Service):
         # Call transition handler (transactional: failure = rollback)
         handler = self._transition_handlers.get(entity_type)
         if handler is not None:
+            handler_kwargs: dict[str, Any] = {
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "from_state": current,
+                "to_state": to_state,
+                "reason": reason,
+                "context": _context,
+            }
+            if self._handler_accepts_payload.get(entity_type, False):
+                handler_kwargs["payload"] = payload
             try:
-                await handler(
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    from_state=current,
-                    to_state=to_state,
-                    reason=reason,
-                    context=_context,
-                )
-            except Exception:
-                # Rollback: revert storage to previous state AND history
+                await handler(**handler_kwargs)
+            except Exception as handler_exc:
+                # Rollback: revert backend/storage to previous state AND history.
+                # Each step is guarded so a failing rollback (e.g. the backend
+                # CAS raising StaleStateError because a concurrent worker moved
+                # the entity) cannot mask the original handler exception or
+                # skip the remaining storage/history reverts.
+                if self._state_backend is not None:
+                    try:
+                        await self._state_backend.awrite_state(
+                            entity_type, entity_id, current, expected=to_state
+                        )
+                    except Exception as rollback_exc:  # noqa: BLE001
+                        logger.error(
+                            "State-backend rollback failed for {!r}/{!r} "
+                            "({} → {}); entity may be in an indeterminate state: {}",
+                            entity_type,
+                            entity_id,
+                            to_state,
+                            current,
+                            rollback_exc,
+                        )
                 if self._storage is not None:
                     storage_key = _entity_key(entity_type, entity_id)
                     await self._storage.asave(
@@ -339,7 +418,7 @@ class EntityState(Service):
                                 "transitions": rollback_transitions,
                             },
                         )
-                raise
+                raise handler_exc
 
         # Commit in-memory state (after storage + handler succeeded)
         self._states[key] = to_state
@@ -409,6 +488,14 @@ class EntityState(Service):
             Dict with entity_type, entity_id, and current state, or None.
         """
         key = (entity_type, entity_id)
+        if self._state_backend is not None:
+            backend_state = await self._state_backend.aread_state(entity_type, entity_id)
+            if backend_state is not None:
+                return {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "state": backend_state,
+                }
         current = self._states.get(key)
         if current is not None:
             return {

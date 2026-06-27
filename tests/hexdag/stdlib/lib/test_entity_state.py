@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from hexdag.kernel.domain.entity_state import StateMachineConfig, StateTransition
-from hexdag.kernel.exceptions import ValidationError
+from hexdag.kernel.exceptions import StaleStateError, ValidationError
 from hexdag.stdlib.adapters.memory.collection_memory import InMemoryCollectionStorage
 from hexdag.stdlib.lib.entity_state import EntityState, InvalidTransitionError
 from hexdag.stdlib.lib_base import HexDAGLib
@@ -433,3 +433,165 @@ class TestEntityBoundToolFiltering:
         assert "aget_state" in tools
         assert "aget_history" in tools
         assert "aregister_entity" in tools
+
+
+# ---------------------------------------------------------------------------
+# EntityState with a SupportsStateBackend (domain DB as source of truth)
+# ---------------------------------------------------------------------------
+
+
+class FakeStateBackend:
+    """In-memory SupportsStateBackend with CAS semantics."""
+
+    def __init__(self) -> None:
+        self.states: dict[tuple[str, str], str] = {}
+        self.writes: list[tuple[str, str, str, str | None]] = []
+
+    async def aread_state(self, entity_type: str, entity_id: str) -> str | None:
+        return self.states.get((entity_type, entity_id))
+
+    async def awrite_state(
+        self,
+        entity_type: str,
+        entity_id: str,
+        state: str,
+        *,
+        expected: str | None = None,
+    ) -> None:
+        key = (entity_type, entity_id)
+        if expected is not None and self.states.get(key) != expected:
+            msg = f"{key}: expected {expected!r}, found {self.states.get(key)!r}"
+            raise StaleStateError(msg)
+        self.states[key] = state
+        self.writes.append((entity_type, entity_id, state, expected))
+
+
+def _backend_machine() -> StateMachineConfig:
+    return StateMachineConfig(
+        entity_type="order",
+        states={"NEW", "PAID", "SHIPPED"},
+        initial_state="NEW",
+        transitions={"NEW": {"PAID"}, "PAID": {"SHIPPED"}},
+    )
+
+
+@pytest.fixture()
+def backend() -> FakeStateBackend:
+    return FakeStateBackend()
+
+
+@pytest.fixture()
+def es(backend: FakeStateBackend) -> EntityState:
+    state = EntityState(state_backend=backend)
+    state.register_machine(_backend_machine())
+    return state
+
+
+class TestStateBackend:
+    @pytest.mark.asyncio()
+    async def test_register_writes_through_backend(self, es, backend):
+        await es.aregister_entity("order", "O-1")
+        assert backend.states[("order", "O-1")] == "NEW"
+
+    @pytest.mark.asyncio()
+    async def test_transition_cas_write(self, es, backend):
+        await es.aregister_entity("order", "O-1")
+        await es.atransition("order", "O-1", "PAID")
+
+        assert backend.states[("order", "O-1")] == "PAID"
+        # The transition write was conditional on the previous state
+        assert ("order", "O-1", "PAID", "NEW") in backend.writes
+
+    @pytest.mark.asyncio()
+    async def test_backend_is_source_of_truth_for_validation(self, es, backend):
+        """No pre-sync dance: state changed externally is seen by validation."""
+        await es.aregister_entity("order", "O-1")
+        # Another worker moved the entity directly in the domain DB
+        backend.states[("order", "O-1")] = "PAID"
+
+        # PAID -> SHIPPED is valid even though the in-memory cache says NEW
+        result = await es.atransition("order", "O-1", "SHIPPED")
+        assert result["from_state"] == "PAID"
+
+    @pytest.mark.asyncio()
+    async def test_invalid_transition_from_backend_state(self, es, backend):
+        await es.aregister_entity("order", "O-1")
+        backend.states[("order", "O-1")] = "SHIPPED"
+
+        with pytest.raises(InvalidTransitionError):
+            await es.atransition("order", "O-1", "PAID")
+
+    @pytest.mark.asyncio()
+    async def test_concurrent_transition_raises_stale(self, es, backend):
+        """CAS conflict: backend changed between read and write."""
+        await es.aregister_entity("order", "O-1")
+
+        original_read = backend.aread_state
+
+        async def read_then_race(entity_type: str, entity_id: str) -> str | None:
+            state = await original_read(entity_type, entity_id)
+            # Concurrent worker wins the race after our validation read
+            backend.states[(entity_type, entity_id)] = "PAID"
+            return state
+
+        backend.aread_state = read_then_race
+        with pytest.raises(StaleStateError):
+            await es.atransition("order", "O-1", "PAID")
+
+    @pytest.mark.asyncio()
+    async def test_handler_failure_reverts_backend(self, es, backend):
+        await es.aregister_entity("order", "O-1")
+
+        async def failing_handler(**kwargs):
+            raise RuntimeError("side effect failed")
+
+        es.register_handler("order", failing_handler)
+
+        with pytest.raises(RuntimeError, match="side effect failed"):
+            await es.atransition("order", "O-1", "PAID")
+
+        assert backend.states[("order", "O-1")] == "NEW"
+
+    @pytest.mark.asyncio()
+    async def test_aget_state_reads_backend_first(self, es, backend):
+        await es.aregister_entity("order", "O-1")
+        backend.states[("order", "O-1")] = "PAID"  # external change
+
+        state = await es.aget_state("order", "O-1")
+        assert state["state"] == "PAID"
+
+    @pytest.mark.asyncio()
+    async def test_unregistered_entity_still_errors(self, es):
+        with pytest.raises(InvalidTransitionError, match="not registered"):
+            await es.atransition("order", "missing", "PAID")
+
+    @pytest.mark.asyncio()
+    async def test_history_stays_local(self, es, backend):
+        """The backend owns current state only; history is EntityState's."""
+        await es.aregister_entity("order", "O-1")
+        await es.atransition("order", "O-1", "PAID")
+
+        history = await es.aget_history("order", "O-1")
+        assert [h["to_state"] for h in history] == ["NEW", "PAID"]
+
+    @pytest.mark.asyncio()
+    async def test_failed_rollback_does_not_mask_handler_error(self, es, backend):
+        """If the rollback CAS itself fails (concurrent worker moved the
+        entity), the *handler's* exception must still propagate — not the
+        StaleStateError from the failed rollback."""
+        await es.aregister_entity("order", "O-1")
+
+        async def failing_handler(**kwargs):
+            # A concurrent worker transitions the entity while we hold it,
+            # so the rollback's CAS (expected="PAID") will find "SHIPPED".
+            backend.states[("order", "O-1")] = "SHIPPED"
+            raise RuntimeError("side effect failed")
+
+        es.register_handler("order", failing_handler)
+
+        with pytest.raises(RuntimeError, match="side effect failed"):
+            await es.atransition("order", "O-1", "PAID")
+
+        # Rollback could not revert (CAS conflict); state is left as the
+        # concurrent worker set it — but the original error surfaced.
+        assert backend.states[("order", "O-1")] == "SHIPPED"

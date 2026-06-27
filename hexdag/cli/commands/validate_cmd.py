@@ -9,7 +9,15 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin
+from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin
+from hexdag.compiler.preprocessing.template import TemplatePlugin
 from hexdag.compiler.yaml_validator import YamlValidator
+from hexdag.kernel import (
+    YamlPipelineBuilderError,
+    register_alias,
+    register_type_from_config,
+)
 
 app = typer.Typer()
 console = Console()
@@ -67,6 +75,30 @@ def validate(
     except OSError as e:
         console.print(f"[red]✗ File Error:[/red] {e}")
         raise typer.Exit(1) from e
+
+    # Run the same preprocessing pipeline the builder applies before
+    # validation (include expansion, ${VAR} substitution, templating) so
+    # `validate` matches `build`. base_path uses the unresolved parent to
+    # mirror the builder (yaml_builder._temporary_base_path(yaml_file.parent)).
+    preprocess_plugins = [
+        IncludePreprocessPlugin(base_path=yaml_file.parent),
+        EnvironmentVariablePlugin(),
+        TemplatePlugin(),
+    ]
+    try:
+        for plugin in preprocess_plugins:
+            config = plugin.process(config)
+    except YamlPipelineBuilderError as e:
+        console.print(f"[red]✗ Preprocessing Error:[/red] {e}")
+        raise typer.Exit(1) from e
+
+    # Register user-defined aliases and custom types before validation,
+    # mirroring YamlPipelineBuilder (steps 4.5/4.6)
+    spec = config.get("spec", {}) if isinstance(config, dict) else {}
+    for alias, full_path in spec.get("aliases", {}).items():
+        register_alias(alias, full_path)
+    for type_name, type_config in spec.get("custom_types", {}).items():
+        register_type_from_config(type_name, type_config)
 
     # Validate using YamlValidator
     validator = YamlValidator()

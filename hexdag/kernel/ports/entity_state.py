@@ -18,6 +18,45 @@ if TYPE_CHECKING:
 
 
 @runtime_checkable
+class SupportsStateBackend(Protocol):
+    """Domain database as the canonical store for entity states.
+
+    When an ``EntityState`` implementation is given a state backend, the
+    application's own storage (e.g. a ``status`` column) becomes the
+    source of truth for *current state*: validation reads through
+    ``aread_state`` and writes go through ``awrite_state``.  Audit history
+    is NOT the backend's concern — it stays in the EntityState
+    implementation (in-memory or ``SupportsCollectionStorage``).
+
+    ``awrite_state``'s ``expected`` parameter enables compare-and-swap:
+    implementations should perform a conditional write (e.g.
+    ``UPDATE ... SET status = :state WHERE status = :expected``) and raise
+    ``StaleStateError`` when the entity is no longer in ``expected`` —
+    turning concurrent check-then-act races into explicit conflicts.
+    """
+
+    async def aread_state(self, entity_type: str, entity_id: str) -> str | None:
+        """Return the current state of an entity, or None if unknown."""
+        ...
+
+    async def awrite_state(
+        self,
+        entity_type: str,
+        entity_id: str,
+        state: str,
+        *,
+        expected: str | None = None,
+    ) -> None:
+        """Write an entity's state.
+
+        When ``expected`` is not None, the write must be conditional on the
+        entity currently being in ``expected`` and raise ``StaleStateError``
+        on mismatch.
+        """
+        ...
+
+
+@runtime_checkable
 class EntityState(Protocol):
     """Port interface for entity state management.
 
@@ -106,11 +145,14 @@ class EntityState(Protocol):
         entity_id: str,
         to_state: str,
         reason: str | None = None,
+        payload: dict[str, Any] | None = None,
         *,
         _context: TransitionContext | None = None,
     ) -> dict[str, Any]:
         """Transition an entity to a new state.
 
         Validates the transition against the registered state machine.
+        ``payload`` carries optional domain context forwarded to transition
+        handlers that declare a ``payload`` parameter.
         """
         ...

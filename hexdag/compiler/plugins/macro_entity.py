@@ -10,7 +10,7 @@ from hexdag.kernel.domain.dag import DirectedGraph
 from hexdag.kernel.exceptions import YamlPipelineBuilderError
 from hexdag.kernel.logging import get_logger
 from hexdag.kernel.resolver import ResolveError, resolve
-from hexdag.kernel.yaml_macro import YamlMacro, YamlMacroConfig
+from hexdag.kernel.yaml_macro import YamlMacroConfig
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -99,19 +99,23 @@ class MacroEntityPlugin:
         # enforces a depth limit.
         try:
             with macro_instance.expansion_guard(instance_name):
-                if isinstance(macro_instance, YamlMacro):
-                    subgraph = macro_instance.expand(
-                        instance_name=instance_name,
-                        inputs=inputs,
-                        dependencies=dependencies,
-                        node_builder=self._make_node_builder(builder),
-                    )
-                else:
-                    subgraph = macro_instance.expand(
-                        instance_name=instance_name,
-                        inputs=inputs,
-                        dependencies=dependencies,
-                    )
+                # Pass the node_builder to any macro whose expand() accepts it
+                # (YamlMacro and any Python macro that builds child YAML node
+                # specs, e.g. the database `transaction` macro).
+                import inspect
+
+                expand_kwargs: dict[str, Any] = {
+                    "instance_name": instance_name,
+                    "inputs": inputs,
+                    "dependencies": dependencies,
+                }
+                expand_params = inspect.signature(macro_instance.expand).parameters
+                accepts_node_builder = "node_builder" in expand_params or any(
+                    p.kind is inspect.Parameter.VAR_KEYWORD for p in expand_params.values()
+                )
+                if accepts_node_builder:
+                    expand_kwargs["node_builder"] = self._make_node_builder(builder)
+                subgraph = macro_instance.expand(**expand_kwargs)
         except (ValueError, YamlPipelineBuilderError):
             # Re-raise validation/builder errors directly
             raise

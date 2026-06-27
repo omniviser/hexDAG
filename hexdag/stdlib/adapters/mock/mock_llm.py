@@ -1,6 +1,7 @@
 """Mock LLM implementation for testing purposes."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from hexdag.kernel.ports.llm import (
@@ -12,6 +13,7 @@ from hexdag.kernel.ports.llm import (
     SupportsBatchGeneration,
     SupportsFunctionCalling,
     SupportsGeneration,
+    SupportsStreaming,
     SupportsStructuredOutput,
     SupportsUsageTracking,
     TokenUsage,
@@ -29,6 +31,7 @@ class MockLLM(
     HexDAGAdapter,
     LLM,
     SupportsGeneration,
+    SupportsStreaming,
     SupportsFunctionCalling,
     SupportsStructuredOutput,
     SupportsUsageTracking,
@@ -136,6 +139,32 @@ class MockLLM(
     def get_last_usage(self) -> TokenUsage | None:
         """Return token usage from the most recent LLM API call."""
         return self._last_usage
+
+    async def astream(self, messages: MessageList) -> AsyncIterator[str]:
+        """Stream the configured response in small text deltas.
+
+        Splits the response that ``aresponse()`` would return into
+        whitespace-preserving word chunks, so tests can verify both the
+        deltas and the reassembled full text.
+
+        Parameters
+        ----------
+        messages : MessageList
+            List of messages to process
+
+        Yields
+        ------
+        str
+            Incremental text deltas.
+        """
+        import re  # lazy: only needed for streaming chunk split
+
+        response = await self.aresponse(messages)
+        if response is None:
+            return
+        for chunk in re.split(r"(\s+)", response):
+            if chunk:
+                yield chunk
 
     async def aresponse_with_tools(
         self,

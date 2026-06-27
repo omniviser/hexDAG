@@ -11,7 +11,10 @@ Tests the complete lifecycle of pre-DAG and post-DAG hooks including:
 import pytest
 
 from hexdag.kernel.domain.dag import DirectedGraph, NodeSpec
-from hexdag.kernel.orchestration.hooks import HookConfig, PostDagHookConfig
+from hexdag.kernel.orchestration.components.lifecycle_manager import (
+    HookConfig,
+    PostDagHookConfig,
+)
 from hexdag.kernel.orchestration.orchestrator import Orchestrator
 from hexdag.kernel.ports.healthcheck import HealthStatus
 

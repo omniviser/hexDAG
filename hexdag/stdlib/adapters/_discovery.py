@@ -53,6 +53,12 @@ _ADAPTER_REGISTRY: list[tuple[str, str, str, str]] = [
     ("MockLLM", "hexdag.stdlib.adapters.mock.MockLLM", "llm", "mock"),
     ("MockDatabaseAdapter", "hexdag.stdlib.adapters.mock.MockDatabaseAdapter", "database", "mock"),
     ("MockEmbedding", "hexdag.stdlib.adapters.mock.MockEmbedding", "embedding", "mock"),
+    (
+        "MockNotification",
+        "hexdag.stdlib.adapters.mock.MockNotification",
+        "notification",
+        "mock",
+    ),
     # OpenAI
     ("OpenAIAdapter", "hexdag.stdlib.adapters.openai.OpenAIAdapter", "llm", "openai"),
     # Anthropic
@@ -74,15 +80,17 @@ _ADAPTER_REGISTRY: list[tuple[str, str, str, str]] = [
         "database",
         "pgvector",
     ),
-    (
-        "SQLAlchemyAdapter",
-        "hexdag.stdlib.adapters.database.sqlalchemy.SQLAlchemyAdapter",
-        "database",
-        "sqlalchemy",
-    ),
+    # SQLAlchemyAdapter moved to hexdag_plugins.database (discovered as a plugin).
     ("CsvAdapter", "hexdag.stdlib.adapters.database.csv.CsvAdapter", "database", "csv"),
     # Secret adapters
     ("LocalSecretAdapter", "hexdag.stdlib.adapters.secret.LocalSecretAdapter", "secret", "local"),
+    # Notification adapters
+    (
+        "ConsoleNotificationAdapter",
+        "hexdag.stdlib.adapters.notification.ConsoleNotificationAdapter",
+        "notification",
+        "console",
+    ),
     # ToolRouter lives in kernel/ports but is treated as an adapter
     ("ToolRouter", "hexdag.kernel.ports.tool_router.ToolRouter", "tool_router", "default"),
 ]

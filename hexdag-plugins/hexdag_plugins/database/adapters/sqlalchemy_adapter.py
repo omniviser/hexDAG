@@ -1,11 +1,9 @@
 # type: ignore
-"""SQLAlchemy adapter implementation for hexDAG."""
+"""SQLAlchemy adapter implementation for hexDAG (database plugin)."""
 
 from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from typing import Any
-
-from sqlalchemy import MetaData, Table, inspect, select, text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from hexdag.kernel.ports.data_store import SupportsQuery
 from hexdag.kernel.ports.database import (
@@ -14,40 +12,111 @@ from hexdag.kernel.ports.database import (
     TableSchema,
 )
 from hexdag.stdlib.adapters.base import HexDAGAdapter
+from sqlalchemy import MetaData, Table, inspect, select, text
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from hexdag_plugins.database._ports import SupportsSessionFactory
+from hexdag_plugins.database.dual_mode import DualModeSessionMixin
 
 
 class SQLAlchemyAdapter(
     HexDAGAdapter,
+    DualModeSessionMixin,
     SupportsQuery,
     SupportsRawSQL,
+    SupportsSessionFactory,
     yaml_alias="sqlalchemy_adapter",
     port="database",
 ):
-    """Adapter for SQLAlchemy-supported databases."""
+    """Adapter for SQLAlchemy-supported databases.
 
-    def __init__(self, dsn: str) -> None:
+    Session access comes in two flavors:
+
+    - ``asession()`` — always-independent session (saga mode: each caller
+      commits its own work, see ``SupportsSessionFactory``).
+    - ``get_session()`` — dual-mode session: per-call autocommit outside a
+      pipeline run, one shared atomic transaction inside a run (commit or
+      rollback decided at ``ateardown(success=...)`` / ``aclose()``).
+    """
+
+    def __init__(
+        self,
+        dsn: str | None = None,
+        session_factory: Any | None = None,
+    ) -> None:
         """
         Initialize SQLAlchemy adapter.
 
         Args:
             dsn: Database connection string (e.g., postgresql+asyncpg://user:pass@localhost/db)
+            session_factory: Pre-built ``async_sessionmaker`` from the host
+                app.  When provided, the adapter uses it instead of creating
+                an engine from ``dsn`` and never disposes the host's engine.
         """
+        if dsn is None and session_factory is None:
+            msg = "SQLAlchemyAdapter requires either 'dsn' or 'session_factory'"
+            raise ValueError(msg)
         self.engine: AsyncEngine | None = None
         self.dsn = dsn
         self._metadata = MetaData()
+        self._session_factory = session_factory
+        self._owns_engine = session_factory is None
+        self._init_dual_mode(self._make_session)
 
     async def connect(self) -> None:
         """Establish database connection."""
-        self.engine = create_async_engine(self.dsn)
+        self._ensure_engine()
         async with self.engine.connect() as conn:
             # Force reflection after any schema changes
             await conn.run_sync(self._metadata.reflect)
 
+    def _ensure_engine(self) -> None:
+        """Create the engine lazily from the DSN."""
+        if self.engine is None:
+            if self.dsn is None:
+                msg = "Not connected to database (no DSN; session_factory-only adapter)"
+                raise RuntimeError(msg)
+            self.engine = create_async_engine(self.dsn)
+
+    def _make_session(self) -> AsyncSession:
+        """Create a session from the configured or lazily-built factory."""
+        if self._session_factory is None:
+            self._ensure_engine()
+            self._session_factory = async_sessionmaker(
+                self.engine, class_=AsyncSession, expire_on_commit=False
+            )
+        return self._session_factory()
+
+    @asynccontextmanager
+    async def asession(self) -> AsyncIterator[AsyncSession]:
+        """Independent session with its own transaction scope (saga mode).
+
+        The caller commits or rolls back; the connection returns to the
+        pool on exit.  See ``SupportsSessionFactory``.
+        """
+        session = self._make_session()
+        try:
+            yield session
+        finally:
+            await session.close()
+
     async def aclose(self) -> None:
-        """Close database connection."""
+        """Finalize outstanding sessions and close the database connection."""
+        await self.afinalize_sessions(success=True)
+        # self.engine is always adapter-created (hosts inject a factory,
+        # never an engine), so disposing it never touches host resources.
         if self.engine:
             await self.engine.dispose()
             self.engine = None
+        if self._owns_engine:
+            # The lazily-built factory is bound to the disposed engine and
+            # would otherwise hand out broken sessions after a reconnect.
+            self._session_factory = None
 
     # Backward-compatible alias
     disconnect = aclose
@@ -76,11 +145,13 @@ class SQLAlchemyAdapter(
 
                 if col.foreign_keys:
                     fk = next(iter(col.foreign_keys))
-                    foreign_keys.append({
-                        "from_column": col.name,
-                        "to_table": fk.column.table.name,
-                        "to_column": fk.column.name,
-                    })
+                    foreign_keys.append(
+                        {
+                            "from_column": col.name,
+                            "to_table": fk.column.table.name,
+                            "to_column": fk.column.name,
+                        }
+                    )
 
             schemas[table_name] = {
                 "table_name": table_name,

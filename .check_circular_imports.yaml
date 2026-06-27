@@ -14,6 +14,16 @@ allowed_cycles:
   - [hexdag.compiler.yaml_builder, hexdag.compiler.plugins.macro_definition, hexdag.kernel.yaml_macro]
   # Cycle 4: macro_entity ↔ yaml_macro — lazy fallback import + callback injection breaks cycle
   - [hexdag.compiler.plugins.macro_entity, hexdag.kernel.yaml_macro]
+  # Cycle 5: discovery ↔ ports.detection ↔ ports.data_store — every edge is a
+  # function-body / PEP-562 __getattr__ import (none execute at module-import
+  # time; verified by importing all four modules cleanly).  detect_port_type
+  # must inspect the DataStore marker protocol, and data_store's lazy resolver
+  # triggers plugin discovery — an inherently bidirectional, lazy relationship.
+  - [hexdag.kernel.discovery, hexdag.kernel.ports.detection, hexdag.kernel.ports.data_store]
+  # Cycle 5b: same cycle when the plugin-port resolver routes through the
+  # registry seam (data_store → registry → discovery) instead of importing
+  # discovery directly.  Still entirely lazy/__getattr__, still safe.
+  - [hexdag.kernel.discovery, hexdag.kernel.ports.detection, hexdag.kernel.ports.data_store, hexdag.kernel.ports.registry]
 
 # Modules allowed to use TYPE_CHECKING guards for internal imports.
 # These are hidden cycles that are intentionally masked.

@@ -180,7 +180,7 @@ class WaitNode(BaseNodeFactory, yaml_alias="wait_node"):
                 )
 
                 tpl = PromptTemplate(_event_key)
-                resolved_key = tpl.render(**inputs) if isinstance(inputs, dict) else tpl.render()
+                resolved_key = tpl.render(**inputs) if isinstance(inputs, dict) else tpl.render()  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
 
             setup_result = None
             if _setup_fn is not None:

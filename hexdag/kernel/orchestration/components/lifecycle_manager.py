@@ -106,6 +106,10 @@ class PostDagHookConfig:
         Save final checkpoint state
     checkpoint_on_failure : bool
         Save checkpoint even if pipeline fails (useful for debugging)
+    enable_incremental_checkpoint : bool
+        Save a checkpoint after every completed wave (run journaling).
+        Enables crash recovery: a run killed mid-execution can be resumed
+        from the last completed wave via ``PipelineRunner.resume()``.
     custom_hooks : list[Callable]
         User-defined post-DAG hooks
     run_on_success : bool
@@ -120,6 +124,7 @@ class PostDagHookConfig:
     enable_secret_cleanup: bool = True
     enable_checkpoint_save: bool = False
     checkpoint_on_failure: bool = True
+    enable_incremental_checkpoint: bool = False
     custom_hooks: list[Callable] = field(default_factory=list)
     run_on_success: bool = True
     run_on_failure: bool = True
@@ -548,6 +553,36 @@ class LifecycleManager:
     # Checkpoint (inlined from PostDagHookManager)
     # ========================================================================
 
+    async def asave_incremental_checkpoint(
+        self,
+        context: NodeExecutionContext,
+        node_results: dict[str, Any],
+    ) -> None:
+        """Journal the current execution state mid-run (after a wave completes).
+
+        Saves a checkpoint with status ``"running"`` so a crashed process can
+        be resumed from the last completed wave.  Failures are logged but
+        never propagate — journaling must not affect pipeline execution.
+
+        Parameters
+        ----------
+        context : NodeExecutionContext
+            Execution context for this pipeline run.
+        node_results : dict[str, Any]
+            Node results accumulated so far.
+        """
+        try:
+            ports: MappingProxyType[str, Any] | dict[Any, Any] = get_ports() or {}
+            await self._save_checkpoint(
+                dict(ports),
+                context,
+                node_results,
+                status="running",
+                observer_manager=None,
+            )
+        except Exception as e:
+            logger.warning("Incremental checkpoint save failed (continuing): {}", e)
+
     async def _save_checkpoint(
         self,
         ports: dict[str, Any],
@@ -610,10 +645,19 @@ class LifecycleManager:
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
             metadata=checkpoint_metadata,
-            status="suspended" if status == "suspended" else "saved",
+            status=status if status in ("suspended", "running") else "saved",
         )
 
         await checkpoint_mgr.save(state)
-        logger.info("Saved checkpoint for run_id: {} (pipeline: {})", actual_run_id, context.dag_id)
+        if status == "running":
+            logger.debug(
+                "Journaled checkpoint for run_id: {} ({} nodes)",
+                actual_run_id,
+                len(clean_results),
+            )
+        else:
+            logger.info(
+                "Saved checkpoint for run_id: {} (pipeline: {})", actual_run_id, context.dag_id
+            )
 
         return {"saved": True, "run_id": actual_run_id, "node_count": len(node_results)}

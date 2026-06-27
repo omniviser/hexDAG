@@ -1,0 +1,49 @@
+# Human-in-the-loop approval flow
+#
+# prepare_request -> notify_approver -> await_decision (suspends!) -> finalize
+#
+# The pipeline suspends at the wait node after notifying the approver.
+# When the human decision arrives (hours or days later), resume it with:
+#
+#     runner.resume_with_event(pipeline_path, run_id, event_data={...})
+#
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: order-approval
+spec:
+  ports:
+    notification:
+      adapter: hexdag.stdlib.adapters.notification.ConsoleNotificationAdapter
+
+  nodes:
+    - kind: function_node
+      metadata:
+        name: prepare_request
+      spec:
+        fn: approval_helpers.prepare_request
+      dependencies: []
+
+    - kind: function_node
+      metadata:
+        name: notify_approver
+      spec:
+        fn: approval_helpers.notify_approver
+        input_mapping:
+          request: prepare_request
+
+    - kind: wait_node
+      metadata:
+        name: await_decision
+      spec:
+        event_key: "approval:{{order_id}}"
+        timeout: 1d
+      dependencies: [notify_approver]
+
+    - kind: function_node
+      metadata:
+        name: finalize
+      spec:
+        fn: approval_helpers.finalize
+        input_mapping:
+          decision: await_decision

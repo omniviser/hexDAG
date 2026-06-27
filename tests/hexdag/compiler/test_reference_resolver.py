@@ -2,8 +2,10 @@
 
 from hexdag.compiler.reference_resolver import (
     extract_input_refs_from_mapping,
+    extract_jinja_head_names,
     extract_refs_from_expressions,
     extract_refs_from_mapping,
+    extract_refs_from_spec,
     extract_refs_from_string,
     extract_refs_from_template,
 )
@@ -420,3 +422,66 @@ class TestExtractInputRefsFromMapping:
             "multi": ["$input.age", "literal"],
         }
         assert extract_input_refs_from_mapping(mapping) == {"name", "age"}
+
+
+class TestExtractRefsFromSpec:
+    """Tests for extract_refs_from_spec — the deep-scan shared by builder and validator."""
+
+    def test_human_message_top_level(self):
+        """Canonical llm_node field is scanned (was a known inference gap)."""
+        spec = {"human_message": "Analyze {{fetcher.load.description}}"}
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == {"fetcher"}
+
+    def test_bare_whole_node_ref(self):
+        """{{node}} without a field references the whole output (conversation form)."""
+        spec = {"conversation": "{{analyzer}}"}
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == {"analyzer"}
+
+    def test_custom_field_any_name(self):
+        """Custom node spec fields get inference without any declaration."""
+        spec = {"subject_template": "Order {{order.id}} shipped"}
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == {"order"}
+
+    def test_deeply_nested_strings(self):
+        """Refs are found in dicts and lists at any depth."""
+        spec = {
+            "template": {
+                "messages": [
+                    {"role": "user", "content": "Check {{product.sku}}"},
+                ],
+            },
+            "options": {"footer": {"text": "by {{cleanup.report}}"}},
+        }
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == {"product", "cleanup"}
+
+    def test_unknown_names_ignored(self):
+        """Aliases and namespaces never become edges."""
+        spec = {
+            "human_message": "{{email_subject}} {{input.carrier}} {{state.round}}",
+        }
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == set()
+
+    def test_expression_fields_still_scanned(self):
+        """Bare expression grammar in framework fields keeps working."""
+        spec = {
+            "when": "analyzer.done == True",
+            "input_mapping": {"data": "fetcher.result"},
+            "expressions": {"total": "order.price * 2"},
+        }
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == {"analyzer", "fetcher", "order"}
+
+    def test_expression_grammar_not_applied_to_arbitrary_strings(self):
+        """Bare node.field in prose (non-framework field) creates no edge."""
+        spec = {"description": "reads from analyzer.output downstream"}
+        assert extract_refs_from_spec(spec, KNOWN_NODES) == set()
+
+
+class TestExtractJinjaHeadNames:
+    """Tests for extract_jinja_head_names — feeds the validator typo lint."""
+
+    def test_collects_dotted_and_bare(self):
+        text = "{{analyzer.result}} and {{whole_node}} and {{ spaced.x }}"
+        assert extract_jinja_head_names(text) == {"analyzer", "whole_node", "spaced"}
+
+    def test_no_match_without_braces(self):
+        assert extract_jinja_head_names("plain analyzer.result text") == set()

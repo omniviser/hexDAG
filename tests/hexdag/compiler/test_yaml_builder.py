@@ -1419,11 +1419,12 @@ class TestDeprecationWarning:
 
 
 class TestMissingInferredDepsWarning:
-    """When explicit deps miss inferred ones, the validator catches it
-    as a hard error at build time."""
+    """When explicit deps miss inferred ones, the builder warns and
+    auto-merges — explicit deps supplement inference, they are not an
+    exhaustive promise."""
 
-    def test_missing_inferred_dep_is_build_error(self):
-        """Explicit deps [a] + input_mapping refs {a, b} -> validation error for 'b'."""
+    def test_missing_inferred_dep_warns_and_merges(self):
+        """Explicit deps [a] + input_mapping refs {a, b} -> warning, 'b' merged."""
         nodes = """\
 - kind: function_node
   metadata: { name: a }
@@ -1445,8 +1446,9 @@ class TestMissingInferredDepsWarning:
       data_b: b.result
   dependencies: [a]
 """
-        with pytest.raises(YamlPipelineBuilderError, match="references node 'b'"):
-            _build_from_nodes(nodes)
+        with pytest.warns(UserWarning, match=r"reference nodes \['b'\]"):
+            graph = _build_from_nodes(nodes)
+        assert graph.nodes["c"].deps == frozenset({"a", "b"})
 
 
 class TestBuilderInlineConfig:
@@ -2022,3 +2024,81 @@ class TestReservedNodeNames:
 """
         with pytest.raises(YamlPipelineBuilderError, match="reserved"):
             _build_from_nodes(nodes)
+
+
+class TestDeepScanInference:
+    """Deep-scan inference: {{node.field}} anywhere in spec creates an edge.
+
+    Regression tests for the field-list gaps: human_message and
+    conversation were rendered at runtime but not scanned at build
+    time, so their references produced no dependency edge.
+    """
+
+    def test_human_message_infers_dep_same_as_prompt_template(self):
+        """Identical ref in human_message vs prompt_template → identical graph."""
+        template = """\
+- kind: data_node
+  metadata: {{ name: unrelated }}
+  spec:
+    output: {{ x: 1 }}
+
+- kind: llm_node
+  metadata: {{ name: analyze }}
+  spec:
+    {field}: "Analyze {{{{get_context.load.description}}}}"
+
+- kind: data_node
+  metadata: {{ name: get_context }}
+  spec:
+    output: {{ load: {{ description: "steel coils" }} }}
+"""
+        deps_by_field = {}
+        for field in ("prompt_template", "human_message"):
+            graph = _build_from_nodes(template.format(field=field))
+            deps_by_field[field] = graph.nodes["analyze"].deps
+        assert deps_by_field["human_message"] == deps_by_field["prompt_template"]
+        assert "get_context" in deps_by_field["human_message"]
+
+    def test_conversation_ref_infers_dep(self):
+        """conversation: "{{node}}" (whole-output ref) creates an edge."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: chat_history }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: padding }
+  spec:
+    fn: "json.dumps"
+
+- kind: llm_node
+  metadata: { name: respond }
+  spec:
+    human_message: "Reply"
+    conversation: "{{chat_history}}"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "chat_history" in graph.nodes["respond"].deps
+
+    def test_custom_spec_field_infers_dep(self):
+        """A field name the framework has never seen still gets inference."""
+        nodes = """\
+- kind: function_node
+  metadata: { name: lookup }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: padding }
+  spec:
+    fn: "json.dumps"
+
+- kind: function_node
+  metadata: { name: emailer }
+  spec:
+    fn: "json.dumps"
+    subject_template: "Order {{lookup.order_id}} shipped"
+"""
+        graph = _build_from_nodes(nodes)
+        assert "lookup" in graph.nodes["emailer"].deps
