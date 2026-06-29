@@ -1,6 +1,6 @@
 [project]
 name = "hexdag"
-version = "0.8.0"
+version = "0.9.0.dev1"
 
 description = "Developer-first workflow engine for AI agents — compose YAML/Python workflows as typed, observable, replayable DAGs"
 authors = [{ name = "hexDAG Team", email = "developers@omniviser.ai" }]
