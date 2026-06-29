@@ -105,7 +105,7 @@ hexDAG YAML has 4 special syntaxes. They look similar but do different things at
 | `!include` | Merge another YAML file | Build-time, phase 1 (first) | `!include shared/ports.yaml` |
 | `${VAR}` | Environment variable | Build-time, phase 4 (secrets deferred to runtime) | `${OPENAI_API_KEY}` |
 | `{{ expr }}` | Jinja2 template | Build-time for metadata; **runtime** for node specs | `{{ analyzer.result }}` |
-| `node.field` | Value extraction | Runtime, in input_mapping and expressions | `"analyzer.result"` |
+| `node.field` | Value extraction (any depth) | Runtime, in input_mapping and expressions | `"analyzer.result.items.0"` |
 
 ### `!include` — File Composition
 
@@ -157,6 +157,14 @@ spec:
   expressions:
     total: "analyzer.count * 2"     # expression evaluation
 ```
+
+**Nested paths walk arbitrary depth.** A dotted path descends as many levels as you
+write, for both node and `$input` references — `analyzer.result.items.0` and
+`$input.user.profile.name` both resolve at runtime. A missing **deep** segment yields
+`None` (treated as an optional field), while a wrong **first** segment (unknown node or
+undeclared input field) is a build-time error. The validator's `input_schema` and
+sibling-consistency checks key on the **top-level** field by design, so `$input.a.b.c` is
+validated as `a`.
 
 ### The Critical Difference
 
@@ -375,8 +383,8 @@ nodes:
 
 | Namespace | Pattern | Purpose |
 |-----------|---------|---------|
-| Upstream nodes | `node_name.field` | Output of completed nodes |
-| Pipeline input | `$input.field` | Initial input data |
+| Upstream nodes | `node_name.field` | Output of completed nodes (any nested sub-path) |
+| Pipeline input | `$input.field` | Initial input data (field or any nested sub-path) |
 | Execution context | `$ctx.run_id` | Runtime metadata |
 | Loop state | `state.counter` | Current iteration |
 

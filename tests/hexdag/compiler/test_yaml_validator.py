@@ -2104,6 +2104,22 @@ class TestInputFlowConsistency:
         # 2/3 = 0.67, below 1.0 threshold → no error for conversation_id
         assert not any("conversation_id" in e for e in consistency_errors)
 
+    def test_no_error_for_different_nested_subpaths_of_same_field(self):
+        """Siblings reading different sub-paths of the same $input field agree.
+
+        One sibling reads $input.context.a, the other $input.context.b. Both
+        reference the top-level field 'context', so the consistency check
+        (which keys on the top-level field) must NOT flag either as missing.
+        """
+        config = self._make_config([
+            self._fn_node("router", {"x": "$input.load_id"}),
+            self._fn_node("a", {"v": "$input.context.a"}, deps=["router"]),
+            self._fn_node("b", {"v": "$input.context.b"}, deps=["router"]),
+        ])
+        result = self.validator.validate(config)
+        consistency_errors = [e for e in result.errors if "input_mapping is missing" in e]
+        assert not any("context" in e for e in consistency_errors)
+
 
 class TestInputSchemaValidation:
     """Tests for $input references validated against declared input_schema."""
@@ -2183,6 +2199,29 @@ class TestInputSchemaValidation:
         schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
         assert len(schema_errors) == 1
         assert "bad_field" in schema_errors[0]
+
+    def test_nested_input_path_checked_by_top_level_field(self):
+        """$input.a.b.c is validated by its top-level field 'a' (flat schema)."""
+        config = self._make_config(
+            [self._fn_node("a", {"x": "$input.profile.name"})],
+            input_schema={"profile": "dict"},
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert not schema_errors
+
+    def test_nested_input_path_error_names_top_level_field(self):
+        """A nested path whose root is undeclared errors on the root, not the full path."""
+        config = self._make_config(
+            [self._fn_node("a", {"x": "$input.profile.name"})],
+            input_schema={"conversation_id": "str"},
+        )
+        result = self.validator.validate(config)
+        schema_errors = [e for e in result.errors if "input_schema does not declare" in e]
+        assert len(schema_errors) == 1
+        assert "profile" in schema_errors[0]
+        # The error names the top-level field, not the full nested path.
+        assert "profile.name" not in schema_errors[0]
 
 
 class TestUndeclaredRefs:

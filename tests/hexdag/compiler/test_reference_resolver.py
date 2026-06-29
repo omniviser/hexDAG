@@ -423,6 +423,17 @@ class TestExtractInputRefsFromMapping:
         }
         assert extract_input_refs_from_mapping(mapping) == {"name", "age"}
 
+    def test_nested_input_ref_captures_first_segment(self):
+        """$input.a.b.c captures only the top-level field 'a' (by design).
+
+        The validators that consume this (input_schema check and
+        sibling-consistency) key on the flat, top-level input field, so a
+        nested path is validated by its first segment. Runtime resolution
+        still walks the full depth — see test_input_mapper.py.
+        """
+        mapping = {"x": "$input.a.b.c"}
+        assert extract_input_refs_from_mapping(mapping) == {"a"}
+
 
 class TestExtractRefsFromSpec:
     """Tests for extract_refs_from_spec — the deep-scan shared by builder and validator."""

@@ -299,6 +299,64 @@ class TestInputMappingWithExecutionCoordinator:
 
         assert result["deep_value"] == "found_it"
 
+    def test_input_mapping_nested_input_path(self, coordinator):
+        """$input.a.b.c walks arbitrary depth into the initial input."""
+        node_spec = NodeSpec(
+            "consumer",
+            lambda x: x,
+            deps={"producer"},
+            params={
+                "input_mapping": {
+                    "x": "$input.a.b.c",
+                }
+            },
+        )
+        initial_input = {"a": {"b": {"c": "found_it"}}}
+        node_results = {"producer": {"result": "data"}}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
+
+        assert result["x"] == "found_it"
+
+    def test_input_mapping_nested_input_partial(self, coordinator):
+        """$input.a.b returns the intermediate subtree, not just a leaf."""
+        node_spec = NodeSpec(
+            "consumer",
+            lambda x: x,
+            deps={"producer"},
+            params={
+                "input_mapping": {
+                    "x": "$input.a.b",
+                }
+            },
+        )
+        initial_input = {"a": {"b": {"c": "found_it"}}}
+        node_results = {"producer": {"result": "data"}}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
+
+        assert result["x"] == {"c": "found_it"}
+
+    def test_input_mapping_nested_input_missing_deep_returns_none(self, coordinator):
+        """A missing deep $input segment resolves to None (known root, deep miss)."""
+        node_spec = NodeSpec(
+            "consumer",
+            lambda x: x,
+            deps={"producer"},
+            params={
+                "input_mapping": {
+                    "x": "$input.a.missing.deep",
+                }
+            },
+        )
+        initial_input = {"a": {"b": {"c": "found_it"}}}
+        node_results = {"producer": {"result": "data"}}
+
+        result = coordinator.prepare_node_input(node_spec, node_results, initial_input)
+
+        # Deep miss under a known root → None (optional field), not a MISSING error.
+        assert result["x"] is None
+
     def test_input_mapping_unknown_node_raises(self, coordinator):
         """Test that referencing an unknown node raises a clear error."""
         import pytest
