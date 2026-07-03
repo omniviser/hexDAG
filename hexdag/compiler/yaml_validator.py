@@ -3,7 +3,6 @@
 import difflib
 import inspect
 import re
-from collections import Counter
 from collections.abc import Iterator
 from typing import Any
 
@@ -286,30 +285,20 @@ class _SchemaValidator:
 class YamlValidator:
     """Validates YAML pipeline configurations with optimized performance."""
 
-    # Node kinds excluded from $input consistency checking — their input_mapping
-    # serves a different purpose (expression aliases, not function params).
-    _SKIP_CONSISTENCY_KINDS: frozenset[str] = frozenset({"expression_node", "expression"})
-
     def __init__(
         self,
         valid_node_types: set[str] | frozenset[str] | None = None,
-        *,
-        input_mapping_consistency_threshold: float = 0.5,
     ) -> None:
         """Initialize validator with configurable node types.
 
         Args
         ----
             valid_node_types: Set of valid node type names. If None, uses defaults.
-            input_mapping_consistency_threshold: Fraction of sibling nodes that
-                must reference a ``$input.X`` field before a missing reference
-                becomes a build error (default 0.5 = majority).
         """
         self._provided_node_types = (
             frozenset(valid_node_types) if valid_node_types is not None else None
         )
         self._cached_node_types: frozenset[str] | None = None
-        self._input_mapping_consistency_threshold = input_mapping_consistency_threshold
 
         # Schema validator for spec validation
         self.schema_validator = _SchemaValidator()
@@ -374,9 +363,6 @@ class YamlValidator:
 
         # Warn on {{name}} refs that look like typos of real node names
         self._validate_template_typos(nodes, dep_graph, node_ids, macro_instances, result)
-
-        # Validate $input data-flow consistency using the dependency graph
-        self._validate_input_flow_consistency(nodes, dep_graph, result)
 
         # Validate $input references against declared input_schema (if any)
         input_schema = spec.get("input_schema")
@@ -1266,101 +1252,6 @@ class YamlValidator:
                 f"Node '{node_id}': Unknown reference '{candidate}' "
                 f"in field '{field_name}'.{suggestion}"
             )
-
-    # ==================================================================
-    # Rule 4: Graph-based $input data-flow consistency
-    # ==================================================================
-
-    def _validate_input_flow_consistency(
-        self,
-        nodes: list[dict[str, Any]],
-        dep_graph: dict[str, set[str]],
-        result: ValidationReport,
-    ) -> None:
-        """Error when sibling nodes on the same DAG branch inconsistently
-        pass ``$input.X`` fields.
-
-        Uses the dependency graph to find **graph siblings** — nodes that
-        share at least one common parent.  Within each sibling group, if
-        a ``$input.X`` field is used by ≥ threshold fraction of siblings
-        but one omits it, that node gets a build error.
-
-        This catches copy-paste omissions like ``send_counter_and_mc_request``
-        missing ``conversation_id: $input.conversation_id`` while its four
-        graph-siblings all pass it.
-
-        Nodes can suppress the check for specific fields via
-        ``validated_input_fields: [field_name]`` in their spec.
-        """
-        # Build a lookup: node_id → node config
-        node_by_id: dict[str, dict[str, Any]] = {}
-        for node in nodes:
-            nid = node.get("metadata", {}).get("name", "")
-            if nid:
-                node_by_id[nid] = node
-
-        # Build forward graph (parent → children)
-        forward: dict[str, set[str]] = {}
-        for child, parents in dep_graph.items():
-            for parent in parents:
-                forward.setdefault(parent, set()).add(child)
-
-        # For each node, extract $input refs and validated_input_fields
-        node_input_refs: dict[str, set[str]] = {}
-        node_validated: dict[str, set[str]] = {}
-        for nid, node in node_by_id.items():
-            kind = node.get("kind", "")
-            bare_kind = kind[:-5] if kind.endswith("_node") else kind
-            if kind in self._SKIP_CONSISTENCY_KINDS or bare_kind in self._SKIP_CONSISTENCY_KINDS:
-                continue
-            spec = node.get("spec", {})
-            input_mapping = spec.get("input_mapping")
-            if not isinstance(input_mapping, dict) or not input_mapping:
-                continue
-            node_input_refs[nid] = extract_input_refs_from_mapping(input_mapping)
-            node_validated[nid] = set(spec.get("validated_input_fields") or [])
-
-        # Find sibling groups: nodes that share a common parent
-        # A node can appear in multiple sibling groups (if it has multiple parents)
-        sibling_groups: dict[str, set[str]] = {}
-        for parent, children in forward.items():
-            # Filter to children that have input_mapping (are in node_input_refs)
-            eligible = children & node_input_refs.keys()
-            if len(eligible) >= 2:
-                sibling_groups[parent] = eligible
-
-        # Also treat root nodes (no dependencies) as a sibling group
-        root_nodes = {nid for nid in node_input_refs if not dep_graph.get(nid)}
-        if len(root_nodes) >= 2:
-            sibling_groups["__root__"] = root_nodes
-
-        # Check consistency within each sibling group
-        threshold = self._input_mapping_consistency_threshold
-        reported: set[tuple[str, str]] = set()  # avoid duplicate errors
-
-        for siblings in sibling_groups.values():
-            field_usage: Counter[str] = Counter()
-            for nid in siblings:
-                field_usage.update(node_input_refs[nid])
-
-            total = len(siblings)
-            for nid in siblings:
-                referenced = node_input_refs[nid]
-                validated = node_validated.get(nid, set())
-                for field, count in field_usage.items():
-                    if (
-                        count / total >= threshold
-                        and field not in referenced
-                        and field not in validated
-                        and (nid, field) not in reported
-                    ):
-                        reported.add((nid, field))
-                        result.add_error(
-                            f"Node '{nid}': input_mapping is missing '$input.{field}' "
-                            f"({count}/{total} sibling nodes pass it). "
-                            f"Add '{field}: $input.{field}' to input_mapping, "
-                            f"or add 'validated_input_fields: [{field}]' to suppress."
-                        )
 
     # ==================================================================
     # Rule 5: $input references vs declared input_schema
