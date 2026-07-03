@@ -243,7 +243,13 @@ class TestAutoInferParams:
         assert result == {"name": "Alice"}
 
     def test_infers_from_initial_input(self, coordinator):
-        """Params not in upstream dicts are found in initial_input."""
+        """Params not in upstream dicts arrive via the ambient input tier.
+
+        Auto-infer no longer searches the pipeline input; instead every
+        top-level input field is filled ambiently after inference. Fields
+        the fn doesn't declare (``extra``) are present in the prepared
+        input — the fn boundary (signature filter) drops them at binding.
+        """
         node = NodeSpec(
             "process",
             noop_fn,
@@ -256,7 +262,7 @@ class TestAutoInferParams:
             node, results, initial_input={"user_id": "U42", "extra": "ignored"}
         )
 
-        assert result == {"amount": 99.5, "user_id": "U42"}
+        assert result == {"amount": 99.5, "user_id": "U42", "extra": "ignored"}
 
 
 class TestAdditiveInputMapping:
@@ -834,3 +840,183 @@ class TestExpressionValuesInInputMapping:
             node_results={"order": {"name": "ABC-123"}},
         )
         assert result["label"] == "Order: ABC-123"
+
+
+class TestAmbientInput:
+    """The run's input is ambient: every top-level input field is available
+    to every node unless something closer provides that name.
+
+    Precedence (closest wins): explicit input_mapping > upstream data >
+    ambient input. Coalesce semantics: ambient fills keys that are absent
+    or None. strict_mapping opts a node out entirely.
+    """
+
+    @pytest.fixture
+    def coordinator(self):
+        return ExecutionCoordinator()
+
+    def test_mapped_node_receives_absent_input_fields(self, coordinator):
+        """A mapped node gets input fields it never declared."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"rate": "producer.rate"}},
+        )
+        node_results = {"producer": {"rate": 100}}
+        initial_input = {"conversation_id": "c1", "email_subject": "RE: load"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["rate"] == 100
+        assert result["conversation_id"] == "c1"
+        assert result["email_subject"] == "RE: load"
+
+    def test_non_none_value_never_overwritten(self, coordinator):
+        """An explicit mapping pin beats the ambient input value."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"conversation_id": "producer.conversation_id"}},
+        )
+        node_results = {"producer": {"conversation_id": "from-upstream"}}
+        initial_input = {"conversation_id": "from-input"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["conversation_id"] == "from-upstream"
+
+    def test_none_value_coalesced_from_input(self, coordinator):
+        """A mapped value that resolved to None is rescued by ambient input.
+
+        None in hexDAG usually means a failed path resolution — protecting
+        it would preserve broken wiring instead of real data.
+        """
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={"input_mapping": {"conversation_id": "producer.missing_field"}},
+        )
+        node_results = {"producer": {"other": 1}}
+        initial_input = {"conversation_id": "from-input"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["conversation_id"] == "from-input"
+
+    def test_strict_node_gets_nothing_ambient(self, coordinator):
+        """strict_mapping: the node receives ONLY its mapped fields."""
+        node = NodeSpec(
+            "consumer",
+            noop_fn,
+            deps=frozenset({"producer"}),
+            params={
+                "input_mapping": {"amount": "producer.amount"},
+                "strict_mapping": True,
+            },
+        )
+        node_results = {"producer": {"amount": 42}}
+        initial_input = {"conversation_id": "c1"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result == {"amount": 42}
+
+    def test_single_dep_flat_upstream_key_beats_ambient(self, coordinator):
+        """Closest wins: a field in the flat single-dep output shadows input."""
+        node = NodeSpec("consumer", noop_fn, deps=frozenset({"producer"}))
+        node_results = {"producer": {"status": "from-upstream", "x": 1}}
+        initial_input = {"status": "from-input", "conversation_id": "c1"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["status"] == "from-upstream"
+        assert result["conversation_id"] == "c1"  # true gap filled ambiently
+
+    def test_auto_infer_upstream_unique_beats_ambient(self, coordinator):
+        """A param found in exactly one upstream source wins over $input.
+
+        This is the old ambiguity trap resolved: name in $input + one
+        upstream no longer skips/TypeErrors — upstream wins (closest).
+        """
+        node = NodeSpec(
+            "route",
+            noop_fn,
+            deps=frozenset({"get_context", "decide"}),
+            accepted_params=frozenset({"conversation_id", "decision"}),
+        )
+        node_results = {
+            "get_context": {"conversation_id": "from-context"},
+            "decide": {"decision": "accept"},
+        }
+        initial_input = {"conversation_id": "from-input"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["conversation_id"] == "from-context"
+        assert result["decision"] == "accept"
+
+    def test_no_deps_node_input_unchanged(self, coordinator):
+        """A root node receives the initial input as-is (no duplication)."""
+        node = NodeSpec("start", noop_fn)
+        initial_input = {"conversation_id": "c1", "email_subject": "hello"}
+
+        result = coordinator.prepare_node_input(node, {}, initial_input)
+
+        assert result == initial_input
+
+    def test_non_dict_initial_input_untouched(self, coordinator):
+        """A non-dict pipeline input has no fields to make ambient."""
+        node = NodeSpec("consumer", noop_fn, deps=frozenset({"producer"}))
+        node_results = {"producer": {"x": 1}}
+
+        result = coordinator.prepare_node_input(node, node_results, "plain string")
+
+        assert result == {"x": 1}
+
+    def test_non_dict_prepared_input_untouched(self, coordinator):
+        """A flat non-dict upstream output passes through unchanged."""
+        node = NodeSpec("consumer", noop_fn, deps=frozenset({"producer"}))
+        node_results = {"producer": "scalar output"}
+        initial_input = {"conversation_id": "c1"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result == "scalar output"
+
+    def test_skip_marker_not_polluted(self, coordinator):
+        """Upstream-skipped markers are not enriched with ambient fields."""
+        node = NodeSpec("consumer", noop_fn, deps=frozenset({"producer"}))
+        node_results = {"producer": {"_skipped": True, "reason": "when clause"}}
+        initial_input = {"conversation_id": "c1"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert "conversation_id" not in result
+
+    def test_ambient_does_not_mutate_shared_state(self, coordinator):
+        """Ambient fill is copy-on-write: stored upstream results and the
+        initial input must never gain injected keys."""
+        node = NodeSpec("consumer", noop_fn, deps=frozenset({"producer"}))
+        producer_result = {"x": 1}
+        node_results = {"producer": producer_result}
+        initial_input = {"conversation_id": "c1"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert result["conversation_id"] == "c1"
+        assert producer_result == {"x": 1}
+        assert initial_input == {"conversation_id": "c1"}
+
+    def test_none_input_field_not_injected(self, coordinator):
+        """A None-valued input field injects nothing (never inject None)."""
+        node = NodeSpec("consumer", noop_fn, deps=frozenset({"producer"}))
+        node_results = {"producer": {"x": 1}}
+        initial_input = {"resolved_by": None, "conversation_id": "c1"}
+
+        result = coordinator.prepare_node_input(node, node_results, initial_input)
+
+        assert "resolved_by" not in result
+        assert result["conversation_id"] == "c1"

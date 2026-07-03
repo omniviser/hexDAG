@@ -295,9 +295,6 @@ class PipelineConfig(BaseModel):
     output_schema: dict[str, Any] | None = Field(
         default=None, description="JSON Schema for pipeline outputs"
     )
-    common_field_mappings: dict[str, Any] | None = Field(
-        default=None, description="Reusable field mapping definitions"
-    )
 
     # Execution configuration (optional per-pipeline overrides)
     orchestrator: OrchestratorConfig | None = Field(

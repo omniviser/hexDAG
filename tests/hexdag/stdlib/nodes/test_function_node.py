@@ -457,3 +457,76 @@ class TestFunctionNodeAcceptedParams:
         node = factory(name="test_node", fn=process, unpack_input=True)
 
         assert node.accepted_params == frozenset({"load_id", "rate"})
+
+
+class TestUnpackSignatureFilter:
+    """The unpack branch filters kwargs to the fn signature.
+
+    Same contract as ServiceCallNode: bind what the fn declares, drop the
+    rest. Ambient input fields and additive upstream keys must not
+    TypeError functions that don't want them.
+    """
+
+    @pytest.mark.asyncio
+    async def test_extra_fields_dropped_without_typeerror(self) -> None:
+        """Ambient/extra keys are filtered out instead of raising."""
+        factory = FunctionNode()
+        received: dict[str, Any] = {}
+
+        def normalize(text: str) -> dict[str, Any]:
+            received["text"] = text
+            return {"status": "ok"}
+
+        node = factory(
+            name="normalize",
+            fn=normalize,
+            input_mapping={"text": "$input.text"},
+            unpack_input=True,
+        )
+
+        result = await node.fn({
+            "text": "hello",
+            "conversation_id": "c1",
+            "email_subject": "RE: load",
+        })
+
+        assert received["text"] == "hello"
+        assert result == {"status": "ok"}
+
+    @pytest.mark.asyncio
+    async def test_kwargs_fn_still_receives_everything(self) -> None:
+        """A fn with **kwargs keeps receiving all fields unfiltered."""
+        factory = FunctionNode()
+        received: dict[str, Any] = {}
+
+        def collect(**kwargs: Any) -> dict[str, Any]:
+            received.update(kwargs)
+            return {"status": "ok"}
+
+        node = factory(name="collect", fn=collect, unpack_input=True)
+
+        await node.fn({"text": "hello", "conversation_id": "c1"})
+
+        assert received == {"text": "hello", "conversation_id": "c1"}
+
+    @pytest.mark.asyncio
+    async def test_fn_receives_accepted_ambient_field(self) -> None:
+        """A fn that declares an ambient field's name receives its value."""
+        factory = FunctionNode()
+        received: dict[str, Any] = {}
+
+        def handle(text: str, conversation_id: str) -> dict[str, Any]:
+            received["text"] = text
+            received["conversation_id"] = conversation_id
+            return {"status": "ok"}
+
+        node = factory(
+            name="handle",
+            fn=handle,
+            input_mapping={"text": "$input.text"},
+            unpack_input=True,
+        )
+
+        await node.fn({"text": "hello", "conversation_id": "c1", "extra": "dropped"})
+
+        assert received == {"text": "hello", "conversation_id": "c1"}

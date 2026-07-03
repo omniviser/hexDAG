@@ -4,66 +4,10 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from pydantic import BaseModel, Field, create_model, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
-from hexdag.kernel.exceptions import ResourceNotFoundError, ValidationError
 from hexdag.kernel.expression_parser import MISSING
 from hexdag.kernel.protocols import DictConvertible, is_dict_convertible, is_schema_type
-
-
-class FieldMappingRegistry:
-    """Registry for common field mappings - empty by default, no magic."""
-
-    def __init__(self) -> None:
-        """Initialize empty registry - users must define their mappings."""
-        self.mappings: dict[str, dict[str, str]] = {}
-
-    def register(self, name: str, mapping: dict[str, str]) -> None:
-        """Register a reusable field mapping.
-
-        Args
-        ----
-            name: Name for the mapping pattern
-            mapping: dict of {target_field: "source.path"}
-
-        Raises
-        ------
-        ValidationError
-            If the mapping name is empty
-        """
-        if not name:
-            raise ValidationError("name", "cannot be empty")
-        if not mapping:
-            raise ValidationError("mapping", "cannot be empty")
-        self.mappings[name] = mapping
-
-    def get(self, name_or_mapping: str | dict[str, str]) -> dict[str, str]:
-        """Get mapping by name or return inline mapping.
-
-        Args
-        ----
-            name_or_mapping: Either a string name or inline mapping dict
-
-        Returns
-        -------
-        dict[str, str]
-            The resolved mapping dictionary
-
-        Raises
-        ------
-        ResourceNotFoundError
-            If the mapping name is not found in registry
-        """
-        if isinstance(name_or_mapping, str):
-            if name_or_mapping not in self.mappings:
-                available = list(self.mappings.keys()) if self.mappings else []
-                raise ResourceNotFoundError("field mapping", name_or_mapping, available)
-            return self.mappings[name_or_mapping]
-        return name_or_mapping
-
-    def clear(self) -> None:
-        """Clear all registered mappings."""
-        self.mappings.clear()
 
 
 class FieldExtractor:
@@ -249,6 +193,10 @@ class ModelFactory:
 
         model: type[BaseModel] = create_model(
             name,
+            # Extras pass through: ambient input fields and additive upstream
+            # keys must survive coercion — the fn boundary (signature filter)
+            # decides what to bind, not the model.
+            __config__=ConfigDict(extra="allow"),
             __validators__={"extract_mapped_fields": validator},
             **field_definitions,
         )
@@ -343,11 +291,11 @@ class ModelFactory:
             # Pre-processed data has the target field names as keys (not source paths)
             data_keys = set(data.keys())
             if target_fields <= data_keys:
-                # Data already has all target fields - it was pre-processed
-                # Just extract the target fields directly
-                for target_field in target_fields:
-                    result[target_field] = data.get(target_field)
-                return result
+                # Data already has all target fields - it was pre-processed.
+                # Pass everything through: extras (ambient input fields,
+                # additive upstream keys) are kept for the fn boundary to
+                # filter, not silently dropped here.
+                return dict(data)
 
             # Data needs extraction using the mapping paths
             for target_field, source_path in mapping.items():

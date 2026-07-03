@@ -377,3 +377,173 @@ spec:
             "request_id": "REQ001",
             "extra": "data",
         }
+
+
+class TestAmbientInputRuntime:
+    """End-to-end: the run's input is ambient for every node.
+
+    Pipelines are built from YAML and executed through the orchestrator —
+    no `field: $input.field` pass-through mappings anywhere.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mapped_function_node_receives_ambient_field(self):
+        """A mapped unpack fn gets an input field it never mapped."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: ambient-mapped
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: fetch
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.produce_body
+
+    - kind: function_node
+      metadata:
+        name: handle
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.consume_with_conversation
+        unpack_input: true
+        input_mapping:
+          text: fetch.body
+"""
+        graph, _ = YamlPipelineBuilder().build_from_yaml_string(yaml_content)
+        orchestrator = Orchestrator()
+
+        results = await orchestrator.run(
+            graph, {"conversation_id": "c-42", "email_subject": "RE: load"}
+        )
+
+        assert results["handle"]["text"] == "the body"
+        assert results["handle"]["conversation_id"] == "c-42"
+
+    @pytest.mark.asyncio
+    async def test_unpack_fn_ignores_undeclared_ambient_fields(self):
+        """Ambient fields the fn doesn't declare are dropped, not TypeErrors."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: ambient-filtered
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: fetch
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.produce_body
+
+    - kind: function_node
+      metadata:
+        name: normalize
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.consume_text_only
+        unpack_input: true
+        input_mapping:
+          text: fetch.body
+"""
+        graph, _ = YamlPipelineBuilder().build_from_yaml_string(yaml_content)
+        orchestrator = Orchestrator()
+
+        results = await orchestrator.run(
+            graph, {"conversation_id": "c-42", "email_subject": "RE: load"}
+        )
+
+        assert results["normalize"] == {"text": "the body"}
+
+    @pytest.mark.asyncio
+    async def test_expression_node_uses_ambient_field(self):
+        """Expressions resolve bare input names without any mapping block."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: ambient-expression
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: fetch
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.produce_body
+
+    - kind: expression_node
+      metadata:
+        name: label
+      spec:
+        expressions:
+          tag: "'RE: ' + email_subject"
+        output_fields: [tag]
+      wait_for: [fetch]
+"""
+        graph, _ = YamlPipelineBuilder().build_from_yaml_string(yaml_content)
+        orchestrator = Orchestrator()
+
+        results = await orchestrator.run(graph, {"email_subject": "load 77"})
+
+        assert results["label"]["tag"] == "RE: load 77"
+
+    @pytest.mark.asyncio
+    async def test_explicit_pin_overrides_ambient(self):
+        """A mapped (pinned) source wins over the ambient input value."""
+        from hexdag.compiler.yaml_builder import YamlPipelineBuilder
+
+        yaml_content = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: ambient-pin
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: get_context
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.produce_context
+
+    - kind: function_node
+      metadata:
+        name: handle
+      spec:
+        fn: tests.integration.test_yaml_pipeline_execution.consume_with_conversation
+        unpack_input: true
+        input_mapping:
+          text: get_context.body
+          conversation_id: get_context.conversation_id
+"""
+        graph, _ = YamlPipelineBuilder().build_from_yaml_string(yaml_content)
+        orchestrator = Orchestrator()
+
+        results = await orchestrator.run(graph, {"conversation_id": "from-input"})
+
+        assert results["handle"]["conversation_id"] == "from-context"
+
+
+async def produce_body(input_data):
+    """Producer for ambient-input tests."""
+    return {"body": "the body"}
+
+
+async def produce_context(input_data):
+    """Producer with a conversation_id that differs from the input's."""
+    return {"body": "ctx body", "conversation_id": "from-context"}
+
+
+async def consume_with_conversation(text: str, conversation_id: str):
+    """Consumer declaring an ambient field."""
+    return {"text": text, "conversation_id": conversation_id}
+
+
+async def consume_text_only(text: str):
+    """Consumer declaring only its mapped field."""
+    return {"text": text}

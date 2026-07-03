@@ -88,7 +88,7 @@ class ExecutionCoordinator:
     """
 
     # ========================================================================
-    # Observer Notifications (from PolicyCoordinator)
+    # Observer Notifications
     # ========================================================================
 
     async def notify_observer(self, observer_manager: ObserverManager | None, event: Any) -> None:
@@ -126,6 +126,13 @@ class ExecutionCoordinator:
 
         This approach balances simplicity (pass-through for single deps) with
         clarity (named dict for multiple deps).
+
+        **Ambient input**: the run's input is available to every node. After
+        mapping/auto-inference, every top-level field of a dict pipeline input
+        is filled into the prepared dict when the key is absent or ``None``
+        (coalesce). Closest data wins: explicit ``input_mapping`` entries,
+        then upstream data, then ambient input. ``strict_mapping: true`` opts
+        a node out entirely.
 
         Parameters
         ----------
@@ -204,43 +211,55 @@ class ExecutionCoordinator:
         input_mapping = node_spec.params.get("input_mapping") if node_spec.params else None
         strict = bool(node_spec.params.get("strict_mapping")) if node_spec.params else False
         if input_mapping or (strict and input_mapping is not None):
-            return self._apply_input_mapping(
+            result = self._apply_input_mapping(
                 base_input,
                 input_mapping,
                 initial_input,
                 node_results,
                 strict=strict,
             )
-
-        # Auto-infer: when the node declares accepted_params (from target fn
-        # signature), search upstream result dicts for matching parameter names.
-        # This supersedes the in_model auto-wire below (handles multi-dep and
-        # nested dict search).
-        if not input_mapping and node_spec.accepted_params and isinstance(base_input, dict):
-            base_input = self._auto_infer_params(
-                base_input, node_spec.accepted_params, node_spec.name, initial_input
-            )
-        # Auto-wire: when a single-dep node has in_model and no explicit input_mapping,
-        # extract only the fields whose names match the in_model from the upstream dict.
-        elif (
-            not input_mapping
-            and node_spec.in_model
-            and len(node_spec.deps) == 1
-            and isinstance(base_input, dict)
-        ):
+        elif node_spec.accepted_params and isinstance(base_input, dict):
+            # Auto-infer: when the node declares accepted_params (from target fn
+            # signature), search upstream result dicts for matching parameter names.
+            # This supersedes the in_model auto-wire below (handles multi-dep and
+            # nested dict search).
+            result = self._auto_infer_params(base_input, node_spec.accepted_params, node_spec.name)
+        elif node_spec.in_model and len(node_spec.deps) == 1 and isinstance(base_input, dict):
+            # Auto-wire: when a single-dep node has in_model and no explicit
+            # input_mapping, extract only the fields whose names match the
+            # in_model from the upstream dict.
             expected_fields = set(node_spec.in_model.model_fields.keys())
             matching = expected_fields & base_input.keys()
-            if matching:
-                base_input = {k: base_input[k] for k in matching}
+            result = {k: base_input[k] for k in matching} if matching else base_input
+        else:
+            result = base_input
 
-        return base_input
+        # Ambient input (tier 3): the run's input is available to every node.
+        # Fill top-level fields that are absent or None (coalesce) — explicit
+        # mappings and upstream data always win; strict nodes opt out entirely.
+        # Copy-on-write: the raw pass-through paths return shared references
+        # (initial_input / stored upstream results) that must not be mutated.
+        if (
+            not strict
+            and isinstance(result, dict)
+            and isinstance(initial_input, dict)
+            and "_skipped" not in result
+        ):
+            ambient = {
+                key: value
+                for key, value in initial_input.items()
+                if value is not None and result.get(key) is None
+            }
+            if ambient:
+                result = {**result, **ambient}
+
+        return result
 
     def _auto_infer_params(
         self,
         input_data: dict[str, Any],
         accepted: frozenset[str],
         node_name: str,
-        initial_input: Any = None,
     ) -> dict[str, Any]:
         """Match target function parameters against upstream node outputs.
 
@@ -250,16 +269,13 @@ class ExecutionCoordinator:
         auto-mapped; ambiguous matches (same key in multiple sources) are
         skipped with a debug log.
 
-        Pipeline ``initial_input`` is included in the search (as the
-        ``"input"`` source) so that function params can also match fields
-        from the pipeline's entry data.
+        Pipeline input is NOT part of the search space: it is the ambient
+        fallback tier applied by ``prepare_node_input`` after this step, so
+        it never makes an upstream match ambiguous.
 
         Top-level keys already matching accepted params take priority.
         """
-        # Build search space: input_data + pipeline initial_input
-        search = dict(input_data)
-        if isinstance(initial_input, dict) and "input" not in search:
-            search["input"] = initial_input
+        search = input_data
 
         # Start with top-level matches
         result = {k: v for k, v in search.items() if k in accepted}

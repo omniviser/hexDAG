@@ -232,6 +232,22 @@ class FunctionNode(BaseNodeFactory, yaml_alias="function_node"):
                             # Fallback: try to convert to dict
                             unpacked_kwargs = {**vars(input_data), **call_kwargs}
 
+                        # Filter to the fn signature (same contract as
+                        # ServiceCallNode): bind what the fn declares, drop the
+                        # rest — ambient input fields and additive upstream
+                        # keys must not TypeError functions that don't want them.
+                        if not accepts_kwargs:
+                            dropped = unpacked_kwargs.keys() - param_names
+                            if dropped:
+                                node_logger.debug(
+                                    "Dropping input fields not in fn signature",
+                                    fn_name=fn_name,
+                                    dropped=sorted(dropped),
+                                )
+                            unpacked_kwargs = {
+                                k: v for k, v in unpacked_kwargs.items() if k in param_names
+                            }
+
                         if asyncio.iscoroutinefunction(fn):
                             result = await fn(**unpacked_kwargs)
                         else:

@@ -1406,11 +1406,6 @@
                     "$ref": "#/$defs/DefaultCaps",
                     "description": "Capability boundaries for this pipeline"
                 },
-                "common_field_mappings": {
-                    "additionalProperties": true,
-                    "description": "Reusable field mapping definitions",
-                    "type": "object"
-                },
                 "custom_types": {
                     "additionalProperties": {
                         "additionalProperties": false,

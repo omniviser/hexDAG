@@ -234,15 +234,17 @@ Ports follow a two-tier naming scheme inspired by Linux kernel structs:
 
 ### Data Flow Model (n8n-like)
 
-hexDAG uses an **n8n-like data flow model** where upstream node outputs are automatically available to downstream nodes. You don't need to wire every field through `input_mapping` — just reference upstream data directly.
+hexDAG uses an **n8n-like data flow model** where upstream node outputs are automatically available to downstream nodes, and **the run's input is ambient**: every top-level field of the pipeline input is available to every node by name — in function kwargs, `@step` params, expressions, and templates. Never write `field: $input.field` pass-through mappings.
 
 **How it works:**
 - Every node can access upstream node outputs by name: `node_name.field.subfield`
-- `input_mapping` is **optional** — use it only to create short aliases
-- `$input.field` or `input.field` — access the initial pipeline input
+- **Ambient input**: input fields fill any prepared-input key that is absent or `None` (coalesce). Closest data wins: explicit `input_mapping` entry > upstream data > ambient input. `strict_mapping: true` opts a node out. The same rule applies at System level (system input is ambient for every process; pipes overlay it).
+- `input_mapping` is **optional** — use it for renames, derived values, or to *pin* a field to a specific source (`conversation_id: get_context.conversation_id` prefers upstream over ambient; `x: $input.x` the reverse)
+- `$input.field` or `input.field` — explicitly reference the initial pipeline input
 - Dependencies are **auto-inferred**: any `{{node.field}}` or `{{node}}` ref in **any spec string** (any field name, any nesting depth — including custom node fields) creates an edge; bare expression refs (`node.field` without braces) are inferred in framework fields (`input_mapping`, `expressions`, `when`, `condition`, `items`, `state_update`, `branches[].condition`, `payload`)
 - Use `wait_for: [node]` for ordering-only edges (run after a side-effect node without reading its data)
 - Built-in functions like `coalesce()`, `default()`, `isnone()` handle optional fields
+- Callable boundaries filter to the target signature (function `unpack_input`, `@step` methods): extra ambient/upstream fields are dropped at binding, never `TypeError`s
 
 **Expression node — reference upstream directly (no mapping needed):**
 ```yaml

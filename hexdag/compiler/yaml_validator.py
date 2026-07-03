@@ -368,8 +368,30 @@ class YamlValidator:
         input_schema = spec.get("input_schema")
         if isinstance(input_schema, dict):
             self._validate_input_refs_against_schema(nodes, input_schema, result)
+            self._validate_input_schema_shadowing(input_schema, node_ids, result)
 
         return result
+
+    @staticmethod
+    def _validate_input_schema_shadowing(
+        input_schema: dict[str, Any],
+        node_ids: set[str],
+        result: ValidationReport,
+    ) -> None:
+        """Warn when an input field name collides with a node name.
+
+        The pipeline input is ambient (available to every node by field
+        name), so an input field named like a node is shadowed by that
+        node's output in expressions and auto-inference — a likely source
+        of confusion.
+        """
+        for field_name in input_schema:
+            if field_name in node_ids:
+                result.add_warning(
+                    f"input_schema field '{field_name}' has the same name as node "
+                    f"'{field_name}'. The node's output shadows the ambient input "
+                    f"field in expressions and auto-inference — rename one of them."
+                )
 
     def _validate_manifest_structure(self, config: Any, result: ValidationReport) -> None:
         """Validate declarative manifest YAML structure.
@@ -447,10 +469,14 @@ class YamlValidator:
         if len(spec["nodes"]) == 0:
             result.add_warning("Pipeline has no nodes defined")
 
-        # Validate common_field_mappings structure if present
-        common_mappings = spec.get("common_field_mappings")
-        if common_mappings is not None and not isinstance(common_mappings, dict):
-            result.add_error("'spec.common_field_mappings' must be a dictionary")
+        # common_field_mappings was removed: the pipeline input is ambient
+        if "common_field_mappings" in spec:
+            result.add_error(
+                "'spec.common_field_mappings' was removed — the pipeline input is "
+                "now ambient (every top-level input field is available to every "
+                "node by name). Delete this block and any 'field: $input.field' "
+                "pass-through mappings."
+            )
 
         # Rule 3 (bonus): Validate state machine structure
         state_machines = spec.get("state_machines")

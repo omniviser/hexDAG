@@ -10,8 +10,6 @@ component that handles the complete pipeline lifecycle:
 - Secret cleanup (security)
 - Adapter cleanup (connections)
 
-The LifecycleManager replaces the separate PreDagHookManager, PostDagHookManager,
-HealthCheckManager, SecretManager, and AdapterLifecycleManager components.
 """
 
 from __future__ import annotations
@@ -369,7 +367,7 @@ class LifecycleManager:
         return results
 
     # ========================================================================
-    # Health Checks (inlined from HealthCheckManager)
+    # Health Checks
     # ========================================================================
 
     async def _check_all_adapters(
@@ -440,7 +438,7 @@ class LifecycleManager:
         return [h for h in health_results if h.status == "unhealthy"]
 
     # ========================================================================
-    # Secret Management (inlined from SecretManager)
+    # Secret Management
     # ========================================================================
 
     async def _load_secrets(
@@ -513,7 +511,7 @@ class LifecycleManager:
         return {"cleaned": True, "keys_removed": removed_count}
 
     # ========================================================================
-    # Adapter Cleanup (inlined from AdapterLifecycleManager)
+    # Adapter Cleanup
     # ========================================================================
 
     async def _cleanup_all_adapters(

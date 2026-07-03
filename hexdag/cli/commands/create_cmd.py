@@ -165,7 +165,6 @@ def create_pipeline(
                         "config": {},
                     }
                 },
-                "common_field_mappings": {"default_mapping": {"value": "input.data"}},
                 "nodes": [
                     {
                         "kind": "function_node",
@@ -178,7 +177,6 @@ def create_pipeline(
                         },
                         "spec": {
                             "fn": "my_module.validate_input",
-                            "input_mapping": {"data": "input.data"},
                             "output_schema": {
                                 "type": "object",
                                 "properties": {"valid": {"type": "boolean"}},

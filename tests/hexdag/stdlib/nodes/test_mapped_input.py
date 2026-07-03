@@ -1,13 +1,10 @@
 """Tests for automatic input mapping with Pydantic."""
 
-import pytest
 from pydantic import BaseModel
 
-from hexdag.kernel.exceptions import ResourceNotFoundError
 from hexdag.stdlib.nodes.mapped_input import (
     AutoMappedInput,
     FieldExtractor,
-    FieldMappingRegistry,
     MappedInput,
     ModelFactory,
     TypeInferrer,
@@ -27,64 +24,6 @@ class ValidatorOutput(BaseModel):
 
     status: str
     score: float
-
-
-class TestFieldMappingRegistry:
-    """Tests for FieldMappingRegistry."""
-
-    def test_empty_registry(self):
-        """Test registry starts empty - no magic."""
-        registry = FieldMappingRegistry()
-        assert len(registry.mappings) == 0
-
-    def test_register_mapping(self):
-        """Test registering a field mapping."""
-        registry = FieldMappingRegistry()
-
-        mapping = {
-            "content": "processor.text",
-            "language": "processor.metadata.lang",
-            "status": "validator.status",
-        }
-
-        registry.register("standard_consumer", mapping)
-        assert "standard_consumer" in registry.mappings
-        assert registry.mappings["standard_consumer"] == mapping
-
-    def test_get_by_name(self):
-        """Test getting mapping by name."""
-        registry = FieldMappingRegistry()
-        mapping = {"content": "processor.text"}
-        registry.register("test_mapping", mapping)
-
-        retrieved = registry.get("test_mapping")
-        assert retrieved == mapping
-
-    def test_get_inline_mapping(self):
-        """Test getting inline mapping (returns as-is)."""
-        registry = FieldMappingRegistry()
-        inline_mapping = {"field1": "source.field1"}
-
-        retrieved = registry.get(inline_mapping)
-        assert retrieved == inline_mapping
-
-    def test_get_unknown_mapping_raises(self):
-        """Test getting unknown mapping raises ResourceNotFoundError."""
-
-        registry = FieldMappingRegistry()
-
-        with pytest.raises(ResourceNotFoundError, match="Field Mapping 'nonexistent' not found"):
-            registry.get("nonexistent")
-
-    def test_clear_registry(self):
-        """Test clearing all mappings."""
-        registry = FieldMappingRegistry()
-        registry.register("mapping1", {"a": "b"})
-        registry.register("mapping2", {"c": "d"})
-
-        assert len(registry.mappings) == 2
-        registry.clear()
-        assert len(registry.mappings) == 0
 
 
 class TestMappedInput:
@@ -241,24 +180,6 @@ class TestAutoMappedInput:
         assert instance.text == "content"
         assert instance.score == 0.8
         assert instance.custom == "custom_value"
-
-    def test_registry_empty_name_error(self):
-        """Test that registering with empty name raises error."""
-        from hexdag.kernel.exceptions import ValidationError
-
-        registry = FieldMappingRegistry()
-
-        with pytest.raises(ValidationError, match="Validation failed for 'name'"):
-            registry.register("", {"field": "value"})
-
-    def test_registry_empty_mapping_error(self):
-        """Test that registering empty mapping raises error."""
-        from hexdag.kernel.exceptions import ValidationError
-
-        registry = FieldMappingRegistry()
-
-        with pytest.raises(ValidationError, match="Validation failed for 'mapping'"):
-            registry.register("test", {})
 
     def test_field_extractor_empty_path(self):
         """Test extraction with empty path returns the data itself."""
@@ -494,3 +415,37 @@ class TestAutoMappedInput:
         instance = PrivateMapping()
         # Since PrivateAttr is handled differently, it may not map
         assert instance.field1 == "default"  # Falls back to default
+
+
+class TestExtrasPassThrough:
+    """Extras survive MappedInput coercion.
+
+    Ambient input fields and additive upstream keys must reach the fn
+    boundary — the signature filter decides what to bind, not the model.
+    """
+
+    def test_preprocessed_data_keeps_extra_keys(self):
+        """Pre-processed data (target fields present) passes extras through."""
+        model = MappedInput.create_model("PreprocessedExtras", {"content": "processor.text"})
+
+        instance = model.model_validate({
+            "content": "hello",
+            "conversation_id": "c1",
+            "email_subject": "RE:",
+        })
+
+        dumped = instance.model_dump()
+        assert dumped["content"] == "hello"
+        assert dumped["conversation_id"] == "c1"
+        assert dumped["email_subject"] == "RE:"
+
+    def test_mapped_fields_still_validated(self):
+        """Target fields keep their optional-with-None default behavior."""
+        model = MappedInput.create_model(
+            "StillValidated", {"content": "processor.text", "status": "validator.status"}
+        )
+
+        instance = model.model_validate({"content": "x", "status": "ok", "extra": 1})
+
+        assert instance.content == "x"
+        assert instance.status == "ok"

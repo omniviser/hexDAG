@@ -220,10 +220,6 @@ properties:
         additionalProperties: true
         type: object
         description: JSON Schema for pipeline outputs
-      common_field_mappings:
-        additionalProperties: true
-        type: object
-        description: Reusable field mapping definitions
       orchestrator:
         $ref: '#/$defs/OrchestratorConfig'
         description: Orchestrator execution settings (max_concurrent_nodes, timeout,

@@ -1,3 +1,28 @@
+## Unreleased
+
+### Breaking Changes — Ambient Input
+
+The run's input is now **ambient**: every top-level field of the pipeline input is available to every node by name, and the system input is available to every System process. One rule, closest data wins: explicit `input_mapping` entry > upstream data > ambient input. Ambient fills prepared-input keys that are absent or `None` (coalesce); `strict_mapping: true` opts a node out. `field: $input.field` pass-through mappings are no longer needed — delete them.
+
+- **Nodes ambiently receive input fields they never declared.** A fn/`@step` param that matches an input field name and previously fell back to its default now receives the input value.
+- **Auto-inference no longer treats `$input` as an ambiguity source.** A param name found in one upstream output + the input resolves to the upstream value (closest wins) instead of being skipped with a TypeError.
+- **`function_node` with `unpack_input: true` now filters kwargs to the fn signature** (same contract as `service_call_node`): extra fields are dropped with a debug log instead of raising `TypeError`. A typo'd mapping key is now a logged drop, not a crash.
+- **Auto-generated `MappedInput` models pass extra fields through** (`extra="allow"`; the before-validator preserves unrecognized keys) so ambient fields survive input coercion.
+- **Downstream System processes receive the ambient system input** under their pipe overlays (previously: only pipe-mapped fields). A pipe value resolving to `None` falls back to the ambient field.
+- **`spec.common_field_mappings` removed** (was parsed but never applied). The validator reports a clear removal error if the key is present.
+
+### Removed (orphaned mechanisms)
+
+- `InputMapper` component (duplicate of `ExecutionCoordinator.prepare_node_input`) and its tests
+- `HealthCheckManager`, `SecretManager`, `AdapterLifecycleManager` modules (functionality long inlined into `LifecycleManager`)
+- The deprecated-component lazy-redirect machinery in `orchestration/components/__init__.py` (including the broken `PolicyCoordinator` redirect, which pointed at a nonexistent module)
+- `FieldMappingRegistry` (unused Python-side mapping registry)
+- `PipelineConfig.common_field_mappings` field
+
+### Added
+
+- `input_schema` field names that shadow node names now produce a validation warning (the node output shadows the ambient input field in expressions).
+
 ## v0.4.0-a1 (2025-10-30)
 
 ### Features

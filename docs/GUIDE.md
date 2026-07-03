@@ -278,7 +278,35 @@ For all middleware symbols and signatures, see [PUBLIC_API.md > Middleware](PUBL
 
 ## 5. Data Flow Between Nodes
 
-Upstream node outputs are automatically available downstream. There are 3 mechanisms:
+Upstream node outputs are automatically available downstream, and **the run's input is ambient** — every top-level field of the pipeline input is available to every node by name. One rule governs who provides a value (closest data wins):
+
+1. an explicit `input_mapping` entry (any source — this is how you *pin* a source)
+2. upstream-provided data (dependency outputs / auto-inference)
+3. ambient input
+
+`strict_mapping: true` opts a node out entirely (tier 1 only). Ambient fill uses **coalesce semantics**: it fills keys that are absent *or `None`* (a `None` in hexDAG usually means a source path that failed to resolve — real data rescues it); non-`None` values are never overwritten.
+
+### 0. Ambient Input — No Wiring Needed for Run Data
+
+If the pipeline input has `conversation_id`, every node that wants `conversation_id` simply receives it — in function kwargs, `@step` parameters, expressions, and templates. No `conversation_id: $input.conversation_id` pass-through lines, ever:
+
+```yaml
+spec:
+  nodes:
+    - kind: step_call
+      metadata:
+        name: set_flag
+      spec:
+        service: conversation
+        method: set_flag          # async def set_flag(conversation_id, phone_number)
+        input_mapping:
+          phone_number: guardrail.phone_number
+        # conversation_id arrives ambiently from the run input
+```
+
+This mirrors GitHub Actions `inputs`, Argo `workflow.parameters`, and n8n's globally addressable trigger data. The same rule applies at System level: the system input is ambient for every process, with pipe mappings overlaying it.
+
+Each callable boundary binds what its signature declares and ignores the rest — extra ambient fields are filtered at the fn boundary (function nodes with `unpack_input`, `@step` methods), never `TypeError`s.
 
 ### 1. `input_mapping` — Wire Fields Explicitly
 
@@ -286,7 +314,7 @@ Upstream node outputs are automatically available downstream. There are 3 mechan
 spec:
   input_mapping:
     data: "analyzer.result"          # upstream node output
-    query: "$input.user_query"       # pipeline input
+    query: "$input.user_query"       # pin to the pipeline input explicitly
 ```
 
 `input_mapping` is **optional for all node types.** The orchestrator auto-infers parameter values from the upstream namespace:
@@ -294,7 +322,7 @@ spec:
 - **LLM and expression nodes** pull what they need via templates (`{{ analyzer.result }}`) or expressions (`analyzer.count * 2`).
 - **Function and service_call nodes** auto-match upstream fields to function parameter names. Use `unpack_input: true` on function nodes to enable this.
 
-Explicit `input_mapping` is only needed when upstream field names **differ** from the target parameter names, or when you want to compute derived values.
+Explicit `input_mapping` is only needed when upstream field names **differ** from the target parameter names, when you want to compute derived values, or to **pin** a field to a specific source (e.g. `conversation_id: get_context.conversation_id` to prefer the upstream value over the ambient input, or `override_rate: $input.override_rate` for the reverse).
 
 **Inline expressions** — mapping values can be expressions, not just references:
 

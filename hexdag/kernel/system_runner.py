@@ -234,9 +234,12 @@ class SystemRunner:
     ) -> dict[str, Any]:
         """Resolve input data for a process from pipe mappings.
 
-        For root processes (no incoming pipes), returns *initial_input*.
-        For downstream processes, resolves ``{{ upstream.field }}`` templates
-        in pipe mappings against upstream process results.
+        The system input is **ambient**: every process (root or downstream)
+        starts from *initial_input*. Downstream processes then overlay their
+        resolved ``{{ upstream.field }}`` pipe mappings on top (closest data
+        wins). A pipe value that resolves to ``None`` falls back to the
+        ambient field when one exists (coalesce) instead of shipping a
+        silent ``None`` downstream.
 
         Parameters
         ----------
@@ -247,7 +250,7 @@ class SystemRunner:
         process_results:
             Results from already-executed upstream processes.
         initial_input:
-            Input data for root processes.
+            The system run input, ambient for all processes.
 
         Returns
         -------
@@ -255,14 +258,16 @@ class SystemRunner:
             Resolved input data for the process.
         """
         incoming_pipes = pipe_map.get(process_name)
-        if not incoming_pipes:
-            return dict(initial_input)
 
-        resolved: dict[str, Any] = {}
+        # Ambient system input: every process sees the run's input.
+        resolved: dict[str, Any] = dict(initial_input)
 
-        for pipe in incoming_pipes:
+        for pipe in incoming_pipes or []:
             for target_field, template in pipe.mapping.items():
-                resolved[target_field] = _resolve_template(template, process_results)
+                value = _resolve_template(template, process_results)
+                if value is None and resolved.get(target_field) is not None:
+                    continue
+                resolved[target_field] = value
 
         return resolved
 

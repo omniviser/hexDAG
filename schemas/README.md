@@ -142,7 +142,6 @@ spec:
 | `spec` | object | Yes | Pipeline specification |
 | `spec.nodes` | array | Yes | List of pipeline nodes |
 | `spec.input_schema` | object | No | JSON Schema for inputs |
-| `spec.common_field_mappings` | object | No | Reusable field mappings |
 
 ### 2. Policy Schema (`policy-schema.json`)
 

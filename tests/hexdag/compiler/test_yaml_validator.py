@@ -268,12 +268,11 @@ class TestYamlValidator:
         result = self.validator.validate(config)
         assert result.is_valid
 
-    def test_field_mapping_validation(self):
-        """Test field mapping validation.
+    def test_common_field_mappings_removed(self):
+        """common_field_mappings was removed — the input is ambient now.
 
-        Note: With simplified validation (no registry), we only check required fields
-        for known node types. Unknown fields like 'field_mapping' are not rejected
-        since we can't know all valid fields without full schema introspection.
+        The key must produce a clear removal error pointing at the new
+        behavior, not a silent pass or a cryptic pydantic failure.
         """
         config = {
             "kind": "Pipeline",
@@ -284,15 +283,14 @@ class TestYamlValidator:
                     {
                         "kind": "function_node",
                         "metadata": {"name": "node1"},
-                        "spec": {"fn": "test", "field_mapping": "standard"},
+                        "spec": {"fn": "test"},
                     }
                 ],
             },
         }
         result = self.validator.validate(config)
-        # With simplified validation, we don't reject unknown fields
-        # The node has all required fields (fn for function_node)
-        assert result.is_valid
+        assert not result.is_valid
+        assert any("ambient" in error for error in result.errors)
 
     def test_unknown_field_mapping_reference(self):
         """Test unknown field mapping handling.
@@ -371,8 +369,8 @@ class TestYamlValidator:
         assert not result.is_valid
         assert any("must be a dictionary" in error for error in result.errors)
 
-    def test_invalid_common_field_mappings(self):
-        """Test validation of invalid common_field_mappings."""
+    def test_common_field_mappings_removed_any_value(self):
+        """The removed key errors regardless of its value type."""
         config = {
             "kind": "Pipeline",
             "metadata": {"name": "test"},
@@ -380,7 +378,7 @@ class TestYamlValidator:
         }
         result = self.validator.validate(config)
         assert not result.is_valid
-        assert any("must be a dictionary" in error for error in result.errors)
+        assert any("removed" in error for error in result.errors)
 
     def test_custom_node_types(self):
         """Test validator with custom node types."""
@@ -2408,3 +2406,49 @@ class TestTemplateTypoLint:
         ])
         result = self.validator.validate(config)
         assert not [w for w in result.warnings if "Did you mean" in w]
+
+
+class TestInputSchemaShadowing:
+    """Ambient input makes input-field/node-name collisions visible."""
+
+    def setup_method(self):
+        from hexdag.compiler.yaml_validator import YamlValidator
+
+        self.validator = YamlValidator()
+
+    def test_input_field_shadowed_by_node_warns(self):
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "input_schema": {"get_context": "str", "conversation_id": "str"},
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "get_context"},
+                        "spec": {"fn": "json.loads"},
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid
+        assert any("shadows" in w for w in result.warnings)
+
+    def test_no_collision_no_warning(self):
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "input_schema": {"conversation_id": "str"},
+                "nodes": [
+                    {
+                        "kind": "function_node",
+                        "metadata": {"name": "get_context"},
+                        "spec": {"fn": "json.loads"},
+                    }
+                ],
+            },
+        }
+        result = self.validator.validate(config)
+        assert not any("shadows" in w for w in result.warnings)

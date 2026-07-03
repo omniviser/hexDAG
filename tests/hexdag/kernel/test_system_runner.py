@@ -103,15 +103,16 @@ class TestSystemRunner:
         # Verify execution order
         assert [name for name, _ in call_log] == ["a", "b", "c"]
 
-        # Verify pipe mapping resolution
+        # Verify pipe mapping resolution: the system input is ambient for
+        # every process; pipe mappings overlay it.
         _, a_input = call_log[0]
         assert a_input == {"initial": True}  # root gets initial input
 
         _, b_input = call_log[1]
-        assert b_input == {"x": "a_result"}  # resolved from {{ a.result }}
+        assert b_input == {"initial": True, "x": "a_result"}  # ambient + pipe
 
         _, c_input = call_log[2]
-        assert c_input == {"y": "b_output"}  # resolved from {{ b.output }}
+        assert c_input == {"initial": True, "y": "b_output"}  # ambient + pipe
 
         # Verify results
         assert "a" in results
@@ -225,3 +226,52 @@ class TestSystemRunner:
             "ProcessCompleted",
             "SystemCompleted",
         ]
+
+
+class TestAmbientSystemInput:
+    """The system input is ambient for every process; pipes overlay it."""
+
+    def test_downstream_gets_ambient_plus_pipe_overlay(self) -> None:
+        """Pipe-mapped fields win over same-named ambient fields."""
+
+        class Pipe:
+            mapping = {"load_id": "{{ intake.load_id }}"}
+
+        resolved = SystemRunner._resolve_process_input(
+            "negotiate",
+            {"negotiate": [Pipe()]},
+            {"intake": {"load_id": "L-77"}},
+            {"conversation_id": "c1", "load_id": "from-input"},
+        )
+
+        assert resolved == {"conversation_id": "c1", "load_id": "L-77"}
+
+    def test_none_pipe_value_coalesces_to_ambient(self) -> None:
+        """A pipe that resolves to None falls back to the ambient field."""
+
+        class Pipe:
+            mapping = {"load_id": "{{ intake.missing }}"}
+
+        resolved = SystemRunner._resolve_process_input(
+            "negotiate",
+            {"negotiate": [Pipe()]},
+            {"intake": {"load_id": "L-77"}},
+            {"load_id": "from-input"},
+        )
+
+        assert resolved == {"load_id": "from-input"}
+
+    def test_none_pipe_value_without_ambient_stays_none(self) -> None:
+        """No ambient fallback → the pipe's None is delivered as-is."""
+
+        class Pipe:
+            mapping = {"load_id": "{{ intake.missing }}"}
+
+        resolved = SystemRunner._resolve_process_input(
+            "negotiate",
+            {"negotiate": [Pipe()]},
+            {"intake": {}},
+            {"conversation_id": "c1"},
+        )
+
+        assert resolved == {"conversation_id": "c1", "load_id": None}
