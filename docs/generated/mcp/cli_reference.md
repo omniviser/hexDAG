@@ -290,7 +290,10 @@ Usage: hexdag validate [OPTIONS] YAML_FILE
 │ *    yaml_file      FILE  Path to YAML pipeline file to validate [required]  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --explain  -e        Show detailed explanation of validation process         │
-│ --help               Show this message and exit.                             │
+│ --explain   -e        Show detailed explanation of validation process        │
+│ --fragment  -f        Validate an include-fragment (root-level node list)    │
+│                       standalone; references to nodes from including         │
+│                       pipelines become warnings                              │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

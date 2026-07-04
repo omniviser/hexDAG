@@ -27,6 +27,24 @@ _logger = get_logger(__name__)
 # Separator for namespace:name format
 NAMESPACE_SEPARATOR = ":"
 
+
+def _input_schema_fields(input_schema: dict[str, Any]) -> set[str]:
+    """Declared input field names, unwrapping JSON-Schema shapes.
+
+    ``input_schema`` supports both the flat hexDAG form
+    (``{field: type, ...}``) and JSON-Schema objects
+    (``{type: object, properties: {field: {...}}, required: [...]}``).
+    The old behavior treated JSON-Schema keys like ``type``/``properties``
+    as field names, false-flagging every ``$input.X`` reference.
+    """
+    properties = input_schema.get("properties")
+    if isinstance(properties, dict) and (
+        input_schema.get("type") == "object" or "required" in input_schema
+    ):
+        return set(properties.keys())
+    return set(input_schema.keys())
+
+
 # Lazy-loaded known node types (derived from resolver's builtin aliases)
 _known_node_types: frozenset[str] | None = None
 
@@ -135,151 +153,113 @@ class ValidationReport:
         yield from self._suggestions
 
 
-class _SchemaValidator:
-    """Validates YAML node specs against known schemas.
+def _node_requirement_errors(node_type: str, spec: dict[str, Any]) -> list[str]:
+    """Alternative-required field checks not expressible via signatures.
 
-    Since we no longer have a registry, schema validation is simplified
-    to basic structural validation.
-
-    Note: This is an internal class. Use YamlValidator for public validation API.
+    The generic factory-signature rule covers plain required parameters;
+    these are the either/or requirements (e.g. an LLM node needs SOME
+    message field) and composite mode-specific fields.
     """
+    errors: list[str] = []
 
-    def validate_node_spec(
-        self,
-        node_type: str,
-        spec: dict[str, Any],
-        namespace: str = "core",
-    ) -> list[str]:
-        """Validate a node's spec with basic structural checks.
+    if (
+        node_type in ("llm", "llm_node")
+        and "human_message" not in spec
+        and "template" not in spec
+        and "prompt_template" not in spec
+    ):
+        errors.append("Missing required field 'human_message' (or legacy 'prompt_template')")
 
-        Args
-        ----
-            node_type: Type of node (e.g., "llm", "agent", "function")
-            spec: Node specification from YAML manifest
-            namespace: Component namespace (default: "core")
+    if (
+        node_type in ("prompt", "prompt_node")
+        and "template" not in spec
+        and "prompt_ref" not in spec
+    ):
+        errors.append("Missing required field 'template' or 'prompt_ref'")
 
-        Returns
-        -------
-            List of validation error messages (empty if valid)
-        """
-        # Basic validation - without registry, we can only do structural checks
-        errors: list[str] = []
+    if (
+        node_type in ("agent", "agent_node")
+        and "initial_prompt_template" not in spec
+        and "main_prompt" not in spec
+    ):
+        errors.append("Missing required field 'initial_prompt_template' (or 'main_prompt')")
 
-        # LLM nodes require human_message (or legacy template/prompt_template)
-        if (
-            node_type in ("llm", "llm_node")
-            and "human_message" not in spec
-            and "template" not in spec
-            and "prompt_template" not in spec
-        ):
-            errors.append("Missing required field 'human_message' (or legacy 'prompt_template')")
+    if node_type in ("function", "function_node") and "fn" not in spec:
+        errors.append("Missing required field 'fn'")
 
-        # Prompt nodes require template
-        if (
-            node_type in ("prompt", "prompt_node")
-            and "template" not in spec
-            and "prompt_ref" not in spec
-        ):
-            errors.append("Missing required field 'template' or 'prompt_ref'")
+    if node_type in ("composite", "composite_node"):
+        errors.extend(_composite_mode_errors(spec))
 
-        # Agent nodes require initial_prompt_template or main_prompt
-        if (
-            node_type in ("agent", "agent_node")
-            and "initial_prompt_template" not in spec
-            and "main_prompt" not in spec
-        ):
-            errors.append("Missing required field 'initial_prompt_template' (or 'main_prompt')")
+    return errors
 
-        # Function nodes require fn
-        if node_type in ("function", "function_node") and "fn" not in spec:
-            errors.append("Missing required field 'fn'")
 
-        # Composite nodes require mode
-        if node_type in ("composite", "composite_node"):
-            errors.extend(self._validate_composite_spec(spec))
+def _composite_mode_errors(spec: dict[str, Any]) -> list[str]:
+    """composite_node mode checks: valid mode + mode-specific fields."""
+    errors: list[str] = []
 
+    if "mode" not in spec:
+        errors.append("Missing required field 'mode'")
         return errors
 
-    def _validate_composite_spec(self, spec: dict[str, Any]) -> list[str]:
-        """Validate composite_node specific requirements.
-
-        Parameters
-        ----------
-        spec : dict[str, Any]
-            Node specification from YAML manifest
-
-        Returns
-        -------
-        list[str]
-            List of validation error messages
-        """
-        errors: list[str] = []
-
-        if "mode" not in spec:
-            errors.append("Missing required field 'mode'")
-            return errors
-
-        mode = spec.get("mode")
-        valid_modes = ("while", "for-each", "times", "if-else", "switch")
-        if mode not in valid_modes:
-            errors.append(f"Invalid mode '{mode}'. Valid modes: {', '.join(valid_modes)}")
-            return errors
-
-        # Mode-specific validation
-        match mode:
-            case "while":
-                if "condition" not in spec:
-                    errors.append("Mode 'while' requires 'condition' field")
-            case "for-each":
-                if "items" not in spec:
-                    errors.append("Mode 'for-each' requires 'items' field")
-            case "times":
-                if "count" not in spec:
-                    errors.append("Mode 'times' requires 'count' field")
-                elif not isinstance(spec.get("count"), int):
-                    errors.append("Field 'count' must be an integer")
-            case "if-else":
-                if "condition" not in spec:
-                    errors.append("Mode 'if-else' requires 'condition' field")
-            case "switch":
-                if "branches" not in spec:
-                    errors.append("Mode 'switch' requires 'branches' field")
-                elif not isinstance(spec.get("branches"), list):
-                    errors.append("Field 'branches' must be a list")
-
-        # Validate body field if present (can be string, list, or callable from !py)
-        body = spec.get("body")
-        body_pipeline = spec.get("body_pipeline")
-
-        if body is not None and body_pipeline is not None:
-            errors.append("Cannot specify both 'body' and 'body_pipeline'")
-
-        # Iterating modes require a body or body_pipeline
-        if mode in ("while", "for-each", "times") and body is None and body_pipeline is None:
-            errors.append(f"Mode '{mode}' requires 'body' or 'body_pipeline'")
-
-        # Validate count is positive (0 is a silent no-op)
-        if mode == "times" and isinstance(spec.get("count"), int) and spec["count"] <= 0:
-            errors.append("Field 'count' must be a positive integer (> 0)")
-
-        # Validate switch branch structure
-        if mode == "switch" and isinstance(spec.get("branches"), list):
-            for i, branch in enumerate(spec["branches"]):
-                if not isinstance(branch, dict):
-                    errors.append(f"branches[{i}] must be a dict")
-                elif "condition" not in branch:
-                    errors.append(f"branches[{i}] missing required 'condition' field")
-
-        # If body is a callable (from !py tag), it's already validated at parse time
-        # If body is a list, it should be inline nodes
-        if isinstance(body, list):
-            for i, node_config in enumerate(body):
-                if not isinstance(node_config, dict):
-                    errors.append(f"body[{i}] must be a node configuration dict")
-                elif "kind" not in node_config:
-                    errors.append(f"body[{i}] missing required 'kind' field")
-
+    mode = spec.get("mode")
+    valid_modes = ("while", "for-each", "times", "if-else", "switch")
+    if mode not in valid_modes:
+        errors.append(f"Invalid mode '{mode}'. Valid modes: {', '.join(valid_modes)}")
         return errors
+
+    match mode:
+        case "while":
+            if "condition" not in spec:
+                errors.append("Mode 'while' requires 'condition' field")
+        case "for-each":
+            if "items" not in spec:
+                errors.append("Mode 'for-each' requires 'items' field")
+        case "times":
+            if "count" not in spec:
+                errors.append("Mode 'times' requires 'count' field")
+            elif not isinstance(spec.get("count"), int):
+                errors.append("Field 'count' must be an integer")
+        case "if-else":
+            if "condition" not in spec:
+                errors.append("Mode 'if-else' requires 'condition' field")
+        case "switch":
+            if "branches" not in spec:
+                errors.append("Mode 'switch' requires 'branches' field")
+            elif not isinstance(spec.get("branches"), list):
+                errors.append("Field 'branches' must be a list")
+
+    body = spec.get("body")
+    body_pipeline = spec.get("body_pipeline")
+
+    if body is not None and body_pipeline is not None:
+        errors.append("Cannot specify both 'body' and 'body_pipeline'")
+
+    # Iterating modes require a body or body_pipeline
+    if mode in ("while", "for-each", "times") and body is None and body_pipeline is None:
+        errors.append(f"Mode '{mode}' requires 'body' or 'body_pipeline'")
+
+    # Validate count is positive (0 is a silent no-op)
+    if mode == "times" and isinstance(spec.get("count"), int) and spec["count"] <= 0:
+        errors.append("Field 'count' must be a positive integer (> 0)")
+
+    # Validate switch branch structure
+    if mode == "switch" and isinstance(spec.get("branches"), list):
+        for i, branch in enumerate(spec["branches"]):
+            if not isinstance(branch, dict):
+                errors.append(f"branches[{i}] must be a dict")
+            elif "condition" not in branch:
+                errors.append(f"branches[{i}] missing required 'condition' field")
+
+    # If body is a callable (from !py tag), it's already validated at parse
+    # time. If body is a list, it should be inline node configurations.
+    if isinstance(body, list):
+        for i, node_config in enumerate(body):
+            if not isinstance(node_config, dict):
+                errors.append(f"body[{i}] must be a node configuration dict")
+            elif "kind" not in node_config:
+                errors.append(f"body[{i}] missing required 'kind' field")
+
+    return errors
 
 
 class YamlValidator:
@@ -301,7 +281,6 @@ class YamlValidator:
         self._cached_node_types: frozenset[str] | None = None
 
         # Schema validator for spec validation
-        self.schema_validator = _SchemaValidator()
 
     @property
     def valid_node_types(self) -> frozenset[str]:
@@ -349,6 +328,9 @@ class YamlValidator:
         nodes = spec.get("nodes", [])
         pipeline_ports = spec.get("ports", {}) if isinstance(spec.get("ports"), dict) else {}
 
+        # Validate port spec shapes (single adapter vs multi-adapter pool)
+        self._validate_ports(spec, result)
+
         # Validate nodes and cache the IDs and macro instances for reuse
         node_ids, macro_instances = self._validate_nodes(nodes, result, pipeline_ports)
 
@@ -373,6 +355,76 @@ class YamlValidator:
         return result
 
     @staticmethod
+    def _validate_ports(spec: dict[str, Any], result: ValidationReport) -> None:
+        """Validate port spec shapes, including multi-adapter pools.
+
+        A port spec is either a single adapter (``adapter``/``ref``/``name``
+        + ``config``) or a pool (``adapters`` list + optional ``strategy``).
+        The two forms are mutually exclusive. Applies to both global
+        ``spec.ports`` and per-type ``spec.type_ports``.
+        """
+        valid_strategies = {"round_robin", "failover"}
+
+        def check_port(port_name: str, port_spec: Any, context: str) -> None:
+            if not isinstance(port_spec, dict):
+                result.add_error(f"{context} '{port_name}': port spec must be a dict")
+                return
+
+            has_pool = "adapters" in port_spec
+            strategy = port_spec.get("strategy")
+
+            if not has_pool:
+                if strategy is not None:
+                    result.add_error(
+                        f"{context} '{port_name}': 'strategy' is only valid together "
+                        f"with 'adapters' (multi-adapter pool)"
+                    )
+                return
+
+            conflicting = [key for key in ("adapter", "ref", "name") if key in port_spec]
+            if conflicting:
+                result.add_error(
+                    f"{context} '{port_name}': 'adapters' is mutually exclusive with {conflicting}"
+                )
+
+            members = port_spec["adapters"]
+            if not isinstance(members, list) or not members:
+                result.add_error(
+                    f"{context} '{port_name}': 'adapters' must be a non-empty list of adapter specs"
+                )
+            else:
+                for i, member in enumerate(members):
+                    if not isinstance(member, dict):
+                        result.add_error(
+                            f"{context} '{port_name}': pool member [{i}] must be a "
+                            f"dict, got {type(member).__name__}"
+                        )
+                    elif not any(key in member for key in ("adapter", "ref", "name")):
+                        result.add_error(
+                            f"{context} '{port_name}': pool member [{i}] must declare "
+                            f"'adapter', 'ref', or 'name'"
+                        )
+
+            if strategy is not None and strategy not in valid_strategies:
+                result.add_error(
+                    f"{context} '{port_name}': invalid strategy {strategy!r}; expected "
+                    f"one of {sorted(valid_strategies)}"
+                )
+
+        ports = spec.get("ports")
+        if isinstance(ports, dict):
+            for port_name, port_spec in ports.items():
+                check_port(port_name, port_spec, "Port")
+
+        type_ports = spec.get("type_ports")
+        if isinstance(type_ports, dict):
+            for node_type, port_map in type_ports.items():
+                if not isinstance(port_map, dict):
+                    continue
+                for port_name, port_spec in port_map.items():
+                    check_port(port_name, port_spec, f"type_ports['{node_type}'] port")
+
+    @staticmethod
     def _validate_input_schema_shadowing(
         input_schema: dict[str, Any],
         node_ids: set[str],
@@ -385,7 +437,7 @@ class YamlValidator:
         node's output in expressions and auto-inference — a likely source
         of confusion.
         """
-        for field_name in input_schema:
+        for field_name in _input_schema_fields(input_schema):
             if field_name in node_ids:
                 result.add_warning(
                     f"input_schema field '{field_name}' has the same name as node "
@@ -685,11 +737,7 @@ class YamlValidator:
             namespace: Component namespace
             result: ValidationReport to add errors to
         """
-        # Schema-based validation
-        schema_errors = self.schema_validator.validate_node_spec(
-            node_type, params, namespace=namespace
-        )
-        for error in schema_errors:
+        for error in _node_requirement_errors(node_type, params):
             result.add_error(f"Node '{node_id}': {error}")
 
     def _validate_dependencies_with_cache(
@@ -1326,7 +1374,7 @@ class YamlValidator:
 
         Only runs when ``spec.input_schema`` is present (it is optional).
         """
-        declared_fields = frozenset(input_schema.keys())
+        declared_fields = frozenset(_input_schema_fields(input_schema))
 
         for node in nodes:
             node_id = node.get("metadata", {}).get("name", "")

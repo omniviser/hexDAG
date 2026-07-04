@@ -109,6 +109,7 @@ def _load_with_nodes(content: str) -> list[tuple[Any, yaml.Node | None]]:
 
 
 def _loc(node: yaml.Node | None, file: str | None, path: SourcePath) -> Location | None:
+    """Location from a node's start mark (1-based), or None."""
     if node is None or node.start_mark is None:
         return None
     return Location(
@@ -117,6 +118,7 @@ def _loc(node: yaml.Node | None, file: str | None, path: SourcePath) -> Location
 
 
 def _is_include(value: Any) -> bool:
+    """Whether *value* is an ``{"!include": path}`` directive."""
     return isinstance(value, dict) and len(value) == 1 and INCLUDE_KEY in value
 
 

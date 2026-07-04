@@ -2574,3 +2574,129 @@ class TestImplicitChainingCycle:
         }
         result = self.validator.validate(config)
         assert result.is_valid, result.errors
+
+
+class TestPortShapeValidation:
+    """Tests for port spec shape validation (single adapter vs pool)."""
+
+    def setup_method(self):
+        self.validator = YamlValidator()
+
+    @staticmethod
+    def _config(ports: dict, type_ports: dict | None = None) -> dict:
+        spec: dict = {
+            "ports": ports,
+            "nodes": [
+                {
+                    "kind": "function_node",
+                    "metadata": {"name": "node1"},
+                    "spec": {"fn": "json.loads"},
+                }
+            ],
+        }
+        if type_ports is not None:
+            spec["type_ports"] = type_ports
+        return {"kind": "Pipeline", "metadata": {"name": "test"}, "spec": spec}
+
+    def test_single_adapter_still_valid(self):
+        config = self._config({"llm": {"adapter": "llm:mock"}})
+        result = self.validator.validate(config)
+        assert result.is_valid, result.errors
+
+    def test_valid_pool(self):
+        config = self._config({
+            "llm": {
+                "adapters": [{"adapter": "llm:mock"}, {"adapter": "llm:mock"}],
+                "strategy": "failover",
+            }
+        })
+        result = self.validator.validate(config)
+        assert result.is_valid, result.errors
+
+    def test_pool_with_single_adapter_key_is_error(self):
+        config = self._config({
+            "llm": {"adapter": "llm:mock", "adapters": [{"adapter": "llm:mock"}]}
+        })
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("mutually exclusive" in e for e in result.errors)
+
+    def test_empty_pool_is_error(self):
+        config = self._config({"llm": {"adapters": []}})
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("non-empty list" in e for e in result.errors)
+
+    def test_pool_member_without_adapter_key_is_error(self):
+        config = self._config({"llm": {"adapters": [{"config": {"model": "x"}}]}})
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("must declare 'adapter', 'ref', or 'name'" in e for e in result.errors)
+
+    def test_invalid_strategy_is_error(self):
+        config = self._config({
+            "llm": {"adapters": [{"adapter": "llm:mock"}], "strategy": "primary"}
+        })
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("invalid strategy" in e for e in result.errors)
+
+    def test_strategy_without_adapters_is_error(self):
+        config = self._config({"llm": {"adapter": "llm:mock", "strategy": "failover"}})
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("only valid together with 'adapters'" in e for e in result.errors)
+
+    def test_type_ports_pool_validated(self):
+        config = self._config(
+            {"llm": {"adapter": "llm:mock"}},
+            type_ports={"agent": {"llm": {"adapters": [], "strategy": "primary"}}},
+        )
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("type_ports['agent']" in e for e in result.errors)
+
+
+class TestInputSchemaJsonSchemaShape:
+    """Rule 5 unwraps JSON-Schema-shaped input_schema declarations."""
+
+    def setup_method(self):
+        from hexdag.compiler.yaml_validator import YamlValidator
+
+        self.validator = YamlValidator()
+
+    def _config(self, input_schema: dict) -> dict:
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "schema-shape"},
+            "spec": {
+                "input_schema": input_schema,
+                "nodes": [
+                    {
+                        "kind": "llm_node",
+                        "metadata": {"name": "draft"},
+                        "spec": {"human_message": "About {{$input.conversation_id}}"},
+                    }
+                ],
+            },
+        }
+
+    def test_json_schema_properties_are_field_names(self):
+        """{type: object, properties: {...}} must not false-flag $input refs."""
+        schema = {
+            "type": "object",
+            "properties": {"conversation_id": {"type": "string"}},
+            "required": ["conversation_id"],
+        }
+        result = self.validator.validate(self._config(schema))
+        assert result.is_valid, result.errors
+
+    def test_json_schema_still_catches_unknown_fields(self):
+        schema = {"type": "object", "properties": {"other_field": {"type": "string"}}}
+        result = self.validator.validate(self._config(schema))
+        assert not result.is_valid
+        assert any("conversation_id" in e for e in result.errors)
+
+    def test_flat_schema_unchanged(self):
+        result = self.validator.validate(self._config({"conversation_id": "str"}))
+        assert result.is_valid, result.errors
