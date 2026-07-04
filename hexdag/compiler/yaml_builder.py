@@ -214,6 +214,43 @@ class YamlPipelineBuilder:
         self, yaml_content: str, use_cache: bool = True, environment: str | None = None
     ) -> tuple[DirectedGraph, PipelineConfig]:
         """Build DirectedGraph + PipelineConfig from YAML string."""
+        config = self._prepare_config(yaml_content, use_cache=use_cache, environment=environment)
+
+        # Skip if selected document is a Macro (already processed during prepare)
+        if config.get("kind") == "Macro":
+            # Return empty graph for macro-only documents
+            logger.info("Document contains only macro definitions, no pipeline to build")
+            return DirectedGraph(), PipelineConfig()
+
+        # Step 5: Validate structure (after includes are resolved)
+        config = self._validate_config(config)
+
+        # Step 6: Build graph
+        graph = self._build_graph(config)
+
+        # Step 7: Extract pipeline config
+        pipeline_config = self._extract_pipeline_config(config)
+
+        logger.info(
+            "Built pipeline '{name}' with {nodes} nodes, {ports} ports, {policies} policies",
+            name=pipeline_config.metadata.get("name", "unknown"),
+            nodes=len(graph),
+            ports=len(pipeline_config.ports),
+            policies=len(pipeline_config.policies),
+        )
+
+        return graph, pipeline_config
+
+    def _prepare_config(
+        self, yaml_content: str, use_cache: bool = True, environment: str | None = None
+    ) -> dict[str, Any]:
+        """Parse, process definition documents, select environment, preprocess,
+        and register aliases/custom types (build steps 1-4.6).
+
+        This is the single source of truth for everything that must happen
+        BEFORE validation. Both the build path and the ``compile()`` validate
+        path go through here — never mirror these steps elsewhere.
+        """
         # Step 1: Parse YAML
         documents = self._parse_yaml(yaml_content, use_cache=use_cache)
 
@@ -259,11 +296,9 @@ class YamlPipelineBuilder:
         # Step 3: Select pipeline environment
         config = self._select_environment(documents, environment)
 
-        # Skip if selected document is a Macro (already processed above)
+        # Macro-only documents were already processed above — nothing to prepare
         if config.get("kind") == "Macro":
-            # Return empty graph for macro-only documents
-            logger.info("Document contains only macro definitions, no pipeline to build")
-            return DirectedGraph(), PipelineConfig()
+            return config
 
         # Step 4: Preprocess FIRST (includes must resolve before validation)
         for plugin in self.preprocess_plugins:
@@ -277,24 +312,7 @@ class YamlPipelineBuilder:
         # so that output_schema type names can pass validation
         self._register_custom_types(config)
 
-        # Step 5: Validate structure (after includes are resolved)
-        config = self._validate_config(config)
-
-        # Step 6: Build graph
-        graph = self._build_graph(config)
-
-        # Step 7: Extract pipeline config
-        pipeline_config = self._extract_pipeline_config(config)
-
-        logger.info(
-            "Built pipeline '{name}' with {nodes} nodes, {ports} ports, {policies} policies",
-            name=pipeline_config.metadata.get("name", "unknown"),
-            nodes=len(graph),
-            ports=len(pipeline_config.ports),
-            policies=len(pipeline_config.policies),
-        )
-
-        return graph, pipeline_config
+        return config
 
     # --- Core Logic ---
 

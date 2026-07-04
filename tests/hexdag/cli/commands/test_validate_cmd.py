@@ -116,7 +116,11 @@ class TestValidate:
                 assert exit_code in (0, None), "validation should pass once !include is expanded"
 
     def test_validate_missing_include_file(self, tmp_path) -> None:
-        """Missing include file reports a clean Preprocessing Error, exit code 1."""
+        """Missing include file reports a diagnostic error, exit code 1.
+
+        Rendered uniformly in the Errors section (no special-cased
+        'Preprocessing Error' label — one validation, one rendering).
+        """
         pipeline = {
             "apiVersion": "hexdag/v1",
             "kind": "Pipeline",
@@ -132,7 +136,8 @@ class TestValidate:
             exit_code = getattr(exc_info.value, "exit_code", getattr(exc_info.value, "code", None))
             assert exit_code == 1
             printed = " ".join(str(c) for c in mock_console.print.call_args_list)
-            assert "Preprocessing Error" in printed
+            assert "Validation failed" in printed
+            assert "missing.yaml" in printed
 
     def test_validate_with_explain(self, tmp_path) -> None:
         """Validate with --explain produces detailed output."""

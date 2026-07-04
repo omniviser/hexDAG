@@ -58,14 +58,23 @@ async def validate_yaml(request: ValidationRequest) -> ValidationResponse:
     # Use unified API for validation
     result = api.validation.validate(request.content, lenient=request.lenient)
 
-    errors: list[ValidationError] = []
+    # Structured diagnostics from the compiler carry severity and (once
+    # provenance lands) line/column information.
+    errors: list[ValidationError] = [
+        ValidationError(
+            line=diag.get("line"),
+            column=diag.get("column"),
+            message=diag["message"],
+            severity=diag.get("severity", "error"),
+        )
+        for diag in result.get("diagnostics", [])
+    ]
 
-    if not result.get("valid", False):
-        # Convert API error to ValidationError format
-        error_msg = result.get("error", "Unknown validation error")
+    if not result.get("valid", False) and not errors:
+        # Fallback for failures without structured diagnostics
         errors.append(
             ValidationError(
-                message=error_msg,
+                message=result.get("error", "Unknown validation error"),
                 severity="error",
             )
         )

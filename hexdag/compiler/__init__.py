@@ -7,6 +7,8 @@ from declarative YAML configurations, plus the configuration loader.
 
 # Import tags to register YAML custom tags
 from . import py_tag as _py_tag  # noqa: F401
+from .diagnostics import Diagnostic, Location
+from .staged import CompileResult, compile
 from .tag_discovery import discover_tags, get_known_tag_names, get_tag_schema
 from .yaml_builder import YamlPipelineBuilder
 
@@ -28,7 +30,11 @@ def __getattr__(name: str) -> object:
 
 
 __all__ = [
+    "CompileResult",
+    "Diagnostic",
+    "Location",
     "YamlPipelineBuilder",
+    "compile",
     "discover_tags",
     "get_known_tag_names",
     "get_tag_schema",

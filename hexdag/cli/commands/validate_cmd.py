@@ -4,20 +4,11 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin
-from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin
-from hexdag.compiler.preprocessing.template import TemplatePlugin
-from hexdag.compiler.yaml_validator import YamlValidator
-from hexdag.kernel import (
-    YamlPipelineBuilderError,
-    register_alias,
-    register_type_from_config,
-)
+from hexdag.compiler.staged import compile as compile_pipeline
 
 app = typer.Typer()
 console = Console()
@@ -64,49 +55,20 @@ def validate(
     hexdag validate pipeline.yaml --explain
     """
 
-    # Read YAML file
+    # One front door: the compiler's validate mode runs exactly the steps
+    # the build path runs (parse, includes, env vars, templates, alias and
+    # custom-type registration) before validating — nothing mirrored here.
     try:
-        with Path.open(yaml_file) as f:
-            content = f.read()
-            config = yaml.safe_load(content)
-    except yaml.YAMLError as e:
-        console.print(f"[red]✗ YAML Syntax Error:[/red] {e}")
-        raise typer.Exit(1) from e
+        result = compile_pipeline(yaml_file, mode="validate")
     except OSError as e:
         console.print(f"[red]✗ File Error:[/red] {e}")
         raise typer.Exit(1) from e
 
-    # Run the same preprocessing pipeline the builder applies before
-    # validation (include expansion, ${VAR} substitution, templating) so
-    # `validate` matches `build`. base_path uses the unresolved parent to
-    # mirror the builder (yaml_builder._temporary_base_path(yaml_file.parent)).
-    preprocess_plugins = [
-        IncludePreprocessPlugin(base_path=yaml_file.parent),
-        EnvironmentVariablePlugin(),
-        TemplatePlugin(),
-    ]
-    try:
-        for plugin in preprocess_plugins:
-            config = plugin.process(config)
-    except YamlPipelineBuilderError as e:
-        console.print(f"[red]✗ Preprocessing Error:[/red] {e}")
-        raise typer.Exit(1) from e
-
-    # Register user-defined aliases and custom types before validation,
-    # mirroring YamlPipelineBuilder (steps 4.5/4.6)
-    spec = config.get("spec", {}) if isinstance(config, dict) else {}
-    for alias, full_path in spec.get("aliases", {}).items():
-        register_alias(alias, full_path)
-    for type_name, type_config in spec.get("custom_types", {}).items():
-        register_type_from_config(type_name, type_config)
-
-    # Validate using YamlValidator
-    validator = YamlValidator()
-    result = validator.validate(config)
+    config = result.document or {}
 
     # Display results
     console.print()
-    if result:
+    if result.ok:
         console.print(f"[green]✓ Validation successful:[/green] {yaml_file}")
     else:
         console.print(f"[red]✗ Validation failed:[/red] {yaml_file}")
@@ -140,7 +102,7 @@ def validate(
     console.print()
 
     # Exit with error code if validation failed
-    if not result:
+    if not result.ok:
         raise typer.Exit(1)
 
 
@@ -253,6 +215,6 @@ Total Nodes: {len(nodes)}
 Errors: {len(result.errors)}
 Warnings: {len(result.warnings)}
 Suggestions: {len(result.suggestions)}
-Valid: {"[green]Yes[/green]" if result else "[red]No[/red]"}
+Valid: {"[green]Yes[/green]" if result.ok else "[red]No[/red]"}
 """
     console.print(Panel(summary_text.strip(), border_style="blue"))
