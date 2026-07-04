@@ -232,6 +232,15 @@ def resolve(kind: str) -> type[Any]:
     if kind in _builtin_aliases:
         kind = _builtin_aliases[kind]
 
+    # Namespace fallback: ``core:<alias>`` is equivalent to the bare
+    # registered alias — user aliases first (they override builtins).
+    if kind.startswith("core:"):
+        bare = kind[5:]
+        if bare in _user_aliases:
+            kind = _user_aliases[bare]
+        elif bare in _builtin_aliases:
+            kind = _builtin_aliases[bare]
+
     # Check __init_subclass__ registries for classes imported after bootstrap
     if "." not in kind:
         from hexdag.kernel.configurable import (

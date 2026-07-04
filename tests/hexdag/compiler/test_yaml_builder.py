@@ -2006,22 +2006,27 @@ class TestDeepScanInference:
     """
 
     def test_human_message_infers_dep_same_as_prompt_template(self):
-        """Identical ref in human_message vs prompt_template → identical graph."""
+        """Identical ref in human_message vs prompt_template → identical graph.
+
+        get_context precedes analyze: a ref-free node placed AFTER its
+        consumer would implicitly chain onto it, forming a cycle that the
+        validator now (correctly) rejects.
+        """
         template = """\
 - kind: data_node
   metadata: {{ name: unrelated }}
   spec:
     output: {{ x: 1 }}
 
-- kind: llm_node
-  metadata: {{ name: analyze }}
-  spec:
-    {field}: "Analyze {{{{get_context.load.description}}}}"
-
 - kind: data_node
   metadata: {{ name: get_context }}
   spec:
     output: {{ load: {{ description: "steel coils" }} }}
+
+- kind: llm_node
+  metadata: {{ name: analyze }}
+  spec:
+    {field}: "Analyze {{{{get_context.load.description}}}}"
 """
         deps_by_field = {}
         for field in ("prompt_template", "human_message"):

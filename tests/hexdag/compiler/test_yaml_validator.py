@@ -148,7 +148,7 @@ class TestYamlValidator:
         }
         result = self.validator.validate(config)
         assert not result.is_valid
-        assert any("Invalid type" in error for error in result.errors)
+        assert any("Unknown kind 'invalid_node'" in error for error in result.errors)
 
     def test_function_node_missing_fn(self):
         """Test function node without fn parameter."""
@@ -611,7 +611,7 @@ class TestManifestValidation:
         }
         result = self.validator.validate(config)
         assert not result.is_valid
-        assert any("Invalid type" in err for err in result.errors)
+        assert any("Unknown kind 'invalid_node'" in err for err in result.errors)
 
 
 class TestCompositeNodeValidation:
@@ -2452,3 +2452,125 @@ class TestInputSchemaShadowing:
         }
         result = self.validator.validate(config)
         assert not any("shadows" in w for w in result.warnings)
+
+
+class TestResolverAsTruthKinds:
+    """Kind validity delegates to the resolver — no parallel valid-types list."""
+
+    def setup_method(self):
+        from hexdag.compiler.yaml_validator import YamlValidator
+
+        self.validator = YamlValidator()
+
+    def _config_with_kind(self, kind: str, spec: dict | None = None) -> dict:
+        return {
+            "kind": "Pipeline",
+            "metadata": {"name": "test"},
+            "spec": {
+                "nodes": [
+                    {"kind": kind, "metadata": {"name": "n1"}, "spec": spec or {}},
+                ]
+            },
+        }
+
+    def test_namespaced_alias_validates(self):
+        """core:-prefixed aliases the resolver accepts must validate.
+
+        Regression: the old membership list rejected namespaced aliases like
+        core:service_call_node even though the resolver (and therefore the
+        builder) resolved them fine.
+        """
+        config = self._config_with_kind("core:service_call_node", {"service": "s", "method": "m"})
+        result = self.validator.validate(config)
+        assert result.is_valid, result.errors
+
+    def test_unknown_kind_gets_resolver_error_with_suggestion(self):
+        config = self._config_with_kind("llm_nodee", {"prompt_template": "x"})
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        error = next(e for e in result.errors if "Unknown kind" in e)
+        assert "llm_node" in error  # did-you-mean suggestion
+
+
+class TestImplicitChainingCycle:
+    """Cycle detection covers inferred refs + implicit sequential chaining."""
+
+    def setup_method(self):
+        from hexdag.compiler.yaml_validator import YamlValidator
+
+        self.validator = YamlValidator()
+
+    def test_chaining_onto_own_consumer_is_rejected(self):
+        """A ref-free node after its consumer chains back onto it → cycle.
+
+        Regression: this shape built fine before (validator checked declared
+        deps only; chaining edges materialized after validation).
+        """
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "cycle-test"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "llm_node",
+                        "metadata": {"name": "analyze"},
+                        "spec": {"prompt_template": "Use {{get_context.load}}"},
+                    },
+                    {
+                        "kind": "data_node",
+                        "metadata": {"name": "get_context"},
+                        "spec": {"output": {"load": "x"}},
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert not result.is_valid
+        assert any("Cycle detected" in e for e in result.errors)
+
+    def test_correct_ordering_still_valid(self):
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "no-cycle"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "data_node",
+                        "metadata": {"name": "get_context"},
+                        "spec": {"output": {"load": "x"}},
+                    },
+                    {
+                        "kind": "llm_node",
+                        "metadata": {"name": "analyze"},
+                        "spec": {"prompt_template": "Use {{get_context.load}}"},
+                    },
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid, result.errors
+
+    def test_core_namespace_covers_user_aliases(self):
+        """core:<alias> resolves whenever the bare alias is registered.
+
+        This is the contract app refactors rely on (e.g. core:step_call
+        where step_call is declared in spec.aliases).
+        """
+        from hexdag.kernel.resolver import register_alias
+
+        register_alias("step_call", "hexdag.stdlib.nodes.service_call_node.ServiceCallNode")
+        config = {
+            "kind": "Pipeline",
+            "metadata": {"name": "ns-alias"},
+            "spec": {
+                "nodes": [
+                    {
+                        "kind": "core:step_call",
+                        "metadata": {"name": "n1"},
+                        "spec": {"service": "s", "method": "m"},
+                    }
+                ]
+            },
+        }
+        result = self.validator.validate(config)
+        assert result.is_valid, result.errors

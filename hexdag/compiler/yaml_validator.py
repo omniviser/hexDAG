@@ -617,52 +617,18 @@ class YamlValidator:
 
             params = merged_params
 
-            # Validate node type
-            # Support both qualified (namespace:type) and simple (type) formats
-            if (
-                qualified_node_type not in self.valid_node_types
-                and node_type not in self.valid_node_types
-                and node_kind not in self.valid_node_types
+            # Kind validity: the resolver is the single source of truth
+            # (checked in _validate_spec_against_factory above). A validator
+            # constructed with an explicit valid_node_types set instead uses
+            # that set as a strict replacement list (embedder restriction).
+            if self._provided_node_types is not None and (
+                qualified_node_type not in self._provided_node_types
+                and node_type not in self._provided_node_types
+                and node_kind not in self._provided_node_types
             ):
-                # Show available types grouped by namespace
-                by_namespace: dict[str, list[str]] = {}
-                simple_types: list[str] = []
-                has_namespaced = False
-
-                for valid_type in sorted(self.valid_node_types):
-                    if ":" in valid_type:
-                        has_namespaced = True
-                        ns, nt = valid_type.split(":", 1)
-                        by_namespace.setdefault(ns, []).append(nt)
-                    else:
-                        # Legacy format without namespace
-                        simple_types.append(valid_type)
-
-                parts = []
-                if by_namespace:
-                    parts.append(
-                        ", ".join(
-                            f"{ns}:[{', '.join(types)}]"
-                            for ns, types in sorted(by_namespace.items())
-                        )
-                    )
-                if simple_types:
-                    parts.append(", ".join(sorted(simple_types)))
-
-                valid_types_str = ", ".join(parts) if parts else "none"
-
-                # Use simple node_type in error if no valid types have namespaces (legacy mode)
-                invalid_type_str = node_type if not has_namespaced else qualified_node_type
-
-                # Suggest close matches for likely typos
-                close = difflib.get_close_matches(
-                    node_kind, sorted(self.valid_node_types), n=3, cutoff=0.5
-                )
-                hint = f" Did you mean: {', '.join(close)}?" if close else ""
-
+                valid_types_str = ", ".join(sorted(self._provided_node_types))
                 result.add_error(
-                    f"Node '{node_id}': Invalid type '{invalid_type_str}'. "
-                    f"Valid types: {valid_types_str}.{hint}"
+                    f"Node '{node_id}': Invalid type '{node_type}'. Valid types: {valid_types_str}."
                 )
 
             # Validate node-specific requirements and schema
@@ -802,10 +768,58 @@ class YamlValidator:
                     )
 
         # Check for cycles using DirectedGraph's public static method
-        if cycle_message := DirectedGraph.detect_cycle(dependency_graph):
-            result.add_error(cycle_message)
+        # Cycle detection runs on the FULL edge set the builder will actually
+        # execute: declared deps + inferred refs + implicit sequential
+        # chaining. Checking only declared deps missed cycles introduced by
+        # chaining (a later ref-free node chains onto its own consumer).
+        effective_graph = self._effective_dependency_graph(nodes, node_ids, macro_instances)
+        if cycle_message := DirectedGraph.detect_cycle(effective_graph):
+            result.add_error(
+                f"{cycle_message} (includes inferred and implicit sequential dependencies)"
+            )
 
         return dependency_graph
+
+    @staticmethod
+    def _effective_dependency_graph(
+        nodes: list[dict[str, Any]],
+        node_ids: set[str],
+        macro_instances: set[str],
+    ) -> dict[str, set[str]]:
+        """The edge set the builder will execute, mirroring its merge rules.
+
+        Per node (in document order): explicit ``dependencies`` merged with
+        inferred references and ``wait_for``; nodes with none of those chain
+        implicitly onto the previous node. Macro exit nodes are approximated
+        by the macro instance name.
+        """
+        effective: dict[str, set[str]] = {}
+        previous: list[str] = []
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+
+            base = BaseNodeConfig.from_node_config(node)
+            explicit = set(base.dependencies or [])
+            wait_for = set(base.wait_for or [])
+            inferred = extract_refs_from_spec(
+                node.get("spec", {}), frozenset(node_ids - {node_id}), frozenset(macro_instances)
+            )
+
+            if explicit:
+                deps = explicit | wait_for | inferred
+            elif inferred or wait_for:
+                deps = inferred | wait_for
+            elif previous:
+                deps = set(previous)
+            else:
+                deps = set()
+
+            effective[node_id] = deps
+            previous = [node_id]
+
+        return effective
 
     def _validate_naming_collisions(
         self,
@@ -1183,11 +1197,29 @@ class YamlValidator:
         try:
             factory_obj = resolve(kind)
         except (ResolveError, Exception):
-            # Can't resolve — may be a custom type registered at runtime.
-            # Only warn for dotted paths (explicit module refs that should be importable).
+            # The resolver is the single source of truth for kinds: exactly
+            # what it resolves here is what the builder will resolve later.
+            if self._provided_node_types is not None:
+                # Embedder supplied an explicit replacement list — that list
+                # governs kind validity (checked in _validate_nodes), and
+                # its kinds are not expected to resolve here.
+                return
             if "." in kind:
                 result.add_error(
                     f"Node '{node_id}': Cannot resolve kind '{kind}'. Check the module path."
+                )
+            else:
+                from hexdag.kernel.resolver import (  # lazy: avoid circular import
+                    get_builtin_aliases,
+                    get_registered_aliases,
+                )
+
+                known = sorted(set(get_builtin_aliases()) | set(get_registered_aliases()))
+                close = difflib.get_close_matches(kind, known, n=3, cutoff=0.5)
+                hint = f" Did you mean: {', '.join(close)}?" if close else ""
+                result.add_error(
+                    f"Node '{node_id}': Unknown kind '{kind}'. Use a registered alias, "
+                    f"a namespaced alias (e.g. core:llm_node), or a full module path.{hint}"
                 )
             return
 
