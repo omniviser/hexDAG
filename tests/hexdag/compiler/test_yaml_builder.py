@@ -914,92 +914,63 @@ class TestSecretDeferral:
 # ============================================================================
 
 
-class TestIncludePreprocessPlugin:
-    """Tests for include directive processing."""
+class TestIncludesThroughBuilder:
+    """Includes expand during the parse stage; the builder path just works.
 
-    def test_absolute_path_rejected(self, tmp_path: Path) -> None:
-        """Test that absolute paths are rejected for security."""
-        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
+    Direct expansion semantics (anchors, security, circular detection,
+    provenance) are covered in tests/hexdag/compiler/staged/test_parse.py.
+    """
 
-        plugin = IncludePreprocessPlugin(base_path=tmp_path)
-        config = {"!include": "/etc/passwd"}
+    def test_builder_expands_dict_include(self, tmp_path: Path) -> None:
+        (tmp_path / "node.yaml").write_text(
+            "kind: function_node\nmetadata:\n  name: included_node\nspec:\n  fn: json.loads\n"
+        )
+        pipeline = (
+            "apiVersion: hexdag/v1\n"
+            "kind: Pipeline\n"
+            "metadata:\n"
+            "  name: include-through-builder\n"
+            "spec:\n"
+            "  nodes:\n"
+            '    - "!include": ./node.yaml\n'
+        )
+        builder = YamlPipelineBuilder(base_path=tmp_path)
+        graph, _ = builder.build_from_yaml_string(pipeline)
+        assert "included_node" in graph.nodes
 
-        with pytest.raises(YamlPipelineBuilderError, match="Absolute paths not allowed"):
-            plugin.process(config)
+    def test_builder_records_include_provenance(self, tmp_path: Path) -> None:
+        (tmp_path / "node.yaml").write_text(
+            "kind: function_node\nmetadata:\n  name: included_node\nspec:\n  fn: json.loads\n"
+        )
+        pipeline = (
+            "apiVersion: hexdag/v1\n"
+            "kind: Pipeline\n"
+            "metadata:\n"
+            "  name: include-provenance\n"
+            "spec:\n"
+            "  nodes:\n"
+            '    - "!include": ./node.yaml\n'
+        )
+        builder = YamlPipelineBuilder(base_path=tmp_path)
+        builder.build_from_yaml_string(pipeline)
+        loc = builder.last_source_map.at(("spec", "nodes", 0, "metadata", "name"))
+        assert loc is not None
+        assert loc.file is not None and loc.file.endswith("node.yaml")
+        assert loc.line == 3
 
-    def test_max_depth_exceeded(self, tmp_path: Path) -> None:
-        """Test that max nesting depth is enforced."""
-        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
-
-        # Create a simple YAML file
-        (tmp_path / "test.yaml").write_text("key: value")
-
-        plugin = IncludePreprocessPlugin(base_path=tmp_path, max_depth=0)
-        config = {"!include": "test.yaml"}
-
-        with pytest.raises(YamlPipelineBuilderError, match="nesting too deep"):
-            plugin.process(config)
-
-    def test_file_not_found_error(self, tmp_path: Path) -> None:
-        """Test clear error message for missing include file."""
-        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
-
-        plugin = IncludePreprocessPlugin(base_path=tmp_path)
-        config = {"!include": "nonexistent.yaml"}
-
-        with pytest.raises(YamlPipelineBuilderError, match="Include file not found"):
-            plugin.process(config)
-
-    def test_anchor_not_found_error(self, tmp_path: Path) -> None:
-        """Test error when anchor doesn't exist in include file."""
-        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
-
-        # Create include file without the anchor
-        (tmp_path / "base.yaml").write_text("existing_key: value")
-
-        plugin = IncludePreprocessPlugin(base_path=tmp_path)
-        config = {"!include": "base.yaml#nonexistent_anchor"}
-
-        with pytest.raises(YamlPipelineBuilderError, match="Anchor.*not found"):
-            plugin.process(config)
-
-    def test_simple_include(self, tmp_path: Path) -> None:
-        """Test simple file inclusion."""
-        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
-
-        # Create include file
-        (tmp_path / "shared.yaml").write_text("shared_key: shared_value")
-
-        plugin = IncludePreprocessPlugin(base_path=tmp_path)
-        config = {"config": {"!include": "shared.yaml"}}
-
-        result = plugin.process(config)
-
-        assert result["config"]["shared_key"] == "shared_value"
-
-    def test_anchor_include(self, tmp_path: Path) -> None:
-        """Test inclusion with anchor reference."""
-        from hexdag.compiler.yaml_builder import IncludePreprocessPlugin
-
-        # Create include file with multiple anchors
-        (tmp_path / "configs.yaml").write_text("""
-dev:
-  debug: true
-prod:
-  debug: false
-""")
-
-        plugin = IncludePreprocessPlugin(base_path=tmp_path)
-        config = {"settings": {"!include": "configs.yaml#prod"}}
-
-        result = plugin.process(config)
-
-        assert result["settings"]["debug"] is False
-
-
-# ============================================================================
-# Validation Warnings Tests
-# ============================================================================
+    def test_builder_rejects_missing_include(self, tmp_path: Path) -> None:
+        pipeline = (
+            "apiVersion: hexdag/v1\n"
+            "kind: Pipeline\n"
+            "metadata:\n"
+            "  name: broken\n"
+            "spec:\n"
+            "  nodes:\n"
+            '    - "!include": ./missing.yaml\n'
+        )
+        builder = YamlPipelineBuilder(base_path=tmp_path)
+        with pytest.raises(YamlPipelineBuilderError, match="missing.yaml"):
+            builder.build_from_yaml_string(pipeline)
 
 
 class TestValidationWarnings:

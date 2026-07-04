@@ -25,7 +25,9 @@ from hexdag.compiler.diagnostics import (
     LEGACY_INFO,
     LEGACY_WARNING,
     Diagnostic,
+    Location,
 )
+from hexdag.compiler.staged.parse import IncludeError, parse_source
 from hexdag.kernel.exceptions import YamlPipelineBuilderError
 
 if TYPE_CHECKING:
@@ -95,6 +97,7 @@ def compile(  # noqa: A001 - deliberate: this IS the compiler's compile()
     base_path: Path | None = None,
     use_cache: bool = True,
     lenient: bool = False,
+    fragment: bool = False,
     raise_on_error: bool | None = None,
 ) -> CompileResult:
     """Compile a pipeline manifest.
@@ -113,6 +116,11 @@ def compile(  # noqa: A001 - deliberate: this IS the compiler's compile()
         Structure-only validation for contexts without files/env vars
         (servers, CI): ``!include`` entries are replaced by placeholders and
         preprocessing is skipped. Implies ``mode="validate"`` semantics.
+    fragment:
+        Validate a fragment file (a root-level node list included by
+        pipelines via ``!include``) standalone. References to nodes that
+        only exist in including pipelines are reported as warnings, not
+        errors. Implies ``mode="validate"`` semantics.
     raise_on_error:
         Override the raising behavior of build mode (e.g. the API layer sets
         ``False`` to receive failures as diagnostics). Ignored in validate
@@ -122,15 +130,19 @@ def compile(  # noqa: A001 - deliberate: this IS the compiler's compile()
         YamlPipelineBuilder,
     )
 
+    entry_file = str(source) if isinstance(source, Path) else None
     yaml_content, base_path = _resolve_source(source, base_path)
 
     if lenient:
         return _compile_lenient(yaml_content)
 
+    if fragment:
+        return _compile_fragment(yaml_content, entry_file, base_path)
+
     builder = YamlPipelineBuilder(base_path=base_path)
 
     if mode == "validate":
-        return _compile_validate(builder, yaml_content, environment, use_cache)
+        return _compile_validate(builder, yaml_content, environment, use_cache, entry_file)
 
     should_raise = True if raise_on_error is None else raise_on_error
     return _compile_build(builder, yaml_content, environment, use_cache, should_raise)
@@ -162,20 +174,43 @@ def _report_diagnostics(report: ValidationReport) -> list[Diagnostic]:
     return diags
 
 
-def _error_diag(message: str, *, stage: str) -> Diagnostic:
+def _error_diag(message: str, *, stage: str, loc: Location | None = None) -> Diagnostic:
     """Build a legacy-coded error diagnostic."""
-    return Diagnostic(code=LEGACY_ERROR, severity="error", message=message, stage=stage)
+    return Diagnostic(code=LEGACY_ERROR, severity="error", message=message, stage=stage, loc=loc)
+
+
+def _yaml_error_loc(e: yaml.YAMLError, entry_file: str | None) -> Location | None:
+    """Location from a MarkedYAMLError's problem mark, when available."""
+    mark = getattr(e, "problem_mark", None)
+    if mark is None:
+        return None
+    return Location(file=entry_file, line=mark.line + 1, column=mark.column + 1)
 
 
 def _compile_validate(
-    builder: Any, yaml_content: str, environment: str | None, use_cache: bool
+    builder: Any,
+    yaml_content: str,
+    environment: str | None,
+    use_cache: bool,
+    entry_file: str | None = None,
 ) -> CompileResult:
     """Stages 1-5, never raises."""
     try:
-        config = builder._prepare_config(yaml_content, use_cache=use_cache, environment=environment)
+        config = builder._prepare_config(
+            yaml_content, use_cache=use_cache, environment=environment, entry_file=entry_file
+        )
+    except IncludeError as e:
+        return CompileResult(
+            diagnostics=[_error_diag(str(e), stage="parse", loc=e.loc)],
+            error_type="IncludeError",
+        )
     except yaml.YAMLError as e:
         return CompileResult(
-            diagnostics=[_error_diag(f"YAML syntax error: {e}", stage="parse")],
+            diagnostics=[
+                _error_diag(
+                    f"YAML syntax error: {e}", stage="parse", loc=_yaml_error_loc(e, entry_file)
+                )
+            ],
             error_type="YAMLError",
         )
     except YamlPipelineBuilderError as e:
@@ -262,6 +297,105 @@ def _strip_includes(
         return result
 
     return obj
+
+
+# ---------------------------------------------------------------------------
+# Fragment mode: validate include-fragments (root-level node lists) standalone
+# ---------------------------------------------------------------------------
+
+# Validator findings that reference nodes OUTSIDE the fragment — real nodes in
+# the including pipeline. Downgraded to warnings in fragment mode.
+_EXTERNAL_REF_MARKERS = (
+    "' does not exist",
+    "Unknown reference '",
+)
+
+
+def _compile_fragment(
+    yaml_content: str, entry_file: str | None, base_path: Path | None
+) -> CompileResult:
+    """Validate a fragment file standalone. Never raises."""
+    from hexdag.compiler.yaml_validator import (  # lazy: package init imports staged first
+        YamlValidator,
+    )
+
+    try:
+        parsed = parse_source(yaml_content, entry_file=entry_file, base_path=base_path)
+    except IncludeError as e:
+        return CompileResult(
+            diagnostics=[_error_diag(str(e), stage="parse", loc=e.loc)], error_type="IncludeError"
+        )
+    except yaml.YAMLError as e:
+        return CompileResult(
+            diagnostics=[
+                _error_diag(
+                    f"YAML syntax error: {e}", stage="parse", loc=_yaml_error_loc(e, entry_file)
+                )
+            ],
+            error_type="YAMLError",
+        )
+
+    doc = parsed.docs[0] if parsed.docs else None
+
+    if isinstance(doc, dict) and "kind" in doc:
+        # A full manifest, not a fragment — validate normally
+        report = YamlValidator().validate(doc)
+        return CompileResult(document=doc, diagnostics=_report_diagnostics(report))
+
+    if isinstance(doc, dict):
+        # Mapping fragment (e.g. a port definition merged into spec.ports):
+        # nothing structural to validate beyond parseability.
+        return CompileResult(
+            document=doc,
+            diagnostics=[
+                Diagnostic(
+                    code=LEGACY_INFO,
+                    severity="info",
+                    message="Mapping fragment: parsed OK (validated in the including pipeline)",
+                    stage="validate",
+                )
+            ],
+        )
+
+    if not isinstance(doc, list):
+        return CompileResult(
+            diagnostics=[
+                _error_diag(
+                    f"Fragment must be a node list or mapping, got {type(doc).__name__}",
+                    stage="parse",
+                )
+            ],
+            error_type="ParseError",
+        )
+
+    # Node-list fragment: validate inside a synthetic pipeline; references to
+    # nodes the fragment doesn't define are expected (the including pipeline
+    # provides them) — downgrade those findings to warnings.
+    name = Path(entry_file).stem if entry_file else "fragment"
+    synthetic = {
+        "apiVersion": "hexdag/v1",
+        "kind": "Pipeline",
+        "metadata": {"name": f"fragment-{name}"},
+        "spec": {"nodes": doc},
+    }
+    report = YamlValidator().validate(synthetic)
+
+    diagnostics: list[Diagnostic] = []
+    for diag in _report_diagnostics(report):
+        if diag.severity == "error" and any(m in diag.message for m in _EXTERNAL_REF_MARKERS):
+            diagnostics.append(
+                Diagnostic(
+                    code=LEGACY_WARNING,
+                    severity="warning",
+                    message=f"{diag.message} (external to this fragment — "
+                    f"expected to be provided by the including pipeline)",
+                    stage="validate",
+                )
+            )
+        else:
+            diagnostics.append(diag)
+
+    return CompileResult(document=synthetic, diagnostics=diagnostics)
 
 
 def _compile_lenient(yaml_content: str) -> CompileResult:

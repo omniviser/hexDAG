@@ -39,6 +39,17 @@ def validate(
             help="Show detailed explanation of validation process",
         ),
     ] = False,
+    fragment: Annotated[
+        bool,
+        typer.Option(
+            "--fragment",
+            "-f",
+            help=(
+                "Validate an include-fragment (root-level node list) standalone; "
+                "references to nodes from including pipelines become warnings"
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Validate a YAML pipeline file against node schemas.
 
@@ -53,13 +64,14 @@ def validate(
     --------
     hexdag validate pipeline.yaml
     hexdag validate pipeline.yaml --explain
+    hexdag validate fragments/routing.yaml --fragment
     """
 
     # One front door: the compiler's validate mode runs exactly the steps
     # the build path runs (parse, includes, env vars, templates, alias and
     # custom-type registration) before validating — nothing mirrored here.
     try:
-        result = compile_pipeline(yaml_file, mode="validate")
+        result = compile_pipeline(yaml_file, mode="validate", fragment=fragment)
     except OSError as e:
         console.print(f"[red]✗ File Error:[/red] {e}")
         raise typer.Exit(1) from e
@@ -73,26 +85,31 @@ def validate(
     else:
         console.print(f"[red]✗ Validation failed:[/red] {yaml_file}")
 
-    # Show warnings
-    if result.warnings:
+    def _render(diag: Any) -> str:
+        prefix = f"{diag.loc}: " if diag.loc and diag.loc.file else ""
+        return f"{prefix}{diag.message}"
+
+    by_severity: dict[str, list[Any]] = {"error": [], "warning": [], "info": []}
+    for diag in result.diagnostics:
+        by_severity[diag.severity].append(diag)
+
+    if by_severity["warning"]:
         console.print()
         console.print("[yellow]Warnings:[/yellow]")
-        for warning in result.warnings:
-            console.print(f"  [yellow]⚠[/yellow] {warning}")
+        for diag in by_severity["warning"]:
+            console.print(f"  [yellow]⚠[/yellow] {_render(diag)}")
 
-    # Show errors
-    if result.errors:
+    if by_severity["error"]:
         console.print()
         console.print("[red]Errors:[/red]")
-        for error in result.errors:
-            console.print(f"  [red]✗[/red] {error}")
+        for diag in by_severity["error"]:
+            console.print(f"  [red]✗[/red] {_render(diag)}")
 
-    # Show suggestions
-    if result.suggestions:
+    if by_severity["info"]:
         console.print()
         console.print("[blue]Suggestions:[/blue]")
-        for suggestion in result.suggestions:
-            console.print(f"  [blue]ℹ[/blue] {suggestion}")
+        for diag in by_severity["info"]:
+            console.print(f"  [blue]ℹ[/blue] {_render(diag)}")
 
     # Explain mode - show validation details
     if explain:

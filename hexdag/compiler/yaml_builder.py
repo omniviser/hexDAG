@@ -4,7 +4,8 @@ The builder orchestrates the pipeline from YAML to DirectedGraph:
 1. Parse YAML → 2. Select environment → 3. Validate → 4. Preprocess → 5. Build graph
 
 Plugins are extracted into focused modules:
-- ``preprocessing/``: IncludePreprocessPlugin, EnvironmentVariablePlugin, TemplatePlugin
+- ``staged/parse.py``: !include expansion with source provenance
+- ``preprocessing/``: EnvironmentVariablePlugin, TemplatePlugin
 - ``plugins/``: MacroDefinitionPlugin, MacroEntityPlugin, NodeEntityPlugin
 """
 
@@ -12,11 +13,8 @@ from __future__ import annotations
 
 import warnings
 from contextlib import contextmanager
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol
-
-import yaml
 
 # Re-export extracted classes for backward compatibility.
 # Existing code that imports from ``yaml_builder`` continues to work.
@@ -27,9 +25,9 @@ from hexdag.compiler.plugins.macro_entity import MacroEntityPlugin  # noqa: F401
 from hexdag.compiler.plugins.middleware_definition import MiddlewareDefinitionPlugin  # noqa: F401
 from hexdag.compiler.plugins.node_entity import NodeEntityPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.env_vars import EnvironmentVariablePlugin  # noqa: F401
-from hexdag.compiler.preprocessing.include import IncludePreprocessPlugin  # noqa: F401
 from hexdag.compiler.preprocessing.template import TemplatePlugin  # noqa: F401
 from hexdag.compiler.reference_resolver import extract_refs_from_spec
+from hexdag.compiler.staged.parse import parse_source, parse_source_cached
 from hexdag.compiler.yaml_validator import YamlValidator
 from hexdag.kernel.context.execution_context import RESERVED_NAMES
 from hexdag.kernel.domain.dag import DirectedGraph
@@ -127,7 +125,14 @@ class YamlPipelineBuilder:
             base_path: Base directory for resolving includes (default: cwd)
         """
         self.base_path = base_path or Path.cwd()
+        # Security root for !include resolution: fixed at construction, while
+        # base_path moves per file (see _temporary_base_path).
+        self._project_root = self.base_path
         self.validator = YamlValidator()
+
+        # Source map from the most recent _prepare_config run (provenance
+        # for diagnostics; consumed by hexdag.compiler.staged.compile).
+        self.last_source_map: Any = None
 
         # Plugins
         self.preprocess_plugins: list[PreprocessPlugin] = []
@@ -149,8 +154,9 @@ class YamlPipelineBuilder:
 
     def _register_default_plugins(self) -> None:
         """Register default plugins for common use cases."""
-        # Preprocessing plugins (run before building)
-        self.preprocess_plugins.append(IncludePreprocessPlugin(base_path=self.base_path))
+        # Preprocessing plugins (run before building). !include expansion is
+        # NOT a plugin anymore — it happens in the parse stage, where source
+        # marks are alive (hexdag.compiler.staged.parse).
         self.preprocess_plugins.append(EnvironmentVariablePlugin())
         self.preprocess_plugins.append(TemplatePlugin())
 
@@ -175,19 +181,11 @@ class YamlPipelineBuilder:
         original_base = self.base_path
         self.base_path = new_base
 
-        # Update include plugin base paths
-        for plugin in self.preprocess_plugins:
-            if isinstance(plugin, IncludePreprocessPlugin):
-                plugin.base_path = new_base
-
         try:
             yield
         finally:
             # Always restore original state
             self.base_path = original_base
-            for plugin in self.preprocess_plugins:
-                if isinstance(plugin, IncludePreprocessPlugin):
-                    plugin.base_path = original_base
 
     # --- Public API ---
 
@@ -242,7 +240,11 @@ class YamlPipelineBuilder:
         return graph, pipeline_config
 
     def _prepare_config(
-        self, yaml_content: str, use_cache: bool = True, environment: str | None = None
+        self,
+        yaml_content: str,
+        use_cache: bool = True,
+        environment: str | None = None,
+        entry_file: str | None = None,
     ) -> dict[str, Any]:
         """Parse, process definition documents, select environment, preprocess,
         and register aliases/custom types (build steps 1-4.6).
@@ -251,8 +253,17 @@ class YamlPipelineBuilder:
         BEFORE validation. Both the build path and the ``compile()`` validate
         path go through here — never mirror these steps elsewhere.
         """
-        # Step 1: Parse YAML
-        documents = self._parse_yaml(yaml_content, use_cache=use_cache)
+        # Step 1: Parse YAML with provenance; !include expands here so every
+        # element records the file:line it came from (fragments included).
+        parse = parse_source_cached if use_cache else parse_source
+        parsed = parse(
+            yaml_content,
+            entry_file=entry_file,
+            base_path=self.base_path,
+            project_root=self._project_root,
+        )
+        self.last_source_map = parsed.source_map
+        documents: list[dict[str, Any]] = list(parsed.docs)
 
         # Step 2: Process ALL documents for definitions first
         #         This allows Config and Macros to be defined in multi-document YAML
@@ -315,13 +326,6 @@ class YamlPipelineBuilder:
         return config
 
     # --- Core Logic ---
-
-    def _parse_yaml(self, yaml_content: str, use_cache: bool) -> list[dict[str, Any]]:
-        """Parse YAML into list of documents."""
-        if "---" in yaml_content:
-            return list(yaml.safe_load_all(yaml_content))
-        parsed = _parse_yaml_cached(yaml_content) if use_cache else yaml.safe_load(yaml_content)
-        return [parsed]
 
     def _select_environment(
         self, documents: list[dict[str, Any]], environment: str | None
@@ -791,12 +795,3 @@ class YamlPipelineBuilder:
 # ============================================================================
 # Utilities
 # ============================================================================
-
-
-@lru_cache(maxsize=32)
-def _parse_yaml_cached(yaml_content: str) -> Any:
-    """Cached YAML parsing.
-
-    Returns dict[str, Any] in practice, but yaml.safe_load returns Any.
-    """
-    return yaml.safe_load(yaml_content)

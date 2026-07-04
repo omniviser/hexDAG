@@ -229,3 +229,87 @@ class TestApiLayerAdapter:
         assert result["diagnostics"], "expected structured diagnostics"
         diag = result["diagnostics"][0]
         assert {"code", "severity", "message", "line", "column"} <= diag.keys()
+
+
+class TestFragmentMode:
+    """Fragments (root-level node lists) validate standalone."""
+
+    def test_node_list_fragment_validates(self):
+        content = """\
+- kind: function_node
+  metadata:
+    name: frag_node
+  spec:
+    fn: json.loads
+"""
+        result = compile(content, fragment=True)
+        assert result.ok
+        assert result.node_names == ["frag_node"]
+
+    def test_external_refs_become_warnings(self):
+        content = """\
+- kind: function_node
+  metadata:
+    name: frag_node
+  spec:
+    fn: json.loads
+    dependencies: [defined_in_including_pipeline]
+"""
+        result = compile(content, fragment=True)
+        assert result.ok, result.errors
+        assert any("external to this fragment" in w for w in result.warnings)
+
+    def test_internal_errors_stay_errors(self):
+        content = """\
+- kind: function_node
+  metadata:
+    name: frag_node
+"""
+        result = compile(content, fragment=True)
+        # function_node without fn is a genuine fragment-internal error
+        assert not result.ok
+
+    def test_mapping_fragment_is_info_only(self):
+        result = compile("llm:\n  adapter: mock\n", fragment=True)
+        assert result.ok
+        assert any("Mapping fragment" in s for s in result.suggestions)
+
+    def test_full_manifest_validates_normally(self):
+        content = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: not-a-fragment
+spec:
+  nodes: []
+"""
+        result = compile(content, fragment=True)
+        assert result.ok
+
+
+class TestLocatedDiagnostics:
+    """Parse/include failures carry file:line locations."""
+
+    def test_include_error_location(self, tmp_path):
+        pipeline = tmp_path / "p.yaml"
+        pipeline.write_text(
+            "apiVersion: hexdag/v1\n"
+            "kind: Pipeline\n"
+            "metadata:\n"
+            "  name: x\n"
+            "spec:\n"
+            "  nodes:\n"
+            '    - "!include": ./missing.yaml\n'
+        )
+        result = compile(pipeline, mode="validate")
+        assert not result.ok
+        diag = result.diagnostics[0]
+        assert diag.loc is not None
+        assert diag.loc.line == 7
+
+    def test_yaml_syntax_error_location(self):
+        result = compile("kind: Pipeline\nmetadata:\n  bad: [unclosed\n", mode="validate")
+        assert not result.ok
+        diag = result.diagnostics[0]
+        assert diag.loc is not None
+        assert diag.loc.line is not None
