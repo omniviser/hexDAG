@@ -313,3 +313,119 @@ class TestLocatedDiagnostics:
         diag = result.diagnostics[0]
         assert diag.loc is not None
         assert diag.loc.line is not None
+
+
+class TestValidateGreenImpliesBuildGreen:
+    """The one-validation invariant: what validates, builds.
+
+    Checks migrated from build-time raises must be flagged at validate
+    time (no exception), and pipelines that validate green must build.
+    """
+
+    RESERVED_NAME = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: reserved
+spec:
+  nodes:
+    - kind: function_node
+      metadata:
+        name: input
+      spec:
+        fn: json.loads
+"""
+
+    BROKEN_SWITCH = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: broken-switch
+spec:
+  nodes:
+    - kind: data_node
+      metadata:
+        name: seed
+      spec:
+        output: {x: 1}
+    - kind: composite_node
+      metadata:
+        name: router
+      spec:
+        mode: switch
+        route_downstream: true
+        branches:
+          - condition: "seed.x == 1"
+            action: does_not_exist
+"""
+
+    MACRO_OVERLAP = """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: macro-overlap
+spec:
+  nodes:
+    - kind: macro_invocation
+      metadata:
+        name: agent
+      spec:
+        macro: hexdag.stdlib.macros.ReasoningAgentMacro
+        config: {question: a}
+        inputs: {question: b}
+"""
+
+    @pytest.mark.parametrize(
+        ("yaml_content", "marker"),
+        [
+            (RESERVED_NAME, "reserved expression namespaces"),
+            (BROKEN_SWITCH, "Route target 'does_not_exist'"),
+            (MACRO_OVERLAP, "both 'config' and 'inputs'"),
+        ],
+    )
+    def test_migrated_build_errors_flagged_at_validate(self, yaml_content, marker):
+        result = compile(yaml_content, mode="validate")
+        assert not result.ok
+        assert any(marker in e for e in result.errors), result.errors
+
+    @pytest.mark.parametrize("yaml_content", [RESERVED_NAME, BROKEN_SWITCH, MACRO_OVERLAP])
+    def test_migrated_build_errors_never_raise_in_validate(self, yaml_content):
+        compile(yaml_content, mode="validate")  # must not raise
+
+    def test_valid_corpus_validate_green_implies_build_green(self):
+        corpus = [
+            VALID_PIPELINE,
+            """\
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: switch-ok
+spec:
+  nodes:
+    - kind: data_node
+      metadata:
+        name: seed
+      spec:
+        output: {x: 1}
+    - kind: composite_node
+      metadata:
+        name: router
+      spec:
+        mode: switch
+        route_downstream: true
+        branches:
+          - condition: "seed.x == 1"
+            action: handle
+    - kind: function_node
+      metadata:
+        name: handle
+      spec:
+        fn: json.dumps
+        wait_for: [router]
+""",
+        ]
+        for content in corpus:
+            validated = compile(content, mode="validate")
+            assert validated.ok, validated.errors
+            built = compile(content, mode="build")  # must not raise
+            assert built.graph is not None

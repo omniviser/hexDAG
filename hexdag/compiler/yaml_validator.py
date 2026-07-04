@@ -352,7 +352,69 @@ class YamlValidator:
             self._validate_input_refs_against_schema(nodes, input_schema, result)
             self._validate_input_schema_shadowing(input_schema, node_ids, result)
 
+        # Checks the builder used to raise AFTER validation — migrated here
+        # so validate-green implies build-green.
+        self._validate_build_invariants(nodes, node_ids, macro_instances, result)
+
         return result
+
+    @staticmethod
+    def _validate_build_invariants(
+        nodes: list[dict[str, Any]],
+        node_ids: set[str],
+        macro_instances: set[str],
+        result: ValidationReport,
+    ) -> None:
+        """Rules migrated from build-time raises (one-validation invariant).
+
+        Each of these used to surface as a ``YamlPipelineBuilderError``
+        during ``_build_graph``/plugins — after a green validation.
+        """
+        # 1. Node names must not collide with reserved expression namespaces
+        bad = node_ids & RESERVED_NAMES
+        if bad:
+            result.add_error(
+                f"Node names conflict with reserved expression namespaces: "
+                f"{sorted(bad)}. Choose different node names."
+            )
+
+        def _is_known(name: str) -> bool:
+            return name in node_ids or any(name.startswith(f"{mi}_") for mi in macro_instances)
+
+        for node in nodes:
+            node_id = node.get("metadata", {}).get("name")
+            if not node_id:
+                continue
+            spec = node.get("spec", {})
+
+            # 2. Switch routing targets must exist (route_downstream wiring)
+            if (
+                node.get("kind") == "composite_node"
+                and spec.get("mode") == "switch"
+                and spec.get("route_downstream")
+            ):
+                branches = spec.get("branches") or []
+                actions: list[str] = [
+                    str(b["action"]) for b in branches if isinstance(b, dict) and b.get("action")
+                ]
+                if spec.get("else_action"):
+                    actions.append(str(spec["else_action"]))
+                for action in actions:
+                    if not _is_known(action):
+                        result.add_error(
+                            f"Route target '{action}' in node '{node_id}' does not "
+                            f"exist. Available nodes: {sorted(node_ids)}"
+                        )
+
+            # 3. Macro invocations: config and inputs keys must not overlap
+            if node.get("kind") == "macro_invocation":
+                overlap = set(spec.get("config", {}) or {}) & set(spec.get("inputs", {}) or {})
+                if overlap:
+                    result.add_error(
+                        f"Macro '{node_id}': keys {sorted(overlap)} appear in both "
+                        f"'config' and 'inputs'. Use 'config' for macro initialization, "
+                        f"'inputs' for expansion parameters."
+                    )
 
     @staticmethod
     def _validate_ports(spec: dict[str, Any], result: ValidationReport) -> None:
@@ -1269,6 +1331,17 @@ class YamlValidator:
                     f"Node '{node_id}': Unknown kind '{kind}'. Use a registered alias, "
                     f"a namespaced alias (e.g. core:llm_node), or a full module path.{hint}"
                 )
+            return
+
+        # Resolved but not callable → the builder would fail; flag it here.
+        # (resolve() is annotated as returning a class, but runtime-registered
+        # components can be arbitrary objects.)
+        factory_value: Any = factory_obj
+        if not callable(factory_value):
+            result.add_error(
+                f"Node '{node_id}': Kind '{kind}' resolved to "
+                f"{type(factory_value).__name__}, which is not callable."
+            )
             return
 
         # Get callable to introspect
