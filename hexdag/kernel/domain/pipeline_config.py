@@ -195,6 +195,17 @@ class PipelineConfig(BaseModel):
           params:
             connection_string: ${DB_URL}
 
+      # Multi-adapter pool: adapters (list) + optional strategy replace
+      # the single adapter key; members are wrapped in a RoundRobin pool.
+      # ports:
+      #   llm:
+      #     adapters:
+      #       - adapter: llm:vertex
+      #         config: {project_id: "${GCP_AI1_PROJECT_ID}"}
+      #       - adapter: llm:vertex
+      #         config: {project_id: "${GCP_AI2_PROJECT_ID}"}
+      #     strategy: round_robin   # or: failover
+
       # Per-type port defaults
       type_ports:
         agent:

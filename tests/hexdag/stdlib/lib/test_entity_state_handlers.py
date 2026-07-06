@@ -249,3 +249,100 @@ class TestWriteAhead:
         # History should NOT contain the failed transition
         history = es._history.get(("ticket", "T-1"), [])
         assert all(t.to_state != "INVESTIGATING" for t in history)
+
+
+class TestComposableHandlerLists:
+    """Multiple handlers per entity type: ordered dispatch + rollback."""
+
+    @pytest.mark.asyncio()
+    async def test_handlers_fire_in_registration_order(self):
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        order = []
+
+        async def first(**kwargs):
+            order.append("first")
+
+        async def second(**kwargs):
+            order.append("second")
+
+        es.register_handler("ticket", first)
+        es.register_handler("ticket", second)
+        await es.atransition("ticket", "T-1", "INVESTIGATING")
+
+        assert order == ["first", "second"]
+
+    @pytest.mark.asyncio()
+    async def test_second_handler_failure_rolls_back_state(self):
+        """Failure rolls state back, but earlier handlers are not compensated."""
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        side_effects = []
+
+        async def first(**kwargs):
+            side_effects.append("first-ran")
+
+        async def second(**kwargs):
+            raise RuntimeError("second handler failed")
+
+        es.register_handler("ticket", first)
+        es.register_handler("ticket", second)
+
+        with pytest.raises(RuntimeError, match="second handler failed"):
+            await es.atransition("ticket", "T-1", "INVESTIGATING")
+
+        # State rolled back...
+        state = await es.aget_state("ticket", "T-1")
+        assert state["state"] == "OPEN"
+        # ...but the first handler's side effect is NOT compensated
+        assert side_effects == ["first-ran"]
+
+    @pytest.mark.asyncio()
+    async def test_mixed_payload_signatures(self):
+        """Payload is delivered only to handlers that declare it."""
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        seen = {}
+
+        async def payload_aware(
+            entity_type, entity_id, from_state, to_state, reason, context, payload=None
+        ):
+            seen["payload_aware"] = payload
+
+        async def legacy(entity_type, entity_id, from_state, to_state, reason, context):
+            seen["legacy"] = "called"
+
+        es.register_handler("ticket", payload_aware)
+        es.register_handler("ticket", legacy)
+        await es.atransition("ticket", "T-1", "INVESTIGATING", payload={"assignee": "alice"})
+
+        assert seen["payload_aware"] == {"assignee": "alice"}
+        assert seen["legacy"] == "called"
+
+    @pytest.mark.asyncio()
+    async def test_re_registration_appends_not_replaces(self):
+        es = EntityState()
+        es.register_machine(_make_ticket_machine())
+        await es.aregister_entity("ticket", "T-1")
+
+        calls = []
+
+        async def handler_a(**kwargs):
+            calls.append("a")
+
+        async def handler_b(**kwargs):
+            calls.append("b")
+
+        es.register_handler("ticket", handler_a)
+        es.register_handler("ticket", handler_b)
+
+        assert len(es._transition_handlers["ticket"]) == 2
+
+        await es.atransition("ticket", "T-1", "INVESTIGATING")
+        assert calls == ["a", "b"]

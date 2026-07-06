@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from hexdag.kernel.ports.notification import Notification
+from hexdag.kernel.ports.messaging import Messaging, SupportsNotification
 from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 
 class MockNotification(
     HexDAGAdapter,
-    Notification,
+    Messaging,
+    SupportsNotification,
     yaml_alias="mock_notification",
     port="notification",
 ):
-    """Mock implementation of the Notification port for testing.
+    """Mock implementation of the notification capability for testing.
 
     Records every sent notification for inspection and can simulate
     delivery failures.

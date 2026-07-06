@@ -358,3 +358,167 @@ class TestOrchestratorFactoryIntegration:
         )
 
         assert orchestrator is not None
+
+
+class TestAdapterPools:
+    """Tests for multi-adapter pool ports (``adapters:`` list + ``strategy``)."""
+
+    def test_pool_instantiation(self) -> None:
+        from hexdag.stdlib.middleware.round_robin import RoundRobin
+
+        factory = OrchestratorFactory()
+        ports = factory._instantiate_ports({
+            "llm": {
+                "adapters": [
+                    {"adapter": "llm:mock"},
+                    {"adapter": "hexdag.stdlib.adapters.mock.MockLLM"},
+                ],
+                "strategy": "failover",
+            }
+        })
+
+        pool = ports["llm"]
+        assert isinstance(pool, RoundRobin)
+        assert len(pool._adapters) == 2
+        assert pool._strategy == "failover"
+
+    def test_pool_default_strategy_is_round_robin(self) -> None:
+        from hexdag.stdlib.middleware.round_robin import RoundRobin
+
+        factory = OrchestratorFactory()
+        ports = factory._instantiate_ports({"llm": {"adapters": [{"adapter": "llm:mock"}]}})
+
+        pool = ports["llm"]
+        assert isinstance(pool, RoundRobin)
+        assert pool._strategy == "round_robin"
+
+    def test_pool_member_config_applied(self) -> None:
+        factory = OrchestratorFactory()
+        ports = factory._instantiate_ports({
+            "llm": {
+                "adapters": [
+                    {"adapter": "llm:mock", "config": {"responses": ["one"]}},
+                    {"adapter": "llm:mock", "config": {"responses": ["two"]}},
+                ]
+            }
+        })
+
+        members = ports["llm"]._adapters
+        assert members[0].responses == ["one"]
+        assert members[1].responses == ["two"]
+
+    def test_pool_conflicting_keys_error(self) -> None:
+        from hexdag.kernel.exceptions import ComponentInstantiationError
+
+        factory = OrchestratorFactory()
+        with pytest.raises(ComponentInstantiationError, match="mutually exclusive"):
+            factory._instantiate_ports({
+                "llm": {
+                    "adapter": "llm:mock",
+                    "adapters": [{"adapter": "llm:mock"}],
+                }
+            })
+
+    def test_pool_empty_list_error(self) -> None:
+        from hexdag.kernel.exceptions import ComponentInstantiationError
+
+        factory = OrchestratorFactory()
+        with pytest.raises(ComponentInstantiationError, match="non-empty list"):
+            factory._instantiate_ports({"llm": {"adapters": []}})
+
+    def test_pool_invalid_strategy_error(self) -> None:
+        from hexdag.kernel.exceptions import ComponentInstantiationError
+
+        factory = OrchestratorFactory()
+        with pytest.raises(ComponentInstantiationError, match=r"(?i)invalid strategy"):
+            factory._instantiate_ports({
+                "llm": {
+                    "adapters": [{"adapter": "llm:mock"}],
+                    "strategy": "primary",
+                }
+            })
+
+    def test_strategy_without_adapters_error(self) -> None:
+        from hexdag.kernel.exceptions import ComponentInstantiationError
+
+        factory = OrchestratorFactory()
+        with pytest.raises(ComponentInstantiationError, match="without 'adapters'"):
+            factory._instantiate_ports({"llm": {"adapter": "llm:mock", "strategy": "failover"}})
+
+    def test_create_orchestrator_with_pool_and_middleware(self) -> None:
+        """Pool spec composes with the existing middleware key."""
+        factory = OrchestratorFactory()
+        config = PipelineConfig(
+            ports={
+                "llm": {
+                    "adapters": [
+                        {"adapter": "llm:mock"},
+                        {"adapter": "llm:mock"},
+                    ],
+                    "strategy": "round_robin",
+                    "middleware": [],
+                }
+            },
+            type_ports={},
+            policies={},
+            metadata={"name": "pool-test"},
+            nodes=[],
+        )
+
+        orchestrator = factory.create_orchestrator(config)
+        assert orchestrator is not None
+
+
+class TestStateMachineHandlerLists:
+    """YAML handlers.on_transition accepts a single path or a list of paths."""
+
+    @staticmethod
+    def _install_handler_module():
+        import sys
+
+        module = type(sys)("handler_test_module")
+
+        async def handler_one(**kwargs):
+            return None
+
+        async def handler_two(**kwargs):
+            return None
+
+        module.handler_one = handler_one
+        module.handler_two = handler_two
+        sys.modules["handler_test_module"] = module
+        return module
+
+    @staticmethod
+    def _machine(on_transition) -> dict:
+        return {
+            "ticket": {
+                "initial": "OPEN",
+                "transitions": {"OPEN": ["CLOSED"]},
+                "handlers": {"on_transition": on_transition},
+            }
+        }
+
+    def test_single_string_registers_one_handler(self) -> None:
+        module = self._install_handler_module()
+        services: dict = {}
+        OrchestratorFactory._register_state_machines(
+            self._machine("handler_test_module.handler_one"), services
+        )
+        entity_state = services["entity_state"]
+        handlers = entity_state._transition_handlers["ticket"]
+        assert len(handlers) == 1
+        assert handlers[0][0] is module.handler_one
+
+    def test_list_registers_handlers_in_order(self) -> None:
+        module = self._install_handler_module()
+        services: dict = {}
+        OrchestratorFactory._register_state_machines(
+            self._machine(["handler_test_module.handler_one", "handler_test_module.handler_two"]),
+            services,
+        )
+        entity_state = services["entity_state"]
+        handlers = entity_state._transition_handlers["ticket"]
+        assert len(handlers) == 2
+        assert handlers[0][0] is module.handler_one
+        assert handlers[1][0] is module.handler_two

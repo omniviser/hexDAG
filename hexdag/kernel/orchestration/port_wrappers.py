@@ -31,6 +31,13 @@ from hexdag.kernel.tool_router import ToolRouter
 logger = get_logger(__name__)
 
 
+def build_adapter_pool(members: list[Any], strategy: str) -> Any:
+    """Wrap pre-instantiated adapters in a load-balancing pool."""
+    from hexdag.stdlib.middleware.round_robin import RoundRobin  # lazy: kernel→stdlib boundary
+
+    return RoundRobin(members, strategy=strategy)  # type: ignore[arg-type]
+
+
 def _resolve_middleware_class(module_path: str) -> type:
     """Resolve a middleware module path to a class."""
     from hexdag.kernel.resolver import resolve  # lazy: avoid circular import

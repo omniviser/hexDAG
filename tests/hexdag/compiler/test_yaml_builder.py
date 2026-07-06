@@ -2078,3 +2078,52 @@ class TestDeepScanInference:
 """
         graph = _build_from_nodes(nodes)
         assert "lookup" in graph.nodes["emailer"].deps
+
+
+class TestAdapterPoolYaml:
+    """End-to-end: multi-adapter pool declared in YAML becomes a RoundRobin port."""
+
+    POOL_YAML = """
+apiVersion: hexdag/v1
+kind: Pipeline
+metadata:
+  name: pool-pipeline
+spec:
+  ports:
+    llm:
+      adapters:
+        - adapter: llm:mock
+          config:
+            responses: "from-one"
+        - adapter: llm:mock
+          config:
+            responses: "${POOL_TEST_RESPONSE:pooled-default}"
+      strategy: failover
+  nodes:
+    - kind: llm_node
+      metadata:
+        name: ask
+      spec:
+        human_message: "hi"
+"""
+
+    def test_pool_port_built_and_instantiated(self, monkeypatch) -> None:
+        from hexdag.kernel.orchestration.orchestrator_factory import OrchestratorFactory
+        from hexdag.stdlib.middleware.round_robin import RoundRobin
+
+        monkeypatch.delenv("POOL_TEST_RESPONSE", raising=False)
+
+        builder = YamlPipelineBuilder()
+        graph, config = builder.build_from_yaml_string(self.POOL_YAML)
+        assert "ask" in graph.nodes
+
+        factory = OrchestratorFactory()
+        pool = factory._instantiate_ports(config.ports)["llm"]
+
+        assert isinstance(pool, RoundRobin)
+        assert pool._strategy == "failover"
+        members = pool._adapters
+        assert len(members) == 2
+        assert members[0].responses == ["from-one"]
+        # ${VAR:default} resolved per member (env unset -> default)
+        assert members[1].responses == ["pooled-default"]

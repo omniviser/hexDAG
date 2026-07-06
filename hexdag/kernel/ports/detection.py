@@ -56,6 +56,10 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
     from hexdag.kernel.ports.memory import (
         Memory,  # lazy: loaded on first use to avoid import-time side effects
     )
+    from hexdag.kernel.ports.messaging import (  # lazy: deferred port loading
+        SupportsEmail,
+        SupportsNotification,
+    )
     from hexdag.kernel.ports.pipeline_spawner import (
         PipelineSpawner,  # lazy: loaded on first use to avoid import-time side effects
     )
@@ -103,6 +107,8 @@ def _build_registry() -> Sequence[tuple[str, tuple[type, ...]]]:
         ("tool_router", (ToolRouter,)),
         # VFS
         ("vfs", (VFS,)),
+        # Messaging — email/notification capabilities (before generic api_call)
+        ("messaging", (SupportsEmail, SupportsNotification)),
         # API call — last before "unknown" (most generic HTTP port)
         ("api_call", (APICall,)),
     )

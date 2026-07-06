@@ -46,6 +46,14 @@ from hexdag.kernel.ports.llm import (
     VisionMessage,
 )
 from hexdag.kernel.ports.memory import Memory
+from hexdag.kernel.ports.messaging import (
+    Messaging,
+    SendEmailRequest,
+    SendEmailResult,
+    SupportsEmail,
+    SupportsNotification,
+    html_to_plain_text,
+)
 from hexdag.kernel.ports.notification import Notification
 from hexdag.kernel.ports.observer_manager import ObserverManager
 from hexdag.kernel.ports.pipeline_spawner import PipelineSpawner
@@ -109,7 +117,13 @@ __all__ = [
     "LLM",
     "SupportsBatchGeneration",
     "Memory",
+    "Messaging",
     "Notification",
+    "SendEmailRequest",
+    "SendEmailResult",
+    "SupportsEmail",
+    "SupportsNotification",
+    "html_to_plain_text",
     "ObserverManager",
     "ObserverManagerPort",
     "PipelineSpawner",

@@ -77,6 +77,7 @@ allowed_exceptions:
     - "from hexdag.stdlib.middleware.observable import ObservableLLM"
     - "from hexdag.stdlib.middleware.observable_tool_router import ObservableToolRouter"
     - "from hexdag.stdlib.middleware.structured_output import StructuredOutputFallback"
+    - "from hexdag.stdlib.middleware.round_robin import RoundRobin"
 
   # Resolver imports stdlib.nodes to trigger auto-discovery and alias registration
   # Also imports adapter/macro discovery for the unified alias system.

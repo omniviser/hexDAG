@@ -41,6 +41,10 @@ class TestInitialization:
         rr = RoundRobin(adapters=adapters)
         assert len(rr._adapters) == 3
 
+    def test_invalid_strategy_raises(self):
+        with pytest.raises(ValueError, match="Invalid strategy"):
+            RoundRobin(adapters=[_make_adapter()], strategy="primary")  # type: ignore[arg-type]
+
 
 @pytest.mark.asyncio
 class TestRoundRobinDistribution:
@@ -118,6 +122,49 @@ class TestFailover:
         # Without failover, should return None (aresponse error path)
         result = await rr.aresponse(messages)
         assert result is None
+
+
+@pytest.mark.asyncio
+class TestFailoverStrategy:
+    async def test_always_starts_at_first(self, messages):
+        a1 = _make_adapter("primary")
+        a2 = _make_adapter("secondary")
+        rr = RoundRobin(adapters=[a1, a2], strategy="failover")
+
+        for _ in range(3):
+            assert await rr.aresponse(messages) == "primary"
+        a2.aresponse.assert_not_called()
+
+    async def test_spills_over_on_failure_then_retries_primary(self, messages):
+        a1 = _make_adapter()
+        a1.aresponse = AsyncMock(side_effect=RuntimeError("down"))
+        a2 = _make_adapter("secondary")
+        rr = RoundRobin(adapters=[a1, a2], strategy="failover")
+
+        assert await rr.aresponse(messages) == "secondary"
+
+        # Primary is tried first again on the next call
+        a1.aresponse = AsyncMock(return_value="recovered")
+        assert await rr.aresponse(messages) == "recovered"
+
+    async def test_default_strategy_still_rotates(self, messages):
+        a1 = _make_adapter("one")
+        a2 = _make_adapter("two")
+        rr = RoundRobin(adapters=[a1, a2])
+
+        assert await rr.aresponse(messages) == "one"
+        assert await rr.aresponse(messages) == "two"
+
+
+@pytest.mark.asyncio
+class TestHeterogeneousPool:
+    async def test_missing_capability_raises_type_error(self, messages):
+        limited = AsyncMock(spec=[])
+        limited.aresponse = AsyncMock(return_value="ok")
+        rr = RoundRobin(adapters=[limited])
+
+        with pytest.raises(TypeError, match="homogeneous"):
+            await rr.aresponse_structured(messages, output_schema={"type": "object"})
 
 
 @pytest.mark.asyncio

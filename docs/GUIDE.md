@@ -274,6 +274,41 @@ Auto-middleware (`ObservableLLM`, `ObservableToolRouter`) is framework-managed a
 
 For all middleware symbols and signatures, see [PUBLIC_API.md > Middleware](PUBLIC_API.md#middleware-from-hexdagstdlibmiddleware-import-).
 
+### Multi-Adapter Pools
+
+One port, N adapter instances — declared entirely in YAML. `adapters:` (a list)
+replaces the single `adapter:` key; the members are wrapped in a `RoundRobin`
+pool:
+
+```yaml
+spec:
+  ports:
+    llm:
+      adapters:                    # mutually exclusive with adapter:/ref:/name:
+        - adapter: llm:vertex
+          config: {credentials_json: "${GCP_AI1_SA_JSON}", project_id: "${GCP_AI1_PROJECT_ID}"}
+        - adapter: llm:vertex
+          config: {credentials_json: "${GCP_AI2_SA_JSON}", project_id: "${GCP_AI2_PROJECT_ID}"}
+      strategy: round_robin        # or: failover (default: round_robin)
+      middleware: []               # optional — wraps the whole pool
+```
+
+- **`strategy: round_robin`** rotates the starting member on every call; on
+  failure the next member is tried (up to N attempts total).
+- **`strategy: failover`** always starts at the first member (deterministic
+  primary) and spills over to the others only on failure.
+- Each member uses the full single-adapter grammar (`adapter:`/`ref:` +
+  `config:`), and `${VAR}` resolution happens **per member** — so N cloud
+  accounts become N members with different credentials.
+- Members must have **homogeneous capabilities**: the pool advertises
+  `SupportsGeneration`/`SupportsStructuredOutput`/`SupportsFunctionCalling`
+  regardless of its members. Calling a capability a member lacks raises
+  `TypeError`, and automatic `StructuredOutputFallback` wrapping is skipped
+  for pools.
+- `hexdag validate` checks the pool shape: `adapters` vs single-adapter key
+  exclusivity, non-empty member list, member keys, and the strategy enum.
+- Pools work in `spec.ports` and `spec.type_ports` alike.
+
 ---
 
 ## 5. Data Flow Between Nodes

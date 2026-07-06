@@ -240,7 +240,7 @@ All exceptions inherit from `HexDAGError`.
 | `CircuitBreaker` | Wrapper | Failure threshold -> open/half-open/closed |
 | `ResponseCache` | Wrapper | LRU response cache |
 | `Timeout` | Wrapper | Wall-clock timeout |
-| `RoundRobin` | Wrapper | Load balance across adapters |
+| `RoundRobin` | Wrapper | Load balance across adapters; declarative via port `adapters:` list + `strategy: round_robin`/`failover` (see [GUIDE.md > Multi-Adapter Pools](GUIDE.md#multi-adapter-pools)) |
 | `BatchGeneration` | Wrapper | Batch generation control |
 | `DistributedCache` | Wrapper | External store cache |
 | `ResourceAccountingObserver` | Observer | Track tokens/calls, enforce limits |

@@ -34,6 +34,8 @@ class TestDiscoverAdapterAliases:
         assert "mock_llm" in aliases
         assert "open_ai_adapter" in aliases
         assert "anthropic_adapter" in aliases
+        assert "vertex_ai_adapter" in aliases
+        assert "ollama_adapter" in aliases
         assert "in_memory_memory" in aliases
         assert "sq_lite_adapter" in aliases
         assert "tool_router" in aliases
@@ -43,6 +45,8 @@ class TestDiscoverAdapterAliases:
         assert "llm:mock" in aliases
         assert "llm:openai" in aliases
         assert "llm:anthropic" in aliases
+        assert "llm:vertex" in aliases
+        assert "llm:ollama" in aliases
         assert "memory:in_memory" in aliases
         assert "memory:file" in aliases
         assert "database:sqlite" in aliases
@@ -58,6 +62,13 @@ class TestDiscoverAdapterAliases:
         assert "AnthropicAdapter" in aliases
         assert "InMemoryMemory" in aliases
         assert "ToolRouter" in aliases
+
+    def test_vertex_and_ollama_paths(self) -> None:
+        aliases = discover_adapter_aliases()
+        assert aliases["llm:vertex"] == "hexdag.stdlib.adapters.google.VertexAIAdapter"
+        assert aliases["VertexAIAdapter"] == "hexdag.stdlib.adapters.google.VertexAIAdapter"
+        assert aliases["llm:ollama"] == "hexdag.stdlib.adapters.ollama.OllamaAdapter"
+        assert aliases["OllamaAdapter"] == "hexdag.stdlib.adapters.ollama.OllamaAdapter"
 
     def test_backward_compat_aliases(self) -> None:
         aliases = discover_adapter_aliases()

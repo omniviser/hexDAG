@@ -105,10 +105,9 @@ class EntityState(Service):
         self._states: dict[tuple[str, str], str] = {}
         # (entity_type, entity_id) → ordered list of transitions
         self._history: dict[tuple[str, str], list[StateTransition]] = {}
-        # entity_type → async handler callable (transactional: failure = rollback)
-        self._transition_handlers: dict[str, Callable[..., Any]] = {}
-        # entity_type → whether the handler accepts a ``payload`` kwarg
-        self._handler_accepts_payload: dict[str, bool] = {}
+        # entity_type → ordered list of (handler, accepts_payload) pairs
+        # (transactional: any handler failure = rollback)
+        self._transition_handlers: dict[str, list[tuple[Callable[..., Any], bool]]] = {}
 
     # ------------------------------------------------------------------
     # Setup API (not tools — called before pipeline runs)
@@ -125,9 +124,13 @@ class EntityState(Service):
     ) -> None:
         """Register a transition handler for an entity type.
 
-        Handlers are called asynchronously after a successful transition.
-        **Handler failure = transition failure** — the in-memory state is
-        rolled back and the error propagates to the caller.
+        Handlers **accumulate**: registering multiple handlers for the same
+        entity type dispatches them in registration order on every
+        transition. They are called asynchronously after a successful
+        transition. **Any handler failure = transition failure** — the
+        persisted state is rolled back and the error propagates to the
+        caller. Side effects of handlers that already ran are NOT
+        compensated (same semantics as a single handler failing midway).
 
         The handler receives keyword arguments::
 
@@ -151,8 +154,14 @@ class EntityState(Service):
             entity_type: Entity type to attach the handler to.
             handler: Async callable invoked on every transition.
         """
-        self._transition_handlers[entity_type] = handler
-        self._handler_accepts_payload[entity_type] = _accepts_payload(handler)
+        handlers = self._transition_handlers.setdefault(entity_type, [])
+        handlers.append((handler, _accepts_payload(handler)))
+        if len(handlers) > 1:
+            logger.debug(
+                "Appending transition handler #{} for entity type {!r}",
+                len(handlers),
+                entity_type,
+            )
 
     # ------------------------------------------------------------------
     # Collection interface
@@ -357,21 +366,24 @@ class EntityState(Service):
                 },
             )
 
-        # Call transition handler (transactional: failure = rollback)
-        handler = self._transition_handlers.get(entity_type)
-        if handler is not None:
-            handler_kwargs: dict[str, Any] = {
-                "entity_type": entity_type,
-                "entity_id": entity_id,
-                "from_state": current,
-                "to_state": to_state,
-                "reason": reason,
-                "context": _context,
-            }
-            if self._handler_accepts_payload.get(entity_type, False):
-                handler_kwargs["payload"] = payload
+        # Call transition handlers in registration order (transactional:
+        # any failure = rollback; earlier handlers' side effects are not
+        # compensated — same semantics as a single handler failing midway).
+        handlers = self._transition_handlers.get(entity_type)
+        if handlers:
             try:
-                await handler(**handler_kwargs)
+                for handler, accepts_payload in handlers:
+                    handler_kwargs: dict[str, Any] = {
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "from_state": current,
+                        "to_state": to_state,
+                        "reason": reason,
+                        "context": _context,
+                    }
+                    if accepts_payload:
+                        handler_kwargs["payload"] = payload
+                    await handler(**handler_kwargs)
             except Exception as handler_exc:
                 # Rollback: revert backend/storage to previous state AND history.
                 # Each step is guarded so a failing rollback (e.g. the backend

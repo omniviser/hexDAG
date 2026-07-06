@@ -87,8 +87,11 @@ class EntityState(Protocol):
     ) -> None:
         """Register a transition handler for an entity type.
 
-        Handlers are called asynchronously after a successful transition.
-        Handler failure = transition failure (rollback).
+        Handlers accumulate: registering multiple handlers for the same
+        entity type dispatches them in registration order. Handlers are
+        called asynchronously after a successful transition. Any handler
+        failure = transition failure (state rollback); side effects of
+        handlers that already ran are not compensated.
         """
         ...
 

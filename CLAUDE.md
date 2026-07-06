@@ -519,6 +519,20 @@ spec:
         prompt_template: "Analyze: {{input}}"
 ```
 
+**Multi-adapter pools** — a port can declare `adapters:` (list) + `strategy: round_robin|failover` instead of a single `adapter:`; members are wrapped in a `RoundRobin` pool with per-member `${VAR}` resolution and failover. Members must have homogeneous capabilities. See [docs/GUIDE.md > Multi-Adapter Pools](docs/GUIDE.md#multi-adapter-pools).
+
+```yaml
+spec:
+  ports:
+    llm:
+      adapters:
+        - adapter: llm:vertex
+          config: {project_id: "${GCP_AI1_PROJECT_ID}"}
+        - adapter: llm:vertex
+          config: {project_id: "${GCP_AI2_PROJECT_ID}"}
+      strategy: round_robin   # or: failover
+```
+
 ### Built-in Aliases
 
 For convenience, built-in nodes have short aliases:

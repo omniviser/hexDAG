@@ -8,8 +8,7 @@ import uuid
 from datetime import UTC, datetime
 
 from hexdag.kernel.logging import get_logger
-
-from hexdag_plugins._ports import SendEmailRequest, SendEmailResult, SupportsEmail
+from hexdag.kernel.ports.messaging import SendEmailRequest, SendEmailResult, SupportsEmail
 
 logger = get_logger(__name__)
 
@@ -20,6 +19,8 @@ class NoopEmailAdapter(SupportsEmail):
     All ``send_email`` calls return a successful result with a generated
     message ID. ``fetch_emails`` always returns an empty list.
     """
+
+    auto_quotes_thread: bool = True
 
     async def send_email(self, request: SendEmailRequest) -> SendEmailResult:
         """Log the email and return a fake success result."""

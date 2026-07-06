@@ -43,6 +43,13 @@ openai = [
 anthropic = [
     "anthropic>=0.25.0", # Anthropic Claude LLM adapter
 ]
+google = [
+    "google-auth>=2.0.0", # Vertex AI / Gemini adapter (ADC auth)
+    "httpx>=0.24.0",      # Vertex AI REST client
+]
+ollama = [
+    "httpx>=0.24.0", # Ollama OpenAI-compatible client
+]
 database = [
     "aiosqlite>=0.19.0", # Async SQLite database adapter
     "aiofiles>=23.0.0",  # Async file I/O for CSV adapter
@@ -84,6 +91,8 @@ otel = [
 all = [
     "hexdag[openai]",
     "hexdag[anthropic]",
+    "hexdag[google]",
+    "hexdag[ollama]",
     "hexdag[database]",
     "hexdag[storage-all]",
     "hexdag[notebooks]",

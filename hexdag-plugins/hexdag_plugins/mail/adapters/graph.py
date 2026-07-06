@@ -29,8 +29,7 @@ from typing import Any
 
 import httpx
 from hexdag.kernel.logging import get_logger
-
-from hexdag_plugins._ports import (
+from hexdag.kernel.ports.messaging import (
     SendEmailRequest,
     SendEmailResult,
     SupportsEmail,

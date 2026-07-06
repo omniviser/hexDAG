@@ -59,10 +59,15 @@ _ADAPTER_REGISTRY: list[tuple[str, str, str, str]] = [
         "notification",
         "mock",
     ),
+    ("MockEmailAdapter", "hexdag.stdlib.adapters.mock.MockEmailAdapter", "email", "mock"),
     # OpenAI
     ("OpenAIAdapter", "hexdag.stdlib.adapters.openai.OpenAIAdapter", "llm", "openai"),
     # Anthropic
     ("AnthropicAdapter", "hexdag.stdlib.adapters.anthropic.AnthropicAdapter", "llm", "anthropic"),
+    # Google Vertex AI / Gemini
+    ("VertexAIAdapter", "hexdag.stdlib.adapters.google.VertexAIAdapter", "llm", "vertex"),
+    # Ollama (local models)
+    ("OllamaAdapter", "hexdag.stdlib.adapters.ollama.OllamaAdapter", "llm", "ollama"),
     # Memory adapters
     ("InMemoryMemory", "hexdag.stdlib.adapters.memory.InMemoryMemory", "memory", "in_memory"),
     ("FileMemoryAdapter", "hexdag.stdlib.adapters.memory.FileMemoryAdapter", "memory", "file"),

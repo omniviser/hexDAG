@@ -8,8 +8,8 @@ Example
 -------
 Python usage::
 
+    from hexdag.stdlib.adapters.google import VertexAIAdapter
     from hexdag.stdlib.middleware import RoundRobin
-    from hexdag_plugins.google import VertexAIAdapter
 
     adapters = [
         VertexAIAdapter(credentials_json=sa1, project_id=pid1),
@@ -20,10 +20,22 @@ Python usage::
 
     # Calls are distributed across the three adapters with failover
     result = await llm.aresponse(messages)
+
+Declarative YAML pool (built automatically by the orchestrator factory)::
+
+    spec:
+      ports:
+        llm:
+          adapters:
+            - adapter: llm:vertex
+              config: {credentials_json: "${GCP_AI1_SA_JSON}", project_id: "${GCP_AI1_PROJECT_ID}"}
+            - adapter: llm:vertex
+              config: {credentials_json: "${GCP_AI2_SA_JSON}", project_id: "${GCP_AI2_PROJECT_ID}"}
+          strategy: round_robin   # or: failover
 """
 
 import itertools
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -51,6 +63,12 @@ class RoundRobin(
     attempts). Each adapter may have its own internal retry logic, so
     this outer failover only fires after the adapter itself gives up.
 
+    The pool advertises ``SupportsGeneration``/``SupportsStructuredOutput``/
+    ``SupportsFunctionCalling`` regardless of its members, so members must
+    have homogeneous capabilities: a member missing a called capability
+    raises ``TypeError`` (and automatic ``StructuredOutputFallback`` port
+    wrapping is skipped for pools).
+
     Parameters
     ----------
     adapters : list[SupportsGeneration]
@@ -59,28 +77,43 @@ class RoundRobin(
     failover : bool
         When ``True`` (default), try the next adapter on failure.
         When ``False``, fail immediately.
+    strategy : {"round_robin", "failover"}
+        ``round_robin`` (default) rotates the starting adapter on every
+        call. ``failover`` always starts at the first adapter, spilling
+        over to the others only on failure (deterministic primary).
     """
+
+    VALID_STRATEGIES = frozenset({"round_robin", "failover"})
 
     def __init__(
         self,
         adapters: list[SupportsGeneration],
         failover: bool = True,
+        strategy: Literal["round_robin", "failover"] = "round_robin",
     ) -> None:
         """Initialize the round-robin balancer with a list of adapters."""
         if not adapters:
             raise ValueError("RoundRobin requires at least one adapter")
+        if strategy not in self.VALID_STRATEGIES:
+            raise ValueError(
+                f"Invalid strategy {strategy!r}; expected one of {sorted(self.VALID_STRATEGIES)}"
+            )
         self._adapters = adapters
         self._failover = failover
+        self._strategy = strategy
         self._counter = itertools.count()
 
         logger.info(
-            "RoundRobin initialized with %d adapter(s), failover=%s",
+            "RoundRobin initialized with %d adapter(s), failover=%s, strategy=%s",
             len(self._adapters),
             self._failover,
+            self._strategy,
         )
 
     def _next_index(self) -> int:
-        """Return the next adapter index using the round-robin counter."""
+        """Return the starting adapter index for the next call."""
+        if self._strategy == "failover":
+            return 0
         return next(self._counter) % len(self._adapters)
 
     async def _call_with_failover(
@@ -105,8 +138,14 @@ class RoundRobin(
                 idx,
                 method_name,
             )
+            method = getattr(adapter, method_name, None)
+            if method is None:
+                raise TypeError(
+                    f"Pool member {type(adapter).__name__} (slot {idx}) does not "
+                    f"support {method_name}; pool members must have homogeneous "
+                    f"capabilities"
+                )
             try:
-                method = getattr(adapter, method_name)
                 result = await method(*args, **kwargs)
                 if method_name == "aresponse" and result is None:
                     logger.warning(

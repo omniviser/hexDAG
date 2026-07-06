@@ -294,6 +294,18 @@ class OrchestratorFactory:
 
         for port_name, port_spec in port_specs.items():
             try:
+                # Multi-adapter pool: adapters: [...] + strategy
+                if "adapters" in port_spec:
+                    ports[port_name] = self._instantiate_adapter_pool(port_name, port_spec)
+                    logger.debug("✅ Port pool instantiated: {}", port_name)
+                    continue
+
+                if "strategy" in port_spec:
+                    raise ComponentInstantiationError(
+                        f"Port '{port_name}' declares 'strategy' without 'adapters'. "
+                        f"'strategy' is only valid for multi-adapter pools."
+                    )
+
                 # Resolve adapter ref if present
                 if "ref" in port_spec:
                     port_spec = self._resolve_adapter_ref(port_name, port_spec)
@@ -312,6 +324,66 @@ class OrchestratorFactory:
                 raise
 
         return ports
+
+    def _instantiate_adapter_pool(self, port_name: str, port_spec: dict[str, Any]) -> Any:
+        """Instantiate a multi-adapter pool port from an ``adapters:`` list.
+
+        Each member uses the full single-adapter grammar (``adapter``/``ref``
+        + ``config``) and is instantiated independently, so per-member
+        deferred ``${VAR}`` resolution applies. The members are wrapped in a
+        :class:`~hexdag.stdlib.middleware.round_robin.RoundRobin` pool.
+
+        Parameters
+        ----------
+        port_name : str
+            Port name (for error messages).
+        port_spec : dict[str, Any]
+            Port spec containing ``adapters`` (non-empty list of member
+            specs) and optional ``strategy`` (``round_robin``/``failover``).
+
+        Returns
+        -------
+        Any
+            RoundRobin pool wrapping the instantiated member adapters.
+        """
+        conflicting = [key for key in ("adapter", "ref", "name") if key in port_spec]
+        if conflicting:
+            raise ComponentInstantiationError(
+                f"Port '{port_name}' declares both 'adapters' and "
+                f"{conflicting}; 'adapters' is mutually exclusive with "
+                f"single-adapter keys."
+            )
+
+        members_spec = port_spec["adapters"]
+        if not isinstance(members_spec, list) or not members_spec:
+            raise ComponentInstantiationError(
+                f"Port '{port_name}': 'adapters' must be a non-empty list of adapter specs."
+            )
+
+        strategy = port_spec.get("strategy", "round_robin")
+
+        members = []
+        for i, member_spec in enumerate(members_spec):
+            member_name = f"{port_name}[{i}]"
+            if not isinstance(member_spec, dict):
+                raise ComponentInstantiationError(
+                    f"Port '{member_name}': pool member must be an adapter "
+                    f"spec dict, got {type(member_spec).__name__}."
+                )
+            if "ref" in member_spec:
+                member_spec = self._resolve_adapter_ref(member_name, member_spec)
+            members.append(
+                self.component_instantiator.instantiate_adapter(member_spec, member_name)
+            )
+
+        from hexdag.kernel.orchestration.port_wrappers import (
+            build_adapter_pool,  # lazy: kernel→kernel
+        )
+
+        try:
+            return build_adapter_pool(members, strategy)
+        except ValueError as exc:
+            raise ComponentInstantiationError(f"Port '{port_name}': {exc}") from exc
 
     def _resolve_adapter_ref(self, port_name: str, port_spec: dict[str, Any]) -> dict[str, Any]:
         """Resolve a ``ref:`` adapter reference to a full port spec.
@@ -458,7 +530,11 @@ class OrchestratorFactory:
         from hexdag.kernel.domain.entity_state import (
             StateMachineConfig,  # lazy: only needed when state machines declared
         )
-        from hexdag.kernel.resolver import resolve  # lazy: only needed when state machines declared
+        from hexdag.kernel.resolver import (  # lazy: only needed when state machines declared
+            ResolveError,
+            resolve,
+            resolve_function,
+        )
         from hexdag.stdlib.lib.entity_state import (
             EntityState,  # lazy: arch boundary, only when state machines declared
         )
@@ -500,14 +576,23 @@ class OrchestratorFactory:
             )
             entity_state.register_machine(config)
 
-            # Register transition handler if declared
+            # Register transition handler(s) if declared — accepts a single
+            # module path or an ordered list of paths
             handlers = sm_spec.get("handlers", {})
-            handler_path = handlers.get("on_transition")
-            if handler_path:
-                handler_cls = resolve(handler_path)
-                # Instantiate if it's a class, use directly if callable
-                handler = handler_cls() if isinstance(handler_cls, type) else handler_cls  # noqa: E501 # pyright: ignore[reportUnnecessaryIsInstance]
-                entity_state.register_handler(entity_type, handler)
+            handler_paths = handlers.get("on_transition")
+            if handler_paths:
+                if isinstance(handler_paths, str):
+                    handler_paths = [handler_paths]
+                for handler_path in handler_paths:
+                    try:
+                        handler_obj = resolve(handler_path)
+                    except ResolveError:
+                        # resolve() only accepts classes; handlers are
+                        # commonly plain (async) functions
+                        handler_obj = resolve_function(handler_path)
+                    # Instantiate if it's a class, use directly if callable
+                    handler = handler_obj() if isinstance(handler_obj, type) else handler_obj
+                    entity_state.register_handler(entity_type, handler)
 
             logger.debug(
                 "✅ State machine registered: {} ({} states, {} transition rules)",

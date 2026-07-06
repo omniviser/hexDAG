@@ -1,8 +1,9 @@
 """Console notification adapter — logs notifications to the terminal.
 
-Development/default implementation of the ``Notification`` port.  Use it
-to see approval requests and alerts during local runs; swap in a Slack,
-email, or webhook adapter for production without changing the pipeline.
+Development/default implementation of the ``Messaging`` port's
+``SupportsNotification`` capability.  Use it to see approval requests
+and alerts during local runs; swap in a Slack, email, or webhook adapter
+for production without changing the pipeline.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from hexdag.kernel.logging import get_logger
-from hexdag.kernel.ports.notification import Notification
+from hexdag.kernel.ports.messaging import Messaging, SupportsNotification
 from hexdag.stdlib.adapters.base import HexDAGAdapter
 
 logger = get_logger(__name__)
@@ -18,7 +19,8 @@ logger = get_logger(__name__)
 
 class ConsoleNotificationAdapter(
     HexDAGAdapter,
-    Notification,
+    Messaging,
+    SupportsNotification,
     yaml_alias="console_notification",
     port="notification",
 ):

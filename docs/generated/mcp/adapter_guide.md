@@ -113,11 +113,13 @@ Secrets declared with `secret()` are resolved in this order:
 | Adapter | Description |
 |---------|-------------|
 | `PgVectorAdapter` | PostgreSQL adapter with pgvector extension support. |
-| `ChromaDBAdapter` | ChromaDB vector store adapter. |
 | `ConsoleNotificationAdapter` | Notification adapter that writes to the hexDAG logger. |
 | `GraphEmailAdapter` | Microsoft Graph email adapter for production use. |
-| `HexDAGAdapter` | Mixin that auto-registers adapters when ``yaml_alias`` is pr... |
+| `MockEmailAdapter` | Mock implementation of the ``SupportsEmail`` capability for ... |
 | `NoopEmailAdapter` | No-op email adapter that logs but does not send anything. |
+| `SendGridEmailAdapter` | SendGrid v3 email adapter for high-throughput sending. |
+| `ChromaDBAdapter` | ChromaDB vector store adapter. |
+| `HexDAGAdapter` | Mixin that auto-registers adapters when ``yaml_alias`` is pr... |
 | `PgVectorAdapter` | PostgreSQL pgvector adapter using SQLAlchemy. |
 | `RedisAdapter` | Redis-backed key-value store with TTL support. |
 
