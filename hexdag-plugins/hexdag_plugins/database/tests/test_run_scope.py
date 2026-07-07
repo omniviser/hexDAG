@@ -1,11 +1,15 @@
-"""Tests for RunScopedResource — the dual-mode resource primitive."""
+"""Tests for RunScopedSessions — the run-scoped session primitive.
+
+Uses fake sessions that record ``commit``/``rollback``/``close`` calls, so
+these tests exercise the scoping/lock/verdict logic without a real database.
+"""
 
 import asyncio
 
 import pytest
 from hexdag.kernel.context.execution_context import set_run_id
 
-from hexdag_plugins.database.run_scope import RunScopedResource
+from hexdag_plugins.database.run_scope import RunScopedSessions
 
 
 class FakeSession:
@@ -13,24 +17,28 @@ class FakeSession:
         self.n = n
         self.committed = False
         self.rolled_back = False
+        self.closed = False
         self.writes: list[str] = []
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 def make_scope():
     created: list[FakeSession] = []
 
-    async def factory() -> FakeSession:
+    def factory() -> FakeSession:
         session = FakeSession(len(created))
         created.append(session)
         return session
 
-    async def finalize(session: FakeSession, success: bool) -> None:
-        if success:
-            session.committed = True
-        else:
-            session.rolled_back = True
-
-    return RunScopedResource(factory, finalize), created
+    return RunScopedSessions(factory), created
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +50,7 @@ def _clear_run_id():
 
 class TestStandaloneMode:
     @pytest.mark.asyncio()
-    async def test_fresh_resource_committed_on_exit(self):
+    async def test_fresh_session_committed_on_exit(self):
         scope, created = make_scope()
 
         async with scope.aget() as session:
@@ -51,6 +59,7 @@ class TestStandaloneMode:
         assert len(created) == 1
         assert created[0].committed
         assert not created[0].rolled_back
+        assert created[0].closed
 
     @pytest.mark.asyncio()
     async def test_rollback_on_exception(self):
@@ -62,9 +71,10 @@ class TestStandaloneMode:
 
         assert created[0].rolled_back
         assert not created[0].committed
+        assert created[0].closed
 
     @pytest.mark.asyncio()
-    async def test_each_call_gets_fresh_resource(self):
+    async def test_each_call_gets_fresh_session(self):
         scope, created = make_scope()
 
         async with scope.aget():
@@ -77,7 +87,7 @@ class TestStandaloneMode:
 
 class TestRunScopedMode:
     @pytest.mark.asyncio()
-    async def test_shared_resource_within_run(self):
+    async def test_shared_session_within_run(self):
         scope, created = make_scope()
         set_run_id("run-1")
 
@@ -91,6 +101,7 @@ class TestRunScopedMode:
         # Not finalized until afinalize_run
         assert not created[0].committed
         assert not created[0].rolled_back
+        assert not created[0].closed
 
     @pytest.mark.asyncio()
     async def test_finalize_run_commits_on_success(self):
@@ -102,6 +113,7 @@ class TestRunScopedMode:
         await scope.afinalize_run(success=True)
 
         assert created[0].committed
+        assert created[0].closed
 
     @pytest.mark.asyncio()
     async def test_finalize_run_rolls_back_on_failure(self):
@@ -113,6 +125,7 @@ class TestRunScopedMode:
         await scope.afinalize_run(success=False)
 
         assert created[0].rolled_back
+        assert created[0].closed
 
     @pytest.mark.asyncio()
     async def test_step_exception_forces_rollback_despite_success(self):
@@ -141,6 +154,21 @@ class TestRunScopedMode:
         assert created[0].rolled_back
 
     @pytest.mark.asyncio()
+    async def test_mark_recovered_allows_commit_after_step_failure(self):
+        """A contained failure (SAVEPOINT rollback) lets the run still commit."""
+        scope, created = make_scope()
+        set_run_id("run-1")
+
+        with pytest.raises(RuntimeError):
+            async with scope.aget():
+                raise RuntimeError("contained")
+        scope.mark_recovered()
+        await scope.afinalize_run(success=True)
+
+        assert created[0].committed
+        assert not created[0].rolled_back
+
+    @pytest.mark.asyncio()
     async def test_finalize_without_use_is_noop(self):
         scope, created = make_scope()
         set_run_id("run-1")
@@ -150,7 +178,7 @@ class TestRunScopedMode:
 
     @pytest.mark.asyncio()
     async def test_concurrent_access_serialized(self):
-        """Parallel waves share one resource; the lock serializes access."""
+        """Parallel waves share one session; the lock serializes access."""
         scope, created = make_scope()
         set_run_id("run-1")
         in_block = 0
@@ -172,7 +200,7 @@ class TestRunScopedMode:
         assert sorted(created[0].writes) == ["a", "b", "c"]
 
     @pytest.mark.asyncio()
-    async def test_separate_runs_get_separate_resources(self):
+    async def test_separate_runs_get_separate_sessions(self):
         scope, created = make_scope()
 
         set_run_id("run-1")
@@ -202,3 +230,4 @@ class TestRunScopedMode:
         await scope.afinalize_all()
 
         assert created[0].rolled_back
+        assert created[0].closed

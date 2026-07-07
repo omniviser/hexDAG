@@ -1,9 +1,9 @@
 """Back-compat shim — the SQLAlchemy adapter moved to the database plugin.
 
-``SQLAlchemyAdapter``, ``SQLAlchemyStateBackend``, and ``DualModeSessionMixin``
-now live in ``hexdag_plugins.database`` (install with
-``pip install hexdag-plugins[database]``).  Imports from this legacy path keep
-working when the plugin is installed; otherwise a clear error points there.
+``SQLAlchemyAdapter`` and ``SQLAlchemyStateBackend`` now live in
+``hexdag_plugins.database`` (install with ``pip install hexdag-plugins[database]``).
+Imports from this legacy path keep working when the plugin is installed;
+otherwise a clear error points there.
 """
 
 from typing import Any
@@ -11,12 +11,10 @@ from typing import Any
 _MOVED = {
     "SQLAlchemyAdapter": "hexdag_plugins.database.adapters",
     "SQLAlchemyStateBackend": "hexdag_plugins.database.adapters",
-    "DualModeSessionMixin": "hexdag_plugins.database.dual_mode",
 }
 
 # Names resolved lazily via __getattr__ (PEP 562) from the database plugin.
 __all__ = [
-    "DualModeSessionMixin",  # noqa: F822 # pyright: ignore[reportUnsupportedDunderAll]
     "SQLAlchemyAdapter",  # noqa: F822 # pyright: ignore[reportUnsupportedDunderAll]
     "SQLAlchemyStateBackend",  # noqa: F822 # pyright: ignore[reportUnsupportedDunderAll]
 ]

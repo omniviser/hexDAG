@@ -122,6 +122,7 @@ Secrets declared with `secret()` are resolved in this order:
 | `HexDAGAdapter` | Mixin that auto-registers adapters when ``yaml_alias`` is pr... |
 | `PgVectorAdapter` | PostgreSQL pgvector adapter using SQLAlchemy. |
 | `RedisAdapter` | Redis-backed key-value store with TTL support. |
+| `TestFactoryOnlyAdapter` | A session_factory-only adapter (no DSN, engine is None) stil... |
 
 ## Using Adapters in YAML
 

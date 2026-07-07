@@ -1,4 +1,4 @@
-"""Tests for SQLAlchemyAdapter dual-mode sessions and the state backend."""
+"""Tests for SQLAlchemyAdapter run-scoped sessions and the state backend."""
 
 import pytest
 

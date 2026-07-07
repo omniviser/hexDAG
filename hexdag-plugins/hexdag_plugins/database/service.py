@@ -29,7 +29,7 @@ from hexdag.kernel.context.execution_context import get_run_id
 from hexdag.kernel.exceptions import HexDAGError
 from hexdag.kernel.service import Service, step, tool
 
-from hexdag_plugins.database.dual_mode import DualModeSessionMixin
+from hexdag_plugins.database.run_scope import RunScopedSessions
 
 _IDENTIFIER_RE = r"^[A-Za-z_][A-Za-z0-9_]*$"
 
@@ -43,7 +43,7 @@ def _check_identifier(name: str, kind: str) -> str:
     return name
 
 
-class DatabaseService(DualModeSessionMixin, Service):
+class DatabaseService(Service):
     """SQLAlchemy-backed service exposing CRUD + query as tools/steps.
 
     Parameters
@@ -71,7 +71,7 @@ class DatabaseService(DualModeSessionMixin, Service):
         self._engine = None
         # Per-(run, scope) SAVEPOINT handles for the transaction macro.
         self._savepoints: dict[tuple[str, str], Any] = {}
-        self._init_dual_mode(self._make_session)
+        self._sessions = RunScopedSessions(self._make_session)
 
     def _make_session(self) -> Any:
         """Create a session from the configured or lazily-built factory."""
@@ -88,8 +88,17 @@ class DatabaseService(DualModeSessionMixin, Service):
             )
         return self._session_factory()
 
+    def get_session(self) -> Any:
+        """Async context manager yielding the run-scoped session.
+
+        Steps should ``flush()`` but not ``commit()`` — commit/rollback is
+        owned by the scope (per-call standalone, per-run in a pipeline).
+        """
+        return self._sessions.aget()
+
     async def ateardown(self, *, success: bool = True) -> None:
         """Finalize the run transaction, then dispose any owned engine."""
+        await self._sessions.afinalize_run(success=success)
         await super().ateardown(success=success)
         if self._engine is not None:
             await self._engine.dispose()
@@ -235,5 +244,5 @@ class DatabaseService(DualModeSessionMixin, Service):
             await sp.rollback()
             # Only clear the run failure flag when a rollback actually happened —
             # otherwise a stray call could let a genuinely-failed run commit.
-            self._db_scope.mark_recovered()
+            self._sessions.mark_recovered()
         return {"scope_id": scope_id, "savepoint": "rolled_back"}

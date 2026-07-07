@@ -21,12 +21,11 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from hexdag_plugins.database._ports import SupportsSessionFactory
-from hexdag_plugins.database.dual_mode import DualModeSessionMixin
+from hexdag_plugins.database.run_scope import RunScopedSessions
 
 
 class SQLAlchemyAdapter(
     HexDAGAdapter,
-    DualModeSessionMixin,
     SupportsQuery,
     SupportsRawSQL,
     SupportsSessionFactory,
@@ -35,13 +34,17 @@ class SQLAlchemyAdapter(
 ):
     """Adapter for SQLAlchemy-supported databases.
 
-    Session access comes in two flavors:
+    All query/execute methods are transaction-aware: they run on the
+    run-scoped session (see :class:`RunScopedSessions`), so inside a
+    pipeline run they see the run's uncommitted writes and their own
+    writes join the run transaction.  Session access comes in two flavors:
 
-    - ``asession()`` — always-independent session (saga mode: each caller
-      commits its own work, see ``SupportsSessionFactory``).
-    - ``get_session()`` — dual-mode session: per-call autocommit outside a
+    - ``get_session()`` — run-scoped session: per-call autocommit outside a
       pipeline run, one shared atomic transaction inside a run (commit or
       rollback decided at ``ateardown(success=...)`` / ``aclose()``).
+    - ``asession()`` — always-independent session, out-of-band by design
+      (saga mode: each caller commits its own work, see
+      ``SupportsSessionFactory``).
     """
 
     def __init__(
@@ -66,12 +69,12 @@ class SQLAlchemyAdapter(
         self._metadata = MetaData()
         self._session_factory = session_factory
         self._owns_engine = session_factory is None
-        self._init_dual_mode(self._make_session)
+        self._sessions = RunScopedSessions(self._make_session)
 
     async def connect(self) -> None:
-        """Establish database connection."""
-        self._ensure_engine()
-        async with self.engine.connect() as conn:
+        """Reflect the database schema into ``self._metadata``."""
+        async with self.get_session() as session:
+            conn = await session.connection()
             # Force reflection after any schema changes
             await conn.run_sync(self._metadata.reflect)
 
@@ -91,6 +94,27 @@ class SQLAlchemyAdapter(
                 self.engine, class_=AsyncSession, expire_on_commit=False
             )
         return self._session_factory()
+
+    def get_session(self) -> Any:
+        """Async context manager yielding the run-scoped session.
+
+        Steps should ``flush()`` but not ``commit()`` — commit/rollback is
+        owned by the scope (per-call standalone, per-run in a pipeline).
+        """
+        return self._sessions.aget()
+
+    async def ateardown(self, *, success: bool = True) -> None:
+        """Finalize the run's shared session (Service mounting)."""
+        await self._sessions.afinalize_run(success=success)
+
+    async def afinalize_sessions(self, *, success: bool = True) -> None:
+        """Finalize the current run's session, then roll back any leftovers.
+
+        Called from ``aclose()`` for port mounting, where no success flag
+        exists: commits unless a step failed inside ``get_session()``.
+        """
+        await self._sessions.afinalize_run(success=success)
+        await self._sessions.afinalize_all(success=False)
 
     @asynccontextmanager
     async def asession(self) -> AsyncIterator[AsyncSession]:
@@ -121,6 +145,14 @@ class SQLAlchemyAdapter(
     # Backward-compatible alias
     disconnect = aclose
 
+    async def _fetch_all(
+        self, stmt: Any, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Execute ``stmt`` on the run-scoped session and materialize all rows."""
+        async with self.get_session() as session:
+            result = await session.execute(stmt, params or {})
+            return [dict(row._mapping) for row in result]
+
     async def aget_table_schemas(self) -> dict[str, dict[str, Any]]:
         """
         Get schema information for all tables in Database format.
@@ -128,9 +160,6 @@ class SQLAlchemyAdapter(
         Returns:
             Dictionary mapping table names to schema information.
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
         schemas = {}
         for table_name, table in self._metadata.tables.items():
             columns = {}
@@ -165,7 +194,7 @@ class SQLAlchemyAdapter(
     async def aexecute_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        """Execute a SQL query and return results.
+        """Execute a SQL query on the run-scoped session and return results.
 
         Args:
             query: SQL query string
@@ -174,14 +203,7 @@ class SQLAlchemyAdapter(
         Returns:
             List of dictionaries representing query result rows
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
-        results = []
-        async with self.engine.connect() as conn:
-            result = await conn.execute(text(query), params or {})
-            results.extend(dict(row._mapping) for row in result)
-        return results
+        return await self._fetch_all(text(query), params)
 
     async def get_table_schemas(self) -> Sequence[TableSchema]:
         """
@@ -190,9 +212,6 @@ class SQLAlchemyAdapter(
         Returns:
             Sequence[TableSchema]: List of table schemas
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
         schemas = []
         for table_name, table in self._metadata.tables.items():
             columns = []
@@ -227,6 +246,11 @@ class SQLAlchemyAdapter(
         """
         Query rows from a table with filtering and column selection.
 
+        Results are fully materialized before yielding (the run-scoped
+        session lock is held only while the query executes).  For true
+        streaming of large result sets use ``asession()`` with
+        ``session.stream()``.
+
         Args:
             table: Table name
             filters: Optional column-value pairs to filter by
@@ -235,46 +259,36 @@ class SQLAlchemyAdapter(
         Returns:
             AsyncIterator[dict[str, Any]]: An async iterator over rows as dictionaries
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
         table_obj = Table(table, self._metadata, extend_existing=True)
-        query = select(table_obj)
+        stmt = select(table_obj)
 
         if columns:
-            query = select(*[table_obj.c[col] for col in columns])
+            stmt = select(*[table_obj.c[col] for col in columns])
 
         if filters:
             conditions = [table_obj.c[k] == v for k, v in filters.items()]
-            query = query.where(*conditions)
+            stmt = stmt.where(*conditions)
 
         if limit:
-            query = query.limit(limit)
+            stmt = stmt.limit(limit)
 
         async def generate_rows() -> AsyncIterator[dict[str, Any]]:
-            if not self.engine:  # Recheck engine in case it was closed
-                raise RuntimeError("Database connection lost")
-            async with self.engine.connect() as conn:
-                result = await conn.stream(query)
-                async for row in result:
-                    yield dict(row._mapping)
+            for row in await self._fetch_all(stmt):
+                yield row
 
         return generate_rows()
 
     def query_raw(
         self, sql: str, params: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
-        """Execute a raw SQL query."""
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
+        """Execute a raw SQL query on the run-scoped session.
+
+        Results are fully materialized before yielding — see :meth:`query`.
+        """
 
         async def generate_rows() -> AsyncIterator[dict[str, Any]]:
-            if not self.engine:
-                raise RuntimeError("Database connection lost")
-            async with self.engine.connect() as conn:
-                result = await conn.stream(text(sql), params or {})
-                async for row in result:
-                    yield dict(row._mapping)
+            for row in await self._fetch_all(text(sql), params):
+                yield row
 
         return generate_rows()
 
@@ -282,16 +296,17 @@ class SQLAlchemyAdapter(
         """
         Execute a raw SQL statement without returning results.
 
+        Runs on the run-scoped session: standalone calls autocommit, calls
+        inside a pipeline run join the run transaction (committed or rolled
+        back at teardown).
+
         Args:
             sql: SQL statement to execute
             params: Optional parameters for the SQL statement
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
-        async with self.engine.connect() as conn:
-            await conn.execute(text(sql), params or {})
-            await conn.commit()
+        async with self.get_session() as session:
+            await session.execute(text(sql), params or {})
+            await session.flush()
 
     async def get_indexes(self, table: str) -> list[str]:
         """
@@ -303,14 +318,10 @@ class SQLAlchemyAdapter(
         Returns:
             list[str]: List of index names
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
-        async with self.engine.connect() as conn:
-            # Remove engine argument from inspect call
-            inspector = await conn.run_sync(inspect)
-            # Filter out None values to ensure list[str]
-            return [idx["name"] for idx in inspector.get_indexes(table) if idx["name"] is not None]
+        async with self.get_session() as session:
+            conn = await session.connection()
+            indexes = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_indexes(table))
+        return [idx["name"] for idx in indexes if idx["name"] is not None]
 
     async def get_table_statistics(self, table: str) -> dict[str, int]:
         """
@@ -322,10 +333,5 @@ class SQLAlchemyAdapter(
         Returns:
             dict[str, int]: Statistics including row count
         """
-        if not self.engine:
-            raise RuntimeError("Not connected to database")
-
-        async with self.engine.connect() as conn:
-            result = await conn.execute(text(f"SELECT COUNT(*) as count FROM {table}"))  # nosec
-            row = await result.fetchone()  # type: ignore # type: ignore
-            return {"row_count": int(row[0]) if row else 0}
+        rows = await self._fetch_all(text(f"SELECT COUNT(*) as count FROM {table}"))  # nosec
+        return {"row_count": int(rows[0]["count"]) if rows else 0}

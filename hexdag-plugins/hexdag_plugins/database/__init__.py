@@ -2,8 +2,8 @@
 
 Owns the transaction machinery that used to live in hexDAG core:
 
-- ``RunScopedResource`` / ``DualModeSessionMixin`` — the dual-mode session
-  primitive (standalone autocommit vs. per-run atomic transaction).
+- ``RunScopedSessions`` — one shared session per pipeline run (atomic,
+  verdict at teardown); fresh autocommitting sessions outside a run.
 - ``SupportsTransactions`` / ``SupportsSessionFactory`` — the transaction port
   protocols (also registered back into ``hexdag.kernel.ports`` for back-compat).
 - ``SQLAlchemyAdapter`` / ``SQLAlchemyStateBackend`` — SQLAlchemy implementations.
@@ -20,8 +20,7 @@ from typing import Any
 from hexdag_plugins.database import _ports as _ports  # noqa: F401
 
 _LAZY: dict[str, tuple[str, str]] = {
-    "RunScopedResource": ("hexdag_plugins.database.run_scope", "RunScopedResource"),
-    "DualModeSessionMixin": ("hexdag_plugins.database.dual_mode", "DualModeSessionMixin"),
+    "RunScopedSessions": ("hexdag_plugins.database.run_scope", "RunScopedSessions"),
     "SQLAlchemyAdapter": ("hexdag_plugins.database.adapters", "SQLAlchemyAdapter"),
     "SQLAlchemyStateBackend": ("hexdag_plugins.database.adapters", "SQLAlchemyStateBackend"),
     "DatabaseService": ("hexdag_plugins.database.service", "DatabaseService"),
