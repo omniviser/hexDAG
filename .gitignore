@@ -100,3 +100,6 @@ hexdag/studio/ui/.vite/
 # hexdag-studio standalone package (UI)
 hexdag-studio/ui/node_modules/
 hexdag-studio/ui/.vite/
+
+# Claude Code agent worktrees (created by /worktree + feature-fanout)
+.claude/worktrees/

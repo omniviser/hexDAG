@@ -1,8 +1,101 @@
 {
+    "hooks": {
+        "PostToolUse": [
+            {
+                "hooks": [
+                    {
+                        "command": "f=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; if [[ \"$f\" == *.py ]]; then PATH=\"$HOME/.local/bin:$PATH\" uv run ruff format \"$f\" --quiet 2>/dev/null; PATH=\"$HOME/.local/bin:$PATH\" uv run ruff check \"$f\" --fix --quiet 2>/dev/null; true; fi",
+                        "type": "command"
+                    }
+                ],
+                "matcher": "Edit|Write"
+            }
+        ],
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "command": "echo 'hexDAG \u2014 kernel/stdlib/drivers/compiler layers; kernel must not import stdlib/drivers. Loop: /qa-fast while editing, /qa-gate before commit, /pr-prep to ship (GitHub, PR->main). Modern 3.12 type hints only; cov gate 70%; version is CI-only; never --no-verify or --amend a made commit.'",
+                        "type": "command"
+                    }
+                ]
+            }
+        ]
+    },
     "permissions": {
         "allow": [
             "WebFetch(domain:deepwiki.com)",
-            "Bash(git pull:*)"
+            "Bash(git pull:*)",
+            "Bash(uv run pytest:*)",
+            "Bash(uv run ruff check:*)",
+            "Bash(uv run ruff format:*)",
+            "Bash(uv run mypy:*)",
+            "Bash(uv run pyright:*)",
+            "Bash(uv run bandit:*)",
+            "Bash(uv run pyupgrade:*)",
+            "Bash(uv run interrogate:*)",
+            "Bash(uv run radon:*)",
+            "Bash(uv run vulture:*)",
+            "Bash(uv run safety:*)",
+            "Bash(uv run licensecheck:*)",
+            "Bash(uv run pre-commit run:*)",
+            "Bash(uv run python scripts/:*)",
+            "Bash(uv run hexdag:*)",
+            "Bash(uv sync:*)",
+            "Bash(uv lock:*)",
+            "Bash(git status:*)",
+            "Bash(git log:*)",
+            "Bash(git diff:*)",
+            "Bash(git show:*)",
+            "Bash(git fetch:*)",
+            "Bash(git stash list:*)",
+            "Bash(git ls-files:*)",
+            "Bash(git ls-tree:*)",
+            "Bash(git rev-parse:*)",
+            "Bash(git merge-base:*)",
+            "Bash(git branch:*)",
+            "Bash(git remote:*)",
+            "Bash(git blame:*)",
+            "Bash(git check-ignore:*)",
+            "Bash(git worktree list:*)",
+            "Bash(gh pr list:*)",
+            "Bash(gh pr view:*)",
+            "Bash(gh auth status:*)",
+            "Bash(rg:*)",
+            "Bash(grep:*)",
+            "Bash(find:*)",
+            "Bash(ls:*)",
+            "Bash(wc:*)",
+            "Read(./**)",
+            "Glob(./**)",
+            "Grep(./**)",
+            "Skill(qa-fast)",
+            "Skill(qa-gate)",
+            "Skill(commit)",
+            "Skill(pr-prep)",
+            "Skill(worktree)",
+            "Skill(yaml-check)",
+            "Skill(format)",
+            "Skill(simplify)",
+            "Skill(code-review)"
+        ],
+        "deny": [
+            "Read(./.env)",
+            "Read(./.env.*)",
+            "Read(./**/.env)",
+            "Read(./**/.env.*)",
+            "Read(./**/secrets.json)",
+            "Read(./**/*.pem)",
+            "Read(./**/*.key)",
+            "Bash(git commit --no-verify:*)",
+            "Bash(git commit -n:*)",
+            "Bash(git push --no-verify:*)",
+            "Bash(git commit --amend:*)",
+            "Bash(git push --force:*)",
+            "Bash(git push -f:*)",
+            "Bash(git push --force-with-lease:*)",
+            "Bash(git reset --hard:*)",
+            "Bash(git clean -fdx:*)"
         ]
     }
 }
