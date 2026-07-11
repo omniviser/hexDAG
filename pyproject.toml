@@ -171,6 +171,15 @@ packages = ["hexdag"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["hexdag"]
+# Bundle non-Python scaffold assets (Claude Code skills/agents/workflows) shipped under
+# hexdag/cli/templates/ so `hexdag init --claude` can copy them from an installed wheel.
+artifacts = [
+    "hexdag/cli/templates/**/*.md",
+    "hexdag/cli/templates/**/*.js",
+    "hexdag/cli/templates/**/*.yaml",
+    "hexdag/cli/templates/**/*.yml",
+    "hexdag/cli/templates/**/*.json",
+]
 
 # For local development with uv - points to local packages not yet on PyPI
 [tool.uv.sources]

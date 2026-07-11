@@ -417,6 +417,14 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: check-claude-assets
+        name: Check bundled Claude assets quote current node-kind aliases
+        entry: uv run python scripts/check_claude_assets.py
+        language: system
+        files: ^(hexdag/stdlib/nodes/.*\.py|hexdag/cli/templates/claude/.*|scripts/check_claude_assets\.py)$
+        stages: [pre-commit]
+        pass_filenames: false
+
       # ========================================================================
       # MCP Documentation Generation
       # ========================================================================

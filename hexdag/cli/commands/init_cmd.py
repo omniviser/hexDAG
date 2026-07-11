@@ -1,5 +1,7 @@
 """Initialize command for HexDAG CLI."""
 
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -34,6 +36,13 @@ def init(
             help="Overwrite existing configuration",
         ),
     ] = False,
+    claude: Annotated[
+        bool,
+        typer.Option(
+            "--claude",
+            help="Also scaffold Claude Code assets (skills, agent, workflow) into .claude/",
+        ),
+    ] = False,
     path: Annotated[
         Path | None,
         typer.Argument(
@@ -47,6 +56,10 @@ def init(
 
     if path is None:
         path = Path.cwd()
+
+    if claude:
+        _scaffold_claude_assets(path, force=force)
+        return
 
     config_path = path / "hexdag.yaml"
 
@@ -82,6 +95,73 @@ def init(
         console.print("\n[bold]Adapters configured:[/bold]")
         for adapter in adapters:
             _print_adapter_info(adapter)
+
+
+def _scaffold_claude_assets(path: Path, *, force: bool) -> None:
+    """Copy the bundled Claude Code assets into ``path/.claude``.
+
+    Reads the template tree shipped inside the wheel at
+    ``hexdag.cli.templates/claude`` via :mod:`importlib.resources`, so it works from an
+    installed package as well as from a source checkout.
+    """
+    source = resources.files("hexdag.cli.templates").joinpath("claude")
+    if not source.is_dir():
+        console.print("[red]Bundled Claude assets not found in this hexdag install.[/red]")
+        raise typer.Exit(1)
+
+    dest = path / ".claude"
+    written, skipped = _copy_tree(source, dest, force=force)
+
+    if not written and not skipped:
+        console.print("[yellow]No Claude assets to write.[/yellow]")
+        return
+
+    console.print(f"[green]✓[/green] Scaffolded Claude Code assets into {dest}")
+    for rel in written:
+        console.print(f"  [green]+[/green] .claude/{rel}")
+    for rel in skipped:
+        console.print(
+            f"  [yellow]•[/yellow] .claude/{rel} [dim](exists — use --force to overwrite)[/dim]"
+        )
+
+    console.print("\n[bold]Next steps:[/bold]")
+    console.print("1. Restart Claude Code so it discovers the new skills/agent/workflow.")
+    console.print("2. Try [cyan]/hexdag-pipeline[/cyan] or [cyan]/hexdag-validate[/cyan].")
+
+
+def _copy_tree(
+    source: Traversable,
+    dest: Path,
+    *,
+    force: bool,
+    _prefix: str = "",
+) -> tuple[list[str], list[str]]:
+    """Recursively copy a resource ``Traversable`` tree onto disk.
+
+    Returns ``(written, skipped)`` lists of destination-relative paths. Existing files are
+    skipped unless ``force`` is set. ``__init__.py`` markers are not copied.
+    """
+    written: list[str] = []
+    skipped: list[str] = []
+    dest.mkdir(parents=True, exist_ok=True)
+
+    for entry in source.iterdir():
+        rel = f"{_prefix}{entry.name}"
+        target = dest / entry.name
+        if entry.is_dir():
+            sub_written, sub_skipped = _copy_tree(entry, target, force=force, _prefix=f"{rel}/")
+            written.extend(sub_written)
+            skipped.extend(sub_skipped)
+            continue
+        if entry.name == "__init__.py":
+            continue
+        if target.exists() and not force:
+            skipped.append(rel)
+            continue
+        target.write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+        written.append(rel)
+
+    return written, skipped
 
 
 def _generate_config(adapters: list[str]) -> str:

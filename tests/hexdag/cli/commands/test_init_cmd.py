@@ -221,3 +221,46 @@ class TestPrintAdapterInfo:
             assert any(
                 "pip install" in str(call) and "uv pip install" not in str(call) for call in calls
             )
+
+
+@pytest.mark.usefixtures("_chdir")
+class TestInitClaude:
+    """Test the ``hexdag init --claude`` scaffold."""
+
+    def test_scaffolds_claude_assets_into_dot_claude(self, runner, tmp_path):
+        """--claude writes the bundled Claude Code assets under .claude/."""
+        result = runner.invoke(app, ["--claude", str(tmp_path)])
+        assert result.exit_code == 0
+
+        claude_dir = tmp_path / ".claude"
+        assert (claude_dir / "skills" / "hexdag-pipeline" / "SKILL.md").exists()
+        assert (claude_dir / "skills" / "hexdag-validate" / "SKILL.md").exists()
+        assert (claude_dir / "agents" / "hexdag-pipeline-debugger.md").exists()
+        assert (claude_dir / "workflows" / "hexdag-pipeline-review.js").exists()
+        assert (claude_dir / "README.md").exists()
+
+    def test_claude_does_not_write_hexdag_yaml(self, runner, tmp_path):
+        """--claude only scaffolds assets; it does not also write hexdag.yaml."""
+        result = runner.invoke(app, ["--claude", str(tmp_path)])
+        assert result.exit_code == 0
+        assert not (tmp_path / "hexdag.yaml").exists()
+
+    def test_claude_skips_existing_without_force(self, runner, tmp_path):
+        """A second run without --force leaves an edited file untouched."""
+        runner.invoke(app, ["--claude", str(tmp_path)])
+        target = tmp_path / ".claude" / "README.md"
+        target.write_text("EDITED")
+
+        result = runner.invoke(app, ["--claude", str(tmp_path)])
+        assert result.exit_code == 0
+        assert target.read_text() == "EDITED"
+
+    def test_claude_force_overwrites(self, runner, tmp_path):
+        """--force overwrites an existing asset."""
+        runner.invoke(app, ["--claude", str(tmp_path)])
+        target = tmp_path / ".claude" / "README.md"
+        target.write_text("EDITED")
+
+        result = runner.invoke(app, ["--claude", "--force", str(tmp_path)])
+        assert result.exit_code == 0
+        assert target.read_text() != "EDITED"
